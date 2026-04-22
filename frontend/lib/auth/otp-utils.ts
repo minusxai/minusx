@@ -28,7 +28,6 @@ export function hashOTP(otp: string): string {
 export interface OTPPayload {
   email: string;
   phone?: string;  // optional — not present for email OTP
-  companyId: number;
   otpHash: string;
   exp: number;  // Unix timestamp (expiry)
   nonce: string;  // Random string to prevent reuse
@@ -40,7 +39,6 @@ export interface OTPPayload {
  */
 export interface VerifiedOTPPayload {
   email: string;
-  companyId: number;
   verified: true;
   exp: number;
 }
@@ -49,13 +47,13 @@ export interface VerifiedOTPPayload {
  * Create a short-lived JWT proving OTP verification was completed
  * Expires in 60 seconds — just enough time for signIn() to be called
  */
-export function createVerifiedToken(email: string, companyId: number): string {
+export function createVerifiedToken(email: string): string {
   const secret = NEXTAUTH_SECRET;
   if (!secret) {
     throw new Error('NEXTAUTH_SECRET is not configured');
   }
   const exp = Math.floor(Date.now() / 1000) + 60;
-  return jwt.sign({ email, companyId, verified: true, exp }, secret);
+  return jwt.sign({ email, verified: true, exp }, secret);
 }
 
 /**

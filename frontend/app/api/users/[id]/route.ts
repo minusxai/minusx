@@ -29,17 +29,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Check authorization
     const userRole = session.user.role || 'viewer';
     const isOwnUser = session.user.userId === userId;
-    const companyId = session.user.companyId;
-
-    if (!companyId) {
-      return ApiErrors.forbidden('Company ID not found in session');
-    }
 
     if (!isAdmin(userRole) && !isOwnUser) {
       return ApiErrors.forbidden();
     }
 
-    const user = await UserDB.getById(userId, companyId);
+    const user = await UserDB.getById(userId);
 
     if (!user) {
       return ApiErrors.notFound('User');
@@ -81,18 +76,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Check authorization
     const userRole = session.user.role || 'viewer';
     const isOwnUser = session.user.userId === userId;
-    const companyId = session.user.companyId;
-
-    if (!companyId) {
-      return ApiErrors.forbidden('Company ID not found in session');
-    }
 
     if (!isAdmin(userRole) && !isOwnUser) {
       return ApiErrors.forbidden();
     }
 
     // Get existing user
-    const existingUser = await UserDB.getById(userId, companyId);
+    const existingUser = await UserDB.getById(userId);
 
     if (!existingUser) {
       return ApiErrors.notFound('User');
@@ -115,10 +105,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update user
-    await UserDB.update(userId, companyId, body);
+    await UserDB.update(userId, body);
 
     // Get updated user
-    const updatedUser = await UserDB.getById(userId, companyId);
+    const updatedUser = await UserDB.getById(userId);
 
     if (!updatedUser) {
       return ApiErrors.notFound('User');
@@ -164,22 +154,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return ApiErrors.badRequest('Cannot delete your own user account');
     }
 
-    const companyId = session.user.companyId;
-    if (!companyId) {
-      return ApiErrors.forbidden('Company ID not found in session');
-    }
-
     // Get existing user
-    const existingUser = await UserDB.getById(userId, companyId);
+    const existingUser = await UserDB.getById(userId);
 
     if (!existingUser) {
       return ApiErrors.notFound('User');
     }
 
-    await UserDB.delete(userId, companyId);
+    await UserDB.delete(userId);
 
     appEventRegistry.publish(AppEvents.USER_DELETED, {
-      companyId,
       mode: 'org',
       userId: existingUser.id,
       userEmail: existingUser.email,

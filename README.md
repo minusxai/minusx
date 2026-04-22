@@ -19,8 +19,16 @@ Note: This is on top of obvious BI features like connecting to databases/warehou
 - **Website:** [minusx.ai](https://minusx.ai)
 
 ## Getting Started
-- Simple Docker setup (coming soon)
-- Local development setup: [Local Setup](./Docs.md)
+
+**Docker (quickest):**
+```bash
+cp frontend/.env.example frontend/.env   # add NEXTAUTH_SECRET + ANTHROPIC_API_KEY
+cp backend/.env.example backend/.env     # add ANTHROPIC_API_KEY
+docker compose up -d
+```
+Open http://localhost:3000
+
+**Local development:** [Docs.md](./Docs.md)
 
 ## Why MinusX
 

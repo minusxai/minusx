@@ -125,9 +125,10 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
       }
 
       // Try Node.js connector first (DuckDB) to avoid Python's exclusive file lock
-      const connData = await ConnectionsAPI.getByName(connection_id, user).catch(() => null);
+      // Use getRawByName so credentials (e.g. service_account_json) are included
+      const connData = await ConnectionsAPI.getRawByName(connection_id, user.mode).catch(() => null);
       if (connData) {
-        const { type, config } = connData.connection;
+        const { type, config } = connData;
         const connector = getNodeConnector(connection_id, type, config);
         if (connector) {
           const queryResult = await connector.query(query, params);

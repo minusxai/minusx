@@ -1,7 +1,7 @@
 import 'server-only';
 import { DbFile } from '@/lib/types';
 
-export type ChildIdResolver = (folderPath: string, companyId: number) => Promise<number[]>;
+export type ChildIdResolver = (folderPath: string) => Promise<number[]>;
 
 /**
  * Extract reference IDs from a file (Phase 6: Reads from cached references column)
@@ -28,10 +28,9 @@ export async function extractReferenceIds(
   // Handle folders - return IDs of direct children
   if (file.type === 'folder') {
     const folderPath = file.path;
-    const companyId = file.company_id!;  // Always present in DB queries (NOT NULL column)
 
     // Delegate to injected resolver (implemented in files.server.ts using DocumentDB)
-    const childIds = await resolveChildIds(folderPath, companyId);
+    const childIds = await resolveChildIds(folderPath);
 
     // Filter out the folder itself
     return childIds.filter(id => id !== file.id);

@@ -34,14 +34,11 @@ jest.mock('@/lib/connections', () => ({
 }));
 
 // Database-specific mock
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_context_loader.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const TEST_DB_PATH = getTestDbPath('context_loader');
 
@@ -54,8 +51,6 @@ const adminUser: EffectiveUser = {
   name: 'Admin User',
   email: 'admin@example.com',
   role: 'admin',
-  companyId: 1,
-  companyName: 'test-company',
   mode: 'org',
   home_folder: ''
 };
@@ -65,8 +60,6 @@ const nonAdminUser: EffectiveUser = {
   name: 'Regular User',
   email: 'user@example.com',
   role: 'viewer',
-  companyId: 1,
-  companyName: 'test-company',
   mode: 'org',
   home_folder: ''
 };
@@ -76,8 +69,6 @@ const adminUser4: EffectiveUser = {
   name: 'Admin User 4',
   email: 'admin4@example.com',
   role: 'admin',
-  companyId: 1,
-  companyName: 'test-company',
   mode: 'org',
   home_folder: ''
 };
@@ -107,7 +98,7 @@ describe('Context Loader Integration with Versioning', () => {
     // Clean up existing test data
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const db = await getAdapter();
-    await db.query('DELETE FROM files WHERE company_id = $1', [1]);
+    await db.query('DELETE FROM files', []);
 
     // Mock getSchemaFromPython to return schemas directly
     mockGetSchemaFromPython.mockImplementation((name: string) => {
@@ -182,8 +173,7 @@ describe('Context Loader Integration with Versioning', () => {
       '/org/database/duckdb_main',
       'connection',
       duckdbContent,
-      [],
-      1
+      []
     );
 
     bigqueryConnectionId = await DocumentDB.create(
@@ -191,8 +181,7 @@ describe('Context Loader Integration with Versioning', () => {
       '/org/database/bigquery_analytics',
       'connection',
       bigqueryContent,
-      [],
-      1
+      []
     );
 
     // Create versioned context files
@@ -246,8 +235,7 @@ describe('Context Loader Integration with Versioning', () => {
       '/org/context',
       'context',
       orgContent,
-      [],
-      1
+      []
     );
 
     // /org/sales/context - Child context
@@ -278,8 +266,7 @@ describe('Context Loader Integration with Versioning', () => {
       '/org/sales/context',
       'context',
       salesContent,
-      [],
-      1
+      []
     );
   });
 
@@ -396,8 +383,7 @@ describe('Context Loader Integration with Versioning', () => {
         '/org/legacy_context',
         'context',
         legacyContent,
-        [],
-        1
+        []
       );
 
       await expect(
@@ -428,8 +414,7 @@ describe('Context Loader Integration with Versioning', () => {
         '/org/invalid_context',
         'context',
         invalidContent,
-        [],
-        1
+        []
       );
 
       await expect(
@@ -484,8 +469,7 @@ describe('Context Loader Integration with Versioning', () => {
         '/org/gapped_context',
         'context',
         gappedContent,
-        [],
-        1
+        []
       );
 
       const { data: contexts } = await FilesAPI.loadFiles([gappedContextId], nonAdminUser);
@@ -504,8 +488,6 @@ describe('Context Loader Integration with Versioning', () => {
 
   describe('Path-based whitelist inheritance', () => {
     it('should filter child context by childPaths in parent whitelist', async () => {
-      const companyId = 1;
-
       // Create parent context at /org/testing with childPaths
       // This inherits from /org/context (which has fullSchema from connections)
       const parentContextId = await DocumentDB.create(
@@ -527,8 +509,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create child context at /org/testing/sales (should see users, not orders)
@@ -546,8 +527,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create child context at /org/testing/marketing (should see orders, not users)
@@ -565,8 +545,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Load sales child context
@@ -595,8 +574,6 @@ describe('Context Loader Integration with Versioning', () => {
     });
 
     it('should apply to all children when childPaths is undefined', async () => {
-      const companyId = 1;
-
       // Create parent context without childPaths (applies to all)
       const parentContextId = await DocumentDB.create(
         'context',
@@ -616,8 +593,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create child contexts
@@ -635,8 +611,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       const child2Id = await DocumentDB.create(
@@ -653,8 +628,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Both children should see products table
@@ -672,8 +646,6 @@ describe('Context Loader Integration with Versioning', () => {
     });
 
     it('should support nested path matching (startsWith)', async () => {
-      const companyId = 1;
-
       // Create parent context with childPaths: ['/org/testing3/sales']
       const parentContextId = await DocumentDB.create(
         'context',
@@ -693,8 +665,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create nested child at /org/testing3/sales/north/context
@@ -712,8 +683,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create unrelated child at /org/testing3/marketing/context
@@ -731,8 +701,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Nested child should see users (path matches /org/sales/*)
@@ -759,8 +728,6 @@ describe('Context Loader Integration with Versioning', () => {
     });
 
     it('should support schema-level childPaths filtering', async () => {
-      const companyId = 1;
-
       // Create parent context with schema-level childPaths
       const parentContextId = await DocumentDB.create(
         'context',
@@ -779,8 +746,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create child at /org/testing4/engineering (should see entire schema)
@@ -798,8 +764,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Create child at /org/testing4/sales (should NOT see schema)
@@ -817,8 +782,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Engineering child should see all tables from public schema
@@ -848,8 +812,6 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('CRITICAL: child fullSchema must respect PARENT whitelist childPaths, not child whitelist', async () => {
       // This test catches the bug where we filtered by child's whitelist instead of parent's
-      const companyId = 1;
-
       // Parent whitelists tables with childPaths
       const parentContextId = await DocumentDB.create(
         'context',
@@ -870,8 +832,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Child at /org/testing5/team_a with DIFFERENT whitelist (whitelists orders, not users)
@@ -895,8 +856,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Load child context
@@ -921,8 +881,6 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('E2E: child can only whitelist from parent-allowed fullSchema', async () => {
       // Test the complete flow: parent restricts → child loads → child can only select allowed tables
-      const companyId = 1;
-
       // Parent restricts severely
       const parentContextId = await DocumentDB.create(
         'context',
@@ -943,8 +901,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Child at /org/testing6/restricted uses '*' to expose everything parent allows
@@ -962,8 +919,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Load child
@@ -980,8 +936,6 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('E2E: sibling contexts with different childPaths see different schemas', async () => {
       // Real-world scenario: two teams, different access
-      const companyId = 1;
-
       const parentContextId = await DocumentDB.create(
         'context',
         '/org/testing7/context',
@@ -1002,8 +956,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Sales team - expose everything parent allows (users, orders, products)
@@ -1021,8 +974,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Support team - expose everything parent allows (only users)
@@ -1040,8 +992,7 @@ describe('Context Loader Integration with Versioning', () => {
           }],
           published: { all: 1 }
         } as ContextContent,
-        [],
-        companyId
+        []
       );
 
       // Load both siblings
@@ -1077,8 +1028,6 @@ describe('Context Loader Integration with Versioning', () => {
       name: 'Subfolder Viewer',
       email: 'subfolder-viewer@example.com',
       role: 'viewer',
-      companyId: 1,
-      companyName: 'test-company',
       mode: 'org',
       home_folder: 'sales'   // resolves to /org/sales
     };
@@ -1088,8 +1037,6 @@ describe('Context Loader Integration with Versioning', () => {
       name: 'Subfolder Admin',
       email: 'subfolder-admin@example.com',
       role: 'admin',
-      companyId: 1,
-      companyName: 'test-company',
       mode: 'org',
       home_folder: 'sales'   // admins get full mode access regardless
     };
@@ -1099,8 +1046,6 @@ describe('Context Loader Integration with Versioning', () => {
       name: 'Deeply Nested Viewer',
       email: 'nested-viewer@example.com',
       role: 'viewer',
-      companyId: 1,
-      companyName: 'test-company',
       mode: 'org',
       home_folder: 'sales/team1'  // resolves to /org/sales/team1
     };
@@ -1127,7 +1072,7 @@ describe('Context Loader Integration with Versioning', () => {
           versions: [{ version: 1, whitelist: [], docs: [], createdAt: new Date().toISOString(), createdBy: 1, description: '' }],
           published: { all: 1 }, fullSchema: [], fullDocs: []
         } as ContextContent,
-        [], 1
+        []
       );
       // loadFiles filters inaccessible files silently — expect empty result
       const { data } = await FilesAPI.loadFiles([marketingCtxId], subfolderViewer);
@@ -1181,8 +1126,6 @@ describe('Context Loader Integration with Versioning', () => {
       name: 'Dashboard Viewer',
       email: 'dashboard-viewer@example.com',
       role: 'viewer',
-      companyId: 1,
-      companyName: 'test-company',
       mode: 'org',
       home_folder: 'sales'   // resolves to /org/sales
     };
@@ -1198,7 +1141,7 @@ describe('Context Loader Integration with Versioning', () => {
       };
       const questionId = await DocumentDB.create(
         'question', '/org/my-question', 'question',
-        questionContent, [], 1
+        questionContent, []
       );
 
       // Dashboard lives at /org/sales/my-dashboard — INSIDE home folder
@@ -1210,7 +1153,7 @@ describe('Context Loader Integration with Versioning', () => {
       };
       const dashboardId = await DocumentDB.create(
         'dashboard', '/org/sales/my-dashboard', 'dashboard',
-        dashboardContent, [questionId], 1
+        dashboardContent, [questionId]
       );
 
       const { data: files, metadata } = await FilesAPI.loadFiles([dashboardId], subfolderViewer);
@@ -1230,13 +1173,13 @@ describe('Context Loader Integration with Versioning', () => {
       const questionId = await DocumentDB.create(
         'question', '/org/shared/report-question', 'question',
         { query: 'SELECT 2', description: '', vizSettings: { type: 'table' }, parameters: [], connection_name: 'duckdb_main' } as QuestionContent,
-        [], 1
+        []
       );
 
       const dashboardId = await DocumentDB.create(
         'dashboard', '/org/sales/team-dashboard', 'dashboard',
         { description: '', assets: [{ type: 'question', id: questionId }], layout: { columns: 12, items: [] } } as DocumentContent,
-        [questionId], 1
+        [questionId]
       );
 
       const { data: files, metadata } = await FilesAPI.loadFiles([dashboardId], subfolderViewer);
@@ -1251,7 +1194,7 @@ describe('Context Loader Integration with Versioning', () => {
       const questionId = await DocumentDB.create(
         'question', '/org/top-level-question', 'question',
         { query: 'SELECT 3', description: '', vizSettings: { type: 'table' }, parameters: [], connection_name: 'duckdb_main' } as QuestionContent,
-        [], 1
+        []
       );
 
       const { data } = await FilesAPI.loadFiles([questionId], subfolderViewer);
@@ -1282,7 +1225,7 @@ describe('Context Loader Integration with Versioning', () => {
     async function replaceRootContext(whitelist: import('@/lib/types').Whitelist): Promise<number> {
       const { getAdapter } = await import('@/lib/database/adapter/factory');
       const db = await getAdapter();
-      await db.query("DELETE FROM files WHERE path = '/org/context' AND company_id = 1", []);
+      await db.query("DELETE FROM files WHERE path = '/org/context'", []);
       return DocumentDB.create('context', '/org/context', 'context', {
         versions: [{
           version: 1,
@@ -1295,7 +1238,7 @@ describe('Context Loader Integration with Versioning', () => {
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, [], 1);
+      } as ContextContent, []);
     }
 
     /** Unique suffix counter for child context paths — avoids path collisions within a test. */
@@ -1318,7 +1261,7 @@ describe('Context Loader Integration with Versioning', () => {
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, [], 1);
+      } as ContextContent, []);
     }
 
     // ── Root context — whitelist filters connections directly ────────────────
@@ -1565,13 +1508,13 @@ describe('Context Loader Integration with Versioning', () => {
     async function replaceRootCtx(whitelist: Whitelist): Promise<number> {
       const { getAdapter } = await import('@/lib/database/adapter/factory');
       const db = await getAdapter();
-      await db.query("DELETE FROM files WHERE path = '/org/context' AND company_id = 1", []);
+      await db.query("DELETE FROM files WHERE path = '/org/context'", []);
       return DocumentDB.create('context', '/org/context', 'context', {
         versions: [{ version: 1, whitelist, docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, [], 1);
+      } as ContextContent, []);
     }
 
     async function mkContext(path: string, whitelist: Whitelist): Promise<number> {
@@ -1580,7 +1523,7 @@ describe('Context Loader Integration with Versioning', () => {
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, [], 1);
+      } as ContextContent, []);
     }
 
     function tables(content: ContextContent): string[] {

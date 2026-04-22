@@ -386,7 +386,7 @@ export interface SessionRecordingFileContent extends BaseFileContent {
 }
 
 /**
- * Styles content - CSS styling for company branding
+ * Styles content - CSS styling for org branding
  */
 export interface StylesContent extends BaseFileContent {
   styles: string;  // Raw CSS string
@@ -576,7 +576,6 @@ export interface JobRun {
   completed_at: string | null;
   job_id: string;
   job_type: string;
-  company_id: number;
   output_file_id: number | null;    // ID of the result file (e.g. alert_run); navigate via /f/{output_file_id}
   output_file_type: string | null;  // Type of the result file (e.g. 'alert_run')
   status: JobRunStatus;
@@ -772,12 +771,11 @@ export interface JobRunnerInput {
 
 /**
  * Database file entity
- * Extends BaseFileMetadata with content and multi-tenant support
+ * Extends BaseFileMetadata with content
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
   content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
-  company_id: number;     // NOT NULL column in DB
 }
 
 /**
@@ -796,49 +794,6 @@ export interface DatabaseConnectionCreate {
   config: Record<string, any>;
 }
 
-/**
- * Access token entity for public file sharing
- * Allows unauthenticated access to specific files by viewing as a designated user
- */
-export interface AccessToken extends BaseEntity {
-  token: string;                  // UUID for public access URL
-  file_id: number;                // File to expose (question, dashboard, or folder)
-  view_as_user_id: number;        // User whose permissions to use
-  company_id: number;             // Multi-tenant isolation
-  created_by_user_id: number;     // Admin who created this token
-  expires_at: string;             // ISO timestamp (required, default 30 days)
-  is_active: boolean;             // Manual revocation flag
-}
-
-/**
- * Access token analytics log entry
- */
-export interface AccessTokenLog {
-  id: number;
-  token_id: number;
-  accessed_at: string;
-  ip_address: string | null;
-  user_agent: string | null;
-}
-
-/**
- * Aggregated token analytics
- */
-export interface AccessTokenAnalytics {
-  token_id: number;
-  access_count: number;
-  last_accessed_at: string | null;
-  first_accessed_at: string | null;
-}
-
-/**
- * Input for creating a new access token
- */
-export interface AccessTokenCreate {
-  file_id: number;
-  view_as_user_id: number;
-  expires_at?: string;  // Optional, defaults to 30 days from now
-}
 
 export interface DatabaseSchema {
   schemas: Array<{
@@ -871,7 +826,7 @@ export interface CsvFileInfo {
   filename: string;
   table_name: string;
   schema_name: string;         // DuckDB schema, e.g. "public" or "mxfood"
-  s3_key: string;              // S3 object key, company-scoped
+  s3_key: string;              // S3 object key, org-scoped
   file_format: 'csv' | 'parquet';
   row_count: number;
   columns: { name: string; type: string }[];

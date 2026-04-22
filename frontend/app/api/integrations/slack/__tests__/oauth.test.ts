@@ -4,9 +4,10 @@
  * Covers:
  *  1. buildState — payload encoding and HMAC structure
  *  2. oauth-callback security — tampered payload, tampered sig, expired state
- *  3. oauth-callback happy path — company lookup, bot saved, redirect to returnUrl
- *  4. oauth-callback edge cases — null subdomain, user denied, Slack error, missing params
- *  5. oauth-start host-header handling — subdomain and returnUrl encoding
+ *  3. oauth-callback happy path — bot saved, redirect to returnUrl
+ *  4. oauth-callback edge cases — user denied, Slack error, missing params
+ *  5. oauth-start host-header handling — returnUrl encoding
+ *  6. oauth-callback — direct install (no state)
  */
 
 jest.mock('server-only', () => ({}));
@@ -24,13 +25,6 @@ jest.mock('@/lib/integrations/slack/config', () => ({
   buildOAuthUrl: jest.fn((state: string) => `https://slack.com/oauth/v2/authorize?state=${state}`),
 }));
 
-jest.mock('@/lib/database/company-db', () => ({
-  CompanyDB: {
-    getBySubdomain: jest.fn(),
-    getDefaultCompany: jest.fn(),
-  },
-}));
-
 jest.mock('@/lib/integrations/slack/api', () => ({
   slackAuthTest: jest.fn(),
 }));
@@ -39,9 +33,6 @@ jest.mock('@/lib/integrations/slack/store', () => ({
   upsertSlackBotConfig: jest.fn(),
 }));
 
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn(),
-}));
 
 jest.mock('@/lib/auth/role-helpers', () => ({
   isAdmin: (role: string) => role === 'admin',
@@ -52,11 +43,9 @@ jest.mock('@/lib/api/with-auth', () => ({
     handler(request, {
       email: 'admin@acme.com',
       role: 'admin',
-      companyId: 42,
       mode: 'org' as const,
       userId: 1,
       home_folder: '/org',
-      companyName: 'acme',
     }),
 }));
 
@@ -65,18 +54,14 @@ import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { buildState, GET as oauthStartHandler } from '../oauth-start/route';
 import { GET as callbackHandler } from '../oauth-callback/route';
-import { CompanyDB } from '@/lib/database/company-db';
 import { slackAuthTest } from '@/lib/integrations/slack/api';
 import { upsertSlackBotConfig } from '@/lib/integrations/slack/store';
 import { isSlackOAuthConfigured } from '@/lib/integrations/slack/config';
-import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const TEST_SECRET = 'test-secret-that-is-long-enough-32x';
 const CALLBACK_BASE = 'https://minusx.app/api/integrations/slack/oauth-callback';
 
-const MOCK_COMPANY = { id: 42, name: 'acme', subdomain: 'acme', display_name: 'Acme Inc' };
 const MOCK_SLACK_OAUTH = {
   ok: true,
   access_token: 'xoxb-test-bot-token',
@@ -98,14 +83,12 @@ const MOCK_AUTH_TEST = {
 function makeState(overrides: {
   ts?: number;
   nonce?: string;
-  subdomain?: string | null;
   returnUrl?: string;
   userEmail?: string;
 } = {}): string {
   return buildState({
     ts: Date.now(),
     nonce: 'testnonce16bytes',
-    subdomain: 'acme',
     returnUrl: 'https://acme.minusx.app/settings?tab=integrations',
     userEmail: 'admin@acme.com',
     ...overrides,
@@ -140,21 +123,9 @@ beforeEach(() => {
   });
   global.fetch = fetchMock;
 
-  (CompanyDB.getBySubdomain as jest.Mock).mockResolvedValue(MOCK_COMPANY);
-  (CompanyDB.getDefaultCompany as jest.Mock).mockResolvedValue(MOCK_COMPANY);
   (slackAuthTest as jest.Mock).mockResolvedValue(MOCK_AUTH_TEST);
   (upsertSlackBotConfig as jest.Mock).mockResolvedValue(undefined);
   (isSlackOAuthConfigured as jest.Mock).mockReturnValue(true);
-  // Default: authenticated admin (used by direct-install subdomain tests)
-  (getEffectiveUser as jest.Mock).mockResolvedValue({
-    email: 'admin@acme.com',
-    role: 'admin',
-    companyId: 42,
-    mode: 'org' as const,
-    userId: 1,
-    home_folder: '/org',
-    companyName: 'acme',
-  });
 });
 
 // ─── 1. buildState ────────────────────────────────────────────────────────────
@@ -169,18 +140,10 @@ describe('buildState', () => {
   });
 
   it('payload round-trips correctly', () => {
-    const state = makeState({ subdomain: 'beta', userEmail: 'bob@beta.com' });
+    const state = makeState({ userEmail: 'bob@beta.com' });
     const lastDot = state.lastIndexOf('.');
     const decoded = JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
-    expect(decoded.subdomain).toBe('beta');
     expect(decoded.userEmail).toBe('bob@beta.com');
-  });
-
-  it('encodes null subdomain for root-domain requests', () => {
-    const state = makeState({ subdomain: null });
-    const lastDot = state.lastIndexOf('.');
-    const decoded = JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
-    expect(decoded.subdomain).toBeNull();
   });
 
   it('two calls with same payload produce different states (nonce)', () => {
@@ -202,10 +165,10 @@ describe('oauth-callback — state verification', () => {
   });
 
   it('rejects a state with a tampered payload', async () => {
-    const state = makeState({ subdomain: 'acme' });
+    const state = makeState({ userEmail: 'admin@acme.com' });
     const lastDot = state.lastIndexOf('.');
     const originalPayload = JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
-    const attackerState = tamperPayload(state, { ...originalPayload, subdomain: 'victim' });
+    const attackerState = tamperPayload(state, { ...originalPayload, userEmail: 'attacker@evil.com' });
 
     const req = makeCallbackRequest({ code: 'code', state: attackerState });
     const res = await callbackHandler(req);
@@ -245,18 +208,11 @@ describe('oauth-callback — state verification', () => {
 // ─── 3. oauth-callback happy path ────────────────────────────────────────────
 
 describe('oauth-callback — happy path', () => {
-  it('looks up company by subdomain from state', async () => {
-    const state = makeState({ subdomain: 'acme' });
-    await callbackHandler(makeCallbackRequest({ code: 'code', state }));
-    expect(CompanyDB.getBySubdomain).toHaveBeenCalledWith('acme');
-    expect(CompanyDB.getDefaultCompany).not.toHaveBeenCalled();
-  });
-
   it('saves bot config with install_mode oauth and no signing_secret', async () => {
     const state = makeState();
     await callbackHandler(makeCallbackRequest({ code: 'code', state }));
     expect(upsertSlackBotConfig).toHaveBeenCalledWith(
-      42, 'org',
+      'org',
       expect.objectContaining({
         install_mode: 'oauth',
         bot_token: 'xoxb-test-bot-token',
@@ -266,7 +222,7 @@ describe('oauth-callback — happy path', () => {
       }),
     );
     // signing_secret must NOT be stored — shared env var is used instead
-    const [,, bot] = (upsertSlackBotConfig as jest.Mock).mock.calls[0];
+    const [, bot] = (upsertSlackBotConfig as jest.Mock).mock.calls[0];
     expect(bot.signing_secret).toBeUndefined();
   });
 
@@ -281,22 +237,6 @@ describe('oauth-callback — happy path', () => {
 // ─── 4. oauth-callback edge cases ────────────────────────────────────────────
 
 describe('oauth-callback — edge cases', () => {
-  it('falls back to getDefaultCompany when subdomain is null', async () => {
-    const state = makeState({ subdomain: null });
-    await callbackHandler(makeCallbackRequest({ code: 'code', state }));
-    expect(CompanyDB.getDefaultCompany).toHaveBeenCalled();
-    expect(CompanyDB.getBySubdomain).not.toHaveBeenCalled();
-    expect(upsertSlackBotConfig).toHaveBeenCalled();
-  });
-
-  it('returns 404 when company subdomain is not found', async () => {
-    (CompanyDB.getBySubdomain as jest.Mock).mockResolvedValue(null);
-    const state = makeState({ subdomain: 'unknown' });
-    const res = await callbackHandler(makeCallbackRequest({ code: 'code', state }));
-    expect(res.status).toBe(404);
-    expect(upsertSlackBotConfig).not.toHaveBeenCalled();
-  });
-
   it('redirects to returnUrl with slack=denied when user declines in Slack', async () => {
     const returnUrl = 'https://acme.minusx.app/settings?tab=integrations';
     const state = makeState({ returnUrl });
@@ -317,7 +257,6 @@ describe('oauth-callback — edge cases', () => {
     const maliciousPayload = Buffer.from(JSON.stringify({
       ts: Date.now(),
       nonce: 'x',
-      subdomain: 'acme',
       returnUrl: 'https://evil.com',
       userEmail: 'attacker@evil.com',
     })).toString('base64url');
@@ -338,7 +277,7 @@ describe('oauth-callback — edge cases', () => {
   it('enters direct install path (not 400) when state is missing but code is present', async () => {
     // code + no state → direct install flow, not a validation error
     const res = await callbackHandler(makeCallbackRequest({ code: 'code' }));
-    // Root domain with empty cookie → login HTML
+    // Root domain with no subdomain → login HTML
     expect(res.status).toBe(200);
   });
 
@@ -377,23 +316,10 @@ describe('oauth-start — host header handling', () => {
     return JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
   }
 
-  it('encodes subdomain from Host header into state', async () => {
-    const res = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
-    const location = res.headers.get('location')!;
-    const decoded = decodeState(location);
-    expect(decoded.subdomain).toBe('acme');
-  });
-
   it('sets returnUrl to the originating subdomain', async () => {
     const res = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
     const decoded = decodeState(res.headers.get('location')!);
     expect(decoded.returnUrl).toBe('https://acme.minusx.app/settings?tab=integrations');
-  });
-
-  it('encodes null subdomain when request arrives on root domain', async () => {
-    const res = await oauthStartHandler(makeStartRequest('minusx.app'));
-    const decoded = decodeState(res.headers.get('location')!);
-    expect(decoded.subdomain).toBeNull();
   });
 
   it('uses http protocol for localhost', async () => {
@@ -422,165 +348,10 @@ describe('oauth-start — host header handling', () => {
 // ─── 6. oauth-callback — direct install (no state) ────────────────────────────
 
 describe('oauth-callback — direct install (no state)', () => {
-  /** Build a callback request with an mx-companies cookie and optional x-subdomain header. */
-  function makeDirectRequest(
-    code: string,
-    companies: string[],
-    subdomain?: string,
-  ): NextRequest {
-    const url = new URL(CALLBACK_BASE);
-    url.searchParams.set('code', code);
-    const headers: Record<string, string> = {
-      cookie: `mx-companies=${encodeURIComponent(JSON.stringify(companies))}`,
-    };
-    if (subdomain) headers['x-subdomain'] = subdomain;
-    return new NextRequest(url.toString(), { headers });
-  }
-
-  // ── Root domain (no x-subdomain) ──────────────────────────────────────────
-
-  describe('root domain', () => {
-    it('renders login HTML when no companies in cookie', async () => {
-      const req = makeDirectRequest('slack-code', []);
-      const res = await callbackHandler(req);
-      expect(res.status).toBe(200);
-      const html = await res.text();
-      expect(html).toContain('log in');
-    });
-
-    it('redirects to the single company subdomain when one company in cookie', async () => {
-      const req = makeDirectRequest('slack-code', ['acme']);
-      const res = await callbackHandler(req);
-      expect(res.headers.get('location')).toContain('acme.minusx.app');
-      expect(res.headers.get('location')).toContain('code=slack-code');
-    });
-
-    it('redirect to subdomain preserves the code exactly', async () => {
-      const req = makeDirectRequest('abc-123-xyz', ['acme']);
-      const res = await callbackHandler(req);
-      const location = res.headers.get('location')!;
-      const redirected = new URL(location);
-      expect(redirected.searchParams.get('code')).toBe('abc-123-xyz');
-    });
-
-    it('renders picker HTML with links for each company when multiple in cookie', async () => {
-      const req = makeDirectRequest('slack-code', ['acme', 'beta', 'gamma']);
-      const res = await callbackHandler(req);
-      expect(res.status).toBe(200);
-      const html = await res.text();
-      expect(html).toContain('acme');
-      expect(html).toContain('beta');
-      expect(html).toContain('gamma');
-    });
-
-    it('picker links point to correct subdomain callback URLs', async () => {
-      const req = makeDirectRequest('my-code', ['acme', 'beta']);
-      const res = await callbackHandler(req);
-      const html = await res.text();
-      expect(html).toContain('acme.minusx.app/api/integrations/slack/oauth-callback');
-      expect(html).toContain('beta.minusx.app/api/integrations/slack/oauth-callback');
-    });
-
-    it('ignores malformed mx-companies cookie and shows login page', async () => {
-      const url = new URL(CALLBACK_BASE);
-      url.searchParams.set('code', 'code');
-      const req = new NextRequest(url.toString(), {
-        headers: { cookie: 'mx-companies=not-valid-json' },
-      });
-      const res = await callbackHandler(req);
-      expect(res.status).toBe(200);
-      const html = await res.text();
-      expect(html).toContain('log in');
-    });
-  });
-
-  // ── Subdomain (x-subdomain present, session available) ───────────────────
-
-  describe('subdomain — authenticated', () => {
-    it('exchanges code, saves bot, redirects to settings', async () => {
-      const req = makeDirectRequest('slack-code', [], 'acme');
-      const res = await callbackHandler(req);
-      expect(upsertSlackBotConfig).toHaveBeenCalledWith(
-        42, 'org',
-        expect.objectContaining({ install_mode: 'oauth', bot_token: 'xoxb-test-bot-token' }),
-      );
-      expect(res.headers.get('location')).toContain('slack=installed');
-    });
-
-    it('redirect goes to the subdomain host, not root domain', async () => {
-      const url = new URL(CALLBACK_BASE);
-      url.searchParams.set('code', 'code');
-      // Simulate request arriving at acme.minusx.app
-      const req = new NextRequest(url.toString(), {
-        headers: { 'x-subdomain': 'acme', host: 'acme.minusx.app' },
-      });
-      const res = await callbackHandler(req);
-      expect(res.headers.get('location')).toContain('acme.minusx.app');
-    });
-
-    it('does not store signing_secret (uses env var for direct installs too)', async () => {
-      const req = makeDirectRequest('code', [], 'acme');
-      await callbackHandler(req);
-      const [,, bot] = (upsertSlackBotConfig as jest.Mock).mock.calls[0];
-      expect(bot.signing_secret).toBeUndefined();
-    });
-  });
-
-  describe('subdomain — unauthenticated', () => {
-    it('redirects to login when no session', async () => {
-      (getEffectiveUser as jest.Mock).mockResolvedValue(null);
-      const url = new URL(CALLBACK_BASE);
-      url.searchParams.set('code', 'slack-code');
-      const req = new NextRequest(url.toString(), {
-        headers: { 'x-subdomain': 'acme', host: 'acme.minusx.app' },
-      });
-      const res = await callbackHandler(req);
-      const location = res.headers.get('location')!;
-      expect(location).toContain('/login');
-      expect(location).toContain('callbackUrl');
-      expect(upsertSlackBotConfig).not.toHaveBeenCalled();
-    });
-
-    it('login redirect preserves the code in callbackUrl', async () => {
-      (getEffectiveUser as jest.Mock).mockResolvedValue(null);
-      const url = new URL(CALLBACK_BASE);
-      url.searchParams.set('code', 'preserve-me');
-      const req = new NextRequest(url.toString(), {
-        headers: { 'x-subdomain': 'acme', host: 'acme.minusx.app' },
-      });
-      const res = await callbackHandler(req);
-      expect(res.headers.get('location')).toContain('preserve-me');
-    });
-  });
-
-  describe('subdomain — non-admin', () => {
-    it('returns 403 when user is not an admin', async () => {
-      (getEffectiveUser as jest.Mock).mockResolvedValue({
-        email: 'viewer@acme.com',
-        role: 'viewer',
-        companyId: 42,
-        mode: 'org' as const,
-        userId: 2,
-        home_folder: '/org',
-        companyName: 'acme',
-      });
-      const req = makeDirectRequest('code', [], 'acme');
-      const res = await callbackHandler(req);
-      expect(res.status).toBe(403);
-      expect(upsertSlackBotConfig).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('subdomain — Slack errors', () => {
-    it('returns 500 when Slack exchange fails', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: async () => ({ ok: false, error: 'invalid_code' }),
-      });
-      const req = makeDirectRequest('bad-code', [], 'acme');
-      const res = await callbackHandler(req);
-      expect(res.status).toBe(500);
-      expect(upsertSlackBotConfig).not.toHaveBeenCalled();
-    });
+  it('renders login HTML directing user to install via settings', async () => {
+    const res = await callbackHandler(makeCallbackRequest({ code: 'slack-code' }));
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('log in');
   });
 });

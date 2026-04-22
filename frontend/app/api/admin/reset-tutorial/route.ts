@@ -3,7 +3,7 @@
  * POST /api/admin/reset-tutorial
  *
  * Wipes all tutorial-mode and internals-mode documents and re-inserts
- * the canonical seed docs from company-template.json.
+ * the canonical seed docs from workspace-template.json.
  * Useful for demos, onboarding resets, and testing.
  * Requires admin role.
  */
@@ -12,11 +12,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
-import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
+import { getModules } from '@/lib/modules/registry';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
-import companyTemplate from '@/lib/database/company-template.json';
-import { copySeedMxfoodForCompany } from '@/lib/object-store';
+import workspaceTemplate from '@/lib/database/workspace-template.json';
+import { copySeedMxfoodForMode } from '@/lib/object-store';
 
 const MXFOOD_TABLES = [
   'ad_campaigns', 'ad_spend', 'attribution', 'deliveries', 'drivers',
@@ -31,20 +31,13 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
   }
 
   try {
-    const companyId = user.companyId;
-    if (!companyId) {
-      return ApiErrors.badRequest('Company ID not found in user session');
-    }
-
-    // Deep clone and apply template substitutions (same pattern as createNewCompany())
-    const templateContent = JSON.stringify(companyTemplate);
+    // Deep clone and apply template substitutions (same pattern as initializeDatabase())
+    const templateContent = JSON.stringify(workspaceTemplate);
     const now = new Date().toISOString();
     const defaultDbType = DEFAULT_DB_TYPE;
 
     const processedTemplate = templateContent
-      .replace(/"{{COMPANY_ID}}"/g, String(companyId))
-      .replace(/\{\{COMPANY_ID\}\}/g, String(companyId))
-      .replace(/\{\{COMPANY_NAME\}\}/g, '')
+      .replace(/\{\{ORG_NAME\}\}/g, '')
       .replace(/\{\{ADMIN_EMAIL\}\}/g, '')
       .replace(/\{\{ADMIN_NAME\}\}/g, '')
       .replace(/\{\{ADMIN_PASSWORD_HASH\}\}/g, '')
@@ -54,7 +47,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
     const initData = JSON.parse(processedTemplate);
 
-    // Filter to tutorial and internals seed docs
+    // Support both flat (documents) and legacy nested format from template
     const allDocs: Array<{
       id: number;
       name: string;
@@ -62,10 +55,11 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       type: string;
       content: unknown;
       references?: unknown[];
-      company_id: number;
       created_at: string;
       updated_at: string;
-    }> = initData.companies[0].documents;
+    }> = Array.isArray(initData.orgs ?? initData.companies)
+      ? (initData.orgs ?? initData.companies as any[]).flatMap((c: any) => c.documents ?? [])
+      : (initData.documents ?? []);
 
     const seedDocs = allDocs.filter(
       (doc) =>
@@ -73,46 +67,40 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
         doc.path === '/internals' || doc.path.startsWith('/internals/')
     );
 
-    // Execute in a transaction: delete all tutorial/internals state, then re-insert template docs
-    const db = await getAdapter();
-    await db.transaction(async (tx) => {
-      // Delete user-created tutorial and internals files (any ID, by path)
-      await tx.query(
-        "DELETE FROM files WHERE company_id = $1 AND (path = '/tutorial' OR path LIKE '/tutorial/%' OR path = '/internals' OR path LIKE '/internals/%')",
-        [companyId]
+    const db = getModules().db;
+
+    // Delete user-created tutorial and internals files (any ID, by path)
+    await db.exec(
+      "DELETE FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%' OR path = '/internals' OR path LIKE '/internals/%')",
+      []
+    );
+
+    // Delete seed data orphans (low IDs that may not match paths after user edits)
+    await db.exec(
+      'DELETE FROM files WHERE id < 100',
+      []
+    );
+
+    // Re-insert all tutorial and internals template documents
+    for (const doc of seedDocs) {
+      await db.exec(
+        'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [
+          doc.id,
+          doc.name,
+          doc.path,
+          doc.type,
+          JSON.stringify(doc.content),
+          JSON.stringify(doc.references || []),
+          doc.created_at,
+          doc.updated_at,
+        ]
       );
+    }
 
-      // Delete seed data orphans (low IDs that may not match paths after user edits)
-      await tx.query(
-        'DELETE FROM files WHERE company_id = $1 AND id < 100',
-        [companyId]
-      );
-
-      // Re-insert all tutorial and internals template documents
-      for (const doc of seedDocs) {
-        await tx.query(
-          'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-          [
-            companyId,
-            doc.id,
-            doc.name,
-            doc.path,
-            doc.type,
-            JSON.stringify(doc.content),
-            JSON.stringify(doc.references || []),
-            doc.created_at,
-            doc.updated_at,
-          ]
-        );
-      }
-    });
-
-    // Flush WAL cache so subsequent requests see the new state
-    await resetAdapter();
-
-    // Re-copy mxfood seed Parquet files to company-specific S3 prefix — best-effort.
-    copySeedMxfoodForCompany(companyId, 'tutorial', MXFOOD_TABLES).then((copied) => {
-      console.log(`[RESET_TUTORIAL] Re-copied ${copied.length}/${MXFOOD_TABLES.length} mxfood tables for company ${companyId}`);
+    // Re-copy mxfood seed Parquet files — best-effort
+    copySeedMxfoodForMode('tutorial', MXFOOD_TABLES).then((copied) => {
+      console.log(`[RESET_TUTORIAL] Re-copied ${copied.length}/${MXFOOD_TABLES.length} mxfood tables`);
     }).catch((err) =>
       console.warn('[RESET_TUTORIAL] mxfood S3 copy failed (non-fatal):', err)
     );

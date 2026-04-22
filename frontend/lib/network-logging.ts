@@ -31,7 +31,6 @@ function sanitizeHeaders(headers: Record<string, string>): Record<string, string
 }
 
 interface UserContext {
-  companyId: string | number | null | undefined;
   userId?: string | number | null | undefined;
   mode?: string | null;
 }
@@ -40,7 +39,6 @@ interface RequestInfo {
   method?: string;
   protocol?: string;
   domain?: string;
-  subdomain?: string;
   path?: string;
   headers?: Record<string, string>;
 }
@@ -72,10 +70,8 @@ export async function logNetworkRequest(
     method: req.method ?? null,
     protocol: req.protocol ?? null,
     domain: req.domain ?? null,
-    subdomain: req.subdomain ?? null,
     path: req.path ?? null,
     headers: req.headers ? sanitizeHeaders(req.headers) : null,
-    company_id: user?.companyId != null ? String(user.companyId) : null,
     user_id: user?.userId != null ? String(user.userId) : null,
     mode: user?.mode ?? null,
   });
@@ -95,7 +91,6 @@ export async function logNetworkResponse(
     response_body: responseBody,
     status_code: statusCode,
     is_error: isError,
-    company_id: user?.companyId != null ? String(user.companyId) : null,
     user_id: user?.userId != null ? String(user.userId) : null,
     mode: user?.mode ?? null,
   });

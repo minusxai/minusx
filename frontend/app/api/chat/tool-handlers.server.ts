@@ -148,7 +148,7 @@ registerTool('ExecuteQuery', async (args, user) => {
 
 /**
  * ReadFiles — server-side fallback.
- * Reads files directly from SQLite instead of the Redux store.
+ * Reads files directly from the document DB instead of the Redux store.
  * Uses readFilesServer() for consistent behavior with client-side:
  * - Includes references with parameter inheritance
  * - Computes effective queryResultIds

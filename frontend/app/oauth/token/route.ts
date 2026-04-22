@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { OAuthCodeDB, OAuthTokenDB } from '@/lib/oauth/db';
+import { getModules } from '@/lib/modules/registry';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -57,7 +58,8 @@ export async function POST(request: NextRequest) {
     return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
   }
 
-  const tokenPair = await OAuthTokenDB.create(result.companyId, result.userId, result.scope);
+  const extra = await getModules().auth.getExtraTokenPayload?.(result.userId, result.scope) ?? {};
+  const tokenPair = await OAuthTokenDB.create(result.userId, result.scope, extra);
 
   return NextResponse.json({
     access_token: tokenPair.accessToken,

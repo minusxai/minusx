@@ -19,7 +19,7 @@ import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { getConfigsForMode } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import type { MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
@@ -63,7 +63,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Dedup: skip if already running (force bypasses by using a 1s window)
     if (!force) {
-      const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type, user.companyId);
+      const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type);
       if (existingRun) {
         return successResponse({
           runId: existingRun.id,
@@ -74,7 +74,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // Load previous runs for handler context
-    const previousRuns = await JobRunsDB.getByJobId(job_id, job_type, user.companyId, 10);
+    const previousRuns = await JobRunsDB.getByJobId(job_id, job_type, 10);
 
     const startedAt = new Date().toISOString();
 
@@ -104,7 +104,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const runId = await JobRunsDB.create({
       job_id,
       job_type,
-      company_id: user.companyId,
       output_file_id: runFileId,
       output_file_type: runFileType,
       source: 'manual',
@@ -133,7 +132,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       // Deliver messages (skipped when send=false)
       if (send) {
-        const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+        const { config } = await getConfigsForMode(user.mode);
         const _emailRaw = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
         const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
         const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');

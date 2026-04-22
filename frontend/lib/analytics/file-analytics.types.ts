@@ -9,7 +9,6 @@ export interface FileEvent {
   userId?: number;
   userEmail?: string;
   userRole?: string;
-  companyId: number;  // used to route to correct DB file, not stored in row
   referencedByFileId?: number;
   referencedByFileType?: string;
 }
@@ -24,7 +23,6 @@ export interface LLMCallEvent {
   cost: number;
   durationS: number;
   finishReason?: string;
-  companyId: number;
 }
 
 export interface ConversationAnalyticsSummary {

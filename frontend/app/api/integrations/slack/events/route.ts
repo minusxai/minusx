@@ -1,6 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server';
+import { getModules } from '@/lib/modules/registry';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { getCompanyUserEffectiveUser } from '@/lib/auth/auth-helpers';
+import { getUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
 import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
@@ -78,7 +79,7 @@ export async function processSlackEvent(
     if (ev?.type === 'app_home_opened') {
       if (ev.tab === 'home' && ev.user) {
         const appName = installation.config.branding?.agentName || 'MinusX';
-        const platformUrl = await resolveBaseUrl(installation.companyId);
+        const platformUrl = await resolveBaseUrl();
         const homeView = buildHomeView(appName, platformUrl);
         await publishHomeView(installation.bot.bot_token, ev.user, homeView);
         if (eventId) markSlackEventDone(eventId);
@@ -139,8 +140,7 @@ export async function processSlackEvent(
       return;
     }
 
-    const effectiveUser = await getCompanyUserEffectiveUser(
-      installation.companyId,
+    const effectiveUser = await getUserEffectiveUser(
       slackEmail,
       installation.mode,
     );
@@ -148,7 +148,7 @@ export async function processSlackEvent(
         installation,
         ev.channel,
         threadTs,
-        `Sorry, ${slackEmail} is not configured in MinusX for this company.`,
+        `Sorry, ${slackEmail} is not configured in MinusX.`,
       );
       return;
     }
@@ -158,7 +158,6 @@ export async function processSlackEvent(
       userId: effectiveUser.userId,
       userEmail: effectiveUser.email,
       messagePreview: userMessage.slice(0, 100),
-      companyId: installation.companyId,
       mode: installation.mode,
     });
 
@@ -186,7 +185,7 @@ export async function processSlackEvent(
 
     if (slackReply) {
       const mrkdwnText = markdownToSlackMrkdwn(slackReply.text);
-      const baseUrl = publicBaseUrl ?? await resolveBaseUrl(installation.companyId);
+      const baseUrl = publicBaseUrl ?? await resolveBaseUrl();
       const viewUrl = `${baseUrl}/explore/${conversationId}`;
 
       // Upload chart images first (max 2) so they appear before the text reply
@@ -241,7 +240,6 @@ export async function processSlackEvent(
       source: 'slack_events',
       message: err instanceof Error ? err.message : String(err),
       error: err,
-      companyId: installation.companyId,
       mode: installation.mode,
     });
     // On error, swap :eyes: for :x:
@@ -262,7 +260,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
+  // URL verification handshake must be answered before any DB lookups — Slack calls this
+  // during initial webhook setup when the team may not yet be registered.
+  if (payload.type === 'url_verification' && payload.challenge) {
+    return NextResponse.json({ challenge: payload.challenge });
+  }
+
   const teamId = getTeamId(payload);
+  const contextEstablished = teamId
+    ? await getModules().auth.addHeaders(request, new Headers(), { slack_team: teamId })
+    : true;
+
+  if (!contextEstablished) {
+    console.log('[Slack/events] dropping: unknown team', { teamId });
+    return NextResponse.json({ ok: true });
+  }
+
+  const runInContext = getModules().auth.getContextRunner?.() ?? ((fn: () => Promise<unknown>) => fn());
   const installation = teamId ? await findSlackInstallationByTeam(teamId) : null;
   const signingSecret = installation?.bot.signing_secret ?? getSlackSigningSecret();
 
@@ -289,12 +303,6 @@ export async function POST(request: NextRequest) {
       console.log('[Slack/events] dropping: invalid signature');
       return NextResponse.json({ ok: false }, { status: 401 });
     }
-  }
-
-  // URL verification handshake (Slack calls this when you save the webhook URL)
-  // Handled regardless of whether a signing secret was found, so initial setup works.
-  if (payload.type === 'url_verification' && payload.challenge) {
-    return NextResponse.json({ challenge: payload.challenge });
   }
 
   // If we have no signing secret at all, silently accept remaining events (prevents blocking setup)
@@ -331,11 +339,10 @@ export async function POST(request: NextRequest) {
   console.log('[Slack/events] dispatching processSlackEvent', {
     eventId: payload.event_id,
     eventType: payload.event?.type,
-    companyId: installation.companyId,
     mode: installation.mode,
     publicBaseUrl,
   });
-  after(() => processSlackEvent(payload, installation, publicBaseUrl));
+  after(() => runInContext(() => processSlackEvent(payload, installation, publicBaseUrl)));
 
   return NextResponse.json({ ok: true });
 }

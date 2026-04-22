@@ -14,31 +14,27 @@ import { exportDatabase } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion } from '@/lib/database/config-db';
 import { getTargetVersions } from '@/lib/database/migrations';
-import { DB_PATH, getDbType } from '@/lib/database/db-config';
+import { getDbType } from '@/lib/database/db-config';
 import { createAdapter } from '@/lib/database/adapter/factory';
 import { POSTGRES_URL } from '@/lib/config';
 
 export const GET = withAuth(async (request: NextRequest, user) => {
-  // Check admin permission
   if (!isAdmin(user.role)) {
     return ApiErrors.forbidden('Admin access required');
   }
 
   try {
-    // Get current versions from database
     const dbType = getDbType();
-    const db = dbType === 'sqlite'
-      ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
+    const db = dbType === 'pglite'
+      ? await createAdapter({ type: 'pglite' })
       : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
     const currentDataVersion = await getDataVersion(db);
     const currentSchemaVersion = await getSchemaVersion(db);
     await db.close();
 
-    // Get target versions
     const { dataVersion: targetDataVersion, schemaVersion: targetSchemaVersion } = getTargetVersions();
 
-    // Export and validate — scoped to the authenticated user's company only
-    const exportData = await exportDatabase(DB_PATH, user.companyId);
+    const exportData = await exportDatabase();
     const validation = validateInitData(exportData);
 
     return NextResponse.json({

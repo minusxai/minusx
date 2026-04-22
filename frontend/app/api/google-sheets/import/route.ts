@@ -11,18 +11,17 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (!spreadsheet_url) return ApiErrors.badRequest('spreadsheet_url is required');
 
     if (replace_existing) {
-      await deleteConnectionFiles(user.companyId, user.mode, connection_name);
+      await deleteConnectionFiles(user.mode, connection_name);
     }
 
     const { files, spreadsheetId } = await importGoogleSheetToS3(
       spreadsheet_url,
       connection_name,
-      user.companyId,
       user.mode,
       schema_name,
     );
 
-    const registered = await processFilesFromS3(user.companyId, user.mode, connection_name, files);
+    const registered = await processFilesFromS3(user.mode, connection_name, files);
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { IDatabaseAdapter, ITransactionContext, QueryResult } from './types';
-import { POSTGRES_SCHEMA } from '../postgres-schema';
+import { POSTGRES_SCHEMA, splitSQLStatements } from '../postgres-schema';
 import { POSTGRES_URL, POSTGRES_SCHEMA as CONFIG_POSTGRES_SCHEMA } from '@/lib/config';
 
 /**
@@ -121,12 +121,21 @@ export class PostgresAdapter implements IDatabaseAdapter {
   }
 
   /**
-   * Initialize PostgreSQL-specific schema
-   * Includes tables, indexes, triggers, and functions
+   * Initialize PostgreSQL-specific schema.
+   * Runs each statement individually so errors are proper Promise rejections.
+   * Concurrent Turbopack workers race on CREATE OR REPLACE FUNCTION (23505) and
+   * CREATE TRIGGER (42710) — both are safe to ignore when another worker wins.
    */
   async initializeSchema(): Promise<void> {
-    // Execute PostgreSQL-specific schema
-    await this.exec(POSTGRES_SCHEMA);
+    const pool = this.getPool();
+    for (const stmt of splitSQLStatements(POSTGRES_SCHEMA)) {
+      try {
+        await pool.query(stmt);
+      } catch (error: any) {
+        if (error?.code === '23505' || error?.code === '42710') continue;
+        throw error;
+      }
+    }
   }
 
   /**

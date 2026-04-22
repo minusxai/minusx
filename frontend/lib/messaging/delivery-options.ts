@@ -3,7 +3,7 @@
  * Extracted so they can be unit tested independently of React.
  */
 
-import type { CompanyConfig } from '@/lib/branding/whitelabel';
+import type { OrgConfig } from '@/lib/branding/whitelabel';
 import type { AlertRecipient, ConfigChannel, User } from '@/lib/types';
 
 export type SlackChannel  = Extract<ConfigChannel, { type: 'slack' }>;
@@ -17,11 +17,11 @@ export type DropdownOption =
   | { kind: 'email'; via: 'channel'; channel: EmailChannel }
   | { kind: 'phone'; via: 'channel'; channel: PhoneChannel };
 
-function webhookTypes(config: CompanyConfig): Set<string> {
+function webhookTypes(config: OrgConfig): Set<string> {
   return new Set(config.messaging?.webhooks?.map(w => w.type) ?? []);
 }
 
-function configChannels(config: CompanyConfig) {
+function configChannels(config: OrgConfig) {
   return {
     slack: (config.channels ?? []).filter((c): c is SlackChannel => c.type === 'slack'),
     email: (config.channels ?? []).filter((c): c is EmailChannel => c.type === 'email'),
@@ -29,7 +29,7 @@ function configChannels(config: CompanyConfig) {
   };
 }
 
-export function hasDeliveryEnabled(config: CompanyConfig, users: User[]): boolean {
+export function hasDeliveryEnabled(config: OrgConfig, users: User[]): boolean {
   const types = webhookTypes(config);
   const ch = configChannels(config);
   return (
@@ -44,7 +44,7 @@ function recipientKey(r: AlertRecipient): string {
 }
 
 export function buildDropdownOptions(
-  config: CompanyConfig,
+  config: OrgConfig,
   users: User[],
   recipients: AlertRecipient[],
   query: string,

@@ -12,7 +12,7 @@ import { selectConnectionsContentLoaded, selectContextsContentLoaded } from '@/s
  * DataLoader Component
  *
  * Invisible component that triggers client-side loading of core resources:
- * - Configs (company branding, settings)
+ * - Configs (org branding, settings)
  * - Contexts (all context metadata + home context fully loaded)
  * - Connections (all connections with schemas)
  *

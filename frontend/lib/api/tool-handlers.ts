@@ -479,6 +479,10 @@ registerFrontendTool('EditFile', async (args, _context) => {
   let workingStr = built.fullFileStr;
   for (let i = 0; i < changes.length; i++) {
     const { oldMatch, newMatch, replaceAll } = changes[i];
+    if (typeof oldMatch !== 'string' || typeof newMatch !== 'string') {
+      const err = `Change ${i + 1}/${changes.length} is missing oldMatch or newMatch`;
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
+    }
     // Mirror editFileStr's \n normalization
     const normalizedOld = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
     const normalizedNew = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
@@ -676,12 +680,45 @@ registerFrontendTool('CreateFile', async (args, context) => {
     const mode = getStore().getState().auth.user?.mode ?? 'org';
     path = `/${mode}`;
   }
+  // Normalize: collapse double slashes and strip trailing slash
+  path = path.replace(/\/+/g, '/').replace(/\/$/, '');
+
+  // Guard: the folder path must not already be a virtual file's path.
+  // e.g. if a dashboard already lives at /org/Getting Started, you cannot
+  // also create files *inside* /org/Getting Started — a file and its containing
+  // folder cannot share the same path.
+  const virtualFiles = Object.values(getStore().getState().files.files).filter(f => f.id < 0);
+  const folderConflict = virtualFiles.find(f => f.type !== 'folder' && (f.metadataChanges?.path || f.path) === path);
+  if (folderConflict) {
+    const err = `Path conflict: '${path}' is already occupied by a ${folderConflict.type} file — you cannot create files inside it. Choose a different folder.`;
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
 
   // Create virtual file (draft) for any type — no navigation
   const virtualId = await createVirtualFile(file_type, { folder: path });
 
   if (name) {
     await editFileOp({ fileId: virtualId, changes: { name } });
+  }
+
+  // Guard: after name slug is applied, confirm the final path doesn't duplicate
+  // or overlap any other virtual file path.
+  {
+    const effectivePath = (f: { path: string; metadataChanges?: { path?: string } }) =>
+      f.metadataChanges?.path || f.path;
+    const newPath = effectivePath(getStore().getState().files.files[virtualId]);
+    const others = Object.values(getStore().getState().files.files).filter(f => f.id < 0 && f.id !== virtualId);
+    for (const other of others) {
+      const otherPath = effectivePath(other);
+      if (newPath === otherPath) {
+        const err = `Path conflict: '${newPath}' is already used by another virtual ${other.type} file. Use a different name or path.`;
+        return { content: { success: false, error: err }, details: { success: false, error: err } };
+      }
+      if (other.type !== 'folder' && otherPath.startsWith(newPath + '/')) {
+        const err = `Path conflict: '${newPath}' would be treated as a folder by existing virtual ${other.type} '${otherPath}' — but it is a file. Use a different name or path.`;
+        return { content: { success: false, error: err }, details: { success: false, error: err } };
+      }
+    }
   }
   if (content && Object.keys(content).length > 0) {
     await editFileOp({ fileId: virtualId, changes: { content } });

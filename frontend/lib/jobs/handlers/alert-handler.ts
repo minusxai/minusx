@@ -2,7 +2,7 @@ import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { buildAlertEmailHtml } from '@/lib/messaging/alert-email-html';
-import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { getConfigsForMode } from '@/lib/data/configs.server';
 import { UserDB } from '@/lib/database/user-db';
 import { createServerRunner } from '@/lib/tests/server';
 import type { AlertContent, AlertOutput, DeliveredRecipient, JobHandlerResult, JobRunnerInput, TestRunResult } from '@/lib/types';
@@ -52,14 +52,14 @@ export const alertJobHandler: JobHandler = {
 
     if (triggered && alert.recipients && alert.recipients.length > 0) {
       const subject = `[Alert Triggered] ${alertName}`;
-      const baseUrl = await resolveBaseUrl(user.companyId);
+      const baseUrl = await resolveBaseUrl();
       const alertLink = `${baseUrl}/f/${runFileId}`;
 
-      const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+      const { config } = await getConfigsForMode(user.mode);
       const agentName = config.branding.agentName;
 
       // Load users for dynamic address resolution
-      const dbUsers = await UserDB.listByCompany(user.companyId);
+      const dbUsers = await UserDB.listAll();
       const userById = Object.fromEntries(dbUsers.map(u => [u.id, u]));
 
       const failSummary = failedTests.map((r, i) => {

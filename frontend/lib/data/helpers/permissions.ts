@@ -55,7 +55,7 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
 
 /**
  * Check if user has access to a file type (type-based)
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  */
 export function checkFileTypeAccess(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
   return canAccessFileType(user.role, file.type, overrides);

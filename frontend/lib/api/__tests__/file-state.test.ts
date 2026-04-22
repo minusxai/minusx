@@ -123,7 +123,7 @@ function createMockFile(id: number, type: FileType = 'question'): DbFile {
     references: [],
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    company_id: 1,
+
     version: 1,
     last_edit_id: null,
   };
@@ -147,7 +147,7 @@ describe('readFiles - File State Manager', () => {
     // Set default auth state
     mockStore.dispatch({
       type: 'auth/setUser',
-      payload: { userId: 1, email: 'test@example.com', companyId: 1, isAdmin: false }
+      payload: { userId: 1, email: 'test@example.com', isAdmin: false }
     });
 
     // Clear mocks
@@ -481,8 +481,8 @@ describe('readFiles - File State Manager', () => {
       // Mock getFiles to return metadata
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null },
-          { id: file2.id, name: file2.name, path: file2.path, type: file2.type, references: [], created_at: file2.created_at, updated_at: file2.updated_at, company_id: 1, version: 1, last_edit_id: null }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, version: 1, last_edit_id: null },
+          { id: file2.id, name: file2.name, path: file2.path, type: file2.type, references: [], created_at: file2.created_at, updated_at: file2.updated_at, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -507,7 +507,7 @@ describe('readFiles - File State Manager', () => {
 
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -542,7 +542,7 @@ describe('readFiles - File State Manager', () => {
 
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -566,7 +566,7 @@ describe('readFiles - File State Manager', () => {
 
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -755,6 +755,28 @@ describe('readFiles - File State Manager', () => {
       mockSaveFile.mockRejectedValueOnce(new Error('Database error'));
 
       await expect(publishFile({ fileId: 1 })).rejects.toThrow('Database error');
+    });
+
+    it('should auto-retry once on 409 conflict, merging edits onto server version', async () => {
+      const { ConflictError } = jest.requireMock('@/lib/data/files');
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      // Server file has been updated (e.g. schema cache write bumped version to 2)
+      const serverFile = { ...mockFile, version: 2 };
+      mockSaveFile.mockClear();
+      mockSaveFile
+        .mockRejectedValueOnce(new ConflictError(serverFile))
+        .mockResolvedValueOnce({ data: { ...serverFile, version: 3 } });
+
+      const result = await publishFile({ fileId: 1 });
+
+      expect(mockSaveFile).toHaveBeenCalledTimes(2);
+      // Second call must use the server's version
+      const [, , , , , , , retryVersion] = mockSaveFile.mock.calls[1];
+      expect(retryVersion).toBe(2);
+      expect(result.id).toBe(1);
     });
   });
 
@@ -1043,20 +1065,6 @@ describe('readFiles - File State Manager', () => {
       await expect(createFolder('Existing', '/org')).rejects.toThrow();
     });
 
-    it('should set correct company_id from auth state', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: { id: 101, name: 'Marketing', path: '/org/marketing' }
-        })
-      } as Response);
-
-      await createFolder('Marketing', '/org');
-
-      const state = mockStore.getState() as RootState;
-      // Should use company_id from auth state (set in mockStore setup)
-      expect(state.files.files[101].company_id).toBe(1);
-    });
   });
 
   describe('readFolder', () => {
@@ -1073,7 +1081,7 @@ describe('readFiles - File State Manager', () => {
       mockGetFiles.mockResolvedValue({
         data: [childFile1, childFile2],
         metadata: {
-          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1, version: 1, last_edit_id: null }]
+          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', version: 1, last_edit_id: null }]
         }
       });
 
@@ -1104,7 +1112,7 @@ describe('readFiles - File State Manager', () => {
       mockGetFiles.mockResolvedValue({
         data: [],
         metadata: {
-          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1, version: 1, last_edit_id: null }]
+          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', version: 1, last_edit_id: null }]
         }
       });
 

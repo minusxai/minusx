@@ -6,14 +6,11 @@
  */
 
 // Must be hoisted before any imports that touch the DB — path must match getTestDbPath('infer_columns_e2e')
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_infer_columns_e2e.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import { NextRequest } from 'next/server';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -22,7 +19,6 @@ import { POST as inferColumnsHandler } from '../route';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 
 const mockUser = {
-  companyId: 1,
   companyName: 'test',
   userId: 1,
   email: 'test@test.com',
@@ -38,12 +34,12 @@ const TEST_QUESTION_QUERY =
 
 describe('Infer Columns - E2E Tests', () => {
   setupTestDb(getTestDbPath('infer_columns_e2e'), {
-    customInit: async (dbPath) => {
-      const { createAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+    customInit: async (_dbPath) => {
+      const { getAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await getAdapter();
       await db.query(
-        `INSERT INTO files (id, name, path, type, content, company_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           TEST_QUESTION_ID,
           'Test Infer Question',
@@ -56,12 +52,11 @@ describe('Infer Columns - E2E Tests', () => {
             connection_name: null,
             references: [],
           }),
-          1,
+          '[]',
           new Date().toISOString(),
           new Date().toISOString(),
         ]
       );
-      await db.close();
     },
   });
 
@@ -73,7 +68,6 @@ describe('Infer Columns - E2E Tests', () => {
     (getEffectiveUser as jest.Mock).mockResolvedValue({
       userId: 1,
       email: 'test@example.com',
-      companyId: 1,
       role: 'admin',
       home_folder: '/org',
       mode: 'org',

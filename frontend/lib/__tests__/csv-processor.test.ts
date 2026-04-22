@@ -59,7 +59,8 @@ async function* makeStream(buf: Buffer): AsyncIterable<Uint8Array> {
 
 let mockSend: jest.Mock;
 let mockConnRun: jest.Mock;
-let mockCloseSync: jest.Mock;
+let mockConnCloseSync: jest.Mock;
+let mockInstanceCloseSync: jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -79,9 +80,11 @@ beforeEach(() => {
     };
     return {};
   });
-  mockCloseSync = jest.fn();
+  mockConnCloseSync = jest.fn();
+  mockInstanceCloseSync = jest.fn();
   (DuckDBInstance.create as jest.Mock).mockResolvedValue({
-    connect: jest.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockCloseSync }),
+    connect: jest.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockConnCloseSync }),
+    closeSync: mockInstanceCloseSync,
   });
 });
 
@@ -154,7 +157,7 @@ describe('parseSpreadsheetId', () => {
 
 describe('processFilesFromS3', () => {
   it('extracts metadata for a CSV file', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: '1/csvs/org/myconn/orders.csv',
       schema_name: 'public',
@@ -173,7 +176,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('uses read_parquet for parquet files', async () => {
-    await processFilesFromS3(1, 'org', 'myconn', [{
+    await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.parquet',
       s3_key: '1/csvs/org/myconn/orders.parquet',
       file_format: 'parquet',
@@ -186,7 +189,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('uses read_csv_auto for csv files', async () => {
-    await processFilesFromS3(1, 'org', 'myconn', [{
+    await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: '1/csvs/org/myconn/orders.csv',
       file_format: 'csv',
@@ -199,7 +202,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('auto-generates table name from filename when not provided', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'My Sales Data.csv',
       s3_key: '1/csvs/org/myconn/file.csv',
     }]);
@@ -208,7 +211,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('respects explicit table_name', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: '1/csvs/org/myconn/orders.csv',
       table_name: 'custom_name',
@@ -218,7 +221,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('defaults schema_name to "public" when not provided', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: '1/csvs/org/myconn/orders.csv',
     }]);
@@ -227,7 +230,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('respects explicit schema_name', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: '1/csvs/org/myconn/orders.csv',
       schema_name: 'sales',
@@ -245,7 +248,7 @@ describe('processFilesFromS3', () => {
       .mockResolvedValueOnce({ Body: makeStream(xlsxBuf) }) // GET xlsx from S3
       .mockResolvedValue({});                                // PUT each Parquet
 
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'workbook.xlsx',
       s3_key: '1/csvs/org/myconn/workbook.xlsx',
       schema_name: 'public',
@@ -266,7 +269,7 @@ describe('processFilesFromS3', () => {
       .mockResolvedValueOnce({ Body: makeStream(xlsxBuf) })
       .mockResolvedValue({});
 
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'wb.xlsx',
       s3_key: '1/csvs/org/myconn/wb.xlsx',
       file_format: 'xlsx',
@@ -281,7 +284,7 @@ describe('processFilesFromS3', () => {
     mockSend.mockResolvedValueOnce({ Body: makeStream(xlsxBuf) });
 
     await expect(
-      processFilesFromS3(1, 'org', 'myconn', [{
+      processFilesFromS3('org', 'myconn', [{
         filename: 'empty.xlsx',
         s3_key: '1/csvs/org/myconn/empty.xlsx',
         file_format: 'xlsx',
@@ -290,7 +293,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('auto-assigns unique names when filenames collide', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [
+    const result = await processFilesFromS3('org', 'myconn', [
       { filename: 'data.csv', s3_key: 'k1' },
       { filename: 'data.parquet', s3_key: 'k2' },
     ]);
@@ -302,7 +305,7 @@ describe('processFilesFromS3', () => {
 
   it('throws on collision between user-supplied and auto-generated table names', async () => {
     await expect(
-      processFilesFromS3(1, 'org', 'myconn', [
+      processFilesFromS3('org', 'myconn', [
         { filename: 'orders.csv', s3_key: 'k1', table_name: 'orders' }, // explicit
         { filename: 'orders.parquet', s3_key: 'k2' },                   // auto → also 'orders'
       ]),
@@ -310,7 +313,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('passes s3_key through to result unchanged', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [{
+    const result = await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: '1/csvs/org/myconn/abc-def.csv',
     }]);
@@ -319,7 +322,7 @@ describe('processFilesFromS3', () => {
   });
 
   it('handles multiple files in one call', async () => {
-    const result = await processFilesFromS3(1, 'org', 'myconn', [
+    const result = await processFilesFromS3('org', 'myconn', [
       { filename: 'orders.csv', s3_key: 'k1', schema_name: 'sales' },
       { filename: 'users.csv', s3_key: 'k2', schema_name: 'auth' },
     ]);
@@ -330,22 +333,24 @@ describe('processFilesFromS3', () => {
   });
 
   it('closes the DuckDB connection in the finally block', async () => {
-    await processFilesFromS3(1, 'org', 'myconn', [{
+    await processFilesFromS3('org', 'myconn', [{
       filename: 'orders.csv',
       s3_key: 'k1',
     }]);
 
-    expect(mockCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockConnCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockInstanceCloseSync).toHaveBeenCalledTimes(1);
   });
 
   it('still closes DuckDB connection when metadata extraction fails', async () => {
     mockConnRun.mockRejectedValueOnce(new Error('DuckDB exploded'));
 
     await expect(
-      processFilesFromS3(1, 'org', 'myconn', [{ filename: 'bad.csv', s3_key: 'k1' }]),
+      processFilesFromS3('org', 'myconn', [{ filename: 'bad.csv', s3_key: 'k1' }]),
     ).rejects.toThrow('DuckDB exploded');
 
-    expect(mockCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockConnCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockInstanceCloseSync).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -360,7 +365,7 @@ describe('deleteConnectionFiles', () => {
       })
       .mockResolvedValue({}); // delete call
 
-    const result = await deleteConnectionFiles(1, 'org', 'myconn');
+    const result = await deleteConnectionFiles('org', 'myconn');
 
     expect(result).toBe(true);
     // Second send call should be the DeleteObjectsCommand
@@ -371,7 +376,7 @@ describe('deleteConnectionFiles', () => {
   it('returns false when no objects exist under the prefix', async () => {
     mockSend.mockResolvedValueOnce({ Contents: [], NextContinuationToken: undefined });
 
-    const result = await deleteConnectionFiles(1, 'org', 'myconn');
+    const result = await deleteConnectionFiles('org', 'myconn');
 
     expect(result).toBe(false);
   });
@@ -388,7 +393,7 @@ describe('deleteConnectionFiles', () => {
       })
       .mockResolvedValue({}); // delete call
 
-    await deleteConnectionFiles(1, 'org', 'conn');
+    await deleteConnectionFiles('org', 'conn');
 
     // 2 list calls + 1 delete call
     expect(mockSend).toHaveBeenCalledTimes(3);
@@ -416,7 +421,7 @@ describe('importGoogleSheetToS3', () => {
     });
 
     const { files, spreadsheetId } = await importGoogleSheetToS3(
-      SHEET_URL, 'myconn', 1, 'org', 'public',
+      SHEET_URL, 'myconn', 'org', 'public',
     );
 
     expect(spreadsheetId).toBe('sheet123');
@@ -438,7 +443,7 @@ describe('importGoogleSheetToS3', () => {
       arrayBuffer: async () => xlsxBuf.buffer.slice(xlsxBuf.byteOffset, xlsxBuf.byteOffset + xlsxBuf.byteLength),
     });
 
-    const { files } = await importGoogleSheetToS3(SHEET_URL, 'conn', 1, 'org', 'public');
+    const { files } = await importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public');
 
     expect(files).toHaveLength(2);
   });
@@ -447,7 +452,7 @@ describe('importGoogleSheetToS3', () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
 
     await expect(
-      importGoogleSheetToS3(SHEET_URL, 'conn', 1, 'org', 'public'),
+      importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
     ).rejects.toThrow('not publicly accessible');
   });
 
@@ -455,7 +460,7 @@ describe('importGoogleSheetToS3', () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
 
     await expect(
-      importGoogleSheetToS3(SHEET_URL, 'conn', 1, 'org', 'public'),
+      importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
     ).rejects.toThrow('not found');
   });
 
@@ -463,7 +468,7 @@ describe('importGoogleSheetToS3', () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500, statusText: 'Server Error' });
 
     await expect(
-      importGoogleSheetToS3(SHEET_URL, 'conn', 1, 'org', 'public'),
+      importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
     ).rejects.toThrow('Failed to download spreadsheet');
   });
 });

@@ -27,7 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 MinusX is an agentic, file-system based BI Tool that combines:
 - **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux
 - **Backend**: Python FastAPI for query execution and data pipeline orchestration
-- **Storage**: SQLite/Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
+- **Storage**: PGLite (open-source) or Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
 - **Architecture**: Dual-database system with integer ID-based file access, hierarchical permissions, and mode-based file system isolation
 
 ## Common Development Commands
@@ -69,7 +69,7 @@ The backend runs at http://localhost:8001 and handles:
 cd frontend
 npm run import-db -- --replace-db=y
 ```
-This creates `atlas_documents.db` from `lib/database/init-data.json` (includes sample questions and dashboards).
+Seeds the database from `lib/database/init-data.json` (includes sample questions and dashboards).
 
 **Export current database:**
 ```bash
@@ -85,7 +85,7 @@ Exports all documents to STDOUT for version control or sharing.
 
 ### Database Migrations
 
-**Documents DB (SQLite/Postgres)** — uses a versioned migration framework:
+**Documents DB (PGLite/Postgres)** — uses a versioned migration framework:
 1. Increment `LATEST_DATA_VERSION` in `lib/database/constants.ts`
 2. Add a `MigrationEntry` to `MIGRATIONS` array in `lib/database/migrations.ts`
 3. Migration runs automatically on `npm run import-db`
@@ -104,7 +104,7 @@ Exports all documents to STDOUT for version control or sharing.
 │                   (Next.js 16 + React 19)                   │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  SQLite or Postgres (atlas_documents.db / DATABASE_URL)     │
+│  PGLite (open-source) or Postgres (DATABASE_URL)            │
 │  ├─ Questions, Dashboards, Notebooks, Presentations         │
 │  ├─ Connections, Context, Users, Folders                    │
 │  └─ Accessed directly by Next.js server components          │
@@ -127,8 +127,8 @@ Exports all documents to STDOUT for version control or sharing.
 
 ### Key Concepts
 
-**Document Storage (SQLite/Postgres)**
-- Supports both SQLite (`atlas_documents.db`, WAL mode) and Postgres (via `DATABASE_URL`); adapters in `lib/database/`
+**Document Storage (PGLite/Postgres)**
+- Open-source: PGLite (embedded Postgres-compatible, directory-based persistence); hosted: Postgres via `DATABASE_URL`; adapters in `lib/database/`
 - Files accessed by integer ID via `/f/{id}` routes (not by path)
 - Path field is display-only for organization (e.g., `/org/Revenue-Summary`)
 - Content stored as JSON in `content` column
@@ -150,7 +150,7 @@ Exports all documents to STDOUT for version control or sharing.
 **Company Configs System**
 The configs system provides per-company configuration stored as database documents:
 
-- **Storage**: Document at `/configs/config.json` (per company, isolated by `company_id`)
+- **Storage**: Document at `/configs/config.json`
 - **File Type**: `'config'`
 - **Content Structure**:
   ```json
@@ -189,7 +189,7 @@ The configs system provides per-company configuration stored as database documen
 **Query Execution Flow**
 1. User edits SQL in QuestionViewer → Redux tracks state
 2. Execute query → `POST /api/query` (Next.js)
-3. Next.js fetches connection config from SQLite
+3. Next.js fetches connection config from the document DB
 4. Forward to Python backend → `POST /api/execute-query`
 5. Python executes via SQLAlchemy with connection pooling
 6. Return QueryResult (columns, types, rows)
@@ -211,7 +211,7 @@ minusx/
 │   ├── lib/         # Utilities, API clients, types
 │   └── store/       # Redux store and slices
 ├── backend/         # Python FastAPI backend (query execution, connections)
-└── data/            # Database files (SQLite documents, DuckDB analytics)
+└── data/            # Database files (PGLite documents, DuckDB analytics)
 ```
 
 ## Key Design Patterns
@@ -399,7 +399,7 @@ On every message send from a question or dashboard page, `buildChartAttachments(
 ## Development Workflow
 
 ### Database Schema Changes
-Update `lib/database/schema.ts` + `lib/database/postgres-schema.ts` (must stay in sync), update `lib/types.ts`, add a migration entry, then re-initialize: `npm run import-db -- --replace-db=y`.
+Update `lib/database/postgres-schema.ts` (PGLite uses this schema), update `lib/types.ts`, add a migration entry, then re-initialize: `npm run import-db -- --replace-db=y`.
 
 ### Adding Next.js API Routes
 
@@ -430,7 +430,7 @@ export async function POST(req: NextRequest) {
 - **React 19** with Next.js 16 (App Router)
 - **Chakra UI v3** with custom theme (Flat UI colors)
 - **Redux Toolkit** for state management
-- **better-sqlite3** for direct SQLite access; Postgres adapter also supported via `pg`
+- **@electric-sql/pglite** for embedded Postgres (open-source); `pg` for external Postgres (hosted)
 - **Monaco Editor** for SQL editing
 - **ECharts 6** for visualizations (themed with JetBrains Mono fonts)
 - **NextAuth v5** for authentication
@@ -446,7 +446,7 @@ export async function POST(req: NextRequest) {
   - Default `BASE_DUCKDB_DATA_PATH` is `.` (current directory)
 
 ### Database
-- **SQLite** (WAL mode) or **Postgres**: Documents, metadata, configuration
+- **PGLite** (embedded, open-source) or **Postgres** (hosted): Documents, metadata, configuration
 - **DuckDB**: Default analytics database (local)
 - **BigQuery/PostgreSQL**: Optional external data warehouses
 
@@ -461,7 +461,8 @@ export async function POST(req: NextRequest) {
   - **Note**: Replaces the old `DEFAULT_DUCKDB_PATH` variable which only stored the filename
 
 #### Frontend
-- `DATABASE_URL`: Document DB connection — SQLite file path (default: `data/atlas_documents.db`) or a `postgres://` URL
+- `DATABASE_URL`: Postgres connection URL (hosted only; open-source uses PGLite, set `DB_TYPE=pglite`)
+- `PGLITE_DATA_DIR`: Directory for PGLite persistence (default: derived from `BASE_DUCKDB_DATA_PATH`)
 - `NEXTAUTH_SECRET`: NextAuth secret for session encryption
 - `NEXTAUTH_URL`: NextAuth URL (default: `http://localhost:3000`)
 
@@ -483,7 +484,7 @@ export async function POST(req: NextRequest) {
 
 > **⚠️ `DocumentDB` should only be used inside the server-side `FilesAPI` implementation.** Do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere else — go through `FilesAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell.
 
-- `frontend/lib/database/documents-db.ts` - SQLite CRUD operations
+- `frontend/lib/database/documents-db.ts` - Document DB CRUD operations (PGLite or Postgres)
 - `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `types.gen.ts`; defines frontend-only types and extends generated ones (e.g. `QuestionContent` adds `queryResultId`)
 - `frontend/lib/types.gen.ts` - **Generated file — do not edit by hand.** Regenerate with `cd frontend && npm run generate-types` after changing Pydantic models in `backend/tasks/agents/analyst/file_schema.py`
 
@@ -581,7 +582,7 @@ After any change to agent prompts, tool docstrings, or field descriptions, measu
 
 **Scripts belong in `frontend/scripts/` as Node.js (tsx), never Python.** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
 
-**Schema parity (SQLite + Postgres):** Any change to `lib/database/schema.ts` MUST be mirrored in `lib/database/postgres-schema.ts` (and vice versa) in the same commit — including new columns, indexes, and `ALTER TABLE` guards for existing tables.
+**Schema changes:** Any change to `lib/database/postgres-schema.ts` (used by both PGLite and the Postgres adapter) must be accompanied by the appropriate migration entry.
 
 **Tool Registration:** When a tool spawns another tool via `FrontendToolException`, the spawned tool MUST be registered with `@register_agent` because the Python orchestrator needs to instantiate it from the registry when processing the conversation log.
 

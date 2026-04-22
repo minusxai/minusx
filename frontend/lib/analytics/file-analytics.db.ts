@@ -5,7 +5,7 @@ import { DuckDBInstance } from '@duckdb/node-api';
 import { getOrCreateDuckDbInstance } from '@/lib/connections/duckdb-registry';
 import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 
-// Schema for per-company analytics database
+// Schema for per-org analytics database
 const SCHEMA_SQL = `
 CREATE SEQUENCE IF NOT EXISTS file_events_id_seq;
 
@@ -67,13 +67,11 @@ CREATE TABLE IF NOT EXISTS query_execution_events (
   row_count     INTEGER   NOT NULL DEFAULT 0,
   was_cache_hit BOOLEAN   NOT NULL DEFAULT false,
   user_email    VARCHAR,
-  company_id    INTEGER,
   timestamp     TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 
 CREATE INDEX IF NOT EXISTS idx_qee_hash ON query_execution_events(query_hash);
 CREATE INDEX IF NOT EXISTS idx_qee_ts   ON query_execution_events(timestamp);
-CREATE INDEX IF NOT EXISTS idx_qee_co   ON query_execution_events(company_id);
 
 ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS query_hash    VARCHAR;
 ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS connection_name VARCHAR;
@@ -81,11 +79,10 @@ ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS duration_ms   INTEGE
 ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS row_count     INTEGER;
 ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS was_cache_hit BOOLEAN;
 ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS user_email    VARCHAR;
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS company_id    INTEGER;
 `;
 
 // Track which absolute paths have already had initSchema run (idempotent guard)
-// eslint-disable-next-line no-restricted-syntax -- keyed by absolute file path (unique per company by directory layout)
+// eslint-disable-next-line no-restricted-syntax -- keyed by absolute file path (unique per org by directory layout)
 const initializedPaths = new Set<string>();
 
 // Convert legacy ? placeholders to $1, $2, ... (DuckDB prepared statement syntax)
@@ -118,27 +115,27 @@ async function initSchema(instance: DuckDBInstance): Promise<void> {
 }
 
 /**
- * Check whether the analytics DuckDB file already exists for a given company.
+ * Check whether the analytics DuckDB file already exists.
  * Used by read-side queries to avoid creating a DB just for a read.
  */
-export function analyticsDbExists(companyId: number): boolean {
+export function analyticsDbExists(): boolean {
   const dir = getAnalyticsDbDir();
-  const dbPath = path.join(dir, `${companyId}.duckdb`);
+  const dbPath = path.join(dir, 'analytics.duckdb');
   return fs.existsSync(dbPath);
 }
 
 /**
- * Returns the DuckDBInstance for the given company, creating it on first access.
+ * Returns the shared DuckDBInstance for analytics, creating it on first access.
  * Uses the shared duckdb-registry so the analytics DB and any user-configured
  * DuckDB connection pointing at the same file share a single instance (no lock conflict).
  */
-export async function getAnalyticsDb(companyId: number): Promise<DuckDBInstance> {
+export async function getAnalyticsDb(): Promise<DuckDBInstance> {
   const dir = getAnalyticsDbDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const dbPath = path.join(dir, `${companyId}.duckdb`);
+  const dbPath = path.join(dir, 'analytics.duckdb');
 
   // Proactively delete stale WAL before the first open in this process.
   // initSchema always ends with CHECKPOINT so the WAL is empty after a clean shutdown.

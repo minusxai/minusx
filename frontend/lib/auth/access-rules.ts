@@ -129,7 +129,7 @@ function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride): File
  * Check if a user can access a specific file type
  * @param role - User's role
  * @param fileType - The file type to check
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  * @returns true if user can access the file type
  */
 export function canAccessFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
@@ -153,7 +153,7 @@ export function canAccessFileType(role: UserRole, fileType: FileType, overrides?
  * Uses viewTypes instead of allowedTypes for UI filtering
  * @param role - User's role
  * @param fileType - The file type to check
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  * @returns true if user can view the file type in UI
  */
 export function canViewFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
@@ -180,7 +180,7 @@ export function canViewFileType(role: UserRole, fileType: FileType, overrides?: 
  * Both operations use createTypes — if your role can create a type, it can also edit it.
  * @param role - User's role
  * @param fileType - The file type to check
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  * @returns true if user can create/edit files of this type
  */
 export function canCreateFileByRole(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
@@ -271,7 +271,7 @@ export function validateFileLocation(type: FileType, path: string, mode: Mode): 
 /**
  * Check if a file type should show in the Create menu for a role
  * This is purely for UI filtering - API can still create types not in this list
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  */
 export function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: AccessRulesOverride): boolean {
   const rule = getEffectiveRule(role, overrides);

@@ -154,7 +154,6 @@ export default function ConnectionFormV2({
 }: ConnectionFormV2Props) {
   const router = useRouter();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const companyId = useAppSelector((state) => state.auth.user?.companyId);
   const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
   const showJson = useAppSelector((state) => state.ui.devMode);
   const staticConnectionPath = resolvePath(userMode, '/database/static');
@@ -1067,7 +1066,6 @@ export default function ConnectionFormV2({
             config={config}
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}
-            companyId={companyId}
             userMode={userMode}
             onError={setNameError}
             onPendingDeletion={onPendingDeletion}
@@ -1092,7 +1090,6 @@ export default function ConnectionFormV2({
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}
             connectionName={fileName}
-            companyId={companyId}
             userMode={userMode}
             onError={setNameError}
           />

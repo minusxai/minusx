@@ -3,7 +3,7 @@ import { handleApiError } from '@/lib/api/api-responses';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
 
-// Force Node.js runtime (required for better-sqlite3)
+// Force Node.js runtime (required for document DB)
 export const runtime = 'nodejs';
 
 /**
@@ -35,7 +35,7 @@ export async function GET(
       );
     }
 
-    // Validate JWT and extract company ID and mode
+    // Validate JWT and extract mode
     const tokenData = sessionTokenManager.validate(sessionToken);
 
     if (tokenData === null) {
@@ -46,12 +46,12 @@ export async function GET(
       );
     }
 
-    const { companyId, mode } = tokenData;
+    const { mode } = tokenData;
 
     // Use getRawByName — this is a trusted internal endpoint (JWT-protected, Python-only).
     // getSafeConfig() must NOT be applied here; Python needs the full credentials
     // (e.g. service_account_json for BigQuery) to execute queries.
-    const { type, config } = await ConnectionsAPI.getRawByName(name, companyId, mode);
+    const { type, config } = await ConnectionsAPI.getRawByName(name, mode);
 
     // Return full connection config for Python backend
     return NextResponse.json({ type, config });

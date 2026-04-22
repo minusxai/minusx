@@ -80,7 +80,7 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
 
   // Update file in database with fresh schema
   try {
-    await updateCachedSchema(file.id, file.name, file.path, freshSchema, file.references, user.companyId);
+    await updateCachedSchema(file.id, file.name, file.path, freshSchema, file.references);
     console.log(`[connectionLoader] Schema saved to database for ${file.name}`);
   } catch (error) {
     console.error(`[connectionLoader] Failed to save schema for ${file.name}:`, error);

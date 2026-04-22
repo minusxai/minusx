@@ -8,11 +8,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { OAuthCodeDB } from '@/lib/oauth/db';
+import { getModules } from '@/lib/modules/registry';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
+  await getModules().auth.addHeaders(request, new Headers());
 
-  if (!session?.user?.companyId || !session?.user?.userId) {
+  if (!session?.user?.userId) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
@@ -29,7 +31,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const code = await OAuthCodeDB.create(
-      session.user.companyId,
       session.user.userId,
       redirectUri,
       codeChallenge,

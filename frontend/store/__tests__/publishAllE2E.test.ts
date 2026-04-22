@@ -41,15 +41,11 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 // ---------------------------------------------------------------------------
 
 // Isolated test database
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_publish_all_e2e.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite'
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Make file-state.ts's getStore() return our test store
 let testStore: any;
@@ -68,8 +64,7 @@ const TEST_AUTH_STATE = {
     email: 'test@example.com',
     name: 'Test User',
     role: 'admin' as UserRole,
-    companyId: 1,
-    companyName: 'test-company',
+    companyName: 'test-workspace',
     home_folder: '/org',
     mode: 'org' as Mode
   },
@@ -113,7 +108,6 @@ describe('publishAll E2E', () => {
 
   beforeAll(async () => {
     await initTestDatabase(dbPath);
-    const companyId = 1;
 
     question1Id = await DocumentDB.create(
       'Revenue Query',
@@ -126,8 +120,7 @@ describe('publishAll E2E', () => {
         parameters: [],
         vizSettings: { type: 'table' }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     question2Id = await DocumentDB.create(
@@ -141,8 +134,7 @@ describe('publishAll E2E', () => {
         parameters: [],
         vizSettings: { type: 'table' }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     dashboardId = await DocumentDB.create(
@@ -163,8 +155,7 @@ describe('publishAll E2E', () => {
           ]
         }
       } as DocumentContent,
-      [question1Id, question2Id],
-      companyId
+      [question1Id, question2Id]
     );
   });
 
@@ -188,9 +179,9 @@ describe('publishAll E2E', () => {
     // -----------------------------------------------------------------------
     // Step 1: Load existing files into Redux (simulate page load)
     // -----------------------------------------------------------------------
-    const q1File = await DocumentDB.getById(question1Id, 1);
-    const q2File = await DocumentDB.getById(question2Id, 1);
-    const dashFile = await DocumentDB.getById(dashboardId, 1);
+    const q1File = await DocumentDB.getById(question1Id);
+    const q2File = await DocumentDB.getById(question2Id);
+    const dashFile = await DocumentDB.getById(dashboardId);
 
     expect(q1File).toBeDefined();
     expect(q2File).toBeDefined();
@@ -247,7 +238,6 @@ describe('publishAll E2E', () => {
           name: 'New Question',
           path: '/org/new-question',
           type: 'question',
-          company_id: 1,
           content: virtualContent,
           references: [],
           created_at: new Date().toISOString(),
@@ -345,7 +335,7 @@ describe('publishAll E2E', () => {
     console.log(`✓ Step 6a: virtual ${virtualId} → real ID ${newQuestionId}`);
 
     // Verify content in DB
-    const dbNewQuestion = await DocumentDB.getById(newQuestionId, 1);
+    const dbNewQuestion = await DocumentDB.getById(newQuestionId);
     expect(dbNewQuestion).toBeDefined();
     expect(dbNewQuestion!.name).toBe('New Question');
     const dbNewContent = dbNewQuestion!.content as QuestionContent;
@@ -356,7 +346,7 @@ describe('publishAll E2E', () => {
     // -----------------------------------------------------------------------
     // Step 6b: Dashboard references the real ID, not the virtual ID
     // -----------------------------------------------------------------------
-    const dbDash = await DocumentDB.getById(dashboardId, 1);
+    const dbDash = await DocumentDB.getById(dashboardId);
     expect(dbDash).toBeDefined();
     const dbDashContent = dbDash!.content as DocumentContent;
 
@@ -386,8 +376,8 @@ describe('publishAll E2E', () => {
     // -----------------------------------------------------------------------
     // Step 6c: Existing question edits were persisted
     // -----------------------------------------------------------------------
-    const dbQ1 = await DocumentDB.getById(question1Id, 1);
-    const dbQ2 = await DocumentDB.getById(question2Id, 1);
+    const dbQ1 = await DocumentDB.getById(question1Id);
+    const dbQ2 = await DocumentDB.getById(question2Id);
     expect((dbQ1!.content as QuestionContent).description).toBe('Updated revenue by month');
     expect((dbQ2!.content as QuestionContent).description).toBe('Updated active user count');
     console.log('✓ Step 6c: description changes saved for both existing questions');
@@ -413,7 +403,7 @@ describe('publishAll E2E', () => {
 
   it('is a no-op when no files are dirty', async () => {
     // Load a file with no edits → nothing is dirty
-    const q1File = await DocumentDB.getById(question1Id, 1);
+    const q1File = await DocumentDB.getById(question1Id);
     store.dispatch({ type: 'files/setFiles', payload: { files: [q1File] } });
 
     const stateBefore = store.getState() as any;

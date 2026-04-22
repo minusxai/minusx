@@ -25,21 +25,15 @@ import { POST as folderPostHandler } from '@/app/api/folders/route';
 // Jest module mocks — hoisted to top by Jest
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_parent_folder_validation.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const COMPANY_ID = 1;
 
 function makeQuestionContent(): QuestionContent {
   return {
@@ -158,8 +152,7 @@ describe('Parent folder validation', () => {
         '/org/patch-test-question',
         'question',
         makeQuestionContent(),
-        [],
-        COMPANY_ID
+        []
       );
     });
 
@@ -200,16 +193,14 @@ describe('Parent folder validation', () => {
         '/org/meta-test-question',
         'question',
         makeQuestionContent(),
-        [],
-        COMPANY_ID
+        []
       );
       subFolderId = await DocumentDB.create(
         'existing-sub',
         '/org/existing-sub',
         'folder',
         { description: '' },
-        [],
-        COMPANY_ID
+        []
       );
     });
 

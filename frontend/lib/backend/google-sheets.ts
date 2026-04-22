@@ -27,8 +27,6 @@ export interface GoogleSheetsReimportResult {
 export async function importGoogleSheets(
   connectionName: string,
   spreadsheetUrl: string,
-  _companyId: number,
-  _mode: string,
   replaceExisting: boolean = false,
   schemaName: string = 'public',
 ): Promise<GoogleSheetsImportResult> {

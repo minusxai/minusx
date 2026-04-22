@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { getStore } from '@/store/store';
-import { CompanyConfig } from '@/lib/branding/whitelabel';
+import { OrgConfig } from '@/lib/branding/whitelabel';
 import { selectConfig, selectConfigsLoaded, setConfigs } from '@/store/configsSlice';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 
@@ -10,7 +10,7 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
  * Call this after saving config changes to reflect them immediately.
  */
 export async function reloadConfigs(): Promise<void> {
-  const response = await fetchWithCache<{ success: boolean; data: { config: CompanyConfig } }>(
+  const response = await fetchWithCache<{ success: boolean; data: { config: OrgConfig } }>(
     '/api/configs', { method: 'GET', skipCache: true }
   );
   if (response.data?.config) {
@@ -19,12 +19,12 @@ export async function reloadConfigs(): Promise<void> {
 }
 
 /**
- * Partially update company config.
+ * Partially update org config.
  * POSTs a partial config to the server (server merges with existing stored content),
  * then updates Redux with the returned full config — no extra round-trip needed.
  */
-export async function updateConfig(partial: Partial<CompanyConfig>): Promise<void> {
-  const response = await fetchWithCache<{ success: boolean; data: { config: CompanyConfig } }>(
+export async function updateConfig(partial: Partial<OrgConfig>): Promise<void> {
+  const response = await fetchWithCache<{ success: boolean; data: { config: OrgConfig } }>(
     '/api/configs',
     {
       method: 'POST',
@@ -43,7 +43,7 @@ export interface UseConfigsOptions {
 }
 
 export function useConfigs(options: UseConfigsOptions = {}): {
-  config: CompanyConfig;
+  config: OrgConfig;
   loading: boolean;
 } {
   const { skip = false } = options;

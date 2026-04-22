@@ -1,19 +1,20 @@
 /**
- * JobRunsDB - CRUD operations for the job_runs table
+ * JobRunsDB - CRUD operations for the job_runs table.
  * Tracks lifecycle, deduplication, and status of scheduled/manual job executions.
+ * All queries route through the module registry (getModules().db).
+ *
+ * findOrCreate() and getRunningByJobId() use atomic CTEs (same pattern as documents-db.ts)
+ * to avoid the need for explicit transaction wrappers.
  */
 import { JobRun, JobRunStatus, JobRunSource } from '../types';
-import { getAdapter } from './adapter/factory';
-import { getDbType } from './db-config';
+import { getModules } from '@/lib/modules/registry';
 
-// Raw row returned from the DB before JSON parsing
 interface JobRunRow {
   id: number;
   created_at: string;
   completed_at: string | null;
   job_id: string;
   job_type: string;
-  company_id: number;
   output_file_id: number | null;
   output_file_type: string | null;
   status: string;
@@ -22,17 +23,7 @@ interface JobRunRow {
   source: string;
 }
 
-/**
- * SQLite stores CURRENT_TIMESTAMP as 'YYYY-MM-DD HH:MM:SS' (UTC, no timezone marker).
- * JavaScript's Date constructor treats this as *local* time, which is wrong.
- * Normalize to ISO 8601 with explicit 'Z' so Date.parse always treats it as UTC.
- * Postgres timestamps already include timezone info and pass through unchanged.
- */
 function normalizeTimestamp(ts: string): string {
-  // Match exact SQLite format: 'YYYY-MM-DD HH:MM:SS' (no T, no timezone)
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)) {
-    return ts.replace(' ', 'T') + 'Z';
-  }
   return ts;
 }
 
@@ -43,7 +34,6 @@ function rowToJobRun(row: JobRunRow): JobRun {
     completed_at: row.completed_at ? normalizeTimestamp(row.completed_at) : null,
     job_id: row.job_id,
     job_type: row.job_type,
-    company_id: row.company_id,
     output_file_id: row.output_file_id,
     output_file_type: row.output_file_type,
     status: row.status as JobRunStatus,
@@ -53,26 +43,6 @@ function rowToJobRun(row: JobRunRow): JobRun {
   };
 }
 
-const SQLITE_DDL = `
-  CREATE TABLE IF NOT EXISTS job_runs (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at     TIMESTAMP NULL,
-    job_id           TEXT NOT NULL,
-    job_type         TEXT NOT NULL,
-    company_id       INTEGER NOT NULL,
-    output_file_id   INTEGER NULL,
-    output_file_type TEXT NULL,
-    status           TEXT NOT NULL DEFAULT 'RUNNING',
-    error            TEXT NULL,
-    timeout          INTEGER NOT NULL DEFAULT 30,
-    source           TEXT NOT NULL DEFAULT 'manual',
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
-  );
-  CREATE INDEX IF NOT EXISTS idx_job_runs_company_job ON job_runs(company_id, job_id, job_type);
-  CREATE INDEX IF NOT EXISTS idx_job_runs_created_at ON job_runs(created_at DESC);
-`;
-
 const POSTGRES_DDL = `
   CREATE TABLE IF NOT EXISTS job_runs (
     id               SERIAL PRIMARY KEY,
@@ -80,229 +50,164 @@ const POSTGRES_DDL = `
     completed_at     TIMESTAMP NULL,
     job_id           TEXT NOT NULL,
     job_type         TEXT NOT NULL,
-    company_id       INTEGER NOT NULL,
     output_file_id   INTEGER NULL,
     output_file_type TEXT NULL,
     status           TEXT NOT NULL DEFAULT 'RUNNING',
     error            TEXT NULL,
     timeout          INTEGER NOT NULL DEFAULT 30,
-    source           TEXT NOT NULL DEFAULT 'manual',
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    source           TEXT NOT NULL DEFAULT 'manual'
   );
-  CREATE INDEX IF NOT EXISTS idx_job_runs_company_job ON job_runs(company_id, job_id, job_type);
+  CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id, job_type);
   CREATE INDEX IF NOT EXISTS idx_job_runs_created_at ON job_runs(created_at DESC);
 `;
 
 export class JobRunsDB {
-  /**
-   * Ensure the job_runs table exists (safe to call on every request).
-   * New DBs already have the table from schema.ts; this handles existing DBs.
-   */
   static async ensureTable(): Promise<void> {
-    const db = await getAdapter();
-    const ddl = getDbType() === 'postgres' ? POSTGRES_DDL : SQLITE_DDL;
-    await db.exec(ddl);
+    await getModules().db.exec(POSTGRES_DDL);
   }
 
-  /**
-   * Force-create a new job run with the output file linked upfront.
-   * output_file_id and output_file_type are set immediately since the run file
-   * is created before execution starts. Returns the new run ID.
-   */
   static async create(params: {
     job_id: string;
     job_type: string;
-    company_id: number;
     output_file_id: number;
     output_file_type: string;
     timeout?: number;
     source?: JobRunSource;
   }): Promise<number> {
-    const db = await getAdapter();
-    const { job_id, job_type, company_id, output_file_id, output_file_type, timeout = 30, source = 'manual' } = params;
-
-    const result = await db.query<{ id: number }>(
-      `INSERT INTO job_runs (job_id, job_type, company_id, output_file_id, output_file_type, timeout, source, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'RUNNING')
+    const { job_id, job_type, output_file_id, output_file_type, timeout = 30, source = 'manual' } = params;
+    const result = await getModules().db.exec<{ id: number }>(
+      `INSERT INTO job_runs (job_id, job_type, output_file_id, output_file_type, timeout, source, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'RUNNING')
        RETURNING id`,
-      [job_id, job_type, company_id, output_file_id, output_file_type, timeout, source]
+      [job_id, job_type, output_file_id, output_file_type, timeout, source]
     );
     return result.rows[0].id;
   }
 
   /**
    * Atomic find-or-create within a time window (cron dedup).
-   *
-   * Mirrors the Python find_or_create_job_run CTE logic:
-   *   - Active RUNNING (within timeout) → return existing, no new run
-   *   - SUCCESS in window             → return existing, no new run
-   *   - RUNNING but timed out         → mark old run TIMEOUT, create new run
-   *   - FAILURE or TIMEOUT in window  → create new run (retry)
-   *   - Nothing in window             → create new run
-   *
-   * timeout is in MINUTES (matching Python reference).
+   * Single CTE: reads existing run, marks timed-out RUNNING as TIMEOUT,
+   * then conditionally inserts a new run — all in one round-trip.
    */
   static async findOrCreate(params: {
     job_id: string;
     job_type: string;
-    company_id: number;
     window_start: Date;
     window_end: Date;
     timeout?: number;
     source?: JobRunSource;
   }): Promise<{ runId: number; action: string; isNewRun: boolean }> {
-    const db = await getAdapter();
-    const { job_id, job_type, company_id, window_start, window_end, timeout = 30, source = 'cron' } = params;
+    const { job_id, job_type, window_start, window_end, timeout = 30, source = 'cron' } = params;
 
-    const toWindowBound = (d: Date): string =>
-      getDbType() === 'sqlite'
-        ? d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
-        : d.toISOString();
+    // Use window duration in seconds so the comparison uses CURRENT_TIMESTAMP exclusively —
+    // avoids JavaScript UTC vs DB clock skew (e.g. PGLite WASM timezone offset).
+    const windowSeconds = Math.ceil((window_end.getTime() - window_start.getTime()) / 1000);
 
-    // Per-row timeout cutoff: each row uses its own timeout column (in minutes)
-    const timedOutExpr = getDbType() === 'sqlite'
-      ? `created_at <= datetime('now', '-' || timeout || ' minutes')`
-      : `created_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute' * timeout`;
+    const timedOutExpr = `created_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute' * timeout`;
 
-    return db.transaction(async (tx) => {
-      // Find most recent run in window, compute whether it has timed out
-      const existing = await tx.query<JobRunRow & { is_timed_out: number }>(
-        `SELECT *, CASE WHEN status = 'RUNNING' AND ${timedOutExpr} THEN 1 ELSE 0 END AS is_timed_out
-         FROM job_runs
-         WHERE job_id = $1 AND job_type = $2 AND company_id = $3
-           AND created_at >= $4 AND created_at <= $5
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [job_id, job_type, company_id, toWindowBound(window_start), toWindowBound(window_end)]
-      );
+    // Single atomic CTE:
+    // 1. existing: find most recent run in window + compute is_timed_out
+    // 2. timeout_update: mark timed-out RUNNING runs as TIMEOUT
+    // 3. new_run: insert only when no active/successful run exists
+    // 4. outcome: union the three possible results into one row
+    const sql = `
+      WITH
+      existing AS (
+        SELECT *,
+          CASE WHEN status = 'RUNNING' AND ${timedOutExpr} THEN 1 ELSE 0 END AS is_timed_out
+        FROM job_runs
+        WHERE job_id = $1 AND job_type = $2
+          AND created_at >= CURRENT_TIMESTAMP - ($3 * INTERVAL '1 second')
+          AND created_at <= CURRENT_TIMESTAMP
+        ORDER BY created_at DESC
+        LIMIT 1
+      ),
+      timeout_update AS (
+        UPDATE job_runs
+        SET status = 'TIMEOUT', completed_at = CURRENT_TIMESTAMP,
+            error = 'Job timed out - marked on next cron attempt'
+        WHERE id IN (SELECT id FROM existing WHERE is_timed_out = 1)
+        RETURNING id
+      ),
+      new_run AS (
+        INSERT INTO job_runs (job_id, job_type, timeout, source, status)
+        SELECT $1, $2, $4, $5, 'RUNNING'
+        WHERE NOT EXISTS (
+          SELECT 1 FROM existing
+          WHERE (status = 'RUNNING' AND is_timed_out = 0) OR status = 'SUCCESS'
+        )
+        RETURNING id
+      ),
+      outcome AS (
+        SELECT id, 'found_running'   AS action, FALSE AS is_new_run FROM existing WHERE status = 'RUNNING' AND is_timed_out = 0
+        UNION ALL
+        SELECT id, 'found_completed' AS action, FALSE AS is_new_run FROM existing WHERE status = 'SUCCESS'
+        UNION ALL
+        SELECT id, 'created'         AS action, TRUE  AS is_new_run FROM new_run
+      )
+      SELECT * FROM outcome
+    `;
 
-      if (existing.rows.length > 0) {
-        const run = existing.rows[0];
-        const isTimedOut = Number(run.is_timed_out) === 1;
+    const result = await getModules().db.exec<{ id: number; action: string; is_new_run: boolean | number }>(
+      sql,
+      [job_id, job_type, windowSeconds, timeout, source]
+    );
 
-        // Active RUNNING → dedup, no new run
-        if (run.status === 'RUNNING' && !isTimedOut) {
-          return { runId: run.id, action: 'found_running', isNewRun: false };
-        }
-
-        // SUCCESS → don't retry
-        if (run.status === 'SUCCESS') {
-          return { runId: run.id, action: 'found_completed', isNewRun: false };
-        }
-
-        // Timed-out RUNNING → mark as TIMEOUT then fall through to create
-        if (isTimedOut) {
-          await tx.query(
-            `UPDATE job_runs SET status = 'TIMEOUT', completed_at = CURRENT_TIMESTAMP,
-                 error = 'Job timed out - marked on next cron attempt'
-             WHERE id = $1`,
-            [run.id]
-          );
-        }
-        // FAILURE, TIMEOUT (prior), or timed-out RUNNING → fall through to create new run
-      }
-
-      const inserted = await tx.query<{ id: number }>(
-        `INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
-         VALUES ($1, $2, $3, $4, $5, 'RUNNING')
-         RETURNING id`,
-        [job_id, job_type, company_id, timeout, source]
-      );
-      return { runId: inserted.rows[0].id, action: 'created', isNewRun: true };
-    });
+    const row = result.rows[0];
+    return {
+      runId: row.id,
+      action: row.action,
+      isNewRun: Boolean(row.is_new_run),
+    };
   }
 
-  /**
-   * Mark a job run as complete. output_file_id is already set from create(),
-   * so only status and error need to be updated.
-   */
-  static async complete(
-    runId: number,
-    status: 'SUCCESS' | 'FAILURE' | 'TIMEOUT',
-    error?: string
-  ): Promise<void> {
-    const db = await getAdapter();
-    await db.query(
-      `UPDATE job_runs
-       SET status = $1, completed_at = CURRENT_TIMESTAMP, error = $2
-       WHERE id = $3`,
+  static async complete(runId: number, status: 'SUCCESS' | 'FAILURE' | 'TIMEOUT', error?: string): Promise<void> {
+    await getModules().db.exec(
+      `UPDATE job_runs SET status = $1, completed_at = CURRENT_TIMESTAMP, error = $2 WHERE id = $3`,
       [status, error ?? null, runId]
     );
   }
 
-  /**
-   * Link a run file to an existing job_run (used by cron after pre-creating the file).
-   */
-  static async setOutputFile(
-    runId: number,
-    output_file_id: number,
-    output_file_type: string
-  ): Promise<void> {
-    const db = await getAdapter();
-    await db.query(
+  static async setOutputFile(runId: number, output_file_id: number, output_file_type: string): Promise<void> {
+    await getModules().db.exec(
       `UPDATE job_runs SET output_file_id = $1, output_file_type = $2 WHERE id = $3`,
       [output_file_id, output_file_type, runId]
     );
   }
 
   /**
-   * Find an in-progress run for a given job (used for manual dedup).
-   * Atomically marks any stale RUNNING runs (past their timeout) as TIMEOUT,
-   * then returns the active run if one exists within its timeout window.
-   * timeout is in MINUTES (matching Python reference).
+   * Atomically marks stale RUNNING runs as TIMEOUT, then returns the active run if one exists.
+   * Single CTE: timeout_update excludes IDs just marked from the final SELECT via NOT IN.
    */
-  static async getRunningByJobId(
-    job_id: string,
-    job_type: string,
-    company_id: number
-  ): Promise<JobRun | null> {
-    const db = await getAdapter();
+  static async getRunningByJobId(job_id: string, job_type: string): Promise<JobRun | null> {
+    const timedOutExpr = `created_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute' * timeout`;
 
-    // Per-row timeout cutoff: each row uses its own timeout column (in minutes)
-    const timedOutExpr = getDbType() === 'sqlite'
-      ? `created_at <= datetime('now', '-' || timeout || ' minutes')`
-      : `created_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute' * timeout`;
+    const sql = `
+      WITH timeout_update AS (
+        UPDATE job_runs
+        SET status = 'TIMEOUT', completed_at = CURRENT_TIMESTAMP,
+            error = 'Job timed out - marked on next manual trigger attempt'
+        WHERE job_id = $1 AND job_type = $2
+          AND status = 'RUNNING' AND ${timedOutExpr}
+        RETURNING id
+      )
+      SELECT j.* FROM job_runs j
+      WHERE j.job_id = $1 AND j.job_type = $2
+        AND j.status = 'RUNNING'
+        AND j.id NOT IN (SELECT id FROM timeout_update)
+      ORDER BY j.created_at DESC
+      LIMIT 1
+    `;
 
-    return db.transaction(async (tx) => {
-      // Mark all stale RUNNING runs as TIMEOUT
-      await tx.query(
-        `UPDATE job_runs SET status = 'TIMEOUT', completed_at = CURRENT_TIMESTAMP,
-             error = 'Job timed out - marked on next manual trigger attempt'
-         WHERE job_id = $1 AND job_type = $2 AND company_id = $3
-           AND status = 'RUNNING' AND ${timedOutExpr}`,
-        [job_id, job_type, company_id]
-      );
-
-      // Now find an active (non-timed-out) RUNNING run
-      const result = await tx.query<JobRunRow>(
-        `SELECT * FROM job_runs
-         WHERE job_id = $1 AND job_type = $2 AND company_id = $3
-           AND status = 'RUNNING'
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [job_id, job_type, company_id]
-      );
-      if (result.rows.length === 0) return null;
-      return rowToJobRun(result.rows[0]);
-    });
+    const result = await getModules().db.exec<JobRunRow>(sql, [job_id, job_type]);
+    if (result.rows.length === 0) return null;
+    return rowToJobRun(result.rows[0]);
   }
 
-  /**
-   * Get recent runs for a specific job (most recent first).
-   */
-  static async getByJobId(
-    job_id: string,
-    job_type: string,
-    company_id: number,
-    limit = 20
-  ): Promise<JobRun[]> {
-    const db = await getAdapter();
-    const result = await db.query<JobRunRow>(
-      `SELECT * FROM job_runs
-       WHERE job_id = $1 AND job_type = $2 AND company_id = $3
-       ORDER BY created_at DESC
-       LIMIT $4`,
-      [job_id, job_type, company_id, limit]
+  static async getByJobId(job_id: string, job_type: string, limit = 20): Promise<JobRun[]> {
+    const result = await getModules().db.exec<JobRunRow>(
+      `SELECT * FROM job_runs WHERE job_id = $1 AND job_type = $2 ORDER BY created_at DESC LIMIT $3`,
+      [job_id, job_type, limit]
     );
     return result.rows.map(rowToJobRun);
   }

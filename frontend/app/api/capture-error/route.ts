@@ -20,18 +20,15 @@ export async function POST(req: NextRequest) {
     };
 
     const user = await getEffectiveUser();
-    if (user?.companyId) {
+    if (user) {
       ctx['user'] = user.email;
-      if (user.companyName) ctx['company'] = user.companyName;
       appEventRegistry.publish(AppEvents.ERROR, {
-        companyId: user.companyId,
         mode: user.mode ?? 'org',
         source: src,
         message: String(message),
         context: ctx,
       });
     } else {
-      // Not authenticated — report internally only (no companyId for event registry)
       await notifyInternal(src, String(message), ctx as Record<string, string>);
     }
 

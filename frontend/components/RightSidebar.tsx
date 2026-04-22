@@ -13,7 +13,6 @@ import { FileType, DatabaseWithSchema } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
-import AccessTokenManager from './AccessTokenManager';
 import DevToolsPanel from './DevToolsPanel';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -157,12 +156,6 @@ function SectionContent({
           />
         </Box>
       );
-    case 'share':
-      return appState?.type === 'file' && currentUser ? (
-        <Box p={4}>
-          <AccessTokenManager fileId={appState.state.fileState.id} currentUser={currentUser as never} />
-        </Box>
-      ) : null;
     case 'dev':
       return <DevToolsPanel appState={appState} />;
     case 'question-references':

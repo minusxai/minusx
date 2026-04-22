@@ -7,14 +7,12 @@ import { UserRole } from "@/lib/types"
 
 declare module "next-auth" {
   /**
-   * Extended user object with role, userId, and company info
+   * Extended user object with role, userId, and org info
    */
   interface User {
     userId: number;  // Required - every authenticated user has an ID
     role?: UserRole;
     home_folder: string;
-    companyId: number;  // Required - enforced by withAuth middleware
-    companyName?: string;
     tokenVersion?: number;
     createdAt?: number;  // Unix timestamp
   }
@@ -27,8 +25,6 @@ declare module "next-auth" {
       userId: number;  // Required - every authenticated user has an ID
       role?: UserRole;
       home_folder: string;
-      companyId: number;  // Required - enforced by withAuth middleware
-      companyName?: string;
       tokenVersion?: number;
       createdAt?: number;  // Unix timestamp
     } & DefaultSession["user"]
@@ -43,8 +39,6 @@ declare module "next-auth/jwt" {
     userId: number;  // Required - every authenticated user has an ID
     role?: UserRole;
     home_folder: string;
-    companyId: number;  // Required - enforced by withAuth middleware
-    companyName?: string;
     tokenVersion?: number;
     createdAt?: number;  // Unix timestamp
   }

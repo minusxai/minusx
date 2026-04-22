@@ -80,16 +80,16 @@ fi
 # ── start ────────────────────────────────────────────────────────────────────
 
 info "Pulling latest images..."
-$COMPOSE -f docker-compose.prod.yml pull
+$COMPOSE -f docker-compose.yml pull
 
 info "Starting MinusX..."
-$COMPOSE -f docker-compose.prod.yml up -d
+$COMPOSE -f docker-compose.yml up -d
 
 echo ""
 ok "MinusX is running!"
 echo "   Open http://localhost:3000 in your browser."
 echo ""
 echo "   Useful commands:"
-echo "     $COMPOSE -f docker-compose.prod.yml logs -f        # follow logs"
-echo "     $COMPOSE -f docker-compose.prod.yml down           # stop"
-echo "     $COMPOSE -f docker-compose.prod.yml pull && $COMPOSE -f docker-compose.prod.yml up -d  # upgrade"
+echo "     $COMPOSE -f docker-compose.yml logs -f        # follow logs"
+echo "     $COMPOSE -f docker-compose.yml down           # stop"
+echo "     $COMPOSE -f docker-compose.yml pull && $COMPOSE -f docker-compose.yml up -d  # upgrade"

@@ -38,7 +38,7 @@ export interface EvalRunResponse {
 export async function POST(request: NextRequest) {
   try {
     const user = await getEffectiveUser();
-    if (!user || !user.companyId) {
+    if (!user) {
       return NextResponse.json({ passed: false, error: 'Unauthorized' } as EvalRunResponse, { status: 401 });
     }
 

@@ -13,13 +13,12 @@ import { NextRequest } from 'next/server';
 import { withCronAuth } from '@/lib/api/with-auth';
 import { successResponse, handleApiError } from '@/lib/api/api-responses';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
-import { CompanyDB } from '@/lib/database/company-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
 import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { getConfigsForMode } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
@@ -98,8 +97,7 @@ function getPrevFireTime(cronExpr: string, now: Date, maxMinutes = 525_600): Dat
 
 // ---------------------------------------------------------------------------
 
-async function runForCompany(
-  companyId: number,
+async function runForOrg(
   now: Date
 ): Promise<{ triggered: number; skipped: number; failed: number }> {
   const user: EffectiveUser = {
@@ -108,7 +106,6 @@ async function runForCompany(
     name: 'Cron',
     role: 'admin',
     home_folder: '',
-    companyId,
     mode: 'org',
   };
 
@@ -165,7 +162,6 @@ async function runForCompany(
       const { runId, isNewRun } = await JobRunsDB.findOrCreate({
         job_id: jobId,
         job_type: jobDef.job_type,
-        company_id: user.companyId,
         window_start: windowStart,
         window_end: now,
         source: 'cron',
@@ -173,7 +169,7 @@ async function runForCompany(
 
       if (!isNewRun) { skipped++; continue; }
 
-      const previousRuns = await JobRunsDB.getByJobId(jobId, jobDef.job_type, user.companyId, 10);
+      const previousRuns = await JobRunsDB.getByJobId(jobId, jobDef.job_type, 10);
       const startedAt = new Date().toISOString();
 
       // Derive mode from the job file's path (first segment: /org/... → 'org')
@@ -217,7 +213,7 @@ async function runForCompany(
         };
         await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], jobUser);
 
-        const { config } = await getConfigsByCompanyId(jobUser.companyId, jobUser.mode);
+        const { config } = await getConfigsForMode(jobUser.mode);
         const _emailRaw = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
         const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
         const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
@@ -277,9 +273,9 @@ async function runForCompany(
   }
 
   if (failed > 0) {
-    appEventRegistry.publish(AppEvents.JOB_CRON_FAILED, { companyId, mode: user.mode, triggered, skipped, failed });
+    appEventRegistry.publish(AppEvents.JOB_CRON_FAILED, { mode: user.mode, triggered, skipped, failed });
   } else if (triggered > 0) {
-    appEventRegistry.publish(AppEvents.JOB_CRON_SUCCEEDED, { companyId, mode: user.mode, triggered, skipped });
+    appEventRegistry.publish(AppEvents.JOB_CRON_SUCCEEDED, { mode: user.mode, triggered, skipped });
   }
 
   return { triggered, skipped, failed };
@@ -287,20 +283,10 @@ async function runForCompany(
 
 export const POST = withCronAuth(async (request: NextRequest) => {
   try {
-    const body = await request.json().catch(() => ({}));
-    const requestedIds: number[] = Array.isArray(body.company_ids) ? body.company_ids : [];
-
     await JobRunsDB.ensureTable();
-
     const now = new Date();
-    const companyIds = requestedIds.length > 0
-      ? requestedIds
-      : (await CompanyDB.listAll()).map(c => c.id);
-
-    const resultArray = await Promise.all(companyIds.map(id => runForCompany(id, now)));
-    const results = Object.fromEntries(companyIds.map((id, i) => [id, resultArray[i]]));
-
-    return successResponse({ results });
+    const result = await runForOrg(now);
+    return successResponse({ results: { 0: result } });
   } catch (error) {
     return handleApiError(error);
   }

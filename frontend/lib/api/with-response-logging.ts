@@ -14,7 +14,6 @@ async function logResponse(cloned: Response): Promise<void> {
       cloned.status,
       cloned.status >= 400,
       {
-        companyId: h.get('x-company-id'),
         userId: h.get('x-user-id'),
         mode: h.get('x-mode'),
       },

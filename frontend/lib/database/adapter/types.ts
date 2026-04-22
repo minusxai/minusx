@@ -53,8 +53,7 @@ export interface IDatabaseAdapter {
 
   /**
    * Perform database-specific optimization/maintenance
-   * SQLite: WAL checkpoint (TRUNCATE)
-   * PostgreSQL: No-op (auto-vacuum handles maintenance)
+   * PGLite: no-op. PostgreSQL: no-op (auto-vacuum handles maintenance).
    */
   optimize(): Promise<void>;
 }
@@ -63,12 +62,11 @@ export interface IDatabaseAdapter {
  * Database adapter configuration
  */
 export interface DatabaseConfig {
-  type: 'sqlite' | 'postgres';
+  type: 'postgres' | 'pglite';
 
-  // SQLite-specific
-  sqlitePath?: string;
-
-  // PostgreSQL-specific (for PGlite or node-postgres)
+  // PostgreSQL-specific (node-postgres)
   postgresConnectionString?: string;
-  pgDataDir?: string; // For PGlite file-based mode
+
+  // PGLite-specific
+  pgDataDir?: string; // undefined = in-memory; path = filesystem-backed
 }

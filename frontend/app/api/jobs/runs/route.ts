@@ -29,7 +29,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
 
     await JobRunsDB.ensureTable();
 
-    const runs = await JobRunsDB.getByJobId(job_id, job_type, user.companyId, limit);
+    const runs = await JobRunsDB.getByJobId(job_id, job_type, limit);
     return successResponse(runs);
   } catch (error) {
     return handleApiError(error);

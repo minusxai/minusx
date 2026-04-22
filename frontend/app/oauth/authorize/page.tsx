@@ -45,7 +45,7 @@ export default async function OAuthAuthorizePage({ searchParams }: PageProps) {
   // Check session
   const session = await auth();
 
-  if (!session?.user?.companyId || !session?.user?.userId) {
+  if (!session?.user?.userId) {
     const origin = await getExternalOrigin();
     const currentUrl = new URL('/oauth/authorize', origin);
     for (const [key, value] of Object.entries(params)) {
@@ -70,7 +70,7 @@ export default async function OAuthAuthorizePage({ searchParams }: PageProps) {
       clientOrigin={clientOrigin}
       userName={user.name || user.email || ''}
       userEmail={user.email || ''}
-      companyName={user.companyName || ''}
+      companyName={''}
       redirectUri={redirectUri}
       codeChallenge={codeChallenge}
       codeChallengeMethod={codeChallengeMethod}

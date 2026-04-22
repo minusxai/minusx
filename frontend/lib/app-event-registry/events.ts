@@ -1,4 +1,3 @@
-import 'server-only';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
 export const AppEvents = {
@@ -23,7 +22,6 @@ export const AppEvents = {
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
 
 interface BaseEventPayload {
-  companyId: number;
   mode: string;
 }
 

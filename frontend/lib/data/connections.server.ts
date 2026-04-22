@@ -7,6 +7,7 @@ import 'server-only';
  */
 
 import { DocumentDB } from '@/lib/database/documents-db';
+import { hashContent } from '@/lib/utils/query-hash';
 import {
   initializeConnectionOnPython,
   removeConnectionFromPython,
@@ -36,7 +37,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
   async listAll(user: EffectiveUser, includeSchemas = false): Promise<ListConnectionsResult> {
     // Filter connections by mode to ensure mode isolation
     const modePath = `/${user.mode}`;
-    const connections = await DocumentDB.listAll(user.companyId, 'connection', [modePath]);
+    const connections = await DocumentDB.listAll('connection', [modePath]);
 
     const formatted = connections.map(conn => {
       const content = conn.content as ConnectionContent;
@@ -80,7 +81,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
   async getByName(name: string, user: EffectiveUser): Promise<GetConnectionResult> {
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
-    const conn = await DocumentDB.getByPath(connectionPath, user.companyId);
+    const conn = await DocumentDB.getByPath(connectionPath);
 
     if (!conn) {
       throw new Error(`Connection '${name}' not found`);
@@ -103,9 +104,9 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
    * Get connection with raw (unfiltered) config — for trusted internal server-to-server use only.
    * Never expose this to clients; it returns sensitive credentials like service_account_json.
    */
-  async getRawByName(name: string, companyId: number, mode: Mode): Promise<{ type: string; config: Record<string, any> }> {
+  async getRawByName(name: string, mode: Mode): Promise<{ type: string; config: Record<string, any> }> {
     const connectionPath = resolvePath(mode, `/database/${name}`);
-    const conn = await DocumentDB.getByPath(connectionPath, companyId);
+    const conn = await DocumentDB.getByPath(connectionPath);
 
     if (!conn) {
       throw new Error(`Connection '${name}' not found`);
@@ -113,6 +114,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     const content = conn.content as ConnectionContent;
     return { type: content.type, config: content.config };
+
   }
 
   async create(input: CreateConnectionInput, user: EffectiveUser): Promise<CreateConnectionResult> {
@@ -128,11 +130,11 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error(`Connection name "${input.name}" is reserved`);
     }
 
-    validateDuckDbFilePath(input.type, input.config, user.companyId);
+    validateDuckDbFilePath(input.type, input.config);
 
     // Check duplicates
     const connectionPath = resolvePath(user.mode, `/database/${input.name}`);
-    const existing = await DocumentDB.getByPath(connectionPath, user.companyId);
+    const existing = await DocumentDB.getByPath(connectionPath);
     if (existing) {
       throw new Error(`Connection '${input.name}' already exists`);
     }
@@ -154,11 +156,10 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       connectionPath,
       'connection',
       content,
-      [],  // Phase 6: Connections have no references
-      user.companyId
+      []  // Phase 6: Connections have no references
     );
 
-    const created = await DocumentDB.getById(id, user.companyId);
+    const created = await DocumentDB.getById(id);
     if (!created) {
       throw new Error('Failed to create connection');
     }
@@ -183,16 +184,16 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     }
 
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
-    const conn = await DocumentDB.getByPath(connectionPath, user.companyId);
+    const conn = await DocumentDB.getByPath(connectionPath);
     if (!conn) {
       throw new Error(`Connection '${name}' not found`);
     }
 
     const content = conn.content as ConnectionContent;
-    validateDuckDbFilePath(content.type, config, user.companyId);
+    validateDuckDbFilePath(content.type, config);
     content.config = config;
 
-    await DocumentDB.update(conn.id, name, conn.path, content, [], user.companyId);  // Phase 6: Connections have no references
+    await DocumentDB.update(conn.id, name, conn.path, content, [], hashContent({ id: conn.id, config }));  // Phase 6: Connections have no references
 
     // Re-initialize on Python backend and capture schema.
     // DuckDB connections are handled entirely in Node.js — skip Python to avoid lock conflict.
@@ -207,7 +208,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       }
     }
 
-    const updated = await DocumentDB.getById(conn.id, user.companyId);
+    const updated = await DocumentDB.getById(conn.id);
     if (!updated) {
       throw new Error('Failed to update connection');
     }
@@ -233,14 +234,14 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     }
 
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
-    const conn = await DocumentDB.getByPath(connectionPath, user.companyId);
+    const conn = await DocumentDB.getByPath(connectionPath);
     if (!conn) {
       throw new Error(`Connection '${name}' not found`);
     }
 
     const content = conn.content as ConnectionContent;
 
-    await DocumentDB.deleteByIds([conn.id], user.companyId);
+    await DocumentDB.deleteByIds([conn.id]);
 
     // Remove from Python backend
     try {
@@ -255,7 +256,6 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
         await fetch(`${BACKEND_URL}/api/csv/delete/${encodeURIComponent(name)}`, {
           method: 'DELETE',
           headers: {
-            'x-company-id': user.companyId.toString(),
             'x-mode': user.mode
           }
         });
@@ -268,7 +268,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     // For Google Sheets connections, also clean up the data files
     if (content.type === 'google-sheets') {
       try {
-        await deleteGoogleSheetsData(name, user.companyId, user.mode);
+        await deleteGoogleSheetsData(name, user.mode);
         console.log(`[ConnectionsAPI] Cleaned up Google Sheets data for connection ${name}`);
       } catch (error) {
         console.error(`[ConnectionsAPI] Failed to clean up Google Sheets data for ${name}:`, error);
@@ -287,17 +287,16 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     path: string,
     schema: DatabaseSchema,
     references: number[],
-    companyId: number
   ): Promise<void> {
-    const conn = await DocumentDB.getById(id, companyId);
+    const conn = await DocumentDB.getById(id);
     if (!conn) return;
     const updatedContent: ConnectionContent = { ...(conn.content as ConnectionContent), schema };
-    await DocumentDB.update(id, name, path, updatedContent, references, companyId);
+    await DocumentDB.update(id, name, path, updatedContent, references, hashContent({ id, schema }));
   }
 
   async test(name: string, user: EffectiveUser): Promise<{ success: boolean; message: string }> {
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
-    const conn = await DocumentDB.getByPath(connectionPath, user.companyId);
+    const conn = await DocumentDB.getByPath(connectionPath);
     if (!conn) {
       throw new Error(`Connection '${name}' not found`);
     }

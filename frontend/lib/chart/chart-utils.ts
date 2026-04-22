@@ -3,7 +3,7 @@ import type { EChartsType } from 'echarts/core'
 import { withMinusXTheme } from './echarts-theme'
 import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
-import type { CompanyBranding } from '@/lib/branding/whitelabel'
+import type { OrgBranding } from '@/lib/branding/whitelabel'
 
 // Chart props interface
 export interface ChartProps {
@@ -25,7 +25,7 @@ export interface ChartProps {
   axisConfig?: AxisConfig  // Axis scale config (linear/log)
   styleConfig?: VisualizationStyleConfig
   annotations?: ChartAnnotation[]
-  exportBranding?: Partial<CompanyBranding>
+  exportBranding?: Partial<OrgBranding>
   onDownloadImage?: () => Promise<void>
   columnTypes?: Record<string, ColumnType>  // SQL-derived column types for axis type detection
 }
@@ -59,7 +59,7 @@ interface SpecialChartOptionConfig {
   showChartTitle?: boolean
   colorPalette: string[]
   styleConfig?: VisualizationStyleConfig
-  exportBranding?: Partial<CompanyBranding>
+  exportBranding?: Partial<OrgBranding>
   downloadCsv?: () => void
   onDownloadImage?: () => Promise<void>
 }
@@ -1128,7 +1128,7 @@ interface ChartToolboxConfig {
   colorMode: 'light' | 'dark'
   downloadCsv?: () => void
   chartTitle?: string
-  exportBranding?: Partial<CompanyBranding>
+  exportBranding?: Partial<OrgBranding>
   onDownloadImage?: () => Promise<void>
 }
 
@@ -1235,7 +1235,7 @@ interface BaseChartConfig {
   axisConfig?: AxisConfig
   styleConfig?: VisualizationStyleConfig
   annotations?: ChartAnnotation[]
-  exportBranding?: Partial<CompanyBranding>
+  exportBranding?: Partial<OrgBranding>
   onDownloadImage?: () => Promise<void>
   columnTypes?: Record<string, ColumnType>
 }

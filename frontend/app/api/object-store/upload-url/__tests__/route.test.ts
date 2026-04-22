@@ -9,15 +9,11 @@
  *  - s3Key is a signed token that verifyStorageToken can decode back to the raw key
  */
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_upload_url_route.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 jest.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: jest.fn(),
@@ -34,8 +30,8 @@ jest.mock('@/lib/object-store', () => {
       })),
       delete: jest.fn(),
     })),
-    generateUploadKey: ({ companyId, ext }: { companyId: number; userId: number; mode: string; type: string; ext: string }) => {
-      return `${companyId}/${randomUUID()}${ext}`;
+    generateUploadKey: ({ ext }: { userId: number; mode: string; type: string; ext: string }) => {
+      return `uploads/${randomUUID()}${ext}`;
     },
   };
 });
@@ -46,7 +42,6 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { verifyStorageToken } from '@/lib/object-store/key-token';
 
 const mockUser = {
-  companyId: 42,
   companyName: 'test',
   userId: 1,
   email: 'test@test.com',
@@ -76,11 +71,11 @@ describe('GET /api/object-store/upload-url', () => {
     expect(body.publicUrl).toMatch(/^https:\/\/bucket\.s3\.amazonaws\.com\/.+\.png$/);
   });
 
-  it('key contains companyId and preserves extension', async () => {
+  it('key preserves file extension', async () => {
     const req = makeRequest({ filename: 'diagram.svg', contentType: 'image/svg+xml' });
     const res = await GET(req);
     const { publicUrl } = await res.json();
-    expect(publicUrl).toMatch(/\/42\/.+\.svg$/);
+    expect(publicUrl).toMatch(/\.svg$/);
   });
 
   it('returns 400 when filename is missing', async () => {
@@ -101,15 +96,12 @@ describe('GET /api/object-store/upload-url', () => {
     const { s3Key, publicUrl } = await res.json();
 
     // Token must be verifiable and decode to the same key embedded in publicUrl
-    const rawKey = verifyStorageToken(s3Key, mockUser.companyId);
+    const rawKey = verifyStorageToken(s3Key);
     expect(publicUrl).toContain(rawKey);
 
-    // Wrong companyId must be rejected
-    expect(() => verifyStorageToken(s3Key, mockUser.companyId + 1)).toThrow();
-
     // Tampered token must be rejected
-    const [head, sig] = s3Key.split('.');
-    expect(() => verifyStorageToken(`${head}.invalidsig`, mockUser.companyId)).toThrow();
+    const [head] = s3Key.split('.');
+    expect(() => verifyStorageToken(`${head}.invalidsig`)).toThrow();
   });
 
   it('returns 401 when not authenticated (null user)', async () => {

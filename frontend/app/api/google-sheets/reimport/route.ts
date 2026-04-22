@@ -17,19 +17,16 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const { files: incomingFiles, spreadsheetId } = await importGoogleSheetToS3(
       spreadsheet_url,
       'static',
-      user.companyId,
       user.mode,
       schema_name,
     );
 
     // Read column/row metadata from S3 via DuckDB (validates new files are readable)
-    const registered = await processFilesFromS3(user.companyId, user.mode, 'static', incomingFiles);
+    const registered = await processFilesFromS3(user.mode, 'static', incomingFiles);
 
     // New data confirmed — now delete the old S3 files (best-effort, non-fatal)
     await Promise.allSettled(
-      (old_s3_keys as string[])
-        .filter((key) => key.startsWith(`${user.companyId}/`)) // security check
-        .map((key) => deleteS3File(key)),
+      (old_s3_keys as string[]).map((key) => deleteS3File(key)),
     );
 
     // Attach source metadata to every file so the UI can group/refresh them

@@ -1,37 +1,54 @@
+import { POSTGRES_SCHEMA as POSTGRES_SCHEMA_NAME } from '@/lib/config';
+
 /**
- * PostgreSQL-specific database schema
- * Converted from SQLite schema with PostgreSQL syntax
+ * Split a SQL string into individual statements, correctly handling dollar-quoted
+ * strings ($$...$$, $tag$...$tag$) so semicolons inside them are not treated as
+ * statement terminators. Used by both PGLite and Postgres adapters.
  */
+export function splitSQLStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let dollarTag: string | null = null;
+  let i = 0;
+
+  while (i < sql.length) {
+    if (dollarTag === null) {
+      if (sql[i] === '$') {
+        let j = i + 1;
+        while (j < sql.length && sql[j] !== '$' && /\w/.test(sql[j])) j++;
+        if (j < sql.length && sql[j] === '$') {
+          dollarTag = sql.slice(i, j + 1);
+          current += dollarTag;
+          i = j + 1;
+          continue;
+        }
+      }
+      if (sql[i] === ';') {
+        const stmt = current.trim();
+        if (stmt) statements.push(stmt);
+        current = '';
+        i++;
+        continue;
+      }
+    } else if (sql.startsWith(dollarTag, i)) {
+      current += dollarTag;
+      i += dollarTag.length;
+      dollarTag = null;
+      continue;
+    }
+    current += sql[i++];
+  }
+
+  const last = current.trim();
+  if (last) statements.push(last);
+  return statements;
+}
 
 export const POSTGRES_SCHEMA = `
-  -- Companies table (multi-tenant architecture)
-  CREATE TABLE IF NOT EXISTS companies (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    display_name TEXT NOT NULL,
-    subdomain TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  );
+  CREATE SCHEMA IF NOT EXISTS ${POSTGRES_SCHEMA_NAME};
 
-  -- Trigger to auto-update updated_at for companies
-  CREATE OR REPLACE FUNCTION update_companies_updated_at()
-  RETURNS TRIGGER AS $$
-  BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql;
-
-  DROP TRIGGER IF EXISTS update_companies_updated_at_trigger ON companies;
-  CREATE TRIGGER update_companies_updated_at_trigger
-  BEFORE UPDATE ON companies
-  FOR EACH ROW
-  EXECUTE FUNCTION update_companies_updated_at();
-
-  -- Users table (multi-tenant architecture with per-company ID sequences)
+  -- Users table
   CREATE TABLE IF NOT EXISTS users (
-    company_id INTEGER NOT NULL,
     id INTEGER NOT NULL,
     email TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -42,13 +59,9 @@ export const POSTGRES_SCHEMA = `
     role TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('admin', 'editor', 'viewer')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (company_id, id),
-    UNIQUE(company_id, email),
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    PRIMARY KEY (id),
+    UNIQUE(email)
   );
-
-  CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);
-  CREATE INDEX IF NOT EXISTS idx_users_email_company ON users(company_id, email);
 
   -- Add phone and state columns if they don't exist (migration for existing tables)
   DO $$
@@ -82,9 +95,8 @@ export const POSTGRES_SCHEMA = `
   FOR EACH ROW
   EXECUTE FUNCTION update_users_updated_at();
 
-  -- Files table (multi-tenant architecture with per-company ID sequences)
+  -- Files table
   CREATE TABLE IF NOT EXISTS files (
-    company_id INTEGER NOT NULL,
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
     path TEXT NOT NULL,
@@ -95,9 +107,8 @@ export const POSTGRES_SCHEMA = `
     last_edit_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (company_id, id),
-    UNIQUE(company_id, path),
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    PRIMARY KEY (id),
+    UNIQUE(path)
   );
 
   -- Add file_references column if it doesn't exist (migration for existing tables)
@@ -140,10 +151,8 @@ export const POSTGRES_SCHEMA = `
   DROP INDEX IF EXISTS idx_files_type;
 
   CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
-  CREATE INDEX IF NOT EXISTS idx_files_company_id ON files(company_id);
-  CREATE INDEX IF NOT EXISTS idx_files_path_company ON files(company_id, path);
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_files_company_type_updated ON files(company_id, type, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_files_type_updated ON files(type, updated_at DESC);
 
   -- Trigger to auto-update updated_at for files
   CREATE OR REPLACE FUNCTION update_files_updated_at()
@@ -160,25 +169,6 @@ export const POSTGRES_SCHEMA = `
   FOR EACH ROW
   EXECUTE FUNCTION update_files_updated_at();
 
-  -- Access tokens table for public file sharing (token as primary key)
-  CREATE TABLE IF NOT EXISTS access_tokens (
-    token TEXT PRIMARY KEY,
-    company_id INTEGER NOT NULL,
-    file_id INTEGER NOT NULL,
-    view_as_user_id INTEGER NOT NULL,
-    created_by_user_id INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    FOREIGN KEY (company_id, file_id) REFERENCES files(company_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (company_id, view_as_user_id) REFERENCES users(company_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (company_id, created_by_user_id) REFERENCES users(company_id, id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_access_tokens_company_file ON access_tokens(company_id, file_id);
-  CREATE INDEX IF NOT EXISTS idx_access_tokens_company ON access_tokens(company_id);
-  CREATE INDEX IF NOT EXISTS idx_access_tokens_expires_at ON access_tokens(expires_at);
-
   -- Job runs table for tracking scheduled and manual job executions
   CREATE TABLE IF NOT EXISTS job_runs (
     id               SERIAL PRIMARY KEY,
@@ -186,17 +176,15 @@ export const POSTGRES_SCHEMA = `
     completed_at     TIMESTAMP NULL,
     job_id           TEXT NOT NULL,
     job_type         TEXT NOT NULL,
-    company_id       INTEGER NOT NULL,
     output_file_id   INTEGER NULL,
     output_file_type TEXT NULL,
     status           TEXT NOT NULL DEFAULT 'RUNNING',
     error            TEXT NULL,
     timeout          INTEGER NOT NULL DEFAULT 30,
-    source           TEXT NOT NULL DEFAULT 'manual',
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    source           TEXT NOT NULL DEFAULT 'manual'
   );
 
-  CREATE INDEX IF NOT EXISTS idx_job_runs_company_job ON job_runs(company_id, job_id, job_type);
+  CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id, job_type);
   CREATE INDEX IF NOT EXISTS idx_job_runs_created_at ON job_runs(created_at DESC);
 
   -- Configs table for storing system configuration values

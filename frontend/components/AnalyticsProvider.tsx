@@ -24,8 +24,6 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
         userId: user.id,
         email: user.email,
         role: user.role,
-        companyId: user.companyId,
-        companyName: user.companyName,
         mode: user.mode,
       });
     } else if (status === 'unauthenticated') {

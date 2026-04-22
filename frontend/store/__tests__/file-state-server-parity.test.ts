@@ -60,15 +60,11 @@ import { NextRequest } from 'next/server';
 // ---------------------------------------------------------------------------
 // Mock: test database
 // ---------------------------------------------------------------------------
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_server_parity.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite'
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // ---------------------------------------------------------------------------
 // Mock: Redux store (file-state.ts reads from this via getStore())
@@ -130,7 +126,7 @@ describe('Client-Server File State Parity', () => {
           const req = new NextRequest('http://localhost:3000/api/files/batch', {
             method: init?.method || 'POST',
             body: init?.body,
-            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' },
+            headers: { ...init?.headers, 'x-user-id': '1' },
           });
           const res = await batchPostHandler(req);
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -142,7 +138,7 @@ describe('Client-Server File State Parity', () => {
           const req = new NextRequest(fullUrl, {
             method: 'PATCH',
             body: init?.body,
-            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' },
+            headers: { ...init?.headers, 'x-user-id': '1' },
           });
           const res = await filePatchHandler(req, { params: Promise.resolve({ id: fileId! }) });
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -153,7 +149,7 @@ describe('Client-Server File State Parity', () => {
           const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
           const req = new NextRequest(fullUrl, {
             method: 'GET',
-            headers: { 'x-company-id': '1', 'x-user-id': '1' },
+            headers: { 'x-user-id': '1' },
           });
           const res = await fileGetHandler(req, { params: Promise.resolve({ id: fileId! }) });
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -170,8 +166,6 @@ describe('Client-Server File State Parity', () => {
     name: 'Test User',
     role: 'admin',
     home_folder: '/org',
-    companyId: 1,
-    companyName: 'test-company',
     mode: 'org',
   };
 
@@ -180,7 +174,6 @@ describe('Client-Server File State Parity', () => {
   // ---------------------------------------------------------------------------
   beforeAll(async () => {
     await initTestDatabase(dbPath);
-    const companyId = 1;
 
     // Simple question — no params
     questionId = await DocumentDB.create(
@@ -194,8 +187,7 @@ describe('Client-Server File State Parity', () => {
         parameters: [],
         vizSettings: { type: 'table', xCols: [], yCols: [] },
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     // Dashboard referencing the simple question (no param override)
@@ -209,8 +201,7 @@ describe('Client-Server File State Parity', () => {
         layout: {},
         parameterValues: {},
       } as DocumentContent,
-      [questionId],
-      companyId
+      [questionId]
     );
 
     // Question with :limit param — own default limit=5
@@ -226,8 +217,7 @@ describe('Client-Server File State Parity', () => {
         parameterValues: { limit: '5' },
         vizSettings: { type: 'table', xCols: [], yCols: [] },
       } as unknown as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     // Dashboard overriding limit=10 (overrides question's default of 5)
@@ -241,8 +231,7 @@ describe('Client-Server File State Parity', () => {
         layout: {},
         parameterValues: { limit: '10' },
       } as unknown as DocumentContent,
-      [paramQuestionId],
-      companyId
+      [paramQuestionId]
     );
 
     store = configureStore({
@@ -258,8 +247,6 @@ describe('Client-Server File State Parity', () => {
             email: 'test@example.com',
             name: 'Test User',
             role: 'admin' as UserRole,
-            companyId: 1,
-            companyName: 'test-company',
             home_folder: '/org',
             mode: 'org' as Mode,
           },
@@ -499,7 +486,6 @@ describe('Client-Server File State Parity', () => {
     let secondContextId: number;
 
     beforeAll(async () => {
-      const companyId = 1;
       const FilesAPI = (await import('@/lib/data/files.server')).FilesAPI;
 
       // Seed a connection at /org/database/test-conn (type='duckdb') with a
@@ -517,8 +503,7 @@ describe('Client-Server File State Parity', () => {
             updated_at: new Date().toISOString(),
           },
         } as ConnectionContent,
-        [],
-        companyId
+        []
       );
 
       // Upsert the canonical /org/context with test-specific whitelist + docs.
@@ -535,11 +520,11 @@ describe('Client-Server File State Parity', () => {
         fullSchema: [],
         fullDocs: [],
       };
-      const existingOrgCtx = await DocumentDB.getByPath('/org/context', companyId);
+      const existingOrgCtx = await DocumentDB.getByPath('/org/context');
       if (existingOrgCtx) {
-        await DocumentDB.update(existingOrgCtx.id, 'context', '/org/context', testContextContent, [], companyId);
+        await DocumentDB.update(existingOrgCtx.id, 'context', '/org/context', testContextContent, [], 'test-edit');
       } else {
-        await DocumentDB.create('context', '/org/context', 'context', testContextContent, [], companyId);
+        await DocumentDB.create('context', '/org/context', 'context', testContextContent, []);
       }
 
       // Seed a second context with distinct docs — used for the contextFileId override test.
@@ -552,7 +537,7 @@ describe('Client-Server File State Parity', () => {
           createdAt: new Date().toISOString(),
           createdBy: 1,
         }],
-      } as ContextContent, [], companyId);
+      } as ContextContent, []);
 
       // home_folder='' → resolveHomeFolderSync('org', '') → '/org' (mode root)
       agentUser = {
@@ -561,8 +546,6 @@ describe('Client-Server File State Parity', () => {
         name: 'Test User',
         role: 'admin',
         home_folder: '',
-        companyId: 1,
-        companyName: 'test-company',
         mode: 'org',
       };
 

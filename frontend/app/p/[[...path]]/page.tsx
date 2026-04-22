@@ -31,7 +31,7 @@ export default function PathPage({ params }: PathPageProps) {
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
   const [selectedContextPath, setSelectedContextPath] = useState<string | null>(null);
 
-  // Get company configs
+  // Get org configs
   const { config } = useConfigs();
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop).

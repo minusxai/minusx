@@ -15,4 +15,6 @@ data/uploads/
 *.DS_Store
 experiments
 static/
-junk/
+data/pglite
+
+frontend/local

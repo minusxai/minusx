@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
-import { getConfigs, validateCompanyConfig, saveConfig } from '@/lib/data/configs.server';
+import { getConfigs, validateOrgConfig, saveConfig } from '@/lib/data/configs.server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { revalidateTag } from 'next/cache';
 
 /**
  * GET /api/configs
- * Get configs for the authenticated user's company
+ * Get configs for the authenticated user
  */
 export const GET = withAuth(async (request: NextRequest, user) => {
   try {
@@ -19,7 +19,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
 
 /**
  * POST /api/configs
- * Save configs for the authenticated user's company
+ * Save configs for the authenticated user
  * Validates config structure before saving
  */
 export const POST = withAuth(async (request: NextRequest, user) => {
@@ -27,7 +27,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const body = await request.json();
 
     // Validate config structure
-    if (!validateCompanyConfig(body)) {
+    if (!validateOrgConfig(body)) {
       return ApiErrors.validationError('Invalid config structure. Required fields: branding.{logoLight, logoDark, displayName, agentName, favicon}');
     }
 

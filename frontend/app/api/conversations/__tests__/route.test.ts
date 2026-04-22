@@ -7,14 +7,11 @@
  *    with their `source` metadata, which is the fix for Bug #3 (sidebar visibility)
  */
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_conversations_route.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import { GET } from '@/app/api/conversations/route';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -24,7 +21,7 @@ import type { ConversationFileContent } from '@/lib/types';
 
 const TEST_DB_PATH = getTestDbPath('conversations_route');
 
-// Global mock provides: userId:1, mode:'org', companyId:1, role:'admin'
+// Global mock provides: userId:1, mode:'org', role:'admin'
 // → conversationsPath = '/org/logs/conversations/1'
 
 function makeConvContent(opts: {
@@ -51,13 +48,13 @@ function makeConvContent(opts: {
   };
 }
 
-async function seedConversations(dbPath: string): Promise<void> {
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+async function seedConversations(_dbPath: string): Promise<void> {
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
 
   const { rows: [{ next_id }] } = await db.query<{ next_id: number }>(
-    'SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files WHERE company_id = 1',
+    'SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files',
     [],
   );
 
@@ -88,13 +85,12 @@ async function seedConversations(dbPath: string): Promise<void> {
 
   for (const f of files) {
     await db.query(
-      `INSERT INTO files (company_id, id, name, path, type, content, file_references, version, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [1, f.id, f.name, f.path, 'conversation', JSON.stringify(f.content), '[]', 1, now, now],
+      `INSERT INTO files (id, name, path, type, content, file_references, version, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [f.id, f.name, f.path, 'conversation', JSON.stringify(f.content), '[]', 1, now, now],
     );
   }
 
-  await db.close();
 }
 
 // ── Test suite ────────────────────────────────────────────────────────────────

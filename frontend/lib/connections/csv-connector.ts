@@ -104,13 +104,13 @@ async function initInstance(
       );
     }
 
-    // Lock down access to the company's own storage prefix only.
+    // Lock down DuckDB access to the storage prefix of the uploaded files only.
     // allowed_directories must be set BEFORE disabling external access.
-    const companyId = files[0]?.s3_key.split('/')[0] ?? '';
-    if (isLocal && companyId) {
-      await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, companyId)}/']`);
-    } else if (!isLocal && OBJECT_STORE_BUCKET && companyId) {
-      await conn.run(`SET allowed_directories = ['s3://${OBJECT_STORE_BUCKET}/${companyId}/']`);
+    const storagePrefix = files[0]?.s3_key.split('/')[0] ?? '';
+    if (isLocal && storagePrefix) {
+      await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, storagePrefix)}/']`);
+    } else if (!isLocal && OBJECT_STORE_BUCKET && storagePrefix) {
+      await conn.run(`SET allowed_directories = ['s3://${OBJECT_STORE_BUCKET}/${storagePrefix}/']`);
     }
     await conn.run('SET enable_external_access = false');
   } finally {

@@ -9,8 +9,6 @@
  */
 
 import { setupMockFetch } from '@/test/harness/mock-fetch';
-import { setupTestDb } from '@/test/harness/test-db';
-import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { POST as autocompleteHandler } from '../route';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { DatabaseWithSchema } from '@/lib/types';
@@ -19,25 +17,21 @@ import { DatabaseWithSchema } from '@/lib/types';
 // Harness setup
 // ---------------------------------------------------------------------------
 
-// Schema is populated in customInit from the mxfood connection document.
+// Schema loaded from fixture once — no PGLite needed (avoids WASM conflicts in parallel workers).
 let mxfoodSchema: DatabaseWithSchema[] = [];
 
 describe('Autocomplete API — E2E', () => {
-  setupTestDb(getTestDbPath('autocomplete_e2e'), {
-    customInit: async () => {
-      // Load schema from the committed fixture (exported from mxfood.duckdb).
-      // Update with: python3 -c "import json,sqlite3; ..." > test/fixtures/mxfood-connection.json
-      const fixture = await import('@/test/fixtures/mxfood-connection.json');
-      mxfoodSchema = [{
-        databaseName: fixture.name,
-        schemas: fixture.schema?.schemas ?? [],
-        updated_at: fixture.schema?.updated_at,
-      }];
-    },
+  beforeAll(async () => {
+    // Load schema from the committed fixture (exported from mxfood.duckdb).
+    const fixture = await import('@/test/fixtures/mxfood-connection.json');
+    mxfoodSchema = [{
+      databaseName: fixture.name,
+      schemas: fixture.schema?.schemas ?? [],
+      updated_at: fixture.schema?.updated_at,
+    }];
   });
 
   const mockUser = {
-    companyId: 1,
     companyName: 'test',
     userId: 1,
     email: 'test@test.com',

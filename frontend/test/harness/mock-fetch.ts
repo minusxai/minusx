@@ -78,7 +78,8 @@ export interface MockFetchOptions {
  */
 export function setupMockFetch(options: MockFetchOptions) {
   const { getPythonPort, interceptors = [], getLLMMockPort, additionalInterceptors = [] } = options;
-  const originalFetch = global.fetch;
+  let originalFetch: typeof fetch;
+  let spy: jest.SpyInstance;
 
   const mockFetch = jest.fn(async (url: string | Request | URL, init?: any) => {
     const urlStr = url.toString();
@@ -166,7 +167,10 @@ export function setupMockFetch(options: MockFetchOptions) {
     throw new Error(`Unmocked fetch call to ${urlStr}`);
   });
 
-  jest.spyOn(global, 'fetch').mockImplementation(mockFetch as any);
+  beforeAll(() => {
+    originalFetch = global.fetch;
+    spy = jest.spyOn(global, 'fetch').mockImplementation(mockFetch as any);
+  });
 
   afterEach(() => {
     // Clear mock call history to prevent memory accumulation
@@ -180,9 +184,7 @@ export function setupMockFetch(options: MockFetchOptions) {
   });
 
   afterAll(() => {
-    // Restore original fetch
-    global.fetch = originalFetch;
-    mockFetch.mockRestore();
+    spy?.mockRestore();
   });
 
   return mockFetch;

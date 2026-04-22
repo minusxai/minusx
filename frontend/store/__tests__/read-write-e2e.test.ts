@@ -28,17 +28,23 @@ import { readFilesByCriteria } from '@/lib/api/file-state';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { NextRequest } from 'next/server';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+
+const TEST_USER: EffectiveUser = {
+  userId: 1,
+  email: 'test@example.com',
+  name: 'Test User',
+  role: 'admin',
+  home_folder: '/org',
+  mode: 'org',
+};
 
 // Mock db-config to use test database
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_read_write_e2e.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite'
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Mock the store import so file-state.ts uses the test store
 let testStore: any;
@@ -141,7 +147,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         if (urlStr.includes('/api/query') && !urlStr.includes('execute-query')) {
           const req = new NextRequest('http://localhost:3000/api/query', {
             method: init?.method || 'POST', body: init?.body,
-            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+            headers: { ...init?.headers, 'x-user-id': '1' }
           });
           const res = await queryPostHandler(req);
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -149,7 +155,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
         if (urlStr.match(/\/api\/files(\?|$)/) && (!init?.method || init?.method === 'GET')) {
           const req = new NextRequest(fullUrl, {
-            method: 'GET', headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+            method: 'GET', headers: { ...init?.headers, 'x-user-id': '1' }
           });
           const res = await filesListGetHandler(req);
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -159,7 +165,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
           const req = new NextRequest(fullUrl, {
             method: 'PATCH', body: init?.body,
-            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+            headers: { ...init?.headers, 'x-user-id': '1' }
           });
           const res = await filePatchHandler(req, { params: Promise.resolve({ id: fileId! }) });
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -168,7 +174,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (!init?.method || init?.method === 'GET')) {
           const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
           const req = new NextRequest(fullUrl, {
-            method: 'GET', headers: { 'x-company-id': '1', 'x-user-id': '1' }
+            method: 'GET', headers: { 'x-user-id': '1' }
           });
           const res = await fileGetHandler(req, { params: Promise.resolve({ id: fileId! }) });
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -177,7 +183,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         if (urlStr.includes('/api/files/batch') && !urlStr.includes('batch-save')) {
           const req = new NextRequest('http://localhost:3000/api/files/batch', {
             method: init?.method || 'POST', body: init?.body,
-            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+            headers: { ...init?.headers, 'x-user-id': '1' }
           });
           const res = await batchPostHandler(req);
           return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
@@ -192,7 +198,6 @@ describe('Phase 1: Unified File System API E2E', () => {
     // Initialize test database
     await initTestDatabase(dbPath);
     // Create test data
-    const companyId = 1;
 
     // Create a test question
     questionId = await DocumentDB.create(
@@ -210,8 +215,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           yCols: []
         }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     // Create a dashboard referencing the question
@@ -229,8 +233,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         ],
         layout: {}
       } as DocumentContent,
-      [questionId],
-      companyId
+      [questionId]
     );
 
     // Initialize Redux store
@@ -247,8 +250,7 @@ describe('Phase 1: Unified File System API E2E', () => {
             email: 'test@example.com',
             name: 'Test User',
             role: 'admin' as UserRole,
-            companyId: 1,
-            companyName: 'test-company',
+            companyName: 'test-workspace',
             home_folder: '/org',
             mode: 'org' as Mode
           },
@@ -272,8 +274,8 @@ describe('Phase 1: Unified File System API E2E', () => {
     console.log('\n[TEST] Step 1: ReadFiles - Load 1 dashboard (auto-loads references)');
 
     // Load files into Redux first (simulating initial page load)
-    const dashboardFile = await DocumentDB.getById(dashboardId, 1);
-    const questionFile = await DocumentDB.getById(questionId, 1);
+    const dashboardFile = await DocumentDB.getById(dashboardId);
+    const questionFile = await DocumentDB.getById(questionId);
 
     // Dispatch to Redux
     (store.dispatch as any)({
@@ -302,7 +304,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
       connectionId: 'test_db',
       parameters: {}
-    });
+    }, TEST_USER);
 
     // Verify ExecuteQuery output (mock returns products data)
     expect(exploreResult).toBeDefined();
@@ -360,7 +362,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     // ========================================================================
     console.log('\n[TEST] Step 5: Verify database state');
 
-    const savedFile = await DocumentDB.getById(questionId, 1);
+    const savedFile = await DocumentDB.getById(questionId);
     expect(savedFile).toBeDefined();
 
     // Note: The actual save didn't happen in this test (we mocked the API)
@@ -383,7 +385,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     console.log('\n[TEST] PublishFile with no dirty changes');
 
     // Load question into Redux (clean state)
-    const questionFile = await DocumentDB.getById(questionId, 1);
+    const questionFile = await DocumentDB.getById(questionId);
     (store.dispatch as any)({
       type: 'files/setFiles',
       payload: { files: [questionFile] }
@@ -407,7 +409,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('\n[TEST] ReadFiles with unsaved changes');
 
       // Load question into Redux
-      const questionFile = await DocumentDB.getById(questionId, 1);
+      const questionFile = await DocumentDB.getById(questionId);
       (store.dispatch as any)({
         type: 'files/setFiles',
         payload: { files: [questionFile] }
@@ -441,7 +443,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('\n[TEST] ReadFiles after publish shows clean state');
 
       // Load question, edit it, and publish
-      const questionFile = await DocumentDB.getById(questionId, 1);
+      const questionFile = await DocumentDB.getById(questionId);
       (store.dispatch as any)({
         type: 'files/setFiles',
         payload: { files: [questionFile] }
@@ -470,7 +472,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('\n[TEST] PublishFile saves correct content to database');
 
       // Load question into Redux
-      const questionFile = await DocumentDB.getById(questionId, 1);
+      const questionFile = await DocumentDB.getById(questionId);
       (store.dispatch as any)({
         type: 'files/setFiles',
         payload: { files: [questionFile] }
@@ -518,8 +520,6 @@ describe('Phase 1: Unified File System API E2E', () => {
           email: 'test@example.com',
           name: 'Test User',
           role: 'admin',
-          companyId: 1,
-          companyName: 'test-company',
           home_folder: '/org',
           mode: 'org'
         }
@@ -535,7 +535,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 3: Reload from database and verify content
       console.log('[3] Reloading from database and verifying content...');
-      const reloadedFile = await DocumentDB.getById(questionId, 1);
+      const reloadedFile = await DocumentDB.getById(questionId);
       const reloadedContent = reloadedFile?.content as any;
 
       expect(reloadedContent.description).toBe('Published test description');
@@ -574,7 +574,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT name, age FROM users WHERE age > :minAge',
         connectionId: 'test_db',
         parameters: { minAge: 20 }
-      });
+      }, TEST_USER);
 
       expect(result).toBeDefined();
       const resultDetails = result.details as import('@/lib/types').ExecuteQueryDetails;
@@ -587,7 +587,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('\n[TEST] Query result caching with getQueryResult');
 
       // Load question into Redux
-      const questionFile = await DocumentDB.getById(questionId, 1);
+      const questionFile = await DocumentDB.getById(questionId);
       (store.dispatch as any)({
         type: 'files/setFiles',
         payload: { files: [questionFile] }
@@ -637,7 +637,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
         connectionId: 'test_db',
         parameters: {}
-      });
+      }, TEST_USER);
 
       // content must be a CompressedQueryResult object, NOT the raw QueryResult
       expect(result.content).toBeDefined();
@@ -660,7 +660,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
         connectionId: 'test_db',
         parameters: {}
-      });
+      }, TEST_USER);
 
       const compressed = result.content as CompressedQueryResult;
       // Markdown table should include actual cell values
@@ -684,7 +684,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT * FROM nonexistent_table_xyz',
         connectionId: 'test_db',
         parameters: {}
-      });
+      }, TEST_USER);
 
       // content and details both reflect the error (no raw rows)
       const details = result.details as ExecuteQueryDetails;
@@ -733,7 +733,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT name, age FROM users WHERE age > :minAge',
         connectionId: 'test_db',
         parameters: { minAge: 20 }
-      });
+      }, TEST_USER);
 
       // Simulate how a completed tool call message looks after route injects details
       const newToolMessage: ToolMessage = {
@@ -825,7 +825,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       return {
         fileState: {
           id: 9999, name: 'Large Result', path: '/test', type: 'question',
-          content: {}, companyId: 1, createdAt: '', updatedAt: 0,
+          content: {}, createdAt: '', updatedAt: 0,
           references: [], loading: false, saving: false, loadError: null,
           persistableChanges: {}, ephemeralChanges: {}, metadataChanges: {},
         } as any,
@@ -896,8 +896,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           parameters: [],
           vizSettings: { type: 'table', xCols: [], yCols: [] },
         } as QuestionContent,
-        [],
-        1
+        []
       );
     });
 
@@ -938,7 +937,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] EditFile / ReadFiles consistency');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -977,7 +976,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] AppState / ReadFiles consistency');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1014,7 +1013,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] CompressedAugmentedFile: persistableChanges + ephemeralChanges isolation');
 
         // Load question into Redux (clean state)
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1049,7 +1048,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr - Basic string replacement');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1089,7 +1088,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr - String not found');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1115,7 +1114,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr - JSON validation');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1146,7 +1145,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr - Question field validation');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1177,7 +1176,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr - Dashboard field validation');
 
         // Load dashboard into Redux
-        const dashboardFile = await DocumentDB.getById(dashboardId, 1);
+        const dashboardFile = await DocumentDB.getById(dashboardId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [dashboardFile] }
@@ -1208,7 +1207,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr + PublishFile integration');
 
         // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1251,7 +1250,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         console.log('\n[TEST] editFileStr - Multiple consecutive edits');
 
         // Load question into Redux (fresh state from beforeEach)
-        const questionFile = await DocumentDB.getById(questionId, 1);
+        const questionFile = await DocumentDB.getById(questionId);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
@@ -1309,8 +1308,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           query: 'SELECT month, revenue\nFROM sales\nWHERE year = 2024',
           connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
-        } as QuestionContent, [], 1);
-        const file = await DocumentDB.getById(id, 1);
+        } as QuestionContent, []);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         const result = await editFileStr({
@@ -1330,8 +1329,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           query: 'SELECT * FROM "users" WHERE "active" = true',
           connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
-        } as QuestionContent, [], 1);
-        const file = await DocumentDB.getById(id, 1);
+        } as QuestionContent, []);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         // encodeFileStr escapes " to \" so LLM writes \" (backslash+quote) in oldMatch
@@ -1352,8 +1351,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           query: "SELECT * FROM t WHERE name LIKE '%\\_%'",
           connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
-        } as QuestionContent, [], 1);
-        const file = await DocumentDB.getById(id, 1);
+        } as QuestionContent, []);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         // encodeFileStr escapes \ to \\ so LLM writes \\ (two backslashes) in oldMatch
@@ -1374,8 +1373,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           query: 'SELECT *\n\tFROM "orders"\nWHERE status = "active"',
           connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
-        } as QuestionContent, [], 1);
-        const file = await DocumentDB.getById(id, 1);
+        } as QuestionContent, []);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         const result = await editFileStr({
@@ -1403,10 +1402,9 @@ describe('Phase 1: Unified File System API E2E', () => {
             connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
-          [],
-          1
+          []
         );
-        const file = await DocumentDB.getById(id, 1);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         const result = await editFileStr({
@@ -1437,10 +1435,9 @@ describe('Phase 1: Unified File System API E2E', () => {
             connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
-          [],
-          1
+          []
         );
-        const file = await DocumentDB.getById(id, 1);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         const result = await editFileStr({
@@ -1470,10 +1467,9 @@ describe('Phase 1: Unified File System API E2E', () => {
             connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
-          [],
-          1
+          []
         );
-        const file = await DocumentDB.getById(id, 1);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         const result = await editFileStr({
@@ -1501,10 +1497,9 @@ describe('Phase 1: Unified File System API E2E', () => {
             connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
-          [],
-          1
+          []
         );
-        const file = await DocumentDB.getById(id, 1);
+        const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
         // replaceAll omitted — should default to true and replace all
@@ -1548,14 +1543,13 @@ describe('Phase 1: Unified File System API E2E', () => {
           parameterValues: { limit: 50 },
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
         } as QuestionContent,
-        [],
-        1
+        []
       );
     });
 
     beforeEach(async () => {
       // Reload from DB and reset Redux state (clears edits and ephemeral state)
-      const qFile = await DocumentDB.getById(paramQuestionId, 1);
+      const qFile = await DocumentDB.getById(paramQuestionId);
       (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
     });
 
@@ -1693,10 +1687,9 @@ describe('Phase 1: Unified File System API E2E', () => {
           parameters: [],  // intentionally empty — auto-execute will fail
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
         } as QuestionContent,
-        [],
-        1
+        []
       );
-      const qFile = await DocumentDB.getById(brokenQuestionId, 1);
+      const qFile = await DocumentDB.getById(brokenQuestionId);
       (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
 
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
@@ -1754,8 +1747,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       email: 'subfolder-viewer-redux@example.com',
       name: 'Subfolder Viewer Redux',
       role: 'viewer' as UserRole,
-      companyId: 1,
-      companyName: 'test-company',
+      companyName: 'test-workspace',
       home_folder: 'sales',  // resolves to /org/sales
       mode: 'org' as Mode
     };
@@ -1765,8 +1757,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       email: 'subfolder-viewer-redux@example.com',
       name: 'Subfolder Viewer Redux',
       role: 'viewer' as UserRole,
-      companyId: 1,
-      companyName: 'test-company',
+      companyName: 'test-workspace',
       home_folder: 'sales',
       mode: 'org' as Mode
     };
@@ -1791,13 +1782,13 @@ describe('Phase 1: Unified File System API E2E', () => {
         fullSchema: [],
         fullDocs: []
       };
-      const existingAncestor = await DocumentDB.getByPath('/org/context', 1);
+      const existingAncestor = await DocumentDB.getByPath('/org/context');
       if (existingAncestor) {
-        await DocumentDB.update(existingAncestor.id, 'context', '/org/context', ancestorContextContent, [], 1);
+        await DocumentDB.update(existingAncestor.id, 'context', '/org/context', ancestorContextContent, [], 'test-edit');
         ancestorContextId = existingAncestor.id;
       } else {
         ancestorContextId = await DocumentDB.create(
-          'context', '/org/context', 'context', ancestorContextContent, [], 1
+          'context', '/org/context', 'context', ancestorContextContent, []
         );
       }
     });
@@ -1807,7 +1798,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const authMock = jest.requireMock('@/lib/auth/auth-helpers');
       authMock.getEffectiveUser.mockResolvedValue({
         userId: 1, email: 'test@example.com', name: 'Test User',
-        role: 'admin', companyId: 1, companyName: 'test-company',
+        role: 'admin', companyName: 'test-workspace',
         home_folder: '/org', mode: 'org'
       });
     });

@@ -3,11 +3,10 @@ import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/a
 
 /**
  * FileInfo: File metadata without content (for efficient folder listings)
- * Extends BaseFileMetadata with computed references field and company_id
+ * Extends BaseFileMetadata with computed references field
  */
 export interface FileInfo extends BaseFileMetadata {
-  references: number[];  // Computed from content.assets
-  company_id: number;     // Multi-tenant isolation
+  references: number[];
 }
 
 /**

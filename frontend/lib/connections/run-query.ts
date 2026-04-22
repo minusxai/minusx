@@ -20,7 +20,7 @@ export interface QueryResult {
  * @param databaseName - Connection name (matches the `name` field in connection config)
  * @param query        - SQL query string
  * @param params       - Parameter values (substituted for :param placeholders)
- * @param user         - Effective user (supplies companyId and mode for path resolution)
+ * @param user - Effective user (supplies mode for path resolution)
  */
 export async function runQuery(
   databaseName: string,
@@ -29,10 +29,10 @@ export async function runQuery(
   user: EffectiveUser,
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>
 ): Promise<QueryResult> {
-  // Try Node.js connector first (DuckDB, CSV, Google Sheets)
-  const connData = await ConnectionsAPI.getByName(databaseName, user).catch(() => null);
-  if (connData) {
-    const { type, config } = connData.connection;
+  // Try Node.js connector first — use getRawByName so credentials (e.g. service_account_json) are included
+  const rawConn = await ConnectionsAPI.getRawByName(databaseName, user.mode).catch(() => null);
+  if (rawConn) {
+    const { type, config } = rawConn;
     const connector = getNodeConnector(databaseName, type, config);
     if (connector) {
       return connector.query(query, params);

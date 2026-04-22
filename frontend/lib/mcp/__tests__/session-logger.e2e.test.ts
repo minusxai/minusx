@@ -17,14 +17,11 @@
 // Hoisted mocks — must come before any imports
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_mcp_logger.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 jest.mock('next/cache', () => ({
   revalidateTag: jest.fn(),
@@ -36,7 +33,7 @@ jest.mock('next/cache', () => ({
 // ---------------------------------------------------------------------------
 
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
-import { createAdapter, resetAdapter } from '@/lib/database/adapter/factory';
+import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationFileContent, TaskLogEntry, TaskResultEntry } from '@/lib/types';
@@ -53,8 +50,6 @@ const TEST_USER: EffectiveUser = {
   email: 'test@example.com',
   name: 'Test User',
   role: 'admin',
-  companyId: 1,
-  companyName: 'test-company',
   home_folder: '/org',
   mode: 'org',
 };
@@ -69,7 +64,7 @@ const TOOL_RESULT: McpToolCallResult = {
 
 beforeAll(async () => {
   await initTestDatabase(DB_PATH);
-  // test@example.com admin user is created by initTestDatabase via company-template.json
+  // test@example.com admin user is created by initTestDatabase via workspace-template.json
 });
 
 afterAll(async () => {
@@ -79,9 +74,8 @@ afterAll(async () => {
 afterEach(async () => {
   // Reset singleton and wipe all files except the /org root between tests
   await resetAdapter();
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
+  const db = await getAdapter();
   await db.query("DELETE FROM files WHERE path != '/org'", []);
-  await db.close();
   await resetAdapter();
 });
 
@@ -90,12 +84,11 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 async function loadConversationRows(): Promise<Array<{ path: string; content: string }>> {
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
+  const db = await getAdapter();
   const { rows } = await db.query<{ path: string; content: string }>(
-    "SELECT path, content FROM files WHERE type = 'conversation' AND company_id = 1",
+    "SELECT path, content FROM files WHERE type = 'conversation'",
     [],
   );
-  await db.close();
   await resetAdapter();
   return rows;
 }

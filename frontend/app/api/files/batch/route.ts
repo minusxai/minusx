@@ -32,7 +32,7 @@ export const POST = withAuth(async (
         userId: user.userId,
         userEmail: user.email,
         userRole: user.role,
-        companyId: user.companyId,
+        
         mode: user.mode,
       });
     }

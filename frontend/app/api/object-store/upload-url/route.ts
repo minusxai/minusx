@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     let key: string;
     if (keyTypeParam === 'csvs') {
-      // CSV uploads use a connection-scoped key for easy per-company cleanup.
+      // CSV uploads use a connection-scoped key.
       // connectionName is required for csvs key type.
       const connectionName = req.nextUrl.searchParams.get('connectionName');
       if (!connectionName) {
@@ -79,7 +79,6 @@ export async function GET(req: NextRequest) {
         );
       }
       key = generateCsvUploadKey({
-        companyId: user.companyId,
         mode: user.mode,
         connectionName,
         filename,
@@ -88,7 +87,6 @@ export async function GET(req: NextRequest) {
       const keyType = keyTypeParam === 'charts' ? 'charts' : 'uploads';
       const ext = '.' + filename.split('.').pop()!.toLowerCase();
       key = generateUploadKey({
-        companyId: user.companyId,
         userId: user.userId,
         mode: user.mode,
         type: keyType,
@@ -101,7 +99,7 @@ export async function GET(req: NextRequest) {
 
     // Sign the key into a tamper-proof token so /api/csv/register can trust
     // the echoed-back key without mode-specific validation.
-    return NextResponse.json({ ...result, s3Key: signStorageToken(key, user.companyId) });
+    return NextResponse.json({ ...result, s3Key: signStorageToken(key) });
   } catch (error) {
     return handleApiError(error);
   }

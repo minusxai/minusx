@@ -32,7 +32,7 @@ export type WhitelistSchema = Array<{ schema: string; tables: Array<{ table: str
  *                       user's effective home folder for MCP / server-initiated
  *                       queries where no specific file is known.
  * @param connectionName - Database connection name to look up in the context.
- * @param user           - Effective user (supplies companyId and mode).
+ * @param user           - Effective user (supplies mode and home folder).
  */
 export async function getWhitelistForPath(
   lookupPath: string,

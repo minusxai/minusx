@@ -11,14 +11,11 @@
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_file_delete_e2e.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // ---------------------------------------------------------------------------
 // Imports
@@ -33,8 +30,6 @@ import { DELETE as fileDeleteHandler } from '@/app/api/files/[id]/route';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const COMPANY_ID = 1;
 
 function makeQuestion(): QuestionContent {
   return {
@@ -62,8 +57,8 @@ describe('DELETE /api/files/[id]', () => {
 
   beforeAll(async () => {
     await initTestDatabase(dbPath);
-    await DocumentDB.create('subfolder', '/org/subfolder', 'folder', { description: '' }, [], COMPANY_ID);
-    // /org/configs is created by initTestDatabase via company-template.json
+    await DocumentDB.create('subfolder', '/org/subfolder', 'folder', { description: '' }, []);
+    // /org/configs is created by initTestDatabase via workspace-template.json
   });
 
   afterAll(async () => {
@@ -72,25 +67,25 @@ describe('DELETE /api/files/[id]', () => {
 
   it('deletes a regular file', async () => {
     const fileId = await DocumentDB.create(
-      'q-to-delete', '/org/subfolder/q-to-delete', 'question', makeQuestion(), [], COMPANY_ID
+      'q-to-delete', '/org/subfolder/q-to-delete', 'question', makeQuestion(), []
     );
 
     const res = await deleteFile(fileId);
     expect(res.status).toBe(200);
-    expect(await DocumentDB.getById(fileId, COMPANY_ID)).toBeNull();
+    expect(await DocumentDB.getById(fileId)).toBeNull();
   });
 
   it('deletes a folder and all its descendants', async () => {
-    await DocumentDB.create('folder-to-delete', '/org/subfolder/folder-to-delete', 'folder', { description: '' }, [], COMPANY_ID);
+    await DocumentDB.create('folder-to-delete', '/org/subfolder/folder-to-delete', 'folder', { description: '' }, []);
     const childId = await DocumentDB.create(
-      'child', '/org/subfolder/folder-to-delete/child', 'question', makeQuestion(), [], COMPANY_ID
+      'child', '/org/subfolder/folder-to-delete/child', 'question', makeQuestion(), []
     );
-    const folderId = (await DocumentDB.getByPath('/org/subfolder/folder-to-delete', COMPANY_ID))!.id;
+    const folderId = (await DocumentDB.getByPath('/org/subfolder/folder-to-delete'))!.id;
 
     const res = await deleteFile(folderId);
     expect(res.status).toBe(200);
-    expect(await DocumentDB.getById(folderId, COMPANY_ID)).toBeNull();
-    expect(await DocumentDB.getById(childId, COMPANY_ID)).toBeNull();
+    expect(await DocumentDB.getById(folderId)).toBeNull();
+    expect(await DocumentDB.getById(childId)).toBeNull();
   });
 
   it('returns 404 when file does not exist', async () => {
@@ -101,11 +96,11 @@ describe('DELETE /api/files/[id]', () => {
   it('returns 403 when trying to delete a protected file type', async () => {
     // Use a unique path to avoid conflicting with the template-seeded /org/configs/config
     const configId = await DocumentDB.create(
-      'config-protected', '/org/configs/config-protected', 'config', {} as any, [], COMPANY_ID
+      'config-protected', '/org/configs/config-protected', 'config', {} as any, []
     );
     const res = await deleteFile(configId);
     expect(res.status).toBe(403);
     // File must still exist
-    expect(await DocumentDB.getById(configId, COMPANY_ID)).not.toBeNull();
+    expect(await DocumentDB.getById(configId)).not.toBeNull();
   });
 });

@@ -1,49 +1,38 @@
 import { IDatabaseAdapter, DatabaseConfig } from './types';
-import { getDbType } from '../db-config';
+import { getDbType, PGLITE_DATA_DIR } from '../db-config';
 import { POSTGRES_URL } from '@/lib/config';
 
 let currentAdapter: IDatabaseAdapter | null = null;
 
-/**
- * Create database adapter based on configuration
- * Uses DB_TYPE constant (from environment variable) to determine adapter
- * Falls back to SQLite if not specified
- */
 export async function createAdapter(config?: DatabaseConfig): Promise<IDatabaseAdapter> {
   const dbType = config?.type || getDbType();
 
-  if (dbType === 'sqlite') {
-    // eslint-disable-next-line no-restricted-syntax
-    const { SqliteAdapter } = await import('./sqlite-adapter');
-    return new SqliteAdapter(config?.sqlitePath);
-  } else if (dbType === 'postgres') {
+  if (dbType === 'postgres') {
     // eslint-disable-next-line no-restricted-syntax
     const { PostgresAdapter } = await import('./postgres-adapter');
     return new PostgresAdapter(config?.postgresConnectionString);
+  } else if (dbType === 'pglite') {
+    // eslint-disable-next-line no-restricted-syntax
+    const { PgliteAdapter } = await import('./pglite-adapter');
+    const adapter = new PgliteAdapter(config?.pgDataDir);
+    await adapter.initializeSchema();
+    return adapter;
   } else {
     throw new Error(`Unknown database type: ${dbType}`);
   }
 }
 
-/**
- * Get or create singleton adapter
- * Used by most application code
- * Respects DB_TYPE environment variable
- */
 export async function getAdapter(): Promise<IDatabaseAdapter> {
   if (!currentAdapter) {
     const dbType = getDbType();
 
-    if (dbType === 'sqlite') {
-      // Import DB_PATH to ensure we use the mocked value in tests
-      // eslint-disable-next-line no-restricted-syntax
-      const { DB_PATH } = await import('../db-config');
-      currentAdapter = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
-    } else if (dbType === 'postgres') {
+    if (dbType === 'postgres') {
       currentAdapter = await createAdapter({
         type: 'postgres',
         postgresConnectionString: POSTGRES_URL
       });
+    } else if (dbType === 'pglite') {
+      currentAdapter = await createAdapter({ type: 'pglite', pgDataDir: PGLITE_DATA_DIR });
     } else {
       throw new Error(`Unknown database type: ${dbType}`);
     }
@@ -56,9 +45,6 @@ export async function getAdapter(): Promise<IDatabaseAdapter> {
   return currentAdapter;
 }
 
-/**
- * Reset adapter (for testing)
- */
 export async function resetAdapter(): Promise<void> {
   if (currentAdapter) {
     await currentAdapter.close();

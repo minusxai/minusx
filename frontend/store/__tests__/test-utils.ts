@@ -7,10 +7,9 @@
 
 import { configureStore } from '@reduxjs/toolkit';
 import { join } from 'path';
-import { unlinkSync, existsSync } from 'fs';
 import { ChildProcess } from 'child_process';
 import treeKill from 'tree-kill';
-import { createNewCompany } from '@/lib/database/import-export';
+import { initializeDatabase } from '@/lib/database/import-export';
 import chatReducer from '../chatSlice';
 import { chatListenerMiddleware } from '../chatListener';
 import { waitForPortRelease } from './port-manager';
@@ -60,34 +59,21 @@ import { waitForPortRelease } from './port-manager';
 // ============================================================================
 
 /**
- * Initialize a fresh test database with schema and test company.
+ * Initialize a fresh test database with schema and test org.
  * Cleans up any existing database and WAL files first.
  */
 export async function initTestDatabase(dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
-  // Clean up existing files
-  [dbPath, `${dbPath}-shm`, `${dbPath}-wal`].forEach(file => {
-    if (existsSync(file)) unlinkSync(file);
-  });
-
-  // Seed via createNewCompany — uses company-template.json, same as production.
-  // Pass dbPath explicitly so this always writes to the correct test DB regardless
-  // of whether the caller has mocked @/lib/database/db-config.
-  await createNewCompany('test-company', 'Test User', 'test@example.com', 'password', 'test-company', dbPath);
+  // Seed via initializeDatabase — uses workspace-template.json, same as production.
+  await initializeDatabase('Test User', 'test@example.com', 'password', dbPath);
 }
 
 /**
  * Clean up test database and associated WAL files.
  * Call this in afterAll hook.
  */
-export async function cleanupTestDatabase(dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
-  // Reset adapter to close any open connections
+export async function cleanupTestDatabase(_dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
   const { resetAdapter } = await import('@/lib/database/adapter/factory');
   await resetAdapter();
-
-  // Clean up files
-  [dbPath, `${dbPath}-shm`, `${dbPath}-wal`].forEach(file => {
-    if (existsSync(file)) unlinkSync(file);
-  });
 }
 
 // ============================================================================

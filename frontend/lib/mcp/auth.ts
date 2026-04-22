@@ -8,7 +8,6 @@
 import 'server-only';
 import { OAuthTokenDB } from '@/lib/oauth/db';
 import { UserDB } from '@/lib/database/user-db';
-import { CompanyDB } from '@/lib/database/company-db';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 
@@ -28,10 +27,8 @@ export async function authenticateOAuthRequest(
   const tokenData = await OAuthTokenDB.validateAccessToken(token);
   if (!tokenData) return null;
 
-  const user = await UserDB.getById(tokenData.userId, tokenData.companyId);
+  const user = await UserDB.getById(tokenData.userId);
   if (!user) return null;
-
-  const company = await CompanyDB.getById(tokenData.companyId);
 
   return {
     userId: user.id,
@@ -39,8 +36,6 @@ export async function authenticateOAuthRequest(
     name: user.name,
     role: user.role,
     home_folder: user.home_folder,
-    companyId: tokenData.companyId,
-    companyName: company?.name,
     mode: DEFAULT_MODE,
   };
 }

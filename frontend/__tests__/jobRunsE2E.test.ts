@@ -28,16 +28,21 @@ import type { AlertContent, AlertOutput, JobRun, RunFileContent, Test } from '@/
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_job_runs_e2e.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
+
+// ─── Node connector mock ─────────────────────────────────────────────────────
+// Force getNodeConnector to return null so runQuery falls through to
+// pythonBackendFetch for all connection types including 'postgresql'.
+jest.mock('@/lib/connections', () => ({
+  ...jest.requireActual('@/lib/connections'),
+  getNodeConnector: jest.fn().mockReturnValue(null),
+}));
 
 // ─── Query execution mock (no Python backend needed) ─────────────────────────
 // Mocked pythonBackendFetch returns a single row with value=150 for any query.
@@ -61,16 +66,16 @@ jest.mock('@/lib/messaging/webhook-executor', () => ({
 
 // ─── User DB mock (no real users needed for channel-name based delivery) ──────
 jest.mock('@/lib/database/user-db', () => ({
-  UserDB: { listByCompany: jest.fn().mockResolvedValue([]) },
+  UserDB: { listAll: jest.fn().mockResolvedValue([]) },
 }));
 
-// ─── Company config mock (provide email webhook + channels for delivery tests) ─
+// ─── Org config mock (provide email webhook + channels for delivery tests) ─
 jest.mock('@/lib/data/configs.server', () => ({
-  getConfigsByCompanyId: jest.fn().mockResolvedValue({
+  getConfigsForMode: jest.fn().mockResolvedValue({
     config: {
       branding: {
         agentName: 'TestAgent',
-        displayName: 'Test Company',
+        displayName: 'Test Workspace',
       },
       messaging: {
         webhooks: [
@@ -98,19 +103,19 @@ const TEST_CRON_SECRET = 'test-cron-secret';
 function makeRequest(url: string, method: string, body?: object): NextRequest {
   return new NextRequest(`http://localhost:3000${url}`, {
     method,
-    headers: { 'Content-Type': 'application/json', 'x-company-id': '1', 'x-user-id': '1' },
+    headers: { 'Content-Type': 'application/json', 'x-user-id': '1' },
     body: body ? JSON.stringify(body) : undefined,
   });
 }
 
-function makeCronRequest(companyIds: number[] = [1]): NextRequest {
+function makeCronRequest(): NextRequest {
   return new NextRequest('http://localhost:3000/api/jobs/cron', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${TEST_CRON_SECRET}`,
     },
-    body: JSON.stringify({ company_ids: companyIds }),
+    body: JSON.stringify({}),
   });
 }
 
@@ -135,8 +140,6 @@ describe('Job Runs E2E', () => {
     await resetAdapter();
     await initTestDatabase(TEST_DB_PATH);
 
-    const companyId = 1;
-
     // Connection — uses 'postgresql' type so getNodeConnector() returns null
     // and execution falls through to the mocked pythonBackendFetch
     connectionId = await DocumentDB.create(
@@ -144,8 +147,7 @@ describe('Job Runs E2E', () => {
       '/org/database/test_conn',
       'connection',
       { id: 'test_conn', name: 'test_conn', type: 'postgresql', config: { host: 'localhost' } } as any,
-      [],
-      companyId
+      []
     );
 
     // Question referencing that connection
@@ -160,8 +162,7 @@ describe('Job Runs E2E', () => {
         parameters: [],
         parameterValues: {},
       } as any,
-      [],
-      companyId
+      []
     );
 
     // NEW: test passes when revenue <= 100, fails (triggers alert) when revenue > 100
@@ -185,8 +186,7 @@ describe('Job Runs E2E', () => {
       '/org/alerts/revenue',
       'alert',
       liveAlertContent,
-      [questionId],
-      companyId
+      [questionId]
     );
 
     const draftAlertContent: AlertContent = {
@@ -200,8 +200,7 @@ describe('Job Runs E2E', () => {
       '/org/alerts/draft',
       'alert',
       draftAlertContent,
-      [questionId],
-      companyId
+      [questionId]
     );
 
     await JobRunsDB.ensureTable();
@@ -231,7 +230,7 @@ describe('Job Runs E2E', () => {
       expect(body.data.fileId).toBeGreaterThan(0);
 
       // job_runs row should be complete with output_file_id set
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);
 
       const run = runs[0];
@@ -242,7 +241,7 @@ describe('Job Runs E2E', () => {
       expect(run.completed_at).not.toBeNull();
 
       // Run file should use new RunFileContent shape
-      const runFile = await DocumentDB.getById(body.data.fileId, 1);
+      const runFile = await DocumentDB.getById(body.data.fileId);
       expect(runFile).not.toBeNull();
       expect(runFile!.type).toBe('alert_run');
 
@@ -272,7 +271,7 @@ describe('Job Runs E2E', () => {
       const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
       pythonBackendFetch.mockImplementationOnce(async () => {
         // By the time the query runs, the job_run should already have output_file_id
-        const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+        const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
         if (runs.length > 0) {
           capturedRunFileId = runs[0].output_file_id;
         }
@@ -292,7 +291,7 @@ describe('Job Runs E2E', () => {
       // And the run file had status=running at that point
       if (capturedRunFileId) {
         // After completion, status is 'success'
-        const runFile = await DocumentDB.getById(capturedRunFileId, 1);
+        const runFile = await DocumentDB.getById(capturedRunFileId);
         const content = runFile!.content as RunFileContent;
         expect(content.status).toBe('success');
       }
@@ -311,11 +310,11 @@ describe('Job Runs E2E', () => {
       expect(body.data.status).toBe('SUCCESS');
       expect(body.data.fileId).toBeGreaterThan(0);
 
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs[0].status).toBe('SUCCESS');
       expect(runs[0].output_file_id).toBe(body.data.fileId);
 
-      const runFile = await DocumentDB.getById(body.data.fileId, 1);
+      const runFile = await DocumentDB.getById(body.data.fileId);
       const content = runFile!.content as RunFileContent;
       expect(content.status).toBe('success');
 
@@ -332,7 +331,6 @@ describe('Job Runs E2E', () => {
       await JobRunsDB.create({
         job_id: String(alertId),
         job_type: 'alert',
-        company_id: 1,
         output_file_id: fakeFileId,
         output_file_type: 'alert_run',
         source: 'manual',
@@ -348,7 +346,7 @@ describe('Job Runs E2E', () => {
       expect(body.data.fileId).toBe(fakeFileId);
 
       // No new run should have been created
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);
       expect(runs[0].status).toBe('RUNNING');
     });
@@ -359,7 +357,6 @@ describe('Job Runs E2E', () => {
       await JobRunsDB.create({
         job_id: String(alertId),
         job_type: 'alert',
-        company_id: 1,
         output_file_id: 999,
         output_file_type: 'alert_run',
         source: 'manual',
@@ -375,7 +372,7 @@ describe('Job Runs E2E', () => {
       expect(body.data.status).toBe('SUCCESS');
 
       // Two runs total: the stale one (now TIMEOUT) and the new one (SUCCESS)
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(2);
       const newRun = runs.find(r => r.status === 'SUCCESS');
       const staleRun = runs.find(r => r.status === 'TIMEOUT');
@@ -397,7 +394,7 @@ describe('Job Runs E2E', () => {
           { channelName: 'bob', channel: 'email' },
         ],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 'test-edit');
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);
@@ -416,7 +413,7 @@ describe('Job Runs E2E', () => {
       );
 
       // Run file messages should show 'sent' status
-      const runFile = await DocumentDB.getById(body.data.fileId, 1);
+      const runFile = await DocumentDB.getById(body.data.fileId);
       const content = runFile!.content as RunFileContent;
       expect(content.messages).toHaveLength(2);
       expect(content.messages![0].status).toBe('sent');
@@ -434,7 +431,7 @@ describe('Job Runs E2E', () => {
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [{ channelName: 'alice', channel: 'email' }],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 'test-edit');
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);
@@ -443,7 +440,7 @@ describe('Job Runs E2E', () => {
       // The overall run should still succeed even if delivery fails
       expect(body.data.status).toBe('SUCCESS');
 
-      const runFile = await DocumentDB.getById(body.data.fileId, 1);
+      const runFile = await DocumentDB.getById(body.data.fileId);
       const content = runFile!.content as RunFileContent;
       expect(content.messages![0].status).toBe('failed');
       expect(content.messages![0].deliveryError).toContain('Unauthorized');
@@ -459,7 +456,7 @@ describe('Job Runs E2E', () => {
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 200 } }],
         recipients: [{ channelName: 'alice', channel: 'email' }],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 'test-edit');
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       await runPostHandler(req);
@@ -484,18 +481,18 @@ describe('Job Runs E2E', () => {
 
   describe('POST /api/jobs/cron', () => {
     it('triggers live alert with matching cron, skips draft', async () => {
-      const req = makeCronRequest([1]);
+      const req = makeCronRequest();
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
       // 1 live alert triggered, 1 draft skipped
-      expect(body.data.results[1].triggered).toBe(1);
-      expect(body.data.results[1].failed).toBe(0);
-      expect(body.data.results[1].skipped).toBeGreaterThanOrEqual(1);
+      expect(body.data.results[0].triggered).toBe(1);
+      expect(body.data.results[0].failed).toBe(0);
+      expect(body.data.results[0].skipped).toBeGreaterThanOrEqual(1);
 
       // job_runs row created for the live alert
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);
       expect(runs[0].status).toBe('SUCCESS');
       expect(runs[0].source).toBe('cron');
@@ -503,7 +500,7 @@ describe('Job Runs E2E', () => {
       expect(runs[0].output_file_type).toBe('alert_run');
 
       // Run file should use new RunFileContent shape
-      const runFile = await DocumentDB.getById(runs[0].output_file_id!, 1);
+      const runFile = await DocumentDB.getById(runs[0].output_file_id!);
       const content = runFile!.content as RunFileContent;
       expect(content.job_type).toBe('alert');
       expect(content.status).toBe('success');
@@ -511,21 +508,21 @@ describe('Job Runs E2E', () => {
       expect(output.status).toBe('triggered');
 
       // No job_runs row for the draft alert
-      const draftRuns = await JobRunsDB.getByJobId(String(draftAlertId), 'alert', 1);
+      const draftRuns = await JobRunsDB.getByJobId(String(draftAlertId), 'alert');
       expect(draftRuns).toHaveLength(0);
     });
 
     it('deduplicates: second cron call within the same minute is skipped', async () => {
-      const req1 = makeCronRequest([1]);
+      const req1 = makeCronRequest();
       await cronPostHandler(req1);
 
-      const req2 = makeCronRequest([1]);
+      const req2 = makeCronRequest();
       const res2 = await cronPostHandler(req2);
       const body2 = await parseResponse(res2);
 
-      expect(body2.data.results[1].triggered).toBe(0);
+      expect(body2.data.results[0].triggered).toBe(0);
       // The live alert was already run; the second call finds the existing run in the time window
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);  // only one run, not two
     });
 
@@ -541,15 +538,15 @@ describe('Job Runs E2E', () => {
         recipients: [],
         suppressUntil,
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', suppressedContent, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', suppressedContent, [questionId], 'test-edit');
 
-      const req = makeCronRequest([1]);
+      const req = makeCronRequest();
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
-      expect(body.data.results[1].triggered).toBe(0);
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(body.data.results[0].triggered).toBe(0);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(0);
     });
 
@@ -565,15 +562,15 @@ describe('Job Runs E2E', () => {
         recipients: [],
         suppressUntil,
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', expiredSuppressContent, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', expiredSuppressContent, [questionId], 'test-edit');
 
-      const req = makeCronRequest([1]);
+      const req = makeCronRequest();
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
-      expect(body.data.results[1].triggered).toBe(1);
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(body.data.results[0].triggered).toBe(1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);
       expect(runs[0].status).toBe('SUCCESS');
     });
@@ -588,14 +585,14 @@ describe('Job Runs E2E', () => {
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', updatedContent, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', updatedContent, [questionId], 'test-edit');
 
-      const req = makeCronRequest([1]);
+      const req = makeCronRequest();
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
-      expect(body.data.results[1].triggered).toBe(0);
-      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(body.data.results[0].triggered).toBe(0);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(0);
     });
   });
@@ -610,7 +607,7 @@ describe('Job Runs E2E', () => {
 
       const req = new NextRequest(
         `http://localhost:3000/api/jobs/runs?job_id=${alertId}&job_type=alert&limit=5`,
-        { headers: { 'x-company-id': '1', 'x-user-id': '1' } }
+        { headers: { 'x-user-id': '1' } }
       );
       const res = await runsGetHandler(req);
       const body = await parseResponse(res);
@@ -634,7 +631,7 @@ describe('Job Runs E2E', () => {
     it('returns 400 when job_id is missing', async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/jobs/runs?job_type=alert',
-        { headers: { 'x-company-id': '1', 'x-user-id': '1' } }
+        { headers: { 'x-user-id': '1' } }
       );
       const res = await runsGetHandler(req);
       expect(res.status).toBe(400);

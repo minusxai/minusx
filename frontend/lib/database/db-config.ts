@@ -1,24 +1,12 @@
-/**
- * Centralized database configuration
- * Provides environment-aware database paths and adapter type
- */
 import path from 'path';
 import { IS_DEV } from '../constants';
-import { DB_TYPE } from '../config';
+import { DB_TYPE, PGLITE_DATA_DIR_ENV, BASE_DUCKDB_DATA_PATH } from '../config';
 
-/**
- * Get database adapter type.
- * Tests mock this function directly via jest.mock('../db-config').
- */
-export function getDbType(): 'sqlite' | 'postgres' {
+export function getDbType(): 'postgres' | 'pglite' {
   return DB_TYPE;
 }
 
-// Environment-aware database path
-// Production (Docker): /app/data/atlas_documents.db
-// Local dev: ../data/atlas_documents.db (from frontend directory)
-export const DB_PATH = IS_DEV
-  ? path.join(process.cwd(), '..', 'data', 'atlas_documents.db')
-  : path.join(process.cwd(), 'data', 'atlas_documents.db');
-
-export const DB_DIR = path.dirname(DB_PATH);
+// PGLite persists to a directory, not a file.
+// Explicit PGLITE_DATA_DIR overrides; otherwise derived from BASE_DUCKDB_DATA_PATH.
+export const PGLITE_DATA_DIR = PGLITE_DATA_DIR_ENV
+  ?? path.join(BASE_DUCKDB_DATA_PATH, 'data', 'pglite');

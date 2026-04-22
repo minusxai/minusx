@@ -18,9 +18,5 @@ export const configLoader: CustomLoader = async (file: DbFile, _user: EffectiveU
     return file;
   }
 
-  // TODO: Merge with default branding values
-  // const defaultBranding = getCompanyBranding(user.companyName);
-  // file.content = { ...defaultBranding, ...file.content };
-
   return file;
 };
