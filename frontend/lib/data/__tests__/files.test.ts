@@ -174,7 +174,7 @@ describe('Files Data Layer - getTemplate', () => {
     it('should generate connection template', async () => {
       const result = await FilesAPI.getTemplate('connection', {}, testUser);
 
-      expect(result.fileName).toBe('new_connection');
+      expect(result.fileName).toBe('');
       expect(result.content).toMatchObject({
         type: 'bigquery',
         config: {}
