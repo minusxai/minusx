@@ -2,8 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { Box, Text } from '@chakra-ui/react';
-import { useAppDispatch } from '@/store/hooks';
-import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
+
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { fadeInUpKeyframes } from '@/lib/ui/animations';
 import { type ConnectionWizardStep, type ConnectionWizardProps } from './ConnectionWizardTypes';
@@ -23,8 +22,6 @@ export default function ConnectionWizard({
   showSkipConnection = false,
   greetings,
 }: ConnectionWizardProps) {
-  const dispatch = useAppDispatch();
-
   const [step, setStep] = useState<ConnectionWizardStep>(initialStep);
   const [connectionId, setConnectionId] = useState<number | null>(initialConnectionId);
   const [connectionName, setConnectionName] = useState<string | null>(initialConnectionName);
@@ -59,9 +56,7 @@ export default function ConnectionWizard({
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
-    dispatch(setNavigation({ pathname: '/new/context', searchParams: { virtualId: String(fileId) } }));
-    dispatch(setActiveVirtualId(fileId));
-  }, [dispatch]);
+  }, []);
 
   const greeting = (s: ConnectionWizardStep) => showGreetings ? greetings?.[s] : undefined;
 

@@ -1,25 +1,30 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Box, VStack, HStack, Text, Heading, Button, Spinner, Collapsible, Icon } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Heading, Button, Spinner, Collapsible, Icon, Progress } from '@chakra-ui/react';
 import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
 import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useConnections } from '@/lib/hooks/useConnections';
-import { useFile, useFileByPath } from '@/lib/hooks/file-state-hooks';
+import { useFile } from '@/lib/hooks/file-state-hooks';
+import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { resolvePath } from '@/lib/mode/path-resolver';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
 import type { ContextContent, Whitelist, WhitelistNode } from '@/lib/types';
+import { useAgentProgress } from '../useAgentProgress';
 
 const TYPEWRITER_SPEED = 35;
 
-const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database.';
+const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database. A new empty doc entry has been added at the end of the docs array — write your documentation into that entry using EditFile.';
+
+type ContextSubStep = 'tables' | 'docs';
 
 interface StepContextProps {
   connectionName: string;
@@ -30,9 +35,18 @@ interface StepContextProps {
   greeting?: string;
 }
 
-/** Collapsible agent trace with toggle text and status indicator */
-function AgentFeedCollapsible({ connectionName, isRunning }: { connectionName: string; isRunning: boolean }) {
-  const [isOpen, setIsOpen] = useState(false);
+/** Collapsible agent trace — auto-opens when first rendered */
+function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { connectionName: string; contextPath: string; isRunning: boolean }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const wasRunningRef = useRef(isRunning);
+  useEffect(() => {
+    // Auto-close when agent transitions from running → done
+    if (wasRunningRef.current && !isRunning) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsOpen(false);
+    }
+    wasRunningRef.current = isRunning;
+  }, [isRunning]);
   return (
     <Collapsible.Root open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <Collapsible.Trigger asChild>
@@ -82,7 +96,7 @@ function AgentFeedCollapsible({ connectionName, isRunning }: { connectionName: s
           mt={2}
         >
           <ChatInterface
-            contextPath="/org/context"
+            contextPath={contextPath}
             databaseName={connectionName}
             container="sidebar"
             readOnly
@@ -98,14 +112,19 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
   const dispatch = useAppDispatch();
+  const user = useAppSelector(state => state.auth.user);
+  const userMode = user?.mode ?? 'org';
+  const homeFolder = user?.home_folder ?? '';
+  const homePath = resolvePath(userMode, homeFolder || '/');
 
-  // Load the existing context file — auto-created for every company on init
-  const { file: contextByPath, loading: contextLoading } = useFileByPath('/org/context');
-  const realFileId = contextByPath ? (contextByPath.fileState.id as number) : null;
+  // Resolve context file via the same pattern as ConnectionFormV2
+  const { contextId: realFileId, contextLoading } = useContextHook(homePath, undefined, true);
+  const contextPath = `${homePath}/context`;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [description, setDescription] = useState('');
   const [showAgentFeed, setShowAgentFeed] = useState(false);
+  const [subStep, setSubStep] = useState<ContextSubStep>('tables');
+  const hasAppendedDoc = useRef(false);
 
   // Typewriter effect for greeting
   const [displayedText, setDisplayedText] = useState('');
@@ -133,37 +152,72 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     activeConvId ? selectConversation(state, activeConvId) : undefined
   );
   const isAgentRunning = showAgentFeed && conversation?.executionState !== 'FINISHED';
+  const isAgentDone = showAgentFeed && conversation?.executionState === 'FINISHED';
+  const agentProgress = useAgentProgress(isAgentRunning, isAgentDone);
 
   // Watch the real context file in Redux for agent edits
-  const { fileState: contextFile } = useFile(realFileId ?? undefined) ?? {};
+  const { fileState: contextFile } = useFile(realFileId) ?? {};
 
-  // Sync description from Redux when agent edits the file
-  const lastSyncedContent = useRef<string | null>(null);
-  useEffect(() => {
-    if (!contextFile || contextFile.loading) return;
-    const content = contextFile.content as ContextContent | undefined;
-    const merged = { ...content, ...contextFile.persistableChanges } as ContextContent;
-    const versions = merged?.versions;
-    if (!versions || versions.length === 0) return;
-    const latestVersion = versions[versions.length - 1];
-    const docContent = latestVersion?.docs?.[0]?.content ?? '';
-    if (docContent !== lastSyncedContent.current && docContent !== description) {
-      lastSyncedContent.current = docContent;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDescription(docContent);
-    }
+  // Get the effective content (base + persistable changes merged)
+  const effectiveContent = useMemo(() => {
+    if (!contextFile) return undefined;
+    return { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
   }, [contextFile]);
 
-  // Debounced markdown change — also pushes to Redux virtual file
+  // Extract existing docs (all docs except the last one which is our new empty doc)
+  const existingDocs = useMemo(() => {
+    if (!effectiveContent?.versions?.length) return [];
+    const latestVersion = effectiveContent.versions[effectiveContent.versions.length - 1];
+    const docs = latestVersion?.docs ?? [];
+    // If we've appended a new doc, existing = all but the last
+    if (hasAppendedDoc.current && docs.length > 1) {
+      return docs.slice(0, -1).filter(d => d.content.trim());
+    }
+    // Before append, all existing docs
+    return docs.filter(d => d.content.trim());
+  }, [effectiveContent]);
+
+  // The new doc content — last doc in the array after we've appended
+  const newDocContent = useMemo(() => {
+    if (!hasAppendedDoc.current || !effectiveContent?.versions?.length) return '';
+    const latestVersion = effectiveContent.versions[effectiveContent.versions.length - 1];
+    const docs = latestVersion?.docs ?? [];
+    return docs[docs.length - 1]?.content ?? '';
+  }, [effectiveContent]);
+
+  // Append a new empty doc when entering the docs sub-step
+  useEffect(() => {
+    if (subStep !== 'docs' || !realFileId || !contextFile || contextFile.loading || hasAppendedDoc.current) return;
+    hasAppendedDoc.current = true;
+    const content = { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
+    const versions = content?.versions;
+    if (!versions?.length) return;
+    const latestVersion = versions[versions.length - 1];
+    const updatedVersions = versions.map((v, i) => {
+      if (i !== versions.length - 1) return v;
+      return { ...v, docs: [...(latestVersion.docs || []), { content: '' }] };
+    });
+    editFile({ fileId: realFileId, changes: { content: { ...content, versions: updatedVersions } } });
+  }, [subStep, realFileId, contextFile]);
+
+  // Debounced editor change — writes to the last doc in the version via editFile
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      const newVal = value || '';
-      lastSyncedContent.current = newVal;
-      setDescription(newVal);
+      if (!realFileId || !contextFile) return;
+      const content = { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
+      const versions = content?.versions;
+      if (!versions?.length) return;
+      const updatedVersions = versions.map((v, i) => {
+        if (i !== versions.length - 1) return v;
+        const docs = [...(v.docs || [])];
+        docs[docs.length - 1] = { ...docs[docs.length - 1], content: value || '' };
+        return { ...v, docs };
+      });
+      editFile({ fileId: realFileId, changes: { content: { ...content, versions: updatedVersions } } });
     }, 300);
-  }, []);
+  }, [realFileId, contextFile]);
 
   // Get schema from Redux
   const schemas: SchemaTreeItem[] = useMemo(() => {
@@ -218,21 +272,28 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
           children: tables.map(t => ({ name: t.name, type: 'table' as const } as WhitelistNode)),
         } as WhitelistNode)),
       ];
-      const whitelist: Whitelist = [{
+      const wl: Whitelist = [{
         name: connectionName,
         type: 'connection' as const,
         children: schemaChildren.length > 0 ? schemaChildren : undefined,
       }];
+      // Preserve existing docs and include the new doc (last in array) if non-empty
+      const allDocs = effectiveContent?.versions?.[effectiveContent.versions.length - 1]?.docs ?? [];
+      const docsToSave = allDocs.filter(d => d.content.trim());
+      // If no docs at all, include a single empty doc
+      if (docsToSave.length === 0) docsToSave.push({ content: '' });
+      const existingVersion = effectiveContent?.versions?.[effectiveContent.versions.length - 1];
       const contextContent: ContextContent = {
         versions: [{
-          version: 1,
-          whitelist,
-          docs: [{ content: description.trim() || '' }],
-          createdAt: new Date().toISOString(),
-          createdBy: 0,
-          description: 'Initial setup',
+          version: existingVersion?.version ?? 1,
+          whitelist: wl,
+          docs: docsToSave,
+          createdAt: existingVersion?.createdAt ?? new Date().toISOString(),
+          createdBy: existingVersion?.createdBy ?? 0,
+          lastEditedAt: new Date().toISOString(),
+          description: existingVersion?.description ?? 'Initial setup',
         }],
-        published: { all: 1 },
+        published: { all: effectiveContent?.published?.all ?? 1 },
       };
       editFile({ fileId: realFileId, changes: { content: contextContent, name: 'Knowledge Base' } });
       const result = await publishFile({ fileId: realFileId });
@@ -243,7 +304,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     } finally {
       setSaving(false);
     }
-  }, [realFileId, connectionName, effectiveWhitelist, description, onComplete]);
+  }, [realFileId, connectionName, effectiveWhitelist, effectiveContent, onComplete]);
 
   /** Show inline agent activity feed and kick off the agent */
   const reduxState = useAppSelector(state => state);
@@ -274,16 +335,16 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       agent: 'OnboardingContextAgent',
       agent_args: {
         connection_id: connectionName,
-        context_path: '/org/context',
+        context_path: contextPath,
         context_version: null,
         schema: simplifiedSchema,
-        context: description || '',
+        context: newDocContent || '',
         app_state: appState,
       },
       message: AGENT_DESCRIBE_MESSAGE,
     }));
     setShowAgentFeed(true);
-  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, description]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, newDocContent, contextPath]);
 
   /** Skip: interrupt agent if running, save context without docs, advance */
   const handleSkip = useCallback(async () => {
@@ -334,55 +395,125 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     );
   }
 
+  /* ─── Sub-step 1: Select Tables ─── */
+  if (subStep === 'tables') {
+    return (
+      <VStack gap={6} align="stretch">
+        {greeting && <style>{cursorBlinkKeyframes}</style>}
+
+        {/* Header */}
+        <Box>
+          {greeting ? (
+            <Heading
+              fontSize="2xl"
+              fontFamily="mono"
+              fontWeight="400"
+              mb={1}
+              letterSpacing="-0.02em"
+            >
+              {displayedText}
+              {!typingDone && (
+                <Box
+                  as="span"
+                  display="inline-block"
+                  w="2px"
+                  h="1em"
+                  bg="accent.teal"
+                  ml="2px"
+                  verticalAlign="text-bottom"
+                  css={{ animation: 'cursorBlink 0.8s step-end infinite' }}
+                />
+              )}
+            </Heading>
+          ) : (
+            <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
+              Select tables
+            </Heading>
+          )}
+          <Text color="fg.muted" fontSize="sm">
+            {totalTables > 0
+              ? <>We&apos;ve auto-selected {totalTables === 1 ? '' : 'all '}<Text as="span" color="accent.teal" fontWeight="600">{totalTables} {totalTables === 1 ? 'table' : 'tables'}</Text>. Deselect anything you don&apos;t need (you can always edit this later).</>
+              : 'No tables found for this connection.'
+            }
+          </Text>
+        </Box>
+
+        {/* Tables */}
+        {schemas.length > 0 && (
+          <Box
+            border="1px solid"
+            borderColor="border.default"
+            borderRadius="lg"
+            p={4}
+            maxH="400px"
+            overflowY="auto"
+          >
+            <HStack gap={2} mb={3}>
+              <Text fontSize="sm" fontWeight="600">Tables</Text>
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
+                {whitelistedCount}/{totalTables} selected
+              </Text>
+            </HStack>
+            <SchemaTreeView
+              schemas={schemas}
+              selectable
+              whitelist={effectiveWhitelist}
+              onWhitelistChange={handleWhitelistChange}
+              showColumns={true}
+              connectionName={connectionName}
+              defaultExpandedSchemas
+            />
+          </Box>
+        )}
+
+        {schemas.length === 0 && (
+          <Box p={4} bg="bg.muted" borderRadius="lg">
+            <Text color="fg.muted" fontSize="sm">
+              No schema found for this connection. You can still add context in the next step.
+            </Text>
+          </Box>
+        )}
+
+        {/* Actions */}
+        <HStack justify="flex-end" gap={3} pt={2}>
+          <Button
+            bg="accent.teal"
+            color="white"
+            _hover={{ opacity: 0.9 }}
+            size="sm"
+            fontFamily="mono"
+            onClick={() => setSubStep('docs')}
+          >
+            Next &rarr;
+          </Button>
+        </HStack>
+      </VStack>
+    );
+  }
+
+  /* ─── Sub-step 2: Add Data Context (text + agent) ─── */
   return (
     <VStack gap={6} align="stretch">
-      {greeting && <style>{cursorBlinkKeyframes}</style>}
+      <style>{cursorBlinkKeyframes}</style>
 
       {/* Header */}
       <Box>
-        {greeting ? (
-          <Heading
-            fontSize="2xl"
-            fontFamily="mono"
-            fontWeight="400"
-            mb={1}
-            letterSpacing="-0.02em"
-          >
-            {displayedText}
-            {!typingDone && (
-              <Box
-                as="span"
-                display="inline-block"
-                w="2px"
-                h="1em"
-                bg="accent.teal"
-                ml="2px"
-                verticalAlign="text-bottom"
-                css={{ animation: 'cursorBlink 0.8s step-end infinite' }}
-              />
-            )}
-          </Heading>
-        ) : (
-          <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
-            Tell us about your data
-          </Heading>
-        )}
+        <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
+          Add data context
+        </Heading>
         <Text color="fg.muted" fontSize="sm">
-          {totalTables > 0
-            ? <>We&apos;ve auto-selected {totalTables === 1 ? '' : 'all '}<Text as="span" color="accent.teal" fontWeight="600">{totalTables} {totalTables === 1 ? 'table' : 'tables'}</Text>. Deselect anything you don&apos;t need.</>
-            : 'Add a description of your data to help us generate better queries.'
-          }
+          Describe your data so the AI generates better queries. You can also let the agent figure it out.
         </Text>
       </Box>
 
-      {/* Tables — collapsible */}
-      {schemas.length > 0 && (
-        <Collapsible.Root defaultOpen>
+      {/* Existing docs — subtle display */}
+      {existingDocs.length > 0 && (
+        <Collapsible.Root>
           <Collapsible.Trigger asChild>
             <HStack
               cursor="pointer"
               px={4}
-              py={3}
+              py={2.5}
               border="1px solid"
               borderColor="border.default"
               borderRadius="lg"
@@ -390,9 +521,9 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               justify="space-between"
             >
               <HStack gap={2}>
-                <Text fontSize="sm" fontWeight="600">Tables</Text>
+                <Text fontSize="sm" fontWeight="600" color="fg.muted">Existing context</Text>
                 <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
-                  {whitelistedCount}/{totalTables} selected
+                  {existingDocs.length} {existingDocs.length === 1 ? 'doc' : 'docs'}
                 </Text>
               </HStack>
               <Icon
@@ -413,114 +544,77 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               borderTop="0"
               borderRadius="0 0 lg lg"
               p={4}
-              maxH="300px"
+              maxH="200px"
               overflowY="auto"
+              bg="bg.muted"
               mt="-1px"
             >
-              <SchemaTreeView
-                schemas={schemas}
-                selectable
-                whitelist={effectiveWhitelist}
-                onWhitelistChange={handleWhitelistChange}
-                showColumns={false}
-                connectionName={connectionName}
-                defaultExpandedSchemas
-              />
+              {existingDocs.map((doc, idx) => (
+                <Box key={idx} mb={idx < existingDocs.length - 1 ? 3 : 0}>
+                  <Markdown context="mainpage">{doc.content}</Markdown>
+                </Box>
+              ))}
             </Box>
           </Collapsible.Content>
         </Collapsible.Root>
       )}
 
-      {schemas.length === 0 && (
-        <Box p={4} bg="bg.muted" borderRadius="lg">
-          <Text color="fg.muted" fontSize="sm">
-            No schema found for this connection. You can still add a description below.
-          </Text>
-        </Box>
-      )}
-
-      {/* Data context — collapsible */}
-      <Collapsible.Root defaultOpen>
-        <Collapsible.Trigger asChild>
-          <HStack
-            cursor="pointer"
-            px={4}
-            py={3}
-            border="1px solid"
-            borderColor="border.default"
-            borderRadius="lg"
-            _hover={{ bg: 'bg.muted' }}
-            justify="space-between"
-          >
-            <HStack gap={2}>
-              <Text fontSize="sm" fontWeight="600">Data Context</Text>
-              <Text as="span" fontSize="xs" color="fg.subtle">(optional, markdown)</Text>
-            </HStack>
-            <Icon
-              as={LuChevronDown}
-              boxSize={4}
-              color="fg.subtle"
-              css={{
-                '[data-state=closed] &': { transform: 'rotate(-90deg)' },
-                transition: 'transform 0.15s',
-              }}
-            />
+      {/* New doc editor */}
+      <Box>
+        <Text fontSize="sm" fontWeight="600" mb={2}>
+          {existingDocs.length > 0 ? 'Add more context' : 'Data context'}
+          <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>(optional, markdown)</Text>
+        </Text>
+        <Box
+          border="1px solid"
+          borderColor="border.default"
+          borderRadius="lg"
+          overflow="hidden"
+        >
+          <HStack gap={0} align="stretch" display="flex">
+            <Box flex={1} minW={0}>
+              <Editor
+                height="250px"
+                language="markdown"
+                value={newDocContent}
+                onChange={handleEditorChange}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'off',
+                  fontSize: 13,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                  placeholder: 'Describe your data here... e.g.,\n\n# My Database\n\nThis contains our e-commerce data: orders, customers, products.',
+                }}
+              />
+            </Box>
+            <Box
+              flex={1}
+              p={3}
+              bg="bg.muted"
+              maxH="250px"
+              overflowY="auto"
+              borderLeft="1px solid"
+              borderColor="border.default"
+              minW={0}
+            >
+              {newDocContent.trim() ? (
+                <Markdown context="mainpage">{newDocContent}</Markdown>
+              ) : (
+                <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
+              )}
+            </Box>
           </HStack>
-        </Collapsible.Trigger>
-        <Collapsible.Content>
-          <Box
-            border="1px solid"
-            borderColor="border.default"
-            borderTop="0"
-            borderRadius="0 0 lg lg"
-            overflow="hidden"
-            mt="-1px"
-          >
-            <HStack gap={0} align="stretch" display="flex">
-              <Box flex={1} minW={0}>
-                <Editor
-                  height="250px"
-                  language="markdown"
-                  value={description}
-                  onChange={handleEditorChange}
-                  theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                  options={{
-                    minimap: { enabled: false },
-                    wordWrap: 'on',
-                    lineNumbers: 'off',
-                    fontSize: 13,
-                    fontFamily: 'JetBrains Mono, monospace',
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 2,
-                    placeholder: 'Describe your data here... e.g.,\n\n# My Database\n\nThis contains our e-commerce data: orders, customers, products.',
-                  }}
-                />
-              </Box>
-              <Box
-                flex={1}
-                p={3}
-                bg="bg.muted"
-                maxH="250px"
-                overflowY="auto"
-                borderLeft="1px solid"
-                borderColor="border.default"
-                minW={0}
-              >
-                {description.trim() ? (
-                  <Markdown context="mainpage">{description}</Markdown>
-                ) : (
-                  <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
-                )}
-              </Box>
-            </HStack>
-          </Box>
-        </Collapsible.Content>
-      </Collapsible.Root>
+        </Box>
+      </Box>
 
-      {/* Agent activity feed — always rendered when active, not auto-expanded */}
+      {/* Agent activity feed */}
       {showAgentFeed && (
-        <AgentFeedCollapsible connectionName={connectionName} isRunning={isAgentRunning} />
+        <AgentFeedCollapsible connectionName={connectionName} contextPath={contextPath} isRunning={isAgentRunning} />
       )}
 
       {/* Debug: appState */}
@@ -553,55 +647,80 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         <Text color="accent.danger" fontSize="sm">{error}</Text>
       )}
 
-      {/* Running indicator + skip escape hatch */}
+      {/* Progress bar + skip escape hatch */}
+      <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
       {isAgentRunning && (
-        <HStack justify="space-between" align="center" pt={2}>
-          <HStack gap={1}>
-            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
-            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
-            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+        <VStack gap={2} align="stretch" pt={2}>
+          <Progress.Root size="sm" value={agentProgress} flex={1} colorPalette="teal">
+            <Progress.Track borderRadius="full" overflow="hidden">
+              <Progress.Range
+                style={{ transition: 'width 0.4s ease-out' }}
+                css={{
+                  position: 'relative',
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                    animation: 'shimmer 1.5s ease-in-out infinite',
+                  },
+                }}
+              />
+            </Progress.Track>
+          </Progress.Root>
+          <HStack justify="flex-end">
+            <Text
+              as="button"
+              fontSize="xs"
+              color="fg.subtle"
+              fontFamily="mono"
+              cursor="pointer"
+              _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
+              onClick={handleSkip}
+            >
+              Skip & figure out later
+            </Text>
           </HStack>
-          <Text
-            as="button"
-            fontSize="xs"
-            color="fg.subtle"
-            fontFamily="mono"
-            cursor="pointer"
-            _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
-            onClick={handleSkip}
-          >
-            Skip & figure out later
-          </Text>
-        </HStack>
+        </VStack>
       )}
 
       {/* Actions — hidden while agent is running */}
       {!isAgentRunning && (
-        <HStack justify="flex-end" gap={3} pt={2}>
-          {!showAgentFeed && (
-            <Button
-              bg="accent.teal"
-              color="white"
-              _hover={{ opacity: 0.9 }}
-              size="sm"
-              fontFamily="mono"
-              onClick={handleAgentDescribe}
-              disabled={saving}
-            >
-              <LuSparkles size={14} />
-              Let the agent figure it out
-            </Button>
-          )}
+        <HStack justify="space-between" gap={3} pt={2}>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             fontFamily="mono"
-            onClick={handleSave}
-            disabled={saving}
+            onClick={() => setSubStep('tables')}
           >
-            {saving ? <Spinner size="xs" mr={2} /> : null}
-            {showAgentFeed ? 'Save & Continue' : 'Skip & Continue'}
+            &larr; Back to tables
           </Button>
+          <HStack gap={3}>
+            {!showAgentFeed && (
+              <Button
+                bg="accent.teal"
+                color="white"
+                _hover={{ opacity: 0.9 }}
+                size="sm"
+                fontFamily="mono"
+                onClick={handleAgentDescribe}
+                disabled={saving}
+              >
+                <LuSparkles size={14} />
+                Let the agent figure it out
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              fontFamily="mono"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? <Spinner size="xs" mr={2} /> : null}
+              {showAgentFeed ? 'Save & Continue' : 'Skip & Continue'}
+            </Button>
+          </HStack>
         </HStack>
       )}
     </VStack>
