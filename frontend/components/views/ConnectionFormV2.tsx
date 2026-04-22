@@ -140,6 +140,8 @@ interface ConnectionFormV2Props {
   onPendingDeletion?: (s3Key: string) => void;
   /** When true, skip switching to 'tables' view after save (wizard handles navigation). */
   wizardMode?: boolean;
+  /** Called when CSV/Sheets is selected in wizard mode instead of navigating away. */
+  onStaticSelect?: (tab: 'csv' | 'sheets') => void;
 }
 
 export default function ConnectionFormV2({
@@ -158,6 +160,7 @@ export default function ConnectionFormV2({
   greeting,
   onPendingDeletion,
   wizardMode = false,
+  onStaticSelect,
 }: ConnectionFormV2Props) {
   const router = useRouter();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -420,6 +423,11 @@ export default function ConnectionFormV2({
     // CSV and Google Sheets always go to the static connection — no new connection is created
     if (selectedType === 'csv' || selectedType === 'google-sheets') {
       const tab = selectedType === 'google-sheets' ? 'sheets' : 'csv';
+      // In wizard mode, notify parent instead of navigating away
+      if (onStaticSelect) {
+        onStaticSelect(tab);
+        return;
+      }
       if (staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
         const modeParam = userMode !== 'org' ? `&mode=${userMode}` : '';
         router.push(`/f/${staticConnectionFile.fileState.id}?tab=${tab}${modeParam}`);

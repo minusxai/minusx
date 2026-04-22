@@ -33,6 +33,8 @@ interface StepContextProps {
   onRequestChat?: (contextFileId: number) => void;
   onContextCreated?: (contextFileId: number) => void;
   greeting?: string;
+  /** For static connections: schema names just uploaded. Auto-selects only these and skips to docs. */
+  staticSchemas?: string[] | null;
 }
 
 /** Collapsible agent trace — auto-opens when first rendered */
@@ -107,7 +109,7 @@ function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { conn
   );
 }
 
-export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting }: StepContextProps) {
+export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting, staticSchemas }: StepContextProps) {
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
@@ -219,11 +221,15 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     }, 300);
   }, [realFileId, contextFile]);
 
-  // Get schema from Redux
+  // Get schema from Redux — filter to uploaded schemas for static connections
   const schemas: SchemaTreeItem[] = useMemo(() => {
     const conn = connections[connectionName];
-    return conn?.schema?.schemas ?? [];
-  }, [connections, connectionName]);
+    const allSchemas = conn?.schema?.schemas ?? [];
+    if (staticSchemas?.length) {
+      return allSchemas.filter(s => staticSchemas.includes(s.schema));
+    }
+    return allSchemas;
+  }, [connections, connectionName, staticSchemas]);
 
   const loading = connectionsLoading || contextLoading;
 
@@ -322,12 +328,21 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
 
-    // Build simplified schema from connections (same as ChatInterface)
+    // Build simplified schema from connections — filter to static schemas if applicable
     const conn = connections[connectionName];
-    const simplifiedSchema = conn?.schema?.schemas?.map(s => ({
+    const allSchemas = conn?.schema?.schemas ?? [];
+    const relevantSchemas = staticSchemas?.length
+      ? allSchemas.filter(s => staticSchemas.includes(s.schema))
+      : allSchemas;
+    const simplifiedSchema = relevantSchemas.map(s => ({
       schema: s.schema,
       tables: s.tables.map(t => t.table)
-    })) || [];
+    }));
+
+    // Build agent message — mention which datasets are new for static connections
+    const agentMessage = staticSchemas?.length
+      ? `${AGENT_DESCRIBE_MESSAGE}\n\nFocus on the newly added dataset(s): ${staticSchemas.join(', ')}. Only document these schemas, not other existing data in the connection.`
+      : AGENT_DESCRIBE_MESSAGE;
 
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
@@ -341,10 +356,10 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         context: newDocContent || '',
         app_state: appState,
       },
-      message: AGENT_DESCRIBE_MESSAGE,
+      message: agentMessage,
     }));
     setShowAgentFeed(true);
-  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, newDocContent, contextPath]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, newDocContent, contextPath, staticSchemas]);
 
   /** Skip: interrupt agent if running, save context without docs, advance */
   const handleSkip = useCallback(async () => {
