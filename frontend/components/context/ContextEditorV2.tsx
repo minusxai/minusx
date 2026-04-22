@@ -8,6 +8,8 @@
 
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-navigation';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
 import { uploadFile } from '@/lib/object-store/client';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
@@ -95,7 +97,27 @@ export default function ContextEditorV2({
   onRunAll,
   onSelectRun,
 }: ContextEditorV2Props) {
-  const [topTab, setTopTab] = useState<'tables' | 'docs' | 'evals'>('tables');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  type TopTab = 'databases' | 'docs' | 'evals';
+  const validTabs: TopTab[] = ['databases', 'docs', 'evals'];
+  const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
+
+  const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
+
+  const setTopTab = useCallback((tab: TopTab) => {
+    setTopTabState(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'databases') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    const query = params.toString();
+    router.replace(`${window.location.pathname}${query ? `?${query}` : ''}`, { scroll: false });
+  }, [searchParams, router]);
+
   const [activeTab, setActiveTab] = useState<'picker' | 'yaml'>('picker');
   const [yamlText, setYamlText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -674,12 +696,12 @@ export default function ContextEditorV2({
       {/* Top-level Tabs */}
       <Tabs.Root
         value={topTab}
-        onValueChange={(e) => setTopTab(e.value as 'tables' | 'docs' | 'evals')}
+        onValueChange={(e) => setTopTab(e.value as TopTab)}
         variant="line"
         colorPalette="teal"
       >
         <Tabs.List>
-          <Tabs.Trigger value="tables" fontFamily="mono" fontSize="sm">
+          <Tabs.Trigger value="databases" fontFamily="mono" fontSize="sm">
             Databases
           </Tabs.Trigger>
           <Tabs.Trigger value="docs" fontFamily="mono" fontSize="sm">
@@ -714,7 +736,7 @@ export default function ContextEditorV2({
         </Tabs.List>
 
         {/* Tables Tab */}
-        <Tabs.Content value="tables">
+        <Tabs.Content value="databases">
           {activeTab === 'picker' ? (
             <VStack gap={6} align="stretch">
               {/* Database Sections */}

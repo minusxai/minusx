@@ -180,9 +180,64 @@ export default function StaticTablesBrowser({
         </IconButton>
       </HStack>
 
-      <Text fontSize="xs" color="fg.muted">
-        {filteredSchemas.length} dataset{filteredSchemas.length !== 1 ? 's' : ''} &middot; {totalTables} table{totalTables !== 1 ? 's' : ''}
-      </Text>
+      <HStack justify="space-between" align="center">
+        <Text fontSize="xs" color="fg.muted">
+          {filteredSchemas.length} dataset{filteredSchemas.length !== 1 ? 's' : ''} &middot; {totalTables} table{totalTables !== 1 ? 's' : ''}
+        </Text>
+        <HStack gap={2}>
+          <Link href={`/new/question?databaseName=${encodeURIComponent(connectionName)}`}>
+            <HStack
+              gap={1.5}
+              px={3}
+              py={1.5}
+              borderRadius="md"
+              border="1px solid"
+              borderColor="border.default"
+              bg="bg.surface"
+              _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
+              transition="all 0.15s"
+              cursor="pointer"
+            >
+              <LuPlus size={12} color="var(--chakra-colors-accent-teal)" />
+              <Text fontSize="2xs" fontWeight="600" fontFamily="mono">New Question</Text>
+            </HStack>
+          </Link>
+          <Link href="/new/dashboard">
+            <HStack
+              gap={1.5}
+              px={3}
+              py={1.5}
+              borderRadius="md"
+              border="1px solid"
+              borderColor="border.default"
+              bg="bg.surface"
+              _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
+              transition="all 0.15s"
+              cursor="pointer"
+            >
+              <LuLayoutDashboard size={12} color="var(--chakra-colors-accent-teal)" />
+              <Text fontSize="2xs" fontWeight="600" fontFamily="mono">New Dashboard</Text>
+            </HStack>
+          </Link>
+          <Link href="/explore">
+            <HStack
+              gap={1.5}
+              px={3}
+              py={1.5}
+              borderRadius="md"
+              border="1px solid"
+              borderColor="border.default"
+              bg="bg.surface"
+              _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
+              transition="all 0.15s"
+              cursor="pointer"
+            >
+              <LuCompass size={12} color="var(--chakra-colors-accent-teal)" />
+              <Text fontSize="2xs" fontWeight="600" fontFamily="mono">Explore</Text>
+            </HStack>
+          </Link>
+        </HStack>
+      </HStack>
 
       {filteredSchemas.length === 0 ? (
         <Text fontSize="sm" color="fg.muted" textAlign="center" py={8}>
@@ -354,6 +409,13 @@ export default function StaticTablesBrowser({
                                       ? contextStatus.fullyWhitelisted ? 'All tables in knowledge base' : `${contextStatus.whitelistedTableCount}/${contextStatus.totalTableCount} tables`
                                       : 'Not in knowledge base'}
                                   </Text>
+                                  {contextId && (
+                                    <Link href={`/f/${contextId}?tab=databases`}>
+                                      <Text fontSize="2xs" color="fg.muted" fontFamily="mono" lineHeight="1" _hover={{ color: 'accent.teal' }}>
+                                        See all table selections →
+                                      </Text>
+                                    </Link>
+                                  )}
                                 </VStack>
                                 <Switch.Root
                                   checked={schemaWL}
@@ -368,13 +430,6 @@ export default function StaticTablesBrowser({
                                   </Switch.Control>
                                 </Switch.Root>
                               </HStack>
-                              {contextId && (
-                                <Link href={`/f/${contextId}`}>
-                                  <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }} px={3}>
-                                    See full knowledge base →
-                                  </Text>
-                                </Link>
-                              )}
                             </>
                           )}
 
@@ -396,7 +451,7 @@ export default function StaticTablesBrowser({
                                         Add Context
                                       </Text>
                                       {hasContextDocs && contextId && (
-                                        <Link href={`/f/${contextId}`} target="_blank">
+                                        <Link href={`/f/${contextId}?tab=docs`} target="_blank">
                                           <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }}>
                                             See existing docs →
                                           </Text>
@@ -454,50 +509,6 @@ export default function StaticTablesBrowser({
                             </VStack>
                           )}
 
-                          <Box h="1px" bg="border.default" my={2} />
-
-                          <Link href={`/new/question?databaseName=${encodeURIComponent(connectionName)}`}>
-                            <HStack
-                              gap={2.5}
-                              px={3}
-                              py={2}
-                              borderRadius="md"
-                              _hover={{ bg: 'bg.muted' }}
-                              transition="all 0.15s"
-                              cursor="pointer"
-                            >
-                              <LuPlus size={14} color="var(--chakra-colors-accent-teal)" />
-                              <Text fontSize="xs" fontWeight="600" fontFamily="mono">New Question</Text>
-                            </HStack>
-                          </Link>
-                          <Link href="/new/dashboard">
-                            <HStack
-                              gap={2.5}
-                              px={3}
-                              py={2}
-                              borderRadius="md"
-                              _hover={{ bg: 'bg.muted' }}
-                              transition="all 0.15s"
-                              cursor="pointer"
-                            >
-                              <LuLayoutDashboard size={14} color="var(--chakra-colors-accent-teal)" />
-                              <Text fontSize="xs" fontWeight="600" fontFamily="mono">New Dashboard</Text>
-                            </HStack>
-                          </Link>
-                          <Link href="/explore">
-                            <HStack
-                              gap={2.5}
-                              px={3}
-                              py={2}
-                              borderRadius="md"
-                              _hover={{ bg: 'bg.muted' }}
-                              transition="all 0.15s"
-                              cursor="pointer"
-                            >
-                              <LuCompass size={14} color="var(--chakra-colors-accent-teal)" />
-                              <Text fontSize="xs" fontWeight="600" fontFamily="mono">Explore</Text>
-                            </HStack>
-                          </Link>
                         </VStack>
                       </Box>
                     </HStack>

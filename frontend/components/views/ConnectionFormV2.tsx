@@ -1094,6 +1094,13 @@ export default function ConnectionFormV2({
                       <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
                         {whitelistStatus === 'full' ? 'All tables in knowledge base' : whitelistStatus === 'partial' ? 'Some tables selected' : 'Currently not in knowledge base'}
                       </Text>
+                      {contextId && (
+                        <Link href={`/f/${contextId}?tab=databases`} target="_blank">
+                          <Text fontSize="2xs" color="fg.muted" fontFamily="mono" lineHeight="1" _hover={{ color: 'accent.teal' }}>
+                            See all table selections →
+                          </Text>
+                        </Link>
+                      )}
                     </VStack>
                     <Switch.Root
                       checked={whitelistStatus !== 'none'}
@@ -1120,7 +1127,7 @@ export default function ConnectionFormV2({
                           </Text>
                         </HStack>
                         {contextId && (
-                          <Link href={`/f/${contextId}`} target="_blank">
+                          <Link href={`/f/${contextId}?tab=docs`} target="_blank">
                             <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }} mt={1} ml={6}>
                               See full knowledge base →
                             </Text>
@@ -1135,7 +1142,7 @@ export default function ConnectionFormV2({
                               Add Context
                             </Text>
                             {contextDocs && contextId && (
-                              <Link href={`/f/${contextId}`} target="_blank">
+                              <Link href={`/f/${contextId}?tab=docs`} target="_blank">
                                 <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }}>
                                   See existing docs →
                                 </Text>
