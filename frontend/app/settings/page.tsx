@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs, Badg
 import { LuRefreshCw, LuUser } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setCompactChatEnabled } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -139,6 +139,7 @@ function SettingsContent() {
   const devMode = useAppSelector((state) => state.ui.devMode);
   const showSuggestedQuestions = useAppSelector((state) => state.ui.showSuggestedQuestions);
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
+  const compactChatEnabled = useAppSelector((state) => state.ui.compactChatEnabled ?? true);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
 
   const searchParams = useSearchParams();
@@ -274,16 +275,59 @@ function SettingsContent() {
         />
       ),
     },
-    // ── General: Advanced Flags (editors + admins) ──
+    // ── General: Experimental Flags (editors + admins) ──
     {
       tab: 'general',
-      section: 'Advanced Flags',
+      section: 'Experimental Flags',
       title: 'Unrestricted Mode',
       description: 'Skip navigation guards — freely move between pages even with unsaved changes or a running agent.',
       control: (
         <SwitchControl
           checked={unrestrictedMode}
           onChange={(checked) => dispatch(setUnrestrictedMode(checked))}
+        />
+      ),
+      visible: isEditorOrAdmin,
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Allow Chat Queue',
+      description: 'Send follow-up chat messages while the agent is still working.',
+      control: (
+        <SwitchControl
+          checked={allowChatQueue}
+          onChange={(checked) => dispatch(setAllowChatQueue(checked))}
+        />
+      ),
+      visible: isEditorOrAdmin,
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Queue Strategy',
+      description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
+      control: (
+        <Flex gap={2}>
+          <Button size="sm" variant={queueStrategy === 'end-of-turn' ? 'solid' : 'outline'} onClick={() => dispatch(setQueueStrategy('end-of-turn'))}>
+            End of Turn
+          </Button>
+          <Button size="sm" variant={queueStrategy === 'mid-turn' ? 'solid' : 'outline'} onClick={() => dispatch(setQueueStrategy('mid-turn'))}>
+            Mid Turn
+          </Button>
+        </Flex>
+      ),
+      visible: isEditorOrAdmin && allowChatQueue,
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Compact Conversation',
+      description: 'Enable a compact summary view for agent work in chat. When off, always shows the detailed view.',
+      control: (
+        <SwitchControl
+          checked={compactChatEnabled}
+          onChange={(checked) => dispatch(setCompactChatEnabled(checked))}
         />
       ),
       visible: isEditorOrAdmin,
@@ -312,33 +356,6 @@ function SettingsContent() {
           onChange={(checked) => dispatch(setDevMode(checked))}
         />
       ),
-    },
-    {
-      tab: 'dev',
-      title: 'Allow Chat Queue',
-      description: 'Send follow-up chat messages while the agent is still working.',
-      control: (
-        <SwitchControl
-          checked={allowChatQueue}
-          onChange={(checked) => dispatch(setAllowChatQueue(checked))}
-        />
-      ),
-    },
-    {
-      tab: 'dev',
-      title: 'Queue Strategy',
-      description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
-      control: (
-        <Flex gap={2}>
-          <Button size="sm" variant={queueStrategy === 'end-of-turn' ? 'solid' : 'outline'} onClick={() => dispatch(setQueueStrategy('end-of-turn'))}>
-            End of Turn
-          </Button>
-          <Button size="sm" variant={queueStrategy === 'mid-turn' ? 'solid' : 'outline'} onClick={() => dispatch(setQueueStrategy('mid-turn'))}>
-            Mid Turn
-          </Button>
-        </Flex>
-      ),
-      visible: allowChatQueue,
     },
     {
       tab: 'dev',
@@ -382,7 +399,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, compactChatEnabled]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

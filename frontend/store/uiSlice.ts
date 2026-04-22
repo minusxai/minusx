@@ -33,6 +33,7 @@ interface UIState {
   allowChatQueue: boolean;
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
+  compactChatEnabled: boolean;
 }
 
 const initialState: UIState = {
@@ -61,6 +62,7 @@ const initialState: UIState = {
   allowChatQueue: false,
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
+  compactChatEnabled: false,
 };
 
 const uiSlice = createSlice({
@@ -230,8 +232,14 @@ const uiSlice = createSlice({
         try { localStorage.setItem('unrestrictedMode', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean }>) => {
-      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode } = action.payload;
+    setCompactChatEnabled: (state, action: PayloadAction<boolean>) => {
+      state.compactChatEnabled = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('compactChatEnabled', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean }>) => {
+      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, compactChatEnabled } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -240,6 +248,7 @@ const uiSlice = createSlice({
       if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
+      if (compactChatEnabled !== undefined) state.compactChatEnabled = compactChatEnabled;
     },
   },
 });
@@ -281,6 +290,7 @@ export const {
   setAllowChatQueue,
   setQueueStrategy,
   setUnrestrictedMode,
+  setCompactChatEnabled,
   setBulkUiFlags,
   pushView,
   popView,
@@ -340,3 +350,4 @@ export const selectViewStackDepth = (state: RootState) => state.ui.viewStack.len
 export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showSuggestedQuestions;
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
 export const selectUnrestrictedMode = (state: RootState) => state.ui.unrestrictedMode;
+export const selectCompactChatEnabled = (state: RootState) => state.ui.compactChatEnabled ?? false;

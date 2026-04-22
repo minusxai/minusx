@@ -16,7 +16,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
-import { clearChatAttachments } from '@/store/uiSlice';
+import { clearChatAttachments, selectCompactChatEnabled } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
@@ -130,7 +130,10 @@ export default function ChatInterface({
   const { conversation: loadedConversation, isLoading, error: loadError } = useConversation(providedConversationId);
 
   const [showThinking, setShowThinking] = useState<boolean>(false)
-  const [viewMode, setViewMode] = useState<import('@/lib/types').ChatViewMode>('compact')
+  const compactChatEnabled = useAppSelector(selectCompactChatEnabled);
+  const [localViewMode, setLocalViewMode] = useState<import('@/lib/types').ChatViewMode>('compact')
+  const viewMode = compactChatEnabled ? localViewMode : 'detailed';
+  const setViewMode = setLocalViewMode;
   const [showToolInspector, setShowToolInspector] = useState(false)
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
@@ -595,7 +598,7 @@ export default function ChatInterface({
                 </Button>
               </Tooltip>
             )}
-            <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
+            {compactChatEnabled && <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />}
             </HStack>
             <HStack gap={2}>
               {setAsActiveButton}
