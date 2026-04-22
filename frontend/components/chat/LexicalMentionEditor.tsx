@@ -328,7 +328,9 @@ function serializeEditorState(root: any): string {
       const parts: string[] = [];
       const paragraphChildren = child.getChildren();
       for (const node of paragraphChildren) {
-        if (node.getType() === 'text') {
+        if (node.getType() === 'linebreak') {
+          parts.push('\n');
+        } else if (node.getType() === 'text') {
           parts.push(node.getTextContent());
         } else if (node.getType() === 'mention') {
           const mentionData = node.__mentionData;
