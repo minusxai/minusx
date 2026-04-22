@@ -5,6 +5,7 @@ import { Box, HStack, Text, Icon, VStack, IconButton, Flex, SimpleGrid, Button }
 import { LuList, LuLayoutGrid, LuFiles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
 import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
 import FileActionMenu from './FileActionMenu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -656,7 +657,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               e.stopPropagation();
                             }}
                           >
-                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : undefined} />
+                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : file.type === 'connection' && RESERVED_NAMES.includes(file.name) ? false : undefined} />
                           </Box>
                         </Box>
                       ))}
@@ -776,7 +777,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               e.stopPropagation();
                             }}
                           >
-                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : undefined} />
+                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : file.type === 'connection' && RESERVED_NAMES.includes(file.name) ? false : undefined} />
                           </Box>
                           )}
                         </Box>
