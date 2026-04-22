@@ -184,17 +184,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Helper: resolve display name using alias
   const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
 
-  // Build chart title from axis columns using aliases
-  const chartTitle = useMemo(() => {
-    if (yAxisColumns.length === 0 && xAxisColumns.length === 0) return undefined
-    const yTitleOverride = axisConfig?.yTitle?.trim()
-    const yPart = yTitleOverride || yAxisColumns.map(getDisplayName).join(', ')
-    const xPart = xAxisColumns.length > 0 ? getDisplayName(xAxisColumns[0]) : ''
-    const splitPart = xAxisColumns.length > 1 ? xAxisColumns.slice(1).map(getDisplayName).join(', ') : ''
-    const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ')
-    return parts || undefined
-  }, [axisConfig?.yTitle, xAxisColumns, yAxisColumns, getDisplayName])
-
   // Build a y-axis label that fits on ~1 line (~40 chars),
   // showing as many column names as fit and "(and X other metrics)" for the rest
   const buildYAxisLabel = useCallback((cols: string[]): string => {
@@ -225,11 +214,35 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
     if (commonLabel.length >= 6) return commonLabel
 
-    const firstName = names[0]
-    const remaining = names.length - 1
-    if (remaining === 0) return firstName
-    return `${firstName} (+${remaining})`
+    // No meaningful common prefix — keep it short for the y-axis
+    if (names.length <= 2) return names.join(', ')
+    return `${names[0]} (+${names.length - 1} more)`
   }, [getDisplayName])
+
+  // Build chart title from axis columns using aliases
+  const chartTitle = useMemo(() => {
+    if (yAxisColumns.length === 0 && xAxisColumns.length === 0) return undefined
+    const yTitleOverride = axisConfig?.yTitle?.trim()
+    // For the title, show up to 2 column names then "+N more" — more space than axis label
+    const yNames = yAxisColumns.map(getDisplayName)
+    const yAxisLabel = buildYAxisLabel(yNames)
+    let yPart: string
+    if (yTitleOverride) {
+      yPart = yTitleOverride
+    } else if (yAxisLabel) {
+      // Common prefix found — use it
+      yPart = yAxisLabel
+    } else if (yNames.length <= 2) {
+      yPart = yNames.join(', ')
+    } else {
+      yPart = `${yNames.slice(0, 2).join(', ')} (+${yNames.length - 2} more)`
+    }
+    const xPart = xAxisColumns.length > 0 ? getDisplayName(xAxisColumns[0]) : ''
+    const splitPart = xAxisColumns.length > 1 ? xAxisColumns.slice(1).map(getDisplayName).join(', ') : ''
+    const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ')
+    return parts || undefined
+  }, [axisConfig?.yTitle, xAxisColumns, yAxisColumns, getDisplayName, buildYAxisLabel])
+
 
   // Handle drop on X Axis (primary): demotes current primary to Split By
   const handleDropXPrimary = useCallback((col: string) => {

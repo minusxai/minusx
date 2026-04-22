@@ -651,7 +651,7 @@ export default function AgentTurnContainer({
                   fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
                   textTransform="uppercase" px={3} pt={1} pb={1.5} w="100%"
                 >
-                  Tools
+                  Tools Timeline
                 </Text>
                 {timeline.map((node, idx) => {
                   const isSelected = idx === safeIdx;
