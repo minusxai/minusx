@@ -142,7 +142,7 @@ class AnalystAgent(Agent):
         page_type = self._get_page_type()
         skills = list(PAGE_SKILL_MAP.get(page_type, DEFAULT_PRELOADED_SKILLS))
         # Add navigation rules based on unrestricted_mode
-        nav_skill = 'navigation_unrestricted' if self.unrestricted_mode else 'navigation_restricted'
+        nav_skill = 'navigation_unrestricted' if getattr(self, 'unrestricted_mode', False) else 'navigation_restricted'
         skills.append(nav_skill)
         return skills
 

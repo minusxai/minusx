@@ -106,11 +106,11 @@ class TestPageAwarePreloading:
     @pytest.mark.parametrize("page_type,expected_skills", list(PAGE_SKILL_MAP.items()))
     def test_page_type_maps_to_correct_skills(self, page_type, expected_skills):
         agent = _make_agent(page_type)
-        assert agent._get_preloaded_skill_names() == expected_skills
+        assert agent._get_preloaded_skill_names() == expected_skills + ['navigation_restricted']
 
     def test_unknown_page_type_uses_defaults(self):
         agent = _make_agent(None)
-        assert agent._get_preloaded_skill_names() == list(DEFAULT_PRELOADED_SKILLS)
+        assert agent._get_preloaded_skill_names() == list(DEFAULT_PRELOADED_SKILLS) + ['navigation_restricted']
 
     @pytest.mark.parametrize("page_type,expected_skills", list(PAGE_SKILL_MAP.items()))
     def test_preloaded_skill_content_present_in_prompt(self, page_type, expected_skills):
@@ -133,8 +133,9 @@ class TestPageAwarePreloading:
     def test_non_preloaded_skills_in_catalog(self, page_type, expected_skills):
         preloaded_set = set(expected_skills)
         catalog = AnalystAgent._build_skills_catalog(preloaded_set)
+        excluded = preloaded_set | AnalystAgent._HIDDEN_SKILLS
         for skill_name in list_skills():
-            if skill_name not in preloaded_set:
+            if skill_name not in excluded:
                 assert f'"{skill_name}"' in catalog
 
 
