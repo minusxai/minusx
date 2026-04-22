@@ -612,36 +612,6 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         </Box>
       </Box>
 
-      {/* Agent activity feed */}
-      {showAgentFeed && (
-        <AgentFeedCollapsible connectionName={connectionName} contextPath={contextPath} isRunning={isAgentRunning} />
-      )}
-
-      {/* Debug: appState */}
-      {showDebug && realFileId && (
-        <Collapsible.Root>
-          <Collapsible.Trigger asChild>
-            <HStack cursor="pointer" px={3} py={1.5} bg="bg.muted" borderRadius="md" gap={2}>
-              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Debug: App State</Text>
-              <Icon as={LuChevronRight} boxSize={3} color="fg.subtle" css={{ '[data-state=open] &': { transform: 'rotate(90deg)' }, transition: 'transform 0.15s' }} />
-            </HStack>
-          </Collapsible.Trigger>
-          <Collapsible.Content>
-            <Box mt={1} p={3} bg="bg.muted" borderRadius="md" maxH="200px" overflowY="auto">
-              <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
-                {JSON.stringify(
-                  (() => {
-                    const [aug] = selectAugmentedFiles(reduxState, [realFileId]);
-                    return aug ? { type: 'file', state: compressAugmentedFile(aug) } : null;
-                  })(),
-                  null, 2
-                )}
-              </Text>
-            </Box>
-          </Collapsible.Content>
-        </Collapsible.Root>
-      )}
-
       {/* Error */}
       {error && (
         <Text color="accent.danger" fontSize="sm">{error}</Text>
@@ -722,6 +692,36 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
             </Button>
           </HStack>
         </HStack>
+      )}
+
+      {/* Agent activity feed */}
+      {showAgentFeed && (
+        <AgentFeedCollapsible connectionName={connectionName} contextPath={contextPath} isRunning={isAgentRunning} />
+      )}
+
+      {/* Debug: appState */}
+      {showDebug && realFileId && (
+        <Collapsible.Root>
+          <Collapsible.Trigger asChild>
+            <HStack cursor="pointer" px={3} py={1.5} bg="bg.muted" borderRadius="md" gap={2}>
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Debug: App State</Text>
+              <Icon as={LuChevronRight} boxSize={3} color="fg.subtle" css={{ '[data-state=open] &': { transform: 'rotate(90deg)' }, transition: 'transform 0.15s' }} />
+            </HStack>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <Box mt={1} p={3} bg="bg.muted" borderRadius="md" maxH="200px" overflowY="auto">
+              <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                {JSON.stringify(
+                  (() => {
+                    const [aug] = selectAugmentedFiles(reduxState, [realFileId]);
+                    return aug ? { type: 'file', state: compressAugmentedFile(aug) } : null;
+                  })(),
+                  null, 2
+                )}
+              </Text>
+            </Box>
+          </Collapsible.Content>
+        </Collapsible.Root>
       )}
     </VStack>
   );

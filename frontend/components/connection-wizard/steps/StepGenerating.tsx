@@ -9,7 +9,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
-import { createVirtualFile, editFile, publishAll } from '@/lib/api/file-state';
+import { createVirtualFile, publishAll } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { getStore } from '@/store/store';
@@ -95,19 +95,6 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     hasCreatedVirtual.current = true;
 
     createVirtualFile('dashboard').then((vId) => {
-      // Set empty dashboard content
-      editFile({
-        fileId: vId,
-        changes: {
-          content: {
-            description: '',
-            assets: [],
-            layout: { columns: 12, items: [] },
-          },
-          name: 'Getting Started',
-          path: `${modeRoot}/Getting Started`,
-        },
-      });
       setVirtualDashboardId(vId);
 
       // Set navigation so selectAppState resolves to this virtual dashboard
@@ -178,9 +165,11 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         context: contextDocs || '',
         app_state: appState,
       },
-      message: userPreference.trim()
-        ? `${DASHBOARD_PROMPT}\n\nUser preference: ${userPreference.trim()}`
-        : DASHBOARD_PROMPT,
+      message: [
+        DASHBOARD_PROMPT,
+        `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
+        userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
+      ].filter(Boolean).join('\n\n'),
     }));
 
     setIsGenerating(true);
@@ -195,7 +184,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       if (onComplete) await onComplete();
       const freshState = getStore().getState();
       const allFiles = Object.values(freshState.files.files);
-      const dashboard = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === 'Getting Started');
+      const dashboard = allFiles
+        .filter(f => f.type === 'dashboard' && f.id > 0 && f.path.startsWith(modeRoot))
+        .sort((a, b) => b.id - a.id)[0];
       if (dashboard) {
         router.push(preserveModeParam(`/f/${dashboard.id}`));
       } else {
