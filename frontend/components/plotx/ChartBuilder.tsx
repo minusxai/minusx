@@ -26,7 +26,7 @@ import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUni
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig } from '@/lib/types'
 import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
-import { getTimestamp } from '@/lib/chart/chart-utils'
+import { getTimestamp, buildCompactYLabel } from '@/lib/chart/chart-utils'
 import { getVizConstraintError } from '@/lib/chart/viz-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
@@ -188,48 +188,15 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const chartTitle = useMemo(() => {
     if (yAxisColumns.length === 0 && xAxisColumns.length === 0) return undefined
     const yTitleOverride = axisConfig?.yTitle?.trim()
-    const yPart = yTitleOverride || yAxisColumns.map(getDisplayName).join(', ')
+    const yNames = yAxisColumns.map(getDisplayName)
+    // Title has more horizontal space — show up to 2 names
+    const yPart = yTitleOverride || buildCompactYLabel(yNames, 2)
     const xPart = xAxisColumns.length > 0 ? getDisplayName(xAxisColumns[0]) : ''
     const splitPart = xAxisColumns.length > 1 ? xAxisColumns.slice(1).map(getDisplayName).join(', ') : ''
     const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ')
     return parts || undefined
   }, [axisConfig?.yTitle, xAxisColumns, yAxisColumns, getDisplayName])
 
-  // Build a y-axis label that fits on ~1 line (~40 chars),
-  // showing as many column names as fit and "(and X other metrics)" for the rest
-  const buildYAxisLabel = useCallback((cols: string[]): string => {
-    if (cols.length === 0) return ''
-    const names = cols.map(getDisplayName)
-    if (cols.length === 1) return names[0]
-
-    const tokenize = (value: string) => value
-      .split(/\s+/)
-      .map(token => token.trim())
-      .filter(Boolean)
-
-    const firstTokens = tokenize(names[0])
-    let commonTokens = [...firstTokens]
-
-    for (const name of names.slice(1)) {
-      const tokens = tokenize(name)
-      let shared = 0
-      while (shared < commonTokens.length && shared < tokens.length && commonTokens[shared] === tokens[shared]) {
-        shared++
-      }
-      commonTokens = commonTokens.slice(0, shared)
-      if (commonTokens.length === 0) break
-    }
-
-    let commonLabel = commonTokens.join(' ').trim()
-    commonLabel = commonLabel.replace(/[\s(|,-]+$/, '').trim()
-
-    if (commonLabel.length >= 6) return commonLabel
-
-    const firstName = names[0]
-    const remaining = names.length - 1
-    if (remaining === 0) return firstName
-    return `${firstName} (+${remaining})`
-  }, [getDisplayName])
 
   // Handle drop on X Axis (primary): demotes current primary to Split By
   const handleDropXPrimary = useCallback((col: string) => {
@@ -766,7 +733,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       xAxisData: aggregatedData.xAxisData,
                       series: aggregatedData.series,
                       xAxisLabel: getDisplayName(xAxisColumns[0]),
-                      yAxisLabel: buildYAxisLabel(yAxisColumns),
+                      yAxisLabel: buildCompactYLabel(yAxisColumns.map(getDisplayName)),
                       xAxisColumns,
                       pointMeta: aggregatedData.pointMeta,
                       tooltipColumns,
