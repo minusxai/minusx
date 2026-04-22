@@ -110,9 +110,9 @@ describe('Files Data Layer - getTemplate', () => {
         query: '',
         vizSettings: { type: 'table' },
         parameters: [],
-        connection_name: 'static'
+        connection_name: 'default_db'
       });
-      expect(result.metadata?.availableDatabases).toContain('static');
+      expect(result.metadata?.availableDatabases).toContain('default_db');
     });
 
     it('should generate question template with custom query', async () => {
