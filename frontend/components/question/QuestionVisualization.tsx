@@ -173,7 +173,7 @@ export function QuestionVisualization({
     // borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}
     >
       {useCompactLayout && config.viz.showTypeButtons && data && !error && (
-        <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" bg="bg.muted" shadow="sm" p={2} gap={1}>
+        <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" bg="bg.muted" shadow="sm" px={2} py={1} gap={0.5}>
           <Box flexShrink={1} minWidth={0}>
             <VizTypeSelector
               value={currentState?.vizSettings?.type || 'table'}

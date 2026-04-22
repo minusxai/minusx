@@ -66,9 +66,9 @@ export function VizTypeSelector({
 
   return (
     <Container
-      gap={1}
+      gap={0.5}
       bg={orientation === 'horizontal' ? 'transparent' : 'bg.muted'}
-      p={orientation === 'horizontal' ? 0 : 2}
+      p={orientation === 'horizontal' ? 0 : 1.5}
       shadow={orientation === 'horizontal' ? undefined : 'sm'}
       h={'100%'}
       flexWrap={orientation === 'horizontal' ? 'wrap' : undefined}
@@ -84,7 +84,7 @@ export function VizTypeSelector({
           >
             <IconButton
               aria-label={label}
-              size="sm"
+              size="xs"
               variant={isActive ? 'solid' : 'ghost'}
               colorPalette={isActive ? 'teal' : undefined}
               onClick={() => onChange(type)}

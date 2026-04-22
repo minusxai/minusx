@@ -307,6 +307,29 @@ Each context sends relevant app state to the orchestrator, allowing the AI to un
 - **Automatic loop**: Next.js backend automatically executes tools until it encounters frontend-only tools
 - **Mixed completion**: When execution yields both completed and pending work, record completions first before returning pending items - breaking early loses completed results
 
+### Chat Tool Display Architecture
+
+The chat UI has two view modes: **Compact** (inline tool rows via `SimpleChatMessage` → `ToolCallDisplay`) and **Detailed** (timeline + carousel via `AgentTurnContainer`).
+
+**Key components:**
+- `AgentTurnContainer.tsx` — groups messages into turns (user msg → working area → reply). Working area = timeline rail (left) + detail carousel (right)
+- `DetailCarousel.tsx` — shared carousel wrapper with header, nav dots, error count. Also exports shared helpers: `parseToolArgs`, `parseToolContent`, `isToolSuccess`, `getToolNameFromMsg`, and the `DetailCardProps` interface
+- `tool-config.ts` — centralized config per tool: `displayComponent` (compact), `tier`, `chipLabel`, `chipIcon`, `timelineVerb`
+
+**Each tool display file exports two things:**
+1. **Default export** — compact inline display (used by `ToolCallDisplay`)
+2. **Named `DetailCard` export** — card for the detail carousel (e.g., `NavigateDetailCard`, `EditFileDetailCard`, `FileDetailCard`)
+
+**Routing in AgentTurnContainer:**
+- `DETAIL_CARD_BY_TOOL` maps tool name → DetailCard component. Set to `null` to skip a tool in the carousel (e.g., `Clarify` is skipped because `ClarifyFrontend` covers it)
+- `FILE_LABELS` (`created/edited/read`) check for chart items first → `ChartCarousel`, else route per tool name
+- Messages are filtered (null-mapped tools removed), sorted (errors last), and error count shown in header
+
+**Interactive tools (ClarifyFrontend, Navigate):** DetailCards check Redux for `pending_tool_calls` with unresolved `userInputs` and render `UserInputComponent` when pending.
+
+**Color coding (compact displays):** Each tool type has a distinct accent color at `/8` opacity bg + `/15` border + colored icons + `fg.muted` text:
+- Create: `accent.success` (green), Edit: `accent.secondary` (purple), Search: `accent.cyan` (turquoise), Read: `accent.primary` (blue), Navigate: `accent.teal`, Failed: `accent.danger` (red)
+
 ### Authentication & Access Control
 - **Auth**: NextAuth v5 with session-based authentication
 - **Authorization**: `getEffectiveUser()` checks permissions on every request

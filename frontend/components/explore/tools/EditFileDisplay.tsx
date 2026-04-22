@@ -12,6 +12,78 @@ import { useAppSelector } from '@/store/hooks';
 import { Tooltip } from '@/components/ui/tooltip';
 import { decodeFileStr } from '@/lib/api/file-encoding';
 import { replaceFileState } from '@/lib/api/file-state';
+import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function EditFileDetailCard({ msg, filesDict }: DetailCardProps) {
+  const args = parseToolArgs(msg);
+  const content = parseToolContent(msg);
+  const success = isToolSuccess(msg);
+
+  const fileState = content?.state?.fileState || content?.fileState;
+  const fileId = fileState?.id ?? args.fileId;
+  const fileName = fileState?.name || (fileId && filesDict[fileId]?.name) || (fileId ? `#${fileId}` : 'file');
+  const filePath = fileState?.path || null;
+  const fileType = (fileState?.type || (fileId && filesDict[fileId]?.type) || null) as FileType | null;
+  const assetCount = fileState?.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+  const meta = fileType ? getFileTypeMetadata(fileType) : null;
+  const canLink = fileId != null && fileId > 0;
+
+  // Parse diff summary
+  const diff = content?.diff || content?.details?.diff;
+  const diffLines = diff ? String(diff).split('\n').filter((l: string) => l.startsWith('+') || l.startsWith('-')) : [];
+  const additions = diffLines.filter((l: string) => l.startsWith('+')).length;
+  const removals = diffLines.filter((l: string) => l.startsWith('-')).length;
+
+  return (
+    <Box
+      mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+      {...(canLink ? {
+        as: Link, href: `/f/${fileId}`, cursor: 'pointer',
+        _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+      } : {})}
+    >
+      <HStack gap={2}>
+        <Icon as={meta?.icon || LuPencilLine} boxSize={4} color={success ? (meta?.color || 'fg.muted') : 'accent.danger'} />
+        <VStack gap={0} align="start" flex={1} minW={0}>
+          <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+            {fileName}
+          </Text>
+          {filePath && (
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+              {filePath}
+            </Text>
+          )}
+        </VStack>
+        {(additions > 0 || removals > 0) && (
+          <HStack gap={1} flexShrink={0}>
+            {additions > 0 && (
+              <Text fontSize="2xs" fontFamily="mono" color="green.fg" fontWeight="600">+{additions}</Text>
+            )}
+            {removals > 0 && (
+              <Text fontSize="2xs" fontFamily="mono" color="red.fg" fontWeight="600">-{removals}</Text>
+            )}
+          </HStack>
+        )}
+        {meta && (
+          <Box bg={`${meta.color}/10`} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+            <Text fontSize="2xs" fontFamily="mono" color={meta.color} fontWeight="500">
+              {meta.label}
+            </Text>
+          </Box>
+        )}
+      </HStack>
+      {assetCount != null && assetCount > 0 && (
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={1} pl={6}>
+          {assetCount} {assetCount === 1 ? 'question' : 'questions'}
+        </Text>
+      )}
+    </Box>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 /**
  * Extract the original (pre-edit) and final (post-edit) file objects from a diff string.
@@ -33,7 +105,7 @@ function parseUndoRedoFromDiff(diff: string | undefined): { original: any | null
   return { original, final };
 }
 
-export default function EditFileDisplay({ toolCallTuple, showThinking }: DisplayProps) {
+export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly }: DisplayProps) {
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
   const [toolCall, toolMessage] = toolCallTuple;
@@ -80,7 +152,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
     setIsUndone(false);
   }, [canUndoRedo, isUndone, fileId, finalState]);
 
-  const color = 'accent.secondary';
+  const accent = 'accent.secondary';
 
   if (!success) {
     return showThinking ? (
@@ -95,12 +167,15 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
     ) : null;
   }
 
-  const href = fileId !== undefined
+  const isNewFile = fileId !== undefined && fileId < 0;
+  const href = fileId !== undefined && !isNewFile
     ? `/f/${fileId}${mode ? `?mode=${mode}` : ''}`
     : undefined;
 
-  const displayName = fileName || (fileId !== undefined ? `#${fileId}` : 'file');
   const meta = fileType ? getFileTypeMetadata(fileType) : null;
+  const displayName = isNewFile
+    ? `a new ${meta?.label ?? fileType ?? 'file'}`
+    : fileName || (fileId !== undefined ? `#${fileId}` : 'file');
   const FileIcon = meta?.icon;
 
   // Parse diff for display
@@ -110,48 +185,12 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg={`${color}/10`}
+        bg={`${accent}/8`}
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor={`${accent}/15`}
         overflow="hidden"
-        position="relative"
       >
-        {/* Undo/Redo buttons — top right */}
-        {canUndoRedo && (
-          <HStack gap={0.5} position="absolute" top={0} right={1.5} zIndex={1}>
-            <Tooltip content="Restore to before this edit">
-              <Box
-                as="button"
-                aria-label="Restore to before this edit"
-                onClick={handleUndo}
-                px={1.5}
-                py={0.5}
-                borderRadius="sm"
-                cursor={isUndone ? 'default' : 'pointer'}
-                opacity={isUndone ? 0.4 : 1}
-                _hover={isUndone ? {} : { bg: `${color}/20` }}
-              >
-                <Icon as={LuUndo2} boxSize={3} color={color} />
-              </Box>
-            </Tooltip>
-            <Tooltip content="Restore to after this edit">
-              <Box
-                as="button"
-                aria-label="Restore to after this edit"
-                onClick={handleRedo}
-                px={1.5}
-                py={0.5}
-                borderRadius="sm"
-                cursor={!isUndone ? 'default' : 'pointer'}
-                opacity={!isUndone ? 0.4 : 1}
-                _hover={!isUndone ? {} : { bg: `${color}/20` }}
-              >
-                <Icon as={LuRedo2} boxSize={3} color={color} />
-              </Box>
-            </Tooltip>
-          </HStack>
-        )}
         <HStack
           gap={1.5}
           py={1.5}
@@ -161,32 +200,71 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
           onClick={() => hasDiff && setIsExpanded(!isExpanded)}
         >
           {hasDiff && (
-            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={color} flexShrink={0} />
+            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={accent} flexShrink={0} />
           )}
           {!hasDiff && (
-            <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
+            <Icon as={LuCheck} boxSize={3} color={accent} flexShrink={0} />
           )}
-          <Icon as={LuPencilLine} boxSize={3} color={color} flexShrink={0} />
-          <Text fontSize="xs" color={color} fontFamily="mono">
+          <Icon as={LuPencilLine} boxSize={3} color={accent} flexShrink={0} />
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             Edited
           </Text>
-          {fileId !== undefined && href && (
-            <Link href={href} onClick={(e) => e.stopPropagation()}>
+          {fileId !== undefined && (() => {
+            const chip = (
               <HStack
                 gap={1}
-                bg={`${color}/15`}
+                bg="bg.muted"
                 px={1.5}
                 py={0.5}
                 borderRadius="sm"
-                cursor="pointer"
-                _hover={{ bg: `${color}/25` }}
+                cursor={href ? 'pointer' : 'default'}
+                _hover={href ? { bg: 'bg.emphasized' } : {}}
               >
-                {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
+                {FileIcon && <Icon as={FileIcon} boxSize={2.5} color="fg.muted" />}
                 <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600">
                   {displayName}
                 </Text>
               </HStack>
-            </Link>
+            );
+            return href ? (
+              <Link href={href} onClick={(e) => e.stopPropagation()}>
+                {chip}
+              </Link>
+            ) : chip;
+          })()}
+          {canUndoRedo && !readOnly && (
+            <HStack gap={0.5} ml="auto" flexShrink={0}>
+              <Tooltip content="Restore to before this edit">
+                <Box
+                  as="button"
+                  aria-label="Restore to before this edit"
+                  onClick={handleUndo}
+                  px={1.5}
+                  py={0.5}
+                  borderRadius="sm"
+                  cursor={isUndone ? 'default' : 'pointer'}
+                  opacity={isUndone ? 0.4 : 1}
+                  _hover={isUndone ? {} : { bg: 'bg.muted' }}
+                >
+                  <Icon as={LuUndo2} boxSize={3} color="fg.muted" />
+                </Box>
+              </Tooltip>
+              <Tooltip content="Restore to after this edit">
+                <Box
+                  as="button"
+                  aria-label="Restore to after this edit"
+                  onClick={handleRedo}
+                  px={1.5}
+                  py={0.5}
+                  borderRadius="sm"
+                  cursor={!isUndone ? 'default' : 'pointer'}
+                  opacity={!isUndone ? 0.4 : 1}
+                  _hover={!isUndone ? {} : { bg: 'bg.muted' }}
+                >
+                  <Icon as={LuRedo2} boxSize={3} color="fg.muted" />
+                </Box>
+              </Tooltip>
+            </HStack>
           )}
         </HStack>
 

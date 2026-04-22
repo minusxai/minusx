@@ -16,13 +16,17 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
-import { clearChatAttachments } from '@/store/uiSlice';
+import { clearChatAttachments, selectCompactChatEnabled } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
+import ViewModeToggle from './ViewModeToggle';
+import AgentTurnContainer from './AgentTurnContainer';
+import { groupIntoTurns } from './message/groupIntoTurns';
+import { StreamingProgressInline, StreamingProgressSticky } from './tools/StreamingProgress';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -126,6 +130,10 @@ export default function ChatInterface({
   const { conversation: loadedConversation, isLoading, error: loadError } = useConversation(providedConversationId);
 
   const [showThinking, setShowThinking] = useState<boolean>(false)
+  const compactChatEnabled = useAppSelector(selectCompactChatEnabled);
+  const [localViewMode, setLocalViewMode] = useState<import('@/lib/types').ChatViewMode>('compact')
+  const viewMode = compactChatEnabled ? localViewMode : 'detailed';
+  const setViewMode = setLocalViewMode;
   const [showToolInspector, setShowToolInspector] = useState(false)
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
@@ -198,7 +206,7 @@ export default function ChatInterface({
 
   // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
   const streamingInfo = useMemo(() => {
-    if (!conversation?.streamedCompletedToolCalls) return { thinkingText: null, toolCalls: [], isAnswering: false };
+    if (!conversation?.streamedCompletedToolCalls) return { thinkingText: null, toolCalls: [], isAnswering: false, completedCount: 0, totalCount: 0, latestAction: '' };
 
     // Native thinking streamed in real-time
     let thinkingText: string | null = null;
@@ -207,11 +215,13 @@ export default function ChatInterface({
     }
 
     const toolCalls: string[] = [];
+    let latestAction = '';
     for (let i = conversation.streamedCompletedToolCalls.length - 1; i >= 0; i--) {
       const msg = conversation.streamedCompletedToolCalls[i];
       const toolName = msg.function?.name;
       if (toolName && toolName !== 'TalkToUser') {
         toolCalls.unshift(toolName);
+        if (!latestAction) latestAction = toolName;
       }
     }
 
@@ -219,8 +229,12 @@ export default function ChatInterface({
     const lastEntry = conversation.streamedCompletedToolCalls[conversation.streamedCompletedToolCalls.length - 1];
     const isAnswering = lastEntry?.function?.name === 'TalkToUser';
 
-    return { thinkingText, toolCalls, isAnswering };
-  }, [conversation?.streamedCompletedToolCalls, conversation?.streamedThinking]);
+    const completedCount = toolCalls.length;
+    const pendingCount = conversation.pending_tool_calls?.filter(p => !p.result).length ?? 0;
+    const totalCount = completedCount + pendingCount;
+
+    return { thinkingText, toolCalls, isAnswering, completedCount, totalCount, latestAction };
+  }, [conversation?.streamedCompletedToolCalls, conversation?.streamedThinking, conversation?.pending_tool_calls]);
 
 //   console.log('allmessages', allMessages);
 
@@ -262,10 +276,11 @@ export default function ChatInterface({
   }, []);
 
   // Compute layout based on container width and mode
-//   console.log('Container width:', containerWidth, 'Container:', container);
+  console.log('Container width:', containerWidth, 'Container:', container);
   const isCompact = container === 'sidebar' || (containerWidth > 0 && containerWidth < 900);
-  const colSpan = isCompact ? 12 : { base: 12, md: 8, lg: 6 };
-  const colStart = isCompact ? 1 : { base: 1, md: 3, lg: 4 };
+  const isMedium = !isCompact && containerWidth > 0 && containerWidth < 1100;
+  const colSpan = isCompact ? 12 : isMedium ? { base: 12, md: 8 } : { base: 12, md: 8, lg: 6 };
+  const colStart = isCompact ? 1 : isMedium ? { base: 1, md: 3 } : { base: 1, md: 3, lg: 4 };
 
   // Clear errors when navigating between conversations — intentional setState in effect
   const prevProvidedIdRef = useRef(providedConversationId);
@@ -583,6 +598,7 @@ export default function ChatInterface({
                 </Button>
               </Tooltip>
             )}
+            {compactChatEnabled && <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />}
             </HStack>
             <HStack gap={2}>
               {setAsActiveButton}
@@ -646,9 +662,9 @@ export default function ChatInterface({
                 gap={2} w="100%">
             <GridItem colSpan={colSpan} colStart={colStart}>
 
-              {
-                allMessages.map((msg, idx) => {
-                    return <SimpleChatMessage
+              {viewMode === 'detailed' ? (
+                allMessages.map((msg, idx) => (
+                    <SimpleChatMessage
                         key={`${msg.role}-${idx}-${(msg as any).tool_call_id || ''}`}
                         message={msg}
                         databaseName={selectedDatabase || ''}
@@ -657,17 +673,34 @@ export default function ChatInterface({
                         toggleShowThinking={toggleShowThinking}
                         markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
                         conversationID={conversationID}
+                        readOnly={readOnly || needsContinueConfirmation}
+                        viewMode={viewMode}
                     />
-                })
-              }
+                ))
+              ) : (
+                groupIntoTurns(allMessages).map((turn, turnIdx) => (
+                  <AgentTurnContainer
+                    key={`turn-${turnIdx}`}
+                    turn={turn}
+                    isCompact={isCompact}
+                    databaseName={selectedDatabase || ''}
+                    showThinking={showThinking}
+                    toggleShowThinking={toggleShowThinking}
+                    markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
+                    readOnly={readOnly || needsContinueConfirmation}
+                    conversationID={conversationID}
+                    viewMode={viewMode}
+                  />
+                ))
+              )}
 
               {/* Streaming info: show thinking text and tool calls while streaming (hide once answer is streaming) */}
               {isStreaming && (() => {
-                const { thinkingText, toolCalls, isAnswering } = streamingInfo;
+                const { thinkingText, toolCalls, isAnswering, completedCount, totalCount, latestAction } = streamingInfo;
                 if (isAnswering) return null;
 
-                // Thinking: one-line preview, expandable to full block
-                if (thinkingText) {
+                // Thinking: one-line preview, expandable to full block (hidden in compact mode)
+                if (thinkingText && viewMode !== 'compact') {
                   const isExpanded = showThinking;
                   const toggleExpanded = toggleShowThinking;
                   return (
@@ -716,8 +749,17 @@ export default function ChatInterface({
                   );
                 }
 
-                // Tool calls: pill-style badges
+                // Tool calls: live counter badge (compact) or pill badges (detailed)
                 if (toolCalls.length > 0) {
+                  if (viewMode === 'compact') {
+                    return (
+                      <StreamingProgressInline
+                        completedCount={completedCount}
+                        totalCount={totalCount}
+                        latestAction={latestAction}
+                      />
+                    );
+                  }
                   return (
                     <HStack my={2} gap={2} flexWrap="wrap">
                       {toolCalls.map((tool, i) => (
@@ -887,6 +929,16 @@ export default function ChatInterface({
         </Box>
       )}
 
+      {/* Sticky streaming progress badge above input */}
+      {isStreaming && viewMode === 'compact' && !streamingInfo.isAnswering && streamingInfo.totalCount > 0 && (
+        <Box display="flex" justifyContent="center" pb={1}>
+          <StreamingProgressSticky
+            completedCount={streamingInfo.completedCount}
+            totalCount={streamingInfo.totalCount}
+          />
+        </Box>
+      )}
+
       {/* Input - Sticky at bottom (hidden in readOnly mode) */}
       {!readOnly && !loadError && !needsContinueConfirmation && (
         <Box
@@ -952,6 +1004,8 @@ export default function ChatInterface({
               onDatabaseChange={handleDatabaseChange}
               container={container}
               isCompact={isCompact}
+              colSpan={colSpan}
+              colStart={colStart}
               connectionsLoading={connectionsLoading}
               contextsLoading={contextsLoading}
               selectedContextPath={contextPath}

@@ -28,7 +28,7 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean } = {};
+      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean } = {};
       const dev = localStorage.getItem('devMode');
       if (dev !== null) flags.devMode = dev === 'true';
       const confirm = localStorage.getItem('askForConfirmation');
@@ -45,6 +45,8 @@ export function DataLoader() {
       if (qs === 'end-of-turn' || qs === 'mid-turn') flags.queueStrategy = qs;
       const unrestricted = localStorage.getItem('unrestrictedMode');
       if (unrestricted !== null) flags.unrestrictedMode = unrestricted === 'true';
+      const compactChat = localStorage.getItem('compactChatEnabled');
+      if (compactChat !== null) flags.compactChatEnabled = compactChat === 'true';
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
     } catch { /* ignore */ }
   }, []);

@@ -232,109 +232,130 @@ export default function UserInputComponent({
 
         return (
           <VStack gap={2} align="stretch">
-            {props.options?.map((option, i) => (
-              <Button
-                key={i}
-                variant={isSelected(option) ? 'solid' : 'outline'}
-                bg={isSelected(option) ? 'accent.primary' : 'transparent'}
-                color={isSelected(option) ? 'white' : 'fg.default'}
-                borderColor="border.default"
-                onClick={() => toggleSelection(option)}
-                justifyContent="flex-start"
-                height="auto"
-                py={3}
-                px={4}
-                whiteSpace="normal"
-                textAlign="left"
-              >
-                <VStack gap={0} align="start" w="100%">
-                  <Text fontSize="sm" fontWeight="500" wordBreak="break-word">{option.label}</Text>
-                  {option.description && (
-                    <Text fontSize="xs" color={isSelected(option) ? 'whiteAlpha.800' : 'fg.muted'} wordBreak="break-word">
-                      {option.description}
-                    </Text>
-                  )}
-                </VStack>
-              </Button>
-            ))}
+            {/* Options as compact stacked rows */}
+            <VStack gap={1} align="stretch">
+              {props.options?.map((option, i) => {
+                const selected = isSelected(option);
+                return (
+                  <HStack
+                    key={i}
+                    as="button"
+                    aria-label={option.label}
+                    onClick={() => toggleSelection(option)}
+                    gap={2}
+                    px={3}
+                    py={1.5}
+                    borderRadius="md"
+                    border="1px solid"
+                    borderColor={selected ? 'accent.teal' : 'border.default'}
+                    bg={selected ? 'accent.teal/8' : 'transparent'}
+                    cursor="pointer"
+                    transition="all 0.15s"
+                    _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/8' }}
+                    textAlign="left"
+                  >
+                    {/* Radio/checkbox indicator */}
+                    <Box
+                      w="14px" h="14px" borderRadius={isMultiSelect ? 'sm' : 'full'}
+                      border="2px solid" borderColor={selected ? 'accent.teal' : 'fg.subtle'}
+                      bg={selected ? 'accent.teal' : 'transparent'}
+                      flexShrink={0}
+                      display="flex" alignItems="center" justifyContent="center"
+                    >
+                      {selected && (
+                        <Box w="6px" h="6px" borderRadius={isMultiSelect ? '1px' : 'full'} bg="white" />
+                      )}
+                    </Box>
+                    <VStack gap={0} align="start" flex={1} minW={0}>
+                      <Text fontSize="xs" fontFamily="mono" fontWeight="500" color={selected ? 'accent.teal' : 'fg.default'}>
+                        {option.label}
+                      </Text>
+                      {option.description && (
+                        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                          {option.description}
+                        </Text>
+                      )}
+                    </VStack>
+                  </HStack>
+                );
+              })}
+            </VStack>
 
-            {/* Special options for clarification */}
+            {/* Special options — side by side */}
             {isCancellable && (
-              <>
-                <Box borderTop="1px solid" borderColor="border.default" my={1} />
-
-                {/* Figure it out option */}
-                <Button
-                  variant={isFigureItOutSelected ? 'solid' : 'outline'}
-                  bg={isFigureItOutSelected ? 'accent.teal' : 'transparent'}
-                  color={isFigureItOutSelected ? 'white' : 'fg.muted'}
-                  borderColor="border.default"
+              <HStack gap={1.5}>
+                <Box
+                  as="button"
+                  aria-label="Figure it out"
                   onClick={() => toggleSelection({ label: 'Figure it out', value: FIGURE_IT_OUT })}
-                  justifyContent="flex-start"
-                  height="auto"
-                  py={3}
-                  px={4}
-                  whiteSpace="normal"
+                  flex={1}
+                  px={3}
+                  py={1.5}
+                  borderRadius="md"
+                  border="1px solid"
+                  borderColor={isFigureItOutSelected ? 'accent.teal' : 'border.default'}
+                  bg="transparent"
+                  cursor="pointer"
+                  transition="all 0.15s"
+                  _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/8' }}
                   textAlign="left"
                 >
-                  <VStack gap={0} align="start" w="100%">
-                    <Text fontSize="sm" fontWeight="500">Figure it out</Text>
-                    <Text fontSize="xs" color={isFigureItOutSelected ? 'whiteAlpha.800' : 'fg.muted'}>
-                      Let the agent decide based on context
-                    </Text>
-                  </VStack>
-                </Button>
+                  <Text fontSize="xs" fontFamily="mono" fontWeight="500" color={isFigureItOutSelected ? 'accent.teal' : 'fg.muted'}>
+                    Figure it out
+                  </Text>
+                </Box>
 
-                {/* Other option */}
-                <Button
-                  variant={isOtherSelected ? 'solid' : 'outline'}
-                  bg={isOtherSelected ? 'accent.secondary' : 'transparent'}
-                  color={isOtherSelected ? 'white' : 'fg.muted'}
-                  borderColor="border.default"
+                <Box
+                  as="button"
+                  aria-label="Other"
                   onClick={() => toggleSelection({ label: 'Other', value: OTHER })}
-                  justifyContent="flex-start"
-                  height="auto"
-                  py={3}
-                  px={4}
-                  whiteSpace="normal"
+                  flex={1}
+                  px={3}
+                  py={1.5}
+                  borderRadius="md"
+                  border="1px solid"
+                  borderColor={isOtherSelected ? 'accent.secondary' : 'border.default'}
+                  bg="transparent"
+                  cursor="pointer"
+                  transition="all 0.15s"
+                  _hover={{ borderColor: 'accent.secondary', bg: 'accent.secondary/8' }}
                   textAlign="left"
                 >
-                  <VStack gap={0} align="start" w="100%">
-                    <Text fontSize="sm" fontWeight="500">Other</Text>
-                    <Text fontSize="xs" color={isOtherSelected ? 'whiteAlpha.800' : 'fg.muted'}>
-                      Provide your own response
-                    </Text>
-                  </VStack>
-                </Button>
-
-                {/* Text input for "Other" option */}
-                {isOtherSelected && (
-                  <Input
-                    placeholder="Enter your response..."
-                    value={otherText}
-                    onChange={(e) => setOtherText(e.target.value)}
-                    fontFamily="mono"
-                    fontSize="sm"
-                    mt={1}
-                  />
-                )}
-              </>
+                  <Text fontSize="xs" fontFamily="mono" fontWeight="500" color={isOtherSelected ? 'accent.secondary' : 'fg.muted'}>
+                    Other
+                  </Text>
+                </Box>
+              </HStack>
             )}
 
-            <HStack gap={2} justify="flex-end" mt={2}>
+            {/* Text input for "Other" option */}
+            {isOtherSelected && (
+              <Input
+                placeholder="Enter your response..."
+                value={otherText}
+                onChange={(e) => setOtherText(e.target.value)}
+                fontFamily="mono"
+                fontSize="sm"
+                size="sm"
+              />
+            )}
+
+            <HStack gap={2} justify="flex-end">
               {isCancellable && (
                 <Button
-                  size="sm"
+                  size="xs"
                   variant="outline"
+                  fontFamily="mono"
                   onClick={() => handleSubmit({ cancelled: true })}
                 >
                   Cancel
                 </Button>
               )}
               <Button
-                size="sm"
-                bg="accent.primary"
+                size="xs"
+                bg="accent.teal"
                 color="white"
+                fontFamily="mono"
                 onClick={() => handleSubmit(getSubmitValue())}
                 disabled={!canSubmit}
               >
@@ -392,24 +413,24 @@ export default function UserInputComponent({
 
   return (
     <Box
-      py={3}
-      px={4}
+      py={2.5}
+      px={3}
       border="1px solid"
       borderColor="border.default"
-      borderRadius="md"
-      bg="bg.subtle"
-      my={2}
+      borderRadius="lg"
+      bg="transparent"
+      my={1}
     >
-      <VStack gap={3} align="stretch">
+      <VStack gap={2} align="stretch">
         {/* Header */}
-        <HStack gap={2}>
-          <Icon as={LuBadgeInfo} boxSize={4} fill="accent.teal" color="bg.subtle" />
-          <Text fontWeight="600" fontSize="md" color="fg.default" fontFamily="mono">{props.title}</Text>
+        <HStack gap={1.5}>
+          <Icon as={LuBadgeInfo} boxSize={3.5} color="accent.teal" />
+          <Text fontWeight="600" fontSize="sm" color="fg.default" fontFamily="mono">{props.title}</Text>
         </HStack>
 
         {/* Message */}
         {props.message && (
-          <Text fontSize="sm" color="fg.muted" fontFamily="mono">
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             {props.message}
           </Text>
         )}

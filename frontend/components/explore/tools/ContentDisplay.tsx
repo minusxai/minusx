@@ -9,7 +9,7 @@ import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage' }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -208,7 +208,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
             ))}
 
             {/* Show citations with thinking if no answer exists */}
-            {showCitationsWithThinking && renderCitations(true)}
+            {viewMode !== 'compact' && showCitationsWithThinking && renderCitations(true)}
 
             {/* Legacy unparsed content (content before first XML tag) */}
             {legacyParsed?.unparsed && (

@@ -1,10 +1,96 @@
 'use client';
 
-import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuFile, LuFolder, LuFilePlus2, LuArrowRight } from 'react-icons/lu';
 import { DisplayProps, ToolCallDetails, contentToDetails } from '@/lib/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { type DetailCardProps, parseToolArgs, isToolSuccess } from './DetailCarousel';
+import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/store/store';
+import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
+import UserInputComponent from '../UserInputComponent';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function NavigateDetailCard({ msg, filesDict }: DetailCardProps) {
+  const toolMsg = msg as any;
+  const toolCallId = toolMsg.tool_call_id;
+  const args = parseToolArgs(msg);
+  const success = isToolSuccess(msg);
+  const { file_id, path, newFileType } = args;
+
+  // Check for pending user input (navigation confirmation)
+  const selectConversation = useMemo(() => makeSelectConversationByToolCallId(), []);
+  const conversation = useSelector((state: RootState) => selectConversation(state, toolCallId));
+  const pendingTool = conversation?.pending_tool_calls.find(p => p.toolCall.id === toolCallId);
+  const pendingUserInputs = pendingTool?.userInputs?.filter(ui => ui.result === undefined);
+
+  if (pendingUserInputs && pendingUserInputs.length > 0 && conversation) {
+    return (
+      <Box mx={3} mb={2}>
+        {pendingUserInputs.map(userInput => (
+          <UserInputComponent
+            key={userInput.id}
+            conversationID={conversation.conversationID}
+            tool_call_id={toolCallId}
+            userInput={userInput}
+            toolName={toolMsg.function?.name}
+            toolArgs={args}
+          />
+        ))}
+      </Box>
+    );
+  }
+
+  let navIcon = LuArrowRight;
+  let label = 'Unknown';
+  let href: string | null = null;
+  if (file_id !== undefined) {
+    navIcon = LuFile;
+    label = filesDict[file_id]?.name || `File #${file_id}`;
+    href = `/f/${file_id}`;
+  } else if (newFileType !== undefined) {
+    navIcon = LuFilePlus2;
+    label = `New ${newFileType}`;
+    href = null;
+  } else if (path !== undefined) {
+    navIcon = LuFolder;
+    label = path;
+    href = `/p/${path.startsWith('/') ? path.slice(1) : path}`;
+  }
+
+  return (
+    <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+      {...(href && success ? {
+        as: Link, href, cursor: 'pointer',
+        _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+      } : {})}
+    >
+      <HStack gap={2}>
+        <Icon as={success ? navIcon : LuX} boxSize={4} color={success ? 'fg.muted' : 'accent.danger'} />
+        <VStack gap={0} align="start" flex={1} minW={0}>
+          <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+            {label}
+          </Text>
+          {href && (
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+              {href}
+            </Text>
+          )}
+        </VStack>
+        <Box bg={success ? 'accent.teal/10' : 'accent.danger/10'} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+          <Text fontSize="2xs" fontFamily="mono" color={success ? 'accent.teal' : 'accent.danger'} fontWeight="500">
+            {success ? 'Navigated' : 'Failed'}
+          </Text>
+        </Box>
+      </HStack>
+    </Box>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
   const searchParams = useSearchParams();
@@ -39,13 +125,13 @@ export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
           gap={1.5}
           py={1.5}
           px={2}
-          bg="bg.elevated"
+          bg="accent.danger/8"
           borderRadius="md"
           border="1px solid"
-          borderColor="border.default"
+          borderColor="accent.danger/15"
           flexWrap="wrap"
         >
-          <Icon as={LuX} boxSize={3} color="fg.muted" flexShrink={0} />
+          <Icon as={LuX} boxSize={3} color="accent.danger" flexShrink={0} />
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             {failMessage || 'User declined navigation'}
           </Text>
@@ -85,14 +171,14 @@ export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
         gap={1.5}
         py={1.5}
         px={2}
-        bg="accent.success/10"
+        bg="accent.teal/8"
         borderRadius="md"
         border="1px solid"
-        borderColor="accent.success/20"
+        borderColor="accent.teal/15"
         flexWrap="wrap"
       >
-        <Icon as={LuCheck} boxSize={3} color="accent.success" flexShrink={0} />
-        <Text fontSize="xs" color="accent.success" fontFamily="mono" whiteSpace="nowrap">
+        <Icon as={LuCheck} boxSize={3} color="accent.teal" flexShrink={0} />
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
           Navigated to
         </Text>
         <HStack
