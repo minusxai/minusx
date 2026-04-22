@@ -9,7 +9,7 @@
  */
 import * as echarts from 'echarts';
 import { aggregateData } from './aggregate-data';
-import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption } from './chart-utils';
+import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption, buildCompactYLabel } from './chart-utils';
 import { COLOR_PALETTE } from './echarts-theme';
 import { buildColumnTypesMap } from '@/lib/database/column-types';
 import type { QueryResult } from '@/lib/types';
@@ -72,7 +72,7 @@ export interface RenderChartOptions {
 
 function buildChartTitle(xCols: string[], yCols: string[]): string | undefined {
   if (yCols.length === 0 && xCols.length === 0) return undefined;
-  const yPart = yCols.join(', ');
+  const yPart = buildCompactYLabel(yCols, 2);
   const xPart = xCols.length > 0 ? xCols[0] : '';
   const splitPart = xCols.length > 1 ? xCols.slice(1).join(', ') : '';
   const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ');
@@ -135,7 +135,7 @@ export function renderChartToSvg(
 
   const chartTitle = titleOverride || buildChartTitle(xCols, yCols);
   const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined;
-  const yAxisLabel = yCols.length === 1 ? yCols[0] : yCols.length > 1 ? yCols.join(', ') : undefined;
+  const yAxisLabel = yCols.length > 0 ? buildCompactYLabel(yCols) : undefined;
 
   let option: echarts.EChartsOption;
 

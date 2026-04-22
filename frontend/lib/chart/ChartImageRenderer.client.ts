@@ -17,6 +17,7 @@ import {
   buildFunnelChartOption,
   buildRadarChartOption,
   buildWaterfallChartOption,
+  buildCompactYLabel,
 } from '@/lib/chart/chart-utils'
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
@@ -50,13 +51,13 @@ function buildEChartsOption(
   if (aggregated.xAxisData.length === 0 && aggregated.series.length === 0) return null
 
   const autoTitle = [
-    yCols.join(', '),
+    buildCompactYLabel(yCols, 2),
     xCols.length > 0 && `vs ${xCols[0]}`,
     xCols.length > 1 && `split by ${xCols.slice(1).join(', ')}`,
   ].filter(Boolean).join(' ') || undefined
   const chartTitle = titleOverride || autoTitle
   const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined
-  const yAxisLabel = yCols.length === 1 ? yCols[0] : yCols.length > 1 ? yCols.join(', ') : undefined
+  const yAxisLabel = yCols.length > 0 ? buildCompactYLabel(yCols) : undefined
   const sharedArgs = {
     xAxisData: aggregated.xAxisData,
     series: aggregated.series,

@@ -30,6 +30,38 @@ export interface ChartProps {
   columnTypes?: Record<string, ColumnType>  // SQL-derived column types for axis type detection
 }
 
+/**
+ * Build a compact label for multiple y-columns.
+ * Used for chart titles, y-axis labels, and image renderer titles.
+ *
+ * - Single column: returns the name as-is
+ * - Multiple with common prefix (>=6 chars): returns common prefix
+ * - Multiple without common prefix: returns first name + "(+N more)"
+ * - maxNames controls how many names to show before "+N more" (default 1)
+ */
+export function buildCompactYLabel(names: string[], maxNames = 1): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+
+  // Try to find a common prefix
+  const tokenize = (value: string) => value.split(/\s+/).map(t => t.trim()).filter(Boolean)
+  let commonTokens = [...tokenize(names[0])]
+  for (const name of names.slice(1)) {
+    const tokens = tokenize(name)
+    let shared = 0
+    while (shared < commonTokens.length && shared < tokens.length && commonTokens[shared] === tokens[shared]) shared++
+    commonTokens = commonTokens.slice(0, shared)
+    if (commonTokens.length === 0) break
+  }
+  let commonLabel = commonTokens.join(' ').trim().replace(/[\s(|,-]+$/, '').trim()
+  if (commonLabel.length >= 6) return commonLabel
+
+  // No meaningful common prefix — show first N names + count
+  if (names.length <= maxNames) return names.join(', ')
+  const shown = names.slice(0, maxNames).join(', ')
+  return `${shown} (+${names.length - maxNames} more)`
+}
+
 interface AnnotationGraphicsConfig {
   chart: EChartsType
   xAxisData: string[]
