@@ -245,6 +245,70 @@ export default function ConnectionFormV2({
     }
   }, [contextId, contextContent, userId, contextDatabases, fileName, whitelistStatus]);
 
+  // Per-schema whitelist toggle (for static connection datasets)
+  const handleSchemaWhitelistToggle = useCallback(async (schemaName: string) => {
+    if (!contextId || !contextContent?.versions || !userId) return;
+    setWhitelistToggling(true);
+    try {
+      const publishedVersion = getPublishedVersion(contextContent);
+      const versionContent = contextContent.versions.find(v => v.version === publishedVersion);
+      if (!versionContent) return;
+
+      const availableDbs = contextContent.parentSchema || contextContent.fullSchema || [];
+
+      const currentDatabases: DatabaseContext[] = availableDbs.map(db => {
+        const whitelistedInContext = contextDatabases.find(cd => cd.databaseName === db.databaseName);
+        if (whitelistedInContext && whitelistedInContext.schemas.length > 0) {
+          return {
+            databaseName: db.databaseName,
+            whitelist: whitelistedInContext.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+          };
+        }
+        return { databaseName: db.databaseName, whitelist: [] };
+      });
+
+      const dbIndex = currentDatabases.findIndex(db => db.databaseName === fileName);
+      if (dbIndex < 0) {
+        // Connection not in whitelist yet — add it with just this schema
+        currentDatabases.push({
+          databaseName: fileName,
+          whitelist: [{ type: 'schema' as const, name: schemaName }],
+        });
+      } else {
+        const existing = currentDatabases[dbIndex];
+        const schemaInWhitelist = existing.whitelist.some(w => w.type === 'schema' && w.name === schemaName);
+        if (schemaInWhitelist) {
+          // Remove this schema
+          currentDatabases[dbIndex] = {
+            ...existing,
+            whitelist: existing.whitelist.filter(w => !(w.type === 'schema' && w.name === schemaName)),
+          };
+        } else {
+          // Add this schema
+          currentDatabases[dbIndex] = {
+            ...existing,
+            whitelist: [...existing.whitelist, { type: 'schema' as const, name: schemaName }],
+          };
+        }
+      }
+
+      const newWhitelist = convertDatabaseContextToWhitelist(currentDatabases);
+      const updatedVersions = contextContent.versions.map(v => {
+        if (v.version === publishedVersion) {
+          return { ...v, whitelist: newWhitelist, lastEditedAt: new Date().toISOString(), lastEditedBy: userId };
+        }
+        return v;
+      });
+
+      editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
+      await publishFile({ fileId: contextId });
+    } catch (error) {
+      console.error('Failed to toggle schema whitelist:', error);
+    } finally {
+      setWhitelistToggling(false);
+    }
+  }, [contextId, contextContent, userId, contextDatabases, fileName]);
+
   // Add context doc handler
   const [contextInput, setContextInput] = useState('');
   const [contextAdding, setContextAdding] = useState(false);
@@ -278,6 +342,25 @@ export default function ConnectionFormV2({
       setContextAdding(false);
     }
   }, [contextId, contextContent, userId, contextInput]);
+
+  // Reusable add-context-doc callback (for passing to child components)
+  const handleAddContextDoc = useCallback(async (text: string) => {
+    if (!contextId || !contextContent?.versions || !userId || !text.trim()) return;
+    const publishedVersion = getPublishedVersion(contextContent);
+    const updatedVersions = contextContent.versions.map(v => {
+      if (v.version === publishedVersion) {
+        return {
+          ...v,
+          docs: [...(v.docs || []), { content: text.trim() }],
+          lastEditedAt: new Date().toISOString(),
+          lastEditedBy: userId,
+        };
+      }
+      return v;
+    });
+    editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
+    await publishFile({ fileId: contextId });
+  }, [contextId, contextContent, userId]);
 
   const [redirectingToStatic, setRedirectingToStatic] = useState<false | 'csv' | 'sheets'>(false);
 
@@ -964,6 +1047,10 @@ export default function ConnectionFormV2({
                     onRetry={handleSchemaReload}
                     whitelistedSchemas={whitelistedDb?.schemas}
                     contextId={contextId}
+                    onSchemaWhitelistToggle={handleSchemaWhitelistToggle}
+                    whitelistToggling={whitelistToggling}
+                    onAddContext={handleAddContextDoc}
+                    hasContextDocs={!!contextDocs}
                   />
                 ) : (
                   <ConnectionTablesBrowser
