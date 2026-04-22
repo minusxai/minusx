@@ -98,6 +98,7 @@ const customConfig = defineConfig({
           border: {
             default: { value: '#D0D7DE' },
             muted: { value: '#E5E9ED' },
+            subtle: { value: '#EAEEF2' },      // Very light, for gentle separators
             emphasized: { value: '#BCC4CC' },  // Stronger borders
           },
           accent: {
@@ -135,6 +136,7 @@ const customConfig = defineConfig({
           border: {
             default: { value: '#30363D' },
             muted: { value: '#21262D' },
+            subtle: { value: '#1B1F24' },      // Very faint, for gentle separators
             emphasized: { value: '#3D444D' },  // Stronger borders
           },
           accent: {
@@ -204,6 +206,9 @@ const customConfig = defineConfig({
         },
         'border.muted': {
           value: { _light: '{colors.light.border.muted}', _dark: '{colors.dark.border.muted}' },
+        },
+        'border.subtle': {
+          value: { _light: '{colors.light.border.subtle}', _dark: '{colors.dark.border.subtle}' },
         },
         'border.emphasized': {
           value: { _light: '{colors.light.border.emphasized}', _dark: '{colors.dark.border.emphasized}' },
