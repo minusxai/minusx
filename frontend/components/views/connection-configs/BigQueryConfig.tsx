@@ -1,7 +1,7 @@
 'use client';
 
-import { Box, Text, Input, VStack, Button, Textarea } from '@chakra-ui/react';
-import { LuUpload } from 'react-icons/lu';
+import { Box, Text, HStack, Textarea, Button } from '@chakra-ui/react';
+import { LuUpload, LuCheck } from 'react-icons/lu';
 import { BaseConfigProps } from './types';
 
 export default function BigQueryConfig({ config, onChange, mode }: BaseConfigProps) {
@@ -49,22 +49,23 @@ export default function BigQueryConfig({ config, onChange, mode }: BaseConfigPro
     <>
       {/* Service Account JSON */}
       <Box>
-        <Text fontSize="sm" fontWeight="700" mb={2}>
-          Service Account JSON
-          {mode === 'view' && (
-            <Text as="span" fontSize="xs" color="accent.warning" ml={2}>
-              (re-upload required for security)
-            </Text>
-          )}
-        </Text>
-        <VStack align="stretch" gap={2}>
+        <HStack justify="space-between" mb={2}>
+          <Text fontSize="sm" fontWeight="700">
+            Service Account JSON
+            {mode === 'view' && (
+              <Text as="span" fontSize="xs" color="accent.warning" ml={2}>
+                (re-upload required for security)
+              </Text>
+            )}
+          </Text>
           <Button
             as="label"
-            size="sm"
-            colorPalette="teal"
+            size="xs"
+            variant="outline"
             cursor="pointer"
           >
-            <LuUpload /> Upload JSON File
+            <LuUpload size={12} />
+            Upload .json
             <input
               type="file"
               accept=".json"
@@ -72,32 +73,25 @@ export default function BigQueryConfig({ config, onChange, mode }: BaseConfigPro
               style={{ display: 'none' }}
             />
           </Button>
-          <hr />
-          <Textarea
-            value={serviceAccountJson}
-            onChange={(e) => handleServiceAccountJsonChange(e.target.value)}
-            placeholder='{"type": "service_account", "project_id": "...", ...}'
-            fontFamily="mono"
-            fontSize="xs"
-            minH="150px"
-            readOnly
-          />
-        </VStack>
-      </Box>
-      <Box>
-        <Text fontSize="sm" fontWeight="700" mb={2}>
-          Project ID
-        </Text>
-        <Input
-          value={projectId}
-          readOnly
-          placeholder="Extracted from service account JSON"
+        </HStack>
+        <Textarea
+          value={serviceAccountJson}
+          onChange={(e) => handleServiceAccountJsonChange(e.target.value)}
+          placeholder='{"type": "service_account", "project_id": "...", ...}'
           fontFamily="mono"
-          bg="bg.muted"
+          fontSize="xs"
+          minH="120px"
+          readOnly
         />
-        <Text fontSize="xs" color="fg.muted" mt={1}>
-          Automatically extracted from service account JSON
-        </Text>
+        {/* Project ID — auto-extracted, shown inline */}
+        {projectId && (
+          <HStack gap={1.5} mt={1.5}>
+            <LuCheck size={12} color="var(--chakra-colors-accent-teal)" />
+            <Text fontSize="xs" color="fg.muted">
+              Project: <Text as="span" fontFamily="mono" fontWeight="600" color="fg.default">{projectId}</Text>
+            </Text>
+          </HStack>
+        )}
       </Box>
     </>
   );

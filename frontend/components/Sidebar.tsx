@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -83,6 +83,7 @@ export default function Sidebar() {
   // Avoid hydration mismatch: showAdvanced is false on server, may be true on client after localStorage restore
   const [mounted, setMounted] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [logoHovered, setLogoHovered] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
 
@@ -138,6 +139,7 @@ export default function Sidebar() {
         category: 'Analytics',
         items: [
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
+          { href: '/history', icon: <LuHistory />, label: 'Conversations' },
         ],
       },
       {
@@ -190,55 +192,66 @@ export default function Sidebar() {
         borderBottom="1px solid"
         borderColor="border.default"
       >
-        <Link href="/" prefetch={true} style={{ textDecoration: 'none' }}>
-          {isCollapsed ? (
+        {isCollapsed ? (
+          <Tooltip content="Expand sidebar" positioning={{ placement: 'right' }}>
             <Box
               cursor="pointer"
-              _hover={{ opacity: 0.8 }}
+              onClick={handleToggleSidebar}
+              onMouseEnter={() => setLogoHovered(true)}
+              onMouseLeave={() => setLogoHovered(false)}
               transition="opacity 0.2s"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              width={8}
+              height={8}
             >
-              <Box
-                aria-label="Workspace logo"
-                role="img"
-                width={8}
-                height={8}
-                flexShrink={0}
-              />
+              {logoHovered ? (
+                <Icon as={LuChevronRight} boxSize={5} color="accent.teal" />
+              ) : (
+                <Box
+                  aria-label="Workspace logo"
+                  role="img"
+                  width={8}
+                  height={8}
+                  flexShrink={0}
+                />
+              )}
             </Box>
-          ) : (
-            <HStack gap={3} cursor="pointer" _hover={{ opacity: 0.8 }} transition="opacity 0.2s">
-              <Box
-                aria-label="Workspace logo"
-                role="img"
-                width={8}
-                height={8}
-                flexShrink={0}
-              />
-              <Text
-                fontSize="lg"
-                fontWeight="900"
-                letterSpacing="-0.02em"
-                color="fg.default"
-                fontFamily="body"
-                opacity={isCollapsed ? 0 : 1}
-                transition="opacity 0.2s"
-              >
-                {displayName}
-              </Text>
-            </HStack>
-          )}
-        </Link>
-        {!isCollapsed && (
-          <IconButton
-            onClick={handleToggleSidebar}
-            variant="ghost"
-            aria-label="Collapse sidebar"
-            size="sm"
-            opacity={isCollapsed ? 0 : 1}
-            transition="opacity 0.2s"
-          >
-            <LuChevronLeft />
-          </IconButton>
+          </Tooltip>
+        ) : (
+          <>
+            <Link href="/" prefetch={true} style={{ textDecoration: 'none' }}>
+              <HStack gap={3} cursor="pointer" _hover={{ opacity: 0.8 }} transition="opacity 0.2s">
+                <Box
+                  aria-label="Workspace logo"
+                  role="img"
+                  width={8}
+                  height={8}
+                  flexShrink={0}
+                />
+                <Text
+                  fontSize="lg"
+                  fontWeight="900"
+                  letterSpacing="-0.02em"
+                  color="fg.default"
+                  fontFamily="body"
+                  transition="opacity 0.2s"
+                >
+                  {displayName}
+                </Text>
+              </HStack>
+            </Link>
+            <IconButton
+              onClick={handleToggleSidebar}
+              variant="ghost"
+              aria-label="Collapse sidebar"
+              size="sm"
+            >
+              <LuChevronLeft />
+            </IconButton>
+          </>
+
         )}
       </Flex>
 
@@ -313,7 +326,7 @@ export default function Sidebar() {
               justify="space-between"
             >
               <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono">
-                Recent Chats
+                Recent Conversations
               </Text>
               <Icon
                 as={LuChevronDown}
@@ -344,23 +357,6 @@ export default function Sidebar() {
           </Box>
         ) : null}
       </VStack>
-
-        {/* Collapse button when collapsed */}
-        {isCollapsed && (
-          <>
-            <Box h="1px" bg="border.muted" mx={3} />
-            <Flex justify="center" py={3}>
-              <IconButton
-                onClick={handleToggleSidebar}
-                variant="ghost"
-                aria-label="Expand sidebar"
-                size="sm"
-              >
-                <LuChevronRight />
-              </IconButton>
-            </Flex>
-          </>
-        )}
 
       {/* Footer */}
       <Box borderTop="1px solid" borderColor="border.default" flexShrink={0}

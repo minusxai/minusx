@@ -3,6 +3,7 @@
 import { Box, IconButton, Text, HStack } from '@chakra-ui/react';
 import SearchBar from './SearchBar';
 import { LuDownload, LuZap } from 'react-icons/lu';
+import { useAppSelector } from '@/store/hooks';
 
 interface BottomBarProps {
   showChat?: boolean;
@@ -11,6 +12,7 @@ interface BottomBarProps {
 }
 
 export default function BottomBar({ showChat, filePath, databaseName }: BottomBarProps) {
+  const rightSidebarCollapsed = useAppSelector(state => state.ui.rightSidebarCollapsed);
   return (
     <Box
       flexShrink={0}
@@ -32,8 +34,8 @@ export default function BottomBar({ showChat, filePath, databaseName }: BottomBa
         </Text>
       </HStack> */}
 
-      {/* Search bar in the middle */}
-      {showChat && (
+      {/* Search bar in the middle — hidden when right sidebar is open (chat visible there) */}
+      {showChat && rightSidebarCollapsed && (
         <Box flex="1" width="100%">
           <SearchBar inBottomBar={true} filePath={filePath} databaseName={databaseName} />
         </Box>

@@ -15,8 +15,8 @@
  * - Domain-specific logic (connection testing, JSON parsing)
  * - Calling onChange for content updates
  */
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Box,
@@ -26,22 +26,26 @@ import {
   Text,
   Heading,
   HStack,
-  Menu,
-  Portal,
-  Icon,
-  SimpleGrid,
   Progress,
+  SimpleGrid,
+  Switch,
+  Textarea,
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuChevronDown, LuTable, LuSettings, LuArrowLeft, LuCircleAlert } from 'react-icons/lu';
-import { ConnectionContent } from '@/lib/types';
+import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck, LuBookOpen, LuPlus, LuLayoutDashboard, LuCompass, LuExternalLink } from 'react-icons/lu';
+import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types';
 import { testConnection } from '@/lib/backend/python-backend';
 import TabSwitcher from '../TabSwitcher';
 import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { useFileByPath } from '@/lib/hooks/file-state-hooks';
+import { useFileByPath, useFile } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile } from '@/lib/api/file-state';
+import { convertDatabaseContextToWhitelist } from '@/lib/context/context-utils';
+import { getPublishedVersion } from '@/lib/context/context-utils';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
+import StaticTablesBrowser from '../StaticTablesBrowser';
+import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import Image from 'next/image';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
@@ -158,23 +162,225 @@ export default function ConnectionFormV2({
   const showJson = useAppSelector((state) => state.ui.devMode);
   const staticConnectionPath = resolvePath(userMode, '/database/static');
   const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
-  const [redirectingToStatic, setRedirectingToStatic] = useState(false);
+  const homeFolder = useAppSelector((state) => state.auth.user?.home_folder) || '';
+  const homePath = resolvePath(userMode, homeFolder || '/');
+  const { databases: contextDatabases, documentation: contextDocs, hasContext, contextId } = useContextHook(homePath, undefined, true);
+  // Check whitelist status for this specific connection: 'full' | 'partial' | 'none'
+  const whitelistedDb = hasContext ? contextDatabases.find(db => db.databaseName === fileName) : undefined;
+  const whitelistStatus: 'full' | 'partial' | 'none' = (() => {
+    if (!whitelistedDb) return 'none';
+    // Count total tables in the connection's full schema
+    const totalTables = (content.schema?.schemas || []).reduce((sum, s) => sum + (s.tables?.length || 0), 0);
+    // Count whitelisted tables
+    const whitelistedTables = whitelistedDb.schemas.reduce((sum, s) => sum + (s.tables?.length || 0), 0);
+    if (totalTables === 0 || whitelistedTables >= totalTables) return 'full';
+    return 'partial';
+  })();
+  // Load context file content for whitelist toggle
+  const contextFileState = useFile(contextId, { skip: !contextId })?.fileState;
+  const contextContent = contextFileState?.content as ContextContent | undefined;
+  const userId = useAppSelector((state) => state.auth.user?.id);
+  const [whitelistToggling, setWhitelistToggling] = useState(false);
+
+  const handleWhitelistToggle = useCallback(async () => {
+    if (!contextId || !contextContent?.versions || !userId) return;
+    setWhitelistToggling(true);
+    try {
+      const publishedVersion = getPublishedVersion(contextContent);
+      const versionContent = contextContent.versions.find(v => v.version === publishedVersion);
+      if (!versionContent) return;
+
+      // Get current databases in editor format
+      // parentSchema has all available connections (what the context CAN whitelist)
+      const availableDbs = contextContent.parentSchema || contextContent.fullSchema || [];
+
+      // Convert current whitelist to DatabaseContext[] for editing
+      const currentDatabases: DatabaseContext[] = availableDbs.map(db => {
+        // Find what's currently whitelisted for this db
+        const whitelistedInContext = contextDatabases.find(cd => cd.databaseName === db.databaseName);
+        if (whitelistedInContext && whitelistedInContext.schemas.length > 0) {
+          return {
+            databaseName: db.databaseName,
+            whitelist: whitelistedInContext.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+          };
+        }
+        return { databaseName: db.databaseName, whitelist: [] };
+      });
+
+      // Toggle this connection
+      const dbIndex = currentDatabases.findIndex(db => db.databaseName === fileName);
+      const shouldWhitelist = whitelistStatus === 'none';
+
+      if (dbIndex >= 0) {
+        currentDatabases[dbIndex] = {
+          ...currentDatabases[dbIndex],
+          whitelist: shouldWhitelist
+            ? (availableDbs.find(db => db.databaseName === fileName)?.schemas || []).map(s => ({ type: 'schema' as const, name: s.schema }))
+            : [],
+        };
+      } else if (shouldWhitelist) {
+        const dbSchemas = availableDbs.find(db => db.databaseName === fileName)?.schemas || [];
+        currentDatabases.push({
+          databaseName: fileName,
+          whitelist: dbSchemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+        });
+      }
+
+      // Convert to storage format and update version
+      const newWhitelist = convertDatabaseContextToWhitelist(currentDatabases);
+      const updatedVersions = contextContent.versions.map(v => {
+        if (v.version === publishedVersion) {
+          return { ...v, whitelist: newWhitelist, lastEditedAt: new Date().toISOString(), lastEditedBy: userId };
+        }
+        return v;
+      });
+
+      // Edit and publish
+      editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
+      await publishFile({ fileId: contextId });
+    } catch (error) {
+      console.error('Failed to toggle whitelist:', error);
+    } finally {
+      setWhitelistToggling(false);
+    }
+  }, [contextId, contextContent, userId, contextDatabases, fileName, whitelistStatus]);
+
+  // Per-schema whitelist toggle (for static connection datasets)
+  const handleSchemaWhitelistToggle = useCallback(async (schemaName: string) => {
+    if (!contextId || !contextContent?.versions || !userId) return;
+    setWhitelistToggling(true);
+    try {
+      const publishedVersion = getPublishedVersion(contextContent);
+      const versionContent = contextContent.versions.find(v => v.version === publishedVersion);
+      if (!versionContent) return;
+
+      const availableDbs = contextContent.parentSchema || contextContent.fullSchema || [];
+
+      const currentDatabases: DatabaseContext[] = availableDbs.map(db => {
+        const whitelistedInContext = contextDatabases.find(cd => cd.databaseName === db.databaseName);
+        if (whitelistedInContext && whitelistedInContext.schemas.length > 0) {
+          return {
+            databaseName: db.databaseName,
+            whitelist: whitelistedInContext.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+          };
+        }
+        return { databaseName: db.databaseName, whitelist: [] };
+      });
+
+      const dbIndex = currentDatabases.findIndex(db => db.databaseName === fileName);
+      if (dbIndex < 0) {
+        // Connection not in whitelist yet — add it with just this schema
+        currentDatabases.push({
+          databaseName: fileName,
+          whitelist: [{ type: 'schema' as const, name: schemaName }],
+        });
+      } else {
+        const existing = currentDatabases[dbIndex];
+        const schemaInWhitelist = existing.whitelist.some(w => w.type === 'schema' && w.name === schemaName);
+        if (schemaInWhitelist) {
+          // Remove this schema
+          currentDatabases[dbIndex] = {
+            ...existing,
+            whitelist: existing.whitelist.filter(w => !(w.type === 'schema' && w.name === schemaName)),
+          };
+        } else {
+          // Add this schema
+          currentDatabases[dbIndex] = {
+            ...existing,
+            whitelist: [...existing.whitelist, { type: 'schema' as const, name: schemaName }],
+          };
+        }
+      }
+
+      const newWhitelist = convertDatabaseContextToWhitelist(currentDatabases);
+      const updatedVersions = contextContent.versions.map(v => {
+        if (v.version === publishedVersion) {
+          return { ...v, whitelist: newWhitelist, lastEditedAt: new Date().toISOString(), lastEditedBy: userId };
+        }
+        return v;
+      });
+
+      editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
+      await publishFile({ fileId: contextId });
+    } catch (error) {
+      console.error('Failed to toggle schema whitelist:', error);
+    } finally {
+      setWhitelistToggling(false);
+    }
+  }, [contextId, contextContent, userId, contextDatabases, fileName]);
+
+  // Add context doc handler
+  const [contextInput, setContextInput] = useState('');
+  const [contextAdding, setContextAdding] = useState(false);
+  const [contextAdded, setContextAdded] = useState(false);
+  const [contextExpanded, setContextExpanded] = useState(false);
+
+  const handleAddContext = useCallback(async () => {
+    if (!contextId || !contextContent?.versions || !userId || !contextInput.trim()) return;
+    setContextAdding(true);
+    try {
+      const publishedVersion = getPublishedVersion(contextContent);
+      const updatedVersions = contextContent.versions.map(v => {
+        if (v.version === publishedVersion) {
+          return {
+            ...v,
+            docs: [...(v.docs || []), { content: contextInput.trim() }],
+            lastEditedAt: new Date().toISOString(),
+            lastEditedBy: userId,
+          };
+        }
+        return v;
+      });
+
+      editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
+      await publishFile({ fileId: contextId });
+      setContextInput('');
+      setContextAdded(true);
+    } catch (error) {
+      console.error('Failed to add context:', error);
+    } finally {
+      setContextAdding(false);
+    }
+  }, [contextId, contextContent, userId, contextInput]);
+
+  // Reusable add-context-doc callback (for passing to child components)
+  const handleAddContextDoc = useCallback(async (text: string) => {
+    if (!contextId || !contextContent?.versions || !userId || !text.trim()) return;
+    const publishedVersion = getPublishedVersion(contextContent);
+    const updatedVersions = contextContent.versions.map(v => {
+      if (v.version === publishedVersion) {
+        return {
+          ...v,
+          docs: [...(v.docs || []), { content: text.trim() }],
+          lastEditedAt: new Date().toISOString(),
+          lastEditedBy: userId,
+        };
+      }
+      return v;
+    });
+    editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
+    await publishFile({ fileId: contextId });
+  }, [contextId, contextContent, userId]);
+
+  const [redirectingToStatic, setRedirectingToStatic] = useState<false | 'csv' | 'sheets'>(false);
 
   useEffect(() => {
     if (redirectingToStatic && staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
-      const modeParam = userMode !== 'org' ? `?mode=${userMode}` : '';
-      router.push(`/f/${staticConnectionFile.fileState.id}${modeParam}`);
+      const modeParam = userMode !== 'org' ? `&mode=${userMode}` : '';
+      router.push(`/f/${staticConnectionFile.fileState.id}?tab=${redirectingToStatic}${modeParam}`);
     }
   }, [redirectingToStatic, staticConnectionFile?.fileState.id, userMode, router]);
 
   // For create mode, start with type selection step; skip if already editing
   const [step, setStep] = useState<'select-type' | 'configure'>(mode === 'create' ? 'select-type' : 'configure');
   // For existing connections, default to 'tables' view; for new connections, show 'settings'.
-  // Exception: static connection (CSV/GS) defaults to 'settings' because that's where
-  // the file upload / Google Sheets UI lives (StaticConnectionConfig).
+  // Static connection: defaults to 'tables' unless arriving via ?tab= param (means user
+  // clicked CSV/Google Sheets from the type selection and wants to upload).
   const isStaticConnection = content.type === 'csv' && fileName === 'static';
+  const searchParams = useSearchParams();
+  const hasTabParam = searchParams.has('tab');
   const [activeSection, setActiveSection] = useState<'tables' | 'settings'>(
-    mode === 'view' && !isStaticConnection ? 'tables' : 'settings'
+    mode === 'view' && !(isStaticConnection && hasTabParam) ? 'tables' : 'settings'
   );
   const [activeView, setActiveView] = useState<'form' | 'json'>('form');
   const [nameError, setNameError] = useState<string | null>(null);
@@ -210,11 +416,12 @@ export default function ConnectionFormV2({
   const handleTypeSelect = (selectedType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     // CSV and Google Sheets always go to the static connection — no new connection is created
     if (selectedType === 'csv' || selectedType === 'google-sheets') {
+      const tab = selectedType === 'google-sheets' ? 'sheets' : 'csv';
       if (staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
-        const modeParam = userMode !== 'org' ? `?mode=${userMode}` : '';
-        router.push(`/f/${staticConnectionFile.fileState.id}${modeParam}`);
+        const modeParam = userMode !== 'org' ? `&mode=${userMode}` : '';
+        router.push(`/f/${staticConnectionFile.fileState.id}?tab=${tab}${modeParam}`);
       } else {
-        setRedirectingToStatic(true);
+        setRedirectingToStatic(tab);
       }
       return;
     }
@@ -566,6 +773,7 @@ export default function ConnectionFormV2({
     }
 
     onSave();
+    setActiveSection('tables');
   };
 
   // Type Selection Screen (Step 1 for create mode)
@@ -622,73 +830,60 @@ export default function ConnectionFormV2({
           )}
 
           {/* Connection Type Cards */}
-          <SimpleGrid columns={{ base: 1, md: 4 }} gap={4}>
+          <SimpleGrid columns={{ base: 2, md: 4 }} gap={3}>
             {CONNECTION_TYPES.map((connType) => (
               <Box
                 key={connType.type}
                 as="button"
                 onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
-                p={6}
+                px={4}
+                py={4}
                 borderRadius="lg"
                 border="1px solid"
                 borderColor="border.default"
                 bg="bg.surface"
                 cursor={connType.comingSoon ? 'not-allowed' : 'pointer'}
-                textAlign="left"
-                transition="all 0.2s"
+                textAlign="center"
+                transition="all 0.15s"
                 position="relative"
+                opacity={connType.comingSoon ? 0.45 : 1}
                 _hover={connType.comingSoon ? {} : {
                   borderColor: 'accent.teal',
                   bg: 'bg.muted',
-                  transform: 'translateY(-2px)',
-                  shadow: 'md',
                 }}
               >
-                {/* Coming Soon Badge */}
                 {connType.comingSoon && (
-                  <Box
+                  <Text
                     position="absolute"
-                    top={2}
+                    top={1.5}
                     right={2}
-                    px={2}
-                    py={0.5}
-                    bg="accent.teal"
-                    color="white"
                     fontSize="2xs"
-                    fontWeight="700"
-                    borderRadius="full"
+                    color="fg.muted"
+                    fontWeight="600"
                   >
-                    Coming Soon
-                  </Box>
+                    Soon
+                  </Text>
                 )}
-                <VStack align="center" gap={4}>
-                  {/* Logo */}
+                <VStack gap={2}>
                   <Box
-                    w="64px"
-                    h="64px"
+                    w="36px"
+                    h="36px"
                     position="relative"
-                    borderRadius="md"
-                    overflow="hidden"
-                    opacity={connType.comingSoon ? 0.5 : 1}
-                    p={2}
-                    filter={connType.comingSoon ? 'grayscale(10%)' : 'none'}
+                    flexShrink={0}
                   >
                     <Image
                       src={connType.logo}
                       alt={connType.name}
                       fill
-                      style={{ objectFit: 'contain', padding: '4px' }}
+                      style={{ objectFit: 'contain' }}
                     />
                   </Box>
-
-                  {/* Name & Note */}
-                  <VStack align="center" gap={0}>
-                    <Text fontWeight="700" fontSize="md" fontFamily={"mono"}
-                    color={connType.comingSoon ? 'fg.subtle' : 'fg.default'}>
+                  <VStack gap={0}>
+                    <Text fontWeight="600" fontSize="sm" fontFamily="mono" color="fg.default">
                       {connType.name}
                     </Text>
                     {('note' in connType) && (connType as { note?: string }).note && (
-                      <Text fontSize="2xs" color="fg.muted" fontStyle="italic">
+                      <Text fontSize="2xs" color="fg.muted">
                         {(connType as { note?: string }).note}
                       </Text>
                     )}
@@ -697,15 +892,6 @@ export default function ConnectionFormV2({
               </Box>
             ))}
           </SimpleGrid>
-
-          {/* Cancel Button */}
-          {!hideCancel && (
-            <HStack>
-              <Button onClick={onCancel} variant="ghost" size="sm">
-                Cancel
-              </Button>
-            </HStack>
-          )}
         </VStack>
       </Box>
     );
@@ -726,7 +912,7 @@ export default function ConnectionFormV2({
                 p={0}
                 minW="auto"
               >
-                <Icon as={LuArrowLeft} boxSize={5} />
+                <LuArrowLeft size={20} />
               </Button>
             )}
             <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
@@ -748,8 +934,8 @@ export default function ConnectionFormV2({
                 {getTypeInfo(content.type).name}
               </Box>
             )}
-            {/* Unsaved changes warning */}
-            {isDirty && (
+            {/* Unsaved changes warning — hide in create mode (everything is unsaved) */}
+            {isDirty && mode === 'view' && (
               <HStack
                 gap={1.5}
                 px={2}
@@ -832,58 +1018,238 @@ export default function ConnectionFormV2({
 
         {/* Tables Browser - shown by default for existing connections */}
         {activeSection === 'tables' && (
-          <VStack align="stretch" gap={4} flex="1">
-            {/* System-managed notice for DuckDB connections */}
-            {content.type === 'duckdb' && (
-              <HStack
-                gap={2}
-                px={4}
-                py={3}
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.subtle"
-              >
-                <Text fontSize="sm" color="fg.muted">
-                  This is a system-managed, read-only connection. Its configuration cannot be changed.
-                </Text>
-              </HStack>
-            )}
-            {/* Hint message */}
-            {content.type !== 'duckdb' && (
-            <HStack
-              gap={2}
-              px={4}
-              py={3}
-              bg="accent.teal/10"
-              borderRadius="md"
-              border="1px solid"
-              borderColor="accent.teal/30"
-              justify="space-between"
-              flexWrap="wrap"
-            >
-              <Text fontSize="sm" color="fg.muted">
-                Click on any table to preview data, or{' '}
-                <Link
-                  href={`/new/question?databaseName=${encodeURIComponent(fileName)}`}
-                  style={{ color: 'var(--chakra-colors-accent-teal)', fontWeight: 600, textDecoration: 'underline' }}
+          <HStack align="start" gap={6} flex="1">
+            {/* Left: Tables */}
+            <VStack align="stretch" gap={4} flex="1" minW={0}>
+              {/* System-managed notice for DuckDB connections */}
+              {content.type === 'duckdb' && (
+                <HStack
+                  gap={2}
+                  px={4}
+                  py={3}
+                  bg="bg.muted"
+                  borderRadius="md"
+                  border="1px solid"
+                  borderColor="border.subtle"
                 >
-                  create a new question
-                </Link>
-              </Text>
-            </HStack>
+                  <Text fontSize="sm" color="fg.muted">
+                    This is a system-managed, read-only connection. Its configuration cannot be changed.
+                  </Text>
+                </HStack>
+              )}
+              <Box minH="400px">
+                {isStaticConnection ? (
+                  <StaticTablesBrowser
+                    schemas={schemas}
+                    schemaLoading={schemaLoading}
+                    schemaError={schemaError}
+                    connectionName={fileName}
+                    onRetry={handleSchemaReload}
+                    whitelistedSchemas={whitelistedDb?.schemas}
+                    contextId={contextId}
+                    onSchemaWhitelistToggle={handleSchemaWhitelistToggle}
+                    whitelistToggling={whitelistToggling}
+                    onAddContext={handleAddContextDoc}
+                    hasContextDocs={!!contextDocs}
+                  />
+                ) : (
+                  <ConnectionTablesBrowser
+                    schemas={schemas}
+                    schemaLoading={schemaLoading}
+                    schemaError={schemaError}
+                    connectionName={fileName}
+                    onRetry={handleSchemaReload}
+                  />
+                )}
+              </Box>
+            </VStack>
+
+            {/* Right: Quick Actions — hide for static (context is per-dataset) and duckdb */}
+            {content.type !== 'duckdb' && !isStaticConnection && (
+              <Box
+                w="300px"
+                flexShrink={0}
+                borderRadius="lg"
+                border="1px solid"
+                borderColor="border.default"
+                bg="bg.surface"
+                p={4}
+              >
+                <Text fontSize="sm" fontWeight="700" mb={3} fontFamily="mono">
+                  Quick Actions
+                </Text>
+                <VStack align="stretch" gap={1}>
+                  {/* 1. Whitelist Tables — toggle */}
+                  <HStack
+                    gap={2.5}
+                    px={3}
+                    py={2}
+                    borderRadius="md"
+                    justify="space-between"
+                  >
+                    <VStack align="start" gap={0}>
+                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">
+                        Whitelist Tables
+                      </Text>
+                      <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
+                        {whitelistStatus === 'full' ? 'All tables in knowledge base' : whitelistStatus === 'partial' ? 'Some tables selected' : 'Currently not in knowledge base'}
+                      </Text>
+                      {contextId && (
+                        <Link href={`/f/${contextId}?tab=databases`} target="_blank">
+                          <Text fontSize="2xs" color="fg.muted" fontFamily="mono" lineHeight="1" _hover={{ color: 'accent.teal' }}>
+                            See all table selections →
+                          </Text>
+                        </Link>
+                      )}
+                    </VStack>
+                    <Switch.Root
+                      checked={whitelistStatus !== 'none'}
+                      onCheckedChange={() => handleWhitelistToggle()}
+                      disabled={whitelistToggling || !contextId}
+                      size="sm"
+                      colorPalette="teal"
+                    >
+                      <Switch.HiddenInput />
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                    </Switch.Root>
+                  </HStack>
+
+                  {/* 2. Add Context — expandable inline form */}
+                  <VStack align="stretch" gap={0} px={3} py={2}>
+                    {contextAdded ? (
+                      <>
+                        <HStack gap={2.5}>
+                          <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
+                          <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="accent.teal">
+                            Context Saved
+                          </Text>
+                        </HStack>
+                        {contextId && (
+                          <Link href={`/f/${contextId}?tab=docs`} target="_blank">
+                            <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }} mt={1} ml={6}>
+                              See full knowledge base →
+                            </Text>
+                          </Link>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <HStack justify="space-between">
+                          <VStack align="start" gap={0}>
+                            <Text fontSize="xs" fontWeight="600" fontFamily="mono">
+                              Add Context
+                            </Text>
+                            {contextDocs && contextId && (
+                              <Link href={`/f/${contextId}?tab=docs`} target="_blank">
+                                <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }}>
+                                  See existing docs →
+                                </Text>
+                              </Link>
+                            )}
+                          </VStack>
+                          <Button
+                            size="2xs"
+                            variant="outline"
+                            onClick={() => setContextExpanded(!contextExpanded)}
+                            fontSize="2xs"
+                            fontFamily="mono"
+                          >
+                            {contextExpanded ? 'Hide' : 'Add'}
+                          </Button>
+                        </HStack>
+                        {contextExpanded && (
+                          <VStack align="stretch" gap={1.5} mt={2}>
+                            <Box position="relative">
+                              <Textarea
+                                value={contextInput}
+                                onChange={(e) => setContextInput(e.target.value)}
+                                placeholder={`Describe the ${fileName} dataset...`}
+                                fontFamily="mono"
+                                fontSize="2xs"
+                                minH="50px"
+                                resize="vertical"
+                                pr="36px"
+                              />
+                              <Box position="absolute" bottom="8px" right="8px">
+                                <Button
+                                  size="2xs"
+                                  bg="accent.teal"
+                                  color="white"
+                                  onClick={handleAddContext}
+                                  loading={contextAdding}
+                                  disabled={!contextInput.trim() || !contextId}
+                                  borderRadius="full"
+                                  p={0}
+                                  minW="24px"
+                                  h="24px"
+                                >
+                                  <LuPlus size={12} />
+                                </Button>
+                              </Box>
+                            </Box>
+                          </VStack>
+                        )}
+                      </>
+                    )}
+                  </VStack>
+
+                  <Box h="1px" bg="border.default" my={2} />
+
+                  {/* 3. New Question */}
+                  <Link href={`/new/question?databaseName=${encodeURIComponent(fileName)}`}>
+                    <HStack
+                      gap={2.5}
+                      px={3}
+                      py={2}
+                      borderRadius="md"
+                      _hover={{ bg: 'bg.muted' }}
+                      transition="all 0.15s"
+                      cursor="pointer"
+                    >
+                      <LuPlus size={14} color="var(--chakra-colors-accent-teal)" />
+                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">New Question</Text>
+                    </HStack>
+                  </Link>
+
+                  {/* 4. Auto Dashboard */}
+                  <Link href={`/new/dashboard`}>
+                    <HStack
+                      gap={2.5}
+                      px={3}
+                      py={2}
+                      borderRadius="md"
+                      _hover={{ bg: 'bg.muted' }}
+                      transition="all 0.15s"
+                      cursor="pointer"
+                    >
+                      <LuLayoutDashboard size={14} color="var(--chakra-colors-accent-teal)" />
+                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">New Dashboard</Text>
+                    </HStack>
+                  </Link>
+
+                  {/* 5. Explore */}
+                  <Link href={`/explore`}>
+                    <HStack
+                      gap={2.5}
+                      px={3}
+                      py={2}
+                      borderRadius="md"
+                      _hover={{ bg: 'bg.muted' }}
+                      transition="all 0.15s"
+                      cursor="pointer"
+                    >
+                      <LuCompass size={14} color="var(--chakra-colors-accent-teal)" />
+                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">Explore</Text>
+                    </HStack>
+                  </Link>
+                </VStack>
+              </Box>
             )}
-            <Box minH="400px">
-              <ConnectionTablesBrowser
-                schemas={schemas}
-                schemaLoading={schemaLoading}
-                schemaError={schemaError}
-                connectionName={fileName}
-                onRetry={handleSchemaReload}
-              />
-            </Box>
-          </VStack>
+          </HStack>
         )}
+
 
         {/* Settings Section */}
         {activeSection === 'settings' && (
@@ -903,144 +1269,40 @@ export default function ConnectionFormV2({
             {/* Form View */}
             {activeView === 'form' && (
         <>
-        {/* Connection Name & Database Type - Side by Side */}
-        <HStack align="start" gap={4}>
-          {/* Connection Name */}
-          <Box flex={1}>
-            <Text fontSize="sm" fontWeight="700" mb={2}>
-              Connection Name
-            </Text>
-            <Input
-              value={fileName}
-              onChange={handleNameChange}
-              placeholder="analytics_prod"
-              disabled={mode === 'view'}
-              fontFamily="mono"
-              borderColor={nameError ? 'accent.danger' : undefined}
-            />
-            {nameError ? (
-              <HStack gap={1} mt={1}>
-                <LuTriangleAlert size={12} color="var(--chakra-colors-accent-danger)" />
-                <Text fontSize="xs" color="accent.danger">
-                  {nameError}
-                </Text>
-              </HStack>
-            ) : (
-              <Text fontSize="xs" color="fg.muted" mt={1}>
-                Lowercase letters, numbers, and underscores only
+        {/* Connection Name */}
+        <Box>
+          <Text fontSize="sm" fontWeight="700" mb={2}>
+            Connection Name
+          </Text>
+          <Input
+            value={fileName}
+            onChange={handleNameChange}
+            placeholder="analytics_prod"
+            disabled={mode === 'view'}
+            fontFamily="mono"
+            borderColor={nameError ? 'accent.danger' : undefined}
+          />
+          {nameError ? (
+            <HStack gap={1} mt={1}>
+              <LuTriangleAlert size={12} color="var(--chakra-colors-accent-danger)" />
+              <Text fontSize="xs" color="accent.danger">
+                {nameError}
               </Text>
-            )}
-          </Box>
-
-          {/* Database Type */}
-          <Box flex={1}>
-            <Text fontSize="sm" fontWeight="700" mb={2}>
-              Database Type
+            </HStack>
+          ) : (
+            <Text fontSize="xs" color="fg.muted" mt={1}>
+              Lowercase letters, numbers, and underscores only
             </Text>
-            {mode === 'view' ? (
-              <>
-                <HStack
-                  display="inline-flex"
-                  px={3}
-                  py={1.5}
-                  bg="accent.primary"
-                  color="white"
-                  fontWeight={700}
-                  borderRadius="full"
-                  fontFamily="mono"
-                  fontSize="xs"
-                  alignItems="center"
-                  gap={2}
-                >
-                  <Box w="16px" h="16px" position="relative" flexShrink={0}>
-                    <Image
-                      src={getTypeInfo(content.type).logo}
-                      alt={content.type}
-                      fill
-                      style={{ objectFit: 'contain' }}
-                    />
-                  </Box>
-                  {getTypeInfo(content.type).name}
-                </HStack>
-                <Text fontSize="xs" color="fg.muted" mt={2}>
-                  Database type cannot be changed after creation
-                </Text>
-              </>
-            ) : (
-              <Menu.Root>
-                <Menu.Trigger asChild>
-                  <Box
-                    px={3}
-                    py={2}
-                    borderRadius="md"
-                    border="1px solid"
-                    borderColor="border.default"
-                    bg="bg.surface"
-                    cursor="pointer"
-                    _hover={{ bg: 'bg.muted', borderColor: 'accent.teal' }}
-                    transition="all 0.2s"
-                  >
-                    <HStack gap={2} justify="space-between">
-                      <HStack gap={2}>
-                        <Box w="20px" h="20px" position="relative" flexShrink={0}>
-                          <Image
-                            src={getTypeInfo(content.type).logo}
-                            alt={content.type}
-                            fill
-                            style={{ objectFit: 'contain' }}
-                          />
-                        </Box>
-                        <Text fontSize="sm" fontWeight="500" fontFamily="mono">
-                          {getTypeInfo(content.type).name}
-                        </Text>
-                      </HStack>
-                      <Icon as={LuChevronDown} boxSize={4} color="fg.subtle" />
-                    </HStack>
-                  </Box>
-                </Menu.Trigger>
-                <Portal>
-                  <Menu.Positioner>
-                    <Menu.Content
-                      minW="240px"
-                      bg="bg.surface"
-                      borderColor="border.default"
-                      shadow="lg"
-                      p={1}
-                    >
-                      {CONNECTION_TYPES.filter(c => !c.comingSoon).map((connType) => (
-                        <Menu.Item
-                          key={connType.type}
-                          value={connType.type}
-                          cursor="pointer"
-                          borderRadius="sm"
-                          px={3}
-                          py={2}
-                          bg={content.type === connType.type ? 'accent.teal/10' : 'transparent'}
-                          _hover={{ bg: content.type === connType.type ? 'accent.teal/20' : 'bg.muted' }}
-                          onClick={() => handleTypeChange(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
-                        >
-                          <HStack gap={2}>
-                            <Box w="20px" h="20px" position="relative" flexShrink={0}>
-                              <Image
-                                src={connType.logo}
-                                alt={connType.name}
-                                fill
-                                style={{ objectFit: 'contain' }}
-                              />
-                            </Box>
-                            <Text fontWeight={content.type === connType.type ? '600' : '400'} fontFamily="mono">
-                              {connType.name}
-                            </Text>
-                          </HStack>
-                        </Menu.Item>
-                      ))}
-                    </Menu.Content>
-                  </Menu.Positioner>
-                </Portal>
-              </Menu.Root>
-            )}
-          </Box>
-        </HStack>
+          )}
+          {isStaticConnection && (
+            <HStack gap={2} mt={2} px={3} py={2} bg="accent.teal/5" borderRadius="md" border="1px solid" borderColor="accent.teal/20">
+              <LuCircleAlert size={13} color="var(--chakra-colors-accent-teal)" style={{ flexShrink: 0 }} />
+              <Text fontSize="xs" color="fg.muted">
+                All uploaded CSV, Parquet, and Google Sheets datasets are stored in this connection.
+              </Text>
+            </HStack>
+          )}
+        </Box>
 
         {/* BigQuery Configuration */}
         {content.type === 'bigquery' && (
@@ -1069,6 +1331,7 @@ export default function ConnectionFormV2({
             userMode={userMode}
             onError={setNameError}
             onPendingDeletion={onPendingDeletion}
+            onSave={onSave}
           />
         )}
 
@@ -1104,29 +1367,34 @@ export default function ConnectionFormV2({
           />
         )}
 
-        {/* Test Connection */}
-        <VStack align="stretch" gap={3}>
-          <HStack gap={2} align="center">
-            <Button
-              onClick={handleTest}
-              loading={testing}
-              disabled={!isFormValidForTest()}
-              colorPalette="red"
-              size="sm"
-              variant="outline"
-            >
-              Test Connection
-            </Button>
+        {/* Actions */}
+        <HStack gap={3} pt={2} justify="flex-end">
+          {showJson && (
             <Checkbox
               checked={includeSchema}
               onCheckedChange={(e) => setIncludeSchema(e.checked === true)}
               size="sm"
             >
               <Text fontSize="xs" color="fg.muted">
-                Include schema (slower)
+                Include schema
               </Text>
             </Checkbox>
-            {testResult && (
+          )}
+          {testResult && (
+            <HStack
+              gap={1.5}
+              px={2.5}
+              py={1}
+              bg={testResult.success ? 'accent.teal/10' : 'accent.danger/10'}
+              borderRadius="full"
+              border="1px solid"
+              borderColor={testResult.success ? 'accent.teal/30' : 'accent.danger/30'}
+            >
+              {testResult.success ? (
+                <LuCheck size={12} color="var(--chakra-colors-accent-teal)" />
+              ) : (
+                <LuCircleAlert size={12} color="var(--chakra-colors-accent-danger)" />
+              )}
               <Text
                 fontSize="xs"
                 color={testResult.success ? 'accent.teal' : 'accent.danger'}
@@ -1134,67 +1402,67 @@ export default function ConnectionFormV2({
               >
                 {testResult.message}
               </Text>
-            )}
-          </HStack>
-
-          {/* Schema Display */}
-          {testResult?.success && testResult.schema && testResult.schema.length > 0 && (
-            <Box
-              borderWidth="1px"
-              borderColor="border.subtle"
-              borderRadius="md"
-              p={4}
-              bg="bg.muted"
-              maxH="400px"
-              overflowY="auto"
-            >
-              <Text fontSize="sm" fontWeight="600" mb={3}>
-                Available Schemas & Tables
-              </Text>
-              <VStack align="stretch" gap={3}>
-                {testResult.schema.map((schema: any, schemaIdx: number) => (
-                  <Box key={schemaIdx}>
-                    <Text fontSize="xs" fontWeight="700" color="accent.emphasized" mb={2}>
-                      {schema.schema}
-                    </Text>
-                    <VStack align="stretch" gap={2} pl={3}>
-                      {schema.tables.map((table: any, tableIdx: number) => (
-                        <Box key={tableIdx}>
-                          <Text fontSize="xs" fontWeight="600" fontFamily="mono">
-                            {table.table}
-                          </Text>
-                          <Text fontSize="xs" color="fg.muted" fontFamily="mono" pl={3}>
-                            {table.columns.map((col: any) => col.name).join(', ')}
-                          </Text>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </Box>
-                ))}
-              </VStack>
-            </Box>
+            </HStack>
           )}
-            </VStack>
-
-        {/* Save Button */}
-        <HStack gap={2}>
+          <Button
+            onClick={handleTest}
+            loading={testing}
+            disabled={!isFormValidForTest()}
+            size="sm"
+            variant="outline"
+          >
+            Test Connection
+          </Button>
           <Button
             onClick={handleSaveClick}
             loading={isSaving}
-            disabled={!isDirty}
+            disabled={!isDirty || !isFormValidForTest()}
             size="sm"
             bg="accent.teal"
             color="white"
           >
             <LuSave />
-            Save DB Connection
+            Save Connection
           </Button>
-          {!hideCancel && isDirty && (
-            <Button onClick={onCancel} variant="ghost" size="sm">
-              Cancel
-            </Button>
-          )}
         </HStack>
+
+        {/* Schema Display */}
+        {testResult?.success && testResult.schema && testResult.schema.length > 0 && (
+          <Box
+            borderWidth="1px"
+            borderColor="border.subtle"
+            borderRadius="md"
+            p={4}
+            bg="bg.muted"
+            maxH="400px"
+            overflowY="auto"
+          >
+            <Text fontSize="sm" fontWeight="600" mb={3}>
+              Available Schemas & Tables
+            </Text>
+            <VStack align="stretch" gap={3}>
+              {testResult.schema.map((schema: any, schemaIdx: number) => (
+                <Box key={schemaIdx}>
+                  <Text fontSize="xs" fontWeight="700" color="accent.emphasized" mb={2}>
+                    {schema.schema}
+                  </Text>
+                  <VStack align="stretch" gap={2} pl={3}>
+                    {schema.tables.map((table: any, tableIdx: number) => (
+                      <Box key={tableIdx}>
+                        <Text fontSize="xs" fontWeight="600" fontFamily="mono">
+                          {table.table}
+                        </Text>
+                        <Text fontSize="xs" color="fg.muted" fontFamily="mono" pl={3}>
+                          {table.columns.map((col: any) => col.name).join(', ')}
+                        </Text>
+                      </Box>
+                    ))}
+                  </VStack>
+                </Box>
+              ))}
+            </VStack>
+          </Box>
+        )}
             </>
             )}
 

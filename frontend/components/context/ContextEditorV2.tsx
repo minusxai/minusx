@@ -8,6 +8,8 @@
 
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from '@/lib/navigation/use-navigation';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
 import { uploadFile } from '@/lib/object-store/client';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
@@ -95,7 +97,27 @@ export default function ContextEditorV2({
   onRunAll,
   onSelectRun,
 }: ContextEditorV2Props) {
-  const [topTab, setTopTab] = useState<'context' | 'evals'>('context');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  type TopTab = 'databases' | 'docs' | 'evals';
+  const validTabs: TopTab[] = ['databases', 'docs', 'evals'];
+  const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
+
+  const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
+
+  const setTopTab = useCallback((tab: TopTab) => {
+    setTopTabState(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'databases') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    const query = params.toString();
+    router.replace(`${window.location.pathname}${query ? `?${query}` : ''}`, { scroll: false });
+  }, [searchParams, router]);
+
   const [activeTab, setActiveTab] = useState<'picker' | 'yaml'>('picker');
   const [yamlText, setYamlText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -674,13 +696,34 @@ export default function ContextEditorV2({
       {/* Top-level Tabs */}
       <Tabs.Root
         value={topTab}
-        onValueChange={(e) => setTopTab(e.value as 'context' | 'evals')}
+        onValueChange={(e) => setTopTab(e.value as TopTab)}
         variant="line"
         colorPalette="teal"
       >
         <Tabs.List>
-          <Tabs.Trigger value="context" fontFamily="mono" fontSize="sm">
-            Context
+          <Tabs.Trigger value="databases" fontFamily="mono" fontSize="sm">
+            Databases
+          </Tabs.Trigger>
+          <Tabs.Trigger value="docs" fontFamily="mono" fontSize="sm">
+            Docs
+            {(content.docs?.length ?? 0) > 0 && (
+              <Box
+                display="inline-flex"
+                alignItems="center"
+                justifyContent="center"
+                w="18px"
+                h="18px"
+                // p={2}
+                borderRadius="full"
+                bg="accent.teal/20"
+                color="accent.teal"
+                fontSize="3xs"
+                fontWeight="700"
+                ml={1}
+              >
+                {content.docs!.length}
+              </Box>
+            )}
           </Tabs.Trigger>
           <Tabs.Trigger value="evals" fontFamily="mono" fontSize="sm">
             Evals
@@ -692,20 +735,53 @@ export default function ContextEditorV2({
           </Tabs.Trigger>
         </Tabs.List>
 
-        {/* Context Tab */}
-        <Tabs.Content value="context">
+        {/* Tables Tab */}
+        <Tabs.Content value="databases">
           {activeTab === 'picker' ? (
             <VStack gap={6} align="stretch">
               {/* Database Sections */}
               <Box>
-                <HStack gap={2} mb={0}>
-                  <Heading size="md">
-                    Database Connections
-                  </Heading>
-                </HStack>
-                <Text fontSize="sm" color="fg.muted" mb={3}>
-                  Whitelist schemas and tables from the available database connections
-                </Text>
+                {!isLoading && availableDatabases.length > 0 && (
+                  <HStack justify="space-between" mb={2}>
+                    <HStack
+                      gap={1.5}
+                      px={2.5}
+                      py={1}
+                      bg={content.databases === '*' ? 'accent.teal/10' : 'bg.muted'}
+                      borderRadius="full"
+                    >
+                      <Icon as={LuGlobe} boxSize={3} color={content.databases === '*' ? 'accent.teal' : 'fg.muted'} />
+                      <Text fontSize="xs" fontWeight="600" fontFamily="mono" color={content.databases === '*' ? 'accent.teal' : 'fg.muted'}>
+                        {content.databases === '*' ? 'All databases selected — includes future connections' : 'Custom selection'}
+                      </Text>
+                    </HStack>
+                    {content.databases === '*' ? (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => {
+                          const explicitDbs: DatabaseContext[] = availableDatabases.map(db => ({
+                            databaseName: db.databaseName,
+                            whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+                          }));
+                          onChange({ databases: explicitDbs });
+                        }}
+                        fontFamily="mono"
+                      >
+                        Edit selection
+                      </Button>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => onChange({ databases: '*' })}
+                        fontFamily="mono"
+                      >
+                        Wildcard — select all
+                      </Button>
+                    )}
+                  </HStack>
+                )}
                 {!isLoading && availableDatabases.length > 0 && totalWhitelisted === 0 && (
                   <Box
                     p={3}
@@ -718,7 +794,7 @@ export default function ContextEditorV2({
                     <HStack gap={2}>
                       <LuCircleAlert color="var(--chakra-colors-accent-warning)" />
                       <Text color="accent.warning" fontSize="sm">
-                        No schemas or tables whitelisted. Select at least one schema or table below to make data available for this context.
+                        No schemas or tables whitelisted. Select at least one below.
                       </Text>
                     </HStack>
                   </Box>
@@ -733,49 +809,6 @@ export default function ContextEditorV2({
                   </Box>
                 ) : (
                   <VStack gap={4} align="stretch">
-                    {content.databases === '*' ? (
-                      <Box
-                        p={3}
-                        mb={1}
-                        bg="accent.teal/10"
-                        border="1px solid"
-                        borderColor="accent.teal/30"
-                        borderRadius="md"
-                      >
-                        <HStack gap={2} justify="space-between">
-                          <HStack gap={2}>
-                            <Icon as={LuGlobe} boxSize={4} color="accent.teal" />
-                            <Text fontSize="sm" color="accent.teal" fontWeight="600">
-                              All connections wildcarded — all current and future schemas are exposed
-                            </Text>
-                          </HStack>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                              const explicitDbs: DatabaseContext[] = availableDatabases.map(db => ({
-                                databaseName: db.databaseName,
-                                whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
-                              }));
-                              onChange({ databases: explicitDbs });
-                            }}
-                          >
-                            Switch to explicit
-                          </Button>
-                        </HStack>
-                      </Box>
-                    ) : (
-                      <HStack justify="flex-end" mb={1}>
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => onChange({ databases: '*' })}
-                        >
-                          <Icon as={LuGlobe} boxSize={3} />
-                          Expose all (wildcard)
-                        </Button>
-                      </HStack>
-                    )}
                     {availableDatabases.map((database) => {
                       const isConnectionWildcard = content.databases === '*';
                       // When databases === '*', pass empty whitelist and let connectionWhitelisted prop handle visuals
@@ -928,19 +961,64 @@ export default function ContextEditorV2({
                 )}
               </Box>
 
-              {/* Markdown Documentation */}
+            </VStack>
+          ) : (
+            <Box
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              overflow="hidden"
+              minH="600px"
+            >
+              <Editor
+                height="600px"
+                language="yaml"
+                value={yamlText}
+                onChange={(value) => handleYamlChange(value || '')}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  fontSize: 14,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                }}
+              />
+            </Box>
+          )}
+          {/* Stats Footer */}
+          {!isLoading && totalWhitelisted > 0 && (
+            <Box
+              p={3}
+              bg="bg.surface"
+              borderRadius="md"
+              border="1px solid"
+              borderColor="border.default"
+            >
+              <HStack gap={2} fontSize="sm" color="fg.muted">
+                <LuCircleCheck color="var(--chakra-colors-accent-success)" />
+                <Text>
+                  <strong>{content.databases?.length || 0}</strong> databases configured with{' '}
+                  <strong>{totalWhitelisted}</strong> total whitelisted items
+                </Text>
+              </HStack>
+            </Box>
+          )}
+        </Tabs.Content>
+
+        {/* Docs Tab */}
+        <Tabs.Content value="docs">
+          <VStack gap={6} align="stretch">
               <Box>
-                <HStack gap={2} mb={0}>
-                  <Heading size="md">
-                    Documentation (Markdown)
-                  </Heading>
-                  {(!content.docs || content.docs.length === 0) && (
-                    <HStack gap={1} color="accent.warning">
-                      <LuCircleAlert size={16} />
-                      <Text fontSize="sm" fontWeight="500">No documentation added</Text>
-                    </HStack>
-                  )}
-                </HStack>
+                {(!content.docs || content.docs.length === 0) && (
+                  <HStack gap={1} color="accent.warning" mb={3}>
+                    <LuCircleAlert size={16} />
+                    <Text fontSize="sm" fontWeight="500">No documentation added</Text>
+                  </HStack>
+                )}
                 <Text fontSize="sm" color="fg.muted" mb={3}>
                   Add notes and documentation about the databases
                 </Text>
@@ -1199,52 +1277,7 @@ export default function ContextEditorV2({
                   </Button>
                 </VStack>
               </Box>
-            </VStack>
-          ) : (
-            <Box
-              border="1px solid"
-              borderColor="border.default"
-              borderRadius="md"
-              overflow="hidden"
-              minH="600px"
-            >
-              <Editor
-                height="600px"
-                language="yaml"
-                value={yamlText}
-                onChange={(value) => handleYamlChange(value || '')}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  fontSize: 14,
-                  fontFamily: 'JetBrains Mono, monospace',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 2,
-                }}
-              />
-            </Box>
-          )}
-          {/* Stats Footer */}
-          {!isLoading && totalWhitelisted > 0 && (
-            <Box
-              p={3}
-              bg="bg.surface"
-              borderRadius="md"
-              border="1px solid"
-              borderColor="border.default"
-            >
-              <HStack gap={2} fontSize="sm" color="fg.muted">
-                <LuCircleCheck color="var(--chakra-colors-accent-success)" />
-                <Text>
-                  <strong>{content.databases?.length || 0}</strong> databases configured with{' '}
-                  <strong>{totalWhitelisted}</strong> total whitelisted items
-                </Text>
-              </HStack>
-            </Box>
-          )}
+          </VStack>
         </Tabs.Content>
 
         {/* Evals Tab */}

@@ -80,6 +80,7 @@ export const FILE_TYPE_METADATA = {
     category: 'analytics',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   report: {
     label: 'Report',
