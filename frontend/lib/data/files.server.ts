@@ -692,7 +692,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         return {
           content,
-          fileName: 'new_connection'
+          fileName: ''
         };
       }
 

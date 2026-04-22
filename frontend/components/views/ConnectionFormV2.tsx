@@ -138,6 +138,8 @@ interface ConnectionFormV2Props {
   hideCancel?: boolean;
   greeting?: string;
   onPendingDeletion?: (s3Key: string) => void;
+  /** When true, skip switching to 'tables' view after save (wizard handles navigation). */
+  wizardMode?: boolean;
 }
 
 export default function ConnectionFormV2({
@@ -155,6 +157,7 @@ export default function ConnectionFormV2({
   hideCancel = false,
   greeting,
   onPendingDeletion,
+  wizardMode = false,
 }: ConnectionFormV2Props) {
   const router = useRouter();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -773,7 +776,9 @@ export default function ConnectionFormV2({
     }
 
     onSave();
-    setActiveSection('tables');
+    if (!wizardMode) {
+      setActiveSection('tables');
+    }
   };
 
   // Type Selection Screen (Step 1 for create mode)

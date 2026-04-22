@@ -173,6 +173,7 @@ export default function ConnectionContainerV2({
       hideCancel={hideCancel}
       greeting={greeting}
       onPendingDeletion={(s3Key) => { pendingDeletionsRef.current.push(s3Key); }}
+      wizardMode={!!onSaveSuccess}
     />
   );
 }
