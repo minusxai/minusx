@@ -48,9 +48,11 @@ interface StepGeneratingProps {
   contextFileId: number;
   greeting?: string;
   onComplete?: () => Promise<void>;
+  /** For static connections: only build dashboard for these schemas. */
+  staticSchemas?: string[] | null;
 }
 
-export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
@@ -147,19 +149,23 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
 
-    // Build simplified schema from context (same as ChatInterface)
+    // Build simplified schema — filter to relevant schemas for static connections
     const selectedDb = databases.find(d => d.databaseName === connectionName) || databases[0];
-    const simplifiedSchema = selectedDb?.schemas?.map(s => ({
+    const allSchemas = selectedDb?.schemas ?? [];
+    const relevantSchemas = staticSchemas?.length
+      ? allSchemas.filter(s => staticSchemas.includes(s.schema))
+      : allSchemas;
+    const simplifiedSchema = relevantSchemas.map(s => ({
       schema: s.schema,
       tables: s.tables.map(t => t.table)
-    })) || [];
+    }));
 
     dispatch(createConversation({
       conversationID: generateVirtualConversationId(),
       agent: 'OnboardingDashboardAgent',
       agent_args: {
         connection_id: connectionName,
-        context_path: '/org/context',
+        context_path: `${modeRoot}/context`,
         context_version: null,
         schema: simplifiedSchema,
         context: contextDocs || '',
@@ -167,7 +173,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       },
       message: [
         DASHBOARD_PROMPT,
+        `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
         `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
+        staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
         userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
       ].filter(Boolean).join('\n\n'),
     }));

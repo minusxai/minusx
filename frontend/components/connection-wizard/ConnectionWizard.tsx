@@ -140,6 +140,7 @@ export default function ConnectionWizard({
             contextFileId={contextFileId!}
             greeting={greeting('generating')}
             onComplete={onComplete}
+            staticSchemas={staticSchemas}
           />
         )}
       </Box>

@@ -339,10 +339,14 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       tables: s.tables.map(t => t.table)
     }));
 
-    // Build agent message — mention which datasets are new for static connections
-    const agentMessage = staticSchemas?.length
-      ? `${AGENT_DESCRIBE_MESSAGE}\n\nFocus on the newly added dataset(s): ${staticSchemas.join(', ')}. Only document these schemas, not other existing data in the connection.`
-      : AGENT_DESCRIBE_MESSAGE;
+    // Build agent message — include connection + schema context
+    const agentMessage = [
+      AGENT_DESCRIBE_MESSAGE,
+      `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
+      staticSchemas?.length
+        ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not document other existing data in the connection.`
+        : '',
+    ].filter(Boolean).join('\n\n');
 
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
