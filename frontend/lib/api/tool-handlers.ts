@@ -20,6 +20,7 @@ import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType, canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectAppState } from '@/store/appStateSelector';
+import { selectUnrestrictedMode } from '@/store/uiSlice';
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import { uploadChartOrEmbed } from '@/lib/chart/chart-attachments';
@@ -634,24 +635,27 @@ registerFrontendTool('CreateFile', async (args, context) => {
 
   // --- Page-context guards for background file creation ---
   const state = context.state ?? getStore().getState();
+  const unrestrictedMode = selectUnrestrictedMode(state);
   const { appState } = state.navigation ? selectAppState(state) : { appState: null };
 
-  // Dashboards can never be created in the background
-  if (file_type === 'dashboard') {
-    const msg = 'Cannot create a dashboard in the background. Navigate to /new/dashboard instead.';
-    return { content: { success: false, error: msg }, details: { success: false, error: msg } };
-  }
+  if (!unrestrictedMode) {
+    // Dashboards can never be created in the background
+    if (file_type === 'dashboard') {
+      const msg = 'Cannot create a dashboard in the background. Navigate to /new/dashboard instead.';
+      return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+    }
 
-  // On a question page, don't allow creating another question in the background
-  if (appState?.type === 'file' && appState.state.fileState.type === 'question' && file_type === 'question') {
-    const msg = 'Cannot create a background question when on a question page. Navigate to /new/question instead.';
-    return { content: { success: false, error: msg }, details: { success: false, error: msg } };
-  }
+    // On a question page, don't allow creating another question in the background
+    if (appState?.type === 'file' && appState.state.fileState.type === 'question' && file_type === 'question') {
+      const msg = 'Cannot create a background question when on a question page. Navigate to /new/question instead.';
+      return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+    }
 
-  // On the explore page, only allow question and folder creation in the background
-  if (appState?.type === 'explore' && file_type !== 'question' && file_type !== 'folder') {
-    const msg = `Cannot create a ${file_type} in the background from the explore page. Navigate to /new/${file_type} instead.`;
-    return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+    // On the explore page, only allow question and folder creation in the background
+    if (appState?.type === 'explore' && file_type !== 'question' && file_type !== 'folder') {
+      const msg = `Cannot create a ${file_type} in the background from the explore page. Navigate to /new/${file_type} instead.`;
+      return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+    }
   }
 
   // Guard: check create permission for this file type by role
