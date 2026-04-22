@@ -24,7 +24,7 @@ interface ConnectionTablesBrowserProps {
   onRetry: () => void;
 }
 
-const TABLES_PER_PAGE = 20;
+const TABLES_PER_PAGE = 18;
 
 export default function ConnectionTablesBrowser({
   schemas,
