@@ -583,7 +583,7 @@ export default function AgentTurnContainer({
               </HStack>
 
               {/* Detail pane below */}
-              <Box minW={0} h={rightPaneH} overflowY="auto" bg="bg.canvas">
+              <Box minW={0} overflowY="auto" bg="bg.canvas">
                 {selectedNode && renderRightPane(selectedNode)}
               </Box>
 

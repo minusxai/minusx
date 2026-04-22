@@ -33,6 +33,8 @@ interface ConnectionContainerV2Props {
   hideCancel?: boolean;
   /** Optional greeting text shown with typewriter animation on the type selection screen */
   greeting?: string;
+  /** Called when CSV/Sheets is selected in wizard mode instead of navigating away. */
+  onStaticSelect?: (tab: 'csv' | 'sheets') => void;
 }
 
 export default function ConnectionContainerV2({
@@ -42,6 +44,7 @@ export default function ConnectionContainerV2({
   onSaveSuccess,
   hideCancel = false,
   greeting,
+  onStaticSelect,
 }: ConnectionContainerV2Props) {
   const router = useRouter();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -173,6 +176,8 @@ export default function ConnectionContainerV2({
       hideCancel={hideCancel}
       greeting={greeting}
       onPendingDeletion={(s3Key) => { pendingDeletionsRef.current.push(s3Key); }}
+      wizardMode={!!onSaveSuccess}
+      onStaticSelect={onStaticSelect}
     />
   );
 }

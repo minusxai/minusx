@@ -56,7 +56,7 @@ interface SchemaTreeViewProps {
   connectionWhitelisted?: boolean;
 }
 
-const TABLES_PER_PAGE = 5;
+const TABLES_PER_PAGE = 25;
 const COLUMNS_PER_PAGE = 5;
 
 export default function SchemaTreeView({

@@ -1,26 +1,27 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible, Input } from '@chakra-ui/react';
-import { LuSparkles, LuRocket, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible, Input, Progress } from '@chakra-ui/react';
+import { LuSparkles, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
-import { createVirtualFile, editFile, publishAll } from '@/lib/api/file-state';
+import { createVirtualFile, publishAll } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { sparkleKeyframes, pulseKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
+import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
-import type { CompletedToolCall } from '@/lib/types';
+import { useAgentProgress } from '../useAgentProgress';
 
 const TYPEWRITER_SPEED = 35;
+const GENERATING_TAU = 40; // ~90% at ~92s — feels like about a minute
 
 const DASHBOARD_PROMPT = `Let's build the dashboard!`;
 
@@ -47,9 +48,11 @@ interface StepGeneratingProps {
   contextFileId: number;
   greeting?: string;
   onComplete?: () => Promise<void>;
+  /** For static connections: only build dashboard for these schemas. */
+  staticSchemas?: string[] | null;
 }
 
-export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
@@ -94,19 +97,6 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     hasCreatedVirtual.current = true;
 
     createVirtualFile('dashboard').then((vId) => {
-      // Set empty dashboard content
-      editFile({
-        fileId: vId,
-        changes: {
-          content: {
-            description: '',
-            assets: [],
-            layout: { columns: 12, items: [] },
-          },
-          name: 'Getting Started',
-          path: `${modeRoot}/Getting Started`,
-        },
-      });
       setVirtualDashboardId(vId);
 
       // Set navigation so selectAppState resolves to this virtual dashboard
@@ -135,6 +125,19 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     setIsGenerating(false);
   }, [isGenerating, conversation]);
 
+  const isDone = !isGenerating && hasStarted;
+
+  // Progress bar + auto-collapse trace
+  const agentProgress = useAgentProgress(isGenerating, isDone, GENERATING_TAU);
+  const wasGeneratingRef = useRef(false);
+  useEffect(() => {
+    if (wasGeneratingRef.current && !isGenerating && hasStarted) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowTrace(false);
+    }
+    wasGeneratingRef.current = isGenerating;
+  }, [isGenerating, hasStarted]);
+
   const handleGenerate = useCallback(() => {
     if (hasStarted || !virtualDashboardId) return;
     setHasStarted(true);
@@ -146,27 +149,35 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
 
-    // Build simplified schema from context (same as ChatInterface)
+    // Build simplified schema — filter to relevant schemas for static connections
     const selectedDb = databases.find(d => d.databaseName === connectionName) || databases[0];
-    const simplifiedSchema = selectedDb?.schemas?.map(s => ({
+    const allSchemas = selectedDb?.schemas ?? [];
+    const relevantSchemas = staticSchemas?.length
+      ? allSchemas.filter(s => staticSchemas.includes(s.schema))
+      : allSchemas;
+    const simplifiedSchema = relevantSchemas.map(s => ({
       schema: s.schema,
       tables: s.tables.map(t => t.table)
-    })) || [];
+    }));
 
     dispatch(createConversation({
       conversationID: generateVirtualConversationId(),
       agent: 'OnboardingDashboardAgent',
       agent_args: {
         connection_id: connectionName,
-        context_path: '/org/context',
+        context_path: `${modeRoot}/context`,
         context_version: null,
         schema: simplifiedSchema,
         context: contextDocs || '',
         app_state: appState,
       },
-      message: userPreference.trim()
-        ? `${DASHBOARD_PROMPT}\n\nUser preference: ${userPreference.trim()}`
-        : DASHBOARD_PROMPT,
+      message: [
+        DASHBOARD_PROMPT,
+        `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
+        `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
+        staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
+        userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
+      ].filter(Boolean).join('\n\n'),
     }));
 
     setIsGenerating(true);
@@ -181,7 +192,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       if (onComplete) await onComplete();
       const freshState = getStore().getState();
       const allFiles = Object.values(freshState.files.files);
-      const dashboard = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === 'Getting Started');
+      const dashboard = allFiles
+        .filter(f => f.type === 'dashboard' && f.id > 0 && f.path.startsWith(modeRoot))
+        .sort((a, b) => b.id - a.id)[0];
       if (dashboard) {
         router.push(preserveModeParam(`/f/${dashboard.id}`));
       } else {
@@ -224,13 +237,10 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     router.push(preserveModeParam('/p/org'));
   }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
 
-  const isDone = !isGenerating && hasStarted;
-
   return (
     <VStack gap={6} align="stretch" minH="400px">
-      <style>{sparkleKeyframes}</style>
-      <style>{pulseKeyframes}</style>
       {greeting && <style>{cursorBlinkKeyframes}</style>}
+      <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
 
       {/* Header */}
       <VStack gap={3} align="start" py={6}>
@@ -286,49 +296,67 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         </Box>
       )}
 
-      {/* Action buttons */}
-      <HStack justify="center" gap={4}>
-        {!isGenerating && !isDone && (
-          <VStack gap={2}>
+      {/* Action buttons + progress */}
+      <VStack gap={2} align="stretch">
+        <HStack justify="center" gap={4}>
+          {!isGenerating && !isDone && (
+            <VStack gap={2}>
+              <Button
+                bg="accent.teal"
+                color="white"
+                _hover={{ opacity: 0.9 }}
+                size="sm"
+                fontFamily="mono"
+                onClick={handleGenerate}
+                disabled={!virtualDashboardId}
+              >
+                <LuSparkles size={14} />
+                Auto-generate dashboard
+              </Button>
+              <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
+            </VStack>
+          )}
+          {isDone && (
             <Button
               bg="accent.teal"
               color="white"
               _hover={{ opacity: 0.9 }}
               size="sm"
               fontFamily="mono"
-              onClick={handleGenerate}
-              disabled={!virtualDashboardId}
+              onClick={handleGoToDashboard}
             >
-              <LuSparkles size={14} />
-              Auto-generate dashboard
+              <LuLayoutDashboard size={14} />
+              Go to dashboard
             </Button>
-            <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
-          </VStack>
-        )}
-        {isDone && (
-          <Button
-            bg="accent.teal"
-            color="white"
-            _hover={{ opacity: 0.9 }}
-            size="sm"
-            fontFamily="mono"
-            onClick={handleGoToDashboard}
-          >
-            <LuLayoutDashboard size={14} />
-            Go to dashboard
-          </Button>
-        )}
+          )}
+        </HStack>
+
+        {/* Progress bar while generating */}
         {isGenerating && (
-          <VStack gap={2} align="center">
-            <HStack gap={1}>
-              <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
-              <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
-              <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+          <VStack gap={2} align="stretch">
+            <Progress.Root size="sm" value={agentProgress} colorPalette="teal">
+              <Progress.Track borderRadius="full" overflow="hidden">
+                <Progress.Range
+                  style={{ transition: 'width 0.4s ease-out' }}
+                  css={{
+                    position: 'relative',
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    },
+                  }}
+                />
+              </Progress.Track>
+            </Progress.Root>
+            <HStack justify="flex-end">
+              <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
             </HStack>
-            <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
           </VStack>
         )}
-      </HStack>
+      </VStack>
 
       {/* Debug: appState */}
       {showDebug && virtualDashboardId && (
@@ -355,7 +383,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         </Collapsible.Root>
       )}
 
-      {/* Agent trace — collapsible */}
+      {/* Agent trace — collapsible, auto-opens on generate, auto-closes on done */}
       {(isGenerating || isDone) && (
         <Collapsible.Root open={showTrace} onOpenChange={(e) => setShowTrace(e.open)}>
           <Collapsible.Trigger asChild>

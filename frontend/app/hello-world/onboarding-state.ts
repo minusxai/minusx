@@ -4,12 +4,9 @@
  * (config.setupWizard.status: 'pending' | 'complete').
  */
 
-export type WizardStep = 'welcome' | 'connection' | 'context' | 'generating';
+import { type ConnectionWizardStep, WIZARD_STEP_LABELS } from '@/components/connection-wizard/ConnectionWizardTypes';
 
-// ─── UI constants ───
+export type WizardStep = 'welcome' | ConnectionWizardStep;
 
-export const STEP_LABELS: Record<Exclude<WizardStep, 'welcome'>, { number: number; label: string }> = {
-  connection: { number: 1, label: 'Connect Data' },
-  context: { number: 2, label: 'Add Context' },
-  generating: { number: 3, label: 'Build' },
-};
+// Re-export for consumers that only need the wizard step labels
+export const STEP_LABELS = WIZARD_STEP_LABELS;

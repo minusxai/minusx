@@ -7,10 +7,11 @@ import { createVirtualFile } from '@/lib/api/file-state';
 
 interface StepConnectionProps {
   onComplete: (connectionId: number, connectionName: string) => void;
+  onStaticSelect?: (tab: 'csv' | 'sheets') => void;
   greeting?: string;
 }
 
-export default function StepConnection({ onComplete, greeting }: StepConnectionProps) {
+export default function StepConnection({ onComplete, onStaticSelect, greeting }: StepConnectionProps) {
   const [virtualFileId, setVirtualFileId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export default function StepConnection({ onComplete, greeting }: StepConnectionP
         fileId={virtualFileId}
         mode="create"
         onSaveSuccess={onComplete}
+        onStaticSelect={onStaticSelect}
         hideCancel
         greeting={greeting}
       />

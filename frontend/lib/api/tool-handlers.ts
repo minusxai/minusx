@@ -442,20 +442,6 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const stateBefore = getStore().getState();
   const fileState = stateBefore.files.files[fileId];
 
-  // Guard: context files — must be on the context page, and only docs[].content can change
-  if (fileState?.type === 'context') {
-    const state = _context.state ?? stateBefore;
-    const { appState } = state.navigation ? selectAppState(state) : { appState: null };
-    const currentFileId = appState?.type === 'file' ? appState.state.fileState.id : null;
-    if (currentFileId != fileId) { // eslint-disable-line eqeqeq -- fileId may be string from tool args
-      const errorContent = {
-        success: false,
-        error: 'Context files can only be edited when the user is on the context page. Navigate to the context file first.',
-      };
-      return { content: errorContent, details: { success: false, error: errorContent.error } };
-    }
-  }
-
   // Guard: check edit permission for this file type (same rule as create — createTypes gates both)
   if (fileState?.type) {
     const user = selectEffectiveUser(stateBefore);
