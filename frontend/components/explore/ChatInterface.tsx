@@ -321,6 +321,7 @@ export default function ChatInterface({
 
   // Re-check scroll position when any message changes (e.g. agent adds responses/suggestions)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkScrollPosition();
   }, [allMessages.length, checkScrollPosition]);
 
