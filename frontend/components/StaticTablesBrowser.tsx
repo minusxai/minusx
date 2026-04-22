@@ -15,6 +15,7 @@ import {
   Icon,
   Switch,
 } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   LuTriangleAlert,
   LuTable,
@@ -306,76 +307,83 @@ export default function StaticTablesBrowser({
                         minW={0}
                       >
                         {schema.tables.map((table) => (
-                          <Box
+                          <Tooltip
                             key={table.table}
-                            p={4}
-                            bg="bg.muted"
-                            borderRadius="lg"
-                            border="1px solid"
-                            borderColor="border.default"
-                            cursor="pointer"
-                            transition="all 0.2s"
-                            _hover={{
-                              bg: 'bg.surface',
-                              borderColor: 'accent.teal',
-                              transform: 'translateY(-2px)',
-                              shadow: 'md',
-                            }}
-                            onClick={() => handleTableClick(schema.schema, table.table)}
+                            content="Table not whitelisted"
+                            disabled={schemaWL}
+                            positioning={{ placement: 'bottom' }}
                           >
-                            <HStack gap={3} align="start">
-                              <Icon as={LuTable} boxSize={5} color="accent.teal" mt={0.5} flexShrink={0} />
-                              <VStack align="start" gap={1.5} flex={1} minW={0}>
-                                <Text
-                                  fontSize="sm"
-                                  fontWeight="700"
-                                  fontFamily="mono"
-                                  color="fg.default"
-                                  textOverflow="ellipsis"
-                                  overflow="hidden"
-                                  whiteSpace="nowrap"
-                                  w="100%"
-                                  title={table.table}
-                                >
-                                  {table.table}
-                                </Text>
-                                <HStack gap={2} w="100%" flexWrap="wrap">
-                                  <Box
-                                    px={1.5}
-                                    py={0.5}
-                                    bg="accent.secondary/15"
-                                    borderRadius="sm"
-                                    maxW="100%"
-                                    minW={0}
+                            <Box
+                              p={4}
+                              bg="bg.muted"
+                              borderRadius="lg"
+                              border="1px solid"
+                              borderColor="border.default"
+                              cursor={schemaWL ? 'pointer' : 'not-allowed'}
+                              opacity={schemaWL ? 1 : 0.5}
+                              transition="all 0.2s"
+                              _hover={schemaWL ? {
+                                bg: 'bg.surface',
+                                borderColor: 'accent.teal',
+                                transform: 'translateY(-2px)',
+                                shadow: 'md',
+                              } : undefined}
+                              onClick={schemaWL ? () => handleTableClick(schema.schema, table.table) : undefined}
+                            >
+                              <HStack gap={3} align="start">
+                                <Icon as={LuTable} boxSize={5} color="accent.teal" mt={0.5} flexShrink={0} />
+                                <VStack align="start" gap={1.5} flex={1} minW={0}>
+                                  <Text
+                                    fontSize="sm"
+                                    fontWeight="700"
+                                    fontFamily="mono"
+                                    color="fg.default"
+                                    textOverflow="ellipsis"
+                                    overflow="hidden"
+                                    whiteSpace="nowrap"
+                                    w="100%"
+                                    title={table.table}
                                   >
-                                    <Text
-                                      fontSize="2xs"
-                                      fontWeight="600"
-                                      color="accent.secondary"
-                                      fontFamily="mono"
-                                      textOverflow="ellipsis"
-                                      overflow="hidden"
-                                      whiteSpace="nowrap"
-                                      title={schema.schema}
+                                    {table.table}
+                                  </Text>
+                                  <HStack gap={2} w="100%" flexWrap="wrap">
+                                    <Box
+                                      px={1.5}
+                                      py={0.5}
+                                      bg="accent.secondary/15"
+                                      borderRadius="sm"
+                                      maxW="100%"
+                                      minW={0}
                                     >
-                                      {schema.schema}
-                                    </Text>
-                                  </Box>
-                                  <Box
-                                    px={1.5}
-                                    py={0.5}
-                                    bg="fg.muted/10"
-                                    borderRadius="sm"
-                                    flexShrink={0}
-                                  >
-                                    <Text fontSize="2xs" fontWeight="600" color="fg.muted" fontFamily="mono">
-                                      {table.columns.length} cols
-                                    </Text>
-                                  </Box>
-                                </HStack>
-                              </VStack>
-                            </HStack>
-                          </Box>
+                                      <Text
+                                        fontSize="2xs"
+                                        fontWeight="600"
+                                        color="accent.secondary"
+                                        fontFamily="mono"
+                                        textOverflow="ellipsis"
+                                        overflow="hidden"
+                                        whiteSpace="nowrap"
+                                        title={schema.schema}
+                                      >
+                                        {schema.schema}
+                                      </Text>
+                                    </Box>
+                                    <Box
+                                      px={1.5}
+                                      py={0.5}
+                                      bg="fg.muted/10"
+                                      borderRadius="sm"
+                                      flexShrink={0}
+                                    >
+                                      <Text fontSize="2xs" fontWeight="600" color="fg.muted" fontFamily="mono">
+                                        {table.columns.length} cols
+                                      </Text>
+                                    </Box>
+                                  </HStack>
+                                </VStack>
+                              </HStack>
+                            </Box>
+                          </Tooltip>
                         ))}
                       </Box>
 
