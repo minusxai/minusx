@@ -274,7 +274,7 @@ export default function DocumentHeader({
               >
                 <Icon as={LuFiles} boxSize={3.5} />
                 <Text fontSize="xs" fontWeight="600" fontFamily="mono">
-                  {dirtyFileCount} change{dirtyFileCount > 1 ? 's' : ''}
+                  Review {dirtyFileCount} change{dirtyFileCount > 1 ? 's' : ''}
                 </Text>
               </HStack>
             )}
@@ -283,7 +283,7 @@ export default function DocumentHeader({
             {editMode && (
               <IconButton
                 onClick={handleSave}
-                aria-label={saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
+                aria-label={'Save'}
                 loading={isSaving}
                 disabled={!isDirty}
                 size="xs"
@@ -291,7 +291,7 @@ export default function DocumentHeader({
                 px={2}
               >
                 <LuSave />
-                {isDirty && saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
+                {'Save'}
               </IconButton>
             )}
 
