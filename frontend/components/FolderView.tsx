@@ -225,8 +225,8 @@ export default function FolderView({ path, title, type, headerRight, showAnalyti
       </HStack>
 
       {/* Stats + Reload */}
-      <HStack mb={6} mt={4} gap={2} align="center">
-        <Text fontSize="lg" color="fg.muted" fontFamily="mono">
+      <HStack mb={6} mt={2} gap={2} align="center">
+        <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
           {fileCount} {fileCount === 1 ? 'file' : 'files'}
           <Box as="span" mx={3} display="inline-flex" alignItems="center" justifyContent="center" aria-hidden>
             <Box as="span" w="5px" h="5px" bg="accent.teal" borderRadius="50%" />
