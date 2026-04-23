@@ -15,14 +15,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { HStack, Text, Icon } from '@chakra-ui/react';
 import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { shallowEqual } from 'react-redux';
-import { selectIsDirty, selectEffectiveName, selectMergedContent, selectDirtyFiles } from '@/store/filesSlice';
+import { selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
 import {
   selectDashboardEditMode, setDashboardEditMode,
   selectFileEditMode, setFileEditMode,
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
-import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
+import { editFile } from '@/lib/api/file-state';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -30,6 +29,7 @@ import { DocumentContent, FileType } from '@/lib/types';
 import { isVirtualFileId } from '@/store/filesSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
+import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 
@@ -46,8 +46,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) ?? '';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
   const description = (mergedContent as any)?.description as string | undefined;
-  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
-  const isSaving = useAppSelector(state => state.files.files[fileId]?.saving ?? false);
 
   const isDashboard = fileType === 'dashboard';
   const editMode = useAppSelector(state =>
@@ -69,9 +67,10 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   }, [dispatch, fileId, isDashboard]);
 
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
-  const otherDirtyFiles = dirtyFiles.filter(f => f.id !== fileId);
+  const {
+    onSave: saveWithChildren, onCancel: cancelWithChildren, isDirty, isSaving, saveCount,
+    unrelatedDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal,
+  } = useSaveDecision(fileId);
 
   // Local state for name/description so typing feels instant.
   // null = no local edit in progress; display falls back to the Redux value.
@@ -92,13 +91,12 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-enter edit mode when any file has unsaved changes (skip for non-editors)
-  const anyDirty = dirtyFiles.length > 0;
+  // Auto-enter edit mode when current file has unsaved changes (skip for non-editors)
   useEffect(() => {
-    if (anyDirty && !editMode && canEdit) {
+    if (isDirty && !editMode && canEdit) {
       dispatchSetEditMode(true);
     }
-  }, [anyDirty, editMode, dispatchSetEditMode, canEdit]);
+  }, [isDirty, editMode, dispatchSetEditMode, canEdit]);
 
   const handleNameChange = useCallback((name: string) => {
     setLocalName(name);
@@ -115,7 +113,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const handleSave = useCallback(async () => {
     setSaveError(null);
     try {
-      const result = await publishFile({ fileId });
+      const result = await saveWithChildren();
       dispatchSetEditMode(false);
       redirectAfterSave(result, fileId, router);
     } catch (error) {
@@ -126,15 +124,15 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       console.error('Failed to save file:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [fileId, router, dispatchSetEditMode]);
+  }, [fileId, router, dispatchSetEditMode, saveWithChildren]);
 
   const handleCancel = useCallback(() => {
     setLocalName(null);
     setLocalDesc(null);
-    clearFileChanges({ fileId });
+    cancelWithChildren();
     dispatchSetEditMode(false);
     setSaveError(null);
-  }, [fileId, dispatchSetEditMode]);
+  }, [cancelWithChildren, dispatchSetEditMode]);
 
   // Dashboard badge: question count
   const questionCount = isDashboard
@@ -182,8 +180,9 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           }
         }}
         onSave={handleSave}
-        onReviewChanges={otherDirtyFiles.length > 0 ? () => setIsPublishModalOpen(true) : undefined}
-        dirtyFileCount={dirtyFiles.length}
+        onReviewChanges={unrelatedDirtyCount > 0 ? openPublishModal : undefined}
+        dirtyFileCount={unrelatedDirtyCount}
+        saveCount={saveCount}
         hideEditToggle={isVirtualFileId(fileId) || !canEdit}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
@@ -215,7 +214,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         highlightColor={isDashboard && editMode ? 'accent.primary' : undefined}
         highlightLabel={isDashboard && editMode ? 'Editing Dashboard' : undefined}
       />
-      <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+      <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
     </>
   );
 }

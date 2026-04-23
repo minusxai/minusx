@@ -15,12 +15,14 @@
  * - useQueryResult - Execute queries with TTL caching
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { shallowEqual } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
 import {
   isVirtualFileId,
   selectDirtyFiles,
+  selectSaveClassification,
+  selectIsDirty,
   type FileId,
   type FileState
 } from '@/store/filesSlice';
@@ -34,6 +36,8 @@ import {
   loadFiles,
   loadFileByPath,
   getQueryResult,
+  publishAll,
+  discardAll,
 } from '@/lib/api/file-state';
 import {
   selectAugmentedFiles,
@@ -44,6 +48,7 @@ import {
 } from '@/lib/store/file-selectors';
 import type { AppState } from '@/lib/appState';
 import { selectAppState, selectAppStateWithUI } from '@/store/appStateSelector';
+import { getStore } from '@/store/store';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
@@ -500,4 +505,91 @@ export function useAppState(): { appState: AppState | null; loading: boolean } {
  */
 export function useDirtyFiles(): FileState[] {
   return useAppSelector(selectDirtyFiles, shallowEqual);
+}
+
+// ============================================================================
+// useSaveDecision - Centralized save/publish decision logic
+// ============================================================================
+
+export interface SaveResult {
+  id: number;
+  name: string;
+}
+
+export interface SaveDecision {
+  /** Save current file + its dirty children (auto-saves dependencies) */
+  onSave: () => Promise<SaveResult>;
+  /** Discard changes for current file + its dirty children (removes virtual files) */
+  onCancel: () => void;
+  /** Whether the current file or any of its children have unsaved changes */
+  isDirty: boolean;
+  /** Whether the current file is currently being saved */
+  isSaving: boolean;
+  /** Number of files that will be saved (current file if dirty + dirty children) */
+  saveCount: number;
+  /** Number of dirty files unrelated to the current file (for breadcrumb indicator) */
+  unrelatedDirtyCount: number;
+  /** Whether the publish modal is open */
+  isPublishModalOpen: boolean;
+  /** Open the publish modal (for reviewing unrelated dirty files) */
+  openPublishModal: () => void;
+  /** Close the publish modal */
+  closePublishModal: () => void;
+}
+
+/**
+ * useSaveDecision - Centralized hook for save/publish decisions.
+ *
+ * Classifies dirty files into current, children, and unrelated:
+ * - Save button always auto-saves current file + dirty children
+ * - Breadcrumb indicator only shows for unrelated dirty files
+ * - Publish modal only needed for unrelated dirty files
+ *
+ * @param fileId - Current file ID being viewed (undefined on folder pages)
+ */
+export function useSaveDecision(fileId: number | undefined): SaveDecision {
+  const { childDirtyFiles, unrelatedDirtyFiles } = useAppSelector(
+    state => selectSaveClassification(state, fileId),
+    shallowEqual
+  );
+  const selfDirty = useAppSelector(state => fileId !== undefined ? selectIsDirty(state, fileId) : false);
+  const isDirty = selfDirty || childDirtyFiles.length > 0;
+  const isSaving = useAppSelector(state => fileId !== undefined ? (state.files.files[fileId]?.saving ?? false) : false);
+
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+
+  const onSave = useCallback(async (): Promise<SaveResult> => {
+    if (fileId === undefined) throw new Error('Cannot save: no file selected');
+    // Scope publishAll to current file + its dirty children
+    // If only children are dirty, only save them (parent has no changes)
+    const idsToSave = selfDirty
+      ? [fileId, ...childDirtyFiles.map(f => f.id)]
+      : childDirtyFiles.map(f => f.id);
+    if (idsToSave.length > 0) {
+      await publishAll(idsToSave);
+    }
+    // Return current file info for redirect (ID may have changed if virtual)
+    const saved = getStore().getState().files.files[fileId];
+    return { id: saved?.id ?? fileId, name: saved?.name ?? '' };
+  }, [fileId, selfDirty, childDirtyFiles]);
+
+  const onCancel = useCallback(() => {
+    if (fileId === undefined) return;
+    discardAll([fileId]);
+  }, [fileId]);
+
+  const openPublishModal = useCallback(() => setIsPublishModalOpen(true), []);
+  const closePublishModal = useCallback(() => setIsPublishModalOpen(false), []);
+
+  return {
+    onSave,
+    onCancel,
+    isDirty,
+    isSaving,
+    saveCount: (selfDirty ? 1 : 0) + childDirtyFiles.length,
+    unrelatedDirtyCount: unrelatedDirtyFiles.length,
+    isPublishModalOpen,
+    openPublishModal,
+    closePublishModal,
+  };
 }

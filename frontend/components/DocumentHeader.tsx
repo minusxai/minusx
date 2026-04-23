@@ -75,6 +75,9 @@ export interface DocumentHeaderProps {
   onReviewChanges?: () => void;
   dirtyFileCount?: number;
 
+  // Number of files that will be saved (current + children). Shown on Save button label.
+  saveCount?: number;
+
   // Optional highlight color for the header background (e.g. dashboard edit mode)
   highlightColor?: string;
   highlightLabel?: string;  // Label shown next to title when highlighted (e.g. "Editing Dashboard")
@@ -101,6 +104,7 @@ export default function DocumentHeader({
   questionId,
   onReviewChanges,
   dirtyFileCount = 0,
+  saveCount = 1,
   highlightColor,
   highlightLabel,
 }: DocumentHeaderProps) {
@@ -289,14 +293,14 @@ export default function DocumentHeader({
             ) : editMode && isDirty && (
               <IconButton
                 onClick={handleSave}
-                aria-label="Save"
+                aria-label={saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
                 loading={isSaving}
                 size="xs"
                 colorPalette="teal"
                 px={2}
               >
                 <LuSave />
-                Save
+                {saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
               </IconButton>
             )}
 

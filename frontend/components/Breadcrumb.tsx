@@ -11,7 +11,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import DemoModeBanner from '@/components/DemoModeBanner';
 import FileSearchBar from './FileSearchBar';
-import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
+import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import PublishModal from './PublishModal';
 
 interface BreadcrumbItem {
@@ -45,8 +45,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
   const hasBanner = isTutorialMode || !!bannerColor;
-  const dirtyFiles = useDirtyFiles();
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const { unrelatedDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal } = useSaveDecision(currentFileId);
   const isLastItem = (index: number) => index === items.length - 1;
   const [searchQuery, setSearchQuery] = useState('');
   const sortedSiblingFiles = siblingFiles ? sortByTypeHierarchy(siblingFiles) : undefined;
@@ -215,8 +214,8 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
     </Flex>
   );
 
-  // Unsaved changes button (styled differently when inside demo banner vs standalone)
-  const unsavedChangesButton = dirtyFiles.length > 0 ? (
+  // Unsaved changes button — only shows for unrelated dirty files (not current file's children)
+  const unsavedChangesButton = unrelatedDirtyCount > 0 ? (
     <Button
       size="xs"
       variant="solid"
@@ -226,10 +225,10 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
       color={hasBanner ? 'white' : 'accent.danger'}
       _hover={hasBanner ? { bg: 'white', color: 'accent.danger' } : undefined}
       fontFamily="mono"
-      onClick={() => setIsPublishModalOpen(true)}
+      onClick={openPublishModal}
     >
       <LuTriangleAlert size={12} />
-      {dirtyFiles.length} unsaved {dirtyFiles.length === 1 ? 'change' : 'changes'}
+      {unrelatedDirtyCount} unsaved {unrelatedDirtyCount === 1 ? 'change' : 'changes'}
     </Button>
   ) : null;
 
@@ -240,7 +239,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
         <DemoModeBanner unsavedChangesButton={unsavedChangesButton}>
           {breadcrumbItems}
         </DemoModeBanner>
-        <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+        <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
       </>
     );
   }
@@ -275,7 +274,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
             <FileSearchBar />
           </Flex>
         </Flex>
-        <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+        <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
       </>
     );
   }
@@ -287,7 +286,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
         {unsavedChangesButton}
         <FileSearchBar />
       </Flex>
-      <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+      <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
     </Flex>
   );
 }
