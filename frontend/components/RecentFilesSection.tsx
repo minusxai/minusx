@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Box, HStack, Text, VStack, Icon, Flex, IconButton } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, Icon, Flex } from '@chakra-ui/react';
 import Link from 'next/link';
 import { LuClock, LuTrendingUp, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
@@ -65,51 +65,65 @@ function QuestionCarousel({ questions }: { questions: RecentFile[] }) {
   if (questions.length === 0) return null;
   if (questions.length === 1) return <QuestionChartCard file={questions[0]} />;
 
+  const canPrev = activeIdx > 0;
+  const canNext = activeIdx < questions.length - 1;
+
   return (
     <Box>
       <QuestionChartCard file={questions[activeIdx]} />
-      <HStack justify="center" gap={1} mt={2}>
-        <IconButton
-          variant="ghost"
-          size="2xs"
+      <HStack justify="center" gap={1.5} mt={2}>
+        <Box
+          as="button"
           aria-label="Previous question"
           onClick={prev}
-          color="fg.subtle"
-          _hover={{ color: 'fg.default' }}
+          w="24px"
+          h="24px"
           borderRadius="full"
-          minW="auto"
-          h="auto"
-          p={0.5}
+          bg={canPrev ? 'accent.teal' : 'accent.teal/15'}
+          color={canPrev ? 'white' : 'accent.teal'}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          cursor={canPrev ? 'pointer' : 'default'}
+          opacity={canPrev ? 1 : 0.4}
+          _hover={canPrev ? { boxShadow: 'sm' } : {}}
+          transition="all 0.15s"
         >
-          <LuChevronLeft size={12} />
-        </IconButton>
+          <LuChevronLeft size={14} />
+        </Box>
         {questions.map((_, idx) => (
           <Box
             key={idx}
-            w="5px"
-            h="5px"
+            as="button"
+            aria-label={`Question ${idx + 1}`}
+            w={idx === activeIdx ? '16px' : '6px'}
+            h="6px"
             borderRadius="full"
-            bg={idx === activeIdx ? 'accent.primary' : 'fg.subtle'}
-            opacity={idx === activeIdx ? 1 : 0.3}
+            bg={idx === activeIdx ? 'accent.teal' : 'border.default'}
             cursor="pointer"
-            transition="all 0.15s"
+            transition="all 0.2s"
             onClick={() => setActiveIdx(idx)}
           />
         ))}
-        <IconButton
-          variant="ghost"
-          size="2xs"
+        <Box
+          as="button"
           aria-label="Next question"
           onClick={next}
-          color="fg.subtle"
-          _hover={{ color: 'fg.default' }}
+          w="24px"
+          h="24px"
           borderRadius="full"
-          minW="auto"
-          h="auto"
-          p={0.5}
+          bg={canNext ? 'accent.teal' : 'accent.teal/15'}
+          color={canNext ? 'white' : 'accent.teal'}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          cursor={canNext ? 'pointer' : 'default'}
+          opacity={canNext ? 1 : 0.4}
+          _hover={canNext ? { boxShadow: 'sm' } : {}}
+          transition="all 0.15s"
         >
-          <LuChevronRight size={12} />
-        </IconButton>
+          <LuChevronRight size={14} />
+        </Box>
       </HStack>
     </Box>
   );
