@@ -243,9 +243,11 @@ function TabsLayout({
   const derivedTab = activeSidebarSection
     ? (refSectionIds.has(activeSidebarSection) ? 'context' : 'chat')
     : null;
-  const lastTabRef = useRef<'chat' | 'context'>('chat');
-  if (derivedTab) lastTabRef.current = derivedTab;
-  const activeTab = derivedTab ?? lastTabRef.current;
+  const [lastTab, setLastTab] = useState<'chat' | 'context'>('chat');
+  useEffect(() => {
+    if (derivedTab) setLastTab(derivedTab);
+  }, [derivedTab]);
+  const activeTab = derivedTab ?? lastTab;
 
   return (
     <VStack gap={0} height="100%" overflow="hidden">
