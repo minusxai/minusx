@@ -59,7 +59,7 @@ const initialState: UIState = {
   chatAttachments: [],
   showSuggestedQuestions: true,
   showTrustScore: true,
-  allowChatQueue: false,
+  allowChatQueue: true,
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
   compactChatEnabled: false,
@@ -217,7 +217,7 @@ const uiSlice = createSlice({
     setAllowChatQueue: (state, action: PayloadAction<boolean>) => {
       state.allowChatQueue = action.payload;
       if (typeof window !== 'undefined') {
-        try { localStorage.setItem('allowChatQueue', String(action.payload)); } catch { /* ignore */ }
+        try { localStorage.setItem('allowChatQueue_v2', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setQueueStrategy: (state, action: PayloadAction<'end-of-turn' | 'mid-turn'>) => {
@@ -322,7 +322,7 @@ export const selectRightSidebarUIState = createSelector(
 export const selectAskForConfirmation = (state: RootState) => state.ui.askForConfirmation;
 export const selectDevMode = (state: RootState) => state.ui.devMode;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
-export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? false;
+export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? true;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
 export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
 export const selectDashboardEditMode = (state: RootState, fileId: number) => state.ui.dashboardEditMode[fileId] ?? false;
