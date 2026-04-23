@@ -1,9 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem } from '@chakra-ui/react';
 import { LuSparkles, LuSearch, LuChartLine } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
-import { selectCompanyName } from '@/store/authSlice';
+import { selectCompanyName, selectEffectiveUser } from '@/store/authSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface ExampleQuestionsProps {
@@ -12,6 +13,13 @@ interface ExampleQuestionsProps {
   colSpan: any;
   colStart: any;
 }
+
+const greetings = [
+  (name: string) => `Hi ${name}, what would you like to explore today?`,
+  (name: string) => `Hey ${name}, ready to dig into some data?`,
+  (name: string) => `Welcome back ${name}! What can I help you find?`,
+  (name: string) => `What's on your mind today, ${name}?`,
+];
 
 const suggestedPrompts = [
   {
@@ -34,9 +42,16 @@ const suggestedPrompts = [
 export default function ExampleQuestions({ onPromptClick, container, colSpan, colStart }: ExampleQuestionsProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const companyName = useAppSelector(selectCompanyName);
+  const user = useAppSelector(selectEffectiveUser);
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const isMinusx = agentName.toLowerCase() === 'minusx';
+  const firstName = user?.name?.split(' ')[0].split('@')[0] || 'there';
+  const greeting = useMemo(() => {
+    const index = Math.floor(Math.random() * greetings.length);
+    return greetings[index](firstName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstName]);
 
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
@@ -93,9 +108,9 @@ export default function ExampleQuestions({ onPromptClick, container, colSpan, co
               color="fg.muted"
               fontSize="sm"
               fontFamily="mono"
-              textAlign="center"
+            //   textAlign="center"
             >
-              Query your data, create visualizations, and discover insights
+              {greeting}
             </Text>
           </VStack>
 

@@ -328,7 +328,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
         </HStack>
 
         {/* View Toggle */}
-        <HStack gap={2} flexShrink={0}>
+        {/* <HStack gap={2} flexShrink={0}>
           <HStack
             gap={0.5}
             bg="bg.surface"
@@ -366,7 +366,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               </IconButton>
             </Tooltip>
           </HStack>
-        </HStack>
+        </HStack> */}
       </HStack>
       )}
 
