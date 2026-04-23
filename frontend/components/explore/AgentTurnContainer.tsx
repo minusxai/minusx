@@ -432,7 +432,12 @@ export default function AgentTurnContainer({
 
   // Stable min height for right pane — based on ALL timeline contents, not just selected
   const hasChartContent = useMemo(() =>
-    timeline.some(n => n.type === 'query' || FILE_LABELS.has(n.label)),
+    timeline.some(n => n.type === 'query' || (
+      FILE_LABELS.has(n.label) && n.messages.some(m => {
+        const parsed = parseFileToolContent(m);
+        return parsed.fileType === 'question';
+      })
+    )),
     [timeline],
   );
   const hasClarify = useMemo(() =>
@@ -442,7 +447,7 @@ export default function AgentTurnContainer({
     })),
     [timeline],
   );
-  const rightPaneH = hasClarify ? '400px' : hasChartContent ? '400px' : '300px';
+  const rightPaneH = hasClarify ? '400px' : hasChartContent ? '400px' : 'auto';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -469,172 +474,117 @@ export default function AgentTurnContainer({
           borderRadius="md"
           overflow="hidden"
         >
+          {/* Timeline — compact (horizontal) or full (vertical rail + detail side-by-side) */}
           {isCompact ? (
-            /* ── Compact: horizontal timeline on top, detail below ── */
-            <VStack gap={0} align="stretch">
-              {/* Horizontal timeline strip with chevrons */}
-              <HStack
-                bg="bg.elevated"
-                borderBottom="1px solid"
-                borderColor="border.default"
-                px={1} py={1} gap={1}
+            <HStack
+              bg="bg.elevated"
+              borderBottom="1px solid"
+              borderColor="border.default"
+              px={1} py={1} gap={1}
+            >
+              <Text
+                fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
+                textTransform="uppercase" flexShrink={0} pl={1}
               >
-                <Text
-                  fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
-                  textTransform="uppercase" flexShrink={0} pl={1}
-                >
-                  Tools
-                </Text>
-                {/* Prev chevron */}
-                <Box
-                  as="button"
-                  aria-label="Previous step"
-                  onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
-                  w="20px" h="20px" borderRadius="full"
-                  bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === 0 ? 'default' : 'pointer'}
-                  opacity={safeIdx === 0 ? 0.3 : 1}
-                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-                  flexShrink={0}
-                >
-                  <LuChevronLeft size={12} />
-                </Box>
-
-                {/* All steps — scroll horizontally if they overflow */}
-                <HStack gap={0} flex={1} minW={0} overflowX="auto" flexWrap="nowrap" css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
-                  {timeline.map((node, idx) => {
-                    const isSelected = idx === safeIdx;
-                    const isLast = idx === timeline.length - 1;
-
-                    return (
-                      <React.Fragment key={idx}>
-                        <Box
-                          ref={isSelected ? activeChipRef : undefined}
-                          as="button"
-                          aria-label={`${node.verb}${node.count > 1 ? ` ×${node.count}` : ''}`}
-                          onClick={() => setSelectedIdx(idx)}
-                          display="flex"
-                          alignItems="center"
-                          gap={1}
-                          px={1.5}
-                          py={0.5}
-                          cursor="pointer"
-                          bg={isSelected ? 'accent.teal/12' : 'transparent'}
-                          borderRadius="sm"
-                          _hover={{ bg: isSelected ? 'accent.teal/12' : 'bg.muted' }}
-                          transition="all 0.1s"
-                          flexShrink={0}
-                        >
-                          <Icon
-                            as={node.icon}
-                            boxSize={3}
-                            color={isSelected ? 'accent.teal' : 'fg.muted'}
-                            flexShrink={0}
-                          />
-                          <Text
-                            fontSize="2xs"
-                            fontFamily="mono"
-                            color={isSelected ? 'accent.teal' : 'fg.subtle'}
-                            fontWeight={isSelected ? '600' : '400'}
-                            whiteSpace="nowrap"
-                          >
-                            {node.verb}
-                          </Text>
-                          {node.count > 1 && (
-                            <Box
-                              bg={isSelected ? 'accent.teal/20' : 'bg.muted'}
-                              color={isSelected ? 'accent.teal' : 'fg.subtle'}
-                              borderRadius="full"
-                              px={1}
-                              fontSize="2xs"
-                              fontFamily="mono"
-                              fontWeight="600"
-                              lineHeight="1.4"
-                              flexShrink={0}
-                            >
-                              {node.count}
-                            </Box>
-                          )}
-                        </Box>
-                        {!isLast && (
-                          <Text color="border.default" fontSize="xs" flexShrink={0} lineHeight={1}>›</Text>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </HStack>
-
-                {/* Next chevron */}
-                <Box
-                  as="button"
-                  aria-label="Next step"
-                  onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
-                  w="20px" h="20px" borderRadius="full"
-                  bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx >= timeline.length - 1 ? 'default' : 'pointer'}
-                  opacity={safeIdx >= timeline.length - 1 ? 0.3 : 1}
-                  _hover={safeIdx >= timeline.length - 1 ? {} : { bg: 'accent.teal/25' }}
-                  flexShrink={0}
-                >
-                  <LuChevronRight size={12} />
-                </Box>
-              </HStack>
-
-              {/* Detail pane below */}
-              <Box minW={0} overflowY="auto" bg="bg.canvas">
-                {selectedNode && renderRightPane(selectedNode)}
+                Tools
+              </Text>
+              {/* Prev chevron */}
+              <Box
+                as="button"
+                aria-label="Previous step"
+                onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
+                w="20px" h="20px" borderRadius="full"
+                bg="accent.teal/15" color="accent.teal"
+                display="flex" alignItems="center" justifyContent="center"
+                cursor={safeIdx === 0 ? 'default' : 'pointer'}
+                opacity={safeIdx === 0 ? 0.3 : 1}
+                _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+                flexShrink={0}
+              >
+                <LuChevronLeft size={12} />
               </Box>
 
-              {/* Bottom prev/next nav */}
-              {timeline.length > 1 && (
-                <HStack
-                  justify="space-between"
-                  px={3} py={1.5}
-                  borderTop="1px solid"
-                  borderColor="border.default"
-                >
-                  <Box
-                    as="button"
-                    aria-label="Previous tool"
-                    onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
-                    display="flex" alignItems="center" gap={1}
-                    cursor={safeIdx > 0 ? 'pointer' : 'default'}
-                    opacity={safeIdx > 0 ? 1 : 0.3}
-                    _hover={safeIdx > 0 ? { color: 'accent.teal' } : {}}
-                    transition="all 0.15s"
-                    color="fg.subtle"
-                  >
-                    <LuChevronLeft size={14} />
-                    <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-                      {safeIdx > 0 ? timeline[safeIdx - 1].verb : 'Prev'}
-                    </Text>
-                  </Box>
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                    {safeIdx + 1} / {timeline.length}
-                  </Text>
-                  <Box
-                    as="button"
-                    aria-label="Next tool"
-                    onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
-                    display="flex" alignItems="center" gap={1}
-                    cursor={safeIdx < timeline.length - 1 ? 'pointer' : 'default'}
-                    opacity={safeIdx < timeline.length - 1 ? 1 : 0.3}
-                    _hover={safeIdx < timeline.length - 1 ? { color: 'accent.teal' } : {}}
-                    transition="all 0.15s"
-                    color="fg.subtle"
-                  >
-                    <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-                      {safeIdx < timeline.length - 1 ? timeline[safeIdx + 1].verb : 'Next'}
-                    </Text>
-                    <LuChevronRight size={14} />
-                  </Box>
-                </HStack>
-              )}
-            </VStack>
+              {/* All steps — scroll horizontally if they overflow */}
+              <HStack gap={0} flex={1} minW={0} overflowX="auto" flexWrap="nowrap" css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+                {timeline.map((node, idx) => {
+                  const isSelected = idx === safeIdx;
+                  const isLast = idx === timeline.length - 1;
+
+                  return (
+                    <React.Fragment key={idx}>
+                      <Box
+                        ref={isSelected ? activeChipRef : undefined}
+                        as="button"
+                        aria-label={`${node.verb}${node.count > 1 ? ` ×${node.count}` : ''}`}
+                        onClick={() => setSelectedIdx(idx)}
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                        px={1.5}
+                        py={0.5}
+                        cursor="pointer"
+                        bg={isSelected ? 'accent.teal/12' : 'transparent'}
+                        borderRadius="sm"
+                        _hover={{ bg: isSelected ? 'accent.teal/12' : 'bg.muted' }}
+                        transition="all 0.1s"
+                        flexShrink={0}
+                      >
+                        <Icon
+                          as={node.icon}
+                          boxSize={3}
+                          color={isSelected ? 'accent.teal' : 'fg.muted'}
+                          flexShrink={0}
+                        />
+                        <Text
+                          fontSize="2xs"
+                          fontFamily="mono"
+                          color={isSelected ? 'accent.teal' : 'fg.subtle'}
+                          fontWeight={isSelected ? '600' : '400'}
+                          whiteSpace="nowrap"
+                        >
+                          {node.verb}
+                        </Text>
+                        {node.count > 1 && (
+                          <Box
+                            bg={isSelected ? 'accent.teal/20' : 'bg.muted'}
+                            color={isSelected ? 'accent.teal' : 'fg.subtle'}
+                            borderRadius="full"
+                            px={1}
+                            fontSize="2xs"
+                            fontFamily="mono"
+                            fontWeight="600"
+                            lineHeight="1.4"
+                            flexShrink={0}
+                          >
+                            {node.count}
+                          </Box>
+                        )}
+                      </Box>
+                      {!isLast && (
+                        <Text color="border.default" fontSize="xs" flexShrink={0} lineHeight={1}>›</Text>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </HStack>
+
+              {/* Next chevron */}
+              <Box
+                as="button"
+                aria-label="Next step"
+                onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
+                w="20px" h="20px" borderRadius="full"
+                bg="accent.teal/15" color="accent.teal"
+                display="flex" alignItems="center" justifyContent="center"
+                cursor={safeIdx >= timeline.length - 1 ? 'default' : 'pointer'}
+                opacity={safeIdx >= timeline.length - 1 ? 0.3 : 1}
+                _hover={safeIdx >= timeline.length - 1 ? {} : { bg: 'accent.teal/25' }}
+                flexShrink={0}
+              >
+                <LuChevronRight size={12} />
+              </Box>
+            </HStack>
           ) : (
-            /* ── Full: vertical timeline rail on left, detail on right ── */
             <HStack gap={0} align="stretch">
               {/* Timeline rail */}
               <VStack
@@ -717,6 +667,59 @@ export default function AgentTurnContainer({
               {/* Right pane */}
               <Box flex={1} minW={0} h={rightPaneH} overflowY="auto" bg="bg.canvas">
                 {selectedNode && renderRightPane(selectedNode)}
+              </Box>
+            </HStack>
+          )}
+
+          {/* Detail pane (compact only — full layout has it inside the HStack) */}
+          {isCompact && (
+            <Box minW={0} overflowY="auto" bg="bg.canvas">
+              {selectedNode && renderRightPane(selectedNode)}
+            </Box>
+          )}
+
+          {/* Bottom prev/next nav — shared across both layouts */}
+          {timeline.length > 1 && (
+            <HStack
+              justify="space-between"
+              px={3} py={1.5}
+              borderTop="1px solid"
+              borderColor="border.default"
+            >
+              <Box
+                as="button"
+                aria-label="Previous tool"
+                onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
+                display="flex" alignItems="center" gap={1}
+                cursor={safeIdx > 0 ? 'pointer' : 'default'}
+                opacity={safeIdx > 0 ? 1 : 0.3}
+                _hover={safeIdx > 0 ? { color: 'accent.teal' } : {}}
+                transition="all 0.15s"
+                color="fg.subtle"
+              >
+                <LuChevronLeft size={14} />
+                <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                  {safeIdx > 0 ? timeline[safeIdx - 1].verb : 'Prev'}
+                </Text>
+              </Box>
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                {safeIdx + 1} / {timeline.length}
+              </Text>
+              <Box
+                as="button"
+                aria-label="Next tool"
+                onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
+                display="flex" alignItems="center" gap={1}
+                cursor={safeIdx < timeline.length - 1 ? 'pointer' : 'default'}
+                opacity={safeIdx < timeline.length - 1 ? 1 : 0.3}
+                _hover={safeIdx < timeline.length - 1 ? { color: 'accent.teal' } : {}}
+                transition="all 0.15s"
+                color="fg.subtle"
+              >
+                <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                  {safeIdx < timeline.length - 1 ? timeline[safeIdx + 1].verb : 'Next'}
+                </Text>
+                <LuChevronRight size={14} />
               </Box>
             </HStack>
           )}

@@ -105,13 +105,15 @@ function SectionContent({
                     {db.databaseName}
                   </Text>
                 </Box>
-                <SchemaTreeView
-                  schemas={db.schemas}
-                  selectable={false}
-                  showColumns={true}
-                  showStats={false}
-                  onTablePreview={undefined}
-                />
+                <Box p={2}>
+                  <SchemaTreeView
+                    schemas={db.schemas}
+                    selectable={false}
+                    showColumns={true}
+                    showStats={false}
+                    onTablePreview={undefined}
+                  />
+                </Box>
               </Box>
             ))
           ) : (
@@ -236,7 +238,13 @@ function TabsLayout({
   const chatSection = chatSections.find(s => s.id === 'chat');
 
   // Derive active tab from which section is active in Redux
-  const activeTab = activeSidebarSection && refSectionIds.has(activeSidebarSection) ? 'context' : 'chat';
+  // activeSidebarSection === null means "no accordion open" — stay on whichever tab was last shown
+  // We use a ref to remember the last derived tab so collapsing an accordion doesn't switch tabs
+  const derivedTab = activeSidebarSection
+    ? (refSectionIds.has(activeSidebarSection) ? 'context' : 'chat')
+    : null;
+  const [lastTab, setLastTab] = useState<'chat' | 'context'>('chat');
+  const activeTab = derivedTab ?? lastTab;
 
   return (
     <VStack gap={0} height="100%" overflow="hidden">
@@ -247,7 +255,7 @@ function TabsLayout({
           px={4}
           py={2.5}
           cursor="pointer"
-          onClick={() => onSetActiveSection('chat')}
+          onClick={() => { setLastTab('chat'); onSetActiveSection('chat'); }}
           bg={activeTab === 'chat' ? 'bg.surface' : 'bg.muted'}
           borderBottom="2px solid"
           borderColor={activeTab === 'chat' ? 'accent.primary' : 'transparent'}
@@ -271,7 +279,7 @@ function TabsLayout({
           px={4}
           py={2.5}
           cursor="pointer"
-          onClick={() => { const first = refSections[0]; if (first) onSetActiveSection(first.id); }}
+          onClick={() => { setLastTab('context'); const first = refSections[0]; if (first) onSetActiveSection(first.id); }}
           bg={activeTab === 'context' ? 'bg.surface' : 'bg.muted'}
           borderBottom="2px solid"
           borderColor={activeTab === 'context' ? 'accent.danger' : 'transparent'}

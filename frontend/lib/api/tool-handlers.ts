@@ -7,6 +7,7 @@
 
 import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectDirtyFiles, generateVirtualId, type FileId } from '@/store/filesSlice';
+import { clearQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -535,6 +536,21 @@ registerFrontendTool('EditFile', async (args, _context) => {
     if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
 
+      // Show loading in the viz immediately by clearing cached result and setting lastExecuted
+      // before awaiting the query. Mirrors handleExecute in QuestionContainerV2.
+      getStore().dispatch(clearQueryResult({ query: finalContent.query, params, database: finalContent.connection_name }));
+      getStore().dispatch(setEphemeral({
+        fileId: fileId as FileId,
+        changes: {
+          lastExecuted: {
+            query: finalContent.query,
+            params,
+            database: finalContent.connection_name,
+            references: finalContent.references || []
+          }
+        }
+      }));
+
       // Auto-execute is best-effort: a failed execution (e.g. no data, bad param) must NOT
       // cause EditFile to report failure. The edit was already staged successfully.
       try {
@@ -544,19 +560,6 @@ registerFrontendTool('EditFile', async (args, _context) => {
           database: finalContent.connection_name,
           filePath: fileState?.path,
         });
-        // Update lastExecuted so QuestionContainerV2 displays results for the new query.
-        // Without this, the component keeps showing results for the old lastExecuted query.
-        getStore().dispatch(setEphemeral({
-          fileId: fileId as FileId,
-          changes: {
-            lastExecuted: {
-              query: finalContent.query,
-              params,
-              database: finalContent.connection_name,
-              references: finalContent.references || []
-            }
-          }
-        }));
       } catch (execErr) {
         console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
       }
@@ -734,6 +737,20 @@ registerFrontendTool('CreateFile', async (args, context) => {
     if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
 
+      // Show loading in the viz immediately
+      getStore().dispatch(clearQueryResult({ query: finalContent.query, params, database: finalContent.connection_name }));
+      getStore().dispatch(setEphemeral({
+        fileId: virtualId as FileId,
+        changes: {
+          lastExecuted: {
+            query: finalContent.query,
+            params,
+            database: finalContent.connection_name,
+            references: finalContent.references || []
+          }
+        }
+      }));
+
       try {
         await getQueryResult({
           query: finalContent.query,
@@ -741,17 +758,6 @@ registerFrontendTool('CreateFile', async (args, context) => {
           database: finalContent.connection_name,
           filePath: path,
         });
-        getStore().dispatch(setEphemeral({
-          fileId: virtualId as FileId,
-          changes: {
-            lastExecuted: {
-              query: finalContent.query,
-              params,
-              database: finalContent.connection_name,
-              references: finalContent.references || []
-            }
-          }
-        }));
       } catch (execErr) {
         console.warn('[CreateFile] Auto-execute failed (file still created):', execErr);
       }

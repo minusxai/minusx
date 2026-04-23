@@ -411,48 +411,58 @@ export default function SchemaTreeView({
   }, [schemas, whitelist, showStats, selectable]);
 
   return (
-    <VStack gap={0} align="stretch" height="100%">
-      {/* Search Bar */}
-      <Box position="relative">
+    <VStack gap={0} align="stretch" height="100%" borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
+      {/* Search Bar — inset, integrated feel */}
+      <Box
+        position="relative"
+        borderBottom="1px solid"
+        borderColor="border.default"
+      >
         <Icon
           as={LuSearch}
           position="absolute"
           left={3}
           top="50%"
           transform="translateY(-50%)"
-          color="fg.muted"
-          boxSize={4}
+          color="fg.subtle"
+          boxSize={3.5}
           pointerEvents="none"
           zIndex={1}
         />
         <Input
+          aria-label="Search schema tree"
           placeholder={showColumns ? "Search schemas, tables & columns..." : "Search schemas & tables..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          fontSize="sm"
+          fontSize="xs"
           fontFamily="mono"
-          bg="bg.surface"
-          borderColor="border.default"
-          _focus={{ borderColor: 'accent.teal', outline: 'none' }}
-          pl={10}
-          pr={searchQuery ? 10 : 3}
+          bg="bg.muted"
+          border="none"
           borderRadius={0}
+          _focus={{ bg: 'bg.surface', outline: 'none', boxShadow: 'inset 0 -2px 0 0 var(--chakra-colors-accent-teal)' }}
+          _placeholder={{ color: 'fg.subtle' }}
+          pl={9}
+          pr={searchQuery ? 9 : 3}
+          py={2}
+          h="auto"
         />
         {searchQuery && (
           <Box
             position="absolute"
-            right={2}
+            right={1}
             top="50%"
             transform="translateY(-50%)"
             zIndex={1}
           >
             <IconButton
               aria-label="Clear search"
-              size="xs"
+              size="2xs"
               variant="ghost"
               onClick={() => setSearchQuery('')}
+              color="fg.subtle"
+              _hover={{ color: 'fg.default' }}
             >
-              <LuX size={14} />
+              <LuX size={12} />
             </IconButton>
           </Box>
         )}
@@ -461,520 +471,434 @@ export default function SchemaTreeView({
       {/* Refresh Button */}
       {onRetry && (
         <HStack
-          p={2}
+          px={3}
+          py={1.5}
           borderBottom="1px solid"
           borderColor="border.default"
-          bg="bg.surface"
+          bg="bg.muted"
           justify="space-between"
         >
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+          <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
             {connectionName ? `${connectionName} schema` : 'Database schema'}
           </Text>
           <IconButton
             aria-label="Refresh schema"
-            size="xs"
+            size="2xs"
             variant="ghost"
             onClick={onRetry}
             title="Fetch latest schema from database"
+            color="fg.subtle"
+            _hover={{ color: 'accent.teal' }}
           >
-            <LuRefreshCw size={14} />
+            <LuRefreshCw size={12} />
           </IconButton>
         </HStack>
       )}
 
-      {/* Stats Summary (only in selectable mode with showStats=true) */}
+      {/* Stats Summary — compact inline bar */}
       {stats && (
-        <Box
-          p={3}
-          bg="bg.muted"
-          borderRadius="md"
-          border="1px solid"
+        <HStack
+          px={3}
+          py={2}
+          gap={3}
+          fontFamily="mono"
+          fontSize="xs"
+          borderBottom="1px solid"
           borderColor="border.default"
+          bg="bg.muted"
         >
-          <HStack gap={4} fontFamily="mono" fontSize="sm">
-            <HStack gap={1.5}>
-              <Icon as={LuDatabase} boxSize={4} color="accent.secondary" />
-              <Text fontWeight="600">
-                {stats.whitelistedSchemas}/{stats.totalSchemas}
-              </Text>
-              <Text color="fg.muted">Schemas</Text>
-            </HStack>
-            <Text color="fg.muted">•</Text>
-            <HStack gap={1.5}>
-              <Icon as={LuTable} boxSize={4} color="accent.teal" />
-              <Text fontWeight="600">
-                {stats.whitelistedTables}/{stats.totalTables}
-              </Text>
-              <Text color="fg.muted">Tables</Text>
-            </HStack>
+          <HStack gap={1}>
+            <Icon as={LuDatabase} boxSize={3} color="accent.secondary" />
+            <Text fontWeight="700" color="fg.default">
+              {stats.whitelistedSchemas}/{stats.totalSchemas}
+            </Text>
+            <Text color="fg.subtle">schemas</Text>
           </HStack>
-        </Box>
+          <Text color="fg.subtle">·</Text>
+          <HStack gap={1}>
+            <Icon as={LuTable} boxSize={3} color="accent.teal" />
+            <Text fontWeight="700" color="fg.default">
+              {stats.whitelistedTables}/{stats.totalTables}
+            </Text>
+            <Text color="fg.subtle">tables</Text>
+          </HStack>
+        </HStack>
       )}
 
       {/* Tree View */}
       <Box flex="1" overflowY="auto">
         {filteredSchemas.length === 0 ? (
-          <Box p={8} textAlign="center">
-            <Text color="fg.muted" fontSize="sm">
+          <Box p={6} textAlign="center">
+            <Text color="fg.subtle" fontSize="xs" fontFamily="mono">
               {searchQuery ? 'No matching schemas, tables or columns found' : 'No schemas found'}
             </Text>
           </Box>
         ) : (
-          <VStack gap={1} align="stretch">
+          <VStack gap={0} align="stretch">
             {filteredSchemas.map((schemaItem) => {
               const isSchemaExpanded = expandedSchemas.has(schemaItem.schema);
               const checkboxState = selectable ? getSchemaCheckboxState(schemaItem) : null;
 
               return (
                 <Box key={schemaItem.schema}>
-                  {/* Schema Header */}
-                  <Box
+                  {/* Schema Header — flat row with left accent */}
+                  <HStack
                     px={3}
                     py={2}
-                    borderRadius="md"
-                    border="1px solid"
-                    borderColor={isSchemaExpanded ? 'accent.secondary' : 'border.default'}
-                    bg={isSchemaExpanded ? 'accent.secondary/10' : 'bg.muted'}
+                    gap={2}
+                    borderBottom="1px solid"
+                    borderColor="border.default"
+                    borderLeft="2px solid"
+                    borderLeftColor={isSchemaExpanded ? 'accent.secondary' : 'transparent'}
+                    bg={isSchemaExpanded ? 'accent.secondary/8' : 'bg.canvas'}
                     cursor="pointer"
                     onClick={() => toggleSchemaExpanded(schemaItem.schema)}
-                    _hover={{
-                      bg: isSchemaExpanded ? 'accent.secondary/20' : 'bg.surface',
-                      borderColor: 'accent.secondary'
-                    }}
-                    transition="all 0.2s"
+                    _hover={{ bg: isSchemaExpanded ? 'accent.secondary/12' : 'bg.muted' }}
+                    transition="all 0.15s"
                     opacity={connectionWhitelisted ? 0.6 : 1}
+                    justify="space-between"
                   >
-                    <HStack gap={2} justify="space-between" w="100%">
-                      <HStack gap={2} flex={1} minW={0}>
-                        <Icon
-                          as={isSchemaExpanded ? LuChevronDown : LuChevronRight}
-                          boxSize={4}
-                          color="fg.muted"
-                          flexShrink={0}
-                        />
-                        {selectable && onWhitelistChange && checkboxState && (
-                          <Box
-                            position="relative"
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation();
-                            }}
-                          >
-                            <Checkbox
-                              checked={checkboxState.checked}
-                              onCheckedChange={() => toggleSchema(schemaItem)}
-                            />
-                            {checkboxState.indeterminate && (
-                              <Box
-                                position="absolute"
-                                top="50%"
-                                left="50%"
-                                transform="translate(-50%, -50%)"
-                                width="8px"
-                                height="2px"
-                                bg="accent.teal"
-                                borderRadius="sm"
-                                pointerEvents="none"
-                              />
-                            )}
-                          </Box>
-                        )}
-                        <Icon
-                          as={LuDatabase}
-                          boxSize={4}
-                          color={isSchemaExpanded ? 'accent.secondary' : 'fg.muted'}
-                          flexShrink={0}
-                        />
-                        <Box
-                          px={1.5}
-                          py={0.5}
-                          bg="accent.secondary/15"
-                          borderRadius="sm"
-                          fontSize="2xs"
-                          fontWeight="700"
-                          color="accent.secondary"
-                          textTransform="uppercase"
-                          letterSpacing="0.05em"
-                          flexShrink={0}
-                        >
-                          Schema
-                        </Box>
-                        <Text
-                          fontSize="sm"
-                          fontWeight={isSchemaExpanded ? '800' : '700'}
-                          fontFamily="mono"
-                          color={isSchemaExpanded ? 'accent.secondary' : 'fg.default'}
-                          textOverflow="ellipsis"
-                          overflow="hidden"
-                          whiteSpace="nowrap"
-                          flex={1}
-                          minW={0}
-                          title={schemaItem.schema}
-                        >
-                          {schemaItem.schema}
-                        </Text>
-                        {selectable && (connectionWhitelisted || isSchemaWhitelisted(schemaItem.schema)) && (
-                          <Text fontSize="xs" color="fg.muted">
-                            {connectionWhitelisted ? '(from connection)' : '(entire schema)'}
-                          </Text>
-                        )}
-                      </HStack>
-                      <Box
-                        px={2}
-                        py={0.5}
-                        bg="bg.canvas"
-                        borderRadius="sm"
-                        border="1px solid"
-                        borderColor="border.muted"
-                      >
-                        <Text
-                          fontSize="2xs"
-                          fontWeight="700"
-                          color="fg.subtle"
-                          fontFamily="mono"
-                        >
-                          {schemaItem.tables.length} {schemaItem.tables.length === 1 ? 'table' : 'tables'}
-                        </Text>
-                      </Box>
-                    </HStack>
-                  </Box>
-
-                  {/* Path Filter UI for schema-level whitelists */}
-                  {showPathFilter && availableChildPaths.length > 0 && isSchemaWhitelisted(schemaItem.schema) && (
-                    <Box ml={10} mt={2}>
-                      <ChildPathSelector
-                        availablePaths={availableChildPaths}
-                        selectedPaths={(() => {
-                          const item = whitelist.find(
-                            w => w.type === 'schema' && w.name === schemaItem.schema
-                          );
-                          return item?.childPaths;
-                        })()}
-                        onChange={(paths) => {
-                          const item = whitelist.find(
-                            w => w.type === 'schema' && w.name === schemaItem.schema
-                          );
-                          if (item) handlePathFilterChange(item, paths);
-                        }}
+                    <HStack gap={1.5} flex={1} minW={0}>
+                      <Icon
+                        as={isSchemaExpanded ? LuChevronDown : LuChevronRight}
+                        boxSize={3.5}
+                        color="fg.subtle"
+                        flexShrink={0}
                       />
-                    </Box>
-                  )}
+                      {selectable && onWhitelistChange && checkboxState && (
+                        <Box
+                          position="relative"
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <Checkbox
+                            checked={checkboxState.checked}
+                            onCheckedChange={() => toggleSchema(schemaItem)}
+                          />
+                          {checkboxState.indeterminate && (
+                            <Box
+                              position="absolute"
+                              top="50%"
+                              left="50%"
+                              transform="translate(-50%, -50%)"
+                              width="8px"
+                              height="2px"
+                              bg="accent.teal"
+                              borderRadius="sm"
+                              pointerEvents="none"
+                            />
+                          )}
+                        </Box>
+                      )}
+                      <Icon
+                        as={LuDatabase}
+                        boxSize={3.5}
+                        color={isSchemaExpanded ? 'accent.secondary' : 'fg.muted'}
+                        flexShrink={0}
+                      />
+                      <Text
+                        fontSize="xs"
+                        fontWeight="700"
+                        fontFamily="mono"
+                        color={isSchemaExpanded ? 'accent.secondary' : 'fg.default'}
+                        textOverflow="ellipsis"
+                        overflow="hidden"
+                        whiteSpace="nowrap"
+                        flex={1}
+                        minW={0}
+                        title={schemaItem.schema}
+                      >
+                        {schemaItem.schema}
+                      </Text>
+                      {selectable && (connectionWhitelisted || isSchemaWhitelisted(schemaItem.schema)) && (
+                        <Text fontSize="10px" color="fg.subtle" flexShrink={0}>
+                          {connectionWhitelisted ? '(connection)' : '(entire schema)'}
+                        </Text>
+                      )}
+                    </HStack>
+                    <HStack gap={2} flexShrink={0}>
+                      {/* Inline path filter badge for schema */}
+                      {showPathFilter && availableChildPaths.length > 0 && isSchemaWhitelisted(schemaItem.schema) && (
+                        <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
+                          <ChildPathSelector
+                            availablePaths={availableChildPaths}
+                            selectedPaths={(() => {
+                              const item = whitelist.find(
+                                w => w.type === 'schema' && w.name === schemaItem.schema
+                              );
+                              return item?.childPaths;
+                            })()}
+                            onChange={(paths) => {
+                              const item = whitelist.find(
+                                w => w.type === 'schema' && w.name === schemaItem.schema
+                              );
+                              if (item) handlePathFilterChange(item, paths);
+                            }}
+                          />
+                        </Box>
+                      )}
+                      <Text
+                        fontSize="10px"
+                        fontWeight="600"
+                        color="fg.subtle"
+                        fontFamily="mono"
+                        flexShrink={0}
+                      >
+                        {schemaItem.tables.length} {schemaItem.tables.length === 1 ? 'table' : 'tables'}
+                      </Text>
+                    </HStack>
+                  </HStack>
 
                   {/* Tables List */}
                   <Collapsible.Root open={isSchemaExpanded}>
                     <Collapsible.Content>
-                      <Box
-                        mt={2}
-                        ml={4}
-                        pl={3}
-                        borderLeft="2px solid"
+                      <VStack
+                        gap={0}
+                        align="stretch"
+                        ml={3}
+                        borderLeft="1px solid"
                         borderColor="border.muted"
                       >
-                        <VStack gap={2} align="stretch">
-                          {schemaItem.tables.slice(0, getVisibleTableCount(schemaItem.schema, schemaItem.tables.length)).map((table) => {
-                            const tableKey = `${schemaItem.schema}.${table.table}`;
-                            const isTableExpanded = expandedTables.has(tableKey);
-                            const filteredColumns = getFilteredColumns(schemaItem.schema, table);
-                            const columnCount = showColumns ? (searchQuery ? filteredColumns.length : table.columns.length) : 0;
-                            const schemaWL = selectable ? (connectionWhitelisted || isSchemaWhitelisted(schemaItem.schema)) : false;
-                            const tableWL = selectable ? isTableWhitelisted(schemaItem.schema, table.table) : false;
+                        {schemaItem.tables.slice(0, getVisibleTableCount(schemaItem.schema, schemaItem.tables.length)).map((table) => {
+                          const tableKey = `${schemaItem.schema}.${table.table}`;
+                          const isTableExpanded = expandedTables.has(tableKey);
+                          const filteredColumns = getFilteredColumns(schemaItem.schema, table);
+                          const columnCount = showColumns ? (searchQuery ? filteredColumns.length : table.columns.length) : 0;
+                          const schemaWL = selectable ? (connectionWhitelisted || isSchemaWhitelisted(schemaItem.schema)) : false;
+                          const tableWL = selectable ? isTableWhitelisted(schemaItem.schema, table.table) : false;
 
-                            return (
-                              <Box key={tableKey}>
-                                {/* Table Header */}
-                                <Box
-                                  px={3}
-                                  py={1}
-                                  borderRadius="md"
-                                  border="1px solid"
-                                  borderColor="border.default"
-                                  bg={isTableExpanded ? 'accent.teal/10' : 'bg.muted'}
-                                  cursor="pointer"
-                                  onClick={() => {
-                                    if (showColumns) {
-                                      toggleTableExpanded(schemaItem.schema, table.table);
-                                    } else if (selectable && onWhitelistChange) {
-                                      toggleTable(schemaItem.schema, table.table);
-                                    }
-                                  }}
-                                  _hover={{
-                                    bg: isTableExpanded ? 'accent.teal/20' : 'bg.surface',
-                                    borderColor: 'accent.teal'
-                                  }}
-                                  transition="all 0.2s"
-                                  opacity={schemaWL ? 0.6 : 1}
-                                >
-                                  <HStack gap={2} justify="space-between" w="100%">
-                                    <HStack gap={2} flex={1} minW={0}>
-                                      {showColumns && (
-                                        <Icon
-                                          as={isTableExpanded ? LuChevronDown : LuChevronRight}
-                                          boxSize={4}
-                                          color="fg.muted"
-                                          flexShrink={0}
-                                        />
-                                      )}
-                                      {selectable && onWhitelistChange && (
-                                        <Box
-                                          onClick={(e: React.MouseEvent) => {
-                                            e.stopPropagation();
-                                          }}
-                                          flexShrink={0}
-                                        >
-                                          <Checkbox
-                                            checked={schemaWL || tableWL}
-                                            onCheckedChange={() => toggleTable(schemaItem.schema, table.table)}
-                                          />
-                                        </Box>
-                                      )}
-                                      <Icon
-                                        as={LuTable}
-                                        boxSize={4}
-                                        color={isTableExpanded ? 'accent.teal' : 'fg.muted'}
-                                        opacity={schemaWL ? 0.6 : 1}
-                                        flexShrink={0}
+                          return (
+                            <Box key={tableKey}>
+                              {/* Table Header — indented flat row */}
+                              <HStack
+                                pl={3}
+                                pr={3}
+                                py={1.5}
+                                gap={1.5}
+                                borderBottom="1px solid"
+                                borderColor="border.muted"
+                                bg={isTableExpanded ? 'accent.teal/6' : 'bg.canvas'}
+                                cursor="pointer"
+                                onClick={() => {
+                                  if (showColumns) {
+                                    toggleTableExpanded(schemaItem.schema, table.table);
+                                  } else if (selectable && onWhitelistChange) {
+                                    toggleTable(schemaItem.schema, table.table);
+                                  }
+                                }}
+                                _hover={{ bg: isTableExpanded ? 'accent.teal/10' : 'bg.muted' }}
+                                transition="all 0.15s"
+                                opacity={schemaWL ? 0.6 : 1}
+                                justify="space-between"
+                              >
+                                <HStack gap={1.5} flex={1} minW={0}>
+                                  {showColumns && (
+                                    <Icon
+                                      as={isTableExpanded ? LuChevronDown : LuChevronRight}
+                                      boxSize={3}
+                                      color="fg.subtle"
+                                      flexShrink={0}
+                                    />
+                                  )}
+                                  {selectable && onWhitelistChange && (
+                                    <Box
+                                      onClick={(e: React.MouseEvent) => {
+                                        e.stopPropagation();
+                                      }}
+                                      flexShrink={0}
+                                    >
+                                      <Checkbox
+                                        checked={schemaWL || tableWL}
+                                        onCheckedChange={() => toggleTable(schemaItem.schema, table.table)}
                                       />
-                                      <Box
-                                        px={1.5}
-                                        py={0.5}
-                                        bg="accent.teal/15"
-                                        borderRadius="sm"
-                                        fontSize="2xs"
-                                        fontWeight="700"
-                                        color="accent.teal"
-                                        textTransform="uppercase"
-                                        letterSpacing="0.05em"
-                                        opacity={schemaWL ? 0.6 : 1}
-                                        flexShrink={0}
-                                      >
-                                        Table
-                                      </Box>
-                                      <Text
-                                        fontSize="sm"
-                                        fontWeight={isTableExpanded ? '700' : '600'}
-                                        fontFamily="mono"
-                                        color={isTableExpanded ? 'accent.teal' : (schemaWL ? 'fg.muted' : 'fg.default')}
-                                        textOverflow="ellipsis"
-                                        overflow="hidden"
-                                        whiteSpace="nowrap"
-                                        flex={1}
-                                        minW={0}
-                                        title={table.table}
-                                      >
-                                        {table.table}
-                                      </Text>
-                                    </HStack>
-                                    <HStack gap={2}>
-                                      {onTablePreview && (
-                                        <Box
-                                          as="button"
-                                          display="flex"
-                                          alignItems="center"
-                                          gap={1}
-                                          px={2}
+                                    </Box>
+                                  )}
+                                  <Icon
+                                    as={LuTable}
+                                    boxSize={3}
+                                    color={isTableExpanded ? 'accent.teal' : 'fg.muted'}
+                                    opacity={schemaWL ? 0.6 : 1}
+                                    flexShrink={0}
+                                  />
+                                  <Text
+                                    fontSize="xs"
+                                    fontWeight={isTableExpanded ? '700' : '500'}
+                                    fontFamily="mono"
+                                    color={isTableExpanded ? 'accent.teal' : (schemaWL ? 'fg.muted' : 'fg.default')}
+                                    textOverflow="ellipsis"
+                                    overflow="hidden"
+                                    whiteSpace="nowrap"
+                                    flex={1}
+                                    minW={0}
+                                    title={table.table}
+                                  >
+                                    {table.table}
+                                  </Text>
+                                </HStack>
+                                <HStack gap={2} flexShrink={0}>
+                                  {onTablePreview && (
+                                    <Box
+                                      as="button"
+                                      display="flex"
+                                      alignItems="center"
+                                      gap={1}
+                                      px={1.5}
+                                      py={0.5}
+                                      fontSize="10px"
+                                      fontWeight="600"
+                                      fontFamily="mono"
+                                      color="accent.teal"
+                                      bg="transparent"
+                                      borderRadius="sm"
+                                      cursor="pointer"
+                                      transition="all 0.15s"
+                                      _hover={{ bg: 'accent.teal/10' }}
+                                      onClick={(e: React.MouseEvent) => {
+                                        e.stopPropagation();
+                                        onTablePreview(schemaItem.schema, table.table);
+                                      }}
+                                    >
+                                      <LuEye size={11} />
+                                      Preview
+                                    </Box>
+                                  )}
+                                  {/* Inline path filter badge */}
+                                  {showPathFilter && availableChildPaths.length > 0 && tableWL && !schemaWL && (
+                                    <Box onClick={(e: React.MouseEvent) => e.stopPropagation()} flexShrink={0}>
+                                      <ChildPathSelector
+                                        availablePaths={availableChildPaths}
+                                        selectedPaths={(() => {
+                                          const item = whitelist.find(
+                                            w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
+                                          );
+                                          return item?.childPaths;
+                                        })()}
+                                        onChange={(paths) => {
+                                          const item = whitelist.find(
+                                            w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
+                                          );
+                                          if (item) handlePathFilterChange(item, paths);
+                                        }}
+                                      />
+                                    </Box>
+                                  )}
+                                  {showColumns && (
+                                    <Text
+                                      fontSize="10px"
+                                      fontWeight="600"
+                                      color="fg.subtle"
+                                      fontFamily="mono"
+                                    >
+                                      {columnCount} cols
+                                    </Text>
+                                  )}
+                                </HStack>
+                              </HStack>
+
+                              {/* Columns List */}
+                              {showColumns && isTableExpanded && (
+                                <Collapsible.Root open={isTableExpanded}>
+                                  <Collapsible.Content>
+                                    <VStack
+                                      gap={0}
+                                      align="stretch"
+                                      ml={5}
+                                      borderLeft="1px solid"
+                                      borderColor="border.muted"
+                                    >
+                                      {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => (
+                                        <HStack
+                                          key={column.name}
+                                          pl={3}
+                                          pr={3}
                                           py={1}
-                                          fontSize="xs"
-                                          fontWeight="600"
-                                          fontFamily="mono"
-                                          color="accent.teal"
-                                          bg="accent.teal/10"
-                                          borderRadius="md"
-                                          border="1px solid"
-                                          borderColor="accent.teal/30"
-                                          cursor="pointer"
-                                          transition="all 0.2s"
-                                          _hover={{
-                                            bg: 'accent.teal/20',
-                                            borderColor: 'accent.teal',
-                                            transform: 'translateY(-1px)'
-                                          }}
-                                          onClick={(e: React.MouseEvent) => {
-                                            e.stopPropagation();
-                                            onTablePreview(schemaItem.schema, table.table);
-                                          }}
-                                        >
-                                          <LuEye size={12} />
-                                          Preview Table
-                                        </Box>
-                                      )}
-                                      {showColumns && (
-                                        <Box
-                                          px={2}
-                                          py={0.5}
-                                          bg="bg.canvas"
-                                          borderRadius="sm"
-                                          border="1px solid"
+                                          gap={2}
+                                          borderBottom="1px solid"
                                           borderColor="border.muted"
+                                          _hover={{ bg: 'bg.muted' }}
+                                          transition="background 0.1s"
+                                          justify="space-between"
                                         >
+                                          <HStack gap={1.5} flex={1} minW={0}>
+                                            <Icon
+                                              as={LuColumns3}
+                                              boxSize={3}
+                                              color="fg.subtle"
+                                              flexShrink={0}
+                                            />
+                                            <Text
+                                              fontSize="xs"
+                                              fontWeight="500"
+                                              fontFamily="mono"
+                                              color="fg.default"
+                                              textOverflow="ellipsis"
+                                              overflow="hidden"
+                                              whiteSpace="nowrap"
+                                              flex={1}
+                                              minW={0}
+                                              title={column.name}
+                                            >
+                                              {column.name}
+                                            </Text>
+                                          </HStack>
                                           <Text
-                                            fontSize="2xs"
-                                            fontWeight="700"
-                                            color="fg.subtle"
+                                            fontSize="10px"
+                                            fontWeight="600"
+                                            color={getTypeColor(column.type)}
                                             fontFamily="mono"
+                                            flexShrink={0}
                                           >
-                                            {columnCount} cols
+                                            {column.type}
+                                          </Text>
+                                        </HStack>
+                                      ))}
+
+                                      {/* Show More Columns Button */}
+                                      {filteredColumns.length > getVisibleColumnCount(tableKey, filteredColumns.length) && (
+                                        <Box
+                                          pl={3}
+                                          pr={3}
+                                          py={1.5}
+                                          borderBottom="1px solid"
+                                          borderColor="border.muted"
+                                          cursor="pointer"
+                                          onClick={() => showMoreColumns(tableKey)}
+                                          _hover={{ bg: 'bg.muted' }}
+                                          transition="background 0.1s"
+                                        >
+                                          <Text fontSize="10px" color="accent.teal" fontFamily="mono" fontWeight="600">
+                                            + {Math.min(COLUMNS_PER_PAGE, filteredColumns.length - getVisibleColumnCount(tableKey, filteredColumns.length))} more columns
                                           </Text>
                                         </Box>
                                       )}
-                                    </HStack>
-                                  </HStack>
-                                </Box>
-
-                                {/* Path Filter UI - only for whitelisted tables in parent contexts */}
-                                {showPathFilter && availableChildPaths.length > 0 && tableWL && !schemaWL && (
-                                  <Box ml={10} mt={2}>
-                                    <ChildPathSelector
-                                      availablePaths={availableChildPaths}
-                                      selectedPaths={(() => {
-                                        const item = whitelist.find(
-                                          w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
-                                        );
-                                        return item?.childPaths;
-                                      })()}
-                                      onChange={(paths) => {
-                                        const item = whitelist.find(
-                                          w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
-                                        );
-                                        if (item) handlePathFilterChange(item, paths);
-                                      }}
-                                    />
-                                  </Box>
-                                )}
-
-                                {/* Columns List - Only render when table is expanded */}
-                                {showColumns && isTableExpanded && (
-                                  <Collapsible.Root open={isTableExpanded}>
-                                    <Collapsible.Content>
-                                      <Box
-                                        mt={1}
-                                        ml={4}
-                                        pl={3}
-                                        borderLeft="2px solid"
-                                        borderColor="border.muted"
-                                      >
-                                        <VStack gap={1} align="stretch" py={2}>
-                                          {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => (
-                                            <Box
-                                              key={column.name}
-                                              px={3}
-                                              py={2}
-                                              borderRadius="sm"
-                                              border="1px solid"
-                                              borderColor="border.muted"
-                                              bg="bg.canvas"
-                                              _hover={{
-                                                bg: 'bg.muted',
-                                                borderColor: getTypeColor(column.type)
-                                              }}
-                                              transition="all 0.2s"
-                                            >
-                                              <HStack gap={2} justify="space-between">
-                                                <HStack gap={2} flex={1} minW={0}>
-                                                  <Icon
-                                                    as={LuColumns3}
-                                                    boxSize={3}
-                                                    color="fg.subtle"
-                                                    flexShrink={0}
-                                                  />
-                                                  <Box
-                                                    px={1}
-                                                    py={0.5}
-                                                    bg="fg.muted/10"
-                                                    borderRadius="sm"
-                                                    fontSize="2xs"
-                                                    fontWeight="600"
-                                                    color="fg.muted"
-                                                    textTransform="uppercase"
-                                                    letterSpacing="0.05em"
-                                                    flexShrink={0}
-                                                  >
-                                                    Column
-                                                  </Box>
-                                                  <Text
-                                                    fontSize="xs"
-                                                    fontWeight="600"
-                                                    fontFamily="mono"
-                                                    color="fg.default"
-                                                    textOverflow="ellipsis"
-                                                    overflow="hidden"
-                                                    whiteSpace="nowrap"
-                                                    maxW="150px"
-                                                    title={column.name}
-                                                  >
-                                                    {column.name}
-                                                  </Text>
-                                                </HStack>
-                                                <Box
-                                                  px={2}
-                                                  py={0.5}
-                                                  bg={`${getTypeColor(column.type)}/10`}
-                                                  borderRadius="sm"
-                                                  border="1px solid"
-                                                  borderColor={`${getTypeColor(column.type)}/30`}
-                                                  flexShrink={0}
-                                                >
-                                                  <Text
-                                                    fontSize="2xs"
-                                                    fontWeight="700"
-                                                    color={getTypeColor(column.type)}
-                                                    fontFamily="mono"
-                                                    textTransform="uppercase"
-                                                  >
-                                                    {column.type}
-                                                  </Text>
-                                                </Box>
-                                              </HStack>
-                                            </Box>
-                                          ))}
-
-                                          {/* Show More Columns Button */}
-                                          {filteredColumns.length > getVisibleColumnCount(tableKey, filteredColumns.length) && (
-                                            <Box
-                                              px={3}
-                                              py={2}
-                                              borderRadius="sm"
-                                              border="1px dashed"
-                                              borderColor="border.default"
-                                              bg="bg.surface"
-                                              cursor="pointer"
-                                              onClick={() => showMoreColumns(tableKey)}
-                                              _hover={{ bg: 'bg.muted', borderColor: 'accent.teal' }}
-                                              transition="all 0.2s"
-                                            >
-                                              <Text fontSize="xs" color="fg.muted" textAlign="center" fontFamily="mono">
-                                                Show {Math.min(COLUMNS_PER_PAGE, filteredColumns.length - getVisibleColumnCount(tableKey, filteredColumns.length))} more columns
-                                              </Text>
-                                            </Box>
-                                          )}
-                                        </VStack>
-                                      </Box>
-                                    </Collapsible.Content>
-                                  </Collapsible.Root>
-                                )}
-                              </Box>
-                            );
-                          })}
-
-                          {/* Show More Tables Button */}
-                          {schemaItem.tables.length > getVisibleTableCount(schemaItem.schema, schemaItem.tables.length) && (
-                            <Box
-                              px={3}
-                              py={2}
-                              borderRadius="md"
-                              border="1px dashed"
-                              borderColor="border.default"
-                              bg="bg.surface"
-                              cursor="pointer"
-                              onClick={() => showMoreTables(schemaItem.schema)}
-                              _hover={{ bg: 'bg.muted', borderColor: 'accent.teal' }}
-                              transition="all 0.2s"
-                            >
-                              <Text fontSize="sm" color="fg.muted" textAlign="center" fontFamily="mono">
-                                Show {Math.min(TABLES_PER_PAGE, schemaItem.tables.length - getVisibleTableCount(schemaItem.schema, schemaItem.tables.length))} more tables
-                              </Text>
+                                    </VStack>
+                                  </Collapsible.Content>
+                                </Collapsible.Root>
+                              )}
                             </Box>
-                          )}
-                        </VStack>
-                      </Box>
+                          );
+                        })}
+
+                        {/* Show More Tables Button */}
+                        {schemaItem.tables.length > getVisibleTableCount(schemaItem.schema, schemaItem.tables.length) && (
+                          <Box
+                            pl={3}
+                            pr={3}
+                            py={2}
+                            borderBottom="1px solid"
+                            borderColor="border.muted"
+                            cursor="pointer"
+                            onClick={() => showMoreTables(schemaItem.schema)}
+                            _hover={{ bg: 'bg.muted' }}
+                            transition="background 0.1s"
+                          >
+                            <Text fontSize="xs" color="accent.teal" fontFamily="mono" fontWeight="600">
+                              + {Math.min(TABLES_PER_PAGE, schemaItem.tables.length - getVisibleTableCount(schemaItem.schema, schemaItem.tables.length))} more tables
+                            </Text>
+                          </Box>
+                        )}
+                      </VStack>
                     </Collapsible.Content>
                   </Collapsible.Root>
                 </Box>

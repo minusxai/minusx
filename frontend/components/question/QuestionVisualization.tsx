@@ -90,8 +90,8 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
   return (
     <VStack gap={2}>
       <Text fontFamily="mono">
-        Loading
-        <Box as="span" display="inline-block">
+        Executing query
+        <Box as="span" display="inline-block" w="3ch" textAlign="left" whiteSpace="nowrap">
           {'.'.repeat(dotCount)}
         </Box>
       </Text>
@@ -114,7 +114,7 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
       )}
       {elapsed >= 10 && (
         <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-          Query is still running... ({elapsed}s elapsed)
+          Query is still running...
         </Text>
       )}
     </VStack>

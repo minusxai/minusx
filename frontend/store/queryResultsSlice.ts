@@ -137,7 +137,16 @@ const queryResultsSlice = createSlice({
     clearQueryResult(state, action: PayloadAction<{ query: string; params: Record<string, any>; database: string }>) {
       const { query, params, database } = action.payload;
       const hash = getQueryHash(query, params, database);
-      delete state.results[hash];
+      // Reset to loading state instead of deleting, so the UI shows a spinner
+      state.results[hash] = {
+        query,
+        params,
+        database,
+        data: null,
+        updatedAt: Date.now(),
+        loading: true,
+        error: null
+      };
     }
   }
 });
