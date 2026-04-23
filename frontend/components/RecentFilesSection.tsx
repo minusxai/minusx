@@ -162,7 +162,7 @@ function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: str
           </Flex>
         )}
         <Box flex="1" minW={0}>
-          <Text fontSize="xs" fontWeight="500" color="fg.default" truncate>
+          <Text fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
             {file.fileName}
           </Text>
         </Box>
