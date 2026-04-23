@@ -11,6 +11,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
 import UserInputComponent from '../UserInputComponent';
+import { type FileType, getFileTypeMetadata } from '@/lib/ui/file-metadata';
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
 
@@ -44,12 +45,15 @@ export function NavigateDetailCard({ msg, filesDict }: DetailCardProps) {
     );
   }
 
+  const file = file_id !== undefined ? filesDict[file_id] : undefined;
+  const meta = file?.type ? getFileTypeMetadata(file.type as FileType) : null;
+
   let navIcon = LuArrowRight;
   let label = 'Unknown';
   let href: string | null = null;
   if (file_id !== undefined) {
-    navIcon = LuFile;
-    label = filesDict[file_id]?.name || `File #${file_id}`;
+    navIcon = meta?.icon || LuFile;
+    label = file?.name || `File #${file_id}`;
     href = `/f/${file_id}`;
   } else if (newFileType !== undefined) {
     navIcon = LuFilePlus2;
