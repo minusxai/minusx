@@ -2337,7 +2337,7 @@
         "name": "internals",
         "type": "duckdb",
         "config": {
-          "file_path": "/app/data/analytics/1.duckdb",
+          "file_path": "/app/data/analytics/analytics.duckdb",
           "read_only": true
         },
         "description": "MinusX system analytics (file events + LLM call stats)"
