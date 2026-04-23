@@ -23,7 +23,7 @@ function getAllReducers() {
     chat: chatReducer,  // Orchestration API with automatic tool execution
     recordings: recordingsReducer,  // Session recording state
     jobRuns: jobRunsReducer,        // Job run state (job_runs table records, all job types)
-    navigation: navigationReducer,  // Navigation state (pathname, searchParams, activeVirtualId)
+    navigation: navigationReducer,  // Navigation state (pathname, searchParams)
     users: usersReducer,            // Users list (admin user management)
   }
 }

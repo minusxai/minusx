@@ -37,9 +37,9 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
         const file = filesDict[id];
         const type = (file?.type ?? null) as FileType | null;
         const meta = type ? getFileTypeMetadata(type) : null;
-        const isNewFile = id < 0;
-        const name = isNewFile ? `New ${meta?.label ?? type ?? 'file'}` : (file?.name ?? `#${id}`);
-        return { id, name, path: null as string | null, meta, assetCount: null as number | null, canLink: !isNewFile && id > 0 };
+        const isDraft = file?.draft === true;
+        const name = isDraft ? `New ${meta?.label ?? type ?? 'file'}` : (file?.name ?? `#${id}`);
+        return { id, name, path: null as string | null, meta, assetCount: null as number | null, canLink: !isDraft && id > 0 };
       });
 
   // Single file: show as a full card
@@ -198,8 +198,8 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
         {fileInfos.map(({ id, name, type }) => {
           const meta = type ? getFileTypeMetadata(type) : null;
           const FileIcon = meta?.icon;
-          const isNewFile = id < 0;
-          const displayName = isNewFile
+          const isDraft = filesDict[id]?.draft === true;
+          const displayName = isDraft
             ? `a new ${meta?.label ?? type ?? 'file'}`
             : name || `#${id}`;
 
@@ -210,8 +210,8 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
               px={1.5}
               py={0.5}
               borderRadius="sm"
-              cursor={isNewFile ? 'default' : 'pointer'}
-              _hover={isNewFile ? {} : { bg: 'bg.emphasized' }}
+              cursor={isDraft ? 'default' : 'pointer'}
+              _hover={isDraft ? {} : { bg: 'bg.emphasized' }}
             >
               {FileIcon && <Icon as={FileIcon} boxSize={2.5} color="fg.muted" />}
               <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="500">
@@ -220,7 +220,7 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
             </HStack>
           );
 
-          return isNewFile ? (
+          return isDraft ? (
             <span key={id}>{chip}</span>
           ) : (
             <Link key={id} href={withMode(`/f/${id}`)}>

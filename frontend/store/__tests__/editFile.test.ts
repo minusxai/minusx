@@ -2,9 +2,8 @@
  * Test for editFile functionality - verifies that editing a file properly
  * updates persistableChanges and isDirty state
  */
-import { getTestDbPath, waitFor, initTestDatabase } from './test-utils';
-import { getModules } from '@/lib/modules/registry';
-import { editFile, editFileStr, readFiles, createVirtualFile } from '@/lib/api/file-state';
+import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
+import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile } from '@/store/filesSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
@@ -632,6 +631,23 @@ describe('CreateFile tool - auto-execute query results', () => {
       };
       return { fileName: 'Untitled', content: {} };
     });
+    let mockFileIdCounter = 9001;
+    jest.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
+      data: {
+        id: mockFileIdCounter++,
+        name: input.name,
+        path: input.path,
+        type: input.type,
+        content: input.content,
+        references: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+        last_edit_id: null,
+        draft: true,
+        meta: null,
+      },
+    }));
   });
 
   afterEach(() => {
@@ -700,6 +716,23 @@ describe('CreateFile tool - content validation', () => {
       if (type === 'dashboard') return dashboardTemplate;
       return { fileName: 'Untitled', content: {} };
     });
+    let mockFileIdCounter = 9001;
+    jest.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
+      data: {
+        id: mockFileIdCounter++,
+        name: input.name,
+        path: input.path,
+        type: input.type,
+        content: input.content,
+        references: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+        last_edit_id: null,
+        draft: true,
+        meta: null,
+      },
+    }));
   });
 
   afterEach(() => {

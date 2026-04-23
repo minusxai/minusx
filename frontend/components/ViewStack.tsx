@@ -49,7 +49,7 @@ export default function ViewStackOverlay() {
             return (
               <QuestionStackLayer
                 key={`create-${item.folderPath}-${item.dashboardId}`}
-                fileId={item.virtualFileId}
+                fileId={item.fileId}
                 folderPath={item.folderPath}
                 isCreateMode={true}
                 dashboardId={item.dashboardId}

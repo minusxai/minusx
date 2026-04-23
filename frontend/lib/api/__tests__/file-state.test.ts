@@ -20,7 +20,6 @@ import {
   reloadFile,
   clearFileChanges,
   readFilesByCriteria,
-  createVirtualFile,
   createFolder,
   readFolder,
   getQueryResult
@@ -929,97 +928,6 @@ describe('readFiles - File State Manager', () => {
       expect(result[0].queryResults).toHaveLength(1);
       expect(result[0].references).toHaveLength(1);
       expect(result[0].references[0].id).toBe(1);
-    });
-  });
-
-  describe('createVirtualFile', () => {
-    it('should create virtual file with generated ID', async () => {
-      const mockTemplate = {
-        fileName: 'Untitled Question',
-        content: { query: 'SELECT 1', vizSettings: {}, connection_name: 'test' }
-      };
-
-      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
-      FilesAPI.getTemplate = mockGetTemplate;
-
-      const virtualId = await createVirtualFile('question', { folder: '/org' });
-
-      // Virtual ID should be negative
-      expect(virtualId).toBeLessThan(0);
-
-      // Should have called getTemplate with correct params
-      expect(mockGetTemplate).toHaveBeenCalledWith('question', {
-        path: '/org',
-        databaseName: undefined,
-        query: undefined
-      });
-
-      // Should be in Redux
-      const state = mockStore.getState() as RootState;
-      expect(state.files.files[virtualId]).toBeDefined();
-      expect(state.files.files[virtualId].name).toBe('Untitled Question');
-      expect(state.files.files[virtualId].path).toBe('/org/Untitled Question');
-    });
-
-    it('should pre-populate question with database and query', async () => {
-      const mockTemplate = {
-        fileName: 'New Query',
-        content: { query: 'SELECT * FROM users', vizSettings: {}, connection_name: 'my_db' }
-      };
-
-      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
-      FilesAPI.getTemplate = mockGetTemplate;
-
-      await createVirtualFile('question', {
-        folder: '/org',
-        databaseName: 'my_db',
-        query: 'SELECT * FROM users'
-      });
-
-      expect(mockGetTemplate).toHaveBeenCalledWith('question', {
-        path: '/org',
-        databaseName: 'my_db',
-        query: 'SELECT * FROM users'
-      });
-    });
-
-    it('should use provided virtual ID', async () => {
-      const mockTemplate = {
-        fileName: 'Test',
-        content: {}
-      };
-
-      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
-      FilesAPI.getTemplate = mockGetTemplate;
-
-      const customVirtualId = -12345;
-      const virtualId = await createVirtualFile('dashboard', {
-        folder: '/org',
-        virtualId: customVirtualId
-      });
-
-      expect(virtualId).toBe(customVirtualId);
-
-      const state = mockStore.getState() as RootState;
-      expect(state.files.files[customVirtualId]).toBeDefined();
-    });
-
-    it('should resolve home folder from user when not provided', async () => {
-      const mockTemplate = {
-        fileName: 'Test',
-        content: {}
-      };
-
-      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
-      FilesAPI.getTemplate = mockGetTemplate;
-
-      // User's home folder should be used (from mockStore setup)
-      await createVirtualFile('question');
-
-      // Should have used resolved home folder path
-      expect(mockGetTemplate).toHaveBeenCalledWith('question', expect.objectContaining({
-        path: expect.any(String)
-      }));
     });
   });
 

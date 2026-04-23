@@ -9,7 +9,7 @@
  * prevent field deletions from working properly.
  */
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectIsDirty, isVirtualFileId, setFullContent, clearEdits, setSaving, updateFileContent, addFile, type FileId } from '@/store/filesSlice';
+import { selectIsDirty, setFullContent, clearEdits, setSaving, updateFileContent, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { reloadFile } from '@/lib/api/file-state';
 import { reloadConfigs } from '@/lib/hooks/useConfigs';
@@ -67,24 +67,9 @@ export default function ConfigContainerV2({
     dispatch(setSaving({ id: fileId, saving: true }));
 
     try {
-      if (isVirtualFileId(fileId)) {
-        // Create new file
-        const result = await FilesAPI.createFile({
-          name: effectiveName,
-          path: newPath,
-          type: file.type,
-          content: currentContent,
-          references: []
-        });
-        dispatch(addFile(result.data));
-        dispatch(clearEdits(result.data.id));
-        router.replace(`/f/${result.data.id}`);
-      } else {
-        // Update existing file - save currentContent directly (full replace)
-        const result = await FilesAPI.saveFile(fileId, effectiveName, newPath, currentContent, []);
-        dispatch(updateFileContent({ id: fileId, file: result.data }));
-        dispatch(clearEdits(fileId));
-      }
+      const result = await FilesAPI.saveFile(fileId, effectiveName, newPath, currentContent, []);
+      dispatch(updateFileContent({ id: fileId, file: result.data }));
+      dispatch(clearEdits(fileId));
 
       // Refresh configs in Redux so the app reflects the new config immediately
       setSyncing(true);

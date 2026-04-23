@@ -4,7 +4,6 @@ import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
-import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { dbFileToFileState } from '@/lib/api/compress-augmented';
 import { immutableSet } from '@/lib/utils/immutable-collections';
@@ -66,30 +65,8 @@ export type FileId = number;
  * Check if a file ID is a virtual file ID (for create mode)
  * Virtual files have negative IDs (< 0)
  */
-export function isVirtualFileId(id: FileId | undefined): boolean {
-  return typeof id === 'number' && id < 0;
-}
-
-/**
- * Get the next available virtual file ID
- * Finds the smallest (most negative) existing virtual ID and decrements it
- * If no virtual IDs exist, returns -1
- */
-export function getNextVirtualFileId(files: Record<FileId, FileState>): FileId {
-  const virtualIds = Object.keys(files)
-    .map(Number)
-    .filter(id => id < 0);
-
-  if (virtualIds.length === 0) {
-    return -1;
-  }
-
-  const minId = Math.min(...virtualIds);
-  return minId - 1;
-}
-
 // djb2-style hash — stays within 32-bit range
-export function hashString(str: string): number {
+function hashString(str: string): number {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
@@ -98,23 +75,8 @@ export function hashString(str: string): number {
   return hash;
 }
 
-// Module-level counter — guarantees uniqueness across all calls in a session.
-// Resets on page reload, which is safe: virtual IDs are never persisted.
-let _virtualIdCounter = 0;
-
-/**
- * Generate a virtual ID for a new user-created file (namespace 1)
- * ID is always 10 digits: -(1_000_000_000 + counter)
- */
-export function generateVirtualId(): number {
-  return -(1_000_000_000 + (++_virtualIdCounter));
-}
-
-/**
- * Deterministic virtual ID for a path-loading placeholder (namespace 2)
- * ID is always 10 digits: -(2_000_000_000 + |hash(path)| % 1_000_000_000)
- */
-export function pathToVirtualId(path: string): number {
+/** Deterministic placeholder ID for a path being loaded (namespace 2, negative). */
+function pathToVirtualId(path: string): number {
   return -(2_000_000_000 + (Math.abs(hashString(path)) % 1_000_000_000));
 }
 
@@ -621,16 +583,6 @@ const filesSlice = createSlice({
     },
 
     /**
-     * Remove a virtual file from Redux cache.
-     * Unlike deleteFile, this only removes the file entry — no path cleanup or folder updates.
-     * Safe for virtual files (negative IDs) that were never persisted.
-     */
-    removeVirtualFile(state, action: PayloadAction<FileId>) {
-      const id = action.payload;
-      delete state.files[id];
-    },
-
-    /**
      * Add a new file/folder to Redux cache
      * Updates parent folder to include the new file in references
      */
@@ -860,44 +812,6 @@ const filesSlice = createSlice({
       };
     },
 
-    /**
-     * Atomically replace virtual (negative) IDs with real (positive) IDs across
-     * all dirty real files in Redux.
-     *
-     * Called by publishAll() after batch-creating virtual files — rewrites any
-     * negative-ID references in persistableChanges so the subsequent batch-save
-     * persists correct real IDs to the database.
-     *
-     * @param idMap - mapping of { virtualId: realId }
-     */
-    replaceVirtualIds(state, action: PayloadAction<Record<number, number>>) {
-      const idMap = action.payload;
-      if (Object.keys(idMap).length === 0) return;
-
-      for (const fileIdStr of Object.keys(state.files)) {
-        const fileId = Number(fileIdStr);
-        const file = state.files[fileId];
-
-        // Skip files with no pending changes (virtual files DO need their refs updated mid-loop)
-        if (!file) continue;
-        const hasPendingChanges = file.persistableChanges && Object.keys(file.persistableChanges).length > 0;
-        const isVirtual = fileId < 0;
-        if (!hasPendingChanges && !isVirtual) continue;
-
-        // Merge base content + pending changes, then rewrite any negative IDs
-        const merged = isVirtual
-          ? { ...file.content, ...(file.persistableChanges || {}) } as any
-          : { ...file.content, ...file.persistableChanges } as any;
-        const updated = replaceNegativeIdsInContent(merged, file.type as FileType, idMap);
-
-        if (JSON.stringify(updated) !== JSON.stringify(merged)) {
-          state.files[fileId].persistableChanges = {
-            ...file.persistableChanges,
-            ...updated
-          };
-        }
-      }
-    }
   }
 });
 
@@ -927,14 +841,12 @@ export const {
   clearFiles,
   setFolderInfo,
   deleteFile,
-  removeVirtualFile,
   addFile,
   addQuestionToDashboard,
   addTextBlockToDashboard,
   updateTextBlockContent,
   addReferenceToQuestion,
   removeReferenceFromQuestion,
-  replaceVirtualIds
 } = filesSlice.actions;
 
 // Selectors
@@ -1048,8 +960,8 @@ export const selectIsDirty = (state: RootState, id: FileId): boolean => {
   const file = state.files.files[id];
   if (!file) return false;
 
-  // Virtual (unsaved) files are always dirty
-  if (isVirtualFileId(id)) return true;
+  // Draft (unsaved) files are always dirty
+  if (file.draft) return true;
 
   const hasContentChanges = !!(file.persistableChanges && Object.keys(file.persistableChanges).length > 0);
   const hasMetadataChanges = !!(file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined));

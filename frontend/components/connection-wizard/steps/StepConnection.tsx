@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Spinner } from '@chakra-ui/react';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
-import { createVirtualFile } from '@/lib/api/file-state';
+import { createDraftFile } from '@/lib/api/file-state';
 
 interface StepConnectionProps {
   onComplete: (connectionId: number, connectionName: string) => void;
@@ -12,17 +12,17 @@ interface StepConnectionProps {
 }
 
 export default function StepConnection({ onComplete, onStaticSelect, greeting }: StepConnectionProps) {
-  const [virtualFileId, setVirtualFileId] = useState<number | null>(null);
+  const [draftFileId, setDraftFileId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    createVirtualFile('connection').then((id) => {
-      if (!cancelled) setVirtualFileId(id);
+    createDraftFile('connection').then((id: number) => {
+      if (!cancelled) setDraftFileId(id);
     });
     return () => { cancelled = true; };
   }, []);
 
-  if (virtualFileId === null) {
+  if (draftFileId === null) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minH="400px">
         <Spinner size="lg" />
@@ -33,7 +33,7 @@ export default function StepConnection({ onComplete, onStaticSelect, greeting }:
   return (
     <Box w="100%">
       <ConnectionContainerV2
-        fileId={virtualFileId}
+        fileId={draftFileId}
         mode="create"
         onSaveSuccess={onComplete}
         onStaticSelect={onStaticSelect}

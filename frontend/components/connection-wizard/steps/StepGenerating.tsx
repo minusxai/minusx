@@ -7,9 +7,8 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
-import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
-import { removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
-import { createVirtualFile, publishAll } from '@/lib/api/file-state';
+import { setNavigation } from '@/store/navigationSlice';
+import { createDraftFile, publishAll, deleteFile } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { getStore } from '@/store/store';
@@ -90,21 +89,20 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     return () => clearInterval(interval);
   }, [greeting]);
 
-  // Create virtual dashboard file on mount
-  const hasCreatedVirtual = useRef(false);
+  // Create draft dashboard file on mount
+  const hasCreatedDraft = useRef(false);
   useEffect(() => {
-    if (hasCreatedVirtual.current || virtualDashboardId) return;
-    hasCreatedVirtual.current = true;
+    if (hasCreatedDraft.current || virtualDashboardId) return;
+    hasCreatedDraft.current = true;
 
-    createVirtualFile('dashboard').then((vId) => {
-      setVirtualDashboardId(vId);
+    createDraftFile('dashboard').then((draftId: number) => {
+      setVirtualDashboardId(draftId);
 
-      // Set navigation so selectAppState resolves to this virtual dashboard
-      dispatch(setNavigation({ pathname: '/new/dashboard', searchParams: { virtualId: String(vId) } }));
-      dispatch(setActiveVirtualId(vId));
-    }).catch((err) => {
-      console.error('[StepGenerating] Virtual dashboard creation failed:', err);
-      hasCreatedVirtual.current = false;
+      // Set navigation so selectAppState resolves to this draft dashboard
+      dispatch(setNavigation({ pathname: `/f/${draftId}`, searchParams: {} }));
+    }).catch((err: unknown) => {
+      console.error('[StepGenerating] Draft dashboard creation failed:', err);
+      hasCreatedDraft.current = false;
     });
   }, [virtualDashboardId, dispatch]);
 
@@ -206,36 +204,36 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, [virtualDashboardId, router, onComplete]);
 
-  /** Discard all virtual (unsaved) files created during this step */
-  const discardVirtualFiles = useCallback(() => {
+  /** Discard draft files created during this step — note: orphan cleanup is a future task */
+  const discardDraftFiles = useCallback(() => {
     const allFiles = getStore().getState().files.files;
     for (const idStr of Object.keys(allFiles)) {
-      const id = Number(idStr);
-      if (isVirtualFileId(id)) {
-        dispatch(removeVirtualFile(id));
+      const file = allFiles[Number(idStr)];
+      if (file?.draft === true) {
+        deleteFile({ fileId: file.id }).catch(() => {});
       }
     }
-  }, [dispatch]);
+  }, []);
 
-  /** Skip: interrupt agent, mark wizard complete, go to /new/dashboard */
+  /** Skip: interrupt agent, mark wizard complete, go home */
   const handleSkip = useCallback(async () => {
     if (activeConvId) {
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
-    discardVirtualFiles();
+    discardDraftFiles();
     if (onComplete) await onComplete();
-    router.push(preserveModeParam('/new/dashboard'));
-  }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
+    router.push(preserveModeParam('/p/org'));
+  }, [activeConvId, dispatch, router, onComplete, discardDraftFiles]);
 
   /** Skip everything and go home */
   const handleGoHome = useCallback(async () => {
     if (activeConvId) {
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
-    discardVirtualFiles();
+    discardDraftFiles();
     if (onComplete) await onComplete();
     router.push(preserveModeParam('/p/org'));
-  }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
+  }, [activeConvId, dispatch, router, onComplete, discardDraftFiles]);
 
   return (
     <VStack gap={6} align="stretch" minH="400px">

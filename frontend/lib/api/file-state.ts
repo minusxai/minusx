@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, removeVirtualFile, hashString, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -34,6 +34,7 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
 import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile } from '@/lib/types';
+import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -47,6 +48,19 @@ import type {
   QueryExecutionParams,
   GetQueryResultOptions,
 } from '@/lib/api/file-state-interface';
+
+// djb2-style hash used for deterministic edit IDs and path placeholder keys
+function hashString(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+function pathToPlaceholderId(path: string): number {
+  return -(2_000_000_000 + (Math.abs(hashString(path)) % 1_000_000_000));
+}
 
 export type {
   IFileStateRead,
@@ -79,7 +93,6 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
 
   // Determine which files need fetching
   const needsFetch = fileIds.filter(id => {
-    if (id < 0) return false;   // virtual files live only in Redux
     if (skip) return false;
     return !selectIsFileLoaded(state, id) || !selectIsFileFresh(state, id, ttl);
   });
@@ -156,7 +169,7 @@ export async function loadFileByPath(path: string, ttl: number = CACHE_TTL.FILE)
     getStore().dispatch(setFile({ file: response.data, references: [] }));
   } catch (err) {
     getStore().dispatch(setLoadError({
-      ids: [pathToVirtualId(path)],
+      ids: [pathToPlaceholderId(path)],
       error: createLoadErrorFromException(err)
     }));
   }
@@ -548,9 +561,6 @@ export async function publishFile(
     return { id: fileId, name: fileState.name };
   }
 
-  // Determine if this is a create or update
-  const isVirtualFile = fileId < 0;
-
   // Prepare content for saving: merge only persistable changes, NOT ephemeral
   // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted
   let contentToSave = fileState.persistableChanges
@@ -561,7 +571,6 @@ export async function publishFile(
     throw new Error(`File ${fileId} has no content to save`);
   }
 
-  // Prepare file data
   const fileData = {
     name: fileState.metadataChanges?.name || fileState.name,
     path: fileState.metadataChanges?.path || fileState.path,
@@ -569,85 +578,52 @@ export async function publishFile(
     content: contentToSave,
   };
 
-  const extractReferences = extractReferencesFromContent;
-  const references = extractReferences(fileData.content, fileData.type as FileType);
+  const references = extractReferencesFromContent(fileData.content, fileData.type as FileType);
+  const editId = String(hashString(`${fileId}:${JSON.stringify(fileState.persistableChanges ?? {})}`));
 
-  // Guard: references must all be real (positive) IDs before hitting the DB.
-  // Negative IDs are virtual files that haven't been saved yet — use publishAll()
-  // to resolve them in topological order instead of publishFile().
-  const negativeRefs = references.filter(id => id < 0);
-  if (negativeRefs.length > 0) {
-    throw new Error(
-      `Cannot save file ${fileId}: references contain unsaved virtual IDs [${negativeRefs.join(', ')}]. ` +
-      `Use publishAll() to save files with unresolved references.`
-    );
-  }
-
-  // Derive editId for idempotency / OCC
-  const editId = isVirtualFile
-    ? String(hashString(`${fileId}:${JSON.stringify(contentToSave)}`))
-    : String(hashString(`${fileId}:${JSON.stringify(fileState.persistableChanges ?? {})}`));
-
-  // Set saving state
   getStore().dispatch(setSaving({ id: fileId, saving: true }));
 
-  // Save file
   let savedId: number;
   let savedName: string;
   let updatedFile: DbFile;
 
   try {
-    if (isVirtualFile) {
-      // Create new file using FilesAPI
-      const result = await FilesAPI.createFile({
-        name: fileData.name,
-        path: fileData.path,
-        type: fileData.type as FileType,
-        content: fileData.content,
+    const saveVersion = fileState.version;
+    const saveContent = fileData.content;
+    try {
+      const result = await FilesAPI.saveFile(
+        fileId,
+        fileData.name,
+        fileData.path,
+        saveContent,
         references,
-        editId
-      });
+        undefined,
+        editId,
+        saveVersion
+      );
       savedId = result.data.id;
       savedName = result.data.name;
       updatedFile = result.data;
-    } else {
-      let saveVersion = fileState.version;
-      let saveContent = fileData.content;
-      try {
-        const result = await FilesAPI.saveFile(
-          fileId,
-          fileData.name,
-          fileData.path,
-          saveContent,
-          references,
-          undefined,
-          editId,
-          saveVersion
-        );
-        savedId = result.data.id;
-        savedName = result.data.name;
-        updatedFile = result.data;
-      } catch (firstError) {
-        if (!(firstError instanceof ConflictError)) throw firstError;
-        // 409: server has a newer version (e.g. schema cache write).
-        // Merge our edits on top of the server's latest content and retry once.
-        const serverFile = firstError.currentFile;
-        getStore().dispatch(setFile({ file: serverFile }));
-        const retryContent = { ...serverFile.content, ...fileState.persistableChanges } as typeof saveContent;
-        const result = await FilesAPI.saveFile(
-          fileId,
-          fileData.name,
-          fileData.path,
-          retryContent,
-          references,
-          undefined,
-          editId,
-          serverFile.version
-        );
-        savedId = result.data.id;
-        savedName = result.data.name;
-        updatedFile = result.data;
-      }
+    } catch (firstError) {
+      if (!(firstError instanceof ConflictError)) throw firstError;
+      // 409: server has a newer version (e.g. schema cache write).
+      // Merge our edits on top of the server's latest content and retry once.
+      const serverFile = firstError.currentFile;
+      getStore().dispatch(setFile({ file: serverFile }));
+      const retryContent = { ...serverFile.content, ...fileState.persistableChanges } as typeof saveContent;
+      const result = await FilesAPI.saveFile(
+        fileId,
+        fileData.name,
+        fileData.path,
+        retryContent,
+        references,
+        undefined,
+        editId,
+        serverFile.version
+      );
+      savedId = result.data.id;
+      savedName = result.data.name;
+      updatedFile = result.data;
     }
   } catch (error) {
     if (error instanceof ConflictError) {
@@ -658,33 +634,24 @@ export async function publishFile(
     getStore().dispatch(setSaving({ id: fileId, saving: false }));
   }
 
-  // Update file state with response from API (so base content is updated)
-  // For new files, use addFile to also update parent folder references
-  // (so the folder view refreshes immediately without a page reload)
-  if (isVirtualFile) {
-    getStore().dispatch(addFile(updatedFile));
-  } else {
-    getStore().dispatch(setFile({ file: updatedFile }));
-  }
-
+  getStore().dispatch(setFile({ file: updatedFile! }));
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
 
-  return { id: savedId, name: savedName };
+  return { id: savedId!, name: savedName! };
 }
 
 /**
- * publishAll - Batch-publish dirty non-system files in a single flow.
+ * publishAll - Batch-publish all dirty non-system files in a single round trip.
  *
- * Flow:
- * 1. Batch-create any virtual (negative-ID) files — one API call.
- * 2. Replace stale negative IDs in other dirty files (Redux only).
- * 3. Batch-save all remaining dirty (positive-ID) files — one API call.
+ * All files are expected to have real positive IDs (use createDraftFile to create
+ * new files — they get real IDs from the server immediately, with draft:true).
  *
  * @param fileIds - Optional list of file IDs to scope the publish to.
- *   When provided, only these files are saved (useful for saving a file + its children).
+ *   When provided, only these files (and their dirty dependencies) are saved.
  *   When omitted, all dirty non-system files are saved.
  *
+ * Returns an empty map (no virtual→real ID mapping needed anymore).
  * Throws on error; caller is responsible for showing error state.
  */
 export async function publishAll(fileIds?: number[]): Promise<Record<number, number>> {
@@ -693,8 +660,6 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
   let allDirty: FileState[];
   if (fileIds) {
     // Start with explicitly requested files, then expand to include their dirty dependencies.
-    // Look at ALL scoped files (not just dirty) to find refs — e.g., a clean dashboard
-    // may reference a dirty question that needs saving.
     const scopedIds = new Set(fileIds);
     for (const id of [...scopedIds]) {
       const f = state.files.files[id];
@@ -711,88 +676,25 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
   }
   if (allDirty.length === 0) return {};
 
-  const idMap: Record<number, number> = {};
+  const toSave = allDirty.map(f => {
+    const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+    return {
+      id: f.id,
+      name: f.metadataChanges?.name || f.name,
+      path: f.metadataChanges?.path || f.path,
+      content: merged,
+      references: extractReferencesFromContent(merged as any, f.type as FileType),
+    };
+  });
 
-  // Step 1: Topologically create virtual files — resolve dependencies level by level
-  let remainingVirtual = allDirty.filter(f => f.id < 0);
-
-  while (remainingVirtual.length > 0) {
-    const remainingVirtualIds = new Set(remainingVirtual.map(f => f.id));
-
-    // Files ready to save: all their virtual-ID references are already resolved
-    const readyToSave = remainingVirtual.filter(f => {
-      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
-      const refs = extractReferencesFromContent(merged as any, f.type as FileType);
-      return refs.every(ref => !remainingVirtualIds.has(ref));
-    });
-
-    if (readyToSave.length === 0) {
-      throw new Error('Circular dependency detected among virtual files — cannot determine save order.');
-    }
-
-    const toCreate = readyToSave.map(f => {
-      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
-      return {
-        virtualId: f.id,
-        name: f.metadataChanges?.name || f.name,
-        path: f.metadataChanges?.path || f.path,
-        type: f.type,
-        content: merged,
-        references: extractReferencesFromContent(merged as any, f.type as FileType),
-        editId: String(hashString(`${f.id}:${JSON.stringify(merged)}`)),
-      };
-    });
-
-    const { data: created } = await FilesAPI.batchCreateFiles(toCreate as any);
-    const batchIdMap: Record<number, number> = {};
-    for (const { virtualId, file } of created) {
-      idMap[virtualId] = file.id;
-      batchIdMap[virtualId] = file.id;
-      getStore().dispatch(addFile(file));
-      getStore().dispatch(clearEdits(virtualId));
-      getStore().dispatch(clearMetadataEdits(virtualId));
-    }
-
-    // Replace IDs in ALL remaining files (real + virtual) so next iteration sees resolved IDs
-    getStore().dispatch(replaceVirtualIds(batchIdMap));
-
-    // Refresh remaining virtual list from updated Redux state
-    const savedIds = new Set(readyToSave.map(f => f.id));
-    remainingVirtual = remainingVirtual
-      .filter(f => !savedIds.has(f.id))
-      .map(f => getStore().getState().files.files[f.id])
-      .filter(Boolean) as FileState[];
+  const { data: saved } = await FilesAPI.batchSaveFiles(toSave as any);
+  for (const file of saved) {
+    getStore().dispatch(setFile({ file }));
+    getStore().dispatch(clearEdits(file.id));
+    getStore().dispatch(clearMetadataEdits(file.id));
   }
 
-  // Step 2: Atomically replace stale negative IDs across all dirty real files (single dispatch)
-  const realDirty = allDirty.filter(f => f.id > 0);
-  if (Object.keys(idMap).length > 0) {
-    getStore().dispatch(replaceVirtualIds(idMap));
-  }
-
-  // Step 3: Batch-save real dirty files
-  if (realDirty.length > 0) {
-    const freshState = getStore().getState();
-    const toSave = realDirty.map(f => {
-      const fs = freshState.files.files[f.id];
-      const merged = { ...(fs.content || {}), ...(fs.persistableChanges || {}) };
-      return {
-        id: f.id,
-        name: fs.metadataChanges?.name || fs.name,
-        path: fs.metadataChanges?.path || fs.path,
-        content: merged,
-        references: extractReferencesFromContent(merged as any, fs.type as FileType),
-      };
-    });
-    const { data: saved } = await FilesAPI.batchSaveFiles(toSave as any);
-    for (const file of saved) {
-      getStore().dispatch(setFile({ file }));
-      getStore().dispatch(clearEdits(file.id));
-      getStore().dispatch(clearMetadataEdits(file.id));
-    }
-  }
-
-  return idMap;
+  return {};
 }
 
 /**
@@ -1019,19 +921,10 @@ export function discardAll(fileIds?: number[]): void {
     filesToDiscard = allDirtyUnscoped;
   }
 
-  // Clear real files first — reverts dashboard refs to virtual IDs before removing them
   for (const file of filesToDiscard) {
-    if (file.id >= 0) {
-      getStore().dispatch(clearEdits(file.id));
-      getStore().dispatch(clearMetadataEdits(file.id));
-      getStore().dispatch(clearEphemeral(file.id));
-    }
-  }
-  // Remove virtual files from Redux entirely
-  for (const file of filesToDiscard) {
-    if (file.id < 0) {
-      getStore().dispatch(removeVirtualFile(file.id));
-    }
+    getStore().dispatch(clearEdits(file.id));
+    getStore().dispatch(clearMetadataEdits(file.id));
+    getStore().dispatch(clearEphemeral(file.id));
   }
 }
 
@@ -1039,104 +932,144 @@ export function discardAll(fileIds?: number[]): void {
 // Create Virtual File
 // ============================================================================
 
+// ============================================================================
+// Create Draft File
+// ============================================================================
+
 /**
- * Options for creating a virtual file
+ * Options for creating a draft file (server-side)
  */
-export interface CreateVirtualFileOptions {
+export interface CreateDraftFileOptions {
   /** Folder path override (defaults to user's home_folder) */
   folder?: string;
   /** For questions: pre-populate with this database/connection name */
   databaseName?: string;
   /** For questions: pre-populate with this SQL query */
   query?: string;
-  /** Virtual ID override */
-  virtualId?: number;
+  /** Name for the file — uses a slug to set the DB path immediately so parent folders are navigable */
+  name?: string;
 }
 
 /**
- * createVirtualFile - Create a virtual file for "create mode"
+ * createDraftFile - Create a new file on the server immediately with draft:true.
  *
- * Virtual files use negative IDs to distinguish them from real files.
- * They exist only in Redux until saved via publishFile.
+ * Unlike createVirtualFile (which uses a negative client-side ID), this calls the
+ * server right away and gets back a real positive ID. The file is stored in the DB
+ * with draft:true, making it invisible in folder listings until first real save.
  *
  * @param type - The type of file to create (question, dashboard, etc.)
  * @param options - Optional configuration (folder, connection, query)
- * @returns Virtual file ID (negative number)
- *
- * Example:
- * ```typescript
- * // Create new question with SQL
- * const virtualId = await createVirtualFile('question', {
- *   folder: '/org',
- *   databaseName: 'my_db',
- *   query: 'SELECT * FROM users LIMIT 100'
- * });
- * ```
+ * @returns Real file ID (positive number) — consistent from creation to publish
  */
-export async function createVirtualFile(
+export async function createDraftFile(
   type: FileType,
-  options: CreateVirtualFileOptions = {}
+  options: CreateDraftFileOptions = {}
 ): Promise<number> {
-  const { folder, databaseName, query, virtualId: providedVirtualId } = options;
+  const { folder, databaseName, query, name } = options;
 
-  // Generate virtual ID (namespaced or use provided)
-  const virtualId = providedVirtualId && providedVirtualId < 0
-    ? providedVirtualId
-    : generateVirtualId();
-
-  // Get user from Redux for folder resolution
   const state = getStore().getState();
   const user = state.auth.user;
 
-  // Resolve folder path
   let resolvedFolder = folder;
   if (!resolvedFolder) {
-    // Import path resolver dynamically to avoid circular deps
     resolvedFolder = user
       ? resolveHomeFolderSync(user.mode, user.home_folder || '')
       : '/org';
   }
 
-  // Check if file type is allowed in this folder
-  // If not allowed in system folder, redirect to user's home folder or mode root
   const mode = user?.mode || 'org';
   if (!isFileTypeAllowedInPath(type, resolvedFolder, mode)) {
     const originalFolder = resolvedFolder;
-    // Redirect to user's home folder
     resolvedFolder = user
       ? resolveHomeFolderSync(user.mode, user.home_folder || '')
       : getModeRoot(mode);
-    console.log(`[createVirtualFile] Redirected ${type} from restricted folder:`, {
+    console.log(`[createDraftFile] Redirected ${type} from restricted folder:`, {
       originalFolder,
       redirectedFolder: resolvedFolder
     });
   }
 
-  // Fetch template from backend
   const template = await FilesAPI.getTemplate(type, {
     path: resolvedFolder,
     databaseName,
     query
   });
 
-  // Create virtual file object
-  const virtualFile: DbFile = {
-    id: virtualId,
-    name: template.fileName,
-    path: `${resolvedFolder.replace(/\/+$/, '')}/${template.fileName}`,
-    type: type,
-    references: [],
+  const baseFolder = resolvedFolder.replace(/\/+$/, '');
+  let fileName: string;
+  let filePath: string;
+  if (name) {
+    // Slug the name immediately so the DB path is correct from creation.
+    // Important for folders that will be used as parents within the same session.
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    fileName = name;
+    filePath = `${baseFolder}/${slug}`;
+  } else if (template.fileName) {
+    fileName = template.fileName;
+    filePath = `${baseFolder}/${template.fileName}`;
+  } else {
+    // Template has no name (questions, dashboards, etc.) — generate a random token
+    // for a unique DB path. The UI shows an empty name; the token is replaced when
+    // the user or agent assigns a real name and saves.
+    const token = Math.random().toString(36).slice(2, 10);
+    fileName = token;
+    filePath = `${baseFolder}/${token}`;
+  }
+
+  const result = await FilesAPI.createFile({
+    name: fileName,
+    path: filePath,
+    type,
     content: template.content,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    version: 1,
-    last_edit_id: null,
-  };
+    references: [],
+  });
 
-  // Add to Redux
-  getStore().dispatch(setFile({ file: virtualFile, references: [] }));
+  const file = result.data;
+  // When using a random token, hide it from the UI by showing the template name
+  // (empty string for questions/dashboards). The parent folder is preserved in
+  // file.path so slug computation in setMetadataEdit works correctly on name change.
+  const uiName = name || template.fileName; // '' when neither is set
+  getStore().dispatch(setFile({ file: { ...file, name: uiName }, references: [] }));
+  return file.id;
+}
 
-  return virtualId;
+// ============================================================================
+// Dry Run Save
+// ============================================================================
+
+/**
+ * dryRunSave - Validate a batch save without committing to the database.
+ *
+ * Collects all dirty files (optionally scoped by fileIds) and runs batchSaveFiles
+ * with dryRun:true — the server wraps everything in a transaction that always rolls
+ * back. Useful for pre-flight checks that catch cross-file path conflicts before
+ * the user actually commits.
+ *
+ * @param fileIds - Optional list of file IDs to scope the dry run to.
+ *   When omitted, all dirty non-system files are included.
+ * @returns DryRunSaveResult — success:true if all saves would succeed, or errors list.
+ */
+export async function dryRunSave(fileIds?: number[]): Promise<DryRunSaveResult> {
+  const state = getStore().getState();
+  const allDirtyUnscoped = selectDirtyFiles(state);
+  const allDirty = fileIds
+    ? allDirtyUnscoped.filter(f => fileIds.includes(f.id))
+    : allDirtyUnscoped;
+
+  if (allDirty.length === 0) return { success: true, errors: [] };
+
+  const toSave = allDirty.map(f => {
+    const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+    return {
+      id: f.id,
+      name: f.metadataChanges?.name || f.name,
+      path: f.metadataChanges?.path || f.path,
+      content: merged,
+      references: extractReferencesFromContent(merged as any, f.type as FileType),
+    };
+  });
+
+  return FilesAPI.batchSaveFiles(toSave as any, undefined, true);
 }
 
 // ============================================================================

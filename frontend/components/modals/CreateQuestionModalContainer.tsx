@@ -4,9 +4,9 @@ import { useState, useCallback, useEffect, MutableRefObject } from 'react';
 import { Box, Button, HStack, Input, Text } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, clearFileChanges, createVirtualFile } from '@/lib/api/file-state';
+import { editFile, clearFileChanges, createDraftFile, deleteFile } from '@/lib/api/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { selectMergedContent, selectEffectiveName, setEphemeral, removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, setEphemeral } from '@/store/filesSlice';
 import { setFileEditMode } from '@/store/uiSlice';
 import { QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -16,16 +16,14 @@ interface CreateQuestionModalContainerProps {
   onClose: () => void;
   onQuestionCreated: (id: number) => void;
   folderPath: string;
-  questionId?: number;  // Virtual (negative) ID for new questions pre-created by caller,
-                        // real (positive) ID when editing, or undefined to self-create.
+  questionId?: number;  // Draft or real positive ID, or undefined to self-create.
   onAttemptCloseRef?: MutableRefObject<(() => void) | null>;  // Ref for parent to call when user attempts to close
   /**
-   * Explicitly controls whether this is a "fresh creation" that should be cleaned
-   * up from Redux on cancel.  When omitted, falls back to isVirtualFileId(questionId).
+   * Explicitly controls whether this is a "fresh creation" that should be deleted
+   * on cancel. When omitted, falls back to file.draft === true.
    *
-   * Pass false when opening an already-added virtual question for editing
-   * (e.g. via the dashboard's "Edit" button) to prevent the question being
-   * removed from Redux — which would leave the dashboard with a dangling reference.
+   * Pass false when editing a draft question already added to the dashboard
+   * (e.g. via the dashboard's "Edit" button) so cancel doesn't delete it.
    */
   isNewQuestion?: boolean;
 }
@@ -52,9 +50,9 @@ export default function CreateQuestionModalContainer({
   useEffect(() => {
     if (questionId !== undefined || virtualId !== undefined) return; // Skip if provided or already created
 
-    createVirtualFile('question', { folder: folderPath })
+    createDraftFile('question', { folder: folderPath })
       .then(id => setVirtualId(id))
-      .catch(err => console.error('[CreateQuestionModal] Failed to create virtual file:', err));
+      .catch(err => console.error('[CreateQuestionModal] Failed to create draft file:', err));
   }, [questionId, virtualId, folderPath]);
 
   const effectiveId = questionId ?? virtualId;
@@ -146,7 +144,7 @@ export default function CreateQuestionModalContainer({
   //   true  → show "Add" button, clean up virtual file on cancel
   //   false → show "Update" button, do NOT remove on cancel (file is already referenced)
   //   undefined → infer from whether the ID is virtual
-  const isCreateMode = isNewQuestion ?? (typeof effectiveId === 'number' && isVirtualFileId(effectiveId));
+  const isCreateMode = isNewQuestion ?? (typeof effectiveId === 'number' && (file?.draft === true));
 
   // Create mode: "Add" — stages the virtual question in Redux, notifies parent, closes.
   // No API call — the question will be published later via "Publish All".
@@ -175,16 +173,12 @@ export default function CreateQuestionModalContainer({
   const handleCancel = useCallback(() => {
     if (typeof effectiveId === 'number') {
       if (isCreateMode) {
-        // Cancel during creation: clean up the orphaned virtual file.
-        // It was never added to any dashboard, so remove it entirely.
-        dispatch(removeVirtualFile(effectiveId));
-      } else if (!isVirtualFileId(effectiveId)) {
-        // Cancel while editing a real (published) file: revert to DB state.
+        // Cancel during creation: delete the orphaned draft from the server.
+        deleteFile({ fileId: effectiveId }).catch(() => {});
+      } else {
+        // Cancel while editing a published file: revert to DB state.
         clearFileChanges({ fileId: effectiveId });
       }
-      // Cancel while editing a virtual file: just close.
-      // clearFileChanges would reset persistableChanges → blank template,
-      // destroying the content the user wrote when they first created the question.
     }
     onClose();
   }, [effectiveId, isCreateMode, dispatch, onClose]);

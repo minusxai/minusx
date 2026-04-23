@@ -107,20 +107,6 @@ export interface GetTemplateResult {
 }
 
 /**
- * Input for batch create: CreateFileInput + client-side virtualId
- */
-export interface BatchCreateInput extends CreateFileInput {
-  virtualId: number;  // client-side negative ID
-}
-
-/**
- * Result for batch create operation
- */
-export interface BatchCreateFileResult {
-  data: Array<{ virtualId: number; file: DbFile }>;
-}
-
-/**
  * Input for batch save: existing file fields
  */
 export interface BatchSaveFileInput {
@@ -138,6 +124,17 @@ export interface BatchSaveFileInput {
  */
 export interface BatchSaveFileResult {
   data: DbFile[];
+}
+
+/**
+ * Result for a dry-run batch save.
+ * The transaction is always rolled back — no DB changes occur.
+ * success: true  → all saves would succeed
+ * success: false → at least one save would fail; errors lists the offenders
+ */
+export interface DryRunSaveResult {
+  success: boolean;
+  errors: Array<{ id: number; error: string }>;
 }
 
 /**

@@ -105,6 +105,8 @@ export const POSTGRES_SCHEMA = `
     file_references TEXT NOT NULL DEFAULT '[]',
     version INTEGER NOT NULL DEFAULT 1,
     last_edit_id TEXT,
+    draft BOOLEAN NOT NULL DEFAULT FALSE,
+    meta JSONB DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -116,7 +118,7 @@ export const POSTGRES_SCHEMA = `
   BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'files' AND column_name = 'file_references'
+      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'file_references'
     ) THEN
       ALTER TABLE files ADD COLUMN file_references TEXT NOT NULL DEFAULT '[]';
     END IF;
@@ -127,7 +129,7 @@ export const POSTGRES_SCHEMA = `
   BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'files' AND column_name = 'version'
+      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'version'
     ) THEN
       ALTER TABLE files ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
     END IF;
@@ -138,14 +140,38 @@ export const POSTGRES_SCHEMA = `
   BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'files' AND column_name = 'last_edit_id'
+      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'last_edit_id'
     ) THEN
       ALTER TABLE files ADD COLUMN last_edit_id TEXT;
     END IF;
   END $$;
 
+  -- Add draft column if it doesn't exist (migration for existing tables)
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'draft'
+    ) THEN
+      ALTER TABLE files ADD COLUMN draft BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
+  END $$;
+
+  -- Add meta column if it doesn't exist (migration for existing tables)
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'meta'
+    ) THEN
+      ALTER TABLE files ADD COLUMN meta JSONB DEFAULT NULL;
+    END IF;
+  END $$;
+
   -- Index on last_edit_id must come AFTER the ADD COLUMN guard above
   CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
+  -- Partial index on draft for efficient "hide drafts" queries
+  CREATE INDEX IF NOT EXISTS idx_files_draft ON files (draft) WHERE draft = true;
 
   -- Drop redundant standalone type index (replaced by composite index below)
   DROP INDEX IF EXISTS idx_files_type;
