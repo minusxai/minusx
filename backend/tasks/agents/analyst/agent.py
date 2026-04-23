@@ -91,6 +91,7 @@ class AnalystAgent(Agent):
         agent_name: Optional[str] = None,
         attachments: Optional[List[dict]] = None,
         allowed_viz_types: Optional[List[str]] = None,
+        unrestricted_mode: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -104,6 +105,7 @@ class AnalystAgent(Agent):
         self.city = city
         self.attachments = attachments or []
         self.allowed_viz_types = allowed_viz_types
+        self.unrestricted_mode = unrestricted_mode
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -136,19 +138,27 @@ class AnalystAgent(Agent):
         return None
 
     def _get_preloaded_skill_names(self) -> list[str]:
-        """Determine which skills to preload based on the current page type."""
+        """Determine which skills to preload based on the current page type and mode."""
         page_type = self._get_page_type()
-        return PAGE_SKILL_MAP.get(page_type, DEFAULT_PRELOADED_SKILLS)
+        skills = list(PAGE_SKILL_MAP.get(page_type, DEFAULT_PRELOADED_SKILLS))
+        # Add navigation rules based on unrestricted_mode
+        nav_skill = 'navigation_unrestricted' if getattr(self, 'unrestricted_mode', False) else 'navigation_restricted'
+        skills.append(nav_skill)
+        return skills
 
-    @staticmethod
-    def _build_skills_catalog(preloaded: set[str] | None = None) -> str:
+    # Skills that are mode-selected, not user-loadable — always exclude from catalog
+    _HIDDEN_SKILLS = {'navigation_restricted', 'navigation_unrestricted'}
+
+    @classmethod
+    def _build_skills_catalog(cls, preloaded: set[str] | None = None) -> str:
         """Generate the LoadSkill catalog, excluding already-preloaded skills."""
         if preloaded is None:
             preloaded = set(DEFAULT_PRELOADED_SKILLS)
+        excluded = preloaded | cls._HIDDEN_SKILLS
         skills = list_skills()
         lines = []
         for name, description in skills.items():
-            if name not in preloaded:
+            if name not in excluded:
                 lines.append(f'  - `"{name}"` — {description}')
         return "\n".join(lines)
 

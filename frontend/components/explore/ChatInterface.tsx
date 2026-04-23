@@ -16,7 +16,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
-import { clearChatAttachments, selectCompactChatEnabled } from '@/store/uiSlice';
+import { clearChatAttachments, selectCompactChatEnabled, selectUnrestrictedMode } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
@@ -144,6 +144,7 @@ export default function ChatInterface({
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
+  const unrestrictedMode = useAppSelector(selectUnrestrictedMode);
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
@@ -439,6 +440,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
+          unrestricted_mode: unrestrictedMode,
           ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
           ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
         },
@@ -469,6 +471,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
+          unrestricted_mode: unrestrictedMode,
           ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
           ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
         }

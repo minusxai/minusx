@@ -279,8 +279,8 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Experimental Flags',
-      title: 'Unrestricted Mode',
-      description: 'Skip navigation guards — freely move between pages even with unsaved changes or a running agent.',
+      title: 'Background Agent Mode',
+      description: 'Allow the agent to work unrestricted — create and edit files without needing to navigate to the target page first.',
       control: (
         <SwitchControl
           checked={unrestrictedMode}

@@ -219,8 +219,6 @@ templates:
       - Users typically expect direct edits to the question in the current page. Use EditFile for query changes, viz updates, parameter edits, and metadata changes.
       - Even if the question is empty or the user is asking a new question, prefer EditFile to update the existing question rather than navigating to a new one.
       - If there is already a question that answers the user's question, Clarify if they want to go to that question or if they want you to adapt it in the current page.
-      - ONLY navigate to a different question if the user explicitly asks to go to that question
-      - ONLY CreateFile in the background if the user explicitly asks you. If they are on an new/empty question page and asks "create a question that shows..." they very likely want you to EditFile the current question.
 
   skill_dashboards:
     description: "Dashboard file structure (assets, 12-column grid layout, inline elements), dashboard page behavior guidelines"
@@ -252,7 +250,6 @@ templates:
 
       ### Dashboard Page Behavior
       - Users expect you to EditFile the current dashboard for changes to questions, layout, and parameters.
-      - The only appropriate time to CreateFile is if a user asks you to add a question to the dashboard that doesn't exist yet. Here, navigating to a new question page becomes laborious. So you can CreateFile the new question in the background, then EditFile the dashboard to add it to the assets and layout.
       - When creating a background question for the dashboard, you MUST pass the dashboard's folder as the `path` argument to CreateFile. Extract the folder from `app_state.state.fileState.path` by removing the last path segment (e.g. if the dashboard path is `/org/Sales/My Dashboard`, the folder is `/org/Sales`). Do NOT default to `/org` or any other root.
       - If user asks you to add a question, and you find an existing question that answers it, you can add that. No need to create a duplicate question just to add to the dashboard.
       - If `app_state.ui.openModal` is present with `type: "create-question"`, a new question modal is already open in the UI. Use EditFile on `virtualFileId` (a negative number) to set the query, name, and viz settings. Do NOT call CreateFile and do NOT manually add the question to the dashboard — the user clicks 'Add' in the modal to do that. The virtual file's current state is in `app_state.ui.openModal.virtualFile` — use it as the source for `oldMatch` values when calling EditFile (do not call ReadFiles for this file).
@@ -313,7 +310,6 @@ templates:
 
       ### Report Page Behavior
       - Users typically ask you to set up references, schedules, synthesis instructions, and recipients.
-      - All changes are done via EditFile. Only navigate or create new files if the user explicitly asks you to.
 
   skill_alerts:
     description: "Dealing with alert files — file structure (conditions, schedules, recipients), alert page behavior guidelines"
@@ -341,7 +337,6 @@ templates:
 
       ### Alert Page Behavior
       - Users typically ask you to set up specific conditions, schedules, and recipients.
-      - All changes are done via EditFile. Only navigate or create new files if the user explicitly asks you to.
 
   skill_parameters:
     description: "Parameter syntax (:paramName), types, sources (dropdown from query), dashboard parameter merging, EditFile ordering. Basic parameter usage is covered in the questions skill, but Load this skill for complex parameter scenarios, dashboard parameters, and source-driven dropdowns."
@@ -492,15 +487,50 @@ templates:
 
       ### Behavior
       - ALWAYS prefer ExecuteQuery. NEVER call CreateFile or EditFile on the explore page unless the user explicitly asks you to.
+      - even if you found an existing question that answers the user's question, you still have to ExecuteQuery for the answer and viz to appear in the UI. DO NOT navigate to the question unless specifically asked
+
+  # ── Navigation rules: restricted (default) vs unrestricted (background agent mode) ──
+  # Loaded as a preloaded skill via _get_preloaded_skill_names based on unrestricted_mode.
+
+  skill_navigation_restricted:
+    description: "Navigation and background file creation rules (restricted mode — require navigation before creating/editing)"
+    content: |
+      ## Navigation & Background File Rules
+
+      ### Question Page
+      - ONLY navigate to a different question if the user explicitly asks to go to that question
+      - ONLY CreateFile in the background if the user explicitly asks you. If they are on an new/empty question page and asks "create a question that shows..." they very likely want you to EditFile the current question.
+
+      ### Dashboard Page
+      - The only appropriate time to CreateFile is if a user asks you to add a question to the dashboard that doesn't exist yet. Here, navigating to a new question page becomes laborious. So you can CreateFile the new question in the background, then EditFile the dashboard to add it to the assets and layout.
+
+      ### Report Page
+      - All changes are done via EditFile. Only navigate or create new files if the user explicitly asks you to.
+
+      ### Alert Page
+      - All changes are done via EditFile. Only navigate or create new files if the user explicitly asks you to.
+
+      ### Explore / Folder Page
       - If the user wants you to edit a particular file, navigate to that file first, then EditFile. Don't EditFile in the background without user confirmation.
       - If the user wants you to create a new question/dashboard/report/alert, navigate to the appropriate `/new/...` page first, then EditFile. NEVER CreateFile in the background without user confirmation.
         - To create new dashboard, navigate to `/new/dashboard` -> this is the main file, then EditFile to add questions and layout. You can create the questions in the background with CreateFile if needed, but only navigate to the question page if the user explicitly asks you to.
         - To create a new question file, go to `/new/question` and EditFile the question content there. Don't CreateFile in the background without user confirmation.
-      - even if you found an existing question that answers the user's question, you still have to ExecuteQuery for the answer and viz to appear in the UI. DO NOT navigate to the question unless specifically asked
       - Example:
         - "show me...", "what's the...", "tell me how many..." → ExecuteQuery.
         - "Add a question to the dashboard that shows...", "Go to the dashboard and ..." → Navigate + EditFile
         - "Create a question/dashboard that shows...", "Create a new alert" → Navigate to `/new/question` or `/new/alert` or `/new/dashboard` + EditFile
+
+  skill_navigation_unrestricted:
+    description: "Navigation and background file creation rules (unrestricted mode — freely create/edit in background)"
+    content: |
+      ## Navigation & Background File Rules (Background Agent Mode)
+      Background agent mode is enabled. You can freely CreateFile and EditFile for any file type in the background without navigating to the target page first. Navigation is still available but not required.
+
+      ### Explore / Folder Page
+      - Example:
+        - "show me...", "what's the...", "tell me how many..." → ExecuteQuery.
+        - "Add a question to the dashboard that shows..." → CreateFile + EditFile in the background, or Navigate + EditFile
+        - "Create a question/dashboard that shows...", "Create a new alert" → CreateFile in the background, or Navigate + EditFile
 
   guidelines: |
     ## Guidelines
