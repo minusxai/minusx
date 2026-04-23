@@ -23,7 +23,7 @@ import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
-import ViewModeToggle from './ViewModeToggle';
+
 import AgentTurnContainer from './AgentTurnContainer';
 import { groupIntoTurns } from './message/groupIntoTurns';
 import { StreamingProgressInline, StreamingProgressSticky } from './tools/StreamingProgress';
@@ -131,9 +131,7 @@ export default function ChatInterface({
 
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const compactChatEnabled = useAppSelector(selectCompactChatEnabled);
-  const [localViewMode, setLocalViewMode] = useState<import('@/lib/types').ChatViewMode>('compact')
-  const viewMode = compactChatEnabled ? localViewMode : 'detailed';
-  const setViewMode = setLocalViewMode;
+  const viewMode = compactChatEnabled ? 'compact' : 'detailed';
   const [showToolInspector, setShowToolInspector] = useState(false)
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
@@ -601,7 +599,7 @@ export default function ChatInterface({
                 </Button>
               </Tooltip>
             )}
-            {compactChatEnabled && <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />}
+            {/* ViewModeToggle removed — always use compact */}
             </HStack>
             <HStack gap={2}>
               {setAsActiveButton}

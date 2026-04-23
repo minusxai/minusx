@@ -303,7 +303,7 @@ function SettingsContent() {
     },
     {
       tab: 'general',
-      section: 'Feature Flags',
+      section: 'Experimental Flags',
       title: 'Queue Strategy',
       description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
       control: (
@@ -316,7 +316,6 @@ function SettingsContent() {
           </Button>
         </Flex>
       ),
-      visible: allowChatQueue,
     },
     {
       tab: 'general',
