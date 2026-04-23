@@ -15,6 +15,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import filesReducer, { generateVirtualId } from '@/store/filesSlice';
 import authReducer from '@/store/authSlice';
+import uiReducer from '@/store/uiSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import type { ToolCall } from '@/lib/types';
 import type { UserRole } from '@/lib/types';
@@ -58,7 +59,7 @@ const TEST_AUTH_STATE = {
 
 function makeStore() {
   return configureStore({
-    reducer: { files: filesReducer, auth: authReducer },
+    reducer: { files: filesReducer, auth: authReducer, ui: uiReducer },
     preloadedState: { auth: TEST_AUTH_STATE },
   });
 }
