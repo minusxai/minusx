@@ -39,7 +39,7 @@ export function DataLoader() {
       if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';
       const trustScore = localStorage.getItem('showTrustScore');
       if (trustScore !== null) flags.showTrustScore = trustScore === 'true';
-      const allowChatQueue = localStorage.getItem('allowChatQueue');
+      const allowChatQueue = localStorage.getItem('allowChatQueue_v2');
       if (allowChatQueue !== null) flags.allowChatQueue = allowChatQueue === 'true';
       const qs = localStorage.getItem('queueStrategy');
       if (qs === 'end-of-turn' || qs === 'mid-turn') flags.queueStrategy = qs;

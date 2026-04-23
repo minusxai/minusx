@@ -291,7 +291,7 @@ function SettingsContent() {
     },
     {
       tab: 'general',
-      section: 'Experimental Flags',
+      section: 'Feature Flags',
       title: 'Allow Chat Queue',
       description: 'Send follow-up chat messages while the agent is still working.',
       control: (
@@ -300,11 +300,10 @@ function SettingsContent() {
           onChange={(checked) => dispatch(setAllowChatQueue(checked))}
         />
       ),
-      visible: isEditorOrAdmin,
     },
     {
       tab: 'general',
-      section: 'Experimental Flags',
+      section: 'Feature Flags',
       title: 'Queue Strategy',
       description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
       control: (
@@ -317,7 +316,7 @@ function SettingsContent() {
           </Button>
         </Flex>
       ),
-      visible: isEditorOrAdmin && allowChatQueue,
+      visible: allowChatQueue,
     },
     {
       tab: 'general',
