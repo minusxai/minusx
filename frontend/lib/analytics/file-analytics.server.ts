@@ -1,6 +1,6 @@
 import 'server-only';
 import { getAnalyticsDb, runStatement, runQuery } from './file-analytics.db';
-import { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
+import { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary, RecentFile } from './file-analytics.types';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
 const INSERT_SQL = `
@@ -306,6 +306,98 @@ export async function getConversationAnalytics(
     return { totalCalls, totalTokens, totalCost, byModel };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Scoring: each create/edit event = 10 pts, each unique day with a view in last N days = 1 pt.
+ * Returns top `perType` results per file_type (question, dashboard), ranked by score then recency.
+ * When userEmail is provided, scopes to that user's events. Otherwise org-wide.
+ */
+function buildRelevantFilesSql(scoped: boolean): string {
+  const userFilter = scoped ? 'AND user_email = ?' : '';
+  return `
+WITH scored AS (
+  SELECT
+    file_id AS "fileId",
+    file_type AS "fileType",
+    file_name AS "fileName",
+    file_path AS "filePath",
+    MAX(timestamp) AS "lastVisited",
+    COUNT(*) FILTER (WHERE event_type IN ('created', 'updated')) * 10
+      + COUNT(DISTINCT CAST(timestamp AS DATE)) FILTER (
+          WHERE event_type = 'read_direct'
+          AND timestamp >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
+        )
+      AS "score"
+  FROM file_events
+  WHERE file_type IN ('question', 'dashboard')
+    ${userFilter}
+  GROUP BY file_id, file_type, file_name, file_path
+  HAVING "score" > 0
+),
+ranked AS (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY "fileType" ORDER BY "score" DESC, "lastVisited" DESC) AS rn
+  FROM scored
+)
+SELECT "fileId", "fileType", "fileName", "filePath", "lastVisited", "score"
+FROM ranked
+WHERE rn <= ?
+ORDER BY "score" DESC, "lastVisited" DESC
+`;
+}
+
+const RELEVANT_USER_SQL = buildRelevantFilesSql(true);
+const RELEVANT_ORG_SQL = buildRelevantFilesSql(false);
+
+function parseRelevantRows(rows: Record<string, unknown>[]): RecentFile[] {
+  return rows.map(row => ({
+    fileId: Number(row['fileId']),
+    fileType: String(row['fileType'] ?? ''),
+    fileName: String(row['fileName'] ?? ''),
+    filePath: String(row['filePath'] ?? ''),
+    lastVisited: toISOOrNull(row['lastVisited']) ?? '',
+  }));
+}
+
+/**
+ * Get the most relevant files for a user based on a combined score:
+ * - Each create/edit event = 10 points
+ * - Each unique day with a view in the last `days` days = 1 point
+ * Returns up to `perType` results per file type (question, dashboard).
+ * Never throws — returns empty array on error.
+ */
+export async function getRelevantFiles(
+  userEmail: string,
+  days: number = 30,
+  perType: number = 3,
+): Promise<RecentFile[]> {
+  try {
+    const db = await getAnalyticsDb();
+    const rows = await runQuery<Record<string, unknown>>(db, RELEVANT_USER_SQL, [days, userEmail, perType]);
+    return parseRelevantRows(rows);
+  } catch (err) {
+    console.error('[analytics] getRelevantFiles failed:', err);
+    return [];
+  }
+}
+
+/**
+ * Same as getRelevantFiles but across all users in the org.
+ * Returns up to `perType` results per file type (question, dashboard).
+ * Never throws — returns empty array on error.
+ */
+export async function getPopularFiles(
+  days: number = 7,
+  perType: number = 3,
+): Promise<RecentFile[]> {
+  try {
+    const db = await getAnalyticsDb();
+    const rows = await runQuery<Record<string, unknown>>(db, RELEVANT_ORG_SQL, [days, perType]);
+    return parseRelevantRows(rows);
+  } catch (err) {
+    console.error('[analytics] getPopularFiles failed:', err);
+    return [];
   }
 }
 

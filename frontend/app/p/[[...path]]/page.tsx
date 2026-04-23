@@ -195,6 +195,7 @@ export default function PathPage({ params }: PathPageProps) {
             path={fullPath}
             title={pageTitle === (user?.mode || DEFAULT_MODE) ? config.branding.displayName : pageTitle}
             headerRight={headerRightContent}
+            showAnalytics={fullPath === '/' + (user.mode || DEFAULT_MODE)}
           />
         </Box>
         {showChat && <SearchBar />}
