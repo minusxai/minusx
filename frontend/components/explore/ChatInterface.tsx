@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare, LuSave, LuEye } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
@@ -34,6 +34,9 @@ import { selectDevMode } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolCallListModal from './ToolCallListModal';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
+import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
+import { publishAll } from '@/lib/api/file-state';
+import PublishModal from '@/components/PublishModal';
 
 // next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
 // from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
@@ -282,6 +285,22 @@ export default function ChatInterface({
   const isMedium = !isCompact && containerWidth > 0 && containerWidth < 1100;
   const colSpan = isCompact ? 12 : isMedium ? { base: 12, md: 8 } : { base: 12, md: 8, lg: 6 };
   const colStart = isCompact ? 1 : isMedium ? { base: 1, md: 3 } : { base: 1, md: 3, lg: 4 };
+
+  // Dirty files — show save banner above chat input
+  const dirtyFiles = useDirtyFiles();
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const handleSaveAll = useCallback(async () => {
+    setIsSavingAll(true);
+    try {
+      await publishAll(dirtyFiles.map(f => f.id));
+      toaster.create({ title: `Saved ${dirtyFiles.length} file${dirtyFiles.length > 1 ? 's' : ''}`, type: 'success' });
+    } catch {
+      toaster.create({ title: 'Failed to save', type: 'error' });
+    } finally {
+      setIsSavingAll(false);
+    }
+  }, [dirtyFiles]);
 
   // Clear errors when navigating between conversations — intentional setState in effect
   const prevProvidedIdRef = useRef(providedConversationId);
@@ -995,6 +1014,51 @@ export default function ChatInterface({
             </Grid>
           )}
 
+          {/* Unsaved changes banner */}
+          {dirtyFiles.length > 0 && !isAgentRunning && !isStreaming && (
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+              <GridItem colSpan={colSpan} colStart={colStart}>
+                <HStack
+                  bg="accent.primary/8"
+                  border="1px solid"
+                  borderColor="accent.primary/20"
+                  borderRadius="md"
+                  px={3} py={2} mb={2}
+                  justify="space-between"
+                >
+                  <Text fontSize="xs" fontFamily="mono" color="fg.default">
+                    {dirtyFiles.length} unsaved change{dirtyFiles.length > 1 ? 's' : ''}
+                  </Text>
+                  <HStack gap={1.5}>
+                    <Button
+                      size="2xs"
+                      variant="ghost"
+                      onClick={() => setPublishModalOpen(true)}
+                      color="accent.primary"
+                      fontFamily="mono"
+                    >
+                      <Icon as={LuEye} boxSize={3} />
+                      Review
+                    </Button>
+                    <Button
+                      size="2xs"
+                      variant="solid"
+                      bg="accent.primary"
+                      color="white"
+                      _hover={{ opacity: 0.9 }}
+                      onClick={handleSaveAll}
+                      disabled={isSavingAll}
+                      fontFamily="mono"
+                    >
+                      <Icon as={LuSave} boxSize={3} />
+                      Save All
+                    </Button>
+                  </HStack>
+                </HStack>
+              </GridItem>
+            </Grid>
+          )}
+
           <Box width="100%">
             <ChatInput
               onSend={handleSendMessage}
@@ -1022,6 +1086,7 @@ export default function ChatInterface({
           </Box>
         </Box>
       )}
+      <PublishModal isOpen={publishModalOpen} onClose={() => setPublishModalOpen(false)} />
     </VStack>
   );
 }
