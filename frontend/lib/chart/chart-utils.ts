@@ -58,8 +58,22 @@ export function buildCompactYLabel(names: string[], maxNames = 1): string {
 
   // No meaningful common prefix — show first N names + count
   if (names.length <= maxNames) return names.join(', ')
+  const suffix = ` (+${names.length - maxNames} more)`
   const shown = names.slice(0, maxNames).join(', ')
-  return `${shown} (+${names.length - maxNames} more)`
+  return `${shown}${suffix}`
+}
+
+/** Truncate a string to maxLen chars, preserving a trailing "(+N more)" suffix if present */
+export function truncateLabel(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s
+  const suffixMatch = s.match(/(\s*\(\+\d+ more\))$/)
+  if (suffixMatch) {
+    const suffix = suffixMatch[1]
+    const name = s.slice(0, -suffix.length)
+    const available = maxLen - suffix.length - 3
+    if (available >= 1) return `${name.slice(0, available)}...${suffix}`
+  }
+  return `${s.slice(0, maxLen - 3)}...`
 }
 
 interface AnnotationGraphicsConfig {
@@ -1273,7 +1287,7 @@ interface BaseChartConfig {
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1338,7 +1352,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
-  const maxAxisNameLength = 40
+  // Rotated y-axis name: ~10px per char at fontSize 16. Reserve 120px for grid margins + legend.
+  const usableHeight = (containerHeight ?? 400) - 120
+  const maxAxisNameLength = Math.max(8, Math.min(40, Math.floor(usableHeight / 10)))
 
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
 
@@ -1485,27 +1501,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const chartSeries = series.map((_, index) => getSeriesConfig(chartType, index))
 
-  // Helper to wrap long axis names - split by maxLength chars per line, truncate if exceeds max lines
-  const wrapAxisName = (name: string | undefined, maxLength: number = 40): string => {
-    if (!name || name.length <= maxLength) return name || ''
-
-    const maxLines = 2  // Maximum number of lines before truncating
-
-    // Split into chunks of maxLength
-    const lines: string[] = []
-    for (let i = 0; i < name.length; i += maxLength) {
-      if (lines.length < maxLines) {
-        lines.push(name.slice(i, i + maxLength))
-      }
-    }
-
-    // If we had more content than max lines, truncate last line with ellipsis
-    if (name.length > maxLength * maxLines) {
-      lines[maxLines - 1] = lines[maxLines - 1].slice(0, -3) + '...'
-    }
-
-    return lines.join('\n')
-  }
+  const truncAxisName = (name: string | undefined) => name ? truncateLabel(name, maxAxisNameLength) : ''
 
   // Build Y-axis names for dual axes based on which series are on each axis
   const getAxisName = (axisIndex: number): string => {
@@ -1514,11 +1510,11 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       .map(s => s.name)
 
     if (seriesOnAxis.length === 0) return ''
-    if (seriesOnAxis.length === 1) return wrapAxisName(seriesOnAxis[0], maxAxisNameLength)
+    if (seriesOnAxis.length === 1) return truncAxisName(seriesOnAxis[0])
 
     // Multiple series on this axis - join with commas
     const combined = seriesOnAxis.join(', ')
-    return wrapAxisName(combined, maxAxisNameLength)
+    return truncAxisName(combined)
   }
 
   const legendData = useDualYAxis
@@ -1607,7 +1603,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       ]
       : {
         type: yAxisType,
-        name: wrapAxisName(resolvedYAxisLabel, maxAxisNameLength),
+        name: truncAxisName(resolvedYAxisLabel),
         ...yExtraProps,
         ...yLogRangeProps,
         ...yRangeProps,

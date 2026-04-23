@@ -7,6 +7,8 @@ import { LuClock, LuTrendingUp, LuChevronLeft, LuChevronRight } from 'react-icon
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
+import { useAppSelector } from '@/store/hooks';
+import { selectRightSidebarUIState } from '@/store/uiSlice';
 import type { RecentFile } from '@/lib/analytics/file-analytics.types';
 
 interface HomeAnalyticsData {
@@ -191,6 +193,7 @@ function SectionHeader({ icon, title, accent }: { icon: React.ElementType; title
 }
 
 export default function RecentFilesSection() {
+  const { isCollapsed } = useAppSelector(selectRightSidebarUIState);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
 
   useEffect(() => {
@@ -201,6 +204,9 @@ export default function RecentFilesSection() {
       })
       .catch(() => {});
   }, []);
+
+  // Hide standalone column when right sidebar is open (content moves to sidebar tab)
+  if (!isCollapsed) return null;
 
   if (!data) return null;
 

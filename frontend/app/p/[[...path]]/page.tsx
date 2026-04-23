@@ -209,6 +209,7 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
+              showRecent={fullPath === '/' + (user.mode || DEFAULT_MODE)}
               contextVersion={selectedVersion}
               selectedContextPath={effectiveContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {

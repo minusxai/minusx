@@ -14,6 +14,7 @@ import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import DevToolsPanel from './DevToolsPanel';
+import RecentFilesSidebarContent from './RecentFilesSidebarContent';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
 import { Tooltip } from './ui/tooltip';
@@ -31,6 +32,7 @@ export interface RightSidebarProps {
   title?: string;
   filePath?: string;  // File path for context filtering
   showChat?: boolean;
+  showRecent?: boolean;
   fileId?: number;
   fileType?: FileType;
   contextVersion?: number;  // Selected context version (admin testing)
@@ -156,6 +158,8 @@ function SectionContent({
           />
         </Box>
       );
+    case 'recent':
+      return <RecentFilesSidebarContent />;
     case 'dev':
       return <DevToolsPanel appState={appState} />;
     case 'question-references':
@@ -344,6 +348,7 @@ export default function RightSidebar({
   title = "Misc Info",
   filePath = '/',
   showChat = false,
+  showRecent = false,
   fileId,
   fileType,
   contextVersion,
@@ -444,6 +449,10 @@ export default function RightSidebar({
 
   if (fileType === 'question') {
     sections.push(getSidebarSection('question-references'));
+  }
+
+  if (showRecent) {
+    sections.push(getSidebarSection('recent'));
   }
 
   if (IS_DEV || devMode) {
