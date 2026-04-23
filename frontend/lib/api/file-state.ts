@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, hashString, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, removeVirtualFile, hashString, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -672,19 +672,42 @@ export async function publishFile(
 }
 
 /**
- * publishAll - Batch-publish all dirty non-system files in a single flow.
+ * publishAll - Batch-publish dirty non-system files in a single flow.
  *
  * Flow:
  * 1. Batch-create any virtual (negative-ID) files — one API call.
  * 2. Replace stale negative IDs in other dirty files (Redux only).
  * 3. Batch-save all remaining dirty (positive-ID) files — one API call.
  *
+ * @param fileIds - Optional list of file IDs to scope the publish to.
+ *   When provided, only these files are saved (useful for saving a file + its children).
+ *   When omitted, all dirty non-system files are saved.
+ *
  * Throws on error; caller is responsible for showing error state.
  */
-export async function publishAll(): Promise<void> {
+export async function publishAll(fileIds?: number[]): Promise<Record<number, number>> {
   const state = getStore().getState();
-  const allDirty = selectDirtyFiles(state);
-  if (allDirty.length === 0) return;
+  const allDirtyUnscoped = selectDirtyFiles(state);
+  let allDirty: FileState[];
+  if (fileIds) {
+    // Start with explicitly requested files, then expand to include their dirty dependencies.
+    // Look at ALL scoped files (not just dirty) to find refs — e.g., a clean dashboard
+    // may reference a dirty question that needs saving.
+    const scopedIds = new Set(fileIds);
+    for (const id of [...scopedIds]) {
+      const f = state.files.files[id];
+      if (!f) continue;
+      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const refs = extractReferencesFromContent(merged as any, f.type as FileType);
+      for (const refId of refs) {
+        if (selectIsDirty(state, refId)) scopedIds.add(refId);
+      }
+    }
+    allDirty = allDirtyUnscoped.filter(f => scopedIds.has(f.id));
+  } else {
+    allDirty = allDirtyUnscoped;
+  }
+  if (allDirty.length === 0) return {};
 
   const idMap: Record<number, number> = {};
 
@@ -766,6 +789,8 @@ export async function publishAll(): Promise<void> {
       getStore().dispatch(clearMetadataEdits(file.id));
     }
   }
+
+  return idMap;
 }
 
 /**
@@ -957,6 +982,55 @@ export function clearFileChanges(options: ClearFileChangesOptions): void {
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
   getStore().dispatch(clearEphemeral(fileId));
+}
+
+/**
+ * discardAll - Discard changes for dirty non-system files.
+ *
+ * Real files (id >= 0): clears persistableChanges, metadataChanges, ephemeralChanges.
+ * Virtual files (id < 0): removed from Redux entirely.
+ * Real files are cleared first so dashboard refs to virtual IDs revert before the virtual files are removed.
+ *
+ * @param fileIds - Optional list of file IDs to scope the discard to.
+ *   When provided, only these files (+ their dirty dependencies) are discarded.
+ *   When omitted, all dirty non-system files are discarded.
+ */
+export function discardAll(fileIds?: number[]): void {
+  const state = getStore().getState();
+  const allDirtyUnscoped = selectDirtyFiles(state);
+  let filesToDiscard: FileState[];
+  if (fileIds) {
+    const scopedIds = new Set(fileIds);
+    // Expand: look at ALL scoped files (not just dirty) to find their dirty children.
+    // E.g., a clean dashboard references a dirty question — the question should be discarded.
+    for (const id of [...scopedIds]) {
+      const f = state.files.files[id];
+      if (!f) continue;
+      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const refs = extractReferencesFromContent(merged as any, f.type as FileType);
+      for (const refId of refs) {
+        if (selectIsDirty(state, refId)) scopedIds.add(refId);
+      }
+    }
+    filesToDiscard = allDirtyUnscoped.filter(f => scopedIds.has(f.id));
+  } else {
+    filesToDiscard = allDirtyUnscoped;
+  }
+
+  // Clear real files first — reverts dashboard refs to virtual IDs before removing them
+  for (const file of filesToDiscard) {
+    if (file.id >= 0) {
+      getStore().dispatch(clearEdits(file.id));
+      getStore().dispatch(clearMetadataEdits(file.id));
+      getStore().dispatch(clearEphemeral(file.id));
+    }
+  }
+  // Remove virtual files from Redux entirely
+  for (const file of filesToDiscard) {
+    if (file.id < 0) {
+      getStore().dispatch(removeVirtualFile(file.id));
+    }
+  }
 }
 
 // ============================================================================

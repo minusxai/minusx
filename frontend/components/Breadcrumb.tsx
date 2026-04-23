@@ -11,7 +11,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import DemoModeBanner from '@/components/DemoModeBanner';
 import FileSearchBar from './FileSearchBar';
-import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
+import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import PublishModal from './PublishModal';
 
 interface BreadcrumbItem {
@@ -45,8 +45,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
   const hasBanner = isTutorialMode || !!bannerColor;
-  const dirtyFiles = useDirtyFiles();
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const { unrelatedDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal } = useSaveDecision(currentFileId);
   const isLastItem = (index: number) => index === items.length - 1;
   const [searchQuery, setSearchQuery] = useState('');
   const sortedSiblingFiles = siblingFiles ? sortByTypeHierarchy(siblingFiles) : undefined;
@@ -195,7 +194,6 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                 fontWeight="600"
                 color={textColor}
                 _hover={{ color: textColorActive }}
-                transition="color 0.2s"
                 cursor="pointer"
               >
                 {item.label}
@@ -215,8 +213,8 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
     </Flex>
   );
 
-  // Unsaved changes button (styled differently when inside demo banner vs standalone)
-  const unsavedChangesButton = dirtyFiles.length > 0 ? (
+  // Unsaved changes button — only shows for unrelated dirty files (not current file's children)
+  const unsavedChangesButton = unrelatedDirtyCount > 0 ? (
     <Button
       size="xs"
       variant="solid"
@@ -226,10 +224,10 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
       color={hasBanner ? 'white' : 'accent.danger'}
       _hover={hasBanner ? { bg: 'white', color: 'accent.danger' } : undefined}
       fontFamily="mono"
-      onClick={() => setIsPublishModalOpen(true)}
+      onClick={openPublishModal}
     >
       <LuTriangleAlert size={12} />
-      {dirtyFiles.length} unsaved {dirtyFiles.length === 1 ? 'change' : 'changes'}
+      {unrelatedDirtyCount} unsaved {unrelatedDirtyCount === 1 ? 'change' : 'changes'}
     </Button>
   ) : null;
 
@@ -240,54 +238,44 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
         <DemoModeBanner unsavedChangesButton={unsavedChangesButton}>
           {breadcrumbItems}
         </DemoModeBanner>
-        <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
-      </>
-    );
-  }
-
-  // Custom banner mode (e.g. dashboard edit mode)
-  if (bannerColor) {
-    return (
-      <>
-        <Flex
-          align="center"
-          justify="space-between"
-          gap={2}
-          mb={2}
-          px={4}
-          py={1}
-          bg={bannerColor}
-          borderRadius="md"
-        >
-          <Box flex="0 0 auto">
-            {breadcrumbItems}
-          </Box>
-          {bannerLabel && (
-            <Flex align="center" gap={2} flex={1} justify="center">
-              <LuPencil size={14} color="white" />
-              <Text fontSize="xs" fontWeight="600" color="white" fontFamily="mono" whiteSpace="nowrap">
-                {bannerLabel}
-              </Text>
-            </Flex>
-          )}
-          <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
-            {unsavedChangesButton}
-            <FileSearchBar />
-          </Flex>
-        </Flex>
-        <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+        <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
       </>
     );
   }
 
   return (
-    <Flex align="center" justify="space-between" gap={2} mb={2}>
-      {breadcrumbItems}
+    <Flex
+      align="center"
+      justify="space-between"
+      gap={2}
+      mb={2}
+      px={3}
+      py={1}
+      mx={-3}
+      bg={bannerColor ?? 'transparent'}
+      borderRadius="md"
+    >
+      <Box flex="0 0 auto">
+        {breadcrumbItems}
+      </Box>
+      {bannerLabel && (
+        <>
+          <style>{`@keyframes bannerIconBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+          <Flex align="center" gap={1.5} flex={1} justify="center">
+            <Box display="inline-flex" style={{ animation: 'bannerIconBlink 2s ease-in-out infinite' }}>
+              <Icon as={LuPencil} boxSize={3} color="white" />
+            </Box>
+            <Text fontSize="xs" fontWeight="600" color="white" fontFamily="mono" whiteSpace="nowrap">
+              {bannerLabel}
+            </Text>
+          </Flex>
+        </>
+      )}
       <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
         {unsavedChangesButton}
         <FileSearchBar />
       </Flex>
-      <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+      <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
     </Flex>
   );
 }

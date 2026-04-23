@@ -24,13 +24,13 @@
  */
 
 import { configureStore } from '@reduxjs/toolkit';
-import filesReducer, { generateVirtualId } from '../filesSlice';
+import filesReducer, { generateVirtualId, selectDirtyFiles } from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { publishAll } from '@/lib/api/file-state';
+import { publishAll, discardAll } from '@/lib/api/file-state';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as batchCreateHandler } from '@/app/api/files/batch-create/route';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
@@ -83,6 +83,51 @@ function makeStore() {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getDirtyFileIds(s: ReturnType<typeof makeStore>): number[] {
+  return selectDirtyFiles(s.getState() as any).map(f => f.id);
+}
+
+function getFileFromRedux(s: ReturnType<typeof makeStore>, fileId: number) {
+  return (s.getState() as any).files.files[fileId];
+}
+
+async function loadFilesIntoRedux(s: ReturnType<typeof makeStore>, fileIds: number[]) {
+  const files = await Promise.all(fileIds.map(id => DocumentDB.getById(id)));
+  s.dispatch({ type: 'files/setFiles', payload: { files } });
+}
+
+function editInRedux(s: ReturnType<typeof makeStore>, fileId: number, edits: Record<string, any>) {
+  s.dispatch({ type: 'files/setEdit', payload: { fileId, edits } });
+}
+
+function addVirtualQuestion(s: ReturnType<typeof makeStore>, name: string, path: string): number {
+  const virtualId = generateVirtualId();
+  const content: QuestionContent = {
+    description: `${name} description`,
+    query: `SELECT * FROM ${name.toLowerCase().replace(/\s/g, '_')}`,
+    connection_name: 'test_db',
+    parameters: [],
+    vizSettings: { type: 'table' }
+  };
+  s.dispatch({
+    type: 'files/setFile',
+    payload: {
+      file: {
+        id: virtualId, name, path, type: 'question',
+        content, references: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    }
+  });
+  s.dispatch({ type: 'files/setEdit', payload: { fileId: virtualId, edits: content } });
+  return virtualId;
+}
+
+// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
@@ -91,6 +136,7 @@ describe('publishAll E2E', () => {
   let store: ReturnType<typeof makeStore>;
   let question1Id: number;
   let question2Id: number;
+  let question3Id: number;  // unrelated question (not in dashboard)
   let dashboardId: number;
 
   // Route batch API calls to real Next.js handlers (no Python backend needed)
@@ -130,6 +176,20 @@ describe('publishAll E2E', () => {
       {
         description: 'Active user count',
         query: 'SELECT COUNT(*) FROM users WHERE active = true',
+        connection_name: 'test_db',
+        parameters: [],
+        vizSettings: { type: 'table' }
+      } as QuestionContent,
+      []
+    );
+
+    question3Id = await DocumentDB.create(
+      'Unrelated Query',
+      '/org/unrelated-query',
+      'question',
+      {
+        description: 'Something unrelated',
+        query: 'SELECT 1',
         connection_name: 'test_db',
         parameters: [],
         vizSettings: { type: 'table' }
@@ -413,9 +473,195 @@ describe('publishAll E2E', () => {
     expect(dirtyBefore).toHaveLength(0);
 
     // publishAll should resolve without making any API calls
-    await expect(publishAll()).resolves.toBeUndefined();
+    const idMap = await publishAll();
+    expect(idMap).toEqual({});
     expect(mockFetch).not.toHaveBeenCalled();
 
     console.log('✓ publishAll() is a no-op when no dirty files exist');
+  });
+
+  // =========================================================================
+  // SCOPED PUBLISH — publishAll(fileIds)
+  // =========================================================================
+
+  describe('publishAll (scoped)', () => {
+
+    it('saves dashboard + dirty child, leaves unrelated dirty', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question2Id, question3Id, dashboardId]);
+      editInRedux(store, question1Id, { description: 'Scoped Q1 edit' });
+      editInRedux(store, dashboardId, { description: 'Dashboard edit' });
+      editInRedux(store, question3Id, { description: 'Unrelated edit' });
+
+      expect(getDirtyFileIds(store)).toHaveLength(3);
+
+      await publishAll([dashboardId]);
+
+      // Dashboard + Q1 (child) saved, Q3 still dirty
+      const dirtyAfter = getDirtyFileIds(store);
+      expect(dirtyAfter).toHaveLength(1);
+      expect(dirtyAfter).toContain(question3Id);
+
+      const q1 = await DocumentDB.getById(question1Id);
+      expect((q1!.content as QuestionContent).description).toBe('Scoped Q1 edit');
+      const dash = await DocumentDB.getById(dashboardId);
+      expect((dash!.content as DocumentContent).description).toBe('Dashboard edit');
+    });
+
+    it('saves dirty child when dashboard itself is clean', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question2Id, question3Id, dashboardId]);
+      editInRedux(store, question1Id, { description: 'Child-only edit' });
+      editInRedux(store, question3Id, { description: 'Still unrelated' });
+
+      expect(getDirtyFileIds(store)).toHaveLength(2);
+
+      await publishAll([dashboardId]);
+
+      // Q1 saved (child of clean dashboard), Q3 still dirty
+      const dirtyAfter = getDirtyFileIds(store);
+      expect(dirtyAfter).toHaveLength(1);
+      expect(dirtyAfter).toContain(question3Id);
+
+      const q1 = await DocumentDB.getById(question1Id);
+      expect((q1!.content as QuestionContent).description).toBe('Child-only edit');
+    });
+
+    it('saves single file with no children', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question3Id]);
+      editInRedux(store, question1Id, { description: 'Single save' });
+      editInRedux(store, question3Id, { description: 'Should stay dirty' });
+
+      await publishAll([question1Id]);
+
+      const dirtyAfter = getDirtyFileIds(store);
+      expect(dirtyAfter).toHaveLength(1);
+      expect(dirtyAfter).toContain(question3Id);
+
+      const q1 = await DocumentDB.getById(question1Id);
+      expect((q1!.content as QuestionContent).description).toBe('Single save');
+    });
+
+    it('creates virtual child and rewires dashboard refs', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question2Id, dashboardId]);
+
+      const virtualId = addVirtualQuestion(store, 'Virtual Q', '/org/virtual-q');
+      store.dispatch({
+        type: 'files/addQuestionToDashboard',
+        payload: { dashboardId, questionId: virtualId }
+      });
+
+      const dirtyBefore = getDirtyFileIds(store);
+      expect(dirtyBefore).toContain(dashboardId);
+      expect(dirtyBefore).toContain(virtualId);
+
+      await publishAll([dashboardId]);
+
+      expect(getDirtyFileIds(store)).toHaveLength(0);
+
+      // Dashboard in DB has only positive IDs
+      const dash = await DocumentDB.getById(dashboardId);
+      const dashContent = dash!.content as DocumentContent;
+      const assetIds = (dashContent.assets || []).map((a: any) => a.id);
+      expect(assetIds.every((id: number) => id > 0)).toBe(true);
+      expect(assetIds).not.toContain(virtualId);
+
+      // Virtual file now exists in DB — find it by name among the new asset IDs
+      const unknownIds = assetIds.filter((id: number) => id !== question1Id && id !== question2Id);
+      const newQs = await Promise.all(unknownIds.map((id: number) => DocumentDB.getById(id)));
+      const virtualQ = newQs.find(q => q?.name === 'Virtual Q');
+      expect(virtualQ).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // DISCARD — discardAll() and discardAll(fileIds)
+  // =========================================================================
+
+  describe('discardAll', () => {
+
+    it('no args — discards all dirty files', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question3Id, dashboardId]);
+      editInRedux(store, question1Id, { description: 'Will be discarded' });
+      editInRedux(store, question3Id, { description: 'Also discarded' });
+      editInRedux(store, dashboardId, { description: 'Gone too' });
+
+      expect(getDirtyFileIds(store)).toHaveLength(3);
+
+      discardAll();
+
+      expect(getDirtyFileIds(store)).toHaveLength(0);
+      // Redux content reverted (persistableChanges cleared)
+      const q1 = getFileFromRedux(store, question1Id);
+      expect(Object.keys(q1.persistableChanges || {})).toHaveLength(0);
+    });
+
+    it('scoped [dashboard] — discards dashboard + dirty child, leaves unrelated', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question2Id, question3Id, dashboardId]);
+      editInRedux(store, question1Id, { description: 'Child edit' });
+      editInRedux(store, dashboardId, { description: 'Dashboard edit' });
+      editInRedux(store, question3Id, { description: 'Unrelated edit' });
+
+      expect(getDirtyFileIds(store)).toHaveLength(3);
+
+      discardAll([dashboardId]);
+
+      const dirtyAfter = getDirtyFileIds(store);
+      expect(dirtyAfter).toHaveLength(1);
+      expect(dirtyAfter).toContain(question3Id);
+
+      const q1 = getFileFromRedux(store, question1Id);
+      expect(Object.keys(q1.persistableChanges || {})).toHaveLength(0);
+      const dash = getFileFromRedux(store, dashboardId);
+      expect(Object.keys(dash.persistableChanges || {})).toHaveLength(0);
+    });
+
+    it('scoped [dashboard] — dashboard clean, child dirty → discards child', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question2Id, question3Id, dashboardId]);
+      editInRedux(store, question1Id, { description: 'Child-only dirty' });
+      editInRedux(store, question3Id, { description: 'Unrelated still dirty' });
+
+      expect(getDirtyFileIds(store)).toHaveLength(2);
+
+      discardAll([dashboardId]);
+
+      const dirtyAfter = getDirtyFileIds(store);
+      expect(dirtyAfter).toHaveLength(1);
+      expect(dirtyAfter).toContain(question3Id);
+
+      const q1 = getFileFromRedux(store, question1Id);
+      expect(Object.keys(q1.persistableChanges || {})).toHaveLength(0);
+    });
+
+    it('scoped [question] — discards just that file, leaves others dirty', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question3Id]);
+      editInRedux(store, question1Id, { description: 'Discard me' });
+      editInRedux(store, question3Id, { description: 'Keep me dirty' });
+
+      discardAll([question1Id]);
+
+      const dirtyAfter = getDirtyFileIds(store);
+      expect(dirtyAfter).toHaveLength(1);
+      expect(dirtyAfter).toContain(question3Id);
+    });
+
+    it('scoped [dashboard] — virtual child removed from Redux', async () => {
+      await loadFilesIntoRedux(store, [question1Id, question2Id, dashboardId]);
+
+      const virtualId = addVirtualQuestion(store, 'Temp Virtual', '/org/temp-virtual');
+      store.dispatch({
+        type: 'files/addQuestionToDashboard',
+        payload: { dashboardId, questionId: virtualId }
+      });
+
+      expect(getDirtyFileIds(store)).toContain(virtualId);
+      expect(getFileFromRedux(store, virtualId)).toBeDefined();
+
+      discardAll([dashboardId]);
+
+      expect(getDirtyFileIds(store)).toHaveLength(0);
+      const dash = getFileFromRedux(store, dashboardId);
+      expect(Object.keys(dash.persistableChanges || {})).toHaveLength(0);
+      // Virtual file removed entirely from Redux
+      expect(getFileFromRedux(store, virtualId)).toBeUndefined();
+    });
   });
 });

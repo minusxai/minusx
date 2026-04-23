@@ -285,6 +285,7 @@ export default function ContextContainerV2({
     try {
       if (typeof fileId === 'number') {
         const result = await publishFile({ fileId });
+        setEditMode(false);
         redirectAfterSave(result, fileId, router);
       }
     } catch (error) {

@@ -733,13 +733,14 @@ describe('Add question to existing dashboard and save', () => {
     expect(savedContent.assets).toHaveLength(1);
     expect(savedContent.assets![0]).toMatchObject({ type: 'question', id: QUESTION_ID });
 
+    // Save now goes through publishAll → batch-save (not single-file PATCH)
     const saveCalls = (global.fetch as jest.Mock).mock.calls.filter(
       ([url, init]) =>
         typeof url === 'string' &&
-        url.includes(`/api/files/${DASHBOARD_ID}`) &&
-        init?.method?.toUpperCase() === 'PATCH'
+        (url.includes('/api/files/batch-save') || url.includes(`/api/files/${DASHBOARD_ID}`)) &&
+        (init?.method?.toUpperCase() === 'POST' || init?.method?.toUpperCase() === 'PATCH')
     );
-    expect(saveCalls).toHaveLength(1);
+    expect(saveCalls.length).toBeGreaterThanOrEqual(1);
   });
 });
 

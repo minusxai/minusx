@@ -10,7 +10,7 @@
  */
 import { createContext, useContext } from 'react';
 
-export type PublishHighlight = 'added' | 'moved';
+export type PublishHighlight = 'added' | 'moved' | 'edited';
 
 interface DashboardPublishHighlightsValue {
   /** question ID → highlight type; null means context is inactive (normal view) */

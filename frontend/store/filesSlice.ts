@@ -5,6 +5,7 @@ import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/a
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
+import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { dbFileToFileState } from '@/lib/api/compress-augmented';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
@@ -1107,6 +1108,33 @@ export const selectDirtyFiles = createSelector(
       return hasContentChanges || hasMetadataChanges;
     }) as FileState[]
 );
+
+/**
+ * Classify dirty files relative to the current file being viewed.
+ * - currentDirty: whether the current file itself has unsaved changes
+ * - childDirtyFiles: dirty files referenced by the current file (e.g., questions in a dashboard)
+ * - unrelatedDirtyFiles: dirty files that are NOT the current file or its children
+ *
+ * When fileId is undefined (e.g., folder pages), all dirty files are "unrelated".
+ */
+export function selectSaveClassification(state: RootState, fileId: number | undefined) {
+  const allDirty = selectDirtyFiles(state);
+  if (fileId === undefined) {
+    return { currentDirty: false, childDirtyFiles: [] as FileState[], unrelatedDirtyFiles: allDirty };
+  }
+  const fileState = state.files.files[fileId];
+  const mergedContent = selectMergedContent(state, fileId);
+  const childIds = new Set(
+    fileState && mergedContent
+      ? extractReferencesFromContent(mergedContent as any, fileState.type as FileType)
+      : []
+  );
+  return {
+    currentDirty: allDirty.some(f => f.id === fileId),
+    childDirtyFiles: allDirty.filter(f => f.id !== fileId && childIds.has(f.id)),
+    unrelatedDirtyFiles: allDirty.filter(f => f.id !== fileId && !childIds.has(f.id)),
+  };
+}
 
 export const selectConnectionsLoading = createSelector(
   [(state: RootState) => state.files.files],

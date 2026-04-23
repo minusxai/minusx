@@ -63,6 +63,7 @@ export interface DocumentHeaderProps {
   readOnlyName?: boolean;        // If true, name cannot be edited
   hideDescription?: boolean;     // If true, description field is not shown
   hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
+  skipNameValidation?: boolean;  // If true, skip name check on save (e.g. save modal handles it)
 
   // JSON view toggle (optional - shown only for admins when provided)
   viewMode?: 'visual' | 'json';  // Current view mode
@@ -74,6 +75,9 @@ export interface DocumentHeaderProps {
   // When other files have unsaved changes, show a "Review N unsaved changes" button.
   onReviewChanges?: () => void;
   dirtyFileCount?: number;
+
+  // Number of files that will be saved (current + children). Shown on Save button label.
+  saveCount?: number;
 
   // Optional highlight color for the header background (e.g. dashboard edit mode)
   highlightColor?: string;
@@ -96,11 +100,13 @@ export default function DocumentHeader({
   readOnlyName = false,
   hideDescription = false,
   hideEditToggle = false,
+  skipNameValidation = false,
   viewMode = 'visual',
   onViewModeChange,
   questionId,
   onReviewChanges,
   dirtyFileCount = 0,
+  saveCount = 1,
   highlightColor,
   highlightLabel,
 }: DocumentHeaderProps) {
@@ -126,7 +132,7 @@ export default function DocumentHeader({
 
   // Validate and save
   const handleSave = useCallback(() => {
-    if (!validateName()) return;
+    if (!skipNameValidation && !validateName()) return;
     onSave();
   }, [validateName, onSave]);
 
@@ -250,62 +256,53 @@ export default function DocumentHeader({
 
           {/* Actions */}
           <HStack gap={2} flexShrink={0}>
-            {/* Highlight label (e.g. "Editing Dashboard") */}
-            {highlightLabel && (
-              <HStack
-                gap={1.5}
-                px={2}
-                py={1}
-                bg={`${highlightColor}/15`}
-                borderRadius="md"
-                border="1px solid"
-                borderColor={`${highlightColor}/30`}
-              >
-                <Box css={{ animation: 'iconBlink 1.5s ease-in-out infinite' }} display="inline-flex">
-                  <Icon as={LuPencil} boxSize={3} color={highlightColor}/>
-                </Box>
-                <Text fontSize="xs" color={highlightColor} fontWeight="600" fontFamily="mono">
-                  {highlightLabel}
-                </Text>
-              </HStack>
-            )}
             {/* Explain Button (show in view mode for questions) */}
             {!editMode && questionId !== undefined && (
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
-            {/* Review N unsaved changes (when other files are dirty) */}
-            {onReviewChanges && dirtyFileCount > 0 ? (
-              <IconButton
+            {/* Review unsaved changes — muted text link, informational */}
+            {onReviewChanges && dirtyFileCount > 0 && (
+              <HStack
+                as="button"
                 onClick={onReviewChanges}
                 aria-label={`Review ${dirtyFileCount} unsaved changes`}
-                size="xs"
-                colorPalette="teal"
-                px={2}
+                gap={1}
+                px={1}
+                color="fg.muted"
+                _hover={{ color: 'fg.default' }}
+                transition="color 0.15s"
+                cursor="pointer"
               >
-                <LuFiles />
-                Review {dirtyFileCount} unsaved {dirtyFileCount === 1 ? 'change' : 'changes'}
-              </IconButton>
-            ) : editMode && isDirty && (
+                <Icon as={LuFiles} boxSize={3.5} />
+                <Text fontSize="xs" fontWeight="600" fontFamily="mono">
+                  Review {dirtyFileCount} change{dirtyFileCount > 1 ? 's' : ''}
+                </Text>
+              </HStack>
+            )}
+
+            {/* Save button — always visible in edit mode, disabled when clean */}
+            {editMode && (
               <IconButton
                 onClick={handleSave}
-                aria-label="Save"
+                aria-label={'Save'}
                 loading={isSaving}
+                disabled={!isDirty}
                 size="xs"
                 colorPalette="teal"
                 px={2}
               >
                 <LuSave />
-                Save
+                {'Save'}
               </IconButton>
             )}
 
-            {/* Edit/Cancel Button (hidden when review button is shown) */}
-            {!hideEditToggle && !(onReviewChanges && dirtyFileCount > 0) && (
+            {/* Edit/Cancel Button */}
+            {!hideEditToggle && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
-              variant="subtle"
+              variant={editMode ? 'outline' : 'subtle'}
               size="xs"
               px={2}
             >

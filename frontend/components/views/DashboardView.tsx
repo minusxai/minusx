@@ -11,14 +11,14 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
-import { useDashboardPublishHighlights } from '@/lib/context/dashboard-publish-highlights';
+import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
 
 const EMPTY_PARAMS: Record<string, any> = {};
 const DASHBOARD_MIN_W = 2;
@@ -277,8 +277,58 @@ export default function DashboardView({
   // Hover state for param filter chips
   const [hoveredParamKey, setHoveredParamKey] = useState<string | null>(null);
 
-  // Publish-modal widget highlights (added / moved), provided via context from PublishModal
-  const { highlights: publishHighlights } = useDashboardPublishHighlights();
+  // Widget highlights: added / moved / edited questions. In PublishModal preview, provided via context.
+  // On the main dashboard page, computed directly from content vs persistableChanges + child dirty state.
+  const { highlights: contextHighlights } = useDashboardPublishHighlights();
+  const fileState = useAppSelector(state => state.files.files[fileId]);
+  const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
+  const localHighlights = useMemo(() => {
+    if (contextHighlights !== null) return null; // context active (PublishModal) — defer to it
+    if (!editMode || !fileState) return null;
+
+    const content = fileState.content as DocumentContent | null;
+    const changes = fileState.persistableChanges as Partial<DocumentContent> | undefined;
+    const allQuestionIds = (changes?.assets ?? content?.assets ?? [])
+      .filter(a => a.type === 'question')
+      .map(a => (a as { type: 'question'; id: number }).id);
+    const dirtyFileIds = new Set(dirtyFiles.map(f => f.id));
+
+    const map = new Map<number, PublishHighlight>();
+
+    // Dashboard-level changes: added questions and moved questions
+    if (changes?.assets || changes?.layout) {
+      const oldIds = new Set(
+        (content?.assets ?? []).filter(a => a.type === 'question').map(a => (a as { type: 'question'; id: number }).id)
+      );
+      const oldLayoutMap = new Map<string, DashboardLayoutItem>(
+        ((content?.layout?.items ?? []) as DashboardLayoutItem[]).map(i => [String(i.id), i])
+      );
+      const newLayoutMap = new Map<string, DashboardLayoutItem>(
+        ((changes?.layout?.items ?? content?.layout?.items ?? []) as DashboardLayoutItem[]).map(i => [String(i.id), i])
+      );
+      for (const id of allQuestionIds) {
+        if (!oldIds.has(id)) {
+          map.set(id, 'added');
+        } else {
+          const o = oldLayoutMap.get(String(id));
+          const n = newLayoutMap.get(String(id));
+          if (o && n && (o.x !== n.x || o.y !== n.y || o.w !== n.w || o.h !== n.h)) {
+            map.set(id, 'moved');
+          }
+        }
+      }
+    }
+
+    // Child-level changes: questions with their own edits (not already marked added/moved)
+    for (const id of allQuestionIds) {
+      if (!map.has(id) && dirtyFileIds.has(id)) {
+        map.set(id, 'edited');
+      }
+    }
+
+    return map.size > 0 ? map : null;
+  }, [contextHighlights, editMode, fileState, dirtyFiles]);
+  const publishHighlights = contextHighlights ?? localHighlights;
 
   // Parameters for display (structure from questions, values from ephemeral)
   const parameterValuesForDisplay = useMemo(() => {
@@ -439,12 +489,15 @@ export default function DashboardView({
           if (publishMark === 'added') {
             borderColor = 'accent.teal';
             opacity = 1;
+          } else if (publishMark === 'edited') {
+            borderColor = 'accent.warning';
+            opacity = 1;
           } else if (publishMark === 'moved') {
-            borderColor = 'orange.400';
+            borderColor = 'accent.primary';
             opacity = 1;
           } else {
             borderColor = 'border.subtle';
-            opacity = 0.5;
+            opacity = 1;
           }
         } else {
           // Normal param-hover highlighting
