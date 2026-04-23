@@ -105,13 +105,15 @@ function SectionContent({
                     {db.databaseName}
                   </Text>
                 </Box>
-                <SchemaTreeView
-                  schemas={db.schemas}
-                  selectable={false}
-                  showColumns={true}
-                  showStats={false}
-                  onTablePreview={undefined}
-                />
+                <Box p={2}>
+                  <SchemaTreeView
+                    schemas={db.schemas}
+                    selectable={false}
+                    showColumns={true}
+                    showStats={false}
+                    onTablePreview={undefined}
+                  />
+                </Box>
               </Box>
             ))
           ) : (
@@ -236,7 +238,14 @@ function TabsLayout({
   const chatSection = chatSections.find(s => s.id === 'chat');
 
   // Derive active tab from which section is active in Redux
-  const activeTab = activeSidebarSection && refSectionIds.has(activeSidebarSection) ? 'context' : 'chat';
+  // activeSidebarSection === null means "no accordion open" — stay on whichever tab was last shown
+  // We use a ref to remember the last derived tab so collapsing an accordion doesn't switch tabs
+  const derivedTab = activeSidebarSection
+    ? (refSectionIds.has(activeSidebarSection) ? 'context' : 'chat')
+    : null;
+  const lastTabRef = useRef<'chat' | 'context'>('chat');
+  if (derivedTab) lastTabRef.current = derivedTab;
+  const activeTab = derivedTab ?? lastTabRef.current;
 
   return (
     <VStack gap={0} height="100%" overflow="hidden">
