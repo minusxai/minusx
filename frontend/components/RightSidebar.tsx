@@ -244,9 +244,6 @@ function TabsLayout({
     ? (refSectionIds.has(activeSidebarSection) ? 'context' : 'chat')
     : null;
   const [lastTab, setLastTab] = useState<'chat' | 'context'>('chat');
-  useEffect(() => {
-    if (derivedTab) setLastTab(derivedTab);
-  }, [derivedTab]);
   const activeTab = derivedTab ?? lastTab;
 
   return (
@@ -258,7 +255,7 @@ function TabsLayout({
           px={4}
           py={2.5}
           cursor="pointer"
-          onClick={() => onSetActiveSection('chat')}
+          onClick={() => { setLastTab('chat'); onSetActiveSection('chat'); }}
           bg={activeTab === 'chat' ? 'bg.surface' : 'bg.muted'}
           borderBottom="2px solid"
           borderColor={activeTab === 'chat' ? 'accent.primary' : 'transparent'}
@@ -282,7 +279,7 @@ function TabsLayout({
           px={4}
           py={2.5}
           cursor="pointer"
-          onClick={() => { const first = refSections[0]; if (first) onSetActiveSection(first.id); }}
+          onClick={() => { setLastTab('context'); const first = refSections[0]; if (first) onSetActiveSection(first.id); }}
           bg={activeTab === 'context' ? 'bg.surface' : 'bg.muted'}
           borderBottom="2px solid"
           borderColor={activeTab === 'context' ? 'accent.danger' : 'transparent'}
