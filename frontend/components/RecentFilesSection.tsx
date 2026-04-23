@@ -252,12 +252,19 @@ export default function RecentFilesSection() {
       {/* Trending section */}
       {hasTrending && (
         <Box>
-          <SectionHeader icon={LuTrendingUp} title="Trending in Org" accent="accent.warning" />
+          <SectionHeader icon={LuTrendingUp} title="Trending in Org" accent="accent.teal" />
           <VStack gap={2} align="stretch">
-            {trendingQuestions.length > 0 && (
+            {/* {trendingQuestions.length > 0 && (
               <QuestionCarousel questions={trendingQuestions} />
-            )}
-            {trendingDashboards.map(file => (
+            )} */}
+            {trendingDashboards.slice(0, 3).map(file => (
+              <CompactFileLink
+                key={file.fileId}
+                file={file}
+                meta={relativeTime(file.lastVisited)}
+              />
+            ))}
+            {trendingQuestions.slice(0, 1).map(file => (
               <CompactFileLink
                 key={file.fileId}
                 file={file}
