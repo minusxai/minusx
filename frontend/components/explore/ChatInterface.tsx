@@ -150,14 +150,15 @@ export default function ChatInterface({
   const unrestrictedMode = useAppSelector(selectUnrestrictedMode);
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
-  const forkFollowedConversation = useAppSelector(state => {
+  const conversations = useAppSelector(state => state.chat.conversations);
+  const forkFollowedConversation = useMemo(() => {
     if (!providedConversationId || !loadedConversation) return null;
     let conv = loadedConversation;
     while (conv?.forkedConversationID) {
-      conv = selectOptionalConversation(state, conv.forkedConversationID) || conv;
+      conv = conversations[conv.forkedConversationID] || conv;
     }
     return conv;
-  });
+  }, [providedConversationId, loadedConversation, conversations]);
 
   // Case 2: new conversation — memoized selector avoids Object.keys scan on every Redux change
   const activeTempConversation = useAppSelector(selectActiveTempConversation);

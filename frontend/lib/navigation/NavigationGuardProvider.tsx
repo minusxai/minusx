@@ -90,18 +90,15 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   );
 
   // For /new pages, find any dirty virtual file (negative ID)
-  const dirtyVirtualFile = useAppSelector(state => {
+  const allFiles = useAppSelector(state => state.files.files);
+  const dirtyVirtualFile = useMemo(() => {
     if (!isOnNewFilePage) return null;
-    // Find the first virtual file (negative ID) that has changes
-    const files = state.files.files;
-    for (const fileId in files) {
+    for (const fileId in allFiles) {
       const id = parseInt(fileId, 10);
-      if (id < 0 && isFileDirty(files[id])) {
-        return files[id];
-      }
+      if (id < 0 && isFileDirty(allFiles[id])) return allFiles[id];
     }
     return null;
-  });
+  }, [isOnNewFilePage, allFiles]);
 
   // Check if the current file is dirty
   const isCurrentFileDirty = useMemo(() => {

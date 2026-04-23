@@ -26,26 +26,26 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '';
 
   const mode = user?.mode || 'org';
-  const allContexts = user ? Object.values(filesState)
-    .filter(file => file.type === 'context')
-    .filter(file => file.path.startsWith(homeFolder))
-    .filter(file => file.id > 0)
-    .filter(file => !isUnderSystemFolder(file.path, mode)) : [];
+  const allContexts = useMemo(() => {
+    if (!user) return [];
+    return Object.values(filesState)
+      .filter(file => file.type === 'context' && file.path.startsWith(homeFolder) && file.id > 0
+        && !isUnderSystemFolder(file.path, mode));
+  }, [filesState, user, homeFolder, mode]);
 
-  const contexts = allContexts.map(file => ({
+  const contexts = useMemo(() => allContexts.map(file => ({
     id: file.id,
     path: file.path,
     name: file.name,
     displayName: file.path.split('/').filter(Boolean).slice(-2, -1)[0] || file.name,
     content: file.content as ContextContent
-  }));
+  })), [allContexts]);
 
-  const homeContext = allContexts.find(file => {
+  const homeContext = useMemo(() => allContexts.find(file => {
     const relativePath = file.path.substring(homeFolder.length);
     if (!relativePath.startsWith('/')) return false;
-    const remainingSegments = relativePath.split('/').filter(Boolean);
-    return remainingSegments.length === 1;
-  });
+    return relativePath.split('/').filter(Boolean).length === 1;
+  }), [allContexts, homeFolder]);
   const homeContextPath = homeContext?.path;
 
   // Auto-select home context only when nothing is selected yet (initial mount)

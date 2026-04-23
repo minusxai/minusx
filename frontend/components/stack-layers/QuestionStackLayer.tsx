@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { Box, HStack, IconButton, Text } from '@chakra-ui/react';
 import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -20,18 +20,19 @@ export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, d
   const fileName = useAppSelector(state =>
     fileId > 0 ? selectEffectiveName(state, fileId) || 'Question' : 'New Question'
   );
+  // Select raw data for breadcrumb computation (stable references from state)
+  const dashFile = useAppSelector(state => dashboardId !== undefined ? selectFile(state, dashboardId) : undefined);
+  const dashName = useAppSelector(state => dashboardId !== undefined ? selectEffectiveName(state, dashboardId) || 'Dashboard' : undefined);
   // Build breadcrumb segments from the dashboard's path, skipping the mode root (first segment)
-  const breadcrumbSegments = useAppSelector(state => {
-    if (dashboardId === undefined) return [];
-    const dashFile = selectFile(state, dashboardId);
-    const dashName = selectEffectiveName(state, dashboardId) || 'Dashboard';
+  const breadcrumbSegments = useMemo(() => {
+    if (dashboardId === undefined || !dashName) return [];
     if (!dashFile?.path) return [dashName];
     const parts = dashFile.path.split('/').filter(Boolean);
     // parts = ['org', 'Sales', 'Dashboard Name'] — skip mode root (parts[0])
     return parts.slice(1).map((seg, i, arr) =>
       i === arr.length - 1 ? dashName : decodeURIComponent(seg)
     );
-  });
+  }, [dashboardId, dashFile, dashName]);
   const attemptCloseRef = useRef<(() => void) | null>(null);
 
   const handleBack = () => {

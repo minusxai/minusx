@@ -45,17 +45,16 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // Find home context (any context file that is direct child of homeFolder)
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org';
 
-  const homeContext = useAppSelector(state => {
-    const files = state.files.files;
+  const files = useAppSelector(state => state.files.files);
+  const homeContext = useMemo(() => {
     for (const file of Object.values(files)) {
       if (file.type !== 'context') continue;
       const relativePath = file.path.substring(homeFolder.length);
       if (!relativePath.startsWith('/')) continue;
-      const remainingSegments = relativePath.split('/').filter(Boolean);
-      if (remainingSegments.length === 1) return file;
+      if (relativePath.split('/').filter(Boolean).length === 1) return file;
     }
     return null;
-  });
+  }, [files, homeFolder]);
   const homeContextPath = homeContext?.path;
 
   // When navigating to a different conversation, sync selectedContextPath/Version to that
@@ -86,13 +85,13 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // stays after the context fully loads with multi-version options, causing a display mismatch in
   // ContextSelector (currentValue doesn't match any versioned option → GenericSelector falls back
   // to options[0], making it look like the selection was reset).
-  const selectedContextFile = useAppSelector(state => {
+  const selectedContextFile = useMemo(() => {
     if (!selectedContextPath) return null;
-    for (const file of Object.values(state.files.files)) {
+    for (const file of Object.values(files)) {
       if (file?.type === 'context' && file.path === selectedContextPath) return file;
     }
     return null;
-  });
+  }, [files, selectedContextPath]);
   useEffect(() => {
     if (!selectedContextPath || selectedVersion !== undefined) return;
     const content = selectedContextFile?.content as ContextContent | undefined;
