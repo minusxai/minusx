@@ -69,7 +69,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const [saveError, setSaveError] = useState<string | null>(null);
   const {
     onSave: saveWithChildren, onCancel: cancelWithChildren, isDirty, isSaving, saveCount,
-    unrelatedDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal,
+    totalDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal,
   } = useSaveDecision(fileId);
 
   // Local state for name/description so typing feels instant.
@@ -180,8 +180,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           }
         }}
         onSave={handleSave}
-        onReviewChanges={unrelatedDirtyCount > 0 ? openPublishModal : undefined}
-        dirtyFileCount={unrelatedDirtyCount}
+        onReviewChanges={totalDirtyCount > 0 ? openPublishModal : undefined}
+        dirtyFileCount={totalDirtyCount}
         saveCount={saveCount}
         hideEditToggle={isVirtualFileId(fileId) || !canEdit}
         questionId={fileType === 'question' ? fileId : undefined}
@@ -211,8 +211,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
             {readOnlyBadge}
           </>
         )}
-        highlightColor={isDashboard && editMode ? 'accent.primary' : undefined}
-        highlightLabel={isDashboard && editMode ? 'Editing Dashboard' : undefined}
       />
       <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
     </>

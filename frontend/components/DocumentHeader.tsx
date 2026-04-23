@@ -254,62 +254,53 @@ export default function DocumentHeader({
 
           {/* Actions */}
           <HStack gap={2} flexShrink={0}>
-            {/* Highlight label (e.g. "Editing Dashboard") */}
-            {highlightLabel && (
-              <HStack
-                gap={1.5}
-                px={2}
-                py={1}
-                bg={`${highlightColor}/15`}
-                borderRadius="md"
-                border="1px solid"
-                borderColor={`${highlightColor}/30`}
-              >
-                <Box css={{ animation: 'iconBlink 1.5s ease-in-out infinite' }} display="inline-flex">
-                  <Icon as={LuPencil} boxSize={3} color={highlightColor}/>
-                </Box>
-                <Text fontSize="xs" color={highlightColor} fontWeight="600" fontFamily="mono">
-                  {highlightLabel}
-                </Text>
-              </HStack>
-            )}
             {/* Explain Button (show in view mode for questions) */}
             {!editMode && questionId !== undefined && (
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
-            {/* Review N unsaved changes (when other files are dirty) */}
-            {onReviewChanges && dirtyFileCount > 0 ? (
-              <IconButton
+            {/* Review unsaved changes — muted text link, informational */}
+            {onReviewChanges && dirtyFileCount > 0 && (
+              <HStack
+                as="button"
                 onClick={onReviewChanges}
                 aria-label={`Review ${dirtyFileCount} unsaved changes`}
-                size="xs"
-                colorPalette="teal"
-                px={2}
+                gap={1}
+                px={1}
+                color="fg.muted"
+                _hover={{ color: 'fg.default' }}
+                transition="color 0.15s"
+                cursor="pointer"
               >
-                <LuFiles />
-                Review {dirtyFileCount} unsaved {dirtyFileCount === 1 ? 'change' : 'changes'}
-              </IconButton>
-            ) : editMode && isDirty && (
+                <Icon as={LuFiles} boxSize={3.5} />
+                <Text fontSize="xs" fontWeight="600" fontFamily="mono">
+                  {dirtyFileCount} change{dirtyFileCount > 1 ? 's' : ''}
+                </Text>
+              </HStack>
+            )}
+
+            {/* Save button — always visible in edit mode, disabled when clean */}
+            {editMode && (
               <IconButton
                 onClick={handleSave}
                 aria-label={saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
                 loading={isSaving}
+                disabled={!isDirty}
                 size="xs"
                 colorPalette="teal"
                 px={2}
               >
                 <LuSave />
-                {saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
+                {isDirty && saveCount > 1 ? `Save ${saveCount} changes` : 'Save'}
               </IconButton>
             )}
 
-            {/* Edit/Cancel Button (hidden when review button is shown) */}
-            {!hideEditToggle && !(onReviewChanges && dirtyFileCount > 0) && (
+            {/* Edit/Cancel Button */}
+            {!hideEditToggle && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
-              variant="subtle"
+              variant={editMode ? 'outline' : 'subtle'}
               size="xs"
               px={2}
             >

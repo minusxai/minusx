@@ -23,7 +23,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';
 import { useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import { setLeftSidebarCollapsed, selectViewStackDepth } from '@/store/uiSlice';
+import { setLeftSidebarCollapsed, selectViewStackDepth, selectDashboardEditMode } from '@/store/uiSlice';
 import ViewStackOverlay from './ViewStack';
 import { useEffect } from 'react';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -43,6 +43,9 @@ interface FileLayoutProps {
 export default function FileLayout(props: FileLayoutProps) {
   const { filePath, fileName, fileType, fileId, rightSidebar } = props;
   const user = useAppSelector(state => state.auth.user);
+  const isDashboardEditing = useAppSelector(state =>
+    fileType === 'dashboard' && fileId ? selectDashboardEditMode(state, fileId) : false
+  );
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop)
   const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
@@ -120,6 +123,8 @@ export default function FileLayout(props: FileLayoutProps) {
                   items={breadcrumbItems}
                   siblingFiles={fileId ? siblingFiles : undefined}
                   currentFileId={fileId}
+                  bannerColor={isDashboardEditing ? 'accent.primary/90' : undefined}
+                  bannerLabel={isDashboardEditing ? 'Editing Dashboard' : undefined}
                 />
               </Box>
             </Flex>

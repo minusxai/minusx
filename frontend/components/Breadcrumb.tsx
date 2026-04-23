@@ -194,7 +194,6 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                 fontWeight="600"
                 color={textColor}
                 _hover={{ color: textColorActive }}
-                transition="color 0.2s"
                 cursor="pointer"
               >
                 {item.label}
@@ -244,44 +243,34 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
     );
   }
 
-  // Custom banner mode (e.g. dashboard edit mode)
-  if (bannerColor) {
-    return (
-      <>
-        <Flex
-          align="center"
-          justify="space-between"
-          gap={2}
-          mb={2}
-          px={4}
-          py={1}
-          bg={bannerColor}
-          borderRadius="md"
-        >
-          <Box flex="0 0 auto">
-            {breadcrumbItems}
-          </Box>
-          {bannerLabel && (
-            <Flex align="center" gap={2} flex={1} justify="center">
-              <LuPencil size={14} color="white" />
-              <Text fontSize="xs" fontWeight="600" color="white" fontFamily="mono" whiteSpace="nowrap">
-                {bannerLabel}
-              </Text>
-            </Flex>
-          )}
-          <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
-            {unsavedChangesButton}
-            <FileSearchBar />
-          </Flex>
-        </Flex>
-        <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
-      </>
-    );
-  }
-
   return (
-    <Flex align="center" justify="space-between" gap={2} mb={2}>
-      {breadcrumbItems}
+    <Flex
+      align="center"
+      justify="space-between"
+      gap={2}
+      mb={2}
+      px={3}
+      py={1}
+      mx={-3}
+      bg={bannerColor ?? 'transparent'}
+      borderRadius="md"
+    >
+      <Box flex="0 0 auto">
+        {breadcrumbItems}
+      </Box>
+      {bannerLabel && (
+        <>
+          <style>{`@keyframes bannerIconBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+          <Flex align="center" gap={1.5} flex={1} justify="center">
+            <Box display="inline-flex" style={{ animation: 'bannerIconBlink 2s ease-in-out infinite' }}>
+              <Icon as={LuPencil} boxSize={3} color="white" />
+            </Box>
+            <Text fontSize="xs" fontWeight="600" color="white" fontFamily="mono" whiteSpace="nowrap">
+              {bannerLabel}
+            </Text>
+          </Flex>
+        </>
+      )}
       <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
         {unsavedChangesButton}
         <FileSearchBar />

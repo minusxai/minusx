@@ -527,6 +527,8 @@ export interface SaveDecision {
   isSaving: boolean;
   /** Number of files that will be saved (current file if dirty + dirty children) */
   saveCount: number;
+  /** Total number of dirty files across the app (for review button) */
+  totalDirtyCount: number;
   /** Number of dirty files unrelated to the current file (for breadcrumb indicator) */
   unrelatedDirtyCount: number;
   /** Whether the publish modal is open */
@@ -587,6 +589,7 @@ export function useSaveDecision(fileId: number | undefined): SaveDecision {
     isDirty,
     isSaving,
     saveCount: (selfDirty ? 1 : 0) + childDirtyFiles.length,
+    totalDirtyCount: (selfDirty ? 1 : 0) + childDirtyFiles.length + unrelatedDirtyFiles.length,
     unrelatedDirtyCount: unrelatedDirtyFiles.length,
     isPublishModalOpen,
     openPublishModal,
