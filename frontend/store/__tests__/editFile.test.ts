@@ -12,6 +12,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
+import uiReducer from '../uiSlice';
 
 // Mock db-config to use test database
 jest.mock('@/lib/database/db-config', () => ({
@@ -703,7 +704,7 @@ describe('CreateFile tool - auto-execute query results', () => {
 
   beforeEach(() => {
     testStore = configureStore({
-      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer },
+      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer },
     });
     jest.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
       if (type === 'question') return {
@@ -779,7 +780,7 @@ describe('CreateFile tool - content validation', () => {
 
   beforeEach(() => {
     testStore = configureStore({
-      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer },
+      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer },
     });
     jest.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
       if (type === 'question') return questionTemplate;
