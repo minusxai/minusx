@@ -63,6 +63,7 @@ export interface DocumentHeaderProps {
   readOnlyName?: boolean;        // If true, name cannot be edited
   hideDescription?: boolean;     // If true, description field is not shown
   hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
+  skipNameValidation?: boolean;  // If true, skip name check on save (e.g. save modal handles it)
 
   // JSON view toggle (optional - shown only for admins when provided)
   viewMode?: 'visual' | 'json';  // Current view mode
@@ -99,6 +100,7 @@ export default function DocumentHeader({
   readOnlyName = false,
   hideDescription = false,
   hideEditToggle = false,
+  skipNameValidation = false,
   viewMode = 'visual',
   onViewModeChange,
   questionId,
@@ -130,7 +132,7 @@ export default function DocumentHeader({
 
   // Validate and save
   const handleSave = useCallback(() => {
-    if (!validateName()) return;
+    if (!skipNameValidation && !validateName()) return;
     onSave();
   }, [validateName, onSave]);
 

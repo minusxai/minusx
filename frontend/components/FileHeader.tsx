@@ -15,7 +15,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { HStack, Text, Icon } from '@chakra-ui/react';
 import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
+import { selectEffectiveName, selectEffectivePath, selectMergedContent } from '@/store/filesSlice';
 import {
   selectDashboardEditMode, setDashboardEditMode,
   selectFileEditMode, setFileEditMode,
@@ -32,6 +32,7 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
+import SaveFileModal from './SaveFileModal';
 
 interface FileHeaderProps {
   fileId: number;
@@ -44,6 +45,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const router = useRouter();
 
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) ?? '';
+  const effectivePath = useAppSelector(state => selectEffectivePath(state, fileId)) ?? '';
+  const parentFolder = effectivePath.substring(0, effectivePath.lastIndexOf('/')) || '/';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
   const description = (mergedContent as any)?.description as string | undefined;
 
@@ -110,7 +113,9 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     descDebounceRef.current = setTimeout(() => editFile({ fileId, changes: { content: { description: desc } } }), 300);
   }, [fileId]);
 
-  const handleSave = useCallback(async () => {
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+
+  const doSave = useCallback(async () => {
     setSaveError(null);
     try {
       const result = await saveWithChildren();
@@ -125,6 +130,22 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       setSaveError('An unexpected error occurred. Please try again.');
     }
   }, [fileId, router, dispatchSetEditMode, saveWithChildren]);
+
+  const handleSave = useCallback(() => {
+    if (isVirtualFileId(fileId)) {
+      // New file — show Save modal to pick name + location
+      setIsSaveModalOpen(true);
+    } else {
+      doSave();
+    }
+  }, [fileId, doSave]);
+
+  const handleSaveModalConfirm = useCallback(async (name: string, path: string) => {
+    // Update name and path on the virtual file, then save
+    await editFile({ fileId, changes: { name, path: `${path}/${name.toLowerCase().replace(/\s+/g, '-')}` } });
+    setLocalName(name);
+    doSave();
+  }, [fileId, doSave]);
 
   const handleCancel = useCallback(() => {
     setLocalName(null);
@@ -184,6 +205,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         dirtyFileCount={totalDirtyCount}
         saveCount={saveCount}
         hideEditToggle={isVirtualFileId(fileId) || !canEdit}
+        skipNameValidation={isVirtualFileId(fileId)}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
@@ -213,6 +235,16 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         )}
       />
       <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
+      {isSaveModalOpen && (
+        <SaveFileModal
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          fileId={fileId}
+          fileType={fileType}
+          onSave={handleSaveModalConfirm}
+          defaultPath={parentFolder}
+        />
+      )}
     </>
   );
 }

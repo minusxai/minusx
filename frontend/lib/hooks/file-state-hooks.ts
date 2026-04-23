@@ -567,12 +567,14 @@ export function useSaveDecision(fileId: number | undefined): SaveDecision {
     const idsToSave = selfDirty
       ? [fileId, ...childDirtyFiles.map(f => f.id)]
       : childDirtyFiles.map(f => f.id);
+    let idMap: Record<number, number> = {};
     if (idsToSave.length > 0) {
-      await publishAll(idsToSave);
+      idMap = await publishAll(idsToSave);
     }
-    // Return current file info for redirect (ID may have changed if virtual)
-    const saved = getStore().getState().files.files[fileId];
-    return { id: saved?.id ?? fileId, name: saved?.name ?? '' };
+    // Virtual files get new real IDs via idMap; real files keep their ID
+    const realId = idMap[fileId] ?? fileId;
+    const saved = getStore().getState().files.files[realId];
+    return { id: realId, name: saved?.name ?? '' };
   }, [fileId, selfDirty, childDirtyFiles]);
 
   const onCancel = useCallback(() => {
