@@ -224,7 +224,10 @@ export default function ChatInterface({
   // Single unified source for all messages (completed, streaming, pending)
   const allMessages = useMemo(() => {
     if (!conversation) return [];
-    return deduplicateMessages(conversation)
+    const msgs = deduplicateMessages(conversation);
+    const ttu = msgs.find(m => (m as any).function?.name === 'TalkToUser');
+    if (ttu) console.log('[ChatInterface] allMessages has TalkToUser, content length:', String((ttu as any).content || '').length);
+    return msgs;
   }, [conversation?.messages, conversation?.streamedCompletedToolCalls, conversation?.pending_tool_calls]);
 
   // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
@@ -363,6 +366,23 @@ export default function ChatInterface({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     checkScrollPosition();
   }, [allMessages.length, checkScrollPosition]);
+
+  // Track streaming answer text length for auto-scroll
+  const streamingAnswerLength = useMemo(() => {
+    if (!conversation?.streamedCompletedToolCalls) return 0;
+    const talkToUser = conversation.streamedCompletedToolCalls.find(m => m.function?.name === 'TalkToUser');
+    return typeof talkToUser?.content === 'string' ? talkToUser.content.length : 0;
+  }, [conversation?.streamedCompletedToolCalls]);
+
+  const prevStreamingAnswerLength = useRef(0);
+  // Auto-scroll to bottom when streaming answer first appears or grows
+  useEffect(() => {
+    if (streamingAnswerLength > 0 && prevStreamingAnswerLength.current === 0) {
+      // First chunk of streaming answer — scroll to show it
+      scrollToBottom();
+    }
+    prevStreamingAnswerLength.current = streamingAnswerLength;
+  }, [streamingAnswerLength]);
 
   const handleNewChat = () => {
     setLocalError(null);

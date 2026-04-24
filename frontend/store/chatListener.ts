@@ -177,6 +177,12 @@ chatListenerMiddleware.startListening({
 
             if (event === 'streaming_event') {
               listenerApi.dispatch(addStreamingMessage(data));
+              // Yield to the macrotask queue so React 18 can render each chunk
+              // progressively. Without this, React batches all streaming dispatches
+              // (microtask context) and renders everything at once after the stream ends.
+              if (data.type === 'StreamedContent') {
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+              }
             } else if (event === 'done') {
               doneEventData = data;
             } else if (event === 'error') {
@@ -348,6 +354,12 @@ chatListenerMiddleware.startListening({
 
                 // Dispatch streaming event to build streamedCompletedToolCalls
                 listenerApi.dispatch(addStreamingMessage(data));
+                // Yield to the macrotask queue so React 18 can render each chunk
+                // progressively. Without this, React batches all streaming dispatches
+                // (microtask context) and renders everything at once after the stream ends.
+                if (data.type === 'StreamedContent') {
+                  await new Promise<void>(resolve => setTimeout(resolve, 0));
+                }
                 break;
 
               case 'done':
@@ -515,6 +527,12 @@ chatListenerMiddleware.startListening({
             const { event, data } = parsed;
             if (event === 'streaming_event') {
               listenerApi.dispatch(addStreamingMessage(data));
+              // Yield to the macrotask queue so React 18 can render each chunk
+              // progressively. Without this, React batches all streaming dispatches
+              // (microtask context) and renders everything at once after the stream ends.
+              if (data.type === 'StreamedContent') {
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+              }
             } else if (event === 'done') {
               doneEventData = data;
             } else if (event === 'error') {
@@ -699,6 +717,12 @@ chatListenerMiddleware.startListening({
 
                 // Dispatch streaming event to build streamedCompletedToolCalls
                 listenerApi.dispatch(addStreamingMessage(data));
+                // Yield to the macrotask queue so React 18 can render each chunk
+                // progressively. Without this, React batches all streaming dispatches
+                // (microtask context) and renders everything at once after the stream ends.
+                if (data.type === 'StreamedContent') {
+                  await new Promise<void>(resolve => setTimeout(resolve, 0));
+                }
                 break;
 
               case 'done':
