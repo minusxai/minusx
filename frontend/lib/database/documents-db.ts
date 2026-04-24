@@ -40,7 +40,7 @@ export class DocumentDB {
         SELECT pg_advisory_xact_lock(1) AS lock_acquired
       ),
       next_id_gen AS (
-        SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files
+        SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) AS next_id FROM files
       )
       INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, created_at, updated_at)
       SELECT next_id, $1, $2, $3, $4, $5, 1, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
