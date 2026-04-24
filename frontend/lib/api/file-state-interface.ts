@@ -51,6 +51,8 @@ export interface QueryExecutionParams {
   filePath?: string;
   /** ID of the question file — stored in query_execution_events for per-file analytics */
   fileId?: number;
+  /** Version of the question file at execution time — stored in queries table for lineage tracking */
+  fileVersion?: number;
 }
 
 export interface GetQueryResultOptions {

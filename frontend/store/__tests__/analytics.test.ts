@@ -155,7 +155,7 @@ describe('Analytics write + read', () => {
   // -------------------------------------------------------------------------
 
   describe('insertQueryExecutionEvent', () => {
-    it('inserts a query event with query text and params', async () => {
+    it('stores query identity in queries table and metrics in query_execution_events', async () => {
       const { insertQueryExecutionEvent } = await import('@/lib/analytics/file-analytics.db');
 
       insertQueryExecutionEvent({
@@ -164,6 +164,8 @@ describe('Analytics write + read', () => {
         params: { id: 42 },
         schemaContext: [{ schema: 'public', table: 'orders', columns: ['id', 'total'] }],
         connectionName: 'default_db',
+        fileId: 42,
+        fileVersion: 3,
         durationMs: 120,
         rowCount: 5,
         colCount: 2,
@@ -172,12 +174,20 @@ describe('Analytics write + read', () => {
         userId: 1,
       });
 
-      const row = await waitForRow('query_execution_events', 'query_hash = $1', ['hash-001']);
+      // Query identity stored in queries table
+      const qRow = await waitForRow('queries', 'query_hash = $1', ['hash-001']);
+      expect(qRow['query']).toBe('SELECT * FROM orders WHERE id = :id');
+      expect(qRow['connection_name']).toBe('default_db');
+      expect(Number(qRow['file_id'])).toBe(42);
+      expect(Number(qRow['file_version'])).toBe(3);
+      expect(qRow['schema_context']).not.toBeNull();
+      expect(qRow['params']).not.toBeNull();
 
-      expect(row['query']).toBe('SELECT * FROM orders WHERE id = :id');
-      expect(Number(row['row_count'])).toBe(5);
-      expect(Number(row['col_count'])).toBe(2);
-      expect(row['error']).toBeNull();
+      // Execution metrics stored in query_execution_events
+      const execRow = await waitForRow('query_execution_events', 'query_hash = $1', ['hash-001']);
+      expect(Number(execRow['row_count'])).toBe(5);
+      expect(Number(execRow['col_count'])).toBe(2);
+      expect(execRow['error']).toBeNull();
     });
 
     it('records error field when query fails', async () => {
@@ -194,8 +204,33 @@ describe('Analytics write + read', () => {
         userId: 1,
       });
 
-      const row = await waitForRow('query_execution_events', 'query_hash = $1', ['hash-err']);
-      expect(row['error']).toBe('table not found: nonexistent');
+      // Error on execution row
+      const execRow = await waitForRow('query_execution_events', 'query_hash = $1', ['hash-err']);
+      expect(execRow['error']).toBe('table not found: nonexistent');
+
+      // Query still registered in queries table (with nulls for missing fields)
+      const qRow = await waitForRow('queries', 'query_hash = $1', ['hash-err']);
+      expect(qRow['query']).toBe('SELECT * FROM nonexistent');
+    });
+
+    it('deduplicates queries by hash — second execution reuses the queries row', async () => {
+      const { insertQueryExecutionEvent } = await import('@/lib/analytics/file-analytics.db');
+      const HASH = 'hash-dedup';
+
+      insertQueryExecutionEvent({ queryHash: HASH, query: 'SELECT 1', durationMs: 10, rowCount: 1, colCount: 1, wasCacheHit: false, fileId: 10, fileVersion: 1, userId: 1 });
+      insertQueryExecutionEvent({ queryHash: HASH, query: 'SELECT 1', durationMs: 20, rowCount: 1, colCount: 1, wasCacheHit: false, fileId: 99, fileVersion: 5, userId: 2 });
+
+      await new Promise(r => setTimeout(r, 200));
+
+      // Only one row in queries (first file_id wins via ON CONFLICT DO NOTHING)
+      const qCount = await countRows('queries', 'query_hash = $1', [HASH]);
+      expect(qCount).toBe(1);
+      const qRow = await waitForRow('queries', 'query_hash = $1', [HASH]);
+      expect(Number(qRow['file_id'])).toBe(10);
+
+      // Both executions recorded separately
+      const execCount = await countRows('query_execution_events', 'query_hash = $1', [HASH]);
+      expect(execCount).toBe(2);
     });
   });
 

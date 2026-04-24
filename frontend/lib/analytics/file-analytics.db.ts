@@ -34,6 +34,7 @@ export interface InsertLlmCallEventParams {
 export interface InsertQueryExecutionEventParams {
   queryHash: string;
   fileId?: number | null;
+  fileVersion?: number | null;
   query?: string | null;
   params?: Record<string, unknown> | null;
   schemaContext?: Array<{ schema: string; table: string; columns: string[] }> | null;
@@ -94,17 +95,22 @@ export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): v
   fireAndForget((async () => {
     const requestId = await getRequestId();
     await getModules().db.exec(
-      `INSERT INTO query_execution_events
-         (query_hash, file_id, query, params, schema_context, connection_name,
-          duration_ms, row_count, col_count, was_cache_hit, error, user_id, request_id)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13::uuid)`,
+      `WITH _q AS (
+         INSERT INTO queries (query_hash, query, params, schema_context, connection_name, file_id, file_version)
+         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7)
+         ON CONFLICT (query_hash) DO NOTHING
+       )
+       INSERT INTO query_execution_events
+         (query_hash, file_id, duration_ms, row_count, col_count, was_cache_hit, error, user_id, request_id)
+       VALUES ($1, $6, $8, $9, $10, $11, $12, $13, $14::uuid)`,
       [
         p.queryHash,
-        p.fileId ?? null,
         p.query ?? null,
         p.params ? JSON.stringify(p.params) : null,
         p.schemaContext ? JSON.stringify(p.schemaContext) : null,
         p.connectionName ?? null,
+        p.fileId ?? null,
+        p.fileVersion ?? null,
         p.durationMs, p.rowCount, p.colCount ?? 0, p.wasCacheHit,
         p.error ?? null,
         p.userId ?? null,

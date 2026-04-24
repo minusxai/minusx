@@ -250,14 +250,21 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
   CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(created_at);
 
-  CREATE TABLE IF NOT EXISTS query_execution_events (
-    id              BIGSERIAL PRIMARY KEY,
-    query_hash      VARCHAR NOT NULL,
-    file_id         INTEGER,
+  CREATE TABLE IF NOT EXISTS queries (
+    query_hash      VARCHAR PRIMARY KEY,
     query           TEXT,
     params          JSONB,
     schema_context  JSONB,
     connection_name VARCHAR,
+    file_id         INTEGER,
+    file_version    INTEGER,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS query_execution_events (
+    id              BIGSERIAL PRIMARY KEY,
+    query_hash      VARCHAR NOT NULL,
+    file_id         INTEGER,
     duration_ms     INTEGER NOT NULL DEFAULT 0,
     row_count       INTEGER NOT NULL DEFAULT 0,
     col_count       INTEGER NOT NULL DEFAULT 0,
@@ -268,6 +275,10 @@ export const POSTGRES_SCHEMA = `
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
   ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS file_id INTEGER;
+  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS query;
+  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS params;
+  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS schema_context;
+  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS connection_name;
 
   CREATE INDEX IF NOT EXISTS idx_qee_file  ON query_execution_events(file_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_qee_hash  ON query_execution_events(query_hash, created_at);
