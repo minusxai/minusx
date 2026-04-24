@@ -233,10 +233,12 @@ async def allm_request(request: ALLMRequest, on_content=None):
 
     elif 'claude' in completion_request["model"]:
         completion_request["max_completion_tokens"] = MAX_TOKENS * 2
-        completion_request["temperature"] = 1  # Required when thinking is enabled
         completion_request["tool_choice"] = "auto"
-        completion_request["thinking"] = {"type": "adaptive"}
-        completion_request["output_config"] = {"effort": "low"}
+        # Adaptive thinking only supported on Sonnet/Opus, not Haiku
+        if 'haiku' not in completion_request["model"]:
+            completion_request["temperature"] = 1  # Required when thinking is enabled
+            completion_request["thinking"] = {"type": "adaptive"}
+            completion_request["output_config"] = {"effort": "low"}
 
         # Add cache checkpoints (up to 4 allowed by Anthropic)
         msgs = request.messages
