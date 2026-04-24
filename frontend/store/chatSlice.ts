@@ -389,7 +389,10 @@ const chatSlice = createSlice({
       const { conversationID, type, payload } = action.payload;
 
       const conv = state.conversations[conversationID];
-      if (!conv) return;
+      if (!conv) {
+        console.log('[addStreamingMessage] MISSING conv for conversationID:', conversationID, 'available:', Object.keys(state.conversations));
+        return;
+      }
 
       conv.executionState = 'STREAMING';
 
@@ -445,9 +448,11 @@ const chatSlice = createSlice({
             created_at: new Date().toISOString()
           };
           conv.streamedCompletedToolCalls.push(syntheticTalkToUser);
+          console.log('[addStreamingMessage] StreamedContent: created synthetic TalkToUser, chunk len:', chunk.length);
         } else {
           // Append to existing TalkToUser
           lastEntry.content = (lastEntry.content || '') + chunk;
+          console.log('[addStreamingMessage] StreamedContent: appended chunk, total len:', lastEntry.content?.length, 'at', Date.now());
         }
       }
     },

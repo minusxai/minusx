@@ -226,9 +226,16 @@ export default function ChatInterface({
     if (!conversation) return [];
     const msgs = deduplicateMessages(conversation);
     const ttu = msgs.find(m => (m as any).function?.name === 'TalkToUser');
-    if (ttu) console.log('[ChatInterface] allMessages has TalkToUser, content length:', String((ttu as any).content || '').length);
+    if (ttu) console.log('[ChatInterface] allMessages has TalkToUser, content length:', String((ttu as any).content || '').length, 'at', Date.now());
     return msgs;
   }, [conversation?.messages, conversation?.streamedCompletedToolCalls, conversation?.pending_tool_calls]);
+
+  // Track when ChatInterface itself re-renders during streaming
+  const streamedLen = conversation?.streamedCompletedToolCalls?.length ?? 0;
+  const streamedTTUContent = (conversation?.streamedCompletedToolCalls ?? []).find((m: any) => m.function?.name === 'TalkToUser')?.content;
+  if (conversation?.executionState === 'STREAMING') {
+    console.log('[ChatInterface] RENDER during STREAMING, streamedLen:', streamedLen, 'TTU content len:', typeof streamedTTUContent === 'string' ? streamedTTUContent.length : 0, 'at', Date.now());
+  }
 
   // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
   const streamingInfo = useMemo(() => {
