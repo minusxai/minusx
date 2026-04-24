@@ -44,7 +44,9 @@ jest.mock('@/lib/database/db-config', () => ({
 
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
-import { initTestDatabase, cleanupTestDatabase, getTestDbPath } from '@/store/__tests__/test-utils';
+import { getTestDbPath } from '@/store/__tests__/test-utils';
+import { setupTestDb } from '@/test/harness/test-db';
+import { getModules } from '@/lib/modules/registry';
 import type {
   ContextContent,
   ContextVersion,
@@ -136,15 +138,7 @@ const viewer: EffectiveUser = {
 // DB lifecycle
 // ─────────────────────────────────────────────────────────────────────────────
 
-beforeAll(async () => {
-  const { resetAdapter } = await import('@/lib/database/adapter/factory');
-  await resetAdapter();
-  await initTestDatabase(TEST_DB_PATH);
-});
-
-afterAll(async () => {
-  await cleanupTestDatabase(TEST_DB_PATH);
-});
+setupTestDb(TEST_DB_PATH);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1 & 2  New whitelist filter functions
@@ -346,9 +340,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
-    await db.query('DELETE FROM files', []);
+    await getModules().db.exec('DELETE FROM files', []);
 
     // Two connections — one DuckDB, one BigQuery
     mockGetSchemaFromPython.mockImplementation((name: string) => {
@@ -595,9 +587,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
 
 describe('Default context per folder', () => {
   beforeEach(async () => {
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
-    await db.query('DELETE FROM files', []);
+    await getModules().db.exec('DELETE FROM files', []);
     // Re-create the /org root folder so parent checks pass
     await DocumentDB.create('org', '/org', 'folder', { description: '' }, []);
   });
@@ -690,9 +680,7 @@ describe('Default context per folder', () => {
 
 describe('Delete protection', () => {
   beforeEach(async () => {
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
-    await db.query('DELETE FROM files', []);
+    await getModules().db.exec('DELETE FROM files', []);
   });
 
   // ── Test 11: standalone context deletion is blocked ───────────────────────

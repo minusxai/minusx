@@ -541,16 +541,16 @@ function AutoPublishUserInput() {
 }
 
 async function insertDashboardAndQuestion(_dbPath: string): Promise<void> {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [DASHBOARD_ID, 'Test Dashboard', '/org/Test Dashboard', 'dashboard',
       JSON.stringify({ assets: [], layout: null }), '[]', now, now]
   );
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [QUESTION_ID, QUESTION_NAME, `/org/${QUESTION_NAME}`, 'question',
@@ -560,10 +560,10 @@ async function insertDashboardAndQuestion(_dbPath: string): Promise<void> {
 
 async function insertDashboardAndTwoQuestions(dbPath: string): Promise<void> {
   await insertDashboardAndQuestion(dbPath);
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [QUESTION_ID_2, 'Regional Revenue', '/org/Regional Revenue', 'question',
@@ -573,24 +573,24 @@ async function insertDashboardAndTwoQuestions(dbPath: string): Promise<void> {
 }
 
 async function insertQuestionsWithSharedParams(_dbPath: string): Promise<void> {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [DASHBOARD_ID, 'Param Dashboard', '/org/Param Dashboard', 'dashboard',
       JSON.stringify({ assets: [{ type: 'question', id: QUESTION_ID }, { type: 'question', id: QUESTION_ID_2 }], layout: null }),
       JSON.stringify([QUESTION_ID, QUESTION_ID_2]), now, now]
   );
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [QUESTION_ID, 'Orders Q', '/org/Orders Q', 'question',
       JSON.stringify({ query: 'SELECT * FROM orders WHERE order_date >= :start_date', parameters: [], vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [QUESTION_ID_2, 'Revenue Q', '/org/Revenue Q', 'question',
@@ -1814,16 +1814,16 @@ function makeViewerQuestionDbFile() {
 }
 
 async function insertViewerDashboardAndQuestion(_dbPath: string): Promise<void> {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [V_DASHBOARD_ID, 'Viewer Dashboard', '/org/Viewer Dashboard', 'dashboard',
       JSON.stringify({ assets: [], layout: null }), '[]', now, now]
   );
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [V_QUESTION_ID, 'Sales Revenue', '/org/Sales Revenue', 'question',

@@ -35,9 +35,8 @@ const TEST_QUESTION_QUERY =
 describe('Infer Columns - E2E Tests', () => {
   setupTestDb(getTestDbPath('infer_columns_e2e'), {
     customInit: async (_dbPath) => {
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
-      await db.query(
+      const { getModules } = await import('@/lib/modules/registry');
+      await getModules().db.exec(
         `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [

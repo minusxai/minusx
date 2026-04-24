@@ -85,12 +85,12 @@ const allFiles = [question1, question2, question3, folder1, destFolder];
 // ---------------------------------------------------------------------------
 
 async function insertTestFiles(_dbPath: string): Promise<void> {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
 
   for (const file of allFiles) {
-    await db.query(
+    await db.exec(
       `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [file.id, file.name, file.path, file.type, JSON.stringify(file.content), '[]', now, now]

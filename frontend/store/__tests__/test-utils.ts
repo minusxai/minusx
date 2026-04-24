@@ -72,8 +72,8 @@ export async function initTestDatabase(dbPath: string = join(process.cwd(), 'dat
  * Call this in afterAll hook.
  */
 export async function cleanupTestDatabase(_dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
-  const { resetAdapter } = await import('@/lib/database/adapter/factory');
-  await resetAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  await getModules().db.reset?.();
 }
 
 // ============================================================================

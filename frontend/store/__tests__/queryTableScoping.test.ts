@@ -37,18 +37,18 @@ const CONN_ID = 'scoping_conn';
 const ALL_TABLES = ['orders', 'customers', 'products'];
 
 async function addScopingFixtures(dbPath: string) {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
 
   const nextId = async () => {
-    const r = await db.query<{ n: number }>(
+    const r = await db.exec<{ n: number }>(
       `SELECT COALESCE(MAX(id), 0) + 1 AS n FROM files`, []
     );
     return r.rows[0].n;
   };
 
-  await db.query(
+  await db.exec(
     `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [

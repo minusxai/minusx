@@ -85,9 +85,8 @@ describe('Completions Suggestions - E2E Tests', () => {
   setupTestDb(getTestDbPath('completions_suggestions'), {
     withTestConnection: true,
     customInit: async (_dbPath) => {
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
-      await db.query(
+      const { getModules } = await import('@/lib/modules/registry');
+      await getModules().db.exec(
         `UPDATE files SET content = $1 WHERE path = $2`,
         [
           JSON.stringify({

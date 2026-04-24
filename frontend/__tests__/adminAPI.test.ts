@@ -32,6 +32,7 @@ jest.mock('@/lib/database/db-config', () => ({
 
 // Import after mocking
 import { InitData, exportDatabase, atomicImport } from '@/lib/database/import-export';
+import { getModules } from '@/lib/modules/registry';
 import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 
 // Import API route handlers AFTER mocking
@@ -89,8 +90,7 @@ function createResetRequest(url = 'http://localhost:3000/api/admin/reset-tutoria
 
 describe('Import/Export API Endpoints', () => {
   beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
+    await getModules().db.reset?.();
     cleanupDbFiles();
 
     // Seed test data — atomicImport lazily creates the adapter (with schema) on first exec().
@@ -119,8 +119,7 @@ describe('Import/Export API Endpoints', () => {
   });
 
   afterEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
+    await getModules().db.reset?.();
     cleanupDbFiles();
     jest.clearAllMocks();
   });
@@ -298,18 +297,14 @@ describe('Import/Export API Endpoints', () => {
 
 describe('POST /api/admin/reset-tutorial', () => {
   beforeEach(async () => {
-    const { resetAdapter, getAdapter } = await import('@/lib/database/adapter/factory');
-
-    await resetAdapter();
+    await getModules().db.reset?.();
     cleanupDbFiles();
 
-    // Use a single adapter instance for all setup — intermediate resetAdapter() calls
-    // would destroy the in-memory PGLite state before the handler can read it.
-    const setupDb = await getAdapter();
+    const db = getModules().db;
     const now = new Date().toISOString();
 
     // Dirty tutorial state: modified seed file
-    await setupDb.query(
+    await db.exec(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
         11, 'my-modified-dashboard', '/tutorial/my-modified-dashboard',
@@ -319,7 +314,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     );
 
     // User-created tutorial question
-    await setupDb.query(
+    await db.exec(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
         500, 'user-question', '/tutorial/user-question',
@@ -329,7 +324,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     );
 
     // User-created org files that must survive the reset (paths don't conflict with template)
-    await setupDb.query(
+    await db.exec(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
         100, 'custom-folder', '/org/custom-folder',
@@ -338,7 +333,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       ]
     );
 
-    await setupDb.query(
+    await db.exec(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
         101, 'custom-report', '/org/custom-folder/report',
@@ -358,8 +353,7 @@ describe('POST /api/admin/reset-tutorial', () => {
   });
 
   afterEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
+    await getModules().db.reset?.();
     cleanupDbFiles();
     jest.clearAllMocks();
   });
@@ -373,23 +367,22 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(body.success).toBe(true);
     expect(body.documentsCreated).toBe(68);
 
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
+    const db = getModules().db;
 
-    const tutorialResult = await db.query<{ count: number }>(
+    const tutorialResult = await db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
     // 30 template docs + 1 user-created question at /tutorial (id=500, preserved)
     expect(tutorialResult.rows[0].count).toBe(31);
 
-    const userFileResult = await db.query<{ count: number }>(
+    const userFileResult = await db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE id = 500",
       []
     );
     expect(userFileResult.rows[0].count).toBe(1); // user-created file is preserved
 
-    const rootResult = await db.query<{ id: number; path: string; name: string }>(
+    const rootResult = await db.exec<{ id: number; path: string; name: string }>(
       "SELECT id, path, name FROM files WHERE id = 1",
       []
     );
@@ -397,14 +390,14 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(rootResult.rows[0].path).toBe('/tutorial');
     expect(rootResult.rows[0].name).toBe('tutorial');
 
-    const connResult = await db.query<{ id: number; path: string }>(
+    const connResult = await db.exec<{ id: number; path: string }>(
       "SELECT id, path FROM files WHERE id = 6",
       []
     );
     expect(connResult.rows).toHaveLength(1);
     expect(connResult.rows[0].path).toBe('/tutorial/database/static');
 
-    const id11Result = await db.query<{ path: string }>(
+    const id11Result = await db.exec<{ path: string }>(
       "SELECT path FROM files WHERE id = 11",
       []
     );
@@ -412,7 +405,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(id11Result.rows[0].path).toBe('/tutorial/top-level-metrics');
 
     // ids 100/101 are user-like files (no longer template IDs) — preserved by reset
-    const orgResult = await db.query<{ id: number; path: string }>(
+    const orgResult = await db.exec<{ id: number; path: string }>(
       "SELECT id, path FROM files WHERE id IN (100, 101) ORDER BY id",
       []
     );
@@ -420,7 +413,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(orgResult.rows[0]).toMatchObject({ id: 100, path: '/org/custom-folder' });
     expect(orgResult.rows[1]).toMatchObject({ id: 101, path: '/org/custom-folder/report' });
     // The actual /org and /org/database template docs now live at ids 1003 and 1006
-    const orgFolderResult = await db.query<{ id: number; path: string }>(
+    const orgFolderResult = await db.exec<{ id: number; path: string }>(
       "SELECT id, path FROM files WHERE id IN (1003, 1006) ORDER BY id",
       []
     );
@@ -448,10 +441,9 @@ describe('POST /api/admin/reset-tutorial', () => {
   it('should not delete non-template docs that happen to have id < 1000', async () => {
     // id=56 is not a template ID — reset-tutorial deletes by explicit template ID list,
     // so this doc must be left untouched (user-created files are never deleted).
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
     const now = new Date().toISOString();
-    const orphanDb = await getAdapter();
-    await orphanDb.query(
+    const db = getModules().db;
+    await db.exec(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
         56, 'orphan', '/org/orphan',
@@ -464,16 +456,14 @@ describe('POST /api/admin/reset-tutorial', () => {
     const response = await resetTutorialHandler(request, {} as any);
     expect(response.status).toBe(200);
 
-    const db = await getAdapter();
-
-    const orphanResult = await db.query<{ count: number }>(
+    const orphanResult = await db.exec<{ count: number }>(
       'SELECT COUNT(*) as count FROM files WHERE id = 56',
       []
     );
     expect(orphanResult.rows[0].count).toBe(1); // preserved — not a template ID
 
     // ids 100/101 (user-like files from beforeEach) are also preserved
-    const orgResult = await db.query<{ count: number }>(
+    const orgResult = await db.exec<{ count: number }>(
       'SELECT COUNT(*) as count FROM files WHERE id IN (100, 101)',
       []
     );
@@ -494,9 +484,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(body2.success).toBe(true);
     expect(body2.documentsCreated).toBe(68);
 
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
-    const result = await db.query<{ count: number }>(
+    const result = await getModules().db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );

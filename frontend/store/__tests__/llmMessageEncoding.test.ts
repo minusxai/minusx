@@ -79,16 +79,16 @@ describe('LLM Message Encoding', () => {
   const { getStore } = setupTestDb(getTestDbPath('atlas_llm_encoding'), {
     withTestConnection: true,
     customInit: async (_dbPath) => {
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
+      const { getModules } = await import('@/lib/modules/registry');
+      const db = getModules().db;
       const now = new Date().toISOString();
 
       // The template creates a file at '/tutorial/user-engagement-dashboard' (id=12).
       // Delete it so we can insert our own version at TUTORIAL_DASHBOARD_ID=1002.
-      await db.query(`DELETE FROM files WHERE path = '/tutorial/user-engagement-dashboard'`, []);
+      await db.exec(`DELETE FROM files WHERE path = '/tutorial/user-engagement-dashboard'`, []);
 
       // Question file referenced by the dashboard
-      await db.query(
+      await db.exec(
         `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [FIXTURE_QUESTION_ID, 'Sales Overview', '/tutorial/sales-overview', 'question',
@@ -96,7 +96,7 @@ describe('LLM Message Encoding', () => {
       );
 
       // Dashboard file at the tutorial path the test expects
-      await db.query(
+      await db.exec(
         `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [TUTORIAL_DASHBOARD_ID, 'User Engagement Dashboard', '/tutorial/user-engagement-dashboard', 'dashboard',

@@ -26,7 +26,7 @@ import {
 import { setAllowChatQueue } from '../uiSlice';
 import type { RootState } from '../store';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
-import { waitFor, getTestDbPath, initTestDatabase, cleanupTestDatabase, createNextRequest, setupTestStore } from './test-utils';
+import { waitFor, getTestDbPath, createNextRequest, setupTestStore } from './test-utils';
 import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch, commonInterceptors } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -69,18 +69,10 @@ describe('Chat API Tests', () => {
   // ============================================================================
 
   describe('Chat API - Handler Tests', () => {
-    beforeEach(async () => {
-      // Reset adapter to ensure fresh connection
-      const { resetAdapter } = await import('@/lib/database/adapter/factory');
-      await resetAdapter();
+    setupTestDb(TEST_DB_PATH);
 
-      await initTestDatabase(TEST_DB_PATH);
-      jest.clearAllMocks();
+    beforeEach(() => {
       mockFetch.mockClear();
-    });
-
-    afterAll(async () => {
-      await cleanupTestDatabase(TEST_DB_PATH);
     });
 
     it('should handle full conversation flow with MultiToolAgent', async () => {
@@ -703,18 +695,11 @@ describe('LLM-Mocked Agent Suites', () => {
 // ============================================================================
 
   describe('Chat Interruption & Error Recovery E2E', () => {
+  setupTestDb(INTERRUPTION_TEST_DB_PATH);
 
   beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(INTERRUPTION_TEST_DB_PATH);
-    jest.clearAllMocks();
     sharedLLMMockFetch.mockClear();
     await getLLMMockServer!().reset();
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(INTERRUPTION_TEST_DB_PATH);
   });
 
   it('UserInputTool interrupted by new message — LLM receives valid paired tool_use/tool_result history', async () => {
@@ -1353,27 +1338,14 @@ async function runTurnViaAPI(opts: {
 }
 
   describe('Edit and Fork E2E', () => {
+  const { getStore: getEditForkStore } = setupTestDb(EDIT_FORK_TEST_DB_PATH);
 
   let store: ReturnType<typeof setupTestStore>;
 
   beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(EDIT_FORK_TEST_DB_PATH);
-    jest.clearAllMocks();
     sharedLLMMockFetch.mockClear();
     await getLLMMockServer!().reset();
-    store = setupTestStore();
-  });
-
-  afterEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    store = null as any;
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(EDIT_FORK_TEST_DB_PATH);
+    store = getEditForkStore();
   });
 
   it('forks at the right log_index and the forked conversation contains only the edited message', async () => {

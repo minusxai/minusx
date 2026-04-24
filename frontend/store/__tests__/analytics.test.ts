@@ -14,6 +14,7 @@ jest.unmock('@/lib/analytics/file-analytics.db');
 
 import { getTestDbPath } from './test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
+import { getModules } from '@/lib/modules/registry';
 
 // ---------------------------------------------------------------------------
 // DB mock (same as read-write-e2e)
@@ -37,11 +38,6 @@ jest.mock('next/headers', () => ({
 // helpers
 // ---------------------------------------------------------------------------
 
-async function getAdapter() {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  return getAdapter();
-}
-
 async function waitForRow(
   table: string,
   condition: string,
@@ -50,8 +46,7 @@ async function waitForRow(
 ): Promise<Record<string, unknown>> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const db = await getAdapter();
-    const result = await db.query<Record<string, unknown>>(
+    const result = await getModules().db.exec<Record<string, unknown>>(
       `SELECT * FROM ${table} WHERE ${condition} LIMIT 1`,
       params,
     );
@@ -62,8 +57,7 @@ async function waitForRow(
 }
 
 async function countRows(table: string, condition: string, params: unknown[]): Promise<number> {
-  const db = await getAdapter();
-  const result = await db.query<{ count: string }>(
+  const result = await getModules().db.exec<{ count: string }>(
     `SELECT COUNT(*)::TEXT AS count FROM ${table} WHERE ${condition}`,
     params,
   );
