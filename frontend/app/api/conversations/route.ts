@@ -80,8 +80,12 @@ function getParentFileInfo(log: ConversationLogEntry[]): { id?: number; name?: s
  * GET /api/conversations
  * List all conversations for the current user
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+
     // Get effective user
     const user = await getEffectiveUser();
 
@@ -145,8 +149,10 @@ export async function GET() {
       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
 
+    const result = limit && limit > 0 ? conversations.slice(0, limit) : conversations;
+
     return NextResponse.json({
-      conversations
+      conversations: result
     } as ConversationsResponse);
 
   } catch (error: any) {
