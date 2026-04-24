@@ -872,7 +872,7 @@
             "version": 1,
             "docs": [
               {
-                "content": "# internals\n\n## file_events\nTracks every file operation in MinusX.\n- `event_type`: created | updated | deleted | read_direct | read_as_reference\n- `file_path`: full path, e.g. `/org/Sales/Revenue` — mode is `SPLIT_PART(file_path,'/',2)`\n- `file_type`: question | dashboard | connection | context | folder | etc.\n- `user_email`, `user_role`: who performed the action\n- `timestamp`: when it happened\n\n## llm_call_events\nTracks every LLM API call made by the agent.\n- `model`: e.g. `claude-sonnet-4-6`\n- `total_tokens`, `prompt_tokens`, `completion_tokens`\n- `cost` (USD), `duration_s` (seconds)\n- `finish_reason`, `conversation_id`\n- `timestamp`: when the call was made\n"
+                "content": "# internals\n\nAll tables live in the document DB (PGLite / Postgres). Use `created_at` for timestamps.\n\n## file_events\nTracks every file operation in MinusX.\n- `event_type`: integer — 0=created, 1=read_direct, 2=read_as_reference, 3=updated, 4=deleted\n- `file_id`: FK → `files.id`\n- `user_id`: FK → `users.id`\n- `created_at`: timestamp\n\nUseful joins:\n- `JOIN files fi ON fi.id = fe.file_id` → `fi.name`, `fi.path`, `fi.type`\n- Mode from path: `SPLIT_PART(fi.path, '/', 2)` e.g. `org`, `tutorial`, `internals`\n- `LEFT JOIN users u ON u.id = fe.user_id` → `u.email`, `u.role`\n\n## llm_call_events\nTracks every LLM API call made by the agent.\n- `model`: e.g. `claude-sonnet-4-6`\n- `total_tokens`, `prompt_tokens`, `completion_tokens`\n- `cost` (USD float8 — cast to numeric for ROUND: `ROUND(SUM(cost)::numeric, 4)`)\n- `duration_s` (seconds float8)\n- `finish_reason`, `conversation_id`\n- `created_at`: timestamp\n\n## query_execution_events\nTracks every query run via /api/query.\n- `query_hash`: hash of query + params + connection\n- `file_id`: FK → `files.id` (the question file that ran the query, if any)\n- `database_name`: connection name\n- `duration_ms`, `row_count`, `col_count`\n- `was_cache_hit`: boolean\n- `error`: text (null on success)\n- `created_at`: timestamp\n"
               }
             ],
             "createdAt": "{{TIMESTAMP}}",
@@ -884,7 +884,7 @@
                 "type": "connection",
                 "children": [
                   {
-                    "name": "main",
+                    "name": "public",
                     "type": "schema"
                   }
                 ]
@@ -911,7 +911,7 @@
       "references": [],
       "content": {
         "description": "File read events broken down by mode and file type",
-        "query": "SELECT\n  SPLIT_PART(file_path, '/', 2)  AS mode,\n  file_type,\n  COUNT(*)                        AS events\nFROM file_events\nWHERE event_type = 'read_direct'\nGROUP BY mode, file_type\nORDER BY events DESC",
+        "query": "SELECT SPLIT_PART(fi.path, '/', 2) AS mode, fi.type AS file_type, COUNT(*) AS events\nFROM file_events fe JOIN files fi ON fi.id = fe.file_id\nWHERE fe.event_type = 1\nGROUP BY mode, file_type ORDER BY events DESC",
         "connection_name": "internals",
         "vizSettings": {
           "type": "bar",
@@ -937,7 +937,7 @@
       "references": [],
       "content": {
         "description": "Number of files created per day, broken down by mode",
-        "query": "SELECT\n  DATE_TRUNC('day', timestamp)   AS day,\n  SPLIT_PART(file_path, '/', 2)  AS mode,\n  COUNT(*)                        AS files_created\nFROM file_events\nWHERE event_type = 'created'\nGROUP BY day, mode\nORDER BY day",
+        "query": "SELECT DATE_TRUNC('day', fe.created_at) AS day, SPLIT_PART(fi.path, '/', 2) AS mode, COUNT(*) AS files_created\nFROM file_events fe JOIN files fi ON fi.id = fe.file_id\nWHERE fe.event_type = 0\nGROUP BY day, mode ORDER BY day",
         "connection_name": "internals",
         "vizSettings": {
           "type": "line",
@@ -963,7 +963,7 @@
       "references": [],
       "content": {
         "description": "Top 20 most viewed files",
-        "query": "SELECT\n  file_name,\n  file_path,\n  file_type,\n  COUNT(*) AS views\nFROM file_events\nWHERE event_type = 'read_direct'\nGROUP BY file_name, file_path, file_type\nORDER BY views DESC\nLIMIT 20",
+        "query": "SELECT fi.name AS file_name, fi.path AS file_path, fi.type AS file_type, COUNT(*) AS views\nFROM file_events fe JOIN files fi ON fi.id = fe.file_id\nWHERE fe.event_type = 1\nGROUP BY fi.name, fi.path, fi.type ORDER BY views DESC LIMIT 20",
         "connection_name": "internals",
         "vizSettings": {
           "type": "table"
@@ -983,7 +983,7 @@
       "references": [],
       "content": {
         "description": "Top 20 users by total events",
-        "query": "SELECT\n  user_email,\n  user_role,\n  COUNT(*)                                                  AS total_events,\n  COUNT(CASE WHEN event_type = 'read_direct' THEN 1 END)   AS views,\n  COUNT(CASE WHEN event_type = 'updated'     THEN 1 END)   AS edits,\n  COUNT(CASE WHEN event_type = 'created'     THEN 1 END)   AS creates\nFROM file_events\nWHERE user_email IS NOT NULL\nGROUP BY user_email, user_role\nORDER BY total_events DESC\nLIMIT 20",
+        "query": "SELECT u.email AS user_email, u.role AS user_role, COUNT(*) AS total_events,\n  COUNT(CASE WHEN fe.event_type = 1 THEN 1 END) AS views,\n  COUNT(CASE WHEN fe.event_type = 3 THEN 1 END) AS edits,\n  COUNT(CASE WHEN fe.event_type = 0 THEN 1 END) AS creates\nFROM file_events fe LEFT JOIN users u ON u.id = fe.user_id\nWHERE u.email IS NOT NULL\nGROUP BY u.email, u.role ORDER BY total_events DESC LIMIT 20",
         "connection_name": "internals",
         "vizSettings": {
           "type": "table"
@@ -1003,7 +1003,7 @@
       "references": [],
       "content": {
         "description": "Distinct active users per day",
-        "query": "SELECT\n  DATE_TRUNC('day', timestamp) AS day,\n  COUNT(DISTINCT user_email)    AS active_users\nFROM file_events\nGROUP BY day\nORDER BY day",
+        "query": "SELECT DATE_TRUNC('day', fe.created_at) AS day, COUNT(DISTINCT fe.user_id) AS active_users\nFROM file_events fe GROUP BY day ORDER BY day",
         "connection_name": "internals",
         "vizSettings": {
           "type": "line",
@@ -1029,7 +1029,7 @@
       "references": [],
       "content": {
         "description": "Total calls, tokens, and cost per LLM model",
-        "query": "SELECT\n  model,\n  COUNT(*)            AS calls,\n  SUM(total_tokens)   AS total_tokens,\n  ROUND(SUM(cost), 4) AS total_cost_usd\nFROM llm_call_events\nGROUP BY model\nORDER BY calls DESC",
+        "query": "SELECT model, COUNT(*) AS calls, SUM(total_tokens) AS total_tokens,\n  ROUND(SUM(cost)::numeric, 4) AS total_cost_usd\nFROM llm_call_events GROUP BY model ORDER BY calls DESC",
         "connection_name": "internals",
         "vizSettings": {
           "type": "bar",
@@ -1055,7 +1055,7 @@
       "references": [],
       "content": {
         "description": "Daily token usage per model",
-        "query": "SELECT\n  DATE_TRUNC('day', timestamp) AS day,\n  model,\n  SUM(total_tokens)             AS tokens\nFROM llm_call_events\nGROUP BY day, model\nORDER BY day",
+        "query": "SELECT DATE_TRUNC('day', created_at) AS day, model, SUM(total_tokens) AS tokens\nFROM llm_call_events GROUP BY day, model ORDER BY day",
         "connection_name": "internals",
         "vizSettings": {
           "type": "line",
@@ -1081,7 +1081,7 @@
       "references": [],
       "content": {
         "description": "Weekly LLM cost, call count, and token totals",
-        "query": "SELECT\n  DATE_TRUNC('week', timestamp) AS week,\n  SUM(cost)                      AS total_cost_usd,\n  COUNT(*)                       AS total_calls,\n  SUM(total_tokens)              AS total_tokens\nFROM llm_call_events\nGROUP BY week\nORDER BY week",
+        "query": "SELECT DATE_TRUNC('week', created_at) AS week, ROUND(SUM(cost)::numeric, 4) AS total_cost_usd,\n  COUNT(*) AS total_calls, SUM(total_tokens) AS total_tokens\nFROM llm_call_events GROUP BY week ORDER BY week",
         "connection_name": "internals",
         "vizSettings": {
           "type": "bar",
@@ -1107,7 +1107,7 @@
       "references": [],
       "content": {
         "description": "Average duration and token count per LLM model",
-        "query": "SELECT\n  model,\n  COUNT(*)                          AS calls,\n  ROUND(AVG(duration_s), 2)         AS avg_duration_s,\n  ROUND(AVG(total_tokens), 0)       AS avg_tokens\nFROM llm_call_events\nGROUP BY model\nORDER BY calls DESC",
+        "query": "SELECT model, COUNT(*) AS calls, ROUND(AVG(duration_s)::numeric, 2) AS avg_duration_s,\n  ROUND(AVG(total_tokens)::numeric, 0) AS avg_tokens\nFROM llm_call_events GROUP BY model ORDER BY calls DESC",
         "connection_name": "internals",
         "vizSettings": {
           "type": "table"
@@ -2335,12 +2335,9 @@
       "type": "connection",
       "content": {
         "name": "internals",
-        "type": "duckdb",
-        "config": {
-          "file_path": "/app/data/analytics/analytics.duckdb",
-          "read_only": true
-        },
-        "description": "MinusX system analytics (file events + LLM call stats)"
+        "type": "internal_db",
+        "config": {},
+        "description": "Document DB — read-only analytics access (file_events, llm_call_events, query_execution_events)"
       },
       "created_at": "{{TIMESTAMP}}",
       "updated_at": "{{TIMESTAMP}}",

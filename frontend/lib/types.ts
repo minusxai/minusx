@@ -784,7 +784,7 @@ export interface DbFile extends BaseFileMetadata {
  */
 export interface DatabaseConnection extends BaseEntity {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'internal_db';
   config: Record<string, any>;  // Safe config fields only (no sensitive data)
 }
 
@@ -851,7 +851,7 @@ export interface GoogleSheetsConnectionConfig {
 
 // Connection file content type (stored as file in /database/)
 export interface ConnectionContent extends BaseFileContent {
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'internal_db';
   config: Record<string, any>;
   description?: string;
   schema?: DatabaseSchema;  // Added by connection loader via introspection
