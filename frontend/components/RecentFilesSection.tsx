@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Box, HStack, Text, VStack, Icon } from '@chakra-ui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuChevronLeft, LuChevronRight, LuRefreshCw } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
@@ -17,6 +17,9 @@ import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { RecentFile } from '@/lib/analytics/file-analytics.types';
 import Markdown from '@/components/Markdown';
+import { useFetch } from '@/lib/api/useFetch';
+import { API } from '@/lib/api/declarations';
+import type { ConversationSummary } from '@/app/api/conversations/route';
 
 interface HomeAnalyticsData {
   recent: RecentFile[];
@@ -151,7 +154,7 @@ function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: str
         borderRadius="md"
         cursor="pointer"
         transition="all 0.15s ease"
-        _hover={{ bg: 'bg.muted' }}
+        _hover={{ bg: 'bg.surface' }}
       >
         {FileIcon && (
           <Icon as={FileIcon} color={color} boxSize={3} flexShrink={0} />
@@ -203,6 +206,33 @@ function SummaryCollapsible({ summary }: { summary: string }) {
   );
 }
 
+/** Compact conversation link for the feed */
+function CompactConversationLink({ conversation }: { conversation: ConversationSummary }) {
+  return (
+    <Link href={`/explore/${conversation.id}`}>
+      <HStack
+        gap={2.5}
+        py={1.5}
+        px={2}
+        borderRadius="md"
+        cursor="pointer"
+        transition="all 0.15s ease"
+        _hover={{ bg: 'bg.surface' }}
+      >
+        <Icon as={LuMessageSquare} color="fg.muted" boxSize={3} flexShrink={0} />
+        <Box flex="1" minW={0}>
+          <Text fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
+            {conversation.name}
+          </Text>
+        </Box>
+        <Text fontSize="2xs" color="fg.subtle" flexShrink={0} fontFamily="mono">
+          {relativeTime(conversation.updatedAt)}
+        </Text>
+      </HStack>
+    </Link>
+  );
+}
+
 /** Shared feed content — used by both standalone column and sidebar */
 export function FeedContent() {
   const { config } = useConfigs();
@@ -215,6 +245,8 @@ export function FeedContent() {
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const lastAppStateRef = useRef<any>(null);
+  const { data: convData } = useFetch(API.conversations.list);
+  const recentConversations: ConversationSummary[] = ((convData as any)?.conversations || []).slice(0, 3);
 
   useEffect(() => {
     if (!showRecentFiles) return;
@@ -363,6 +395,23 @@ export function FeedContent() {
           <VStack gap={1.5} align="stretch">
             {recentDashboards.map(file => (
               <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
+            ))}
+          </VStack>
+        </>
+      )}
+
+      {/* Recent conversations */}
+      {recentConversations.length > 0 && (
+        <>
+          <HStack gap={2}>
+            <Box flex="1" h="1px" bg="border.default" />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
+              Recent conversations
+            </Text>
+          </HStack>
+          <VStack gap={1.5} align="stretch">
+            {recentConversations.map(conv => (
+              <CompactConversationLink key={conv.id} conversation={conv} />
             ))}
           </VStack>
         </>
