@@ -58,11 +58,12 @@ describe('Migration registry', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('applyMigrations', () => {
-  it('rejects data below MINIMUM_SUPPORTED_DATA_VERSION', () => {
-    const data: InitData = { version: LATEST_DATA_VERSION, users: [], documents: [] };
-    expect(() => applyMigrations(data, MINIMUM_SUPPORTED_DATA_VERSION - 1)).toThrow(
-      /below minimum supported version/
-    );
+  it('clamps any version below MINIMUM_SUPPORTED_DATA_VERSION to minimum and runs migrations', () => {
+    // Versions below minimum (including 0 for unversioned DBs) are clamped — never thrown.
+    const data: InitData = { version: 0, users: [], documents: [makeDoc(500)] };
+    const result = applyMigrations(data, 0);
+    expect(result.version).toBe(LATEST_DATA_VERSION);
+    expect(result.documents![0].id).toBe(1000); // V36 ran
   });
 
   it('accepts data at MINIMUM_SUPPORTED_DATA_VERSION without throwing', () => {
@@ -82,7 +83,7 @@ describe('applyMigrations', () => {
 // V36 — v36ShiftUserFileIds (exercised via applyMigrations from v35)
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('V36: shift user-created file IDs to ≥ 1000', () => {
+describe('V36: shift all non-system file IDs to ≥ 1000', () => {
   function migrate(documents: DbFile[]): DbFile[] {
     const result = applyMigrations(initData(documents), 35);
     return result.documents!;
@@ -96,11 +97,38 @@ describe('V36: shift user-created file IDs to ≥ 1000', () => {
     expect(result.map(d => d.id)).toEqual([1000, 1050]);
   });
 
-  it('is a no-op when the only docs below 1000 are template docs (IDs 1 and 2)', () => {
-    // IDs 1 and 2 are workspace-template docs — they must never be shifted
+  it('is a no-op when the only docs below 1000 are system template docs (tutorial IDs 1 and 2)', () => {
+    // IDs 1 and 2 are tutorial/system template docs — they must never be shifted
     const docs = [makeDoc(1), makeDoc(2)];
     const result = migrate(docs);
     expect(result.map(d => d.id)).toEqual([1, 2]);
+  });
+
+  // ── /org files (100–112) are shifted ─────────────────────────────────────────
+
+  it('shifts /org files (formerly 100–112) since they are no longer system template IDs', () => {
+    // 103 = /org folder in old template; no longer in TEMPLATE_IDS after template update
+    const docs = [makeDoc(103), makeDoc(106)]; // /org, /org/database
+    const result = migrate(docs);
+    const ids = result.map(d => d.id).sort((a, b) => a - b);
+    expect(ids[0]).toBeGreaterThanOrEqual(1000);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicates
+  });
+
+  it('preserves relative spacing when shifting /org files', () => {
+    // min=103, offset=897: 103→1000, 112→1009
+    const docs = [makeDoc(103), makeDoc(112)];
+    const result = migrate(docs);
+    expect(result.map(d => d.id)).toEqual([1000, 1009]);
+  });
+
+  it('shifts /org files while leaving system tutorial files untouched', () => {
+    const docs = [makeDoc(1), makeDoc(103), makeDoc(112)];
+    const result = migrate(docs);
+    const byOldId = Object.fromEntries(docs.map((d, i) => [d.id, result[i]]));
+    expect(byOldId[1].id).toBe(1);      // tutorial — untouched
+    expect(byOldId[103].id).toBe(1000); // /org — shifted
+    expect(byOldId[112].id).toBe(1009); // /org/logs/conversations/context — shifted
   });
 
   it('bumps data version to 36', () => {
@@ -152,15 +180,15 @@ describe('V36: shift user-created file IDs to ≥ 1000', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  // ── Template IDs never shifted ───────────────────────────────────────────────
+  // ── System template IDs (1–99) never shifted ────────────────────────────────
 
-  it('leaves template docs (IDs 1, 2) in place even when mixed with user docs', () => {
+  it('leaves system template docs (IDs 1, 2) in place even when mixed with other docs', () => {
     const docs = [makeDoc(1), makeDoc(2), makeDoc(500)];
     const result = migrate(docs);
     const byOldId = Object.fromEntries(docs.map((d, i) => [d.id, result[i]]));
-    expect(byOldId[1].id).toBe(1);   // template — untouched
-    expect(byOldId[2].id).toBe(2);   // template — untouched
-    expect(byOldId[500].id).toBe(1000); // user doc — shifted
+    expect(byOldId[1].id).toBe(1);      // system template — untouched
+    expect(byOldId[2].id).toBe(2);      // system template — untouched
+    expect(byOldId[500].id).toBe(1000); // non-system doc — shifted
   });
 
   // ── doc.references remapping ─────────────────────────────────────────────────

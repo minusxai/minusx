@@ -25,12 +25,13 @@ const TEMPLATE_IDS = immutableSet(
 );
 
 /**
- * V36 — Shift user-created file IDs to ≥ 1000.
+ * V36 — Shift all non-system file IDs to ≥ 1000.
  *
- * IDs 1–999 are reserved for workspace-template files. This migration finds every
- * user-created document with an ID < 1000 (i.e. not a template file), computes
- * offset = 1000 − min(user_id) so the lowest user ID lands exactly at 1000, then
- * renumbers those documents and patches every cross-reference:
+ * IDs 1–99 are reserved for system template files (tutorial, internals).
+ * /org structural files (originally 100–112) and all user-created files are
+ * shifted so the lowest non-system ID lands at ≥ 1000. The floor is raised
+ * above any IDs already ≥ 1000 to prevent collisions.
+ * Patches every cross-reference:
  *   - doc.references  (file_references array)
  *   - dashboard content: assets[].id, layout[].id
  */
@@ -93,7 +94,7 @@ function v36ShiftUserFileIds(data: InitData): InitData {
 export const MIGRATIONS: MigrationEntry[] = [
   {
     dataVersion: 36,
-    description: 'Shift user-created file IDs to ≥ 1000 (reserve 1–999 for template)',
+    description: 'Shift all non-system file IDs to ≥ 1000 (reserve 1–99 for system template; /org files 100–112 also shifted)',
     dataMigration: v36ShiftUserFileIds,
   },
 ];
@@ -139,15 +140,12 @@ export function fixData(data: InitData): InitData {
  * Throws if data version is below MINIMUM_SUPPORTED_DATA_VERSION.
  */
 export function applyMigrations(data: InitData, fromDataVersion: number): InitData {
-  if (fromDataVersion < MINIMUM_SUPPORTED_DATA_VERSION) {
-    throw new Error(
-      `Data version ${fromDataVersion} is below minimum supported version ${MINIMUM_SUPPORTED_DATA_VERSION}. ` +
-      `Re-import from a fresh export or contact support.`
-    );
-  }
+  // Clamp anything below minimum (including 0 for unversioned DBs) to minimum.
+  // All current migrations are safe to run on any old data.
+  const effectiveVersion = Math.max(fromDataVersion, MINIMUM_SUPPORTED_DATA_VERSION);
 
   let currentData = data;
-  let currentVersion = data.version || fromDataVersion;
+  let currentVersion = data.version || effectiveVersion;
 
   for (const migration of MIGRATIONS) {
     if (migration.dataVersion && migration.dataVersion > currentVersion && migration.dataMigration) {

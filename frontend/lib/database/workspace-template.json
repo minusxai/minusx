@@ -28,7 +28,7 @@
       "version": 1
     },
     {
-      "id": 103,
+      "id": 1003,
       "name": "org",
       "path": "/org",
       "type": "folder",
@@ -787,7 +787,7 @@
       "version": 1
     },
     {
-      "id": 102,
+      "id": 1002,
       "name": "configs",
       "path": "/org/configs",
       "type": "folder",
@@ -801,7 +801,7 @@
       "version": 1
     },
     {
-      "id": 104,
+      "id": 1004,
       "name": "logs",
       "path": "/org/logs",
       "type": "folder",
@@ -815,7 +815,7 @@
       "version": 1
     },
     {
-      "id": 106,
+      "id": 1006,
       "name": "database",
       "path": "/org/database",
       "type": "folder",
@@ -1272,7 +1272,7 @@
       "version": 1
     },
     {
-      "id": 108,
+      "id": 1008,
       "name": "Knowledge Base",
       "path": "/org/context",
       "type": "context",
@@ -2170,7 +2170,7 @@
       "version": 1
     },
     {
-      "id": 100,
+      "id": 1000,
       "name": "config",
       "path": "/org/configs/config",
       "type": "config",
@@ -2207,7 +2207,7 @@
       "version": 1
     },
     {
-      "id": 101,
+      "id": 1001,
       "name": "styles",
       "path": "/org/configs/styles",
       "type": "styles",
@@ -2221,7 +2221,7 @@
       "version": 1
     },
     {
-      "id": 105,
+      "id": 1005,
       "name": "conversations",
       "path": "/org/logs/conversations",
       "type": "folder",
@@ -2235,7 +2235,7 @@
       "version": 1
     },
     {
-      "id": 107,
+      "id": 1007,
       "name": "static",
       "path": "/org/database/static",
       "type": "connection",
@@ -2429,7 +2429,7 @@
       "last_edit_id": "from_migration"
     },
     {
-      "id": 109,
+      "id": 1009,
       "name": "Knowledge Base",
       "path": "/org/configs/context",
       "type": "context",
@@ -2457,7 +2457,7 @@
       "last_edit_id": "from_migration"
     },
     {
-      "id": 110,
+      "id": 1010,
       "name": "Knowledge Base",
       "path": "/org/database/context",
       "type": "context",
@@ -2485,7 +2485,7 @@
       "last_edit_id": "from_migration"
     },
     {
-      "id": 111,
+      "id": 1011,
       "name": "Knowledge Base",
       "path": "/org/logs/context",
       "type": "context",
@@ -2625,7 +2625,7 @@
       "last_edit_id": "from_migration"
     },
     {
-      "id": 112,
+      "id": 1012,
       "name": "Knowledge Base",
       "path": "/org/logs/conversations/context",
       "type": "context",

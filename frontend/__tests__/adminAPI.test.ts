@@ -328,12 +328,12 @@ describe('POST /api/admin/reset-tutorial', () => {
       ]
     );
 
-    // Org files that must survive the reset
+    // User-created org files that must survive the reset (paths don't conflict with template)
     await setupDb.query(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
-        100, 'org', '/org',
-        'folder', JSON.stringify({ name: 'org', description: 'Org folder' }),
+        100, 'custom-folder', '/org/custom-folder',
+        'folder', JSON.stringify({ name: 'custom-folder' }),
         JSON.stringify([]), now, now
       ]
     );
@@ -341,8 +341,8 @@ describe('POST /api/admin/reset-tutorial', () => {
     await setupDb.query(
       'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
-        101, 'database', '/org/database',
-        'folder', JSON.stringify({ name: 'database', description: 'DB folder' }),
+        101, 'custom-report', '/org/custom-folder/report',
+        'question', JSON.stringify({ name: 'custom-report', query: 'SELECT 1', vizSettings: { type: 'table' }, connection_name: 'static' }),
         JSON.stringify([]), now, now
       ]
     );
@@ -411,22 +411,22 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(id11Result.rows).toHaveLength(1);
     expect(id11Result.rows[0].path).toBe('/tutorial/top-level-metrics');
 
-    // ids 100/101 are template IDs — after reset they have the correct template paths
+    // ids 100/101 are user-like files (no longer template IDs) — preserved by reset
     const orgResult = await db.query<{ id: number; path: string }>(
       "SELECT id, path FROM files WHERE id IN (100, 101) ORDER BY id",
       []
     );
     expect(orgResult.rows).toHaveLength(2);
-    expect(orgResult.rows[0]).toMatchObject({ id: 100, path: '/org/configs/config' });
-    expect(orgResult.rows[1]).toMatchObject({ id: 101, path: '/org/configs/styles' });
-    // /org and /org/database live at ids 103 and 106 in the current template
+    expect(orgResult.rows[0]).toMatchObject({ id: 100, path: '/org/custom-folder' });
+    expect(orgResult.rows[1]).toMatchObject({ id: 101, path: '/org/custom-folder/report' });
+    // The actual /org and /org/database template docs now live at ids 1003 and 1006
     const orgFolderResult = await db.query<{ id: number; path: string }>(
-      "SELECT id, path FROM files WHERE id IN (103, 106) ORDER BY id",
+      "SELECT id, path FROM files WHERE id IN (1003, 1006) ORDER BY id",
       []
     );
     expect(orgFolderResult.rows).toHaveLength(2);
-    expect(orgFolderResult.rows[0]).toMatchObject({ id: 103, path: '/org' });
-    expect(orgFolderResult.rows[1]).toMatchObject({ id: 106, path: '/org/database' });
+    expect(orgFolderResult.rows[0]).toMatchObject({ id: 1003, path: '/org' });
+    expect(orgFolderResult.rows[1]).toMatchObject({ id: 1006, path: '/org/database' });
   });
 
   it('should deny access to non-admin', async () => {
@@ -472,6 +472,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     );
     expect(orphanResult.rows[0].count).toBe(1); // preserved — not a template ID
 
+    // ids 100/101 (user-like files from beforeEach) are also preserved
     const orgResult = await db.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM files WHERE id IN (100, 101)',
       []
