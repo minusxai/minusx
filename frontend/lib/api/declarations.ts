@@ -202,6 +202,14 @@ export const API = {
         deduplicate: true,
       },
     },
+    listRecent: {
+      url: '/api/conversations?limit=3',
+      method: 'GET',
+      cache: {
+        ttl: 2 * 60 * 1000,
+        deduplicate: true,
+      },
+    },
   },
 
   // Users API

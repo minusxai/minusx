@@ -32,6 +32,16 @@ export interface ConversationAnalyticsSummary {
   byModel: Record<string, { calls: number; tokens: number; cost: number }>;
 }
 
+export interface RecentFile {
+  fileId: number;
+  fileType: string;
+  fileName: string;
+  filePath: string;
+  lastVisited: string;
+  viewCount?: number;
+  uniqueViewers?: number;
+}
+
 export interface FileAnalyticsSummary {
   totalViews: number;           // COUNT(*) WHERE event_type = 'read_direct'
   uniqueViewers: number;        // COUNT(DISTINCT user_id) WHERE event_type = 'read_direct'

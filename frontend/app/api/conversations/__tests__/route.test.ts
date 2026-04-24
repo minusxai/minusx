@@ -99,7 +99,7 @@ describe('GET /api/conversations', () => {
   setupTestDb(TEST_DB_PATH, { customInit: seedConversations });
 
   async function callGet(): Promise<{ status: number; conversations: ConversationSummary[] }> {
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/conversations'));
     const body = await res.json();
     return { status: res.status, conversations: body.conversations ?? [] };
   }

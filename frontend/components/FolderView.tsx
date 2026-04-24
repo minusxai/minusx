@@ -10,7 +10,7 @@
  * - Display folder title and file/folder counts
  * - Delegate to FilesList for rendering
  */
-import { Box, Heading, Text, Spinner, HStack, IconButton } from '@chakra-ui/react';
+import { Box, Heading, Text, Spinner, HStack, IconButton, Flex } from '@chakra-ui/react';
 import {
   LuDatabase,
   LuSettings,
@@ -21,6 +21,7 @@ import {
   LuRefreshCw,
   LuFolderOpen,
 } from 'react-icons/lu';
+import RecentFilesSection from './RecentFilesSection';
 import { Tooltip } from '@/components/ui/tooltip';
 import { readFolder } from '@/lib/api/file-state';
 import type { IconType } from 'react-icons';
@@ -148,9 +149,10 @@ export interface FolderViewProps {
   title: string;
   type?: FileType;  // Optional filter by type
   headerRight?: ReactNode;  // Content to show on the right of the header
+  showAnalytics?: boolean;  // Show analytics panel alongside file list
 }
 
-export default function FolderView({ path, title, type, headerRight }: FolderViewProps) {
+export default function FolderView({ path, title, type, headerRight, showAnalytics }: FolderViewProps) {
   // Get user mode for system folder detection
   const user = useAppSelector(state => state.auth.user);
   const mode = user?.mode || DEFAULT_MODE;
@@ -223,8 +225,8 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
       </HStack>
 
       {/* Stats + Reload */}
-      <HStack mb={6} mt={4} gap={2} align="center">
-        <Text fontSize="lg" color="fg.muted" fontFamily="mono">
+      <HStack mb={6} mt={2} gap={2} align="center">
+        <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
           {fileCount} {fileCount === 1 ? 'file' : 'files'}
           <Box as="span" mx={3} display="inline-flex" alignItems="center" justifyContent="center" aria-hidden>
             <Box as="span" w="5px" h="5px" bg="accent.teal" borderRadius="50%" />
@@ -251,40 +253,47 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
       {/* Getting Started Section - only show in tutorial/demo mode */}
       {!isThisSystemFolder && mode === 'tutorial' && <GettingStartedSection />}
 
-      {/* File list or empty state */}
-      {files.length > 0 ? (
-        <FilesList files={files as any} />
-      ) : (() => {
-        // System folders use their own empty state
-        const systemState = getSystemFolderEmptyState(path, mode);
-        if (systemState) {
-          return (
-            <Box
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              minH="60vh"
-              px={8}
-            >
-              <Box
-                as={systemState.icon}
-                fontSize="6xl"
-                color="fg.muted"
-                opacity={0.4}
-                mb={4}
-              />
-              <Text fontSize="lg" color="fg.muted" fontWeight="500" fontFamily="mono">
-                {systemState.message}
-              </Text>
-            </Box>
-          );
-        }
+      {/* File list (with optional analytics right column) */}
+      <Flex gap={6} align="flex-start">
+        {/* File list or empty state */}
+        <Box flex="1" minW={0}>
+          {files.length > 0 ? (
+            <FilesList files={files as any} />
+          ) : (() => {
+            // System folders use their own empty state
+            const systemState = getSystemFolderEmptyState(path, mode);
+            if (systemState) {
+              return (
+                <Box
+                  display="flex"
+                  flexDirection="column"
+                  alignItems="center"
+                  justifyContent="center"
+                  minH="60vh"
+                  px={8}
+                >
+                  <Box
+                    as={systemState.icon}
+                    fontSize="6xl"
+                    color="fg.muted"
+                    opacity={0.4}
+                    mb={4}
+                  />
+                  <Text fontSize="lg" color="fg.muted" fontWeight="500" fontFamily="mono">
+                    {systemState.message}
+                  </Text>
+                </Box>
+              );
+            }
 
-        // Non-system folders: default empty state
-        return <DefaultEmptyState currentPath={path} />;
-      })()}
-      
+            // Non-system folders: default empty state
+            return <DefaultEmptyState currentPath={path} />;
+          })()}
+        </Box>
+
+        {showAnalytics && <RecentFilesSection />}
+      </Flex>
+
     </Box>
   );
 }

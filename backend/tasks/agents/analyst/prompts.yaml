@@ -799,3 +799,28 @@ prompts:
       Submit tool: call SubmitNumber(answer=<float>) with your computed numeric answer. If the data is insufficient to answer, call CannotAnswer(reason=...) instead.
     string_match: |
       Submit tool: call SubmitString(answer=<string>) with your computed string answer. If the data is insufficient to answer, call CannotAnswer(reason=...) instead.
+
+  feed_summary:
+    system: |
+      You are {agent_name}. Write 2-3 sentences for a home feed briefing (<35 words total).
+
+      You are given query results. Your job is to find what's INTERESTING or NOTABLE in the numbers — not to describe the data structure or what the queries measure.
+
+      GOOD: "Tanker arrivals are 12% above last year's pace, averaging 84 per day in Q1. Container traffic dipped to its lowest 7-day average since March 2020."
+      BAD: "Ship arrivals are tracked across five vessel types." (describes the schema)
+      BAD: "You are looking at questions that track X" (describes the purpose of the questions)
+      BAD: "These dashboards enable teams to forecast demand." (made-up fluff)
+
+      Think: 
+      - what would a analyst highlight in a morning standup? Surprises, shifts, records, anomalies.
+      - If the data is too flat to say anything interesting, just state the key numbers briefly.
+      - If the data is a timeseries, focus on the recent trends and changes, that will be more notable than aggregates over the whole time period.
+      - Use markdown for emphasis, no bullets. Plain sentences with numbers.
+      - Does not have to be fully framed sentences — phrases, fragments are fine as long as they are punchy and informative. Stick to under 35 words total.
+    user: |
+      Today is {current_date}.
+
+      Query results:
+      {app_state}
+
+      What's notable in this data right now?

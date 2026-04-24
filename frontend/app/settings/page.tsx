@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs, Badg
 import { LuRefreshCw, LuUser } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setCompactChatEnabled } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setCompactChatEnabled, setShowRecentFiles } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -141,6 +141,7 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const compactChatEnabled = useAppSelector((state) => state.ui.compactChatEnabled ?? true);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
+  const showRecentFiles = useAppSelector((state) => state.ui.showRecentFiles ?? true);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -303,7 +304,7 @@ function SettingsContent() {
     },
     {
       tab: 'general',
-      section: 'Feature Flags',
+      section: 'Experimental Flags',
       title: 'Queue Strategy',
       description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
       control: (
@@ -316,7 +317,6 @@ function SettingsContent() {
           </Button>
         </Flex>
       ),
-      visible: allowChatQueue,
     },
     {
       tab: 'general',
@@ -327,6 +327,19 @@ function SettingsContent() {
         <SwitchControl
           checked={compactChatEnabled}
           onChange={(checked) => dispatch(setCompactChatEnabled(checked))}
+        />
+      ),
+      visible: isEditorOrAdmin,
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
+      title: 'Recent Files',
+      description: 'Show recently viewed dashboards and questions on the home page.',
+      control: (
+        <SwitchControl
+          checked={showRecentFiles}
+          onChange={(checked) => dispatch(setShowRecentFiles(checked))}
         />
       ),
       visible: isEditorOrAdmin,
@@ -398,7 +411,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, compactChatEnabled]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, compactChatEnabled, showRecentFiles]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

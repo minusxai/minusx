@@ -81,9 +81,13 @@ ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS was_cache_hit BOOLEA
 ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS user_email    VARCHAR;
 `;
 
-// Track which absolute paths have already had initSchema run (idempotent guard)
-// eslint-disable-next-line no-restricted-syntax -- keyed by absolute file path (unique per org by directory layout)
-const initializedPaths = new Set<string>();
+// Track which absolute paths have already had initSchema run (idempotent guard).
+// Attached to globalThis so HMR module reloads don't reset it — prevents
+// unnecessary WAL deletion + schema re-init on every hot reload in dev.
+// Mutable singleton tracking which DB paths have been initialized this process.
+// Survives HMR via globalThis to prevent WAL deletion on hot reload.
+// eslint-disable-next-line no-restricted-syntax -- intentionally shared mutable state keyed by absolute file path
+const initializedPaths: Set<string> = (globalThis as Record<string, unknown>).__analyticsInitializedPaths as Set<string> ?? ((globalThis as Record<string, unknown>).__analyticsInitializedPaths = new Set<string>()); // eslint-disable-line no-restricted-syntax
 
 // Convert legacy ? placeholders to $1, $2, ... (DuckDB prepared statement syntax)
 function toPositional(sql: string): string {
