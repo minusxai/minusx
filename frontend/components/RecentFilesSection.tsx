@@ -1,15 +1,22 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Box, HStack, Text, VStack, Icon, Flex } from '@chakra-ui/react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Box, HStack, Text, VStack, Icon } from '@chakra-ui/react';
 import Link from 'next/link';
-import { LuClock, LuTrendingUp, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { useRouter } from 'next/navigation';
+import { LuChevronLeft, LuChevronRight, LuRefreshCw } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import { useAppSelector } from '@/store/hooks';
-import { selectRightSidebarUIState } from '@/store/uiSlice';
+import { selectRightSidebarUIState, selectShowRecentFiles, selectDevMode } from '@/store/uiSlice';
+import { readFiles } from '@/lib/api/file-state';
+import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useContext } from '@/lib/hooks/useContext';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { RecentFile } from '@/lib/analytics/file-analytics.types';
+import Markdown from '@/components/Markdown';
 
 interface HomeAnalyticsData {
   recent: RecentFile[];
@@ -34,26 +41,24 @@ function relativeTime(isoString: string): string {
 
 /** Live chart card using the same component as DashboardView */
 function QuestionChartCard({ file }: { file: RecentFile }) {
+  const router = useRouter();
   return (
-    <Link href={`/f/${generateFileUrl(file.fileId, file.fileName)}`}>
-      <Box
-        borderRadius="lg"
-        border="1px solid"
-        borderColor="border.default"
-        bg="bg.surface"
-        overflow="hidden"
-        h="340px"
-        display="flex"
-        flexDirection="column"
-        transition="all 0.2s ease"
-        _hover={{ shadow: 'md' }}
-      >
-        <SmartEmbeddedQuestionContainer
-          questionId={file.fileId}
-          showTitle={true}
-        />
-      </Box>
-    </Link>
+    <Box
+      borderRadius="lg"
+      bg="bg.surface"
+      overflow="hidden"
+      h="340px"
+      display="flex"
+      flexDirection="column"
+      transition="all 0.2s ease"
+      cursor="pointer"
+      onClick={() => router.push(`/f/${generateFileUrl(file.fileId, file.fileName)}`)}
+    >
+      <SmartEmbeddedQuestionContainer
+        questionId={file.fileId}
+        showTitle={true}
+      />
+    </Box>
   );
 }
 
@@ -149,17 +154,7 @@ function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: str
         _hover={{ bg: 'bg.muted' }}
       >
         {FileIcon && (
-          <Flex
-            align="center"
-            justify="center"
-            w="20px"
-            h="20px"
-            borderRadius="sm"
-            bg={`${color}/8`}
-            flexShrink={0}
-          >
-            <Icon as={FileIcon} color={color} boxSize={2.5} />
-          </Flex>
+          <Icon as={FileIcon} color={color} boxSize={3} flexShrink={0} />
         )}
         <Box flex="1" minW={0}>
           <Text fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
@@ -174,52 +169,118 @@ function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: str
   );
 }
 
-/** Section header */
-function SectionHeader({ icon, title, accent }: { icon: React.ElementType; title: string; accent?: string }) {
+
+const SUMMARY_COLLAPSED_LINES = 5;
+
+function SummaryCollapsible({ summary }: { summary: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * 60;
+  const maxMaxLen = SUMMARY_COLLAPSED_LINES * 60;
+  const needsCollapse = summary.length > maxMaxLen;
+  const displayText = !expanded && needsCollapse
+    ? summary.slice(0, maxLen).trimEnd() + '...'
+    : summary;
+
   return (
-    <HStack gap={1.5} mb={2}>
-      <Icon as={icon} boxSize={3} color={accent ?? 'fg.muted'} />
-      <Text
-        fontSize="2xs"
-        fontWeight="700"
-        color="fg.muted"
-        textTransform="uppercase"
-        letterSpacing="wider"
-      >
-        {title}
-      </Text>
-    </HStack>
+    <Box>
+      <Markdown textColor="fg.muted" fontSize="xs">{displayText}</Markdown>
+      {needsCollapse && (
+        <Text
+          as="button"
+          fontSize="2xs"
+          fontFamily="mono"
+          color="fg.subtle"
+          cursor="pointer"
+          mt={0.5}
+          _hover={{ color: 'accent.teal' }}
+          transition="all 0.15s"
+          onClick={() => setExpanded(e => !e)}
+        >
+          {expanded ? 'See less' : 'See more'}
+        </Text>
+      )}
+    </Box>
   );
 }
 
 export default function RecentFilesSection() {
   const { isCollapsed } = useAppSelector(selectRightSidebarUIState);
+  const showRecentFiles = useAppSelector(selectShowRecentFiles);
+  const { config } = useConfigs();
+  const devMode = useAppSelector(selectDevMode);
+  const user = useAppSelector(state => state.auth.user);
+  const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
+  const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const lastAppStateRef = useRef<any>(null);
 
   useEffect(() => {
+    if (!showRecentFiles) return;
     fetch('/api/analytics/recent-files')
       .then(res => res.json())
       .then(json => {
         if (json.success) setData(json.data);
       })
       .catch(() => {});
+  }, [showRecentFiles]);
+
+  const fetchSummary = useCallback(async (files: RecentFile[]) => {
+    if (files.length === 0) return;
+
+    const questionIds = files
+      .filter(f => f.fileType === 'question')
+      .slice(0, 3)
+      .map(f => f.fileId);
+
+    setSummaryLoading(true);
+    try {
+      // Load files + run queries — same as ReadFiles tool handler
+      const augmented = await readFiles(questionIds, { runQueries: true });
+      const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
+
+      const fullAppState = { files: appState, context: contextDocs || '' };
+      lastAppStateRef.current = fullAppState;
+      console.log('[FeedSummary] Request:', fullAppState);
+
+      const res = await fetch('/api/feed-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appState: fullAppState }),
+      });
+      const json = await res.json();
+      console.log('[FeedSummary] Response:', json);
+      if (json.success && json.summary) setSummary(json.summary);
+    } catch (err) {
+      console.error('[FeedSummary] Error:', err);
+    } finally {
+      setSummaryLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    if (!data) return;
+    fetchSummary([...data.recent, ...data.trending]);
+  }, [data, fetchSummary]);
+
   // Hide standalone column when right sidebar is open (content moves to sidebar tab)
-  if (!isCollapsed) return null;
+  // In dev mode, always show so the re-run button is accessible
+  if (!isCollapsed && !devMode) return null;
+  if (!showRecentFiles) return null;
 
-  if (!data) return null;
+  if (!data && !devMode) return null;
 
-  const hasRecent = data.recent.length > 0;
-  const hasTrending = data.trending.length > 0;
+  const hasRecent = (data?.recent.length ?? 0) > 0;
+  const hasTrending = (data?.trending.length ?? 0) > 0;
 
-  if (!hasRecent && !hasTrending) return null;
+  if (!hasRecent && !hasTrending && !devMode) return null;
 
   // Split by type: questions as carousel with live charts, dashboards as list
-  const recentQuestions = data.recent.filter(f => f.fileType === 'question');
-  const recentDashboards = data.recent.filter(f => f.fileType === 'dashboard');
-  const trendingQuestions = data.trending.filter(f => f.fileType === 'question');
-  const trendingDashboards = data.trending.filter(f => f.fileType === 'dashboard');
+  const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
+  const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
+  const trendingQuestions = data?.trending.filter(f => f.fileType === 'question') ?? [];
+  const trendingDashboards = data?.trending.filter(f => f.fileType === 'dashboard') ?? [];
 
   return (
     <Box
@@ -228,51 +289,124 @@ export default function RecentFilesSection() {
       flexShrink={0}
       position="sticky"
       top="20px"
+      bg="bg.muted"
+      borderRadius={"md"}
+      px={5}
+      py={3}
     >
-    <VStack gap={5} align="stretch">
-      {/* Recent section */}
-      {hasRecent && (
+    <VStack gap={4} align="stretch">
+      {/* Section title + re-run */}
+      <HStack justify="space-between" align="center">
+        <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing={"0.1em"} textTransform={"uppercase"}>
+          {config.branding.agentName}  feed
+        </Text>
+        {data && (
+          <Box
+            as="button"
+            aria-label="Re-generate summary"
+            onClick={() => fetchSummary([...data.recent, ...data.trending])}
+            display="inline-flex"
+            alignItems="center"
+            gap={1}
+            px={1.5}
+            py={0.5}
+            borderRadius="sm"
+            fontSize="2xs"
+            fontFamily="mono"
+            color="fg.subtle"
+            cursor={summaryLoading ? 'default' : 'pointer'}
+            opacity={summaryLoading ? 0.4 : 0.6}
+            _hover={summaryLoading ? {} : { color: 'accent.teal', opacity: 1 }}
+            transition="all 0.15s"
+          >
+            <Icon as={LuRefreshCw} boxSize={2.5} css={summaryLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+            Re-generate summary
+          </Box>
+        )}
+      </HStack>
+
+      {/* Summary */}
+      {(summary || summaryLoading || devMode) && (
         <Box>
-          <SectionHeader icon={LuClock} title="Recent" accent="accent.teal" />
-          <VStack gap={2} align="stretch">
-            {recentQuestions.length > 0 && (
-              <QuestionCarousel questions={recentQuestions} />
-            )}
-            {recentDashboards.map(file => (
-              <CompactFileLink
-                key={file.fileId}
-                file={file}
-                meta={relativeTime(file.lastVisited)}
-              />
-            ))}
-          </VStack>
+          {summaryLoading && !summary ? (
+            <Text fontSize="xs" color="fg.subtle" fontFamily="mono" fontStyle="italic">
+              Generating summary...
+            </Text>
+          ) : summary ? (
+            <SummaryCollapsible summary={summary} />
+          ) : null}
+          {devMode && lastAppStateRef.current && (
+            <Box as="details" mt={2} fontSize="2xs" fontFamily="mono" color="fg.subtle">
+              <Box as="summary" cursor="pointer" _hover={{ color: 'fg.muted' }}>
+                app_state
+              </Box>
+              <Box
+                mt={1}
+                p={2}
+                bg="bg.canvas"
+                borderRadius="sm"
+                border="1px solid"
+                borderColor="border.default"
+                maxH="300px"
+                overflowY="auto"
+                whiteSpace="pre-wrap"
+                wordBreak="break-all"
+              >
+                {JSON.stringify(lastAppStateRef.current, null, 2)}
+              </Box>
+            </Box>
+          )}
         </Box>
       )}
 
-      {/* Trending section */}
-      {hasTrending && (
-        <Box>
-          <SectionHeader icon={LuTrendingUp} title="Trending in Org" accent="accent.teal" />
-          <VStack gap={2} align="stretch">
-            {/* {trendingQuestions.length > 0 && (
-              <QuestionCarousel questions={trendingQuestions} />
-            )} */}
-            {trendingDashboards.slice(0, 3).map(file => (
-              <CompactFileLink
-                key={file.fileId}
-                file={file}
-                meta={relativeTime(file.lastVisited)}
-              />
-            ))}
-            {trendingQuestions.slice(0, 1).map(file => (
-              <CompactFileLink
-                key={file.fileId}
-                file={file}
-                meta={relativeTime(file.lastVisited)}
-              />
+      {/* Recently viewed — questions carousel */}
+      {hasRecent && recentQuestions.length > 0 && (
+        <>
+          <HStack gap={2}>
+            <Box flex="1" h="1px" bg="border.default" />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
+              Recently viewed
+            </Text>
+          </HStack>
+          <QuestionCarousel questions={recentQuestions} />
+        </>
+      )}
+
+      {/* Recent dashboards */}
+      {hasRecent && recentDashboards.length > 0 && (
+        <>
+          <HStack gap={2}>
+            <Box flex="1" h="1px" bg="border.default" />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
+              Recent dashboards
+            </Text>
+          </HStack>
+          <VStack gap={1.5} align="stretch">
+            {recentDashboards.map(file => (
+              <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
             ))}
           </VStack>
-        </Box>
+        </>
+      )}
+
+      {/* Trending */}
+      {hasTrending && (
+        <>
+          <HStack gap={2}>
+            <Box flex="1" h="1px" bg="border.default" />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
+              Trending in org
+            </Text>
+          </HStack>
+          <VStack gap={1.5} align="stretch">
+            {trendingDashboards.slice(0, 3).map(file => (
+              <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
+            ))}
+            {trendingQuestions.slice(0, 1).map(file => (
+              <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
+            ))}
+          </VStack>
+        </>
       )}
     </VStack>
     </Box>

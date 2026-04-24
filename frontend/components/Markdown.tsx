@@ -405,6 +405,7 @@ interface MarkdownProps {
   context?: 'sidebar' | 'mainpage';
   textAlign?: 'left' | 'center' | 'right';
   textColor?: string;
+  fontSize?: string;  // Override base text font size (e.g. 'xs', 'sm')
   queries?: Record<string, ReportQueryResult>;  // Query results for {{query:id}} references
 }
 
@@ -420,20 +421,22 @@ export default function Markdown({
   context = 'mainpage',
   textAlign = 'left',
   textColor,
+  fontSize: fontSizeOverride,
   queries
 }: MarkdownProps) {
+  const baseFontSize = fontSizeOverride ?? 'sm';
   const styles = {
     h1: { fontSize: 'xl', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3' },
     h2: { fontSize: 'lg', fontWeight: '600', mb: 2.5, mt: 2, lineHeight: '1.4' },
     h3: { fontSize: 'md', fontWeight: '600', mb: 2, mt: 2, lineHeight: '1.4' },
-    h4: { fontSize: 'sm', fontWeight: '600', mb: 1.5, mt: 1.5 },
-    p: { fontSize: 'sm', lineHeight: '1.7', fontWeight: '400' },
-    a: { fontSize: 'sm', lineHeight: '1.7', fontWeight: '400' },
-    code: { fontSize: 'sm' },
+    h4: { fontSize: baseFontSize, fontWeight: '600', mb: 1.5, mt: 1.5 },
+    p: { fontSize: baseFontSize, lineHeight: '1.7', fontWeight: '400' },
+    a: { fontSize: baseFontSize, lineHeight: '1.7', fontWeight: '400' },
+    code: { fontSize: baseFontSize },
     pre: { mb: 3, p: 2.5 },
-    list: { ml: 5, mb: 2.5, fontSize: 'sm', lineHeight: '1.7' },
+    list: { ml: 5, mb: 2.5, fontSize: baseFontSize, lineHeight: '1.7' },
     li: { mb: 1 },
-    table: { mb: 3, fontSize: 'sm', mt: 2 },
+    table: { mb: 3, fontSize: baseFontSize, mt: 2 },
     th: { py: 2, px: 3 },
     td: { py: 2, px: 3 },
   };
