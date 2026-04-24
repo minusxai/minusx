@@ -19,6 +19,7 @@ import type { RecentFile } from '@/lib/analytics/file-analytics.types';
 import Markdown from '@/components/Markdown';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
+import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import type { ConversationSummary } from '@/app/api/conversations/route';
 
 interface HomeAnalyticsData {
@@ -218,13 +219,12 @@ function CompactConversationLink({ conversation }: { conversation: ConversationS
         cursor="pointer"
         transition="all 0.15s ease"
         _hover={{ bg: 'bg.surface' }}
+        overflow="hidden"
       >
         <Icon as={LuMessageSquare} color="fg.muted" boxSize={3} flexShrink={0} />
-        <Box flex="1" minW={0}>
-          <Text fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
-            {conversation.name}
-          </Text>
-        </Box>
+        <Text flex="1" minW={0} fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
+          {conversation.name}
+        </Text>
         <Text fontSize="2xs" color="fg.subtle" flexShrink={0} fontFamily="mono">
           {relativeTime(conversation.updatedAt)}
         </Text>
@@ -233,8 +233,17 @@ function CompactConversationLink({ conversation }: { conversation: ConversationS
   );
 }
 
+function FeedWrapper({ enabled, children }: { enabled?: boolean; children: React.ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <Box bg="bg.muted" borderRadius="md" px={5} py={3}>
+      {children}
+    </Box>
+  );
+}
+
 /** Shared feed content — used by both standalone column and sidebar */
-export function FeedContent() {
+export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const { config } = useConfigs();
   const devMode = useAppSelector(selectDevMode);
   const showRecentFiles = useAppSelector(selectShowRecentFiles);
@@ -245,8 +254,8 @@ export function FeedContent() {
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const lastAppStateRef = useRef<any>(null);
-  const { data: convData } = useFetch(API.conversations.list);
-  const recentConversations: ConversationSummary[] = ((convData as any)?.conversations || []).slice(0, 3);
+  const { data: convData } = useFetch(API.conversations.listRecent);
+  const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
 
   useEffect(() => {
     if (!showRecentFiles) return;
@@ -258,7 +267,7 @@ export function FeedContent() {
       .catch(() => {});
   }, [showRecentFiles]);
 
-  const fetchSummary = useCallback(async (files: RecentFile[]) => {
+  const fetchSummary = useCallback(async (files: RecentFile[], skipCache = false) => {
     if (files.length === 0) return;
 
     const questionIds = files
@@ -273,15 +282,13 @@ export function FeedContent() {
 
       const fullAppState = { files: appState, context: contextDocs || '' };
       lastAppStateRef.current = fullAppState;
-      console.log('[FeedSummary] Request:', fullAppState);
 
-      const res = await fetch('/api/feed-summary', {
+      const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appState: fullAppState }),
+        cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
+        skipCache,
       });
-      const json = await res.json();
-      console.log('[FeedSummary] Response:', json);
       if (json.success && json.summary) setSummary(json.summary);
     } catch (err) {
       console.error('[FeedSummary] Error:', err);
@@ -296,16 +303,48 @@ export function FeedContent() {
   }, [data, fetchSummary]);
 
   if (!showRecentFiles) return null;
-  if (!data && !devMode) return null;
 
+  const analyticsLoading = !data;
   const hasRecent = (data?.recent.length ?? 0) > 0;
-  if (!hasRecent && !devMode) return null;
+  const hasConversations = recentConversations.length > 0;
+  const hasAnything = hasRecent || hasConversations;
+
+  // Nothing loaded yet — show skeleton
+  if (analyticsLoading && !devMode) {
+    // Only show skeleton if conversations also haven't loaded yet
+    // (avoids flash of skeleton when analytics will be empty)
+    if (!convData) {
+      return (
+        <FeedWrapper enabled={wrapper}><VStack gap={4} align="stretch">
+          <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing="0.1em" textTransform="uppercase">
+            {config.branding.agentName}  feed
+          </Text>
+          <VStack gap={2} align="stretch">
+            <Box h="10px" w="100%" bg="border.default" borderRadius="sm" opacity={0.5} css={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <Box h="10px" w="85%" bg="border.default" borderRadius="sm" opacity={0.5} css={{ animation: 'pulse 1.5s ease-in-out infinite', animationDelay: '0.1s' }} />
+            <Box h="10px" w="70%" bg="border.default" borderRadius="sm" opacity={0.5} css={{ animation: 'pulse 1.5s ease-in-out infinite', animationDelay: '0.2s' }} />
+          </VStack>
+          <Box h="1px" bg="border.default" />
+          <Box h="200px" bg="border.default" borderRadius="lg" opacity={0.3} css={{ animation: 'pulse 1.5s ease-in-out infinite', animationDelay: '0.3s' }} />
+          <Box h="1px" bg="border.default" />
+          {[0, 1, 2].map(i => (
+            <Box key={i} h="10px" w={`${80 - i * 10}%`} bg="border.default" borderRadius="sm" opacity={0.4} css={{ animation: 'pulse 1.5s ease-in-out infinite', animationDelay: `${0.4 + i * 0.1}s` }} />
+          ))}
+        </VStack></FeedWrapper>
+      );
+    }
+    // Analytics still loading but conversations loaded — only show feed if conversations exist
+    if (!hasConversations) return null;
+  }
+
+  // Everything loaded but nothing to show
+  if (!analyticsLoading && !hasAnything && !devMode) return null;
 
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
 
   return (
-    <VStack gap={4} align="stretch">
+    <FeedWrapper enabled={wrapper}><VStack gap={4} align="stretch">
       {/* Section title + re-run */}
       <HStack justify="space-between" align="center">
         <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing={"0.1em"} textTransform={"uppercase"}>
@@ -315,7 +354,7 @@ export function FeedContent() {
           <Box
             as="button"
             aria-label="Re-generate summary"
-            onClick={() => fetchSummary(data.recent)}
+            onClick={() => fetchSummary(data.recent, true)}
             display="inline-flex"
             alignItems="center"
             gap={1}
@@ -417,7 +456,7 @@ export function FeedContent() {
         </>
       )}
 
-    </VStack>
+    </VStack></FeedWrapper>
   );
 }
 
@@ -437,12 +476,8 @@ export default function RecentFilesSection() {
       position="sticky"
       top="0"
       alignSelf="flex-start"
-      bg="bg.muted"
-      borderRadius={"md"}
-      px={5}
-      py={3}
     >
-      <FeedContent />
+      <FeedContent wrapper />
     </Box>
   );
 }
