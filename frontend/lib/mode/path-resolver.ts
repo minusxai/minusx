@@ -172,6 +172,21 @@ export function getModeRoot(mode: Mode): string {
 }
 
 /**
+ * Return the physical folder where files of a given type should be created.
+ * Looks up SYSTEM_FOLDER_ALLOWED_TYPES in reverse: finds the system folder that
+ * accepts this type, then resolves it for the current mode.
+ * Falls back to the mode root for types with no system-folder restriction.
+ */
+export function getDefaultFolderForType(type: string, mode: Mode): string {
+  for (const [folder, allowedTypes] of Object.entries(SYSTEM_FOLDER_ALLOWED_TYPES)) {
+    if ((allowedTypes as readonly string[]).includes(type)) {
+      return resolvePath(mode, folder);
+    }
+  }
+  return getModeRoot(mode);
+}
+
+/**
  * Resolve user home folder with graceful fallback
  *
  * If the exact home folder doesn't exist, tries parent folders until reaching mode root.

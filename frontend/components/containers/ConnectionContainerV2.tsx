@@ -35,6 +35,8 @@ interface ConnectionContainerV2Props {
   greeting?: string;
   /** Called when CSV/Sheets is selected in wizard mode instead of navigating away. */
   onStaticSelect?: (tab: 'csv' | 'sheets') => void;
+  /** Skip the type selection step — type is already set on the file content. */
+  skipTypePicker?: boolean;
 }
 
 export default function ConnectionContainerV2({
@@ -45,6 +47,7 @@ export default function ConnectionContainerV2({
   hideCancel = false,
   greeting,
   onStaticSelect,
+  skipTypePicker = false,
 }: ConnectionContainerV2Props) {
   const router = useRouter();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -178,6 +181,7 @@ export default function ConnectionContainerV2({
       onPendingDeletion={(s3Key) => { pendingDeletionsRef.current.push(s3Key); }}
       wizardMode={!!onSaveSuccess}
       onStaticSelect={onStaticSelect}
+      skipTypeSelection={skipTypePicker}
     />
   );
 }

@@ -197,16 +197,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     try {
       await publishAll();
       if (onComplete) await onComplete();
-      const freshState = getStore().getState();
-      const allFiles = Object.values(freshState.files.files);
-      const dashboard = allFiles
-        .filter(f => f.type === 'dashboard' && f.id > 0 && f.path.startsWith(modeRoot))
-        .sort((a, b) => b.id - a.id)[0];
-      if (dashboard) {
-        router.push(preserveModeParam(`/f/${dashboard.id}`));
-      } else {
-        router.push(preserveModeParam('/'));
-      }
+      router.push(preserveModeParam(`/f/${virtualDashboardId}`));
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
       router.push(preserveModeParam('/'));

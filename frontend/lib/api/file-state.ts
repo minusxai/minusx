@@ -27,7 +27,7 @@ import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
-import { resolveHomeFolderSync, isHiddenSystemPath, isFileTypeAllowedInPath, getModeRoot } from '@/lib/mode/path-resolver';
+import { resolveHomeFolderSync, isHiddenSystemPath, isFileTypeAllowedInPath, getDefaultFolderForType } from '@/lib/mode/path-resolver';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
@@ -980,9 +980,7 @@ export async function createDraftFile(
   const mode = user?.mode || 'org';
   if (!isFileTypeAllowedInPath(type, resolvedFolder, mode)) {
     const originalFolder = resolvedFolder;
-    resolvedFolder = user
-      ? resolveHomeFolderSync(user.mode, user.home_folder || '')
-      : getModeRoot(mode);
+    resolvedFolder = getDefaultFolderForType(type, mode);
     console.log(`[createDraftFile] Redirected ${type} from restricted folder:`, {
       originalFolder,
       redirectedFolder: resolvedFolder

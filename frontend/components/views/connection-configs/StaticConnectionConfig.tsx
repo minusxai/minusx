@@ -62,6 +62,8 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   onError: (error: string) => void;
   onPendingDeletion?: (s3Key: string) => void;
   onSave?: () => void;
+  /** Override the default tab when not driven by URL params (e.g. wizard). */
+  initialTab?: 'csv' | 'sheets';
 }
 
 interface PendingFile {
@@ -298,12 +300,13 @@ export default function StaticConnectionConfig({
   onError,
   onPendingDeletion,
   onSave,
+  initialTab,
 }: StaticConnectionConfigProps) {
   // ── Panel toggle ──────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activePanel, setActivePanel] = useState<ActivePanel>(
-    tabParam === 'sheets' ? 'sheets-add' : 'csv-upload'
+    initialTab === 'sheets' || tabParam === 'sheets' ? 'sheets-add' : 'csv-upload'
   );
 
   // ── CSV upload state ──────────────────────────────────────────────────────
