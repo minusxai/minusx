@@ -16,9 +16,7 @@ import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } from '@/lib/database/config-db';
 import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } from '@/lib/database/migrations';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
-import { getDbType } from '@/lib/database/db-config';
-import { createAdapter } from '@/lib/database/adapter/factory';
-import { BACKEND_URL, POSTGRES_URL } from '@/lib/config';
+import { BACKEND_URL } from '@/lib/config';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -34,15 +32,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // No body or invalid JSON - proceed without force
     }
 
-    const dbType = getDbType();
-
-    const db = dbType === 'pglite'
-      ? await createAdapter({ type: 'pglite' })
-      : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
-    const currentDataVersion = await getDataVersion(db);
-    const currentSchemaVersion = await getSchemaVersion(db);
+    const currentDataVersion = await getDataVersion();
+    const currentSchemaVersion = await getSchemaVersion();
     const { dataVersion: targetDataVersion, schemaVersion: targetSchemaVersion } = getTargetVersions();
-    await db.close();
 
     const needsDataMigration = currentDataVersion < targetDataVersion;
     const needsSchemaRecreation = needsSchemaMigration(currentSchemaVersion);
@@ -91,12 +83,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     await atomicImport(migratedData);
 
-    const newDb = dbType === 'pglite'
-      ? await createAdapter({ type: 'pglite' })
-      : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
-    await setDataVersion(targetDataVersion, newDb);
-    await setSchemaVersion(LATEST_SCHEMA_VERSION, newDb);
-    await newDb.close();
+    await setDataVersion(targetDataVersion);
+    await setSchemaVersion(LATEST_SCHEMA_VERSION);
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/connections/reinitialize`, { method: 'POST' });

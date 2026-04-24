@@ -14,9 +14,6 @@ import { exportDatabase } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion } from '@/lib/database/config-db';
 import { getTargetVersions } from '@/lib/database/migrations';
-import { getDbType } from '@/lib/database/db-config';
-import { createAdapter } from '@/lib/database/adapter/factory';
-import { POSTGRES_URL } from '@/lib/config';
 
 export const GET = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -24,14 +21,8 @@ export const GET = withAuth(async (request: NextRequest, user) => {
   }
 
   try {
-    const dbType = getDbType();
-    const db = dbType === 'pglite'
-      ? await createAdapter({ type: 'pglite' })
-      : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
-    const currentDataVersion = await getDataVersion(db);
-    const currentSchemaVersion = await getSchemaVersion(db);
-    await db.close();
-
+    const currentDataVersion = await getDataVersion();
+    const currentSchemaVersion = await getSchemaVersion();
     const { dataVersion: targetDataVersion, schemaVersion: targetSchemaVersion } = getTargetVersions();
 
     const exportData = await exportDatabase();

@@ -4,6 +4,23 @@ import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
 import importPlugin from "eslint-plugin-import-x";
 
+// Shared import restrictions — extracted so each file-scoped override can
+// keep exactly the restrictions that still apply, rather than turning off all of them.
+const RESTRICT_DOCUMENTS_DB = {
+  name: "@/lib/database/documents-db",
+  message:
+    "Do not import DocumentDB outside the data layer. Use FilesAPI, ConnectionsAPI, or ConfigsAPI from lib/data/** instead. " +
+    "DocumentDB is only allowed in lib/data/**, lib/database/**, scripts/**, and test files.",
+};
+
+const RESTRICT_ADAPTER_FACTORY = {
+  name: "@/lib/database/adapter/factory",
+  message:
+    "Do not call createAdapter/getAdapter directly. Use getModules().db instead — it is the module-registry singleton " +
+    "that all DB operations share. Direct adapter construction creates isolated instances that silently lose writes. " +
+    "Allowed only in lib/modules/db/**, lib/database/**, scripts/**, and test files.",
+};
+
 // Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
 // so that per-file configs can extend rather than replace the base rules.
 const BASE_RESTRICTED_SYNTAX = [
@@ -84,6 +101,9 @@ const eslintConfig = defineConfig([
       "import-x/first": "error",
       // Prevent direct DocumentDB imports outside the data layer.
       // Use lib/data/* functions instead. Allowed paths are whitelisted below.
+      // Prevent createAdapter/getAdapter calls outside the module setup layer.
+      // Everything else must use getModules().db — calling createAdapter directly
+      // creates throwaway instances that don't share state with the module registry.
       "no-restricted-imports": [
         "error",
         {
@@ -93,6 +113,13 @@ const eslintConfig = defineConfig([
               message:
                 "Do not import DocumentDB outside the data layer. Use FilesAPI, ConnectionsAPI, or ConfigsAPI from lib/data/** instead. " +
                 "DocumentDB is only allowed in lib/data/**, lib/database/**, scripts/**, and test files.",
+            },
+            {
+              name: "@/lib/database/adapter/factory",
+              message:
+                "Do not call createAdapter/getAdapter directly. Use getModules().db instead — it is the module-registry singleton " +
+                "that all DB operations share. Direct adapter construction creates isolated instances that silently lose writes. " +
+                "Allowed only in lib/modules/db/**, lib/database/**, scripts/**, and test files.",
             },
           ],
         },
@@ -136,8 +163,7 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
-  // Allow DocumentDB only inside the server-side data layer implementations and database module.
-  // Loaders, helpers, and client-side data code must go through FilesAPI/ConnectionsAPI/ConfigsAPI.
+  // DocumentDB: allowed only in the server-side data layer and database internals.
   {
     files: [
       "lib/data/*.server.ts",
@@ -150,7 +176,24 @@ const eslintConfig = defineConfig([
       "test/**",
     ],
     rules: {
-      "no-restricted-imports": "off",
+      "no-restricted-imports": ["error", { paths: [] }],
+    },
+  },
+  // createAdapter/getAdapter: allowed only in module setup, database internals, and scripts.
+  // lib/data/*.server.ts is intentionally excluded — use getModules().db there too.
+  {
+    files: [
+      "lib/modules/db/**",
+      "lib/database/**",
+      "scripts/**",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/__tests__/**",
+      "**/__mocks__/**",
+      "test/**",
+    ],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [] }],
     },
   },
 ]);
