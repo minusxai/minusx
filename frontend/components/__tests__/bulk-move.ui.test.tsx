@@ -36,11 +36,11 @@ const realFetch = global.fetch;
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const QUESTION_1_ID = 1010;
-const QUESTION_2_ID = 1011;
-const QUESTION_3_ID = 1012;
-const FOLDER_ID = 1020;
-const DEST_FOLDER_ID = 1021;
+const QUESTION_1_ID = 5010;
+const QUESTION_2_ID = 5011;
+const QUESTION_3_ID = 5012;
+const FOLDER_ID = 5020;
+const DEST_FOLDER_ID = 5021;
 
 function makeQuestion(id: number, name: string) {
   return {

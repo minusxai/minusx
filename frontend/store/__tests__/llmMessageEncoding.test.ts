@@ -59,9 +59,9 @@ jest.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-// Use IDs well above the template range (template creates IDs 1–107) to avoid conflicts.
-const FIXTURE_QUESTION_ID = 1001;
-const TUTORIAL_DASHBOARD_ID = 1002; // /tutorial/user-engagement-dashboard
+// Use IDs well above the template range (template creates IDs up to ~1012) to avoid conflicts.
+const FIXTURE_QUESTION_ID = 5001;
+const TUTORIAL_DASHBOARD_ID = 5002; // /tutorial/user-engagement-dashboard
 
 const FIXTURE_QUESTION_CONTENT = {
   query: 'SELECT * FROM sales',

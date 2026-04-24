@@ -17,6 +17,7 @@ jest.mock('@/lib/database/db-config', () => ({
 import { PGlite } from '@electric-sql/pglite';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '@/lib/database/postgres-schema';
 import { getModules } from '@/lib/modules/registry';
+import { truncateAllTables } from '@/store/__tests__/test-utils';
 
 // ─── 1. Raw PGLite: run ALL schema statements in sequence ─────────────────────
 // Uses a SINGLE PGlite instance, properly awaited before tests run.
@@ -86,15 +87,7 @@ describe('3. DBModule.exec — routing (no-params + no-semicolon goes to query()
     await getModules().db.exec<{ one: number }>('SELECT 1 AS one', []);
   });
 
-  beforeEach(async () => {
-    await getModules().db.exec(
-      `DO $$ DECLARE r RECORD; BEGIN
-         FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-           EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE';
-         END LOOP;
-       END $$`
-    );
-  });
+  beforeEach(truncateAllTables);
 
   it('CREATE SCHEMA via DBModule.exec (no params, no semicolon → query())', async () => {
     await getModules().db.exec('CREATE SCHEMA IF NOT EXISTS diag_schema');

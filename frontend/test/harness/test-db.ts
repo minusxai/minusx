@@ -62,6 +62,7 @@ function buildImportSQL(
     `DELETE FROM file_events`,
     `DELETE FROM llm_call_events`,
     `DELETE FROM query_execution_events`,
+    `DELETE FROM job_runs`,
     `DELETE FROM files`,
     `DELETE FROM users`,
   ];

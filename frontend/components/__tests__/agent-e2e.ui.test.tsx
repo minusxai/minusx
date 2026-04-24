@@ -424,9 +424,9 @@ describe('Explore page: submit question → agent responds → see answer → to
 
 // ─── Dashboard fixtures ───────────────────────────────────────────────────────
 
-const DASHBOARD_ID = 1002;
-const QUESTION_ID = 1003;
-const QUESTION_ID_2 = 1004;
+const DASHBOARD_ID = 5002;
+const QUESTION_ID = 5003;
+const QUESTION_ID_2 = 5004;
 const QUESTION_NAME = 'Sales Revenue';
 
 function makeDashboardDbFile() {

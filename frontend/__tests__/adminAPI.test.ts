@@ -33,6 +33,7 @@ jest.mock('@/lib/database/db-config', () => ({
 // Import after mocking
 import { InitData, exportDatabase, atomicImport } from '@/lib/database/import-export';
 import { getModules } from '@/lib/modules/registry';
+import { truncateAllTables } from '@/store/__tests__/test-utils';
 import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 
 // Import API route handlers AFTER mocking
@@ -296,9 +297,7 @@ describe('Import/Export API Endpoints', () => {
 describe('POST /api/admin/reset-tutorial', () => {
   beforeEach(async () => {
     cleanupDbFiles();
-    await getModules().db.exec('DELETE FROM files');
-    await getModules().db.exec('DELETE FROM users');
-    await getModules().db.exec('DELETE FROM configs');
+    await truncateAllTables();
 
     const db = getModules().db;
     const now = new Date().toISOString();

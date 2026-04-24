@@ -20,6 +20,7 @@ jest.mock('@/lib/database/db-config', () => ({
 import { DocumentDB } from '@/lib/database/documents-db';
 import { registerModules, getModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';
+import { truncateAllTables } from '@/store/__tests__/test-utils';
 
 function makeMockModules(db: DBModule) {
   return {
@@ -56,15 +57,7 @@ describe('PGLite adapter — Phase 2 spike', () => {
     await getModules().db.init();
   });
 
-  beforeEach(async () => {
-    await getModules().db.exec(
-      `DO $$ DECLARE r RECORD; BEGIN
-         FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-           EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE';
-         END LOOP;
-       END $$`
-    );
-  });
+  beforeEach(truncateAllTables);
 
   it('creates and retrieves a file by ID', async () => {
     const id = await DocumentDB.create('test-question', '/org/test-question', 'question', {
