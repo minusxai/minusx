@@ -260,21 +260,17 @@ export function FeedContent() {
 
   useEffect(() => {
     if (!data) return;
-    fetchSummary([...data.recent, ...data.trending]);
+    fetchSummary(data.recent);
   }, [data, fetchSummary]);
 
   if (!showRecentFiles) return null;
   if (!data && !devMode) return null;
 
   const hasRecent = (data?.recent.length ?? 0) > 0;
-  const hasTrending = (data?.trending.length ?? 0) > 0;
-
-  if (!hasRecent && !hasTrending && !devMode) return null;
+  if (!hasRecent && !devMode) return null;
 
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
-  const trendingQuestions = data?.trending.filter(f => f.fileType === 'question') ?? [];
-  const trendingDashboards = data?.trending.filter(f => f.fileType === 'dashboard') ?? [];
 
   return (
     <VStack gap={4} align="stretch">
@@ -287,7 +283,7 @@ export function FeedContent() {
           <Box
             as="button"
             aria-label="Re-generate summary"
-            onClick={() => fetchSummary([...data.recent, ...data.trending])}
+            onClick={() => fetchSummary(data.recent)}
             display="inline-flex"
             alignItems="center"
             gap={1}
@@ -372,25 +368,6 @@ export function FeedContent() {
         </>
       )}
 
-      {/* Trending */}
-      {hasTrending && (
-        <>
-          <HStack gap={2}>
-            <Box flex="1" h="1px" bg="border.default" />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
-              Trending in org
-            </Text>
-          </HStack>
-          <VStack gap={1.5} align="stretch">
-            {trendingDashboards.slice(0, 3).map(file => (
-              <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
-            ))}
-            {trendingQuestions.slice(0, 1).map(file => (
-              <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
-            ))}
-          </VStack>
-        </>
-      )}
     </VStack>
   );
 }

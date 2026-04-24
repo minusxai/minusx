@@ -381,23 +381,3 @@ export async function getRelevantFiles(
     return [];
   }
 }
-
-/**
- * Same as getRelevantFiles but across all users in the org.
- * Returns up to `perType` results per file type (question, dashboard).
- * Never throws — returns empty array on error.
- */
-export async function getPopularFiles(
-  days: number = 7,
-  perType: number = 3,
-): Promise<RecentFile[]> {
-  try {
-    const db = await getAnalyticsDb();
-    const rows = await runQuery<Record<string, unknown>>(db, RELEVANT_ORG_SQL, [days, perType]);
-    return parseRelevantRows(rows);
-  } catch (err) {
-    console.error('[analytics] getPopularFiles failed:', err);
-    return [];
-  }
-}
-
