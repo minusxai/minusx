@@ -1,7 +1,7 @@
 import 'server-only';
 import { AppEvents } from './events';
 import { appEventRegistry } from './registry';
-import { trackFileEvent, trackLLMCallEvents, trackQueryExecutionEvent } from '@/lib/analytics/file-analytics.server';
+import { FileEventType, trackFileEvent, trackLLMCallEvents, trackQueryExecutionEvent } from '@/lib/analytics/file-analytics.server';
 import { notifyErrorEvent } from '@/lib/messaging/error-notifier';
 import { notifyAppEvent } from '@/lib/messaging/app-events-notifier';
 
@@ -11,13 +11,13 @@ export { appEventRegistry, AppEventRegistry } from './registry';
 
 // Register handlers — runs once when this module is first imported.
 // To add a new handler (Slack, Sentry, etc.), add another subscribe() call here.
-appEventRegistry.subscribe(AppEvents.FILE_CREATED,             p => trackFileEvent({ eventType: 'created',           ...p }));
-appEventRegistry.subscribe(AppEvents.FILE_VIEWED,              p => trackFileEvent({ eventType: 'read_direct',       ...p }));
-appEventRegistry.subscribe(AppEvents.FILE_VIEWED_AS_REFERENCE, p => trackFileEvent({ eventType: 'read_as_reference', ...p }));
-appEventRegistry.subscribe(AppEvents.FILE_UPDATED,             p => trackFileEvent({ eventType: 'updated',           ...p }));
-appEventRegistry.subscribe(AppEvents.FILE_DELETED,             p => trackFileEvent({ eventType: 'deleted',           ...p }));
-appEventRegistry.subscribe(AppEvents.LLM_CALL,                 p => trackLLMCallEvents(p.llmCalls, p.conversationId, p.userId!, p.userEmail!, p.userRole!));
-appEventRegistry.subscribe(AppEvents.QUERY_EXECUTED,           p => trackQueryExecutionEvent({ queryHash: p.queryHash, databaseName: p.databaseName, durationMs: p.durationMs, rowCount: p.rowCount, wasCacheHit: p.wasCacheHit, userEmail: p.userEmail ?? null }));
+appEventRegistry.subscribe(AppEvents.FILE_CREATED,             p => trackFileEvent({ eventType: FileEventType.CREATED,           fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId }));
+appEventRegistry.subscribe(AppEvents.FILE_VIEWED,              p => trackFileEvent({ eventType: FileEventType.READ_DIRECT,       fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId }));
+appEventRegistry.subscribe(AppEvents.FILE_VIEWED_AS_REFERENCE, p => trackFileEvent({ eventType: FileEventType.READ_AS_REFERENCE, fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId, referencedByFileId: p.referencedByFileId }));
+appEventRegistry.subscribe(AppEvents.FILE_UPDATED,             p => trackFileEvent({ eventType: FileEventType.UPDATED,           fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId }));
+appEventRegistry.subscribe(AppEvents.FILE_DELETED,             p => trackFileEvent({ eventType: FileEventType.DELETED,           fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId }));
+appEventRegistry.subscribe(AppEvents.LLM_CALL,                 p => trackLLMCallEvents(p.llmCalls, p.conversationId, p.userId ?? null));
+appEventRegistry.subscribe(AppEvents.QUERY_EXECUTED,           p => trackQueryExecutionEvent({ queryHash: p.queryHash, query: p.query, params: p.params, schemaContext: p.schemaContext, databaseName: p.databaseName, durationMs: p.durationMs, rowCount: p.rowCount, colCount: p.colCount, wasCacheHit: p.wasCacheHit, error: p.error, userId: p.userId }));
 appEventRegistry.subscribe(AppEvents.ERROR,                    p => notifyErrorEvent(p));
 appEventRegistry.subscribe(AppEvents.FILE_CREATED,             p => notifyAppEvent(AppEvents.FILE_CREATED,             p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.FILE_VIEWED,              p => notifyAppEvent(AppEvents.FILE_VIEWED,              p as unknown as Record<string, unknown>));

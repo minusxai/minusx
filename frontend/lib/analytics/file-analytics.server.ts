@@ -1,83 +1,76 @@
 import 'server-only';
-import { getAnalyticsDb, runStatement, runQuery } from './file-analytics.db';
-import { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary, RecentFile } from './file-analytics.types';
+import { getModules } from '@/lib/modules/registry';
+import { FileEventType, insertFileEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
+import type { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
-const INSERT_SQL = `
-INSERT INTO file_events
-  (event_type, file_id, file_type, file_path, file_name, user_id, user_email, user_role, referenced_by_file_id, referenced_by_file_type)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`;
+export { FileEventType } from './file-analytics.db';
+export { insertFileEvent, insertLlmCallEvent, insertQueryExecutionEvent };
 
 /**
- * Track a single file event. Async, never throws — logs errors only.
- * Fire-and-forget: call without await from critical paths.
+ * Track a single file event. Fire-and-forget.
  */
-export async function trackFileEvent(event: FileEvent): Promise<void> {
-  const db = await getAnalyticsDb();
-
-  await runStatement(db, INSERT_SQL, [
-    event.eventType,
-    event.fileId,
-    event.fileType ?? null,
-    event.filePath ?? null,
-    event.fileName ?? null,
-    event.userId ?? null,
-    event.userEmail ?? null,
-    event.userRole ?? null,
-    event.referencedByFileId ?? null,
-    event.referencedByFileType ?? null,
-  ]);
+export function trackFileEvent(event: FileEvent): void {
+  insertFileEvent({
+    eventType: event.eventType,
+    fileId: event.fileId,
+    fileVersion: event.fileVersion ?? null,
+    referencedByFileId: event.referencedByFileId ?? null,
+    userId: event.userId ?? null,
+  });
 }
 
 function toISOOrNull(val: unknown): string | null {
   if (val == null) return null;
-  try { return new Date(val as any).toISOString(); } catch { return null; }
+  try { return new Date(val as string).toISOString(); } catch { return null; }
 }
 
 const AGGREGATION_SQL = `
 SELECT
-  COUNT(*) FILTER (WHERE event_type = 'read_direct') AS "totalViews",
-  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'read_direct') AS "uniqueViewers",
-  COUNT(*) FILTER (WHERE event_type = 'updated') AS "totalEdits",
-  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'updated') AS "uniqueEditors",
-  COUNT(DISTINCT referenced_by_file_id) FILTER (WHERE event_type = 'read_as_reference') AS "usedByFiles",
-  MIN(timestamp) FILTER (WHERE event_type = 'created') AS "createdAt",
-  MAX(timestamp) FILTER (WHERE event_type = 'updated') AS "lastEditedAt"
+  COUNT(*) FILTER (WHERE event_type = ${FileEventType.READ_DIRECT}) AS "totalViews",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = ${FileEventType.READ_DIRECT}) AS "uniqueViewers",
+  COUNT(*) FILTER (WHERE event_type = ${FileEventType.UPDATED}) AS "totalEdits",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = ${FileEventType.UPDATED}) AS "uniqueEditors",
+  COUNT(DISTINCT referenced_by_file_id) FILTER (WHERE event_type = ${FileEventType.READ_AS_REFERENCE}) AS "usedByFiles",
+  MIN(created_at) FILTER (WHERE event_type = ${FileEventType.CREATED}) AS "createdAt",
+  MAX(created_at) FILTER (WHERE event_type = ${FileEventType.UPDATED}) AS "lastEditedAt"
 FROM file_events
-WHERE file_id = ?
+WHERE file_id = $1
 `;
 
 const CREATED_BY_SQL = `
-SELECT user_email FROM file_events
-WHERE file_id = ? AND event_type = 'created'
-ORDER BY id ASC LIMIT 1
+SELECT u.email AS user_email
+FROM file_events fe
+LEFT JOIN users u ON u.id = fe.user_id
+WHERE fe.file_id = $1 AND fe.event_type = ${FileEventType.CREATED}
+ORDER BY fe.id ASC LIMIT 1
 `;
 
 const LAST_EDITED_BY_SQL = `
-SELECT user_email FROM file_events
-WHERE file_id = ? AND event_type = 'updated'
-ORDER BY id DESC LIMIT 1
+SELECT u.email AS user_email
+FROM file_events fe
+LEFT JOIN users u ON u.id = fe.user_id
+WHERE fe.file_id = $1 AND fe.event_type = ${FileEventType.UPDATED}
+ORDER BY fe.id DESC LIMIT 1
 `;
 
 /**
  * Fetch analytics summary for a single file.
- * Returns null if the analytics DB doesn't exist yet or on any error.
- * Never throws.
+ * Returns null on any error. Never throws.
  */
 export async function getFileAnalyticsSummary(
   fileId: number,
 ): Promise<FileAnalyticsSummary | null> {
   try {
-    const db = await getAnalyticsDb();
+    const db = getModules().db;
 
-    const [aggRows, createdByRows, lastEditedByRows] = await Promise.all([
-      runQuery<Record<string, unknown>>(db, AGGREGATION_SQL, [fileId]),
-      runQuery<Record<string, unknown>>(db, CREATED_BY_SQL, [fileId]),
-      runQuery<Record<string, unknown>>(db, LAST_EDITED_BY_SQL, [fileId]),
+    const [aggResult, createdByResult, lastEditedByResult] = await Promise.all([
+      db.exec<Record<string, unknown>>(AGGREGATION_SQL, [fileId]),
+      db.exec<Record<string, unknown>>(CREATED_BY_SQL, [fileId]),
+      db.exec<Record<string, unknown>>(LAST_EDITED_BY_SQL, [fileId]),
     ]);
 
-    const agg = aggRows[0] ?? {};
+    const agg = aggResult.rows[0] ?? {};
     return {
       totalViews: Number(agg['totalViews'] ?? 0),
       uniqueViewers: Number(agg['uniqueViewers'] ?? 0),
@@ -86,8 +79,8 @@ export async function getFileAnalyticsSummary(
       usedByFiles: Number(agg['usedByFiles'] ?? 0),
       createdAt: toISOOrNull(agg['createdAt']),
       lastEditedAt: toISOOrNull(agg['lastEditedAt']),
-      createdBy: (createdByRows[0]?.['user_email'] as string | null | undefined) ?? null,
-      lastEditedBy: (lastEditedByRows[0]?.['user_email'] as string | null | undefined) ?? null,
+      createdBy: (createdByResult.rows[0]?.['user_email'] as string | null | undefined) ?? null,
+      lastEditedBy: (lastEditedByResult.rows[0]?.['user_email'] as string | null | undefined) ?? null,
     };
   } catch {
     return null;
@@ -96,67 +89,70 @@ export async function getFileAnalyticsSummary(
 
 /**
  * Fetch analytics summaries for multiple files in one pass.
- * Returns empty {} if the analytics DB doesn't exist yet or on any error.
- * Never throws.
+ * Returns empty {} on any error. Never throws.
  */
 export async function getFilesAnalyticsSummary(
   fileIds: number[],
 ): Promise<Record<number, FileAnalyticsSummary>> {
   try {
     if (fileIds.length === 0) return {};
-    const db = await getAnalyticsDb();
-
-    const placeholders = fileIds.map(() => '?').join(', ');
+    const db = getModules().db;
 
     const BATCH_AGG_SQL = `
 SELECT
   file_id AS "fileId",
-  COUNT(*) FILTER (WHERE event_type = 'read_direct') AS "totalViews",
-  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'read_direct') AS "uniqueViewers",
-  COUNT(*) FILTER (WHERE event_type = 'updated') AS "totalEdits",
-  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'updated') AS "uniqueEditors",
-  COUNT(DISTINCT referenced_by_file_id) FILTER (WHERE event_type = 'read_as_reference') AS "usedByFiles",
-  MIN(timestamp) FILTER (WHERE event_type = 'created') AS "createdAt",
-  MAX(timestamp) FILTER (WHERE event_type = 'updated') AS "lastEditedAt"
+  COUNT(*) FILTER (WHERE event_type = ${FileEventType.READ_DIRECT}) AS "totalViews",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = ${FileEventType.READ_DIRECT}) AS "uniqueViewers",
+  COUNT(*) FILTER (WHERE event_type = ${FileEventType.UPDATED}) AS "totalEdits",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = ${FileEventType.UPDATED}) AS "uniqueEditors",
+  COUNT(DISTINCT referenced_by_file_id) FILTER (WHERE event_type = ${FileEventType.READ_AS_REFERENCE}) AS "usedByFiles",
+  MIN(created_at) FILTER (WHERE event_type = ${FileEventType.CREATED}) AS "createdAt",
+  MAX(created_at) FILTER (WHERE event_type = ${FileEventType.UPDATED}) AS "lastEditedAt"
 FROM file_events
-WHERE file_id IN (${placeholders})
+WHERE file_id = ANY($1)
 GROUP BY file_id
 `;
 
+    // DISTINCT ON: first (lowest id) user per file for CREATED events
     const BATCH_CREATED_BY_SQL = `
-SELECT file_id AS "fileId", arg_min(user_email, id) AS "createdBy"
-FROM file_events
-WHERE file_id IN (${placeholders}) AND event_type = 'created'
-GROUP BY file_id
+SELECT DISTINCT ON (fe.file_id)
+  fe.file_id AS "fileId",
+  u.email AS "createdBy"
+FROM file_events fe
+LEFT JOIN users u ON u.id = fe.user_id
+WHERE fe.file_id = ANY($1) AND fe.event_type = ${FileEventType.CREATED}
+ORDER BY fe.file_id, fe.id ASC
 `;
 
+    // DISTINCT ON: last (highest id) user per file for UPDATED events
     const BATCH_LAST_EDITED_BY_SQL = `
-SELECT file_id AS "fileId", arg_max(user_email, id) AS "lastEditedBy"
-FROM file_events
-WHERE file_id IN (${placeholders}) AND event_type = 'updated'
-GROUP BY file_id
+SELECT DISTINCT ON (fe.file_id)
+  fe.file_id AS "fileId",
+  u.email AS "lastEditedBy"
+FROM file_events fe
+LEFT JOIN users u ON u.id = fe.user_id
+WHERE fe.file_id = ANY($1) AND fe.event_type = ${FileEventType.UPDATED}
+ORDER BY fe.file_id, fe.id DESC
 `;
 
-    const [aggRows, createdByRows, lastEditedByRows] = await Promise.all([
-      runQuery<Record<string, unknown>>(db, BATCH_AGG_SQL, fileIds),
-      runQuery<Record<string, unknown>>(db, BATCH_CREATED_BY_SQL, fileIds),
-      runQuery<Record<string, unknown>>(db, BATCH_LAST_EDITED_BY_SQL, fileIds),
+    const [aggResult, createdByResult, lastEditedByResult] = await Promise.all([
+      db.exec<Record<string, unknown>>(BATCH_AGG_SQL, [fileIds]),
+      db.exec<Record<string, unknown>>(BATCH_CREATED_BY_SQL, [fileIds]),
+      db.exec<Record<string, unknown>>(BATCH_LAST_EDITED_BY_SQL, [fileIds]),
     ]);
 
-    // Index by fileId
     const createdByMap = new Map<number, string | null>();
-    for (const row of createdByRows) {
+    for (const row of createdByResult.rows) {
       createdByMap.set(Number(row['fileId']), (row['createdBy'] as string | null | undefined) ?? null);
     }
     const lastEditedByMap = new Map<number, string | null>();
-    for (const row of lastEditedByRows) {
+    for (const row of lastEditedByResult.rows) {
       lastEditedByMap.set(Number(row['fileId']), (row['lastEditedBy'] as string | null | undefined) ?? null);
     }
 
     const result: Record<number, FileAnalyticsSummary> = {};
 
-    // Populate from aggregation rows (only files with at least one event)
-    for (const row of aggRows) {
+    for (const row of aggResult.rows) {
       const fid = Number(row['fileId']);
       result[fid] = {
         totalViews: Number(row['totalViews'] ?? 0),
@@ -171,7 +167,6 @@ GROUP BY file_id
       };
     }
 
-    // Fill zero-entries for file IDs with no events at all (GROUP BY omits them)
     const zero: FileAnalyticsSummary = {
       totalViews: 0, uniqueViewers: 0,
       totalEdits: 0, uniqueEditors: 0,
@@ -190,77 +185,65 @@ GROUP BY file_id
   }
 }
 
-const INSERT_QUERY_EXEC_SQL = `
-INSERT INTO query_execution_events
-  (query_hash, connection_name, duration_ms, row_count, was_cache_hit, user_email)
-VALUES (?, ?, ?, ?, ?, ?)
-`;
-
 interface QueryExecutionEvent {
   queryHash: string;
+  query?: string | null;
+  params?: Record<string, unknown> | null;
+  schemaContext?: Array<{ schema: string; table: string; columns: string[] }> | null;
   databaseName: string | null;
   durationMs: number;
   rowCount: number;
+  colCount?: number;
   wasCacheHit: boolean;
-  userEmail: string | null;
+  error?: string | null;
+  userId?: number | null;
 }
 
 /**
- * Track a query execution event (cache hit or real execution). Fire-and-forget; errors logged only.
+ * Track a query execution event. Fire-and-forget; errors logged only.
  */
-export async function trackQueryExecutionEvent(event: QueryExecutionEvent): Promise<void> {
-  try {
-    const db = await getAnalyticsDb();
-    await runStatement(db, INSERT_QUERY_EXEC_SQL, [
-      event.queryHash,
-      event.databaseName ?? null,
-      event.durationMs,
-      event.rowCount,
-      event.wasCacheHit,
-      event.userEmail ?? null,
-    ]);
-  } catch (err) {
-    console.error('[analytics] trackQueryExecutionEvent failed:', err);
-  }
+export function trackQueryExecutionEvent(event: QueryExecutionEvent): void {
+  insertQueryExecutionEvent({
+    queryHash: event.queryHash,
+    query: event.query ?? null,
+    params: event.params ?? null,
+    schemaContext: event.schemaContext ?? null,
+    connectionName: event.databaseName ?? null,
+    durationMs: event.durationMs,
+    rowCount: event.rowCount,
+    colCount: event.colCount ?? 0,
+    wasCacheHit: event.wasCacheHit,
+    error: event.error ?? null,
+    userId: event.userId ?? null,
+  });
 }
 
-const INSERT_LLM_SQL = `
-INSERT INTO llm_call_events
-  (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens, cost, duration_s, finish_reason, trigger, user_id, user_email, user_role)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`;
-
 /**
- * Track LLM call events for a conversation. Fire-and-forget; errors logged but not thrown.
+ * Track LLM call events for a conversation. Fire-and-forget; errors logged only.
  */
-export async function trackLLMCallEvents(
+export function trackLLMCallEvents(
   llmCalls: Record<string, LLMCallDetail>,
   conversationId: number,
-  userId: number,
-  userEmail: string,
-  userRole: string,
-): Promise<void> {
-  const db = await getAnalyticsDb();
-  const inserts = Object.values(llmCalls).map((call) =>
-    runStatement(db, INSERT_LLM_SQL, [
+  userId: number | null,
+): void {
+  for (const call of Object.values(llmCalls)) {
+    insertLlmCallEvent({
       conversationId,
-      call.llm_call_id ?? null,
-      call.model,
-      call.total_tokens,
-      call.prompt_tokens,
-      call.completion_tokens,
-      call.cost,
-      call.duration,
-      call.finish_reason ?? null,
-      call.trigger ?? null,
-      userId,
-      userEmail,
-      userRole,
-    ]).catch((err: unknown) =>
-      console.error('[analytics] trackLLMCallEvents insert failed:', err)
-    )
-  );
-  await Promise.allSettled(inserts);
+      llmCallId: call.llm_call_id ?? null,
+      model: call.model,
+      totalTokens: call.total_tokens,
+      promptTokens: call.prompt_tokens,
+      completionTokens: call.completion_tokens,
+      systemPromptTokens: call.system_prompt_tokens ?? 0,
+      appStateTokens: call.app_state_tokens ?? 0,
+      totalToolCalls: call.total_tool_calls ?? 0,
+      cost: call.cost,
+      durationS: call.duration,
+      finishReason: call.finish_reason ?? null,
+      trigger: call.trigger ?? null,
+      userId: userId ?? null,
+    });
+  }
 }
 
 const CONV_AGG_SQL = `
@@ -270,29 +253,28 @@ SELECT
   SUM(total_tokens) AS tokens,
   SUM(cost) AS cost
 FROM llm_call_events
-WHERE conversation_id = ?
+WHERE conversation_id = $1
 GROUP BY model
 `;
 
 /**
  * Fetch aggregated LLM analytics for a conversation.
- * Returns null if the analytics DB doesn't exist or there are no rows.
+ * Returns null if there are no rows or on any error.
  */
 export async function getConversationAnalytics(
   conversationId: number,
 ): Promise<ConversationAnalyticsSummary | null> {
   try {
-    const db = await getAnalyticsDb();
-    const rows = await runQuery<Record<string, unknown>>(db, CONV_AGG_SQL, [conversationId]);
+    const result = await getModules().db.exec<Record<string, unknown>>(CONV_AGG_SQL, [conversationId]);
 
-    if (rows.length === 0) return null;
+    if (result.rows.length === 0) return null;
 
     const byModel: ConversationAnalyticsSummary['byModel'] = {};
     let totalCalls = 0;
     let totalTokens = 0;
     let totalCost = 0;
 
-    for (const row of rows) {
+    for (const row of result.rows) {
       const model = String(row['model'] ?? '');
       const calls = Number(row['calls'] ?? 0);
       const tokens = Number(row['tokens'] ?? 0);
@@ -306,78 +288,5 @@ export async function getConversationAnalytics(
     return { totalCalls, totalTokens, totalCost, byModel };
   } catch {
     return null;
-  }
-}
-
-/**
- * Scoring: each create/edit event = 10 pts, each unique day with a view in last N days = 1 pt.
- * Returns top `perType` results per file_type (question, dashboard), ranked by score then recency.
- * When userEmail is provided, scopes to that user's events. Otherwise org-wide.
- */
-function buildRelevantFilesSql(scoped: boolean): string {
-  const userFilter = scoped ? 'AND user_email = ?' : '';
-  return `
-WITH scored AS (
-  SELECT
-    file_id AS "fileId",
-    file_type AS "fileType",
-    file_name AS "fileName",
-    file_path AS "filePath",
-    MAX(timestamp) AS "lastVisited",
-    COUNT(*) FILTER (WHERE event_type IN ('created', 'updated')) * 10
-      + COUNT(DISTINCT CAST(timestamp AS DATE)) FILTER (
-          WHERE event_type = 'read_direct'
-          AND timestamp >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')
-        )
-      AS "score"
-  FROM file_events
-  WHERE file_type IN ('question', 'dashboard')
-    ${userFilter}
-  GROUP BY file_id, file_type, file_name, file_path
-  HAVING "score" > 0
-),
-ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY "fileType" ORDER BY "score" DESC, "lastVisited" DESC) AS rn
-  FROM scored
-)
-SELECT "fileId", "fileType", "fileName", "filePath", "lastVisited", "score"
-FROM ranked
-WHERE rn <= ?
-ORDER BY "score" DESC, "lastVisited" DESC
-`;
-}
-
-const RELEVANT_USER_SQL = buildRelevantFilesSql(true);
-const RELEVANT_ORG_SQL = buildRelevantFilesSql(false);
-
-function parseRelevantRows(rows: Record<string, unknown>[]): RecentFile[] {
-  return rows.map(row => ({
-    fileId: Number(row['fileId']),
-    fileType: String(row['fileType'] ?? ''),
-    fileName: String(row['fileName'] ?? ''),
-    filePath: String(row['filePath'] ?? ''),
-    lastVisited: toISOOrNull(row['lastVisited']) ?? '',
-  }));
-}
-
-/**
- * Get the most relevant files for a user based on a combined score:
- * - Each create/edit event = 10 points
- * - Each unique day with a view in the last `days` days = 1 point
- * Returns up to `perType` results per file type (question, dashboard).
- * Never throws — returns empty array on error.
- */
-export async function getRelevantFiles(
-  userEmail: string,
-  days: number = 30,
-  perType: number = 3,
-): Promise<RecentFile[]> {
-  try {
-    const db = await getAnalyticsDb();
-    const rows = await runQuery<Record<string, unknown>>(db, RELEVANT_USER_SQL, [days, userEmail, perType]);
-    return parseRelevantRows(rows);
-  } catch (err) {
-    console.error('[analytics] getRelevantFiles failed:', err);
-    return [];
   }
 }

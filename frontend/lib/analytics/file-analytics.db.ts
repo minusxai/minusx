@@ -1,191 +1,113 @@
 import 'server-only';
-import * as path from 'path';
-import * as fs from 'fs';
-import { DuckDBInstance } from '@duckdb/node-api';
-import { getOrCreateDuckDbInstance } from '@/lib/connections/duckdb-registry';
-import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
+import { getModules } from '@/lib/modules/registry';
+import { headers } from 'next/headers';
+import { FileEventTypeValue } from './file-analytics.types';
 
-// Schema for per-org analytics database
-const SCHEMA_SQL = `
-CREATE SEQUENCE IF NOT EXISTS file_events_id_seq;
+export { FileEventType } from './file-analytics.types';
+export type { FileEventTypeValue } from './file-analytics.types';
 
-CREATE TABLE IF NOT EXISTS file_events (
-  id          BIGINT    DEFAULT nextval('file_events_id_seq') PRIMARY KEY,
-  event_type  VARCHAR   NOT NULL,
-  file_id     INTEGER   NOT NULL,
-  file_type   VARCHAR,
-  file_path   VARCHAR,
-  file_name   VARCHAR,
-  user_id     INTEGER,
-  user_email  VARCHAR,
-  user_role   VARCHAR,
-  referenced_by_file_id   INTEGER,
-  referenced_by_file_type VARCHAR,
-  timestamp   TIMESTAMP NOT NULL DEFAULT current_timestamp
-);
-
-CREATE INDEX IF NOT EXISTS idx_fe_file_id ON file_events(file_id);
-CREATE INDEX IF NOT EXISTS idx_fe_user    ON file_events(user_email);
-CREATE INDEX IF NOT EXISTS idx_fe_ts      ON file_events(timestamp);
-CREATE INDEX IF NOT EXISTS idx_fe_type    ON file_events(event_type, file_id);
-
-CREATE SEQUENCE IF NOT EXISTS llm_call_events_id_seq;
-
-CREATE TABLE IF NOT EXISTS llm_call_events (
-  id                BIGINT    DEFAULT nextval('llm_call_events_id_seq') PRIMARY KEY,
-  conversation_id   INTEGER   NOT NULL,
-  llm_call_id       VARCHAR,
-  model             VARCHAR   NOT NULL,
-  total_tokens      BIGINT    NOT NULL DEFAULT 0,
-  prompt_tokens     BIGINT    NOT NULL DEFAULT 0,
-  completion_tokens BIGINT    NOT NULL DEFAULT 0,
-  cost              FLOAT8    NOT NULL DEFAULT 0,
-  duration_s        FLOAT8    NOT NULL DEFAULT 0,
-  finish_reason     VARCHAR,
-  trigger           VARCHAR,
-  user_id           INTEGER,
-  user_email        VARCHAR,
-  user_role         VARCHAR,
-  timestamp         TIMESTAMP NOT NULL DEFAULT current_timestamp
-);
-
-CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(timestamp);
-
-ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS trigger VARCHAR;
-ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_id INTEGER;
-ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_email VARCHAR;
-ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_role VARCHAR;
-
-CREATE SEQUENCE IF NOT EXISTS query_execution_events_id_seq;
-
-CREATE TABLE IF NOT EXISTS query_execution_events (
-  id            BIGINT    DEFAULT nextval('query_execution_events_id_seq') PRIMARY KEY,
-  query_hash    VARCHAR   NOT NULL,
-  connection_name VARCHAR,
-  duration_ms   INTEGER   NOT NULL DEFAULT 0,
-  row_count     INTEGER   NOT NULL DEFAULT 0,
-  was_cache_hit BOOLEAN   NOT NULL DEFAULT false,
-  user_email    VARCHAR,
-  timestamp     TIMESTAMP NOT NULL DEFAULT current_timestamp
-);
-
-CREATE INDEX IF NOT EXISTS idx_qee_hash ON query_execution_events(query_hash);
-CREATE INDEX IF NOT EXISTS idx_qee_ts   ON query_execution_events(timestamp);
-
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS query_hash    VARCHAR;
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS connection_name VARCHAR;
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS duration_ms   INTEGER;
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS row_count     INTEGER;
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS was_cache_hit BOOLEAN;
-ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS user_email    VARCHAR;
-`;
-
-// Track which absolute paths have already had initSchema run (idempotent guard).
-// Attached to globalThis so HMR module reloads don't reset it — prevents
-// unnecessary WAL deletion + schema re-init on every hot reload in dev.
-// Mutable singleton tracking which DB paths have been initialized this process.
-// Survives HMR via globalThis to prevent WAL deletion on hot reload.
-// eslint-disable-next-line no-restricted-syntax -- intentionally shared mutable state keyed by absolute file path
-const initializedPaths: Set<string> = (globalThis as Record<string, unknown>).__analyticsInitializedPaths as Set<string> ?? ((globalThis as Record<string, unknown>).__analyticsInitializedPaths = new Set<string>()); // eslint-disable-line no-restricted-syntax
-
-// Convert legacy ? placeholders to $1, $2, ... (DuckDB prepared statement syntax)
-function toPositional(sql: string): string {
-  let i = 0;
-  return sql.replace(/\?/g, () => `$${++i}`);
+export interface InsertFileEventParams {
+  eventType: FileEventTypeValue;
+  fileId: number;
+  fileVersion?: number | null;
+  referencedByFileId?: number | null;
+  userId?: number | null;
 }
 
-function getAnalyticsDbDir(): string {
-  // Read at call time (not import time) so tests can override via process.env.ANALYTICS_DB_DIR
-  // eslint-disable-next-line no-restricted-syntax
-  const dir = process.env.ANALYTICS_DB_DIR;
-  if (dir) return dir;
-  return path.join(BASE_DUCKDB_DATA_PATH, 'data', 'analytics');
+export interface InsertLlmCallEventParams {
+  conversationId: number;
+  llmCallId?: string | null;
+  model: string;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  systemPromptTokens?: number;
+  appStateTokens?: number;
+  totalToolCalls?: number;
+  cost: number;
+  durationS: number;
+  finishReason?: string | null;
+  trigger?: string | null;
+  userId?: number | null;
 }
 
-async function initSchema(instance: DuckDBInstance): Promise<void> {
-  const conn = await instance.connect();
+export interface InsertQueryExecutionEventParams {
+  queryHash: string;
+  query?: string | null;
+  params?: Record<string, unknown> | null;
+  schemaContext?: Array<{ schema: string; table: string; columns: string[] }> | null;
+  connectionName?: string | null;
+  durationMs: number;
+  rowCount: number;
+  colCount?: number;
+  wasCacheHit: boolean;
+  error?: string | null;
+  userId?: number | null;
+}
+
+async function getRequestId(): Promise<string | null> {
   try {
-    // Run each statement individually — @duckdb/node-api run() handles one statement at a time
-    for (const stmt of SCHEMA_SQL.split(';').map(s => s.trim()).filter(Boolean)) {
-      await conn.run(stmt);
-    }
-    // Flush WAL to the main DB file so a process kill after this point leaves
-    // no WAL to replay on next startup (avoids ALTER TABLE WAL replay bug in DuckDB).
-    await conn.run('CHECKPOINT');
-  } finally {
-    conn.closeSync();
+    const h = await headers();
+    return h.get('x-request-id');
+  } catch {
+    return null;
   }
 }
 
-/**
- * Check whether the analytics DuckDB file already exists.
- * Used by read-side queries to avoid creating a DB just for a read.
- */
-export function analyticsDbExists(): boolean {
-  const dir = getAnalyticsDbDir();
-  const dbPath = path.join(dir, 'analytics.duckdb');
-  return fs.existsSync(dbPath);
+function fireAndForget(promise: Promise<unknown>): void {
+  promise.catch((err) => console.error('[analytics] insert failed:', err));
 }
 
-/**
- * Returns the shared DuckDBInstance for analytics, creating it on first access.
- * Uses the shared duckdb-registry so the analytics DB and any user-configured
- * DuckDB connection pointing at the same file share a single instance (no lock conflict).
- */
-export async function getAnalyticsDb(): Promise<DuckDBInstance> {
-  const dir = getAnalyticsDbDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const dbPath = path.join(dir, 'analytics.duckdb');
-
-  // Proactively delete stale WAL before the first open in this process.
-  // initSchema always ends with CHECKPOINT so the WAL is empty after a clean shutdown.
-  // After an unclean shutdown the WAL may contain a few unsaved analytics events — acceptable loss.
-  // The duckdb-registry already handles the reactive case (deletes WAL on open error + retries),
-  // but proactive deletion avoids paying the cost of a failed open attempt.
-  if (!initializedPaths.has(dbPath)) {
-    const walPath = `${dbPath}.wal`;
-    if (fs.existsSync(walPath)) {
-      try { fs.unlinkSync(walPath); } catch { /* race with another request or already deleted */ }
-    }
-  }
-
-  const instance = await getOrCreateDuckDbInstance(dbPath);
-
-  // Run schema init once per path (all CREATE IF NOT EXISTS — safe to repeat, but skip for perf)
-  if (!initializedPaths.has(dbPath)) {
-    await initSchema(instance);
-    initializedPaths.add(dbPath);
-  }
-
-  return instance;
+export function insertFileEvent(p: InsertFileEventParams): void {
+  fireAndForget((async () => {
+    const requestId = await getRequestId();
+    await getModules().db.exec(
+      `INSERT INTO file_events (event_type, file_id, file_version, referenced_by_file_id, user_id, request_id)
+       VALUES ($1, $2, $3, $4, $5, $6::uuid)`,
+      [p.eventType, p.fileId, p.fileVersion ?? null, p.referencedByFileId ?? null, p.userId ?? null, requestId]
+    );
+  })());
 }
 
-/**
- * Run a parameterized write statement (INSERT/UPDATE/DELETE).
- * Creates a short-lived connection and closes it after use.
- */
-export async function runStatement(db: DuckDBInstance, sql: string, params: unknown[]): Promise<void> {
-  const conn = await db.connect();
-  try {
-    await conn.run(toPositional(sql), params as never);
-  } finally {
-    conn.closeSync();
-  }
+export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
+  fireAndForget((async () => {
+    const requestId = await getRequestId();
+    await getModules().db.exec(
+      `INSERT INTO llm_call_events
+         (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens,
+          system_prompt_tokens, app_state_tokens, total_tool_calls,
+          cost, duration_s, finish_reason, trigger, user_id, request_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::uuid)`,
+      [
+        p.conversationId, p.llmCallId ?? null, p.model,
+        p.totalTokens, p.promptTokens, p.completionTokens,
+        p.systemPromptTokens ?? 0, p.appStateTokens ?? 0, p.totalToolCalls ?? 0,
+        p.cost, p.durationS, p.finishReason ?? null, p.trigger ?? null,
+        p.userId ?? null, requestId,
+      ]
+    );
+  })());
 }
 
-/**
- * Run a parameterized read query and return all rows as plain JS objects.
- */
-export async function runQuery<T = Record<string, unknown>>(db: DuckDBInstance, sql: string, params: unknown[]): Promise<T[]> {
-  const conn = await db.connect();
-  try {
-    const result = await conn.run(toPositional(sql), params as never);
-    return await result.getRowObjectsJS() as T[];
-  } finally {
-    conn.closeSync();
-  }
+export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): void {
+  fireAndForget((async () => {
+    const requestId = await getRequestId();
+    await getModules().db.exec(
+      `INSERT INTO query_execution_events
+         (query_hash, query, params, schema_context, connection_name,
+          duration_ms, row_count, col_count, was_cache_hit, error, user_id, request_id)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12::uuid)`,
+      [
+        p.queryHash,
+        p.query ?? null,
+        p.params ? JSON.stringify(p.params) : null,
+        p.schemaContext ? JSON.stringify(p.schemaContext) : null,
+        p.connectionName ?? null,
+        p.durationMs, p.rowCount, p.colCount ?? 0, p.wasCacheHit,
+        p.error ?? null,
+        p.userId ?? null,
+        requestId,
+      ]
+    );
+  })());
 }

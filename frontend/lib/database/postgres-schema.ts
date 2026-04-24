@@ -209,4 +209,65 @@ export const POSTGRES_SCHEMA = `
   FOR EACH ROW
   EXECUTE FUNCTION update_configs_updated_at();
 
+  -- Analytics tables -----------------------------------------------------------
+
+  CREATE TABLE IF NOT EXISTS file_events (
+    id                    BIGSERIAL PRIMARY KEY,
+    event_type            SMALLINT NOT NULL,
+    file_id               INTEGER NOT NULL,
+    file_version          INTEGER,
+    referenced_by_file_id INTEGER,
+    user_id               INTEGER,
+    request_id            UUID,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_fe_file_id ON file_events(file_id);
+  CREATE INDEX IF NOT EXISTS idx_fe_user    ON file_events(user_id);
+  CREATE INDEX IF NOT EXISTS idx_fe_ts      ON file_events(created_at);
+  CREATE INDEX IF NOT EXISTS idx_fe_type    ON file_events(event_type, file_id);
+
+  CREATE TABLE IF NOT EXISTS llm_call_events (
+    id                    BIGSERIAL PRIMARY KEY,
+    conversation_id       INTEGER NOT NULL,
+    llm_call_id           VARCHAR,
+    model                 VARCHAR NOT NULL,
+    total_tokens          BIGINT NOT NULL DEFAULT 0,
+    prompt_tokens         BIGINT NOT NULL DEFAULT 0,
+    completion_tokens     BIGINT NOT NULL DEFAULT 0,
+    system_prompt_tokens  INTEGER NOT NULL DEFAULT 0,
+    app_state_tokens      INTEGER NOT NULL DEFAULT 0,
+    total_tool_calls      INTEGER NOT NULL DEFAULT 0,
+    cost                  FLOAT8 NOT NULL DEFAULT 0,
+    duration_s            FLOAT8 NOT NULL DEFAULT 0,
+    finish_reason         VARCHAR,
+    trigger               VARCHAR,
+    user_id               INTEGER,
+    request_id            UUID,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
+  CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(created_at);
+
+  CREATE TABLE IF NOT EXISTS query_execution_events (
+    id              BIGSERIAL PRIMARY KEY,
+    query_hash      VARCHAR NOT NULL,
+    query           TEXT,
+    params          JSONB,
+    schema_context  JSONB,
+    connection_name VARCHAR,
+    duration_ms     INTEGER NOT NULL DEFAULT 0,
+    row_count       INTEGER NOT NULL DEFAULT 0,
+    col_count       INTEGER NOT NULL DEFAULT 0,
+    was_cache_hit   BOOLEAN NOT NULL DEFAULT false,
+    error           TEXT DEFAULT NULL,
+    user_id         INTEGER,
+    request_id      UUID,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_qee_hash ON query_execution_events(query_hash);
+  CREATE INDEX IF NOT EXISTS idx_qee_ts   ON query_execution_events(created_at);
+
 `;

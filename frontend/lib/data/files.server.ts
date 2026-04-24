@@ -118,13 +118,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
     for (const ref of references) {
       appEventRegistry.publish(AppEvents.FILE_VIEWED_AS_REFERENCE, {
         fileId: ref.id,
+        fileVersion: ref.version,
         fileType: ref.type,
         filePath: ref.path,
         fileName: ref.name,
         userId: user.userId,
         userEmail: user.email,
         userRole: user.role,
-        
+
         mode: user.mode,
         referencedByFileId: file.id,
         referencedByFileType: file.type,
@@ -445,13 +446,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Track created event (fire-and-forget)
     appEventRegistry.publish(AppEvents.FILE_CREATED, {
       fileId: newFile.id,
+      fileVersion: newFile.version,
       fileType: newFile.type,
       filePath: newFile.path,
       fileName: newFile.name,
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      
+
       mode: user.mode,
     });
 
@@ -568,13 +570,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Track updated event (fire-and-forget)
     appEventRegistry.publish(AppEvents.FILE_UPDATED, {
       fileId: id,
+      fileVersion: (existingFile.version ?? 1) + 1,
       fileType: existingFile.type,
       filePath: path,
       fileName: name,
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      
+
       mode: user.mode,
     });
 
@@ -897,13 +900,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     appEventRegistry.publish(AppEvents.FILE_DELETED, {
       fileId: id,
+      fileVersion: file.version,
       fileType: file.type,
       filePath: file.path,
       fileName: file.name,
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      
+
       mode: user.mode,
     });
 

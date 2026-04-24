@@ -8,14 +8,15 @@
 // Mock server-only module (Next.js 13+ server components)
 jest.mock('server-only', () => ({}));
 
-// Prevent native DuckDB binary from loading in any Jest worker.
-// Any import chain reaching file-analytics.db.ts triggers require('duckdb') — a native C++
-// module whose destructor SIGSEGV-crashes the worker process on exit, causing flaky CI failures.
-// Analytics is fire-and-forget; these stubs match real error-path behaviour.
+// Stub analytics module — fire-and-forget; stubs match real error-path behaviour.
 jest.mock('@/lib/analytics/file-analytics.server', () => ({
-  trackFileEvent: jest.fn().mockResolvedValue(undefined),
-  trackLLMCallEvents: jest.fn().mockResolvedValue(undefined),
-  trackQueryExecutionEvent: jest.fn().mockResolvedValue(undefined),
+  FileEventType: { CREATED: 0, READ_DIRECT: 1, READ_AS_REFERENCE: 2, UPDATED: 3, DELETED: 4 },
+  trackFileEvent: jest.fn(),
+  trackLLMCallEvents: jest.fn(),
+  trackQueryExecutionEvent: jest.fn(),
+  insertFileEvent: jest.fn(),
+  insertLlmCallEvent: jest.fn(),
+  insertQueryExecutionEvent: jest.fn(),
   getFileAnalyticsSummary: jest.fn().mockResolvedValue(null),
   getFilesAnalyticsSummary: jest.fn().mockResolvedValue({}),
   getConversationAnalytics: jest.fn().mockResolvedValue(null),

@@ -26,14 +26,14 @@ interface BaseEventPayload {
 }
 
 export interface AppEventPayloads {
-  'file:created':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
-  'file:viewed':              BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
-  'file:viewed_as_reference': BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string; referencedByFileId: number; referencedByFileType?: string };
-  'file:updated':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
-  'file:deleted':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:created':             BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:viewed':              BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:viewed_as_reference': BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string; referencedByFileId: number; referencedByFileType?: string };
+  'file:updated':             BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:deleted':             BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
   'folder:created':           BaseEventPayload & { folderId: number; folderPath: string; folderName: string; userId?: number; userEmail?: string; userRole?: string };
   'llm:call':                 BaseEventPayload & { conversationId: number; llmCalls: Record<string, LLMCallDetail>; userId?: number; userEmail?: string; userRole?: string };
-  'query:executed':           BaseEventPayload & { queryHash: string; databaseName: string | null; durationMs: number; rowCount: number; wasCacheHit: boolean; userEmail?: string | null };
+  'query:executed':           BaseEventPayload & { queryHash: string; query?: string; params?: Record<string, unknown>; schemaContext?: Array<{ schema: string; table: string; columns: string[] }>; databaseName: string | null; durationMs: number; rowCount: number; colCount?: number; wasCacheHit: boolean; error?: string | null; userId?: number; userEmail?: string | null };
   'error':                    BaseEventPayload & { source: string; message: string; mode?: string; error?: unknown; context?: Record<string, unknown> };
   'job:cron_succeeded':       BaseEventPayload & { triggered: number; skipped: number };
   'job:cron_failed':          BaseEventPayload & { triggered: number; skipped: number; failed: number };
