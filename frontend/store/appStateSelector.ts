@@ -105,8 +105,8 @@ export const selectAppState = createSelector(
 );
 
 /**
- * Attaches ui.openModal to appState when a create-question overlay is active.
- * Includes the draft file's current CompressedFileState so the agent can read
+ * Attaches ui.openModal to appState when a question overlay is active (edit or create).
+ * Includes the question's current CompressedFileState so the agent can read
  * its content for oldMatch values without calling ReadFiles.
  */
 export const selectAppStateWithUI = createSelector(
@@ -117,26 +117,25 @@ export const selectAppStateWithUI = createSelector(
   ({ appState, loading }, viewStack, filesState, queryResultsMap): { appState: AppState | null; loading: boolean } => {
     if (!appState) return { appState, loading };
     const top = viewStack[viewStack.length - 1];
-    if (top?.type === 'create-question') {
-      const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
-      const [augmented] = selectAugmentedFiles(partialState, [top.fileId]);
-      const draftFile = augmented ? compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS).fileState : undefined;
+    if (!top) return { appState, loading };
 
-      return {
-        appState: {
-          ...appState,
-          ui: {
-            openModal: {
-              type: 'create-question',
-              fileId: top.fileId,
-              dashboardId: top.dashboardId,
-              ...(draftFile ? { draftFile } : {}),
-            },
+    const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
+    const [augmented] = selectAugmentedFiles(partialState, [top.fileId]);
+    const fileState = augmented ? compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS).fileState : undefined;
+
+    return {
+      appState: {
+        ...appState,
+        ui: {
+          openModal: {
+            type: top.type,
+            fileId: top.fileId,
+            ...(top.type === 'create-question' ? { dashboardId: top.dashboardId } : {}),
+            ...(fileState ? { fileState } : {}),
           },
         },
-        loading,
-      };
-    }
-    return { appState, loading };
+      },
+      loading,
+    };
   }
 );

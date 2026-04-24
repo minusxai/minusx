@@ -22,11 +22,11 @@ export interface FolderState {
  */
 export interface AppStateUI {
   openModal?: {
-    type: 'create-question';
+    type: 'question' | 'create-question';
     fileId: number;
-    dashboardId: number;
-    /** Current state of the draft file — use for oldMatch values when calling EditFile */
-    draftFile?: CompressedFileState;
+    dashboardId?: number;
+    /** Current state of the focused file — use for oldMatch values when calling EditFile */
+    fileState?: CompressedFileState;
   };
 }
 
