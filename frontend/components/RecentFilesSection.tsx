@@ -275,9 +275,21 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       .slice(0, 3)
       .map(f => f.fileId);
 
+    if (questionIds.length === 0) return;
+
     setSummaryLoading(true);
     try {
       const augmented = await readFiles(questionIds, { runQueries: true });
+
+      // Skip summary if no files have actual query results
+      const hasData = augmented.some(aug => {
+        return aug.queryResults?.some(qr => qr.rows && qr.rows.length > 0);
+      });
+      if (!hasData) {
+        setSummaryLoading(false);
+        return;
+      }
+
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
 
       const fullAppState = { files: appState, context: contextDocs || '' };
@@ -350,7 +362,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
         <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing={"0.1em"} textTransform={"uppercase"}>
           {config.branding.agentName}  feed
         </Text>
-        {data && (
+        {data && summary && (
           <Box
             as="button"
             aria-label="Re-generate summary"
@@ -375,8 +387,8 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
         )}
       </HStack>
 
-      {/* Summary */}
-      {(summary || summaryLoading || devMode) && (
+      {/* Summary — only render when there's content to show */}
+      {(summary || (summaryLoading && hasRecent) || (devMode && lastAppStateRef.current)) && (
         <Box>
           {summaryLoading && !summary ? (
             <Text fontSize="xs" color="fg.subtle" fontFamily="mono" fontStyle="italic">
