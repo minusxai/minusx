@@ -39,6 +39,8 @@ npm run dev                # Start dev server (http://localhost:3000)
 npm run validate           # Type check + lint (use this to validate code)
 npm run build              # Production build (slow, use only before deployment)
 npm run lint               # Run ESLint
+npm test                   # Run Jest tests (ALWAYS use this, not npx jest)
+npm test -- <pattern>      # Run specific test files
 npm run import-db          # Initialize database if missing, skip if exists (safe default)
 npm run import-db -- --replace-db=y  # Force replace existing database
 npm run export-db          # Export database to STDOUT
@@ -47,6 +49,8 @@ npm run generate-types     # Regenerate frontend/lib/types.gen.ts from Pydantic 
 ```
 
 **IMPORTANT: Always use `npm run validate` to quickly verify code correctness. Do NOT use `npm run build` for validation - it's too slow and memory-intensive. Only run `npm run build` before deployment.**
+
+**IMPORTANT: Always use `npm test` (not `npx jest`) to run frontend tests. The `npm test` script includes `--experimental-vm-modules` which is required by PGLite's WASM runtime. Running `npx jest` directly will fail with module errors.**
 
 ### Backend (Python FastAPI)
 ```bash
