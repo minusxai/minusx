@@ -187,6 +187,7 @@ ORDER BY fe.file_id, fe.id DESC
 
 interface QueryExecutionEvent {
   queryHash: string;
+  fileId?: number | null;
   query?: string | null;
   params?: Record<string, unknown> | null;
   schemaContext?: Array<{ schema: string; table: string; columns: string[] }> | null;
@@ -205,6 +206,7 @@ interface QueryExecutionEvent {
 export function trackQueryExecutionEvent(event: QueryExecutionEvent): void {
   insertQueryExecutionEvent({
     queryHash: event.queryHash,
+    fileId: event.fileId ?? null,
     query: event.query ?? null,
     params: event.params ?? null,
     schemaContext: event.schemaContext ?? null,

@@ -81,7 +81,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const parseStart = Date.now();
     const body = await request.json();
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
-    const { connection_name, query, parameters, references, parameterTypes, filePath } = body;
+    const { connection_name, query, parameters, references, parameterTypes, filePath, fileId } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
@@ -103,7 +103,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const cached = queryCache.get(serverCacheKey);
     if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, query, params: paramValues as Record<string, unknown>,
+        queryHash, fileId: fileId ?? null, query, params: paramValues as Record<string, unknown>,
         databaseName: connection_name, durationMs: 0,
         rowCount: cached.result.rows.length, colCount: cached.result.columns.length,
         wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
@@ -190,7 +190,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       // Publish analytics event (fire-and-forget via registry)
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, query, params: paramValues as Record<string, unknown>,
+        queryHash, fileId: fileId ?? null, query, params: paramValues as Record<string, unknown>,
         schemaContext: schemaContext ?? undefined,
         databaseName: connection_name, durationMs,
         rowCount: result.rows.length, colCount: result.columns.length,
@@ -207,7 +207,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return NextResponse.json({ success: true, data: rest, finalQuery: rq });
     } catch (execError) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, query, params: paramValues as Record<string, unknown>,
+        queryHash, fileId: fileId ?? null, query, params: paramValues as Record<string, unknown>,
         schemaContext: schemaContext ?? undefined,
         databaseName: connection_name, durationMs: Date.now() - startTime,
         rowCount: 0, colCount: 0, wasCacheHit: false,

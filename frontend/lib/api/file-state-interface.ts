@@ -49,6 +49,8 @@ export interface QueryExecutionParams {
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>;
   /** Path of the question file — used by /api/query to resolve the correct context and validate against its whitelist */
   filePath?: string;
+  /** ID of the question file — stored in query_execution_events for per-file analytics */
+  fileId?: number;
 }
 
 export interface GetQueryResultOptions {

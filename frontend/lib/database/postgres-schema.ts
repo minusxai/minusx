@@ -253,6 +253,7 @@ export const POSTGRES_SCHEMA = `
   CREATE TABLE IF NOT EXISTS query_execution_events (
     id              BIGSERIAL PRIMARY KEY,
     query_hash      VARCHAR NOT NULL,
+    file_id         INTEGER,
     query           TEXT,
     params          JSONB,
     schema_context  JSONB,
@@ -266,8 +267,10 @@ export const POSTGRES_SCHEMA = `
     request_id      UUID,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS file_id INTEGER;
 
-  CREATE INDEX IF NOT EXISTS idx_qee_hash ON query_execution_events(query_hash);
-  CREATE INDEX IF NOT EXISTS idx_qee_ts   ON query_execution_events(created_at);
+  CREATE INDEX IF NOT EXISTS idx_qee_file  ON query_execution_events(file_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_qee_hash  ON query_execution_events(query_hash, created_at);
+  CREATE INDEX IF NOT EXISTS idx_qee_ts    ON query_execution_events(created_at);
 
 `;

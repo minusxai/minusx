@@ -33,6 +33,7 @@ export interface InsertLlmCallEventParams {
 
 export interface InsertQueryExecutionEventParams {
   queryHash: string;
+  fileId?: number | null;
   query?: string | null;
   params?: Record<string, unknown> | null;
   schemaContext?: Array<{ schema: string; table: string; columns: string[] }> | null;
@@ -94,11 +95,12 @@ export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): v
     const requestId = await getRequestId();
     await getModules().db.exec(
       `INSERT INTO query_execution_events
-         (query_hash, query, params, schema_context, connection_name,
+         (query_hash, file_id, query, params, schema_context, connection_name,
           duration_ms, row_count, col_count, was_cache_hit, error, user_id, request_id)
-       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12::uuid)`,
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13::uuid)`,
       [
         p.queryHash,
+        p.fileId ?? null,
         p.query ?? null,
         p.params ? JSON.stringify(p.params) : null,
         p.schemaContext ? JSON.stringify(p.schemaContext) : null,
