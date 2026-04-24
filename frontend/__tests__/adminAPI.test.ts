@@ -371,7 +371,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(55);
+    expect(body.documentsCreated).toBe(68);
 
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const db = await getAdapter();
@@ -380,13 +380,14 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(tutorialResult.rows[0].count).toBe(30);
+    // 30 template docs + 1 user-created question at /tutorial (id=500, preserved)
+    expect(tutorialResult.rows[0].count).toBe(31);
 
     const userFileResult = await db.query<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE id = 500",
       []
     );
-    expect(userFileResult.rows[0].count).toBe(0);
+    expect(userFileResult.rows[0].count).toBe(1); // user-created file is preserved
 
     const rootResult = await db.query<{ id: number; path: string; name: string }>(
       "SELECT id, path, name FROM files WHERE id = 1",
@@ -410,13 +411,22 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(id11Result.rows).toHaveLength(1);
     expect(id11Result.rows[0].path).toBe('/tutorial/top-level-metrics');
 
+    // ids 100/101 are template IDs — after reset they have the correct template paths
     const orgResult = await db.query<{ id: number; path: string }>(
       "SELECT id, path FROM files WHERE id IN (100, 101) ORDER BY id",
       []
     );
     expect(orgResult.rows).toHaveLength(2);
-    expect(orgResult.rows[0]).toMatchObject({ id: 100, path: '/org' });
-    expect(orgResult.rows[1]).toMatchObject({ id: 101, path: '/org/database' });
+    expect(orgResult.rows[0]).toMatchObject({ id: 100, path: '/org/configs/config' });
+    expect(orgResult.rows[1]).toMatchObject({ id: 101, path: '/org/configs/styles' });
+    // /org and /org/database live at ids 103 and 106 in the current template
+    const orgFolderResult = await db.query<{ id: number; path: string }>(
+      "SELECT id, path FROM files WHERE id IN (103, 106) ORDER BY id",
+      []
+    );
+    expect(orgFolderResult.rows).toHaveLength(2);
+    expect(orgFolderResult.rows[0]).toMatchObject({ id: 103, path: '/org' });
+    expect(orgFolderResult.rows[1]).toMatchObject({ id: 106, path: '/org/database' });
   });
 
   it('should deny access to non-admin', async () => {
@@ -435,7 +445,9 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(403);
   });
 
-  it('should delete id < 100 orphan even when path is not under /tutorial', async () => {
+  it('should not delete non-template docs that happen to have id < 1000', async () => {
+    // id=56 is not a template ID — reset-tutorial deletes by explicit template ID list,
+    // so this doc must be left untouched (user-created files are never deleted).
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const now = new Date().toISOString();
     const orphanDb = await getAdapter();
@@ -458,7 +470,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       'SELECT COUNT(*) as count FROM files WHERE id = 56',
       []
     );
-    expect(orphanResult.rows[0].count).toBe(0);
+    expect(orphanResult.rows[0].count).toBe(1); // preserved — not a template ID
 
     const orgResult = await db.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM files WHERE id IN (100, 101)',
@@ -472,14 +484,14 @@ describe('POST /api/admin/reset-tutorial', () => {
     const response1 = await resetTutorialHandler(request1, {} as any);
     expect(response1.status).toBe(200);
     const body1 = await response1.json();
-    expect(body1.documentsCreated).toBe(55);
+    expect(body1.documentsCreated).toBe(68);
 
     const request2 = createResetRequest();
     const response2 = await resetTutorialHandler(request2, {} as any);
     expect(response2.status).toBe(200);
     const body2 = await response2.json();
     expect(body2.success).toBe(true);
-    expect(body2.documentsCreated).toBe(55);
+    expect(body2.documentsCreated).toBe(68);
 
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const db = await getAdapter();
@@ -487,6 +499,6 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(result.rows[0].count).toBe(30);
+    expect(result.rows[0].count).toBe(31); // 30 template + 1 preserved user file (id=500)
   });
 });
