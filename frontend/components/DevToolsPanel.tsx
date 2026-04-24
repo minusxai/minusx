@@ -10,7 +10,8 @@ import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
+import type { ToolCall, DatabaseWithSchema, FileType } from '@/lib/types';
+import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { extractChartEntries } from '@/lib/chart/chart-attachments';
@@ -404,14 +405,111 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
   );
 }
 
+// ─── Analytics Panel ─────────────────────────────────────────────────────────
+
+function StatTile({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <Box p={2} borderRadius="sm" bg="bg.subtle" borderWidth="1px" borderColor="border.default" flex="1" minW="0">
+      <Text fontSize="2xs" color="fg.muted" mb="1">{label}</Text>
+      <Text fontSize="xs" fontWeight="600" color="fg.default" fontFamily="mono">{value}</Text>
+    </Box>
+  );
+}
+
+function ProvenanceRow({ label, email, date }: { label: string; email: string | null | undefined; date: string | null | undefined }) {
+  if (!email && !date) return null;
+  return (
+    <HStack gap={1} flexWrap="wrap">
+      <Text fontSize="2xs" color="fg.muted" whiteSpace="nowrap">{label}:</Text>
+      {email && <Text fontSize="2xs" color="fg.default" fontFamily="mono">{email}</Text>}
+      {date && <Text fontSize="2xs" color="fg.muted">{email ? '·' : ''} {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>}
+    </HStack>
+  );
+}
+
+function fmtNum(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function fmtCost(c: number): string {
+  return c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`;
+}
+
+function FileAnalyticsPanel({ fileId, fileType }: { fileId: number; fileType: FileType }) {
+  const analytics = useAppSelector((state): FileAnalyticsSummary | null | undefined =>
+    state.files.files[fileId]?.analytics
+  );
+  const convAnalytics = useAppSelector((state): ConversationAnalyticsSummary | null | undefined =>
+    state.files.files[fileId]?.conversationAnalytics
+  );
+
+  if (!analytics && !convAnalytics) {
+    return <Text fontSize="2xs" color="fg.muted" fontStyle="italic">No analytics data yet.</Text>;
+  }
+
+  return (
+    <VStack align="stretch" gap={3}>
+
+      {/* File stats */}
+      {analytics && (
+        <>
+          <HStack gap={2} flexWrap="wrap">
+            <StatTile label="Views" value={fmtNum(analytics.totalViews)} />
+            <StatTile label="Unique viewers" value={fmtNum(analytics.uniqueViewers)} />
+          </HStack>
+          <HStack gap={2} flexWrap="wrap">
+            <StatTile label="Edits" value={fmtNum(analytics.totalEdits)} />
+            <StatTile label="Unique editors" value={fmtNum(analytics.uniqueEditors)} />
+          </HStack>
+          {analytics.usedByFiles > 0 && (
+            <StatTile label="Used by files" value={fmtNum(analytics.usedByFiles)} />
+          )}
+
+          {/* Provenance */}
+          <VStack align="stretch" gap={1} pt={1}>
+            <ProvenanceRow label="Created by" email={analytics.createdBy} date={analytics.createdAt} />
+            <ProvenanceRow label="Last edited by" email={analytics.lastEditedBy} date={analytics.lastEditedAt} />
+          </VStack>
+        </>
+      )}
+
+      {/* Conversation LLM breakdown */}
+      {fileType === 'conversation' && convAnalytics && (
+        <>
+          <Box borderTopWidth="1px" borderColor="border.default" pt={2}>
+            <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={2} textTransform="uppercase" letterSpacing="wide">LLM Usage</Text>
+            <HStack gap={2} flexWrap="wrap" mb={2}>
+              <StatTile label="Total calls" value={fmtNum(convAnalytics.totalCalls)} />
+              <StatTile label="Total tokens" value={fmtNum(convAnalytics.totalTokens)} />
+              <StatTile label="Est. cost" value={fmtCost(convAnalytics.totalCost)} />
+            </HStack>
+            {Object.keys(convAnalytics.byModel).length > 0 && (
+              <VStack align="stretch" gap="1">
+                {Object.entries(convAnalytics.byModel).map(([model, stats]) => (
+                  <HStack key={model} justify="space-between" px={2} py={1} borderRadius="sm" bg="bg.subtle" borderWidth="1px" borderColor="border.default">
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.default" flex="1" minW="0" truncate>{model}</Text>
+                    <HStack gap={3}>
+                      <Text fontSize="2xs" color="fg.muted">{fmtNum(stats.tokens)} tok</Text>
+                      <Text fontSize="2xs" color="fg.muted">{fmtNum(stats.calls)} calls</Text>
+                      <Text fontSize="2xs" color="accent.secondary" fontFamily="mono">{fmtCost(stats.cost)}</Text>
+                    </HStack>
+                  </HStack>
+                ))}
+              </VStack>
+            )}
+          </Box>
+        </>
+      )}
+
+    </VStack>
+  );
+}
+
 export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
   const [appStateOpen, setAppStateOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   const fileId = appState?.type === 'file' ? appState.state.fileState.id : undefined;
-  const fileAnalytics = useAppSelector(state =>
-    fileId !== undefined ? state.files.files[fileId]?.analytics : undefined
-  );
 
   return (
     <Box p={4}>
@@ -455,23 +553,10 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
             </HStack>
             {analyticsOpen && (
               <Box px={3} pb={3}>
-                <Box
-                  as="pre"
-                  p={2}
-                  borderRadius="sm"
-                  bg="bg.subtle"
-                  borderWidth="1px"
-                  borderColor="border.default"
-                  fontSize="2xs"
-                  fontFamily="mono"
-                  overflowX="auto"
-                  maxH="300px"
-                  overflowY="auto"
-                  whiteSpace="pre-wrap"
-                  wordBreak="break-all"
-                >
-                  {JSON.stringify(fileAnalytics ?? null, null, 2)}
-                </Box>
+                <FileAnalyticsPanel
+                  fileId={appState.state.fileState.id}
+                  fileType={appState.state.fileState.type}
+                />
               </Box>
             )}
           </Box>
