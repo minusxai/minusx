@@ -55,15 +55,6 @@ function createTestData(userCount: number, docCount: number): { users: InitData[
 }
 
 describe('Import/Export E2E', () => {
-  beforeEach(async () => {
-    const { getModules } = await import('@/lib/modules/registry');
-    await getModules().db.reset?.();
-  });
-
-  afterEach(async () => {
-    const { getModules } = await import('@/lib/modules/registry');
-    await getModules().db.reset?.();
-  });
 
   it('should import and export flat data correctly', async () => {
     const { users, documents } = createTestData(2, 3);

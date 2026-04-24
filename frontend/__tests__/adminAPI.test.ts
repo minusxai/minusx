@@ -90,7 +90,6 @@ function createResetRequest(url = 'http://localhost:3000/api/admin/reset-tutoria
 
 describe('Import/Export API Endpoints', () => {
   beforeEach(async () => {
-    await getModules().db.reset?.();
     cleanupDbFiles();
 
     // Seed test data — atomicImport lazily creates the adapter (with schema) on first exec().
@@ -119,7 +118,6 @@ describe('Import/Export API Endpoints', () => {
   });
 
   afterEach(async () => {
-    await getModules().db.reset?.();
     cleanupDbFiles();
     jest.clearAllMocks();
   });
@@ -297,8 +295,10 @@ describe('Import/Export API Endpoints', () => {
 
 describe('POST /api/admin/reset-tutorial', () => {
   beforeEach(async () => {
-    await getModules().db.reset?.();
     cleanupDbFiles();
+    await getModules().db.exec('DELETE FROM files');
+    await getModules().db.exec('DELETE FROM users');
+    await getModules().db.exec('DELETE FROM configs');
 
     const db = getModules().db;
     const now = new Date().toISOString();
@@ -353,7 +353,6 @@ describe('POST /api/admin/reset-tutorial', () => {
   });
 
   afterEach(async () => {
-    await getModules().db.reset?.();
     cleanupDbFiles();
     jest.clearAllMocks();
   });

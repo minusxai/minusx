@@ -81,8 +81,19 @@ describe('2. Raw PGLite — CREATE SCHEMA behaviour', () => {
 // ─── 3. DBModule.exec routing ─────────────────────────────────────────────────
 
 describe('3. DBModule.exec — routing (no-params + no-semicolon goes to query())', () => {
+  beforeAll(async () => {
+    // Init once — PGlite WASM cannot restart after close(); truncate data between tests instead.
+    await getModules().db.exec<{ one: number }>('SELECT 1 AS one', []);
+  });
+
   beforeEach(async () => {
-    await getModules().db.reset?.();
+    await getModules().db.exec(
+      `DO $$ DECLARE r RECORD; BEGIN
+         FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+           EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE';
+         END LOOP;
+       END $$`
+    );
   });
 
   it('CREATE SCHEMA via DBModule.exec (no params, no semicolon → query())', async () => {

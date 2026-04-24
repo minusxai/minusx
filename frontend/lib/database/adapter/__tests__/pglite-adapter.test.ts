@@ -49,11 +49,21 @@ function makeMockModules(db: DBModule) {
 }
 
 describe('PGLite adapter — Phase 2 spike', () => {
-  beforeEach(async () => {
-    // Nullify the singleton first so init() always creates a fresh in-memory PGLite.
-    await getModules().db.reset?.();
+  beforeAll(async () => {
+    // Single PGlite instance for the whole suite — PGlite WASM cannot be restarted
+    // after close() within the same process, so we init once and truncate between tests.
     registerModules(makeMockModules(new DBModule()));
     await getModules().db.init();
+  });
+
+  beforeEach(async () => {
+    await getModules().db.exec(
+      `DO $$ DECLARE r RECORD; BEGIN
+         FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+           EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE';
+         END LOOP;
+       END $$`
+    );
   });
 
   it('creates and retrieves a file by ID', async () => {

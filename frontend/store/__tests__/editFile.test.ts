@@ -86,7 +86,6 @@ describe('editFile - Question Editing Flow', () => {
   });
 
   beforeEach(async () => {
-    await getModules().db.reset?.();
     await initTestDatabase(dbPath);
 
     const { DocumentDB } = await import('@/lib/database/documents-db');
@@ -347,7 +346,6 @@ describe('editFile - Question content validation', () => {
   });
 
   beforeEach(async () => {
-    await getModules().db.reset?.();
     await initTestDatabase(dbPath);
 
     const { DocumentDB } = await import('@/lib/database/documents-db');
@@ -504,7 +502,6 @@ describe('editFile - Dashboard content validation', () => {
   });
 
   beforeEach(async () => {
-    await getModules().db.reset?.();
     await initTestDatabase(dbPath);
 
     const { DocumentDB } = await import('@/lib/database/documents-db');
