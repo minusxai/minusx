@@ -400,9 +400,10 @@ class PublishAll(Tool):
 
 @register_agent
 class CreateFile(Tool):
-    """Create a new file of any type as a draft (virtual ID, negative number). No page navigation.
+    """Create a new file of any type as a draft. No page navigation.
 
-    Always creates in Redux as a draft. The user reviews and publishes via Publish All.
+    Creates the file immediately with a real positive ID. The file is hidden from folder
+    listings until the user publishes via the Save button or Publish All.
 
     - file_type: any supported type ('question', 'dashboard', 'report', etc.)
     - name: optional display name
@@ -413,7 +414,7 @@ class CreateFile(Tool):
         dashboard: {"description": "My dashboard"}
 
     Returns: {success: true, state: {fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}}
-    The returned id is negative (virtual). Use it with EditFile or EditDashboard immediately.
+    The returned id is a real positive integer. Use it with EditFile or EditDashboard immediately.
     """
 
     def __init__(

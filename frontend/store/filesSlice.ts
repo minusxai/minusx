@@ -972,10 +972,14 @@ export const selectIsDirty = (state: RootState, id: FileId): boolean => {
 /**
  * Get effective file name (with pending metadata changes) (Phase 5)
  */
+export function effectiveName(file: FileState): string {
+  return file.metadataChanges?.name ?? file.name;
+}
+
 export const selectEffectiveName = (state: RootState, id: FileId): string | undefined => {
   const file = state.files.files[id];
   if (!file) return undefined;
-  return file.metadataChanges.name ?? file.name;
+  return effectiveName(file);
 };
 
 /**

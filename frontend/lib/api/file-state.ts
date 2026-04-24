@@ -1008,11 +1008,10 @@ export async function createDraftFile(
     fileName = template.fileName;
     filePath = `${baseFolder}/${template.fileName}`;
   } else {
-    // Template has no name (questions, dashboards, etc.) — generate a random token
-    // for a unique DB path. The UI shows an empty name; the token is replaced when
-    // the user or agent assigns a real name and saves.
+    // Template has no name (questions, dashboards, etc.) — name stays empty,
+    // path uses a random token to guarantee uniqueness in the DB.
     const token = Math.random().toString(36).slice(2, 10);
-    fileName = token;
+    fileName = '';
     filePath = `${baseFolder}/${token}`;
   }
 
@@ -1025,11 +1024,7 @@ export async function createDraftFile(
   });
 
   const file = result.data;
-  // When using a random token, hide it from the UI by showing the template name
-  // (empty string for questions/dashboards). The parent folder is preserved in
-  // file.path so slug computation in setMetadataEdit works correctly on name change.
-  const uiName = name || template.fileName; // '' when neither is set
-  getStore().dispatch(setFile({ file: { ...file, name: uiName }, references: [] }));
+  getStore().dispatch(setFile({ file, references: [] }));
   return file.id;
 }
 
