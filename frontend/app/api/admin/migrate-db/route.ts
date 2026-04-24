@@ -16,7 +16,6 @@ import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } from '@/lib/database/config-db';
 import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } from '@/lib/database/migrations';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
-import { BACKEND_URL } from '@/lib/config';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -85,15 +84,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     await setDataVersion(targetDataVersion);
     await setSchemaVersion(LATEST_SCHEMA_VERSION);
-
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/connections/reinitialize`, { method: 'POST' });
-      if (!response.ok) {
-        console.warn('Warning: Failed to reinitialize Python backend connections');
-      }
-    } catch (error: any) {
-      console.warn(`Warning: Could not reach Python backend to reinitialize connections: ${error.message}`);
-    }
 
     const isEmptyMigration = force && appliedMigrations.length === 0;
     const successMessage = isEmptyMigration
