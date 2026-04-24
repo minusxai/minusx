@@ -68,7 +68,7 @@ import { setNavigation } from '@/store/navigationSlice';
 import { setUser } from '@/store/authSlice';
 import {
   createConversation, sendMessage, selectConversation,
-  generateVirtualConversationId, setUserInputResult,
+  setUserInputResult,
 } from '@/store/chatSlice';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { publishAll } from '@/lib/api/file-state';
@@ -372,7 +372,7 @@ describe('Explore page: submit question → agent responds → see answer → to
         { store: testStore }
       );
 
-      const CONV_ID = generateVirtualConversationId();
+      const CONV_ID = 9001; // Real positive ID (no more virtual IDs)
       testStore.dispatch(
         createConversation({
           conversationID: CONV_ID,

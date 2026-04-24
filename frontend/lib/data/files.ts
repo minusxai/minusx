@@ -237,6 +237,17 @@ class FilesDataLayerClient implements IFilesDataLayer {
     return json.data as MoveFileResult;
   }
 
+  async appendJsonArray(
+    _id: number,
+    _entries: any[],
+    _expectedLength: number | undefined,
+    _user?: EffectiveUser,
+    _arrayPath?: string,
+    _metaPath?: string | null
+  ): Promise<boolean> {
+    throw new Error('appendJsonArray is a server-only operation');
+  }
+
   async batchMoveFiles(inputs: MoveFileInput[], user?: EffectiveUser): Promise<MoveFileResult[]> {
     const res = await fetch(`${API_BASE}/api/files/batch-move`, {
       method: 'POST',

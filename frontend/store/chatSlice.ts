@@ -3,17 +3,6 @@ import type { RootState } from './store';
 import type { UserInput } from '@/lib/api/user-input-exception';
 import type { MessageDebugInfo } from '@/lib/types';
 
-// Module-level counter — resets on page reload, which is safe: virtual IDs are never persisted.
-let _virtualConversationIdCounter = 0;
-
-/**
- * Generate a virtual ID for a new temporary conversation (namespace 1.1).
- * Always 10 digits: -(1_100_000_000 + counter)
- */
-export function generateVirtualConversationId(): number {
-  return -(1_100_000_000 + (++_virtualConversationIdCounter));
-}
-
 // Types
 interface ToolCall {
   id: string;
@@ -61,17 +50,11 @@ interface PendingToolCall {
 }
 
 // Streaming event types matching backend
-type StreamingEvent =
-  | {
-      conversationID: number;
-      type: 'StreamedContent' | 'StreamedThinking' | 'ToolCreated' | 'ToolCompleted';
-      payload: { chunk: string } | ToolCall | CompletedToolCall;
-    }
-  | {
-      conversationID: number;
-      type: 'NewConversation';
-      payload: { name: string };
-    };
+type StreamingEvent = {
+  conversationID: number;
+  type: 'StreamedContent' | 'StreamedThinking' | 'ToolCreated' | 'ToolCompleted';
+  payload: { chunk: string } | ToolCall | CompletedToolCall;
+};
 
 export interface Conversation {
   _id: string;             // Stable internal ID (never changes, used for AbortController tracking)
@@ -405,40 +388,6 @@ const chatSlice = createSlice({
     addStreamingMessage(state, action: PayloadAction<StreamingEvent>) {
       const { conversationID, type, payload } = action.payload;
 
-      // Handle NewConversation event (create real conversation, link from temp)
-      if (type === 'NewConversation') {
-        // Find latest temp conversation (most negative ID = most recent)
-        // Since we use negative IDs, newer temps have smaller values (more negative)
-        const tempIDs = Object.keys(state.conversations)
-          .map(Number)
-          .filter(id => id < 0);
-
-        if (tempIDs.length === 0) {
-          console.warn('[NewConversation] No temp conversation found');
-          return;
-        }
-
-        const tempID = Math.min(...tempIDs);  // Most negative = most recent
-
-        const tempConv = state.conversations[tempID];
-
-        // Create real conversation (copy from temp, preserve _id)
-        state.conversations[conversationID] = {
-          ...tempConv,
-          _id: tempConv._id,  // IMPORTANT: Preserve stable _id across fork
-          conversationID,
-          forkedConversationID: undefined, // Real conversations don't have this
-          streamedCompletedToolCalls: [], // Explicitly initialize for new conversation
-          queuedMessages: tempConv.queuedMessages || [],
-        };
-
-        // Mark temp conversation as forked to real one
-        tempConv.forkedConversationID = conversationID;
-
-        console.log(`[NewConversation] Created real conversation ${conversationID}, linked from temp ${tempID}`);
-        return;
-      }
-
       const conv = state.conversations[conversationID];
       if (!conv) return;
 
@@ -685,30 +634,6 @@ export const selectActiveConversation = createSelector(
     }
 
     return id;
-  }
-);
-
-// Memoized selector for new (temp) conversations — avoids Object.keys scan on every Redux change.
-// Follows the fork chain: when a temp conversation (-5) forks to a real one (123), returns
-// conversations[123] so that ChatInterface can navigate to /explore/123.
-export const selectActiveTempConversation = createSelector(
-  [(state: RootState) => state.chat.conversations],
-  (conversations): Conversation | undefined => {
-    const tempIds = Object.keys(conversations)
-      .map(Number)
-      .filter(id => id < 0)
-      .sort((a, b) => b - a);
-    for (const tempId of tempIds) {
-      const conv = conversations[tempId];
-      if (!conv?.active) continue;
-      // Follow the fork chain to get the real (current) conversation
-      let current = conv;
-      while (current.forkedConversationID) {
-        current = conversations[current.forkedConversationID] || current;
-      }
-      return current;
-    }
-    return undefined;
   }
 );
 

@@ -6,7 +6,7 @@ import { LuSparkles, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 're
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { setNavigation } from '@/store/navigationSlice';
 import { createDraftFile, publishAll, deleteFile } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
@@ -136,7 +136,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     wasGeneratingRef.current = isGenerating;
   }, [isGenerating, hasStarted]);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (hasStarted || !virtualDashboardId) return;
     setHasStarted(true);
 
@@ -158,8 +158,23 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       tables: s.tables.map(t => t.table)
     }));
 
+    const message = [
+      DASHBOARD_PROMPT,
+      `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
+      `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
+      staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
+      userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const initRes = await fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstMessage: message }),
+    });
+    const { conversationID: newConvId } = await initRes.json();
+
     dispatch(createConversation({
-      conversationID: generateVirtualConversationId(),
+      conversationID: newConvId,
       agent: 'OnboardingDashboardAgent',
       agent_args: {
         connection_id: connectionName,
@@ -169,13 +184,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         context: contextDocs || '',
         app_state: appState,
       },
-      message: [
-        DASHBOARD_PROMPT,
-        `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
-        `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
-        staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
-        userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
-      ].filter(Boolean).join('\n\n'),
+      message,
     }));
 
     setIsGenerating(true);

@@ -14,8 +14,8 @@ export interface DbRow {
   name: string;
   path: string;
   type: 'question' | 'folder' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'session' | 'config';
-  content: string;
-  file_references: string;
+  content: any;           // JSONB — driver returns parsed JS object
+  file_references: any[]; // JSONB — driver returns parsed JS array
   created_at: string;
   updated_at: string;
   version: number;
@@ -31,8 +31,8 @@ function rowToDbFile(row: DbRow, includeContent: boolean = true): DbFile {
     name: row.name,
     path: row.path,
     type: row.type,
-    references: JSON.parse(row.file_references || '[]'),
-    content: includeContent ? JSON.parse(row.content) : null,
+    references: row.file_references || [],
+    content: includeContent ? row.content : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     version: row.version ?? 1,
@@ -64,7 +64,7 @@ export class DocumentDB {
       SELECT next_id, $1, $2, $3, $4, $5, 1, $6, true, null, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, JSON.stringify(content), JSON.stringify(references), editId ?? null]);
+    `, [name, path, type, content, references, editId ?? null]);
 
     return result.rows[0].id;
   }
@@ -206,7 +206,7 @@ export class DocumentDB {
 
     await db.exec(
       'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, version = $5, last_edit_id = $6, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
-      [name, path, JSON.stringify(content), JSON.stringify(references), (currentRow.version ?? 1) + 1, editId ?? null, id]
+      [name, path, content, references, (currentRow.version ?? 1) + 1, editId ?? null, id]
     );
 
     const updated = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
@@ -319,6 +319,62 @@ export class DocumentDB {
     const result = await getModules().db.exec(
       'UPDATE files SET path = $1 WHERE id = $2',
       [newPath, id]
+    );
+    return result.rowCount > 0;
+  }
+
+  /**
+   * Atomically append entries to a nested JSON array inside `content`.
+   *
+   * `arrayPath`  – dot-separated path to the array (e.g. `'log'` or `'data.items'`).
+   *               Translated to Postgres `{}` syntax for `jsonb_set`.
+   * `metaPath`   – optional dot-separated path to a string field updated to the current
+   *               ISO timestamp (e.g. `'metadata.updatedAt'`). Pass null to skip.
+   * `expectedLength` – current array length for optimistic concurrency check; the row
+   *               is only updated when the current array length matches. Pass undefined
+   *               to skip the check and always append.
+   *
+   * Returns true when the row was updated, false on conflict (length mismatch).
+   */
+  static async appendJsonArray(
+    id: number,
+    entries: any[],
+    expectedLength: number | undefined,
+    arrayPath: string = 'log',
+    metaPath: string | null = 'metadata.updatedAt'
+  ): Promise<boolean> {
+    const db = getModules().db;
+
+    const pgArrayPath  = `{${arrayPath.replace(/\./g, ',')}}`;
+    const arrayNavSQL  = arrayPath.split('.').map(k => `-> '${k}'`).join(' ');
+
+    const params: any[] = [id, JSON.stringify(entries), new Date().toISOString()];
+    const lengthCondition = expectedLength !== undefined
+      ? `AND jsonb_array_length(content ${arrayNavSQL}) = $${params.push(expectedLength)}`
+      : '';
+
+    let contentUpdate: string;
+    if (metaPath) {
+      const pgMetaPath = `{${metaPath.replace(/\./g, ',')}}`;
+      contentUpdate = `jsonb_set(
+           jsonb_set(content, '${pgArrayPath}',
+             (content ${arrayNavSQL}) || $2::jsonb),
+           '${pgMetaPath}', to_jsonb($3::text)
+         )`;
+    } else {
+      contentUpdate = `jsonb_set(content, '${pgArrayPath}',
+           (content ${arrayNavSQL}) || $2::jsonb)`;
+    }
+
+    const result = await db.exec(
+      `UPDATE files
+       SET
+         content = ${contentUpdate},
+         version = version + 1,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       ${lengthCondition}`,
+      params
     );
     return result.rowCount > 0;
   }

@@ -101,8 +101,8 @@ export const POSTGRES_SCHEMA = `
     name TEXT NOT NULL,
     path TEXT NOT NULL,
     type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    file_references TEXT NOT NULL DEFAULT '[]',
+    content JSONB NOT NULL,
+    file_references JSONB NOT NULL DEFAULT '[]',
     version INTEGER NOT NULL DEFAULT 1,
     last_edit_id TEXT,
     draft BOOLEAN NOT NULL DEFAULT FALSE,
@@ -120,7 +120,7 @@ export const POSTGRES_SCHEMA = `
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'file_references'
     ) THEN
-      ALTER TABLE files ADD COLUMN file_references TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE files ADD COLUMN file_references JSONB NOT NULL DEFAULT '[]';
     END IF;
   END $$;
 

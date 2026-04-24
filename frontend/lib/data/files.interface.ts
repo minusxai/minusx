@@ -79,4 +79,19 @@ export interface IFilesDataLayer {
    */
   batchMoveFiles(inputs: MoveFileInput[], user: EffectiveUser): Promise<MoveFileResult[]>;
 
+  /**
+   * Atomically append entries to a nested JSON array inside `content`.
+   * Uses optimistic concurrency: only updates when the array length equals `expectedLength`
+   * (pass `undefined` to skip the check). `arrayPath` and `metaPath` use dot notation.
+   * Returns true on success, false on conflict. Server-only — requires direct DB access.
+   */
+  appendJsonArray(
+    id: number,
+    entries: any[],
+    expectedLength: number | undefined,
+    user: EffectiveUser,
+    arrayPath?: string,
+    metaPath?: string | null
+  ): Promise<boolean>;
+
 }

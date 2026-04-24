@@ -948,6 +948,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
     return results;
   }
+
+  async appendJsonArray(
+    id: number,
+    entries: any[],
+    expectedLength: number | undefined,
+    _user: EffectiveUser,
+    arrayPath?: string,
+    metaPath?: string | null
+  ): Promise<boolean> {
+    return DocumentDB.appendJsonArray(id, entries, expectedLength, arrayPath, metaPath);
+  }
 }
 
 // Export singleton instance - PREFER using this

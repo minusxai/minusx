@@ -10,7 +10,7 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -155,18 +155,41 @@ export default function ChatInterface({
     return conv;
   }, [providedConversationId, loadedConversation, conversations]);
 
-  // Case 2: new conversation — memoized selector avoids Object.keys scan on every Redux change
-  const activeTempConversation = useAppSelector(selectActiveTempConversation);
+  // Case 2: new conversation — find the active conversation (real positive ID from /api/chat/init)
+  const activeConversationId = useAppSelector(selectActiveConversation);
+  const activeConversation = useAppSelector(state =>
+    activeConversationId ? state.chat.conversations[activeConversationId] : undefined
+  );
 
   // When loading an existing conversation (providedConversationId set), don't fall back to
-  // activeTempConversation — doing so causes the fork-follow useEffect to redirect back to
+  // activeConversation — doing so causes the fork-follow useEffect to redirect back to
   // the most recent conversation before the target conversation finishes loading.
   const conversation = providedConversationId
     ? forkFollowedConversation
-    : (forkFollowedConversation ?? activeTempConversation);
+    : (forkFollowedConversation ?? activeConversation);
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // Pre-create a conversation on explore page mount so sends go directly to the existing path
+  useEffect(() => {
+    if (!isNewConversation) return;
+    if (activeConversationId) return; // already have one
+    let cancelled = false;
+    fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !data.conversationID) return;
+        dispatch(createConversation({ conversationID: data.conversationID, agent: 'AnalystAgent' }));
+      })
+      .catch(err => console.error('[ChatInterface] Failed to pre-create conversation:', err));
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNewConversation, activeConversationId]);
 
   // Determine if this conversation originated from a file page or Slack
   const parentPageInfo = useMemo(() => {
@@ -421,69 +444,63 @@ export default function ChatInterface({
     // Question: 1 image. Dashboard: one image per chart with data.
     // Show preparing indicator so user knows something is happening after pressing send.
     setIsPreparing(true);
-    const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
-    setIsPreparing(false);
-    const allAttachments = [...attachments, ...fileAttachments];
+    let allAttachments: Attachment[];
+    let convId = conversationID;
+    try {
+      const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
+      allAttachments = [...attachments, ...fileAttachments];
 
-    // For new conversations (no conversationID yet)
-    if (isNewConversation && !conversationID) {
-      // Create conversation with temp ID (negative) and initial message
-      dispatch(createConversation({
-        conversationID: generateVirtualConversationId(),
-        agent: 'AnalystAgent',
-        agent_args: {
-          connection_id: selectedDatabase || null,
-          context_path: contextPath || null,
-          context_version: contextVersion ?? null,
-          schema: simplifiedSchema,
-          context: markdown || '',
-          app_state: appState,
-          city: config.city,
-          agent_name: config.branding.agentName || 'MinusX',
-          unrestricted_mode: unrestrictedMode,
-          ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
-          ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-        },
-        message: userInput,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }));
-
-      // Navigation will happen via useEffect when conversation forks to real ID
+      // Resolve conversation — normally pre-created on mount, but fall back to inline creation
+      // if the user sends before the pre-creation fetch completes (rare race condition).
+      if (!convId) {
+        const initRes = await fetch('/api/chat/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firstMessage: userInput }),
+        });
+        const { conversationID: newId } = await initRes.json();
+        if (!newId) throw new Error('Failed to get conversation ID from server');
+        convId = newId as number;
+        dispatch(createConversation({ conversationID: convId, agent: 'AnalystAgent' }));
+      }
+    } catch {
+      setLocalError({ message: 'Failed to prepare message', code: 'UNKNOWN' });
+      setIsPreparing(false);
       return;
     }
+    setIsPreparing(false);
 
-    // Existing conversation - normal flow
-    if (conversationID) {
-      // Clear any leftover queued messages (e.g., after interrupt)
-      if (conversation?.queuedMessages?.length) {
-        dispatch(clearQueuedMessages({ conversationID }));
-      }
+    if (!convId) return; // should not happen — caught above or pre-created
 
-      // Update agent_args with fresh appState before sending message
-      dispatch(updateAgentArgs({
-        conversationID,
-        agent_args: {
-          connection_id: database?.databaseName || null,
-          context_path: contextPath || null,
-          context_version: contextVersion ?? null,
-          schema: simplifiedSchema,
-          context: markdown || '',
-          app_state: appState,
-          city: config.city,
-          agent_name: config.branding.agentName || 'MinusX',
-          unrestricted_mode: unrestrictedMode,
-          ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
-          ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-        }
-      }));
-
-      // Send message
-      dispatch(sendMessage({
-        conversationID,
-        message: userInput,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }));
+    // Clear any leftover queued messages (e.g., after interrupt)
+    if (conversation?.queuedMessages?.length) {
+      dispatch(clearQueuedMessages({ conversationID: convId }));
     }
+
+    // Update agent_args with fresh appState before sending message
+    dispatch(updateAgentArgs({
+      conversationID: convId,
+      agent_args: {
+        connection_id: database?.databaseName || selectedDatabase || null,
+        context_path: contextPath || null,
+        context_version: contextVersion ?? null,
+        schema: simplifiedSchema,
+        context: markdown || '',
+        app_state: appState,
+        city: config.city,
+        agent_name: config.branding.agentName || 'MinusX',
+        unrestricted_mode: unrestrictedMode,
+        ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
+        ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
+      }
+    }));
+
+    // Send message
+    dispatch(sendMessage({
+      conversationID: convId,
+      message: userInput,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    }));
   };
 
   // Navigate when conversation forks (new conversation gets real ID, or conflict resolution)
@@ -493,8 +510,8 @@ export default function ChatInterface({
     // Don't navigate if conversation is inactive (was cleared via "New Chat")
     if (!conversation.active) return;
 
-    // For new conversations: navigate when we get a real ID (positive)
-    if (isNewConversation && conversationID && conversationID > 0) {
+    // For new conversations: navigate when a real conversation with messages exists
+    if (isNewConversation && conversationID && conversationID > 0 && allMessages.length > 0) {
       console.log("[ChatInterface] New conversation created with ID:", conversationID);
       router.push(`/explore/${conversationID}`);
       return;
@@ -505,7 +522,7 @@ export default function ChatInterface({
       console.log("[ChatInterface] Conversation forked to:", conversationID);
       router.push(`/explore/${conversationID}`);
     }
-  }, [conversationID, isNewConversation, providedConversationId, container, router, conversation]);
+  }, [conversationID, isNewConversation, providedConversationId, container, router, conversation, allMessages.length]);
 
 
   // Handler for setting conversation as active

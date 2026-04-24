@@ -10,7 +10,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -314,7 +314,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
 
   /** Show inline agent activity feed and kick off the agent */
   const reduxState = useAppSelector(state => state);
-  const handleAgentDescribe = useCallback(() => {
+  const handleAgentDescribe = useCallback(async () => {
     if (!realFileId) {
       setError('Context file is still loading. Please wait a moment.');
       return;
@@ -348,9 +348,16 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         : '',
     ].filter(Boolean).join('\n\n');
 
+    const initRes = await fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstMessage: agentMessage }),
+    });
+    const { conversationID: newConvId } = await initRes.json();
+
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
-      conversationID: generateVirtualConversationId(),
+      conversationID: newConvId,
       agent: 'OnboardingContextAgent',
       agent_args: {
         connection_id: connectionName,

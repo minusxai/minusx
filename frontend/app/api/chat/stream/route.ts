@@ -29,9 +29,7 @@ type PythonStreamingEvent = {
 };
 
 // Frontend events (with conversationID added by Next.js)
-type StreamingEvent =
-  | (PythonStreamingEvent & { conversationID: number })
-  | { conversationID: number; type: 'NewConversation'; payload: { name: string } };
+type StreamingEvent = PythonStreamingEvent & { conversationID: number };
 
 type SSEEvent =
   | PythonStreamingEvent
@@ -168,7 +166,6 @@ export async function POST(request: NextRequest) {
         }
 
         // Get or create conversation (pass first message for auto-naming)
-        const isNewConversation = !body.conversationID;
         const { fileId, content: conversation } = await getOrCreateConversation(
           body.conversationID ?? null,
           user,
@@ -176,18 +173,6 @@ export async function POST(request: NextRequest) {
         );
         const conversationID = fileId;
         currentConversationID = conversationID;  // Initialize outer scope variable
-
-        // If new conversation, emit event immediately so frontend can update Redux
-        if (isNewConversation) {
-          const newConversationEvent: StreamingEvent = {
-            conversationID,
-            type: 'NewConversation',
-            payload: {
-              name: conversation.metadata.name
-            }
-          };
-          safeEnqueue(controller, encoder, 'streaming_event', newConversationEvent);
-        }
 
         // Load log
         const initial_log_index = body.log_index ?? conversation.log.length;
