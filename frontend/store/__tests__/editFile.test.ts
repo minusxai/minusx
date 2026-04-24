@@ -2,8 +2,8 @@
  * Test for editFile functionality - verifies that editing a file properly
  * updates persistableChanges and isDirty state
  */
-import { getTestDbPath, waitFor } from './test-utils';
-import { setupTestDb } from '@/test/harness/test-db';
+import { getTestDbPath, waitFor, initTestDatabase } from './test-utils';
+import { getModules } from '@/lib/modules/registry';
 import { editFile, editFileStr, readFiles, createVirtualFile } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile } from '@/store/filesSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
@@ -51,24 +51,6 @@ describe('editFile - Question Editing Flow', () => {
     });
   }
 
-  setupTestDb(dbPath, {
-    customInit: async () => {
-      const { DocumentDB } = await import('@/lib/database/documents-db');
-      questionId1 = await DocumentDB.create('test-question-1', '/org/test-question-1', 'question', {
-        query: 'SELECT 1', connection_name: 'test_db', parameters: [], references: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      } as QuestionContent, []);
-      questionId2 = await DocumentDB.create('test-question-2', '/org/test-question-2', 'question', {
-        query: 'SELECT 2', connection_name: 'test_db', parameters: [], references: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      } as QuestionContent, []);
-      questionId3 = await DocumentDB.create('test-question-3', '/org/test-question-3', 'question', {
-        query: 'SELECT 3', connection_name: 'test_db', parameters: [], references: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      } as QuestionContent, []);
-    }
-  });
-
   // Mock fetch to call API handlers
   beforeAll(() => {
     global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -103,8 +85,26 @@ describe('editFile - Question Editing Flow', () => {
     jest.restoreAllMocks();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await getModules().db.reset?.();
+    await initTestDatabase(dbPath);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    questionId1 = await DocumentDB.create('test-question-1', '/org/test-question-1', 'question', {
+      query: 'SELECT 1', connection_name: 'test_db', parameters: [], references: [],
+      vizSettings: { type: 'table', xCols: [], yCols: [] }
+    } as QuestionContent, []);
+    questionId2 = await DocumentDB.create('test-question-2', '/org/test-question-2', 'question', {
+      query: 'SELECT 2', connection_name: 'test_db', parameters: [], references: [],
+      vizSettings: { type: 'table', xCols: [], yCols: [] }
+    } as QuestionContent, []);
+    questionId3 = await DocumentDB.create('test-question-3', '/org/test-question-3', 'question', {
+      query: 'SELECT 3', connection_name: 'test_db', parameters: [], references: [],
+      vizSettings: { type: 'table', xCols: [], yCols: [] }
+    } as QuestionContent, []);
+
     testStore = setupStore();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -324,16 +324,6 @@ describe('editFile - Question content validation', () => {
     });
   }
 
-  setupTestDb(dbPath, {
-    customInit: async () => {
-      const { DocumentDB } = await import('@/lib/database/documents-db');
-      questionId = await DocumentDB.create('viz-validation-question', '/org/viz-validation-question', 'question', {
-        query: 'SELECT 1', connection_name: 'test_db', parameters: [], references: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      } as QuestionContent, []);
-    }
-  });
-
   beforeAll(() => {
     global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
@@ -356,8 +346,18 @@ describe('editFile - Question content validation', () => {
     jest.restoreAllMocks();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await getModules().db.reset?.();
+    await initTestDatabase(dbPath);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    questionId = await DocumentDB.create('viz-validation-question', '/org/viz-validation-question', 'question', {
+      query: 'SELECT 1', connection_name: 'test_db', parameters: [], references: [],
+      vizSettings: { type: 'table', xCols: [], yCols: [] }
+    } as QuestionContent, []);
+
     testStore = setupStore();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -481,13 +481,6 @@ describe('editFile - Dashboard content validation', () => {
     });
   }
 
-  setupTestDb(dbPath, {
-    customInit: async () => {
-      const { DocumentDB } = await import('@/lib/database/documents-db');
-      dashboardId = await DocumentDB.create('test-dashboard', '/org/test-dashboard', 'dashboard', initialContent, []);
-    }
-  });
-
   beforeAll(() => {
     global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
@@ -510,8 +503,15 @@ describe('editFile - Dashboard content validation', () => {
     jest.restoreAllMocks();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await getModules().db.reset?.();
+    await initTestDatabase(dbPath);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    dashboardId = await DocumentDB.create('test-dashboard', '/org/test-dashboard', 'dashboard', initialContent, []);
+
     testStore = setupStore();
+    jest.clearAllMocks();
   });
 
   afterEach(() => {

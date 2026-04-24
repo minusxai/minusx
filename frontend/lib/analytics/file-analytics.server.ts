@@ -292,3 +292,58 @@ export async function getConversationAnalytics(
     return null;
   }
 }
+
+const RELEVANT_FILES_SQL = `
+WITH scored AS (
+  SELECT
+    fe.file_id AS "fileId",
+    fi.type AS "fileType",
+    fi.name AS "fileName",
+    fi.path AS "filePath",
+    MAX(fe.created_at) AS "lastVisited",
+    COUNT(*) FILTER (WHERE fe.event_type IN (0, 3)) * 10
+      + COUNT(DISTINCT fe.created_at::date) FILTER (
+          WHERE fe.event_type = 1
+          AND fe.created_at >= NOW() - ($1 * INTERVAL '1 day')
+        )
+      AS "score"
+  FROM file_events fe
+  JOIN files fi ON fi.id = fe.file_id
+  JOIN users u ON u.id = fe.user_id
+  WHERE fi.type IN ('question', 'dashboard')
+    AND u.email = $2
+  GROUP BY fe.file_id, fi.type, fi.name, fi.path
+),
+ranked AS (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY "fileType" ORDER BY "score" DESC, "lastVisited" DESC) AS rn
+  FROM scored
+  WHERE "score" > 0
+)
+SELECT "fileId", "fileType", "fileName", "filePath", "lastVisited", "score"
+FROM ranked
+WHERE rn <= $3
+ORDER BY "score" DESC, "lastVisited" DESC
+`;
+
+export async function getRelevantFiles(
+  userEmail: string,
+  days: number = 30,
+  perType: number = 3,
+): Promise<import('./file-analytics.types').RecentFile[]> {
+  try {
+    const result = await getModules().db.exec<Record<string, unknown>>(
+      RELEVANT_FILES_SQL,
+      [days, userEmail, perType],
+    );
+    return result.rows.map(row => ({
+      fileId: Number(row['fileId']),
+      fileType: String(row['fileType'] ?? ''),
+      fileName: String(row['fileName'] ?? ''),
+      filePath: String(row['filePath'] ?? ''),
+      lastVisited: toISOOrNull(row['lastVisited']) ?? '',
+    }));
+  } catch (err) {
+    console.error('[analytics] getRelevantFiles failed:', err);
+    return [];
+  }
+}
