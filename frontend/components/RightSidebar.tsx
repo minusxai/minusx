@@ -14,7 +14,7 @@ import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import DevToolsPanel from './DevToolsPanel';
-import RecentFilesSidebarContent from './RecentFilesSidebarContent';
+import { FeedContent } from './RecentFilesSection';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
 import { Tooltip } from './ui/tooltip';
@@ -159,7 +159,7 @@ function SectionContent({
         </Box>
       );
     case 'recent':
-      return <RecentFilesSidebarContent />;
+      return <Box p={3}><FeedContent /></Box>;
     case 'dev':
       return <DevToolsPanel appState={appState} />;
     case 'question-references':

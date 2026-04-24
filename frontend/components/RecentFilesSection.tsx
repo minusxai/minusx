@@ -203,11 +203,11 @@ function SummaryCollapsible({ summary }: { summary: string }) {
   );
 }
 
-export default function RecentFilesSection() {
-  const { isCollapsed } = useAppSelector(selectRightSidebarUIState);
-  const showRecentFiles = useAppSelector(selectShowRecentFiles);
+/** Shared feed content — used by both standalone column and sidebar */
+export function FeedContent() {
   const { config } = useConfigs();
   const devMode = useAppSelector(selectDevMode);
+  const showRecentFiles = useAppSelector(selectShowRecentFiles);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
   const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
@@ -236,7 +236,6 @@ export default function RecentFilesSection() {
 
     setSummaryLoading(true);
     try {
-      // Load files + run queries — same as ReadFiles tool handler
       const augmented = await readFiles(questionIds, { runQueries: true });
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
 
@@ -257,18 +256,14 @@ export default function RecentFilesSection() {
     } finally {
       setSummaryLoading(false);
     }
-  }, []);
+  }, [contextDocs]);
 
   useEffect(() => {
     if (!data) return;
     fetchSummary([...data.recent, ...data.trending]);
   }, [data, fetchSummary]);
 
-  // Hide standalone column when right sidebar is open (content moves to sidebar tab)
-  // In dev mode, always show so the re-run button is accessible
-  if (!isCollapsed && !devMode) return null;
   if (!showRecentFiles) return null;
-
   if (!data && !devMode) return null;
 
   const hasRecent = (data?.recent.length ?? 0) > 0;
@@ -276,24 +271,12 @@ export default function RecentFilesSection() {
 
   if (!hasRecent && !hasTrending && !devMode) return null;
 
-  // Split by type: questions as carousel with live charts, dashboards as list
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
   const trendingQuestions = data?.trending.filter(f => f.fileType === 'question') ?? [];
   const trendingDashboards = data?.trending.filter(f => f.fileType === 'dashboard') ?? [];
 
   return (
-    <Box
-      w={{ base: '0', lg: '480px' }}
-      display={{ base: 'none', lg: 'block' }}
-      flexShrink={0}
-      position="sticky"
-      top="20px"
-      bg="bg.muted"
-      borderRadius={"md"}
-      px={5}
-      py={3}
-    >
     <VStack gap={4} align="stretch">
       {/* Section title + re-run */}
       <HStack justify="space-between" align="center">
@@ -409,6 +392,31 @@ export default function RecentFilesSection() {
         </>
       )}
     </VStack>
+  );
+}
+
+/** Standalone column wrapper for the home page */
+export default function RecentFilesSection() {
+  const { isCollapsed } = useAppSelector(selectRightSidebarUIState);
+  const devMode = useAppSelector(selectDevMode);
+
+  // Hide standalone column when right sidebar is open (content moves to sidebar tab)
+  if (!isCollapsed && !devMode) return null;
+
+  return (
+    <Box
+      w={{ base: '0', lg: '480px' }}
+      display={{ base: 'none', lg: 'block' }}
+      flexShrink={0}
+      position="sticky"
+      top="0"
+      alignSelf="flex-start"
+      bg="bg.muted"
+      borderRadius={"md"}
+      px={5}
+      py={3}
+    >
+      <FeedContent />
     </Box>
   );
 }
