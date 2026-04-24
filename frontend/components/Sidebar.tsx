@@ -139,7 +139,7 @@ export default function Sidebar() {
         category: 'Analytics',
         items: [
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
-          { href: '/history', icon: <LuHistory />, label: 'Conversations' },
+          { href: '/conversations', icon: <LuHistory />, label: 'Conversations' },
         ],
       },
       {
