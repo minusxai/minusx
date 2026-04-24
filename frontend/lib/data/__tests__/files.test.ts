@@ -67,33 +67,22 @@ describe('Files Data Layer - getTemplate', () => {
       ]
     });
 
-    // Create custom_db first so it has an earlier updated_at (ORDER BY updated_at DESC)
-    await DocumentDB.create(
-      'custom_db',
-      '/org/database/custom_db',
-      'connection',
-      {
-        type: 'duckdb',
-        config: {
-          file_path: 'data/custom_db.duckdb'
-        }
-      } as ConnectionContent,
-      []
-    );
+    // Remove template-seeded connections so they don't interfere with selectDatabase
+    // (listAll uses ORDER BY updated_at DESC, so the last-published connection is first)
+    const seeded = await DocumentDB.listAll('connection');
+    if (seeded.length > 0) {
+      await DocumentDB.deleteByIds(seeded.map(c => c.id));
+    }
 
-    // Create default_db last so it sorts first (most recent updated_at DESC)
-    duckdbConnectionId = await DocumentDB.create(
-      'default_db',
-      '/org/database/default_db',
-      'connection',
-      {
-        type: 'duckdb',
-        config: {
-          file_path: 'data/default_db.duckdb'
-        }
-      } as ConnectionContent,
-      []
-    );
+    // Create custom_db first, then default_db last so default_db has the highest updated_at
+    // and selectDatabase (which picks the first result) returns 'default_db'
+    const customContent: ConnectionContent = { type: 'duckdb', config: { file_path: 'data/custom_db.duckdb' } };
+    const customId = await DocumentDB.create('custom_db', '/org/database/custom_db', 'connection', customContent, []);
+    await DocumentDB.update(customId, 'custom_db', '/org/database/custom_db', customContent, [], 'init-custom');
+
+    const defaultContent: ConnectionContent = { type: 'duckdb', config: { file_path: 'data/default_db.duckdb' } };
+    duckdbConnectionId = await DocumentDB.create('default_db', '/org/database/default_db', 'connection', defaultContent, []);
+    await DocumentDB.update(duckdbConnectionId, 'default_db', '/org/database/default_db', defaultContent, [], 'init-default');
   });
 
   afterAll(async () => {
@@ -221,7 +210,8 @@ describe('Files Data Layer - getTemplate', () => {
       if (existing) {
         await DocumentDB.update(existing.id, 'context', '/org/context', testContextContent, [], 'test-edit');
       } else {
-        await DocumentDB.create('context', '/org/context', 'context', testContextContent, []);
+        const newId = await DocumentDB.create('context', '/org/context', 'context', testContextContent, []);
+        await DocumentDB.update(newId, 'context', '/org/context', testContextContent, [], 'init-context');
       }
     });
 

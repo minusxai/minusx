@@ -88,9 +88,13 @@ describe('PGLite adapter — Phase 2 spike', () => {
   });
 
   it('lists all files (with type filter)', async () => {
-    await DocumentDB.create('q1', '/org/q1', 'question', { query: 'SELECT 1' } as any, []);
-    await DocumentDB.create('q2', '/org/q2', 'question', { query: 'SELECT 2' } as any, []);
-    await DocumentDB.create('dash', '/org/dash', 'dashboard', { layout: [] } as any, []);
+    // create() produces draft:true; update() publishes (draft:false) so listAll() finds them
+    const q1 = await DocumentDB.create('q1', '/org/q1', 'question', { query: 'SELECT 1' } as any, []);
+    await DocumentDB.update(q1, 'q1', '/org/q1', { query: 'SELECT 1' } as any, [], 'init-q1');
+    const q2 = await DocumentDB.create('q2', '/org/q2', 'question', { query: 'SELECT 2' } as any, []);
+    await DocumentDB.update(q2, 'q2', '/org/q2', { query: 'SELECT 2' } as any, [], 'init-q2');
+    const dash = await DocumentDB.create('dash', '/org/dash', 'dashboard', { layout: [] } as any, []);
+    await DocumentDB.update(dash, 'dash', '/org/dash', { layout: [] } as any, [], 'init-dash');
 
     const questions = await DocumentDB.listAll('question');
     expect(questions.length).toBe(2);
@@ -124,8 +128,10 @@ describe('PGLite adapter — Phase 2 spike', () => {
   });
 
   it('filters by path prefix (listAll with pathFilters)', async () => {
-    await DocumentDB.create('a', '/org/folder-a/item', 'question', {} as any, []);
-    await DocumentDB.create('b', '/org/folder-b/item', 'question', {} as any, []);
+    const a = await DocumentDB.create('a', '/org/folder-a/item', 'question', {} as any, []);
+    await DocumentDB.update(a, 'a', '/org/folder-a/item', {} as any, [], 'init-a');
+    const b = await DocumentDB.create('b', '/org/folder-b/item', 'question', {} as any, []);
+    await DocumentDB.update(b, 'b', '/org/folder-b/item', {} as any, [], 'init-b');
 
     const result = await DocumentDB.listAll(undefined, ['/org/folder-a']);
     expect(result.length).toBe(1);

@@ -31,6 +31,16 @@ const childResolver: ChildIdResolver = async (folderPath) => {
   return children.map(c => c.id);
 };
 
+/**
+ * Create a published (non-draft) fixture file so it appears in listAll().
+ * DocumentDB.create() always produces draft:true; update() sets draft:false.
+ */
+async function mkPublished(name: string, path: string, type: string, content: object, refs: number[] = []): Promise<number> {
+  const id = await DocumentDB.create(name, path, type, content, refs);
+  await DocumentDB.update(id, name, path, content, refs, `init-${id}`);
+  return id;
+}
+
 /** Stub resolver — should never be called for non-folder tests */
 const noopResolver: ChildIdResolver = async () => {
   throw new Error('childResolver should not be called for non-folder types');
@@ -99,11 +109,12 @@ describe('extractReferenceIds — document types', () => {
 
 describe('extractReferenceIds — folder type', () => {
   it('returns IDs of direct children only (depth = 1)', async () => {
-    const folderId = await DocumentDB.create('RefFolder', '/org/reffolder', 'folder', {}, []);
-    const child1 = await DocumentDB.create('RefC1', '/org/reffolder/c1', 'question', {}, []);
-    const child2 = await DocumentDB.create('RefC2', '/org/reffolder/c2', 'question', {}, []);
-    // Grandchild — must NOT appear
-    await DocumentDB.create('RefGC', '/org/reffolder/c1/gc', 'question', {}, []);
+    // Children must be published (draft:false) to appear in listAll() / childResolver
+    const folderId = await mkPublished('RefFolder', '/org/reffolder', 'folder', {});
+    const child1 = await mkPublished('RefC1', '/org/reffolder/c1', 'question', {});
+    const child2 = await mkPublished('RefC2', '/org/reffolder/c2', 'question', {});
+    // Grandchild — must NOT appear even though published
+    await mkPublished('RefGC', '/org/reffolder/c1/gc', 'question', {});
     const folder = await DocumentDB.getById(folderId);
 
     const refIds = await extractReferenceIds(folder!, childResolver);
@@ -113,8 +124,8 @@ describe('extractReferenceIds — folder type', () => {
   });
 
   it('excludes the folder itself from the result', async () => {
-    const folderId = await DocumentDB.create('RefFolderSelf', '/org/reffolderself', 'folder', {}, []);
-    await DocumentDB.create('RefSelfChild', '/org/reffolderself/ch', 'question', {}, []);
+    const folderId = await mkPublished('RefFolderSelf', '/org/reffolderself', 'folder', {});
+    await mkPublished('RefSelfChild', '/org/reffolderself/ch', 'question', {});
     const folder = await DocumentDB.getById(folderId);
 
     const refIds = await extractReferenceIds(folder!, childResolver);
@@ -123,7 +134,7 @@ describe('extractReferenceIds — folder type', () => {
   });
 
   it('returns empty array for an empty folder', async () => {
-    const folderId = await DocumentDB.create('RefEmptyFolder', '/org/refemptyfolder', 'folder', {}, []);
+    const folderId = await mkPublished('RefEmptyFolder', '/org/refemptyfolder', 'folder', {});
     const folder = await DocumentDB.getById(folderId);
 
     expect(await extractReferenceIds(folder!, childResolver)).toEqual([]);

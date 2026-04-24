@@ -402,7 +402,7 @@ describe('Slack Bot Integration', () => {
         `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%' LIMIT 1`,
         [],
       );
-      const content = JSON.parse(fileRow.content) as {
+      const content = fileRow.content as unknown as {
         log: unknown[];
         metadata: { source?: { type: string; teamId: string; channelId: string; threadTs: string } };
       };

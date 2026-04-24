@@ -116,7 +116,7 @@ describe('McpSessionLogger — end-to-end session logging', () => {
       await logger.flush();
 
       const rows = await loadConversationRows();
-      const content: ConversationFileContent = JSON.parse(rows[0].content);
+      const content = rows[0].content as unknown as ConversationFileContent;
       expect(content.metadata.source).toEqual({ type: 'mcp', sessionId: SESSION_ID });
       expect(content.metadata.userId).toBe('1');
     });
@@ -129,7 +129,7 @@ describe('McpSessionLogger — end-to-end session logging', () => {
       await logger.flush();
 
       const rows = await loadConversationRows();
-      const content: ConversationFileContent = JSON.parse(rows[0].content);
+      const content = rows[0].content as unknown as ConversationFileContent;
       const taskEntry = content.log.find((e) => e._type === 'task') as TaskLogEntry;
       expect(taskEntry.agent).toBe('ExecuteQuery');
       expect(taskEntry.args).toEqual(args);
@@ -145,7 +145,7 @@ describe('McpSessionLogger — end-to-end session logging', () => {
       await logger.flush();
 
       const rows = await loadConversationRows();
-      const content: ConversationFileContent = JSON.parse(rows[0].content);
+      const content = rows[0].content as unknown as ConversationFileContent;
       const resultEntry = content.log.find((e) => e._type === 'task_result') as TaskResultEntry;
       expect(resultEntry.result).toEqual(result);
     });
@@ -157,7 +157,7 @@ describe('McpSessionLogger — end-to-end session logging', () => {
       await logger.flush();
 
       const rows = await loadConversationRows();
-      const content: ConversationFileContent = JSON.parse(rows[0].content);
+      const content = rows[0].content as unknown as ConversationFileContent;
       const taskEntry = content.log.find((e) => e._type === 'task') as TaskLogEntry;
       const resultEntry = content.log.find((e) => e._type === 'task_result') as TaskResultEntry;
 
@@ -188,7 +188,7 @@ describe('McpSessionLogger — end-to-end session logging', () => {
 
       const rows = await loadConversationRows();
       expect(rows).toHaveLength(1); // still one file per session
-      const content: ConversationFileContent = JSON.parse(rows[0].content);
+      const content = rows[0].content as unknown as ConversationFileContent;
 
       // 2 tool calls → 2 task entries + 2 result entries = 4 log entries
       expect(content.log).toHaveLength(4);
@@ -215,7 +215,7 @@ describe('McpSessionLogger — end-to-end session logging', () => {
       await logger.flush();
 
       const rows = await loadConversationRows();
-      const content: ConversationFileContent = JSON.parse(rows[0].content);
+      const content = rows[0].content as unknown as ConversationFileContent;
       const taskEntries = content.log.filter((e) => e._type === 'task') as TaskLogEntry[];
 
       expect(taskEntries[0].unique_id).not.toBe(taskEntries[1].unique_id);

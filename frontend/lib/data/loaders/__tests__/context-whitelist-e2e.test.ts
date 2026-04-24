@@ -369,13 +369,14 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
       return Promise.resolve({ schemas: [], updated_at: new Date().toISOString() } as DatabaseSchema);
     });
 
-    // Create connection files
-    await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection',
-      { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' } as ConnectionContent,
-      []);
-    await DocumentDB.create('bigquery_analytics', '/org/database/bigquery_analytics', 'connection',
-      { type: 'bigquery', config: { project_id: 'test' }, description: '' } as ConnectionContent,
-      []);
+    // Create connection files — must be published (draft:false) so listAll('connection') finds them
+    const duckdbContent: ConnectionContent = { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' };
+    const duckdbId = await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection', duckdbContent, []);
+    await DocumentDB.update(duckdbId, 'duckdb_main', '/org/database/duckdb_main', duckdbContent, [], 'init-duckdb');
+
+    const bqContent: ConnectionContent = { type: 'bigquery', config: { project_id: 'test' }, description: '' };
+    const bqId = await DocumentDB.create('bigquery_analytics', '/org/database/bigquery_analytics', 'connection', bqContent, []);
+    await DocumentDB.update(bqId, 'bigquery_analytics', '/org/database/bigquery_analytics', bqContent, [], 'init-bigquery');
   });
 
   // ── Test 4: root context with whitelist:'*' ──────────────────────────────
@@ -455,9 +456,9 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
       createdAt: new Date().toISOString(),
       createdBy: 1,
     };
-    await DocumentDB.create('context', '/org/context', 'context',
-      { versions: [parentVersion], published: { all: 1 } } as ContextContent,
-      []);
+    const parentContent: ContextContent = { versions: [parentVersion], published: { all: 1 } };
+    const parentId = await DocumentDB.create('context', '/org/context', 'context', parentContent, []);
+    await DocumentDB.update(parentId, 'context', '/org/context', parentContent, [], 'init-parent');
 
     // Child at /org/sales/context with whitelist:'*' — should see everything parent exposes
     const childVersion: ContextVersion = {
@@ -496,9 +497,9 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
       createdAt: new Date().toISOString(),
       createdBy: 1,
     };
-    await DocumentDB.create('context', '/org/context', 'context',
-      { versions: [parentVersion], published: { all: 1 } } as ContextContent,
-      []);
+    const parentContent6: ContextContent = { versions: [parentVersion], published: { all: 1 } };
+    const parentId6 = await DocumentDB.create('context', '/org/context', 'context', parentContent6, []);
+    await DocumentDB.update(parentId6, 'context', '/org/context', parentContent6, [], 'init-parent6');
 
     // Child only whitelists the orders table
     const childVersion: ContextVersion = {
@@ -547,9 +548,9 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
       createdAt: new Date().toISOString(),
       createdBy: 1,
     };
-    await DocumentDB.create('context', '/org/context', 'context',
-      { versions: [parentVersion], published: { all: 1 } } as ContextContent,
-      []);
+    const parentContent7: ContextContent = { versions: [parentVersion], published: { all: 1 } };
+    const parentId7 = await DocumentDB.create('context', '/org/context', 'context', parentContent7, []);
+    await DocumentDB.update(parentId7, 'context', '/org/context', parentContent7, [], 'init-parent7');
 
     // team_a child: whitelist:'*' — should get users (not orders)
     const teamAVersion: ContextVersion = {
@@ -588,8 +589,10 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
 describe('Default context per folder', () => {
   beforeEach(async () => {
     await getModules().db.exec('DELETE FROM files', []);
-    // Re-create the /org root folder so parent checks pass
-    await DocumentDB.create('org', '/org', 'folder', { description: '' }, []);
+    // Re-create the /org root folder — must be published so createFile parent check passes
+    const orgFolderContent = { description: '' };
+    const orgFolderId = await DocumentDB.create('org', '/org', 'folder', orgFolderContent, []);
+    await DocumentDB.update(orgFolderId, 'org', '/org', orgFolderContent, [], 'init-org');
   });
 
   // ── Test 8: folder creation atomically creates a context ─────────────────
@@ -647,18 +650,24 @@ describe('Default context per folder', () => {
       updated_at: new Date().toISOString(),
     } as DatabaseSchema);
 
-    await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection',
-      { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' } as ConnectionContent,
-      []);
+    const deepConnContent: ConnectionContent = { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' };
+    const deepConnId = await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection', deepConnContent, []);
+    await DocumentDB.update(deepConnId, 'duckdb_main', '/org/database/duckdb_main', deepConnContent, [], 'init-deep-conn');
 
-    // Three levels, all whitelist:'*'
+    // Three levels, all whitelist:'*' — must all be published for ancestor traversal
     const makeCtx = (): ContextContent => ({
       versions: [{ version: 1, whitelist: '*', docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
       published: { all: 1 },
     });
 
-    await DocumentDB.create('context', '/org/context',     'context', makeCtx(), []);
-    await DocumentDB.create('context', '/org/a/context',   'context', makeCtx(), []);
+    const orgCtx = makeCtx();
+    const orgCtxId = await DocumentDB.create('context', '/org/context', 'context', orgCtx, []);
+    await DocumentDB.update(orgCtxId, 'context', '/org/context', orgCtx, [], 'init-org-ctx');
+
+    const aCtx = makeCtx();
+    const aCtxId = await DocumentDB.create('context', '/org/a/context', 'context', aCtx, []);
+    await DocumentDB.update(aCtxId, 'context', '/org/a/context', aCtx, [], 'init-a-ctx');
+
     const deepId = await DocumentDB.create('context', '/org/a/b/context', 'context', makeCtx(), []);
 
     const { data: [deepCtx] } = await FilesAPI.loadFiles([deepId], viewer);
@@ -708,8 +717,11 @@ describe('Delete protection', () => {
     // Create folder + its default context
     const folderId = await DocumentDB.create('folder', '/org/removable-team', 'folder',
       { description: '' }, []);
-    await DocumentDB.create('context', '/org/removable-team/context', 'context',
-      makeDefaultContextContent(1), []);
+    const ctxContent = makeDefaultContextContent(1);
+    const ctxId = await DocumentDB.create('context', '/org/removable-team/context', 'context',
+      ctxContent, []);
+    // Publish context so cascade delete (listAll draft=false filter) can find it
+    await DocumentDB.update(ctxId, 'context', '/org/removable-team/context', ctxContent, [], 'init-ctx');
 
     // Folder deletion MUST succeed even though the folder contains a context
     await expect(FilesAPI.deleteFile(folderId, admin)).resolves.toBeDefined();
@@ -722,9 +734,15 @@ describe('Delete protection', () => {
   it('deleting a nested folder deletes all child contexts in the subtree', async () => {
     // Folder tree: /org/parent → /org/parent/child, each with a context
     const parentId = await DocumentDB.create('folder', '/org/parent', 'folder', { description: '' }, []);
-    await DocumentDB.create('folder',  '/org/parent/child',         'folder',  { description: '' }, []);
-    await DocumentDB.create('context', '/org/parent/context',       'context', makeDefaultContextContent(1), []);
-    await DocumentDB.create('context', '/org/parent/child/context', 'context', makeDefaultContextContent(1), []);
+    const childFolderId = await DocumentDB.create('folder', '/org/parent/child', 'folder', { description: '' }, []);
+    const parentCtxContent = makeDefaultContextContent(1);
+    const parentCtxId = await DocumentDB.create('context', '/org/parent/context', 'context', parentCtxContent, []);
+    const childCtxContent = makeDefaultContextContent(1);
+    const childCtxId = await DocumentDB.create('context', '/org/parent/child/context', 'context', childCtxContent, []);
+    // Publish all descendants so cascade delete (listAll draft=false filter) can find them
+    await DocumentDB.update(childFolderId, 'folder', '/org/parent/child', { description: '' }, [], 'init-child');
+    await DocumentDB.update(parentCtxId, 'context', '/org/parent/context', parentCtxContent, [], 'init-parent-ctx');
+    await DocumentDB.update(childCtxId, 'context', '/org/parent/child/context', childCtxContent, [], 'init-child-ctx');
 
     await expect(FilesAPI.deleteFile(parentId, admin)).resolves.toBeDefined();
 

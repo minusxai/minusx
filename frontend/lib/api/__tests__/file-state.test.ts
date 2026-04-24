@@ -122,9 +122,10 @@ function createMockFile(id: number, type: FileType = 'question'): DbFile {
     references: [],
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-
     version: 1,
     last_edit_id: null,
+    draft: false,
+    meta: null,
   };
 }
 
@@ -703,20 +704,20 @@ describe('readFiles - File State Manager', () => {
       expect(result).toEqual({ id: 1, name: 'Test question 1' });
     });
 
-    it('should create virtual file', async () => {
-      const virtualFile = { ...createMockFile(-1), id: -1 };
-      mockStore.dispatch(setFile({ file: virtualFile, references: [] }));
-      mockStore.dispatch(setEdit({ fileId: -1, edits: { query: 'SELECT 2' } }));
+    it('should save a draft file (positive ID, draft:true) via saveFile', async () => {
+      // Draft files have real positive IDs — publishFile always calls saveFile
+      const draftFile = { ...createMockFile(456, 'question'), draft: true };
+      mockStore.dispatch(setFile({ file: draftFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 456, edits: { query: 'SELECT 2' } }));
 
-      const createdFile = { ...virtualFile, id: 123, name: 'New question' };
-      mockCreateFile.mockResolvedValueOnce({
-        data: createdFile
-      });
+      const savedFile = { ...draftFile, draft: false, name: 'New question' };
+      mockSaveFile.mockResolvedValueOnce({ data: savedFile });
 
-      const result = await publishFile({ fileId: -1 });
+      const result = await publishFile({ fileId: 456 });
 
-      expect(mockCreateFile).toHaveBeenCalled();
-      expect(result).toEqual({ id: 123, name: 'New question' });
+      expect(mockSaveFile).toHaveBeenCalled();
+      expect(mockCreateFile).not.toHaveBeenCalled();
+      expect(result).toEqual({ id: 456, name: 'New question' });
     });
 
     it('should return current id/name when not dirty', async () => {
