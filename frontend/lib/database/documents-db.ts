@@ -5,8 +5,6 @@
 import { DbFile, BaseFileContent } from '../types';
 import { getModules } from '../modules/registry';
 
-export { resetAdapter as resetConnection } from './adapter/factory';
-
 /**
  * Type for raw database row returned by database
  * Exported for reuse in import-export operations

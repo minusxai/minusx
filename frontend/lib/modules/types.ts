@@ -28,6 +28,8 @@ export interface IFileSystemDBModule {
   runMigrations?(): Promise<void>;
   /** Release any held resources (connections, WASM handles). Optional — not all backends need it. */
   close?(): Promise<void>;
+  /** Close and nullify the adapter singleton so the next exec() gets a fresh instance. Test isolation only. */
+  reset?(): Promise<void>;
 }
 
 export interface RegisterInput {

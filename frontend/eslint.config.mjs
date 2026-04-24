@@ -10,7 +10,7 @@ const RESTRICT_DOCUMENTS_DB = {
   name: "@/lib/database/documents-db",
   message:
     "Do not import DocumentDB outside the data layer. Use FilesAPI, ConnectionsAPI, or ConfigsAPI from lib/data/** instead. " +
-    "DocumentDB is only allowed in lib/data/**, lib/database/**, scripts/**, and test files.",
+    "DocumentDB is only allowed in lib/data/**, lib/database/**.",
 };
 
 const RESTRICT_ADAPTER_FACTORY = {
@@ -18,7 +18,7 @@ const RESTRICT_ADAPTER_FACTORY = {
   message:
     "Do not call createAdapter/getAdapter directly. Use getModules().db instead — it is the module-registry singleton " +
     "that all DB operations share. Direct adapter construction creates isolated instances that silently lose writes. " +
-    "Allowed only in lib/modules/db/**, lib/database/**, scripts/**, and test files.",
+    "Allowed only in lib/modules/db/** and lib/database/**.",
 };
 
 // Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
@@ -108,19 +108,8 @@ const eslintConfig = defineConfig([
         "error",
         {
           paths: [
-            {
-              name: "@/lib/database/documents-db",
-              message:
-                "Do not import DocumentDB outside the data layer. Use FilesAPI, ConnectionsAPI, or ConfigsAPI from lib/data/** instead. " +
-                "DocumentDB is only allowed in lib/data/**, lib/database/**, scripts/**, and test files.",
-            },
-            {
-              name: "@/lib/database/adapter/factory",
-              message:
-                "Do not call createAdapter/getAdapter directly. Use getModules().db instead — it is the module-registry singleton " +
-                "that all DB operations share. Direct adapter construction creates isolated instances that silently lose writes. " +
-                "Allowed only in lib/modules/db/**, lib/database/**, scripts/**, and test files.",
-            },
+            RESTRICT_DOCUMENTS_DB,
+            RESTRICT_ADAPTER_FACTORY,
           ],
         },
       ],
@@ -163,12 +152,11 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
-  // DocumentDB: allowed only in the server-side data layer and database internals.
+  // lib/data/*.server.ts and test files — DocumentDB allowed, adapter still restricted.
+  // DocumentDB is clean (routes through getModules().db) so tests may use it for fixtures/assertions.
   {
     files: [
       "lib/data/*.server.ts",
-      "lib/database/**",
-      "scripts/**",
       "**/*.test.ts",
       "**/*.test.tsx",
       "**/__tests__/**",
@@ -176,24 +164,29 @@ const eslintConfig = defineConfig([
       "test/**",
     ],
     rules: {
-      "no-restricted-imports": ["error", { paths: [] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY] }],
     },
   },
-  // createAdapter/getAdapter: allowed only in module setup, database internals, and scripts.
-  // lib/data/*.server.ts is intentionally excluded — use getModules().db there too.
+  // lib/modules/db/** — adapter allowed (it IS the module), DocumentDB still restricted.
   {
-    files: [
-      "lib/modules/db/**",
-      "lib/database/**",
-      "scripts/**",
-      "**/*.test.ts",
-      "**/*.test.tsx",
-      "**/__tests__/**",
-      "**/__mocks__/**",
-      "test/**",
-    ],
+    files: ["lib/modules/db/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB] }],
+    },
+  },
+  // lib/database/** — database internals; both allowed (factory, adapter tests, etc.).
+  {
+    files: ["lib/database/**"],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
+  // scripts/** — DocumentDB allowed (scripts seed the DB), adapter still restricted.
+  // Scripts must go through getModules().db just like everything else.
+  {
+    files: ["scripts/**"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY] }],
     },
   },
 ]);

@@ -16,6 +16,7 @@ import {
 import { buildInitData, InitData } from '@/lib/database/import-export';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '@/lib/database/postgres-schema';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
+import { getModules } from '@/lib/modules/registry';
 
 export interface TestDbHarness {
   getStore: () => ReturnType<typeof setupTestStore>;
@@ -108,34 +109,43 @@ function buildImportSQL(
   return parts.join(';\n') + ';';
 }
 
+// Tracks which schemas have been initialised on the current adapter instance.
+// Cleared by resetDB() when the adapter is replaced with a fresh one.
+const initializedSchemas = new Set<string>();
+
 /**
- * Run schema DDL for `schemaName` if it has not yet been initialised on this adapter.
- * Tracks state on the adapter object itself so it is reset automatically when
- * resetAdapter() creates a new adapter instance.
+ * Reset the adapter singleton and clear schema-init tracking.
+ * Call this in beforeEach when you need a completely fresh in-memory DB.
  */
-async function ensureSchema(adapter: any, schemaName: string): Promise<void> {
-  if (!adapter.__schemas) adapter.__schemas = new Set<string>();
-  if (adapter.__schemas.has(schemaName)) {
-    // Already initialised — just make sure search_path is current
-    await adapter.exec(`SET search_path TO ${schemaName}`);
+export async function resetDB(): Promise<void> {
+  await getModules().db.reset?.();
+  initializedSchemas.clear();
+}
+
+/**
+ * Run schema DDL for `schemaName` if it has not yet been initialised on the current adapter.
+ * State is tracked in `initializedSchemas`; resetDB() clears it when the adapter is replaced.
+ */
+async function ensureSchema(schemaName: string): Promise<void> {
+  const db = getModules().db;
+  if (initializedSchemas.has(schemaName)) {
+    await db.exec(`SET search_path TO ${schemaName}`);
     return;
   }
 
-  // Create the schema and set search_path so all subsequent DDL lands there
-  await adapter.exec(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-  await adapter.exec(`SET search_path TO ${schemaName}`);
+  await db.exec(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
+  await db.exec(`SET search_path TO ${schemaName}`);
 
-  // Run DDL statements, skipping the CREATE SCHEMA line (we already did it above)
   for (const stmt of splitSQLStatements(POSTGRES_SCHEMA)) {
     if (/^\s*CREATE\s+SCHEMA\b/i.test(stmt)) continue;
     try {
-      await adapter.exec(stmt);
+      await db.exec(stmt);
     } catch (e: any) {
       if (e?.code !== '23505' && e?.code !== '42710') throw e;
     }
   }
 
-  adapter.__schemas.add(schemaName);
+  initializedSchemas.add(schemaName);
 }
 
 // ── public helpers ────────────────────────────────────────────────────────────
@@ -143,22 +153,21 @@ async function ensureSchema(adapter: any, schemaName: string): Promise<void> {
 export async function addTestConnection(_dbPath: string) {
   // This is still available for callers that need it outside setupTestDb.
   // setupTestDb itself inlines the connection insert into the atomic exec.
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const db = getModules().db;
   const now = new Date().toISOString();
 
-  const existing = await db.query<{ id: number }>(
+  const existing = await db.exec<{ id: number }>(
     `SELECT id FROM files WHERE path = $1`,
     ['/org/connections/test_connection']
   );
 
   if (existing.rows.length === 0) {
-    const maxIdResult = await db.query<{ next_id: number }>(
+    const maxIdResult = await db.exec<{ next_id: number }>(
       `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files`, []
     );
     const nextId = maxIdResult.rows[0].next_id;
 
-    await db.query(
+    await db.exec(
       `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [nextId, 'default_db', '/org/connections/test_connection', 'connection',
@@ -187,20 +196,19 @@ export async function ensureMxfoodDataset(): Promise<void> {
 }
 
 export async function addMxfoodConnection(_dbPath: string) {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const db = getModules().db;
   const now = new Date().toISOString();
   const connectionPath = '/org/connections/mxfood';
 
-  const existing = await db.query<{ id: number }>(
+  const existing = await db.exec<{ id: number }>(
     `SELECT id FROM files WHERE path = $1`, [connectionPath]
   );
   if (existing.rows.length === 0) {
-    const maxIdResult = await db.query<{ next_id: number }>(
+    const maxIdResult = await db.exec<{ next_id: number }>(
       `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files`, []
     );
     const nextId = maxIdResult.rows[0].next_id;
-    await db.query(
+    await db.exec(
       `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [nextId, 'mxfood', connectionPath, 'connection',
@@ -229,12 +237,9 @@ export function setupTestDb(dbPath: string, options: TestDbOptions = {}): TestDb
   let preparedInitData: InitData;
 
   beforeAll(async () => {
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const adapter = await getAdapter();
-
     // Initialise schema DDL once per (adapter × schemaName).
     // Subsequent suites in this file with the same dbPath skip DDL entirely.
-    await ensureSchema(adapter, schemaName);
+    await ensureSchema(schemaName);
 
     // Cache bcrypt hash across suites — computing it costs ~100ms.
     const g = globalThis as any;
@@ -245,9 +250,6 @@ export function setupTestDb(dbPath: string, options: TestDbOptions = {}): TestDb
   });
 
   beforeEach(async () => {
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const adapter = await getAdapter();
-
     // Single atomic exec: SET search_path + DELETE all + INSERT template.
     // No JS yields during this call, so async listeners from previous tests
     // cannot interleave and cause duplicate-key constraint violations.
@@ -255,7 +257,7 @@ export function setupTestDb(dbPath: string, options: TestDbOptions = {}): TestDb
       ? JSON.stringify({ id: 'test_connection', name: 'default_db', type: 'duckdb', config: { file_path: 'test.duckdb' } })
       : undefined;
     const sql = buildImportSQL(preparedInitData, schemaName, testConnectionJson);
-    await adapter.exec(sql);
+    await getModules().db.exec(sql);
 
     if (customInit) {
       await customInit(dbPath);

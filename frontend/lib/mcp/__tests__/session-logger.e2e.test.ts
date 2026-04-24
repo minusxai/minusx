@@ -33,7 +33,8 @@ jest.mock('next/cache', () => ({
 // ---------------------------------------------------------------------------
 
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
-import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
+import { resetDB } from '@/test/harness/test-db';
+import { getModules } from '@/lib/modules/registry';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationFileContent, TaskLogEntry, TaskResultEntry } from '@/lib/types';
@@ -72,11 +73,9 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  // Reset singleton and wipe all files except the /org root between tests
-  await resetAdapter();
-  const db = await getAdapter();
-  await db.query("DELETE FROM files WHERE path != '/org'", []);
-  await resetAdapter();
+  // Wipe all files except the /org root between tests, then reset the adapter.
+  await getModules().db.exec("DELETE FROM files WHERE path != '/org'", []);
+  await resetDB();
 });
 
 // ---------------------------------------------------------------------------
@@ -84,12 +83,10 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 async function loadConversationRows(): Promise<Array<{ path: string; content: string }>> {
-  const db = await getAdapter();
-  const { rows } = await db.query<{ path: string; content: string }>(
+  const { rows } = await getModules().db.exec<{ path: string; content: string }>(
     "SELECT path, content FROM files WHERE type = 'conversation'",
     [],
   );
-  await resetAdapter();
   return rows;
 }
 
