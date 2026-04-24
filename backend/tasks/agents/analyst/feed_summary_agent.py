@@ -3,7 +3,7 @@
 import json
 import time
 from tasks import register_agent
-from tasks.llm.config import CODING_MODEL, ONBOARDING_MODEL
+from tasks.llm.config import ONBOARDING_MODEL
 from tasks.llm.models import LlmSettings
 from .agent import AnalystAgent
 from .prompt_loader import get_prompt
