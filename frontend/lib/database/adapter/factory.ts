@@ -1,5 +1,5 @@
 import { IDatabaseAdapter, DatabaseConfig } from './types';
-import { getDbType, PGLITE_DATA_DIR } from '../db-config';
+import { getDbType } from '../db-config';
 import { POSTGRES_URL } from '@/lib/config';
 
 let currentAdapter: IDatabaseAdapter | null = null;
@@ -32,6 +32,8 @@ export async function getAdapter(): Promise<IDatabaseAdapter> {
         postgresConnectionString: POSTGRES_URL
       });
     } else if (dbType === 'pglite') {
+      // eslint-disable-next-line no-restricted-syntax
+      const { PGLITE_DATA_DIR } = await import('../db-config');
       currentAdapter = await createAdapter({ type: 'pglite', pgDataDir: PGLITE_DATA_DIR });
     } else {
       throw new Error(`Unknown database type: ${dbType}`);

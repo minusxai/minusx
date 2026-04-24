@@ -26,7 +26,7 @@ jest.mock('@/lib/connections/run-query', () => ({
 import * as path from 'path';
 import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
+import { getTestDbPath } from './test-utils';
 import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb, addMxfoodConnection, ensureMxfoodDataset } from '@/test/harness/test-db';
@@ -101,16 +101,11 @@ describe('extractCellValue + resolveRowIndex', () => {
 });
 
 describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
-  beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(TEST_RUNNER_DB_PATH);
+  setupTestDb(TEST_RUNNER_DB_PATH);
+
+  beforeEach(() => {
     mockLoadFile.mockClear();
     mockRunQuery.mockClear();
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(TEST_RUNNER_DB_PATH);
   });
 
   it('query test — constant = match → passed', async () => {
@@ -245,16 +240,11 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
 
   const USAGE = { total_tokens: 50, prompt_tokens: 30, completion_tokens: 20 };
 
+  setupTestDb(TEST_RUNNER_DB_PATH);
+
   beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(TEST_RUNNER_DB_PATH);
     await getLLMMockServer!().reset();
     mockFetch.mockClear();
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(TEST_RUNNER_DB_PATH);
   });
 
   it('llm binary test — SubmitBinary(true) against expected true → passed', async () => {
@@ -342,10 +332,6 @@ const JSON_AGENT_DB_PATH = getTestDbPath('json_agent_tests');
 
   beforeEach(() => {
     jsonAgentMockFetch.mockClear();
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(JSON_AGENT_DB_PATH);
   });
 
   const specs = loadAgentTestSpecs(path.join(__dirname, 'agent-tests/test-definitions.json'));

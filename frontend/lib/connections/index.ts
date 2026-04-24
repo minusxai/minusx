@@ -5,6 +5,7 @@ import { CsvConnector } from './csv-connector';
 import { PostgresConnector } from './postgres-connector';
 import { BigQueryConnector } from './bigquery-connector';
 import { AthenaConnector } from './athena-connector';
+import { InternalDbConnector } from './internal-db-connector';
 
 export type {
   SchemaEntry,
@@ -20,6 +21,7 @@ export { CsvConnector } from './csv-connector';
 export { PostgresConnector } from './postgres-connector';
 export { BigQueryConnector } from './bigquery-connector';
 export { AthenaConnector } from './athena-connector';
+export { InternalDbConnector } from './internal-db-connector';
 
 /**
  * Factory: return a NodeConnector for the given type, or null if the type is unknown.
@@ -60,6 +62,10 @@ export function getNodeConnector(
   if (type === 'google-sheets') {
     if (Array.isArray(config.files)) return new CsvConnector(name, config);
     return null;
+  }
+
+  if (type === 'internal_db') {
+    return new InternalDbConnector(name, config);
   }
 
   return null;

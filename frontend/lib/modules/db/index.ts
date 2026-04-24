@@ -1,4 +1,4 @@
-import { getAdapter } from '@/lib/database/adapter/factory';
+import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
 import { IFileSystemDBModule } from '../types';
 import { QueryResult } from '@/lib/database/adapter/types';
 import { runMigrationsIfNeeded } from '@/lib/database/run-migrations';
@@ -33,5 +33,9 @@ export class DBModule implements IFileSystemDBModule {
   async close(): Promise<void> {
     const adapter = await getAdapter();
     await adapter.close();
+  }
+
+  async reset(): Promise<void> {
+    await resetAdapter();
   }
 }

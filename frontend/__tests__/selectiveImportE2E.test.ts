@@ -55,15 +55,6 @@ function createTestData(userCount: number, docCount: number): { users: InitData[
 }
 
 describe('Import/Export E2E', () => {
-  beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();  // fresh in-memory PGLite per test
-  });
-
-  afterEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-  });
 
   it('should import and export flat data correctly', async () => {
     const { users, documents } = createTestData(2, 3);

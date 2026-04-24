@@ -61,27 +61,21 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       ? (initData.orgs ?? initData.companies as any[]).flatMap((c: any) => c.documents ?? [])
       : (initData.documents ?? []);
 
-    const seedDocs = allDocs.filter(
-      (doc) =>
-        doc.path === '/tutorial' || doc.path.startsWith('/tutorial/') ||
-        doc.path === '/internals' || doc.path.startsWith('/internals/')
-    );
+    const seedDocs = allDocs;
+    // Delete by explicit template ID list — safe for existing DBs where user files
+    // may have IDs < 1000 (created before the 1000-floor was introduced).
+    const templateIds = seedDocs.map(d => d.id);
 
     const db = getModules().db;
 
-    // Delete user-created tutorial and internals files (any ID, by path)
-    await db.exec(
-      "DELETE FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%' OR path = '/internals' OR path LIKE '/internals/%')",
-      []
-    );
+    if (templateIds.length > 0) {
+      await db.exec(
+        `DELETE FROM files WHERE id = ANY($1::int[])`,
+        [templateIds]
+      );
+    }
 
-    // Delete seed data orphans (low IDs that may not match paths after user edits)
-    await db.exec(
-      'DELETE FROM files WHERE id < 100',
-      []
-    );
-
-    // Re-insert all tutorial and internals template documents
+    // Re-insert all template documents
     for (const doc of seedDocs) {
       await db.exec(
         'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
@@ -107,7 +101,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
     return NextResponse.json({
       success: true,
-      message: 'Tutorial and internals reset to pristine template state',
+      message: 'Workspace template reset to pristine state (user-created files preserved)',
       documentsCreated: seedDocs.length,
     });
   } catch (error: any) {

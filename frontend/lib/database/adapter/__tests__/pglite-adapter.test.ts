@@ -20,7 +20,7 @@ jest.mock('@/lib/database/db-config', () => ({
 import { DocumentDB } from '@/lib/database/documents-db';
 import { registerModules, getModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';
-import { resetAdapter } from '@/lib/database/adapter/factory';
+import { truncateAllTables } from '@/store/__tests__/test-utils';
 
 function makeMockModules(db: DBModule) {
   return {
@@ -50,16 +50,14 @@ function makeMockModules(db: DBModule) {
 }
 
 describe('PGLite adapter — Phase 2 spike', () => {
-  beforeEach(async () => {
-    // Fresh in-memory PGLite instance per test — resetAdapter() in afterEach nullifies
-    // the singleton so getAdapter() creates a new PGlite instance each time.
+  beforeAll(async () => {
+    // Single PGlite instance for the whole suite — PGlite WASM cannot be restarted
+    // after close() within the same process, so we init once and truncate between tests.
     registerModules(makeMockModules(new DBModule()));
     await getModules().db.init();
   });
 
-  afterEach(async () => {
-    await resetAdapter();
-  });
+  beforeEach(truncateAllTables);
 
   it('creates and retrieves a file by ID', async () => {
     const id = await DocumentDB.create('test-question', '/org/test-question', 'question', {

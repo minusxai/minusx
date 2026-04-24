@@ -13,7 +13,7 @@ import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
-import { getWhitelistForPath } from '@/lib/sql/whitelist-resolver.server';
+import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolver.server';
 
 /**
  * Transform a query+params pair so that None (null) parameter values are handled:
@@ -49,6 +49,10 @@ async function applyNoneParams(
   return { sql: query, params: effectiveParams };
 }
 
+function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: string; table: string; columns: string[] }> {
+  return whitelist.flatMap(w => w.tables.map(t => ({ schema: w.schema, table: t.table, columns: [] })));
+}
+
 // ---- Server-side query result cache (shared across sessions per process) ----
 const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
 
@@ -77,7 +81,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const parseStart = Date.now();
     const body = await request.json();
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
-    const { connection_name, query, parameters, references, parameterTypes, filePath } = body;
+    const { connection_name, query, parameters, references, parameterTypes, filePath, fileId, fileVersion } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
@@ -99,9 +103,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const cached = queryCache.get(serverCacheKey);
     if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, databaseName: connection_name, durationMs: 0,
-        rowCount: cached.result.rows.length, wasCacheHit: true,
-         mode: user.mode, userEmail: user.email,
+        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
+        databaseName: connection_name, durationMs: 0,
+        rowCount: cached.result.rows.length, colCount: cached.result.columns.length,
+        wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
       });
       console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
@@ -111,9 +116,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Validate the raw query before CTE expansion: the original SQL contains the actual
     // table references; CTE expansion only wraps referenced questions as WITH clauses.
     // @alias references (question references) will fail to parse → allowed through safely.
+    let schemaContext: Array<{ schema: string; table: string; columns: string[] }> | null = null;
     if (filePath) {
       const whitelist = await getWhitelistForPath(filePath, connection_name, user);
       if (whitelist) {
+        schemaContext = whitelistToSchemaContext(whitelist);
         const validationError = await validateQueryTables(query, whitelist, user);
         if (validationError) {
           return NextResponse.json(
@@ -183,9 +190,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       // Publish analytics event (fire-and-forget via registry)
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, databaseName: connection_name, durationMs,
-        rowCount: result.rows.length, wasCacheHit: false,
-         mode: user.mode, userEmail: user.email,
+        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
+        schemaContext: schemaContext ?? undefined,
+        databaseName: connection_name, durationMs,
+        rowCount: result.rows.length, colCount: result.columns.length,
+        wasCacheHit: false, mode: user.mode, userId: user.userId, userEmail: user.email,
       });
 
       return { ...result, cachedAt, _finalQuery: displayQuery };
@@ -196,6 +205,16 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       const { _finalQuery: rq, ...rest } = await execPromise;
       console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: rest, finalQuery: rq });
+    } catch (execError) {
+      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
+        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
+        schemaContext: schemaContext ?? undefined,
+        databaseName: connection_name, durationMs: Date.now() - startTime,
+        rowCount: 0, colCount: 0, wasCacheHit: false,
+        error: execError instanceof Error ? execError.message : String(execError),
+        mode: user.mode, userId: user.userId, userEmail: user.email,
+      });
+      throw execError;
     } finally {
       queryInflight.delete(serverCacheKey);
     }

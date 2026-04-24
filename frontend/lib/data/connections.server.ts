@@ -123,6 +123,11 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new UserFacingError('DuckDB connections cannot be created manually. Use CSV uploads or Google Sheets instead.');
     }
 
+    // internal_db is a reserved system connection type, not user-creatable
+    if ((input.type as string) === 'internal_db') {
+      throw new UserFacingError('internal_db is a reserved connection type and cannot be created manually.');
+    }
+
     // Validation
     validateConnectionName(input.name);
 

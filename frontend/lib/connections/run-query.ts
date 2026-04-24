@@ -33,6 +33,9 @@ export async function runQuery(
   const rawConn = await ConnectionsAPI.getRawByName(databaseName, user.mode).catch(() => null);
   if (rawConn) {
     const { type, config } = rawConn;
+    if (type === 'internal_db' && user.mode !== 'internals') {
+      throw new Error('internal_db connections are only available in internals mode');
+    }
     const connector = getNodeConnector(databaseName, type, config);
     if (connector) {
       return connector.query(query, params);

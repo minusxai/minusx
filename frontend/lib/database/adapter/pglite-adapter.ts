@@ -56,7 +56,11 @@ export class PgliteAdapter implements IDatabaseAdapter {
 
   async initializeSchema(): Promise<void> {
     if (this.schemaInitialized) return;
+    await this.db.waitReady;
     for (const stmt of splitSQLStatements(POSTGRES_SCHEMA)) {
+      // PGLite always starts with the public schema; CREATE SCHEMA IF NOT EXISTS public
+      // causes a WASM abort in PGLite even with IF NOT EXISTS.
+      if (/^\s*CREATE\s+SCHEMA\b/i.test(stmt)) continue;
       try {
         await this.db.exec(stmt);
       } catch (error: any) {

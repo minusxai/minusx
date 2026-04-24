@@ -43,15 +43,9 @@ const TEST_EMAIL = 'slack-test@example.com';
 // ============================================================================
 
 async function addSlackTestFixtures(_dbPath: string): Promise<void> {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
-
-  // Determine next safe file ID after template-seeded files
-  const { rows: [{ next_id }] } = await db.query<{ next_id: number }>(
-    'SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files',
-    []
-  );
 
   // /org/configs folder and /org/configs/config already exist (created by initTestDatabase
   // via workspace-template.json). Update the config content with the slack bot configuration.
@@ -68,14 +62,14 @@ async function addSlackTestFixtures(_dbPath: string): Promise<void> {
       enabled: true,
     }],
   };
-  await db.query(
+  await db.exec(
     `UPDATE files SET content = $1 WHERE path = $2`,
     [JSON.stringify(configContent), '/org/configs/config']
   );
 
   // MinusX user whose email matches the Slack user.
   // id=1 is already created by initTestDatabase (template admin), so use id=2.
-  await db.query(
+  await db.exec(
     `INSERT INTO users (id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [2, TEST_EMAIL, 'Slack Test User', null, null, null, '', 'viewer', now, now]
@@ -394,9 +388,9 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages[0].text).toBe('Last week they were up 8%.');
 
       // Only ONE conversation file should exist at the Slack path
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
-      const { rows } = await db.query<{ cnt: number }>(
+      const { getModules } = await import('@/lib/modules/registry');
+      const db = getModules().db;
+      const { rows } = await db.exec<{ cnt: number }>(
         `SELECT COUNT(*) AS cnt FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
         [],
       );
@@ -404,7 +398,7 @@ describe('Slack Bot Integration', () => {
 
       // The conversation log must contain entries from BOTH messages — proves history
       // was appended rather than the file being reset on the follow-up.
-      const { rows: [fileRow] } = await db.query<{ content: string }>(
+      const { rows: [fileRow] } = await db.exec<{ content: string }>(
         `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%' LIMIT 1`,
         [],
       );
@@ -440,9 +434,8 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages[0].thread_ts).toBe(ts);
 
       // File should be stored under the user's conversation folder, not a separate slack folder
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
-      const { rows } = await db.query<{ cnt: number }>(
+      const { getModules } = await import('@/lib/modules/registry');
+      const { rows } = await getModules().db.exec<{ cnt: number }>(
         `SELECT COUNT(*) AS cnt FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
         [],
       );

@@ -88,6 +88,9 @@ export interface LLMCallDetail {
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
+  system_prompt_tokens?: number;
+  app_state_tokens?: number;
+  total_tool_calls?: number;
   cost: number;
   finish_reason?: string | null;
   trigger?: string | null;  // What initiated this LLM call: "user_message", "tool_result", etc.

@@ -12,9 +12,10 @@
 
 import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
+import { getTestDbPath } from './test-utils';
 import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
+import { setupTestDb } from '@/test/harness/test-db';
 import { NextRequest } from 'next/server';
 import type { EvalItem } from '@/lib/types';
 
@@ -49,17 +50,11 @@ describe('Evals API E2E Tests', () => {
       }
     ]
   });
+  setupTestDb(TEST_DB_PATH);
 
   beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(TEST_DB_PATH);
     await getLLMMockServer!().reset();
     mockFetch.mockClear();
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(TEST_DB_PATH);
   });
 
   // ---------------------------------------------------------------------------

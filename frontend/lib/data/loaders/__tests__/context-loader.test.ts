@@ -12,11 +12,9 @@
 
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
-import {
-  initTestDatabase,
-  cleanupTestDatabase,
-  getTestDbPath
-} from '@/store/__tests__/test-utils';
+import { getTestDbPath } from '@/store/__tests__/test-utils';
+import { setupTestDb } from '@/test/harness/test-db';
+import { getModules } from '@/lib/modules/registry';
 import type {
   ConnectionContent,
   ContextContent,
@@ -79,26 +77,13 @@ describe('Context Loader Integration with Versioning', () => {
   let orgContextId: number;
   let salesContextId: number;
 
-  beforeAll(async () => {
-    // Reset adapter to ensure fresh connection
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-
-    await initTestDatabase(TEST_DB_PATH);
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(TEST_DB_PATH);
-  });
+  setupTestDb(TEST_DB_PATH);
 
   beforeEach(async () => {
-    jest.clearAllMocks();
     mockGetSchemaFromPython.mockClear();
 
-    // Clean up existing test data
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
-    await db.query('DELETE FROM files', []);
+    // Clean up existing test data (setupTestDb already called jest.clearAllMocks())
+    await getModules().db.exec('DELETE FROM files', []);
 
     // Mock getSchemaFromPython to return schemas directly
     mockGetSchemaFromPython.mockImplementation((name: string) => {
@@ -1223,9 +1208,7 @@ describe('Context Loader Integration with Versioning', () => {
      * Returns the new context ID.
      */
     async function replaceRootContext(whitelist: import('@/lib/types').Whitelist): Promise<number> {
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
-      await db.query("DELETE FROM files WHERE path = '/org/context'", []);
+      await getModules().db.exec("DELETE FROM files WHERE path = '/org/context'", []);
       return DocumentDB.create('context', '/org/context', 'context', {
         versions: [{
           version: 1,
@@ -1506,9 +1489,7 @@ describe('Context Loader Integration with Versioning', () => {
     // ── Shared helpers ───────────────────────────────────────────────────
 
     async function replaceRootCtx(whitelist: Whitelist): Promise<number> {
-      const { getAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await getAdapter();
-      await db.query("DELETE FROM files WHERE path = '/org/context'", []);
+      await getModules().db.exec("DELETE FROM files WHERE path = '/org/context'", []);
       return DocumentDB.create('context', '/org/context', 'context', {
         versions: [{ version: 1, whitelist, docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
         published: { all: 1 },

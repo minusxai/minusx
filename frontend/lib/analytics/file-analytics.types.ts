@@ -1,28 +1,19 @@
-export type FileEventType = 'created' | 'updated' | 'deleted' | 'read_direct' | 'read_as_reference';
+export const FileEventType = {
+  CREATED: 0,
+  READ_DIRECT: 1,
+  READ_AS_REFERENCE: 2,
+  UPDATED: 3,
+  DELETED: 4,
+} as const;
+
+export type FileEventTypeValue = typeof FileEventType[keyof typeof FileEventType];
 
 export interface FileEvent {
-  eventType: FileEventType;
+  eventType: FileEventTypeValue;
   fileId: number;
-  fileType?: string;
-  filePath?: string;
-  fileName?: string;
-  userId?: number;
-  userEmail?: string;
-  userRole?: string;
-  referencedByFileId?: number;
-  referencedByFileType?: string;
-}
-
-export interface LLMCallEvent {
-  conversationId: number;
-  llmCallId?: string;
-  model: string;
-  totalTokens: number;
-  promptTokens: number;
-  completionTokens: number;
-  cost: number;
-  durationS: number;
-  finishReason?: string;
+  fileVersion?: number | null;
+  referencedByFileId?: number | null;
+  userId?: number | null;
 }
 
 export interface ConversationAnalyticsSummary {
@@ -43,13 +34,13 @@ export interface RecentFile {
 }
 
 export interface FileAnalyticsSummary {
-  totalViews: number;           // COUNT(*) WHERE event_type = 'read_direct'
-  uniqueViewers: number;        // COUNT(DISTINCT user_id) WHERE event_type = 'read_direct'
-  totalEdits: number;           // COUNT(*) WHERE event_type = 'updated'
-  uniqueEditors: number;        // COUNT(DISTINCT user_id) WHERE event_type = 'updated'
-  usedByFiles: number;          // COUNT(DISTINCT referenced_by_file_id) WHERE event_type = 'read_as_reference'
-  createdAt: string | null;     // MIN(timestamp) WHERE event_type = 'created'
-  createdBy: string | null;     // user_email of first 'created' event
-  lastEditedAt: string | null;  // MAX(timestamp) WHERE event_type = 'updated'
-  lastEditedBy: string | null;  // user_email of latest 'updated' event
+  totalViews: number;
+  uniqueViewers: number;
+  totalEdits: number;
+  uniqueEditors: number;
+  usedByFiles: number;
+  createdAt: string | null;
+  createdBy: string | null;
+  lastEditedAt: string | null;
+  lastEditedBy: string | null;
 }

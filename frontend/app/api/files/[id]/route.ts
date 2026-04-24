@@ -39,13 +39,14 @@ export const GET = withAuth(async (
       // Track direct read (fire-and-forget)
       appEventRegistry.publish(AppEvents.FILE_VIEWED, {
         fileId: id,
+        fileVersion: result.data.version,
         fileType: result.data.type,
         filePath: result.data.path,
         fileName: result.data.name,
         userId: user.userId,
         userEmail: user.email,
         userRole: user.role,
-        
+
         mode: user.mode,
       });
       return successResponse(result.data);
@@ -58,13 +59,14 @@ export const GET = withAuth(async (
     // Track direct read (fire-and-forget)
     appEventRegistry.publish(AppEvents.FILE_VIEWED, {
       fileId: id,
+      fileVersion: result.data.version,
       fileType: result.data.type,
       filePath: result.data.path,
       fileName: result.data.name,
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      
+
       mode: user.mode,
     });
     return successResponse(result);

@@ -26,13 +26,14 @@ export const POST = withAuth(async (
     for (const file of result.data) {
       appEventRegistry.publish(AppEvents.FILE_VIEWED, {
         fileId: file.id,
+        fileVersion: file.version,
         fileType: file.type,
         filePath: file.path,
         fileName: file.name,
         userId: user.userId,
         userEmail: user.email,
         userRole: user.role,
-        
+
         mode: user.mode,
       });
     }

@@ -21,7 +21,8 @@
 import { POST as runPostHandler } from '@/app/api/jobs/run/route';
 import { POST as cronPostHandler } from '@/app/api/jobs/cron/route';
 import { GET as runsGetHandler } from '@/app/api/jobs/runs/route';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
+import { getTestDbPath } from '@/store/__tests__/test-utils';
+import { setupTestDb } from '@/test/harness/test-db';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 import type { AlertContent, AlertOutput, JobRun, RunFileContent, Test } from '@/lib/types';
@@ -133,87 +134,34 @@ let draftAlertId: number;
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('Job Runs E2E', () => {
-  beforeEach(async () => {
+  setupTestDb(TEST_DB_PATH, {
+    customInit: async () => {
+      connectionId = await DocumentDB.create(
+        'test_conn', '/org/database/test_conn', 'connection',
+        { id: 'test_conn', name: 'test_conn', type: 'postgresql', config: { host: 'localhost' } } as any, []
+      );
+      questionId = await DocumentDB.create(
+        'Revenue Question', '/org/questions/revenue', 'question',
+        { query: 'SELECT revenue FROM sales', connection_name: 'test_conn', vizSettings: { type: 'table' }, parameters: [], parameterValues: {} } as any, []
+      );
+      const liveAlertTest: Test = {
+        type: 'query',
+        subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 },
+        answerType: 'number', operator: '<=',
+        value: { type: 'constant', value: 100 },
+      };
+      const liveAlertContent: AlertContent = {
+        status: 'live', schedule: { cron: '* * * * *', timezone: 'UTC' },
+        tests: [liveAlertTest], recipients: [],
+      };
+      alertId = await DocumentDB.create('Revenue Alert', '/org/alerts/revenue', 'alert', liveAlertContent, [questionId]);
+      draftAlertId = await DocumentDB.create('Draft Alert', '/org/alerts/draft', 'alert', { ...liveAlertContent, status: 'draft' }, [questionId]);
+      await JobRunsDB.ensureTable();
+    }
+  });
+
+  beforeEach(() => {
     process.env.CRON_SECRET = TEST_CRON_SECRET;
-
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(TEST_DB_PATH);
-
-    // Connection — uses 'postgresql' type so getNodeConnector() returns null
-    // and execution falls through to the mocked pythonBackendFetch
-    connectionId = await DocumentDB.create(
-      'test_conn',
-      '/org/database/test_conn',
-      'connection',
-      { id: 'test_conn', name: 'test_conn', type: 'postgresql', config: { host: 'localhost' } } as any,
-      []
-    );
-
-    // Question referencing that connection
-    questionId = await DocumentDB.create(
-      'Revenue Question',
-      '/org/questions/revenue',
-      'question',
-      {
-        query: 'SELECT revenue FROM sales',
-        connection_name: 'test_conn',
-        vizSettings: { type: 'table' },
-        parameters: [],
-        parameterValues: {},
-      } as any,
-      []
-    );
-
-    // NEW: test passes when revenue <= 100, fails (triggers alert) when revenue > 100
-    const liveAlertTest: Test = {
-      type: 'query',
-      subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 },
-      answerType: 'number',
-      operator: '<=',
-      value: { type: 'constant', value: 100 },
-    };
-    const liveAlertContent: AlertContent = {
-      status: 'live',
-      schedule: { cron: '* * * * *', timezone: 'UTC' },
-      tests: [liveAlertTest],
-      recipients: [],
-    };
-
-    // Live alert: condition revenue > 100, cron every minute
-    alertId = await DocumentDB.create(
-      'Revenue Alert',
-      '/org/alerts/revenue',
-      'alert',
-      liveAlertContent,
-      [questionId]
-    );
-
-    const draftAlertContent: AlertContent = {
-      ...liveAlertContent,
-      status: 'draft',
-    };
-
-    // Draft alert — should be skipped by cron
-    draftAlertId = await DocumentDB.create(
-      'Draft Alert',
-      '/org/alerts/draft',
-      'alert',
-      draftAlertContent,
-      [questionId]
-    );
-
-    await JobRunsDB.ensureTable();
-    jest.clearAllMocks();
-  });
-
-  afterEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(TEST_DB_PATH);
   });
 
   // ── 1. Manual run ────────────────────────────────────────────────────────────

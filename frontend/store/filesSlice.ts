@@ -1178,7 +1178,7 @@ export const selectContextsContentLoaded = createSelector(
 export interface ConnectionWithSchema {
   metadata: {
     name: string;
-    type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena';
+    type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'internal_db';
     config: Record<string, any>;
     created_at: string;
     updated_at: string;

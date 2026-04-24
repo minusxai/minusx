@@ -49,11 +49,11 @@ function makeConvContent(opts: {
 }
 
 async function seedConversations(_dbPath: string): Promise<void> {
-  const { getAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await getAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  const db = getModules().db;
   const now = new Date().toISOString();
 
-  const { rows: [{ next_id }] } = await db.query<{ next_id: number }>(
+  const { rows: [{ next_id }] } = await db.exec<{ next_id: number }>(
     'SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files',
     [],
   );
@@ -84,7 +84,7 @@ async function seedConversations(_dbPath: string): Promise<void> {
   ];
 
   for (const f of files) {
-    await db.query(
+    await db.exec(
       `INSERT INTO files (id, name, path, type, content, file_references, version, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [f.id, f.name, f.path, 'conversation', JSON.stringify(f.content), '[]', 1, now, now],

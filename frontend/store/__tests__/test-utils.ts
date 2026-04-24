@@ -59,6 +59,21 @@ import { waitForPortRelease } from './port-manager';
 // ============================================================================
 
 /**
+ * Truncate all public-schema tables between tests.
+ * Faster than reset() and safe for PGLite (avoids WASM close/restart).
+ */
+export async function truncateAllTables(): Promise<void> {
+  const { getModules } = await import('@/lib/modules/registry');
+  await getModules().db.exec(
+    `DO $$ DECLARE r RECORD; BEGIN
+       FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+         EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE';
+       END LOOP;
+     END $$`
+  );
+}
+
+/**
  * Initialize a fresh test database with schema and test org.
  * Cleans up any existing database and WAL files first.
  */
@@ -72,8 +87,8 @@ export async function initTestDatabase(dbPath: string = join(process.cwd(), 'dat
  * Call this in afterAll hook.
  */
 export async function cleanupTestDatabase(_dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
-  const { resetAdapter } = await import('@/lib/database/adapter/factory');
-  await resetAdapter();
+  const { getModules } = await import('@/lib/modules/registry');
+  await getModules().db.reset?.();
 }
 
 // ============================================================================
