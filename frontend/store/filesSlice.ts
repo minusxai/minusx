@@ -109,15 +109,17 @@ const filesSlice = createSlice({
     }>) {
       const { file, references = [] } = action.payload;
 
+      const existing = state.files[file.id];
+
       // Store the main file — preserve existing analytics when not explicitly provided
       state.files[file.id] = {
         ...dbFileToFileState(file),
         analytics: 'analytics' in action.payload
           ? action.payload.analytics
-          : state.files[file.id]?.analytics,
+          : existing?.analytics,
         conversationAnalytics: 'conversationAnalytics' in action.payload
           ? action.payload.conversationAnalytics
-          : state.files[file.id]?.conversationAnalytics,
+          : existing?.conversationAnalytics,
       };
 
       // Update path index (only for real files with positive IDs)
@@ -128,6 +130,21 @@ const filesSlice = createSlice({
           delete state.files[oldId];
         }
         state.pathIndex[file.path] = file.id;
+
+        // Draft → published: clean up old token path and surface in parent folder
+        if (existing?.draft && !file.draft) {
+          if (existing.path && existing.path !== file.path) {
+            delete state.pathIndex[existing.path];
+          }
+          const parentPath = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
+          const parentId = state.pathIndex[parentPath];
+          if (parentId && state.files[parentId]) {
+            if (!state.files[parentId].references.includes(file.id)) {
+              state.files[parentId].references.push(file.id);
+            }
+            state.files[parentId].updatedAt = Date.now();
+          }
+        }
       }
 
       // Store all referenced files
