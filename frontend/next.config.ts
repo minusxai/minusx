@@ -49,6 +49,10 @@ const nextConfig: NextConfig = {
 
   turbopack: {},
 
+  devIndicators: {
+    position: 'bottom-right',
+  },
+
   experimental: {
     // Cache fetch() responses in Server Components across HMR refreshes.
     // Without this, every code change during development re-fetches from the remote
