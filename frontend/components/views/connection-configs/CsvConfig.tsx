@@ -27,6 +27,7 @@ export default function CsvConfig({
 }: CsvConfigProps) {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [uploadStage, setUploadStage] = useState<string>('');
 
   const handleFilesSelected = (selected: File[]) => {
     setPendingFiles(
@@ -87,6 +88,7 @@ export default function CsvConfig({
         connectionName,
         filesWithSchema,
         mode === 'view',
+        setUploadStage,
       );
 
       if (!result.success) {
@@ -200,8 +202,8 @@ export default function CsvConfig({
             </Box>
           )}
 
-          {uploadProgress === 'uploading' && (
-            <Text fontSize="xs" color="accent.teal">Uploading to S3 and reading metadata...</Text>
+          {uploadProgress === 'uploading' && uploadStage && (
+            <Text fontSize="xs" color="accent.teal">{uploadStage}</Text>
           )}
           {uploadProgress === 'done' && (
             <HStack gap={1.5}>

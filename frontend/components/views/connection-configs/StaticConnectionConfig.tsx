@@ -309,12 +309,14 @@ export default function StaticConnectionConfig({
   // ── CSV upload state ──────────────────────────────────────────────────────
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [uploadStage, setUploadStage] = useState<string>('');
 
   // ── Google Sheets add state ───────────────────────────────────────────────
   const [pendingSheets, setPendingSheets] = useState<Array<{ url: string; schema: string; tableName: string }>>([
     { url: '', schema: '', tableName: '' },
   ]);
   const [importProgress, setImportProgress] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
+  const [importStage, setImportStage] = useState<string>('');
 
   // ── Per-item loading states ───────────────────────────────────────────────
   const [reimportingId, setReimportingId] = useState<string | null>(null);
@@ -446,7 +448,7 @@ export default function StaticConnectionConfig({
         tableName: tableName || undefined,
       }));
 
-      const result = await uploadCsvFilesS3('static', filesWithSchema, false);
+      const result = await uploadCsvFilesS3('static', filesWithSchema, false, setUploadStage);
 
       if (!result.success) { onError(result.message); setUploadProgress('error'); return; }
 
@@ -489,6 +491,7 @@ export default function StaticConnectionConfig({
       if (tableErr) { onError(`Table name "${s.tableName}": ${tableErr}`); return; }
     }
     setImportProgress('importing');
+    setImportStage('Downloading from Google Sheets…');
     let allNewFiles: CsvFileInfo[] = [];
     try {
       for (const sheet of validSheets) {
@@ -813,6 +816,9 @@ export default function StaticConnectionConfig({
                 >
                   <LuUpload size={14} /> Upload
                 </Button>
+                {uploadProgress === 'uploading' && uploadStage && (
+                  <Text fontSize="xs" color="accent.teal">{uploadStage}</Text>
+                )}
                 {uploadProgress === 'done' && (
                   <Text fontSize="xs" color="accent.teal">
                     Uploaded. Save the connection to persist.
@@ -932,6 +938,9 @@ export default function StaticConnectionConfig({
               >
                 Import
               </Button>
+              {importProgress === 'importing' && importStage && (
+                <Text fontSize="xs" color="accent.teal">{importStage}</Text>
+              )}
               {importProgress === 'done' && (
                 <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30">
                   <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />

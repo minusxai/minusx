@@ -24,6 +24,7 @@ export default function GoogleSheetsConfig({
   const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>(config.spreadsheet_url || '');
   const [schemaName, setSchemaName] = useState<string>(config.schema_name || 'public');
   const [importProgress, setImportProgress] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
+  const [importStage, setImportStage] = useState<string>('');
 
   const handleImport = async () => {
     if (!spreadsheetUrl) {
@@ -43,6 +44,7 @@ export default function GoogleSheetsConfig({
     }
 
     setImportProgress('importing');
+    setImportStage('Downloading from Google Sheets…');
 
     try {
       const result = await importGoogleSheets(
@@ -124,10 +126,8 @@ export default function GoogleSheetsConfig({
       </Button>
 
       {/* Import progress indicator */}
-      {importProgress === 'importing' && (
-        <Text fontSize="xs" color="accent.teal">
-          Downloading and processing Google Sheets...
-        </Text>
+      {importProgress === 'importing' && importStage && (
+        <Text fontSize="xs" color="accent.teal">{importStage}</Text>
       )}
       {importProgress === 'done' && (
         <HStack gap={1.5}>

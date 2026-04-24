@@ -81,6 +81,7 @@ export async function uploadCsvFilesS3(
   connectionName: string,
   filesWithSchema: FileWithSchema[],
   replaceExisting: boolean = false,
+  onStage?: (message: string) => void,
 ): Promise<CsvUploadResult> {
   try {
     // Step 1 & 2: upload each file to S3
@@ -93,6 +94,7 @@ export async function uploadCsvFilesS3(
     }[] = [];
 
     for (const { file, schemaName, tableName } of filesWithSchema) {
+      onStage?.(`Uploading ${file.name}…`);
       const { uploadUrl, s3Key } = await getPresignedUrl(file, connectionName);
       await putFileToS3(file, uploadUrl);
       const record: {
@@ -112,6 +114,7 @@ export async function uploadCsvFilesS3(
     }
 
     // Step 3: register with backend (reads metadata from S3)
+    onStage?.('Reading file metadata…');
     const res = await fetch('/api/csv/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

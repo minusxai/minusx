@@ -29,7 +29,7 @@ function namedToPositional(
 ): { sql: string; values: unknown[] } {
   const values: unknown[] = [];
   const seen: Record<string, number> = {};
-  const positional = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+  const positional = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
     if (!(key in seen)) {
       values.push(params?.[key] ?? null);
       seen[key] = values.length;
