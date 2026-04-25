@@ -1,8 +1,25 @@
 import 'server-only';
 
+export interface ColumnMeta {
+  description?: string;
+  category?: 'categorical' | 'numeric' | 'temporal' | 'other';
+  nullCount?: number;
+  /** Only for categorical columns */
+  nDistinct?: number;
+  topValues?: Array<{ value: string | number | boolean; count: number; fraction: number }>;
+  /** Only for numeric columns */
+  min?: number | string;
+  max?: number | string;
+  avg?: number;
+  /** Only for temporal columns */
+  minDate?: string;
+  maxDate?: string;
+}
+
 export interface SchemaColumn {
   name: string;
   type: string;
+  meta?: ColumnMeta;
 }
 
 export interface SchemaTable {

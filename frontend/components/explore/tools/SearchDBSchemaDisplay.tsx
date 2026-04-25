@@ -6,14 +6,32 @@ import { LuCheck, LuX, LuDatabase, LuChevronDown, LuChevronRight } from 'react-i
 import { DisplayProps } from '@/lib/types';
 import { type DetailCardProps, parseToolArgs, parseToolContent } from './DetailCarousel';
 
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/** Summarize column meta for a table: e.g. "3 cat, 2 date" */
+function getTableMetaHighlight(columns: any[] | undefined): string | null {
+  if (!columns) return null;
+  let cat = 0, num = 0, temp = 0;
+  for (const col of columns) {
+    const c = col.meta?.category;
+    if (c === 'categorical') cat++;
+    else if (c === 'numeric') num++;
+    else if (c === 'temporal') temp++;
+  }
+  const parts: string[] = [];
+  if (cat) parts.push(`${cat} cat`);
+  if (temp) parts.push(`${temp} date`);
+  if (num) parts.push(`${num} num`);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
 
 export function SearchDBSchemaDetailCard({ msg }: DetailCardProps) {
   const args = parseToolArgs(msg);
   const result = parseToolContent(msg);
   const query = args.query || '';
-  const tables: any[] = result?.schema || [];
-  const schemaList: any[] = result?._schema || [];
+  const queryType = result?.queryType || 'none';
 
   return (
     <VStack gap={1} align="stretch" px={3} pb={2}>
@@ -31,68 +49,131 @@ export function SearchDBSchemaDetailCard({ msg }: DetailCardProps) {
 
       {/* Results */}
       <VStack gap={1} align="stretch" maxH="350px" overflowY="auto">
-        {tables.length > 0 ? (
-          <>
-            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-              {tables.length} {tables.length === 1 ? 'table' : 'tables'}
-            </Text>
-            {tables.map((t: any, idx: number) => (
-              <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-                <HStack gap={2} mb={t.columns?.length > 0 ? 1 : 0}>
-                  <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
-                  <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">
-                    {t._schema ? `${t._schema}.` : ''}{t.table}
-                  </Text>
-                  {t.columns && (
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                      {t.columns.length} cols
-                    </Text>
-                  )}
-                </HStack>
-                {t.columns && t.columns.length > 0 && (
-                  <HStack gap={1} flexWrap="wrap" pl={5}>
-                    {t.columns.slice(0, 6).map((col: any, ci: number) => (
-                      <Box key={ci} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
-                        <Text fontSize="2xs" fontFamily="mono" color="fg.muted">
-                          {col.name} <Text as="span" color="fg.subtle">{col.type}</Text>
-                        </Text>
-                      </Box>
-                    ))}
-                    {t.columns.length > 6 && (
-                      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{t.columns.length - 6}</Text>
-                    )}
-                  </HStack>
-                )}
-              </Box>
-            ))}
-          </>
-        ) : schemaList.length > 0 ? (
-          schemaList.map((s: any, idx: number) => (
-            <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-              <HStack gap={2} mb={1}>
-                <Icon as={LuDatabase} boxSize={3} color="accent.primary" />
-                <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">{s.schema}</Text>
-                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{s.tables?.length || 0} tables</Text>
-              </HStack>
-              {s.tables && (
-                <HStack gap={1} flexWrap="wrap" pl={5}>
-                  {s.tables.slice(0, 10).map((t: string, ti: number) => (
-                    <Box key={ti} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
-                      <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{t}</Text>
-                    </Box>
-                  ))}
-                  {s.tables.length > 10 && (
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{s.tables.length - 10}</Text>
-                  )}
-                </HStack>
-              )}
-            </Box>
-          ))
+        {queryType === 'string' ? (
+          <StringSearchResults results={result?.results || []} />
         ) : (
-          <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No schema data</Text>
+          <SchemaResults schemas={result?.schema || []} queryType={queryType} />
         )}
       </VStack>
     </VStack>
+  );
+}
+
+/** Render string search results (scored matches) */
+function StringSearchResults({ results }: { results: any[] }) {
+  if (results.length === 0) return <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No matches</Text>;
+
+  return (
+    <>
+      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+        {results.length} {results.length === 1 ? 'match' : 'matches'}
+      </Text>
+      {results.slice(0, 8).map((item: any, idx: number) => {
+        const schemaObj = item.schema || {};
+        const schemaName = schemaObj.schema || 'unknown';
+        const tables = schemaObj.tables || [];
+        return (
+          <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+            <HStack gap={2} mb={tables.length > 0 ? 1 : 0}>
+              <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
+              <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">
+                {schemaName}
+              </Text>
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                {tables.length} {tables.length === 1 ? 'table' : 'tables'} · score {(item.score * 100).toFixed(0)}%
+              </Text>
+            </HStack>
+            {item.relevantResults?.slice(0, 3).map((r: any, ri: number) => (
+              <Text key={ri} fontSize="2xs" fontFamily="mono" color="fg.muted" pl={5}>
+                {r.field}: {r.location}
+              </Text>
+            ))}
+          </Box>
+        );
+      })}
+      {results.length > 8 && (
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{results.length - 8} more</Text>
+      )}
+    </>
+  );
+}
+
+/** Render full schema or jsonpath results */
+function SchemaResults({ schemas, queryType }: { schemas: any[]; queryType: string }) {
+  if (schemas.length === 0) return <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No schema data</Text>;
+
+  // JSONPath can return arbitrary shapes (columns, tables, scalars)
+  if (queryType === 'jsonpath') {
+    return (
+      <>
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+          {schemas.length} {schemas.length === 1 ? 'result' : 'results'}
+        </Text>
+        {schemas.slice(0, 10).map((item: any, idx: number) => (
+          <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+            <HStack gap={2}>
+              <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
+              <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate>
+                {item.name
+                  ? `${item._schema ? `${item._schema}.` : ''}${item._table ? `${item._table}.` : ''}${item.name}`
+                  : item.table
+                    ? `${item._schema ? `${item._schema}.` : ''}${item.table}`
+                    : item.schema || JSON.stringify(item).slice(0, 60)
+                }
+              </Text>
+              {item.type && (
+                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{item.type}</Text>
+              )}
+              {item.columns && (
+                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{item.columns.length} cols</Text>
+              )}
+            </HStack>
+          </Box>
+        ))}
+        {schemas.length > 10 && (
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{schemas.length - 10} more</Text>
+        )}
+      </>
+    );
+  }
+
+  // Full schema: [{schema, tables: [{table, columns}]}]
+  const totalTables = schemas.reduce((sum: number, s: any) => sum + (s.tables?.length || 0), 0);
+  return (
+    <>
+      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+        {schemas.length} {schemas.length === 1 ? 'schema' : 'schemas'} · {totalTables} {totalTables === 1 ? 'table' : 'tables'}
+      </Text>
+      {schemas.map((s: any, idx: number) => (
+        <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+          <HStack gap={2} mb={(s.tables?.length || 0) > 0 ? 1 : 0}>
+            <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
+            <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">{s.schema}</Text>
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{s.tables?.length || 0} tables</Text>
+          </HStack>
+          {s.tables && s.tables.length > 0 && (
+            <HStack gap={1} flexWrap="wrap" pl={5}>
+              {s.tables.slice(0, 12).map((t: any, ti: number) => {
+                const colCount = t.columns?.length || 0;
+                const metaHighlight = getTableMetaHighlight(t.columns);
+                return (
+                  <Box key={ti} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.default" fontWeight="600">
+                      {t.table}
+                      <Text as="span" color="fg.subtle" fontWeight="400"> {colCount}c</Text>
+                      {metaHighlight && <Text as="span" color="fg.subtle" fontWeight="400"> · {metaHighlight}</Text>}
+                    </Text>
+                  </Box>
+                );
+              })}
+              {s.tables.length > 12 && (
+                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{s.tables.length - 12}</Text>
+              )}
+            </HStack>
+          )}
+        </Box>
+      ))}
+    </>
   );
 }
 

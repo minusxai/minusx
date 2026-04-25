@@ -9,6 +9,7 @@ import { getSchemaFromPython } from '@/lib/backend/python-backend.server';
 import { updateCachedSchema } from '@/lib/data/connections.server';
 import { CustomLoader } from './types';
 import { getNodeConnector } from '@/lib/connections';
+import { profileDatabase } from '@/lib/connections/statistics-engine';
 
 /**
  * Check if schema is stale (older than 24 hours)
@@ -60,8 +61,21 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
     const result = connector
       ? { schemas: await connector.getSchema() }
       : await getSchemaFromPython(file.name, content.type, content.config);
+
+    // Enrich schema with column metadata (descriptions, categories, top values, etc.)
+    let enrichedSchemas = result.schemas;
+    if (connector) {
+      try {
+        const profile = await profileDatabase(content.type, result.schemas, (sql) => connector.query(sql));
+        enrichedSchemas = profile.schema;
+        console.log(`[connectionLoader] Enriched schema for ${file.name} (${profile.queryCount} queries)`);
+      } catch (e) {
+        console.warn(`[connectionLoader] Failed to enrich schema for ${file.name}, using plain schema:`, e);
+      }
+    }
+
     freshSchema = {
-      ...result,
+      schemas: enrichedSchemas,
       updated_at: new Date().toISOString()
     };
   } catch (error) {

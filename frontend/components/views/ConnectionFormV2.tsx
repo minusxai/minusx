@@ -324,6 +324,9 @@ export default function ConnectionFormV2({
   const [contextAdded, setContextAdded] = useState(false);
   const [contextExpanded, setContextExpanded] = useState(false);
 
+  // Enriched schema viewer (dev mode only)
+  const [schemaJsonExpanded, setSchemaJsonExpanded] = useState(false);
+
   const handleAddContext = useCallback(async () => {
     if (!contextId || !contextContent?.versions || !userId || !contextInput.trim()) return;
     setContextAdding(true);
@@ -1035,7 +1038,7 @@ export default function ConnectionFormV2({
         )}
 
         {/* Tables Browser - shown by default for existing connections */}
-        {activeSection === 'tables' && (
+        {activeSection === 'tables' && (<>
           <HStack align="start" gap={6} flex="1">
             {/* Left: Tables */}
             <VStack align="stretch" gap={4} flex="1" minW={0}>
@@ -1262,11 +1265,48 @@ export default function ConnectionFormV2({
                       <Text fontSize="xs" fontWeight="600" fontFamily="mono">Explore</Text>
                     </HStack>
                   </Link>
+
                 </VStack>
               </Box>
             )}
           </HStack>
-        )}
+
+          {/* Enriched Schema JSON (dev mode only) */}
+          {showJson && schemas.length > 0 && (
+            <Box mt={4}>
+              <Text
+                fontSize="2xs"
+                fontFamily="mono"
+                color="fg.muted"
+                cursor="pointer"
+                onClick={() => setSchemaJsonExpanded(!schemaJsonExpanded)}
+              >
+                {schemaJsonExpanded ? '▾' : '▸'} Enriched Schema ({schemas.reduce((sum, s) => sum + s.tables.length, 0)} tables)
+                {content.schema?.updated_at && ` · ${new Date(content.schema.updated_at).toLocaleString()}`}
+              </Text>
+              {schemaJsonExpanded && (
+                <Box mt={2} borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
+                  <Editor
+                    height="500px"
+                    language="json"
+                    value={JSON.stringify(schemas, null, 2)}
+                    theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      folding: true,
+                      lineNumbers: 'off',
+                      fontSize: 12,
+                      fontFamily: 'JetBrains Mono, monospace',
+                      scrollBeyondLastLine: false,
+                      wordWrap: 'on',
+                    }}
+                  />
+                </Box>
+              )}
+            </Box>
+          )}
+        </>)}
 
 
         {/* Settings Section */}
