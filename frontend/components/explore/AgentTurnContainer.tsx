@@ -440,14 +440,17 @@ export default function AgentTurnContainer({
     )),
     [timeline],
   );
-  const hasClarify = useMemo(() =>
+  const hasPendingClarify = useMemo(() =>
     timeline.some(n => n.messages.some(m => {
       const name = (m as any).function?.name || '';
-      return name === 'ClarifyFrontend' || name === 'Clarify';
+      if (name !== 'ClarifyFrontend' && name !== 'Clarify') return false;
+      // Only tall when clarify is still unresolved (no content yet)
+      const content = (m as any).content;
+      return !content || content === '(executing...)';
     })),
     [timeline],
   );
-  const rightPaneH = hasClarify ? '400px' : hasChartContent ? '400px' : 'auto';
+  const rightPaneH = hasPendingClarify ? '400px' : hasChartContent ? '400px' : 'auto';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps
