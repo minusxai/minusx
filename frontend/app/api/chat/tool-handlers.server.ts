@@ -16,6 +16,7 @@ import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
+import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 
 // ============================================================================
 // Tool Implementations
@@ -134,7 +135,13 @@ registerTool('Clarify', async (args, _user, childResults) => {
  * DuckDB connections are handled in Node.js; all other types fall through to Python.
  */
 registerTool('ExecuteQuery', async (args, user) => {
-  const { query, connectionId, parameters = {}, maxChars: rawMaxChars } = args;
+  const { query, connectionId, parameters = {}, maxChars: rawMaxChars, _schema: whitelist } = args;
+  if (Array.isArray(whitelist)) {
+    const error = await validateQueryTablesLocal(query, whitelist);
+    if (error) {
+      return { content: { success: false, error }, details: { success: false, error } };
+    }
+  }
   return execQuery({ query, connectionId, parameters, maxChars: rawMaxChars }, user);
 });
 

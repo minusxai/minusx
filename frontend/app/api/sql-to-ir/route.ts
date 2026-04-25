@@ -4,7 +4,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-// import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { handleApiError } from '@/lib/api/api-responses';
 import { parseSqlToIrLocal, UnsupportedSQLError } from '@/lib/sql/sql-to-ir';
 
@@ -58,12 +57,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// --- Previous implementation: forward to Python backend ---
-// const response = await pythonBackendFetch('/api/sql-to-ir', {
-//   method: 'POST',
-//   body: JSON.stringify({ sql: processedSql, dialect }),
-// });
-// const data = await response.json();
-// if (!response.ok) return NextResponse.json(data, { status: response.status });
-// ... (@ ref restoration) ...
-// return NextResponse.json(data);
