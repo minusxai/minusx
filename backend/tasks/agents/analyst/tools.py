@@ -6,7 +6,6 @@ import json
 
 from tasks.agents.analyst.file_schema import vizSettingsJsonStr, ATLAS_FILE_SCHEMA_NO_VIZ_JSON
 from tasks.agents.analyst.prompt_loader import get_skill, list_skills
-from sql_utils.table_validator import validate_query_tables
 
 @register_agent
 class LoadSkill(Tool):
@@ -481,11 +480,7 @@ class ExecuteQuery(Tool):
         pass
 
     async def run(self) -> str:
-        if self._schema:
-            error = validate_query_tables(self.query, self._schema)
-            if error:
-                return json.dumps({'success': False, 'error': error})
-        # Backend tool - executes in Next.js API routes
+        # Backend tool - executes in Next.js API routes (table validation happens there)
         raise UserInputException(self._unique_id)
 
 

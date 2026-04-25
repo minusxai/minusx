@@ -15,7 +15,6 @@ import {
   ColumnSuggestionsOptions,
   ColumnSuggestionsResult,
 } from './types';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { connectionTypeToDialect, DatabaseWithSchema, QuestionContent } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
@@ -106,27 +105,6 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       return { suggestions: [] };
     }
 
-    // --- Previous implementation: forward to Python backend ---
-    // try {
-    //   const response = await pythonBackendFetch('/api/chat-mentions', {
-    //     method: 'POST',
-    //     body: JSON.stringify({
-    //       prefix,
-    //       schema_data: schemaData,
-    //       available_questions: availableQuestions,
-    //       mention_type: mentionType
-    //     }),
-    //   });
-    //   if (!response.ok) {
-    //     console.error('[Completions] Backend error:', await response.text());
-    //     return { suggestions: [] };
-    //   }
-    //   const data = await response.json();
-    //   return {
-    //     suggestions: data.suggestions || [],
-    //     metadata: { timestamp: Date.now() }
-    //   };
-    // } catch (error) {
     //   console.error('[Completions] Error:', error);
     //   return { suggestions: [] };
     // }
@@ -181,24 +159,6 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
           console.warn(`[Completions] Failed to infer columns for ref ${ref.alias}:`, err);
         }
 
-        // --- Previous implementation: forward to Python backend ---
-        // try {
-        //   const inferDialect = connectionTypeToDialect(context.connectionType ?? '');
-        //   const inferResponse = await pythonBackendFetch('/api/infer-columns', {
-        //     method: 'POST',
-        //     body: JSON.stringify({
-        //       query: ref.query,
-        //       schema_data: context.schemaData || [],
-        //       dialect: inferDialect,
-        //     }),
-        //   });
-        //   if (inferResponse.ok) {
-        //     const inferData = await inferResponse.json();
-        //     ref.inferredColumns = inferData.columns || [];
-        //   }
-        // } catch (err) {
-        //   console.warn(`[Completions] Failed to infer columns for ref ${ref.alias}:`, err);
-        // }
       }
 
       if (ref.inferredColumns && ref.inferredColumns.length > 0) {
@@ -305,31 +265,6 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       return { suggestions: [] };
     }
 
-    // --- Previous implementation: forward to Python backend ---
-    // try {
-    //   const response = await pythonBackendFetch('/api/sql-autocomplete', {
-    //     method: 'POST',
-    //     body: JSON.stringify({
-    //       query: processedQuery,
-    //       cursor_offset: adjustedCursorOffset,
-    //       schema_data: schemaData,
-    //       connection_name: context.databaseName,
-    //       connection_type: context.connectionType,
-    //     }),
-    //   });
-    //   if (!response.ok) {
-    //     console.error('[Completions] SQL autocomplete backend error:', await response.text());
-    //     return { suggestions: [] };
-    //   }
-    //   const data = await response.json();
-    //   return {
-    //     suggestions: data.suggestions || [],
-    //     metadata: { timestamp: Date.now() }
-    //   };
-    // } catch (error) {
-    //   console.error('[Completions] SQL autocomplete error:', error);
-    //   return { suggestions: [] };
-    // }
   }
 
   async sqlToIR(options: SqlToIROptions): Promise<SqlToIRResult> {
@@ -354,19 +289,6 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       };
     }
 
-    // --- Previous implementation: forward to Python backend ---
-    // try {
-    //   const response = await pythonBackendFetch('/api/sql-to-ir', {
-    //     method: 'POST',
-    //     body: JSON.stringify({ sql, dialect }),
-    //   });
-    //   if (!response.ok) {
-    //     return { success: false, error: 'Failed to parse SQL' };
-    //   }
-    //   return await response.json();
-    // } catch (error) {
-    //   return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    // }
   }
 
   async irToSql(options: IRToSqlOptions): Promise<IRToSqlResult> {
@@ -383,19 +305,6 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       };
     }
 
-    // --- Previous implementation: forward to Python backend ---
-    // try {
-    //   const response = await pythonBackendFetch('/api/ir-to-sql', {
-    //     method: 'POST',
-    //     body: JSON.stringify({ ir, dialect }),
-    //   });
-    //   if (!response.ok) {
-    //     return { success: false, error: 'Failed to generate SQL' };
-    //   }
-    //   return await response.json();
-    // } catch (error) {
-    //   return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    // }
   }
 
   async getTableSuggestions(options: TableSuggestionsOptions, user: EffectiveUser): Promise<TableSuggestionsResult> {

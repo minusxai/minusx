@@ -9,8 +9,7 @@
 
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-// import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { init, parse, generate, Dialect } from '@polyglot-sql/sdk';
+import { init, parse, Dialect } from '@polyglot-sql/sdk';
 
 let initialized = false;
 
@@ -99,21 +98,6 @@ export async function validateQueryTables(
   _user: EffectiveUser
 ): Promise<string | null> {
   return validateQueryTablesLocal(sql, whitelist);
-
-  // --- Previous implementation: forward to Python backend ---
-  // if (!whitelist || whitelist.length === 0) return null;
-  // try {
-  //   const res = await pythonBackendFetch(
-  //     '/api/validate-query-tables',
-  //     { method: 'POST', body: JSON.stringify({ sql, whitelist }) },
-  //     user
-  //   );
-  //   if (!res.ok) return null;
-  //   const data = await res.json();
-  //   return data.error ?? null;
-  // } catch {
-  //   return null;
-  // }
 }
 
 /** Recursively collect CTE alias names from the AST */
