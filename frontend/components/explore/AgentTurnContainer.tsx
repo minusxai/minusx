@@ -599,6 +599,8 @@ export default function AgentTurnContainer({
                 gap={0}
                 w="170px"
                 minW="170px"
+                maxH="400px"
+                overflowY="auto"
               >
                 <Text
                   fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
