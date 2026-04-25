@@ -9,7 +9,7 @@
 
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { init, parse, generate, Dialect } from '@polyglot-sql/sdk';
+import { init, parse, Dialect } from '@polyglot-sql/sdk';
 
 let initialized = false;
 
