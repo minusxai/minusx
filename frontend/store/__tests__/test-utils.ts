@@ -315,3 +315,30 @@ export function createNextRequest(body: any) {
   });
 }
 
+// ============================================================================
+// Draft-aware fixture helpers
+// ============================================================================
+
+/**
+ * Create a published (non-draft) fixture file for use in tests.
+ *
+ * DocumentDB.create() always produces draft:true files. Call update() immediately
+ * after to set draft:false so the file is visible in listAll() and cascade operations.
+ *
+ * Usage:
+ *   const id = await mkPublished('My File', '/org/my-file', 'question', content, []);
+ */
+export async function mkPublished(
+  name: string,
+  path: string,
+  type: string,
+  content: object,
+  refs: number[] = [],
+  editId?: string
+): Promise<number> {
+  const { DocumentDB } = await import('@/lib/database/documents-db');
+  const id = await DocumentDB.create(name, path, type, content as any, refs, editId);
+  await DocumentDB.update(id, name, path, content as any, refs, editId ?? `init-${id}`);
+  return id;
+}
+

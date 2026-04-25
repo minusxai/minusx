@@ -42,31 +42,14 @@ export function truncateMessageForName(message: string): string {
 }
 
 /**
- * Get or create conversation file
- * If conversationId provided, load existing; otherwise create new with auto-generated name
- *
- * @param conversationId - File ID of existing conversation, or null to create new
- * @param user - Effective user
- * @param firstUserMessage - First user message (used for naming new conversations)
- * @returns File ID and conversation content
+ * Create a new conversation file and return its real positive ID.
+ * Called by /api/chat/init before any streaming starts so the frontend
+ * can navigate to the real URL immediately.
  */
-export async function getOrCreateConversation(
-  conversationId: number | null,
+export async function createNewConversation(
   user: EffectiveUser,
   firstUserMessage?: string
-): Promise<{ fileId: number; content: ConversationFile }> {
-  // If conversationId provided, load existing conversation
-  if (conversationId) {
-    const fileResult = await FilesAPI.loadFile(conversationId, user);
-    const content = fileResult.data.content as unknown as ConversationFile;
-
-    return {
-      fileId: conversationId,
-      content
-    };
-  }
-
-  // Create new conversation with auto-generated name from first message
+): Promise<{ fileId: number; name: string }> {
   const userId = user.userId?.toString() || user.email;
   const timestamp = Date.now();
   const name = truncateMessageForName(firstUserMessage || 'New Conversation');
@@ -78,7 +61,7 @@ export async function getOrCreateConversation(
   const initialConversation: ConversationFile = {
     metadata: {
       userId,
-      name,  // Full truncated message stored in metadata
+      name,
       createdAt: now,
       updatedAt: now,
       logLength: 0
@@ -94,16 +77,40 @@ export async function getOrCreateConversation(
       content: initialConversation as any,
       options: {
         createPath: true,
-        returnExisting: false  // Always create new
+        returnExisting: false
       }
     },
     user
   );
 
-  return {
-    fileId: createResult.data.id,
-    content: initialConversation
+  return { fileId: createResult.data.id, name };
+}
+
+/**
+ * Get or create conversation file.
+ * If conversationId provided, load existing; otherwise create new via createNewConversation.
+ */
+export async function getOrCreateConversation(
+  conversationId: number | null,
+  user: EffectiveUser,
+  firstUserMessage?: string
+): Promise<{ fileId: number; content: ConversationFile }> {
+  if (conversationId) {
+    const fileResult = await FilesAPI.loadFile(conversationId, user);
+    return {
+      fileId: conversationId,
+      content: fileResult.data.content as unknown as ConversationFile
+    };
+  }
+
+  const { fileId, name } = await createNewConversation(user, firstUserMessage);
+  const now = new Date().toISOString();
+  const userId = user.userId?.toString() || user.email;
+  const initialConversation: ConversationFile = {
+    metadata: { userId, name, createdAt: now, updatedAt: now, logLength: 0 },
+    log: []
   };
+  return { fileId, content: initialConversation };
 }
 
 /**
@@ -130,14 +137,9 @@ export async function appendTasksToConversation(
 }
 
 /**
- * Append log entries to conversation file with conflict detection
- * If conflict detected (log_index doesn't match current length), forks to new conversation
- *
- * @param fileId - Current conversation file ID
- * @param logDiff - New log entries to append
- * @param log_index - Expected log length before append (for conflict detection)
- * @param user - Effective user
- * @returns conversationID (file ID) and fileId (may be new if forked)
+ * Append log entries to conversation file with conflict detection.
+ * Uses an atomic SQL JSONB append — no full read on the happy path.
+ * If the log length doesn't match log_index, forks to a new conversation file.
  */
 export async function appendLogToConversation(
   fileId: number,
@@ -145,35 +147,17 @@ export async function appendLogToConversation(
   log_index: number,
   user: EffectiveUser
 ): Promise<{ conversationID: number; fileId: number }> {
-  // Read the current file to get conversation structure
-  const fileResult = await FilesAPI.loadFile(fileId, user);
-  const conversation = fileResult.data.content as unknown as ConversationFile;
-
-  // Check for conflict: does log_index match current log length?
-  if (conversation.log.length === log_index) {
-    // No conflict - append normally
-    conversation.log.push(...logDiff);
-    conversation.metadata.updatedAt = new Date().toISOString();
-    conversation.metadata.logLength = conversation.log.length;
-
-    // Save updated conversation
-    await FilesAPI.saveFile(
-      fileId,
-      fileResult.data.name,
-      fileResult.data.path,
-      conversation as any,
-      [],  // Phase 6: Conversations have no references
-      user
-    );
-
-    return {
-      conversationID: fileId,  // Return same file ID
-      fileId
-    };
+  // Optimistic atomic append — succeeds when log length matches expected index
+  const updated = await FilesAPI.appendJsonArray(fileId, logDiff, log_index, user, 'log', 'metadata.updatedAt');
+  if (updated) {
+    return { conversationID: fileId, fileId };
   }
 
-  // Conflict detected - fork to new conversation
-  console.warn(`[CONVERSATION] Conflict detected: expected log_index=${log_index}, actual=${conversation.log.length}. Forking conversation.`);
+  // Length mismatch — read current state and fork
+  console.warn(`[CONVERSATION] Conflict: expected log_index=${log_index}. Forking conversation ${fileId}.`);
+
+  const fileResult = await FilesAPI.loadFile(fileId, user);
+  const conversation = fileResult.data.content as unknown as ConversationFile;
 
   const userId = user.userId?.toString() || user.email;
   const timestamp = Date.now();
@@ -182,7 +166,6 @@ export async function appendLogToConversation(
   const fileName = `${timestamp}-${slug}.chat.json`;
   const now = new Date().toISOString();
 
-  // Create forked conversation with log up to log_index + new logDiff
   const forkedLog = [
     ...conversation.log.slice(0, log_index),
     ...logDiff
@@ -191,16 +174,15 @@ export async function appendLogToConversation(
   const forkedConversation: ConversationFile = {
     metadata: {
       userId,
-      name: forkedName,  // Stored in metadata only
+      name: forkedName,
       createdAt: now,
       updatedAt: now,
       logLength: forkedLog.length,
-      forkedFrom: fileId  // Track parent file ID
+      forkedFrom: fileId
     },
     log: forkedLog
   };
 
-  // Create new conversation file
   const path = resolvePath(user.mode, `/logs/conversations/${userId}/${fileName}`);
   const createResult = await FilesAPI.createFile(
     {
@@ -208,16 +190,13 @@ export async function appendLogToConversation(
       path,
       type: 'conversation',
       content: forkedConversation as any,
-      options: {
-        createPath: true,
-        returnExisting: false  // Never return existing for forks
-      }
+      options: { createPath: true, returnExisting: false }
     },
     user
   );
 
   return {
-    conversationID: createResult.data.id,  // Return new file ID
+    conversationID: createResult.data.id,
     fileId: createResult.data.id
   };
 }

@@ -18,7 +18,6 @@ import { computePathState } from './navigationSlice';
 export const selectAppState = createSelector(
   (state: RootState) => state.navigation.pathname,
   (state: RootState) => state.navigation.searchParams,
-  (state: RootState) => state.navigation.activeVirtualId,
   (state: RootState) => state.files.files,
   (state: RootState) => state.files.pathIndex,
   (state: RootState) => state.auth.user,
@@ -26,13 +25,12 @@ export const selectAppState = createSelector(
   (
     pathname,
     searchParams,
-    activeVirtualId,
     filesState,
     pathIndex,
     user,
     queryResultsMap
   ): { appState: AppState | null; loading: boolean } => {
-    const pathState = computePathState(pathname, searchParams, activeVirtualId, user);
+    const pathState = computePathState(pathname, searchParams);
 
     // Minimal partial state for selectAugmentedFiles — it only reads files.files and queryResults.results
     const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
@@ -46,22 +44,6 @@ export const selectAppState = createSelector(
         appState: { type: 'file', state: compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS) },
         loading: file.loading || false,
       };
-    }
-
-    if (pathState.type === 'newFile') {
-      const virtualId = pathState.createOptions.virtualId;
-      if (virtualId !== undefined && filesState[virtualId]) {
-        const file = filesState[virtualId];
-        const [augmented] = selectAugmentedFiles(partialState, [virtualId]);
-        if (!augmented) return { appState: null, loading: true };
-        return {
-          appState: { type: 'file', state: compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS) },
-          loading: file.loading || false,
-        };
-      }
-      // If virtualId is defined but not in Redux yet, still loading.
-      // If virtualId is undefined (cleared after error or not yet assigned), stop loading.
-      return { appState: null, loading: virtualId !== undefined };
     }
 
     if (pathState.type === 'folder') {
@@ -123,8 +105,8 @@ export const selectAppState = createSelector(
 );
 
 /**
- * Attaches ui.openModal to appState when a create-question overlay is active.
- * Includes the virtual file's current CompressedFileState so the agent can read
+ * Attaches ui.openModal to appState when a question overlay is active (edit or create).
+ * Includes the question's current CompressedFileState so the agent can read
  * its content for oldMatch values without calling ReadFiles.
  */
 export const selectAppStateWithUI = createSelector(
@@ -135,26 +117,25 @@ export const selectAppStateWithUI = createSelector(
   ({ appState, loading }, viewStack, filesState, queryResultsMap): { appState: AppState | null; loading: boolean } => {
     if (!appState) return { appState, loading };
     const top = viewStack[viewStack.length - 1];
-    if (top?.type === 'create-question') {
-      const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
-      const [augmented] = selectAugmentedFiles(partialState, [top.virtualFileId]);
-      const virtualFile = augmented ? compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS).fileState : undefined;
+    if (!top) return { appState, loading };
 
-      return {
-        appState: {
-          ...appState,
-          ui: {
-            openModal: {
-              type: 'create-question',
-              virtualFileId: top.virtualFileId,
-              dashboardId: top.dashboardId,
-              ...(virtualFile ? { virtualFile } : {}),
-            },
+    const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
+    const [augmented] = selectAugmentedFiles(partialState, [top.fileId]);
+    const fileState = augmented ? compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS).fileState : undefined;
+
+    return {
+      appState: {
+        ...appState,
+        ui: {
+          openModal: {
+            type: top.type,
+            fileId: top.fileId,
+            ...(top.type === 'create-question' ? { dashboardId: top.dashboardId } : {}),
+            ...(fileState ? { fileState } : {}),
           },
         },
-        loading,
-      };
-    }
-    return { appState, loading };
+      },
+      loading,
+    };
   }
 );

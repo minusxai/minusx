@@ -2,9 +2,8 @@
  * Test for editFile functionality - verifies that editing a file properly
  * updates persistableChanges and isDirty state
  */
-import { getTestDbPath, waitFor, initTestDatabase } from './test-utils';
-import { getModules } from '@/lib/modules/registry';
-import { editFile, editFileStr, readFiles, createVirtualFile } from '@/lib/api/file-state';
+import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
+import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile } from '@/store/filesSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
@@ -520,8 +519,9 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: '{"type":"question","id":99}',
-      newMatch: '{"type":"chart","id":99}',
+      // PGLite JSONB reorders keys: length-first then lex → id (2) before type (4)
+      oldMatch: '{"id":99,"type":"question"}',
+      newMatch: '{"id":99,"type":"chart"}',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
@@ -531,8 +531,9 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: '{"type":"question","id":99}',
-      newMatch: '{"type":"question","id":"ninety-nine"}',
+      // PGLite JSONB reorders keys: length-first then lex → id (2) before type (4)
+      oldMatch: '{"id":99,"type":"question"}',
+      newMatch: '{"id":"ninety-nine","type":"question"}',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
@@ -542,6 +543,7 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
+      // "w" is a substring present in the JSONB-encoded layout item regardless of key order
       oldMatch: '"w":6',
       newMatch: '"w":1',
     });
@@ -564,7 +566,8 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: '{"type":"question","id":99}',
+      // PGLite JSONB reorders keys: length-first then lex → id (2) before type (4)
+      oldMatch: '{"id":99,"type":"question"}',
       newMatch: '{"type":"text","content":"Section header"}',
     });
     expect(result.success).toBe(true);
@@ -574,8 +577,9 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: '"w":6,"h":4',
-      newMatch: '"w":4,"h":6',
+      // PGLite JSONB: single-char keys (h,w,x,y) before two-char (id) → "h":4,"w":6 is consecutive
+      oldMatch: '"h":4,"w":6',
+      newMatch: '"h":6,"w":4',
     });
     expect(result.success).toBe(true);
   });
@@ -632,6 +636,23 @@ describe('CreateFile tool - auto-execute query results', () => {
       };
       return { fileName: 'Untitled', content: {} };
     });
+    let mockFileIdCounter = 9001;
+    jest.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
+      data: {
+        id: mockFileIdCounter++,
+        name: input.name,
+        path: input.path,
+        type: input.type,
+        content: input.content,
+        references: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+        last_edit_id: null,
+        draft: true,
+        meta: null,
+      },
+    }));
   });
 
   afterEach(() => {
@@ -700,6 +721,23 @@ describe('CreateFile tool - content validation', () => {
       if (type === 'dashboard') return dashboardTemplate;
       return { fileName: 'Untitled', content: {} };
     });
+    let mockFileIdCounter = 9001;
+    jest.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
+      data: {
+        id: mockFileIdCounter++,
+        name: input.name,
+        path: input.path,
+        type: input.type,
+        content: input.content,
+        references: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        version: 1,
+        last_edit_id: null,
+        draft: true,
+        meta: null,
+      },
+    }));
   });
 
   afterEach(() => {
@@ -790,6 +828,6 @@ describe('CreateFile tool - content validation', () => {
     );
     const parsed = JSON.parse(result.content as string);
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toMatch(/Navigate to \/new\/dashboard/);
+    expect(parsed.error).toMatch(/Cannot create a dashboard in the background/);
   });
 });

@@ -19,7 +19,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { shallowEqual } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
 import {
-  isVirtualFileId,
   selectDirtyFiles,
   selectSaveClassification,
   selectIsDirty,
@@ -157,8 +156,7 @@ export interface UseFileOptions {
 export function useFile(id: FileId | undefined, options: UseFileOptions = {}): AugmentedFile | undefined {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
 
-  // Virtual files (negative IDs) are pre-populated in Redux, so skip loading
-  const shouldSkip = skip || (id !== undefined && isVirtualFileId(id));
+  const shouldSkip = skip;
 
   const optionsKey = useMemo(
     () => JSON.stringify({ id, ttl, skip: shouldSkip }),

@@ -122,6 +122,7 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
         userMode={userMode}
         onError={setSaveError}
         onSave={handleInternalSave}
+        initialTab={tab}
       />
 
       {saveError && (

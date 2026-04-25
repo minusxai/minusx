@@ -142,6 +142,8 @@ interface ConnectionFormV2Props {
   wizardMode?: boolean;
   /** Called when CSV/Sheets is selected in wizard mode instead of navigating away. */
   onStaticSelect?: (tab: 'csv' | 'sheets') => void;
+  /** Skip the type selection step and go straight to configure (type already set on content). */
+  skipTypeSelection?: boolean;
 }
 
 export default function ConnectionFormV2({
@@ -161,6 +163,7 @@ export default function ConnectionFormV2({
   onPendingDeletion,
   wizardMode = false,
   onStaticSelect,
+  skipTypeSelection = false,
 }: ConnectionFormV2Props) {
   const router = useRouter();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -377,8 +380,10 @@ export default function ConnectionFormV2({
     }
   }, [redirectingToStatic, staticConnectionFile?.fileState.id, userMode, router]);
 
-  // For create mode, start with type selection step; skip if already editing
-  const [step, setStep] = useState<'select-type' | 'configure'>(mode === 'create' ? 'select-type' : 'configure');
+  // For create mode, start with type selection step; skip if already editing or skipTypeSelection set
+  const [step, setStep] = useState<'select-type' | 'configure'>(
+    mode === 'create' && !skipTypeSelection ? 'select-type' : 'configure'
+  );
   // For existing connections, default to 'tables' view; for new connections, show 'settings'.
   // Static connection: defaults to 'tables' unless arriving via ?tab= param (means user
   // clicked CSV/Google Sheets from the type selection and wants to upload).

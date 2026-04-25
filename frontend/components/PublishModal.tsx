@@ -30,12 +30,13 @@ import { LuSave, LuUndo2, LuX, LuCheck, LuPanelLeftClose, LuPanelLeftOpen, LuCod
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
-import { publishAll, discardAll } from '@/lib/api/file-state';
+import { publishAll, discardAll, editFile } from '@/lib/api/file-state';
 import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
-import { selectFile, selectEffectiveName } from '@/store/filesSlice';
+import { selectFile, selectEffectiveName, effectiveName } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';
 import type { AssetReference, DocumentContent, DashboardLayoutItem } from '@/lib/types';
 import { DashboardPublishHighlightsContext, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
+import SaveFileModal from './SaveFileModal';
 
 interface PublishModalProps {
   isOpen: boolean;
@@ -152,6 +153,9 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   const [publishingSingleId, setPublishingSingleId] = useState<number | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [saveModalFileId, setSaveModalFileId] = useState<number | null>(null);
+  // fileIds queued to save after the SaveFileModal confirms (used by Save All)
+  const [pendingSaveAllIds, setPendingSaveAllIds] = useState<number[] | null>(null);
 
   // Auto-select first file when modal opens or list changes
   useEffect(() => {
@@ -184,9 +188,13 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
 
   const handlePublishFile = useCallback(async (fileId: number) => {
     const file = dirtyFiles.find(f => f.id === fileId);
+    if (file?.draft) {
+      // Draft file — open SaveFileModal, same as FileHeader.handleSave does
+      setSaveModalFileId(fileId);
+      return;
+    }
     setPublishingSingleId(fileId);
     try {
-      // Use scoped publishAll to handle virtual deps + ID replacement automatically
       await publishAll([fileId]);
       exitEditMode(fileId, file?.type);
     } finally {
@@ -207,8 +215,18 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   }, [dirtyFiles, exitEditMode]);
 
   const handlePublishAll = useCallback(async () => {
-    setIsPublishing(true);
     setPublishError(null);
+    // If any file is a draft, open SaveFileModal for the first one.
+    // After naming it, handleSaveModalConfirm will run the remaining saves.
+    const firstDraft = dirtyFiles.find(f => f.draft);
+    if (firstDraft) {
+      const nonDraftIds = dirtyFiles.filter(f => !f.draft).map(f => f.id);
+      setPendingSaveAllIds(nonDraftIds);
+      setSelectedFileId(firstDraft.id);
+      setSaveModalFileId(firstDraft.id);
+      return;
+    }
+    setIsPublishing(true);
     try {
       const filesToPublish = [...dirtyFiles];
       await publishAll();
@@ -220,7 +238,29 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     }
   }, [dirtyFiles, exitEditMode]);
 
+  const handleSaveModalConfirm = useCallback(async (name: string, path: string) => {
+    if (saveModalFileId === null) return;
+    const file = dirtyFiles.find(f => f.id === saveModalFileId);
+    const slug = name.toLowerCase().replace(/\s+/g, '-');
+    await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
+    setSaveModalFileId(null);
+    await publishAll([saveModalFileId]);
+    exitEditMode(saveModalFileId, file?.type);
+    // If this was triggered by Save All, continue saving remaining files
+    if (pendingSaveAllIds !== null) {
+      if (pendingSaveAllIds.length > 0) {
+        await publishAll(pendingSaveAllIds);
+        pendingSaveAllIds.forEach(id => {
+          const f = dirtyFiles.find(df => df.id === id);
+          exitEditMode(id, f?.type);
+        });
+      }
+      setPendingSaveAllIds(null);
+    }
+  }, [saveModalFileId, dirtyFiles, exitEditMode, pendingSaveAllIds]);
+
   return (
+    <>
     <Dialog.Root
       open={isOpen}
       onOpenChange={(e: { open: boolean }) => { if (!e.open) onClose(); }}
@@ -403,6 +443,16 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
         </Dialog.Positioner>
       </Portal>
     </Dialog.Root>
+    {saveModalFileId !== null && (
+      <SaveFileModal
+        isOpen={true}
+        onClose={() => { setSaveModalFileId(null); setPendingSaveAllIds(null); }}
+        fileId={saveModalFileId}
+        fileType={dirtyFiles.find(f => f.id === saveModalFileId)?.type ?? 'question'}
+        onSave={handleSaveModalConfirm}
+      />
+    )}
+    </>
   );
 }
 

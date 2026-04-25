@@ -1,6 +1,6 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { IFilesDataLayer } from './files.interface';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult, MoveFileInput, MoveFileResult, DeleteFileResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchSaveFileInput, BatchSaveFileResult, DryRunSaveResult, MoveFileInput, MoveFileResult, DeleteFileResult } from './types';
 import { FileExistsError, AccessPermissionError, FileNotFoundError, SerializedError, deserializeError } from '@/lib/errors';
 import { BaseFileContent, DbFile, FileType } from '@/lib/types';
 
@@ -185,28 +185,13 @@ class FilesDataLayerClient implements IFilesDataLayer {
     return json.data;
   }
 
-  async batchCreateFiles(inputs: BatchCreateInput[], user?: EffectiveUser): Promise<BatchCreateFileResult> {
-    const res = await fetch(`${API_BASE}/api/files/batch-create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: inputs })
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to batch create files: ${res.statusText}`;
-      throw new Error(errorMessage);
-    }
-
-    const json = await res.json();
-    return { data: json.data };
-  }
-
-  async batchSaveFiles(inputs: BatchSaveFileInput[], user?: EffectiveUser): Promise<BatchSaveFileResult> {
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user?: EffectiveUser, dryRun?: false): Promise<BatchSaveFileResult>;
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user?: EffectiveUser, dryRun?: true): Promise<DryRunSaveResult>;
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user?: EffectiveUser, dryRun?: boolean): Promise<BatchSaveFileResult | DryRunSaveResult> {
     const res = await fetch(`${API_BASE}/api/files/batch-save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: inputs })
+      body: JSON.stringify({ files: inputs, dryRun: dryRun ?? false })
     });
 
     if (!res.ok) {
@@ -216,7 +201,8 @@ class FilesDataLayerClient implements IFilesDataLayer {
     }
 
     const json = await res.json();
-    return { data: json.data };
+    if (dryRun) return json as DryRunSaveResult;
+    return { data: json.data } as BatchSaveFileResult;
   }
 
   async deleteFile(id: number, user?: EffectiveUser): Promise<DeleteFileResult> {
@@ -249,6 +235,17 @@ class FilesDataLayerClient implements IFilesDataLayer {
 
     const json = await res.json();
     return json.data as MoveFileResult;
+  }
+
+  async appendJsonArray(
+    _id: number,
+    _entries: any[],
+    _expectedLength: number | undefined,
+    _user?: EffectiveUser,
+    _arrayPath?: string,
+    _metaPath?: string | null
+  ): Promise<boolean> {
+    throw new Error('appendJsonArray is a server-only operation');
   }
 
   async batchMoveFiles(inputs: MoveFileInput[], user?: EffectiveUser): Promise<MoveFileResult[]> {

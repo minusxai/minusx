@@ -11,7 +11,7 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -360,18 +360,6 @@ export default function DashboardView({
     return values;
   }, [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults]);
 
-  // Queue of virtual file IDs to clean up after they're removed from assets
-  const pendingVirtualCleanup = useRef<number[]>([]);
-
-  // Effect: clean up virtual files after React has rendered the asset removal
-  useEffect(() => {
-    if (pendingVirtualCleanup.current.length === 0) return;
-    const idsToCleanup = [...pendingVirtualCleanup.current];
-    pendingVirtualCleanup.current = [];
-    for (const id of idsToCleanup) {
-      dispatch(removeVirtualFile(id));
-    }
-  });
 
   // Handler for removing any asset (question or text block) from the dashboard
   const handleRemoveAsset = useCallback((idStr: string) => {
@@ -403,10 +391,6 @@ export default function DashboardView({
       layout: { columns: 12, items: updatedLayoutItems }
     });
 
-    // Queue virtual file for cleanup after render (questions only)
-    if (isNumeric && isVirtualFileId(parsedId)) {
-      pendingVirtualCleanup.current.push(parsedId);
-    }
   }, [onChange]);
 
   // Memoize the grid background to prevent re-rendering on every keystroke

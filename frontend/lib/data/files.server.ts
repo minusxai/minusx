@@ -14,10 +14,9 @@ import {
   FileInfo,
   GetTemplateOptions,
   GetTemplateResult,
-  BatchCreateInput,
-  BatchCreateFileResult,
   BatchSaveFileInput,
   BatchSaveFileResult,
+  DryRunSaveResult,
   MoveFileInput,
   MoveFileResult,
   DeleteFileResult
@@ -261,6 +260,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
       updated_at: file.updated_at,
       version: file.version,
       last_edit_id: file.last_edit_id,
+      draft: file.draft,
+      meta: file.meta,
     })));
 
     const folderInfos: FileInfo[] = folderFiles.map(file => ({
@@ -273,6 +274,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
       updated_at: file.updated_at,
       version: file.version,
       last_edit_id: file.last_edit_id,
+      draft: file.draft,
+      meta: file.meta,
     }));
 
     return {
@@ -794,36 +797,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
   }
 
-  async batchCreateFiles(inputs: BatchCreateInput[], user: EffectiveUser): Promise<BatchCreateFileResult> {
-    // Validate: no path in the batch may be a prefix of another path.
-    // e.g. a dashboard at /org/Foo and a question at /org/Foo/bar is illegal —
-    // /org/Foo cannot be both a file and a parent folder.
-    const paths = inputs.map(i => i.path);
-    for (let i = 0; i < paths.length; i++) {
-      for (let j = 0; j < paths.length; j++) {
-        if (i !== j && paths[j].startsWith(paths[i] + '/')) {
-          throw new UserFacingError(
-            `Path conflict in batch: '${paths[i]}' (${inputs[i].type}) is used as both a file path ` +
-            `and a parent folder for '${paths[j]}' (${inputs[j].type}). ` +
-            `A file and its containing folder cannot share the same path.`
-          );
-        }
-      }
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser, dryRun?: false): Promise<BatchSaveFileResult>;
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser, dryRun: true): Promise<DryRunSaveResult>;
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser, dryRun: boolean = false): Promise<BatchSaveFileResult | DryRunSaveResult> {
+    if (dryRun) {
+      return DocumentDB.batchSave(inputs, true);
     }
-
-    const results: Array<{ virtualId: number; file: DbFile }> = [];
-    for (const input of inputs) {
-      const { virtualId, ...createInput } = input;
-      const result = await this.createFile(
-        { ...createInput, options: { ...createInput.options, createPath: true } },
-        user
-      );
-      results.push({ virtualId, file: result.data });
-    }
-    return { data: results };
-  }
-
-  async batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser): Promise<BatchSaveFileResult> {
     const results: DbFile[] = [];
     for (const input of inputs) {
       const result = await this.saveFile(input.id, input.name, input.path, input.content, input.references, user, input.editId, input.expectedVersion);
@@ -969,6 +948,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
     return results;
   }
+
+  async appendJsonArray(
+    id: number,
+    entries: any[],
+    expectedLength: number | undefined,
+    _user: EffectiveUser,
+    arrayPath?: string,
+    metaPath?: string | null
+  ): Promise<boolean> {
+    return DocumentDB.appendJsonArray(id, entries, expectedLength, arrayPath, metaPath);
+  }
 }
 
 // Export singleton instance - PREFER using this
@@ -983,7 +973,6 @@ export const createFile = FilesAPI.createFile.bind(FilesAPI);
 export const saveFile = FilesAPI.saveFile.bind(FilesAPI);
 export const loadFileByPath = FilesAPI.loadFileByPath.bind(FilesAPI);
 export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);
-export const batchCreateFiles = FilesAPI.batchCreateFiles.bind(FilesAPI);
 export const batchSaveFiles = FilesAPI.batchSaveFiles.bind(FilesAPI);
 export const moveFile = FilesAPI.moveFile.bind(FilesAPI);
 export const batchMoveFiles = FilesAPI.batchMoveFiles.bind(FilesAPI);

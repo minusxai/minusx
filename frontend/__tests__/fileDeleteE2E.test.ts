@@ -76,11 +76,12 @@ describe('DELETE /api/files/[id]', () => {
   });
 
   it('deletes a folder and all its descendants', async () => {
-    await DocumentDB.create('folder-to-delete', '/org/subfolder/folder-to-delete', 'folder', { description: '' }, []);
+    const folderId = await DocumentDB.create('folder-to-delete', '/org/subfolder/folder-to-delete', 'folder', { description: '' }, []);
     const childId = await DocumentDB.create(
       'child', '/org/subfolder/folder-to-delete/child', 'question', makeQuestion(), []
     );
-    const folderId = (await DocumentDB.getByPath('/org/subfolder/folder-to-delete'))!.id;
+    // Publish child so cascade delete (which uses listAll/draft=false filter) can find it
+    await DocumentDB.update(childId, 'child', '/org/subfolder/folder-to-delete/child', makeQuestion(), [], 'init-child');
 
     const res = await deleteFile(folderId);
     expect(res.status).toBe(200);

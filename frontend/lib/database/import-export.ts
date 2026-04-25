@@ -71,8 +71,8 @@ export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {
     name: row.name,
     path: row.path,
     type: row.type as any,
-    references: JSON.parse(row.file_references || '[]'),
-    content: JSON.parse(row.content),
+    references: row.file_references || [],
+    content: row.content,
     created_at: row.created_at,
     updated_at: row.updated_at,
     version: row.version ?? 1,
@@ -106,7 +106,7 @@ export async function importToDatabase(_dbPath: string, initData: InitData): Pro
   for (const doc of documents) {
     await db.exec(
       'INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [doc.id, doc.name, doc.path, doc.type, JSON.stringify(doc.content), JSON.stringify((doc as any).references || []), (doc as any).version ?? 1, (doc as any).last_edit_id ?? null, doc.created_at, doc.updated_at],
+      [doc.id, doc.name, doc.path, doc.type, doc.content, (doc as any).references || [], (doc as any).version ?? 1, (doc as any).last_edit_id ?? null, doc.created_at, doc.updated_at],
     );
   }
 

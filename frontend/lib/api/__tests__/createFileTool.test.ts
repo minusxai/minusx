@@ -3,17 +3,17 @@
  *
  * Verifies that the CreateFile tool returns a tool-level error (visible to the
  * model) when:
- *   (a) the requested folder path is already occupied by a non-folder virtual file
- *   (b) the file's final slug path duplicates another virtual file's path
- *   (c) the file's final slug path would become the parent of another virtual file
+ *   (a) the requested folder path is already occupied by a non-folder draft file
+ *   (b) the file's final slug path duplicates another draft file's path
+ *   (c) the file's final slug path would become the parent of another draft file
  *
  * Also verifies that:
- *   (d) creating files inside a virtual *folder* is allowed (folders are OK as parents)
+ *   (d) creating files inside a draft *folder* is allowed (folders are OK as parents)
  *   (e) normal creation in /org (real folder, no conflicts) succeeds
  */
 
 import { configureStore } from '@reduxjs/toolkit';
-import filesReducer, { generateVirtualId } from '@/store/filesSlice';
+import filesReducer from '@/store/filesSlice';
 import authReducer from '@/store/authSlice';
 import uiReducer from '@/store/uiSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
@@ -22,6 +22,7 @@ import type { UserRole } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { POST as templateHandler } from '@/app/api/files/template/route';
+import { POST as createFileHandler } from '@/app/api/files/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 
 // ---------------------------------------------------------------------------
@@ -64,19 +65,24 @@ function makeStore() {
   });
 }
 
-function makeVirtualFile(overrides: Partial<{
+let draftIdCounter = 9001;
+function makeDraftFile(overrides: Partial<{
   id: number; name: string; path: string; type: string;
 }> = {}) {
-  const id = overrides.id ?? generateVirtualId();
+  const id = overrides.id ?? draftIdCounter++;
   return {
     id,
     name: overrides.name ?? 'Test File',
-    path: overrides.path ?? `/org/test-${Math.abs(id)}`,
+    path: overrides.path ?? `/org/test-${id}`,
     type: overrides.type ?? 'question',
+    draft: true,
     content: {},
     references: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    version: 1,
+    last_edit_id: null,
+    meta: null,
   };
 }
 
@@ -99,13 +105,14 @@ const MOCK_DB: any = { schemas: [] };
 // Suite
 // ---------------------------------------------------------------------------
 
-describe('CreateFile tool — path conflict validation', () => {
+describe('CreateFile tool — draft file path conflict validation', () => {
   const dbPath = getTestDbPath('create_file_tool');
 
   const mockFetch = setupMockFetch({
     getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/template'], handler: templateHandler },
+      { includesUrl: ['/api/files'], handler: createFileHandler },
     ],
   });
 
@@ -123,14 +130,14 @@ describe('CreateFile tool — path conflict validation', () => {
   });
 
   // -------------------------------------------------------------------------
-  // (a) Folder path already occupied by a non-folder virtual file
+  // (a) Folder path already occupied by a non-folder draft file
   // -------------------------------------------------------------------------
 
-  it('(a) returns error when folder path is occupied by a virtual dashboard', async () => {
-    // Virtual dashboard at /org/Getting Started
+  it('(a) returns error when folder path is occupied by a draft dashboard', async () => {
+    // Draft dashboard at /org/Getting Started
     testStore.dispatch({
       type: 'files/setFile',
-      payload: { file: makeVirtualFile({ path: '/org/Getting Started', type: 'dashboard' }), references: [] },
+      payload: { file: makeDraftFile({ path: '/org/Getting Started', type: 'dashboard' }), references: [] },
     });
 
     const result = await executeToolCall(
@@ -146,10 +153,10 @@ describe('CreateFile tool — path conflict validation', () => {
     expect(content.error).toMatch(/occupied/);
   });
 
-  it('(a) returns error when folder path is occupied by a virtual question', async () => {
+  it('(a) returns error when folder path is occupied by a draft question', async () => {
     testStore.dispatch({
       type: 'files/setFile',
-      payload: { file: makeVirtualFile({ path: '/org/some-file', type: 'question' }), references: [] },
+      payload: { file: makeDraftFile({ path: '/org/some-file', type: 'question' }), references: [] },
     });
 
     const result = await executeToolCall(
@@ -164,35 +171,38 @@ describe('CreateFile tool — path conflict validation', () => {
   });
 
   // -------------------------------------------------------------------------
-  // (d) Virtual folder at the same path — must be allowed
+  // (d) Draft folder at the same path — must be allowed
   // -------------------------------------------------------------------------
 
-  it('(d) succeeds when folder path is occupied by a virtual folder file', async () => {
-    // Virtual folder at /org/My Folder — this is a legitimate parent
-    testStore.dispatch({
-      type: 'files/setFile',
-      payload: { file: makeVirtualFile({ path: '/org/My Folder', type: 'folder' }), references: [] },
-    });
+  it('(d) succeeds when folder path is occupied by a draft folder file', async () => {
+    // First create the folder via the tool so it exists in DB (and Redux) as a real draft.
+    // createDraftFile with name='My Folder' creates the folder at path /org/my-folder in DB.
+    const folderResult = await executeToolCall(
+      createFileTool({ file_type: 'folder', path: '/org', name: 'My Folder' }),
+      MOCK_DB,
+    );
+    expect(parseContent(folderResult).success).toBe(true);
 
+    // Now create a question inside the draft folder at its slug path — should succeed
     const result = await executeToolCall(
-      createFileTool({ file_type: 'question', path: '/org/My Folder', name: 'Inside Question' }),
+      createFileTool({ file_type: 'question', path: '/org/my-folder', name: 'Inside Question' }),
       MOCK_DB,
     );
 
-    // Should succeed (not a path conflict error)
+    // Should succeed (draft folder is OK as a parent, not a conflict)
     expect(parseContent(result).success).toBe(true);
   });
 
   // -------------------------------------------------------------------------
-  // (b) Final slug path duplicates an existing virtual file path
+  // (b) Final slug path duplicates an existing draft file path
   // -------------------------------------------------------------------------
 
-  it('(b) returns error when slugified name matches existing virtual file path', async () => {
-    // Existing virtual question at /org/roi-by-campaign (slug of "ROI by Campaign")
+  it('(b) returns error when slugified name matches existing draft file path', async () => {
+    // Existing draft question at /org/roi-by-campaign (slug of "ROI by Campaign")
     testStore.dispatch({
       type: 'files/setFile',
       payload: {
-        file: makeVirtualFile({ path: '/org/roi-by-campaign', type: 'question' }),
+        file: makeDraftFile({ path: '/org/roi-by-campaign', type: 'question' }),
         references: [],
       },
     });
@@ -210,15 +220,15 @@ describe('CreateFile tool — path conflict validation', () => {
   });
 
   // -------------------------------------------------------------------------
-  // (c) New file's path would become parent of existing virtual file
+  // (c) New file's path would become parent of existing draft file
   // -------------------------------------------------------------------------
 
-  it('(c) returns error when new file path would be parent of an existing virtual file', async () => {
+  it('(c) returns error when new file path would be parent of an existing draft file', async () => {
     // Existing question at /org/my-folder/child
     testStore.dispatch({
       type: 'files/setFile',
       payload: {
-        file: makeVirtualFile({ path: '/org/my-folder/child', type: 'question' }),
+        file: makeDraftFile({ path: '/org/my-folder/child', type: 'question' }),
         references: [],
       },
     });

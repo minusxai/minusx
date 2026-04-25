@@ -90,16 +90,16 @@ chatListenerMiddleware.startListening({
     const useStreaming = !IS_TEST;
 
     try {
+      // In test env, negative IDs signal a new conversation — send null so the API creates it
+      const testConversationID = !useStreaming && conversationID < 0 ? null : conversationID;
+
       if (!useStreaming) {
         // Non-streaming path (for tests)
-        // Send null for negative IDs (temporary/virtual)
-        const apiConversationID = conversationID < 0 ? null : conversationID;
-
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            conversationID: apiConversationID,
+            conversationID: testConversationID,
             log_index: conversation.log_index,
             user_message: message,
             agent: conversation.agent,
@@ -128,15 +128,12 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      // Streaming path (production)
-      // Send null for negative IDs (temporary/virtual)
-      const apiConversationID = conversationID < 0 ? null : conversationID;
-
+      // Streaming path (production) — conversationID is always a real positive ID
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversationID: apiConversationID,
+          conversationID,
           log_index: conversation.log_index,
           user_message: message,
           agent: conversation.agent,
@@ -179,11 +176,20 @@ chatListenerMiddleware.startListening({
             const { event, data } = parsed;
 
             if (event === 'streaming_event') {
+              if (data.type === 'StreamedContent') {
+                console.log('[chatListener] Dispatching StreamedContent at', Date.now());
+              }
               listenerApi.dispatch(addStreamingMessage(data));
+              // Yield to the macrotask queue so React 18 can render each chunk
+              // progressively. Without this, React batches all streaming dispatches
+              // (microtask context) and renders everything at once after the stream ends.
+              if (data.type === 'StreamedContent') {
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+                console.log('[chatListener] Resumed after setTimeout at', Date.now());
+              }
             } else if (event === 'done') {
               doneEventData = data;
             } else if (event === 'error') {
-              // Save error but continue reading to get done event
               errorData = data;
             } else if (event === 'user_input_request') {
               listenerApi.dispatch(addUserInputRequest({
@@ -197,14 +203,8 @@ chatListenerMiddleware.startListening({
 
         // Handle done event after stream completes
         if (doneEventData) {
-          // New conversations fork from a temp negative ID to a real conversation ID
-          // as soon as the backend creates the file. Clear ephemeral streaming state on
-          // the real conversation if we have one, or stale synthetic TalkToUser content
-          // can survive into the next turn.
           const realConversationID = doneEventData.conversationID || conversationID;
           listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
-
-          // Then update with final state
           listenerApi.dispatch(updateConversation({
             conversationID,
             newConversationID: doneEventData.conversationID,
@@ -215,7 +215,6 @@ chatListenerMiddleware.startListening({
           }));
         }
 
-        // Now throw error if we had one (after processing done event)
         if (errorData) {
           throw new Error(errorData.error);
         }
@@ -223,7 +222,6 @@ chatListenerMiddleware.startListening({
         reader.releaseLock();
       }
     } catch (error: any) {
-      // Don't show error if request was aborted (user clicked stop)
       if (error.name === 'AbortError') {
         console.log('[chatListener] Request aborted by user');
         return;
@@ -236,7 +234,6 @@ chatListenerMiddleware.startListening({
         error: error.message || 'Failed to send message'
       }));
     } finally {
-      // Clean up abort controller
       if (conversation._id) {
         abortControllers.delete(conversation._id);
       }
@@ -265,16 +262,16 @@ chatListenerMiddleware.startListening({
     const useStreaming = !IS_TEST;
 
     try {
+      // In test env, negative IDs signal a new conversation — send null so the API creates it
+      const testConversationID = !useStreaming && conversationID < 0 ? null : conversationID;
+
       if (!useStreaming) {
         // Non-streaming path (for tests)
-        // Send null for negative IDs (temporary/virtual)
-        const apiConversationID = conversationID < 0 ? null : conversationID;
-
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            conversationID: apiConversationID,
+            conversationID: testConversationID,
             log_index: conversation.log_index,
             user_message: message,
             agent: conversation.agent,
@@ -303,15 +300,13 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      // Streaming path (production)
-      // Send null for negative IDs (temporary/virtual)
-      const apiConversationID = conversationID < 0 ? null : conversationID;
+      // Streaming path (production) — conversationID is always a real positive ID
 
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversationID: apiConversationID,
+          conversationID,
           log_index: conversation.log_index,
           user_message: message,
           agent: conversation.agent,
@@ -362,7 +357,17 @@ chatListenerMiddleware.startListening({
                 }
 
                 // Dispatch streaming event to build streamedCompletedToolCalls
+                if (data.type === 'StreamedContent') {
+                  console.log('[chatListener] Dispatching StreamedContent at', Date.now());
+                }
                 listenerApi.dispatch(addStreamingMessage(data));
+                // Yield to the macrotask queue so React 18 can render each chunk
+                // progressively. Without this, React batches all streaming dispatches
+                // (microtask context) and renders everything at once after the stream ends.
+                if (data.type === 'StreamedContent') {
+                  await new Promise<void>(resolve => setTimeout(resolve, 0));
+                  console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                }
                 break;
 
               case 'done':
@@ -451,14 +456,15 @@ chatListenerMiddleware.startListening({
     const useStreaming = !IS_TEST;
 
     try {
-      const apiConversationID = conversationID < 0 ? null : conversationID;
+      // In test env, negative IDs signal a new conversation — send null so the API creates it
+      const testConversationID = !useStreaming && conversationID < 0 ? null : conversationID;
 
       if (!useStreaming) {
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            conversationID: apiConversationID,
+            conversationID: testConversationID,
             log_index: conversation.log_index,  // Set to fork point by the action
             user_message: message,
             agent: conversation.agent,
@@ -491,7 +497,7 @@ chatListenerMiddleware.startListening({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversationID: apiConversationID,
+          conversationID,
           log_index: conversation.log_index,
           user_message: message,
           agent: conversation.agent,
@@ -528,7 +534,17 @@ chatListenerMiddleware.startListening({
 
             const { event, data } = parsed;
             if (event === 'streaming_event') {
+              if (data.type === 'StreamedContent') {
+                console.log('[chatListener] Dispatching StreamedContent at', Date.now());
+              }
               listenerApi.dispatch(addStreamingMessage(data));
+              // Yield to the macrotask queue so React 18 can render each chunk
+              // progressively. Without this, React batches all streaming dispatches
+              // (microtask context) and renders everything at once after the stream ends.
+              if (data.type === 'StreamedContent') {
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
+                console.log('[chatListener] Resumed after setTimeout at', Date.now());
+              }
             } else if (event === 'done') {
               doneEventData = data;
             } else if (event === 'error') {
@@ -712,7 +728,17 @@ chatListenerMiddleware.startListening({
                 }
 
                 // Dispatch streaming event to build streamedCompletedToolCalls
+                if (data.type === 'StreamedContent') {
+                  console.log('[chatListener] Dispatching StreamedContent at', Date.now());
+                }
                 listenerApi.dispatch(addStreamingMessage(data));
+                // Yield to the macrotask queue so React 18 can render each chunk
+                // progressively. Without this, React batches all streaming dispatches
+                // (microtask context) and renders everything at once after the stream ends.
+                if (data.type === 'StreamedContent') {
+                  await new Promise<void>(resolve => setTimeout(resolve, 0));
+                  console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                }
                 break;
 
               case 'done':

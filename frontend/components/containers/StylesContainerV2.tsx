@@ -5,7 +5,7 @@
  * Smart component for editing styles files (CSS editor)
  */
 import { useAppSelector } from '@/store/hooks';
-import { selectIsDirty, isVirtualFileId, type FileId } from '@/store/filesSlice';
+import { selectIsDirty, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import StylesEditor from '@/components/config/StylesEditor';
@@ -55,8 +55,7 @@ export default function StylesContainerV2({
     try {
       const result = await publishFile({ fileId });
 
-      // If this was a create operation, redirect to the new file
-      if (result && isVirtualFileId(fileId)) {
+      if (result && result.id !== fileId) {
         router.replace(`/f/${result.id}`);
       }
     } catch (err) {

@@ -6,6 +6,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { DisplayProps } from '@/lib/types';
 import Markdown from '../../Markdown';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
+import { useEffect } from 'react';
 
 
 
@@ -168,6 +169,12 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
 
   // Determine what answer content to render
   const answerBlocks = legacyParsed ? legacyParsed.answer : (content ? [content] : []);
+
+  useEffect(() => {
+    if (answerBlocks.length > 0) {
+      console.log('[ContentDisplay] Rendering streamed text:', answerBlocks.join('\n\n').slice(0, 200));
+    }
+  }, [answerBlocks.join('').length]);
 
   return (
             <>

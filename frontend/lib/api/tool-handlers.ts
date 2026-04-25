@@ -6,7 +6,7 @@
  */
 
 import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile } from '@/lib/types';
-import { setEphemeral, selectMergedContent, selectDirtyFiles, generateVirtualId, type FileId } from '@/store/filesSlice';
+import { setEphemeral, selectMergedContent, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -14,7 +14,7 @@ import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { FilesAPI } from '../data/files';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createVirtualFile, editFile as editFileOp } from '@/lib/api/file-state';
+import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp, deleteFile as deleteDraftFile } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -261,30 +261,19 @@ registerFrontendTool('Navigate', async (args, context) => {
     return { content: { success: true, message: msg }, details: { success: true } };
   }
 
-  // Navigate to new file creation page
+  // Create a draft file and navigate directly to it
   if (newFileType !== undefined) {
-    // Check if user has permission to create this file type
     const canCreate = canCreateFileType(newFileType);
-
     if (!canCreate) {
       const msg = `You don't have permission to create ${newFileType} files`;
       return { content: { success: false, message: msg }, details: { success: false, error: msg } };
     }
 
-    const virtualFileId = generateVirtualId();
-
-    // Build URL with virtualId and optional folder parameter
-    const params = new URLSearchParams();
-    params.set('virtualId', String(virtualFileId));
-    if (path !== undefined) {
-      params.set('folder', path);
-    }
-    const url = `/new/${newFileType}?${params.toString()}`;
-
-    router.push(url);
+    const draftId = await createDraftFile(newFileType, path ? { folder: path } : {});
+    router.push(`/f/${draftId}`);
     const msg = path
-      ? `Navigating to create new ${newFileType} in ${path}, with file id ${virtualFileId}`
-      : `Navigating to create new ${newFileType} with file id ${virtualFileId}`;
+      ? `Created new ${newFileType} in ${path}, navigating to /f/${draftId}`
+      : `Created new ${newFileType}, navigating to /f/${draftId}`;
     return { content: { success: true, message: msg }, details: { success: true } };
   }
 
@@ -644,19 +633,19 @@ registerFrontendTool('CreateFile', async (args, context) => {
   if (!unrestrictedMode) {
     // Dashboards can never be created in the background
     if (file_type === 'dashboard') {
-      const msg = 'Cannot create a dashboard in the background. Navigate to /new/dashboard instead.';
+      const msg = 'Cannot create a dashboard in the background. Use the Navigate tool with new_file_type="dashboard" instead.';
       return { content: { success: false, error: msg }, details: { success: false, error: msg } };
     }
 
     // On a question page, don't allow creating another question in the background
     if (appState?.type === 'file' && appState.state.fileState.type === 'question' && file_type === 'question') {
-      const msg = 'Cannot create a background question when on a question page. Navigate to /new/question instead.';
+      const msg = 'Cannot create a background question when on a question page. Use the Navigate tool with new_file_type="question" instead.';
       return { content: { success: false, error: msg }, details: { success: false, error: msg } };
     }
 
     // On the explore page, only allow question and folder creation in the background
     if (appState?.type === 'explore' && file_type !== 'question' && file_type !== 'folder') {
-      const msg = `Cannot create a ${file_type} in the background from the explore page. Navigate to /new/${file_type} instead.`;
+      const msg = `Cannot create a ${file_type} in the background from the explore page. Use the Navigate tool with new_file_type="${file_type}" instead.`;
       return { content: { success: false, error: msg }, details: { success: false, error: msg } };
     }
   }
@@ -676,51 +665,50 @@ registerFrontendTool('CreateFile', async (args, context) => {
   // Normalize: collapse double slashes and strip trailing slash
   path = path.replace(/\/+/g, '/').replace(/\/$/, '');
 
-  // Guard: the folder path must not already be a virtual file's path.
+  const draftFiles = Object.values(getStore().getState().files.files).filter(f => f.draft);
+  const effectiveDraftPath = (f: { path: string; metadataChanges?: { path?: string } }) =>
+    f.metadataChanges?.path || f.path;
+
+  // Guard: the folder path must not already be a draft file's path.
   // e.g. if a dashboard already lives at /org/Getting Started, you cannot
   // also create files *inside* /org/Getting Started — a file and its containing
   // folder cannot share the same path.
-  const virtualFiles = Object.values(getStore().getState().files.files).filter(f => f.id < 0);
-  const folderConflict = virtualFiles.find(f => f.type !== 'folder' && (f.metadataChanges?.path || f.path) === path);
+  const folderConflict = draftFiles.find(f => f.type !== 'folder' && effectiveDraftPath(f) === path);
   if (folderConflict) {
     const err = `Path conflict: '${path}' is already occupied by a ${folderConflict.type} file — you cannot create files inside it. Choose a different folder.`;
     return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 
-  // Create virtual file (draft) for any type — no navigation
-  const virtualId = await createVirtualFile(file_type, { folder: path });
-
+  // Pre-creation slug conflict check — when name is given we can compute the final
+  // path upfront and detect conflicts before creating anything in DB.
   if (name) {
-    await editFileOp({ fileId: virtualId, changes: { name } });
-  }
-
-  // Guard: after name slug is applied, confirm the final path doesn't duplicate
-  // or overlap any other virtual file path.
-  {
-    const effectivePath = (f: { path: string; metadataChanges?: { path?: string } }) =>
-      f.metadataChanges?.path || f.path;
-    const newPath = effectivePath(getStore().getState().files.files[virtualId]);
-    const others = Object.values(getStore().getState().files.files).filter(f => f.id < 0 && f.id !== virtualId);
-    for (const other of others) {
-      const otherPath = effectivePath(other);
-      if (newPath === otherPath) {
-        const err = `Path conflict: '${newPath}' is already used by another virtual ${other.type} file. Use a different name or path.`;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const previewPath = `${path}/${slug}`;
+    for (const other of draftFiles) {
+      const otherPath = effectiveDraftPath(other);
+      if (previewPath === otherPath) {
+        const err = `Path conflict: '${previewPath}' is already used by another virtual ${other.type} file. Use a different name or path.`;
         return { content: { success: false, error: err }, details: { success: false, error: err } };
       }
-      if (other.type !== 'folder' && otherPath.startsWith(newPath + '/')) {
-        const err = `Path conflict: '${newPath}' would be treated as a folder by existing virtual ${other.type} '${otherPath}' — but it is a file. Use a different name or path.`;
+      if (other.type !== 'folder' && otherPath.startsWith(previewPath + '/')) {
+        const err = `Path conflict: '${previewPath}' would be treated as a folder by existing virtual ${other.type} '${otherPath}' — but it is a file. Use a different name or path.`;
         return { content: { success: false, error: err }, details: { success: false, error: err } };
       }
     }
   }
+
+  // Create draft file on server — returns real positive ID with draft:true.
+  // Passing name here ensures the DB path uses the slug immediately (important
+  // for folders that will be used as parents for other files in the same session).
+  const draftId = await createDraftFile(file_type, { folder: path, name: name ?? undefined });
   if (content && Object.keys(content).length > 0) {
-    await editFileOp({ fileId: virtualId, changes: { content } });
+    await editFileOp({ fileId: draftId, changes: { content } });
   }
 
   // Validate final merged content (template defaults + content override)
   // Same validator as editFileStr — catches bad vizSettings, invalid types, etc.
-  const fileType = getStore().getState().files.files[virtualId]?.type;
-  const mergedContent = selectMergedContent(getStore().getState(), virtualId);
+  const fileType = getStore().getState().files.files[draftId]?.type;
+  const mergedContent = selectMergedContent(getStore().getState(), draftId);
   if (fileType && mergedContent) {
     const validationError = validateFileState({ type: fileType, content: mergedContent });
     if (validationError) {
@@ -732,7 +720,7 @@ registerFrontendTool('CreateFile', async (args, context) => {
   // Auto-execute query for questions (agent sees results immediately)
   if (file_type === 'question') {
     const updatedState = getStore().getState();
-    const finalContent = selectMergedContent(updatedState, virtualId) as any;
+    const finalContent = selectMergedContent(updatedState, draftId) as any;
 
     if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
@@ -740,7 +728,7 @@ registerFrontendTool('CreateFile', async (args, context) => {
       // Show loading in the viz immediately
       getStore().dispatch(clearQueryResult({ query: finalContent.query, params, database: finalContent.connection_name }));
       getStore().dispatch(setEphemeral({
-        fileId: virtualId as FileId,
+        fileId: draftId as FileId,
         changes: {
           lastExecuted: {
             query: finalContent.query,
@@ -764,9 +752,9 @@ registerFrontendTool('CreateFile', async (args, context) => {
     }
   }
 
-  const [augmented] = await readFiles([virtualId], {});
+  const [augmented] = await readFiles([draftId], {});
   if (!augmented) {
-    const err = `Failed to read created file (virtualId: ${virtualId})`;
+    const err = `Failed to read created file (draftId: ${draftId})`;
     return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 

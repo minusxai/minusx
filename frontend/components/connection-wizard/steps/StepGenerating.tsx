@@ -6,10 +6,9 @@ import { LuSparkles, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 're
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
-import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
-import { removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
-import { createVirtualFile, publishAll } from '@/lib/api/file-state';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
+import { setNavigation } from '@/store/navigationSlice';
+import { createDraftFile, publishAll, deleteFile } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { getStore } from '@/store/store';
@@ -90,21 +89,20 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     return () => clearInterval(interval);
   }, [greeting]);
 
-  // Create virtual dashboard file on mount
-  const hasCreatedVirtual = useRef(false);
+  // Create draft dashboard file on mount
+  const hasCreatedDraft = useRef(false);
   useEffect(() => {
-    if (hasCreatedVirtual.current || virtualDashboardId) return;
-    hasCreatedVirtual.current = true;
+    if (hasCreatedDraft.current || virtualDashboardId) return;
+    hasCreatedDraft.current = true;
 
-    createVirtualFile('dashboard').then((vId) => {
-      setVirtualDashboardId(vId);
+    createDraftFile('dashboard').then((draftId: number) => {
+      setVirtualDashboardId(draftId);
 
-      // Set navigation so selectAppState resolves to this virtual dashboard
-      dispatch(setNavigation({ pathname: '/new/dashboard', searchParams: { virtualId: String(vId) } }));
-      dispatch(setActiveVirtualId(vId));
-    }).catch((err) => {
-      console.error('[StepGenerating] Virtual dashboard creation failed:', err);
-      hasCreatedVirtual.current = false;
+      // Set navigation so selectAppState resolves to this draft dashboard
+      dispatch(setNavigation({ pathname: `/f/${draftId}`, searchParams: {} }));
+    }).catch((err: unknown) => {
+      console.error('[StepGenerating] Draft dashboard creation failed:', err);
+      hasCreatedDraft.current = false;
     });
   }, [virtualDashboardId, dispatch]);
 
@@ -138,7 +136,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     wasGeneratingRef.current = isGenerating;
   }, [isGenerating, hasStarted]);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (hasStarted || !virtualDashboardId) return;
     setHasStarted(true);
 
@@ -160,8 +158,23 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       tables: s.tables.map(t => t.table)
     }));
 
+    const message = [
+      DASHBOARD_PROMPT,
+      `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
+      `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
+      staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
+      userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const initRes = await fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstMessage: message }),
+    });
+    const { conversationID: newConvId } = await initRes.json();
+
     dispatch(createConversation({
-      conversationID: generateVirtualConversationId(),
+      conversationID: newConvId,
       agent: 'OnboardingDashboardAgent',
       agent_args: {
         connection_id: connectionName,
@@ -171,13 +184,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         context: contextDocs || '',
         app_state: appState,
       },
-      message: [
-        DASHBOARD_PROMPT,
-        `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
-        `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
-        staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
-        userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
-      ].filter(Boolean).join('\n\n'),
+      message,
     }));
 
     setIsGenerating(true);
@@ -190,52 +197,43 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     try {
       await publishAll();
       if (onComplete) await onComplete();
-      const freshState = getStore().getState();
-      const allFiles = Object.values(freshState.files.files);
-      const dashboard = allFiles
-        .filter(f => f.type === 'dashboard' && f.id > 0 && f.path.startsWith(modeRoot))
-        .sort((a, b) => b.id - a.id)[0];
-      if (dashboard) {
-        router.push(preserveModeParam(`/f/${dashboard.id}`));
-      } else {
-        router.push(preserveModeParam('/'));
-      }
+      router.push(preserveModeParam(`/f/${virtualDashboardId}`));
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
       router.push(preserveModeParam('/'));
     }
   }, [virtualDashboardId, router, onComplete]);
 
-  /** Discard all virtual (unsaved) files created during this step */
-  const discardVirtualFiles = useCallback(() => {
+  /** Discard draft files created during this step — note: orphan cleanup is a future task */
+  const discardDraftFiles = useCallback(() => {
     const allFiles = getStore().getState().files.files;
     for (const idStr of Object.keys(allFiles)) {
-      const id = Number(idStr);
-      if (isVirtualFileId(id)) {
-        dispatch(removeVirtualFile(id));
+      const file = allFiles[Number(idStr)];
+      if (file?.draft === true) {
+        deleteFile({ fileId: file.id }).catch(() => {});
       }
     }
-  }, [dispatch]);
+  }, []);
 
-  /** Skip: interrupt agent, mark wizard complete, go to /new/dashboard */
+  /** Skip: interrupt agent, mark wizard complete, go home */
   const handleSkip = useCallback(async () => {
     if (activeConvId) {
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
-    discardVirtualFiles();
+    discardDraftFiles();
     if (onComplete) await onComplete();
-    router.push(preserveModeParam('/new/dashboard'));
-  }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
+    router.push(preserveModeParam('/p/org'));
+  }, [activeConvId, dispatch, router, onComplete, discardDraftFiles]);
 
   /** Skip everything and go home */
   const handleGoHome = useCallback(async () => {
     if (activeConvId) {
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
-    discardVirtualFiles();
+    discardDraftFiles();
     if (onComplete) await onComplete();
     router.push(preserveModeParam('/p/org'));
-  }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
+  }, [activeConvId, dispatch, router, onComplete, discardDraftFiles]);
 
   return (
     <VStack gap={6} align="stretch" minH="400px">

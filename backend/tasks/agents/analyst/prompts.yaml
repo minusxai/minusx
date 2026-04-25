@@ -252,7 +252,9 @@ templates:
       - Users expect you to EditFile the current dashboard for changes to questions, layout, and parameters.
       - When creating a background question for the dashboard, you MUST pass the dashboard's folder as the `path` argument to CreateFile. Extract the folder from `app_state.state.fileState.path` by removing the last path segment (e.g. if the dashboard path is `/org/Sales/My Dashboard`, the folder is `/org/Sales`). Do NOT default to `/org` or any other root.
       - If user asks you to add a question, and you find an existing question that answers it, you can add that. No need to create a duplicate question just to add to the dashboard.
-      - If `app_state.ui.openModal` is present with `type: "create-question"`, a new question modal is already open in the UI. Use EditFile on `virtualFileId` (a negative number) to set the query, name, and viz settings. Do NOT call CreateFile and do NOT manually add the question to the dashboard — the user clicks 'Add' in the modal to do that. The virtual file's current state is in `app_state.ui.openModal.virtualFile` — use it as the source for `oldMatch` values when calling EditFile (do not call ReadFiles for this file).
+      - If `app_state.ui.openModal` is present, a question overlay is open. Use EditFile on `openModal.fileId` — its current state is in `app_state.ui.openModal.fileState` (use it as `oldMatch` source; do not call ReadFiles for this file).
+        - `type: "question"`: user is editing an existing question from the dashboard. EditFile it directly.
+        - `type: "create-question"`: a new draft question is open. EditFile to set the query/name/viz. Do NOT call CreateFile and do NOT manually add it to the dashboard — the user clicks 'Add' in the modal.
 
   skill_contexts:
     description: "Context file structure (versions, docs, databases), context page behavior guidelines — editing docs only"
@@ -733,7 +735,7 @@ prompts:
       ## Available Tools
       - **SearchDBSchema(connection_id, query?)**: Get column details for tables.
       - **ExecuteQuery(query, connectionId, vizSettings?)**: Run SQL to test queries before adding them.
-      - **CreateFile(file_type, name?, path?, content?)**: Create a new question as a draft. Returns the virtual file with its negative ID.
+      - **CreateFile(file_type, name?, path?, content?)**: Create a new question as a draft. Returns a draft file with a real positive ID.
         - Question content: {{"query": "SELECT ...", "connection_name": "{connection_id}", "vizSettings": {{"type": "line", "xCols": ["col"], "yCols": ["col"]}}, "description": "..."}}
         - VizSettings types: `table`, `line`, `bar`, `area`, `scatter`, `pie`, `funnel`, `pivot`, `geo`
         - For line/bar/area/scatter: set `xCols` (grouping) and `yCols` (values)
@@ -748,7 +750,7 @@ prompts:
       1. Call SearchDBSchema once to see the full column details, if context is not sufficient.
       2. For each question (3-4 total):
          a. Optionally run ExecuteQuery to verify the SQL works.
-         b. Call CreateFile to create the question (it returns a virtual ID).
+         b. Call CreateFile to create the question (it returns a real positive integer ID).
       3. After all questions are created, call EditFile on the dashboard to add all questions to `assets` and `layout` in one edit. You have to Edit the dashboard you already have in AppState, not a new one, since the frontend creates a dashboard file with a specific ID at the start of onboarding.
 
       ## Guidelines

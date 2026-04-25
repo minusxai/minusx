@@ -1,5 +1,5 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult, MoveFileInput, MoveFileResult, DeleteFileResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchSaveFileInput, BatchSaveFileResult, DryRunSaveResult, MoveFileInput, MoveFileResult, DeleteFileResult } from './types';
 import { BaseFileContent, FileType } from '@/lib/types';
 import { LoaderOptions } from './loaders/types';
 
@@ -56,15 +56,13 @@ export interface IFilesDataLayer {
   getTemplate(type: FileType, options: GetTemplateOptions, user: EffectiveUser): Promise<GetTemplateResult>;
 
   /**
-   * Batch-create multiple virtual files in a single operation.
-   * Each input includes the client-side virtualId so the caller can build an idMap.
-   */
-  batchCreateFiles(inputs: BatchCreateInput[], user: EffectiveUser): Promise<BatchCreateFileResult>;
-
-  /**
    * Batch-save multiple existing files in a single operation.
+   * Pass dryRun: true to validate the saves without committing — useful for
+   * pre-flight checks that catch cross-file path conflicts.
    */
-  batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser): Promise<BatchSaveFileResult>;
+  batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser, dryRun?: false): Promise<BatchSaveFileResult>;
+  batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser, dryRun: true): Promise<DryRunSaveResult>;
+  batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser, dryRun?: boolean): Promise<BatchSaveFileResult | DryRunSaveResult>;
 
   /**
    * Delete a file or folder (and all descendants).
@@ -80,5 +78,20 @@ export interface IFilesDataLayer {
    * Move multiple files/folders in a single operation.
    */
   batchMoveFiles(inputs: MoveFileInput[], user: EffectiveUser): Promise<MoveFileResult[]>;
+
+  /**
+   * Atomically append entries to a nested JSON array inside `content`.
+   * Uses optimistic concurrency: only updates when the array length equals `expectedLength`
+   * (pass `undefined` to skip the check). `arrayPath` and `metaPath` use dot notation.
+   * Returns true on success, false on conflict. Server-only — requires direct DB access.
+   */
+  appendJsonArray(
+    id: number,
+    entries: any[],
+    expectedLength: number | undefined,
+    user: EffectiveUser,
+    arrayPath?: string,
+    metaPath?: string | null
+  ): Promise<boolean>;
 
 }

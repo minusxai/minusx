@@ -3,14 +3,14 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare, LuSave, LuEye } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -34,9 +34,6 @@ import { selectDevMode } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolCallListModal from './ToolCallListModal';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
-import { publishAll } from '@/lib/api/file-state';
-import PublishModal from '@/components/PublishModal';
 
 // next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
 // from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
@@ -158,18 +155,41 @@ export default function ChatInterface({
     return conv;
   }, [providedConversationId, loadedConversation, conversations]);
 
-  // Case 2: new conversation — memoized selector avoids Object.keys scan on every Redux change
-  const activeTempConversation = useAppSelector(selectActiveTempConversation);
+  // Case 2: new conversation — find the active conversation (real positive ID from /api/chat/init)
+  const activeConversationId = useAppSelector(selectActiveConversation);
+  const activeConversation = useAppSelector(state =>
+    activeConversationId ? state.chat.conversations[activeConversationId] : undefined
+  );
 
   // When loading an existing conversation (providedConversationId set), don't fall back to
-  // activeTempConversation — doing so causes the fork-follow useEffect to redirect back to
+  // activeConversation — doing so causes the fork-follow useEffect to redirect back to
   // the most recent conversation before the target conversation finishes loading.
   const conversation = providedConversationId
     ? forkFollowedConversation
-    : (forkFollowedConversation ?? activeTempConversation);
+    : (forkFollowedConversation ?? activeConversation);
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // Pre-create a conversation on explore page mount so sends go directly to the existing path
+  useEffect(() => {
+    if (!isNewConversation) return;
+    if (activeConversationId) return; // already have one
+    let cancelled = false;
+    fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !data.conversationID) return;
+        dispatch(createConversation({ conversationID: data.conversationID, agent: 'AnalystAgent' }));
+      })
+      .catch(err => console.error('[ChatInterface] Failed to pre-create conversation:', err));
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNewConversation, activeConversationId]);
 
   // Determine if this conversation originated from a file page or Slack
   const parentPageInfo = useMemo(() => {
@@ -204,8 +224,18 @@ export default function ChatInterface({
   // Single unified source for all messages (completed, streaming, pending)
   const allMessages = useMemo(() => {
     if (!conversation) return [];
-    return deduplicateMessages(conversation)
+    const msgs = deduplicateMessages(conversation);
+    const ttu = msgs.find(m => (m as any).function?.name === 'TalkToUser');
+    if (ttu) console.log('[ChatInterface] allMessages has TalkToUser, content length:', String((ttu as any).content || '').length, 'at', Date.now());
+    return msgs;
   }, [conversation?.messages, conversation?.streamedCompletedToolCalls, conversation?.pending_tool_calls]);
+
+  // Track when ChatInterface itself re-renders during streaming
+  const streamedLen = conversation?.streamedCompletedToolCalls?.length ?? 0;
+  const streamedTTUContent = (conversation?.streamedCompletedToolCalls ?? []).find((m: any) => m.function?.name === 'TalkToUser')?.content;
+  if (conversation?.executionState === 'STREAMING') {
+    console.log('[ChatInterface] RENDER during STREAMING, streamedLen:', streamedLen, 'TTU content len:', typeof streamedTTUContent === 'string' ? streamedTTUContent.length : 0, 'at', Date.now());
+  }
 
   // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
   const streamingInfo = useMemo(() => {
@@ -285,21 +315,6 @@ export default function ChatInterface({
   const colSpan = isCompact ? 12 : isMedium ? { base: 12, md: 8 } : { base: 12, md: 8, lg: 6 };
   const colStart = isCompact ? 1 : isMedium ? { base: 1, md: 3 } : { base: 1, md: 3, lg: 4 };
 
-  // Dirty files — show save banner above chat input
-  const dirtyFiles = useDirtyFiles();
-  const [publishModalOpen, setPublishModalOpen] = useState(false);
-  const [isSavingAll, setIsSavingAll] = useState(false);
-  const handleSaveAll = useCallback(async () => {
-    setIsSavingAll(true);
-    try {
-      await publishAll(dirtyFiles.map(f => f.id));
-      toaster.create({ title: `Saved ${dirtyFiles.length} file${dirtyFiles.length > 1 ? 's' : ''}`, type: 'success' });
-    } catch {
-      toaster.create({ title: 'Failed to save', type: 'error' });
-    } finally {
-      setIsSavingAll(false);
-    }
-  }, [dirtyFiles]);
 
   // Clear errors when navigating between conversations — intentional setState in effect
   const prevProvidedIdRef = useRef(providedConversationId);
@@ -358,6 +373,23 @@ export default function ChatInterface({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     checkScrollPosition();
   }, [allMessages.length, checkScrollPosition]);
+
+  // Track streaming answer text length for auto-scroll
+  const streamingAnswerLength = useMemo(() => {
+    if (!conversation?.streamedCompletedToolCalls) return 0;
+    const talkToUser = conversation.streamedCompletedToolCalls.find(m => m.function?.name === 'TalkToUser');
+    return typeof talkToUser?.content === 'string' ? talkToUser.content.length : 0;
+  }, [conversation?.streamedCompletedToolCalls]);
+
+  const prevStreamingAnswerLength = useRef(0);
+  // Auto-scroll to bottom when streaming answer first appears or grows
+  useEffect(() => {
+    if (streamingAnswerLength > 0 && prevStreamingAnswerLength.current === 0) {
+      // First chunk of streaming answer — scroll to show it
+      scrollToBottom();
+    }
+    prevStreamingAnswerLength.current = streamingAnswerLength;
+  }, [streamingAnswerLength]);
 
   const handleNewChat = () => {
     setLocalError(null);
@@ -439,69 +471,63 @@ export default function ChatInterface({
     // Question: 1 image. Dashboard: one image per chart with data.
     // Show preparing indicator so user knows something is happening after pressing send.
     setIsPreparing(true);
-    const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
-    setIsPreparing(false);
-    const allAttachments = [...attachments, ...fileAttachments];
+    let allAttachments: Attachment[];
+    let convId = conversationID;
+    try {
+      const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
+      allAttachments = [...attachments, ...fileAttachments];
 
-    // For new conversations (no conversationID yet)
-    if (isNewConversation && !conversationID) {
-      // Create conversation with temp ID (negative) and initial message
-      dispatch(createConversation({
-        conversationID: generateVirtualConversationId(),
-        agent: 'AnalystAgent',
-        agent_args: {
-          connection_id: selectedDatabase || null,
-          context_path: contextPath || null,
-          context_version: contextVersion ?? null,
-          schema: simplifiedSchema,
-          context: markdown || '',
-          app_state: appState,
-          city: config.city,
-          agent_name: config.branding.agentName || 'MinusX',
-          unrestricted_mode: unrestrictedMode,
-          ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
-          ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-        },
-        message: userInput,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }));
-
-      // Navigation will happen via useEffect when conversation forks to real ID
+      // Resolve conversation — normally pre-created on mount, but fall back to inline creation
+      // if the user sends before the pre-creation fetch completes (rare race condition).
+      if (!convId) {
+        const initRes = await fetch('/api/chat/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firstMessage: userInput }),
+        });
+        const { conversationID: newId } = await initRes.json();
+        if (!newId) throw new Error('Failed to get conversation ID from server');
+        convId = newId as number;
+        dispatch(createConversation({ conversationID: convId, agent: 'AnalystAgent' }));
+      }
+    } catch {
+      setLocalError({ message: 'Failed to prepare message', code: 'UNKNOWN' });
+      setIsPreparing(false);
       return;
     }
+    setIsPreparing(false);
 
-    // Existing conversation - normal flow
-    if (conversationID) {
-      // Clear any leftover queued messages (e.g., after interrupt)
-      if (conversation?.queuedMessages?.length) {
-        dispatch(clearQueuedMessages({ conversationID }));
-      }
+    if (!convId) return; // should not happen — caught above or pre-created
 
-      // Update agent_args with fresh appState before sending message
-      dispatch(updateAgentArgs({
-        conversationID,
-        agent_args: {
-          connection_id: database?.databaseName || null,
-          context_path: contextPath || null,
-          context_version: contextVersion ?? null,
-          schema: simplifiedSchema,
-          context: markdown || '',
-          app_state: appState,
-          city: config.city,
-          agent_name: config.branding.agentName || 'MinusX',
-          unrestricted_mode: unrestrictedMode,
-          ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
-          ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-        }
-      }));
-
-      // Send message
-      dispatch(sendMessage({
-        conversationID,
-        message: userInput,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }));
+    // Clear any leftover queued messages (e.g., after interrupt)
+    if (conversation?.queuedMessages?.length) {
+      dispatch(clearQueuedMessages({ conversationID: convId }));
     }
+
+    // Update agent_args with fresh appState before sending message
+    dispatch(updateAgentArgs({
+      conversationID: convId,
+      agent_args: {
+        connection_id: database?.databaseName || selectedDatabase || null,
+        context_path: contextPath || null,
+        context_version: contextVersion ?? null,
+        schema: simplifiedSchema,
+        context: markdown || '',
+        app_state: appState,
+        city: config.city,
+        agent_name: config.branding.agentName || 'MinusX',
+        unrestricted_mode: unrestrictedMode,
+        ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
+        ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
+      }
+    }));
+
+    // Send message
+    dispatch(sendMessage({
+      conversationID: convId,
+      message: userInput,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    }));
   };
 
   // Navigate when conversation forks (new conversation gets real ID, or conflict resolution)
@@ -511,8 +537,8 @@ export default function ChatInterface({
     // Don't navigate if conversation is inactive (was cleared via "New Chat")
     if (!conversation.active) return;
 
-    // For new conversations: navigate when we get a real ID (positive)
-    if (isNewConversation && conversationID && conversationID > 0) {
+    // For new conversations: navigate when a real conversation with messages exists
+    if (isNewConversation && conversationID && conversationID > 0 && allMessages.length > 0) {
       console.log("[ChatInterface] New conversation created with ID:", conversationID);
       router.push(`/explore/${conversationID}`);
       return;
@@ -523,7 +549,7 @@ export default function ChatInterface({
       console.log("[ChatInterface] Conversation forked to:", conversationID);
       router.push(`/explore/${conversationID}`);
     }
-  }, [conversationID, isNewConversation, providedConversationId, container, router, conversation]);
+  }, [conversationID, isNewConversation, providedConversationId, container, router, conversation, allMessages.length]);
 
 
   // Handler for setting conversation as active
@@ -1013,52 +1039,7 @@ export default function ChatInterface({
             </Grid>
           )}
 
-          {/* Unsaved changes banner */}
-          {dirtyFiles.length > 0 && !isAgentRunning && !isStreaming && (
-            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
-              <GridItem colSpan={colSpan} colStart={colStart}>
-                <HStack
-                  bg="accent.primary/8"
-                  border="1px solid"
-                  borderColor="accent.primary/20"
-                  borderRadius="md"
-                  px={3} py={2} mb={2}
-                  justify="space-between"
-                >
-                  <Text fontSize="xs" fontFamily="mono" color="fg.default">
-                    {dirtyFiles.length} unsaved change{dirtyFiles.length > 1 ? 's' : ''}
-                  </Text>
-                  <HStack gap={1.5}>
-                    <Button
-                      size="2xs"
-                      variant="ghost"
-                      onClick={() => setPublishModalOpen(true)}
-                      color="accent.primary"
-                      fontFamily="mono"
-                    >
-                      <Icon as={LuEye} boxSize={3} />
-                      Review
-                    </Button>
-                    <Button
-                      size="2xs"
-                      variant="solid"
-                      bg="accent.primary"
-                      color="white"
-                      _hover={{ opacity: 0.9 }}
-                      onClick={handleSaveAll}
-                      disabled={isSavingAll}
-                      fontFamily="mono"
-                    >
-                      <Icon as={LuSave} boxSize={3} />
-                      Save All
-                    </Button>
-                  </HStack>
-                </HStack>
-              </GridItem>
-            </Grid>
-          )}
-
-          <Box width="100%">
+<Box width="100%">
             <ChatInput
               onSend={handleSendMessage}
               onStop={handleStopAgent}
@@ -1085,7 +1066,6 @@ export default function ChatInterface({
           </Box>
         </Box>
       )}
-      <PublishModal isOpen={publishModalOpen} onClose={() => setPublishModalOpen(false)} />
     </VStack>
   );
 }

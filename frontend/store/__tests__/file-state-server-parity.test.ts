@@ -176,63 +176,47 @@ describe('Client-Server File State Parity', () => {
     await initTestDatabase(dbPath);
 
     // Simple question — no params
-    questionId = await DocumentDB.create(
-      'Sales Query',
-      '/org/sales-query',
-      'question',
-      {
-        description: 'Total sales by month',
-        query: 'SELECT month, SUM(total) as total FROM sales GROUP BY month',
-        connection_name: 'test_db',
-        parameters: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] },
-      } as QuestionContent,
-      []
-    );
+    const questionContent: QuestionContent = {
+      description: 'Total sales by month',
+      query: 'SELECT month, SUM(total) as total FROM sales GROUP BY month',
+      connection_name: 'test_db',
+      parameters: [],
+      vizSettings: { type: 'table', xCols: [], yCols: [] },
+    };
+    questionId = await DocumentDB.create('Sales Query', '/org/sales-query', 'question', questionContent, []);
+    await DocumentDB.update(questionId, 'Sales Query', '/org/sales-query', questionContent, [], 'init-question');
 
     // Dashboard referencing the simple question (no param override)
-    dashboardId = await DocumentDB.create(
-      'Sales Dashboard',
-      '/org/sales-dashboard',
-      'dashboard',
-      {
-        description: 'Sales overview',
-        assets: [{ type: 'question', id: questionId }],
-        layout: {},
-        parameterValues: {},
-      } as DocumentContent,
-      [questionId]
-    );
+    const dashboardContent = {
+      description: 'Sales overview',
+      assets: [{ type: 'question', id: questionId }],
+      layout: {},
+      parameterValues: {},
+    } as DocumentContent;
+    dashboardId = await DocumentDB.create('Sales Dashboard', '/org/sales-dashboard', 'dashboard', dashboardContent, [questionId]);
+    await DocumentDB.update(dashboardId, 'Sales Dashboard', '/org/sales-dashboard', dashboardContent, [questionId], 'init-dashboard');
 
     // Question with :limit param — own default limit=5
-    paramQuestionId = await DocumentDB.create(
-      'Limited Sales Query',
-      '/org/limited-sales-query',
-      'question',
-      {
-        description: 'Sales with limit param',
-        query: 'SELECT month, total FROM sales LIMIT :limit',
-        connection_name: 'test_db',
-        parameters: [{ name: 'limit', type: 'number', value: '5' }],
-        parameterValues: { limit: '5' },
-        vizSettings: { type: 'table', xCols: [], yCols: [] },
-      } as unknown as QuestionContent,
-      []
-    );
+    const paramQuestionContent = {
+      description: 'Sales with limit param',
+      query: 'SELECT month, total FROM sales LIMIT :limit',
+      connection_name: 'test_db',
+      parameters: [{ name: 'limit', type: 'number', value: '5' }],
+      parameterValues: { limit: '5' },
+      vizSettings: { type: 'table', xCols: [], yCols: [] },
+    } as unknown as QuestionContent;
+    paramQuestionId = await DocumentDB.create('Limited Sales Query', '/org/limited-sales-query', 'question', paramQuestionContent, []);
+    await DocumentDB.update(paramQuestionId, 'Limited Sales Query', '/org/limited-sales-query', paramQuestionContent, [], 'init-param-question');
 
     // Dashboard overriding limit=10 (overrides question's default of 5)
-    paramDashboardId = await DocumentDB.create(
-      'Param Sales Dashboard',
-      '/org/param-sales-dashboard',
-      'dashboard',
-      {
-        description: 'Sales with param override',
-        assets: [{ type: 'question', id: paramQuestionId }],
-        layout: {},
-        parameterValues: { limit: '10' },
-      } as unknown as DocumentContent,
-      [paramQuestionId]
-    );
+    const paramDashboardContent = {
+      description: 'Sales with param override',
+      assets: [{ type: 'question', id: paramQuestionId }],
+      layout: {},
+      parameterValues: { limit: '10' },
+    } as unknown as DocumentContent;
+    paramDashboardId = await DocumentDB.create('Param Sales Dashboard', '/org/param-sales-dashboard', 'dashboard', paramDashboardContent, [paramQuestionId]);
+    await DocumentDB.update(paramDashboardId, 'Param Sales Dashboard', '/org/param-sales-dashboard', paramDashboardContent, [paramQuestionId], 'init-param-dashboard');
 
     store = configureStore({
       reducer: {
@@ -491,20 +475,16 @@ describe('Client-Server File State Parity', () => {
       // Seed a connection at /org/database/test-conn (type='duckdb') with a
       // pre-populated schema so the connection loader uses the cached value
       // (rather than attempting a real DuckDB connection and returning empty).
-      await DocumentDB.create(
-        'test-conn',
-        '/org/database/test-conn',
-        'connection',
-        {
-          type: 'duckdb',
-          config: {},
-          schema: {
-            schemas: [{ schema: 'main', tables: [{ table: 'users', columns: [{ name: 'id', type: 'INTEGER' }] }] }],
-            updated_at: new Date().toISOString(),
-          },
-        } as ConnectionContent,
-        []
-      );
+      const testConnContent = {
+        type: 'duckdb',
+        config: {},
+        schema: {
+          schemas: [{ schema: 'main', tables: [{ table: 'users', columns: [{ name: 'id', type: 'INTEGER' }] }] }],
+          updated_at: new Date().toISOString(),
+        },
+      } as ConnectionContent;
+      const testConnId = await DocumentDB.create('test-conn', '/org/database/test-conn', 'connection', testConnContent, []);
+      await DocumentDB.update(testConnId, 'test-conn', '/org/database/test-conn', testConnContent, [], 'init-test-conn');
 
       // Upsert the canonical /org/context with test-specific whitelist + docs.
       // (Template seed already creates /org/context with whitelist:'*'; we update it here.)
@@ -524,11 +504,12 @@ describe('Client-Server File State Parity', () => {
       if (existingOrgCtx) {
         await DocumentDB.update(existingOrgCtx.id, 'context', '/org/context', testContextContent, [], 'test-edit');
       } else {
-        await DocumentDB.create('context', '/org/context', 'context', testContextContent, []);
+        const newCtxId = await DocumentDB.create('context', '/org/context', 'context', testContextContent, []);
+        await DocumentDB.update(newCtxId, 'context', '/org/context', testContextContent, [], 'init-org-context');
       }
 
       // Seed a second context with distinct docs — used for the contextFileId override test.
-      secondContextId = await DocumentDB.create('eval-context', '/org/eval-context', 'context', {
+      const evalContextContent = {
         published: { all: 1 },
         versions: [{
           version: 1,
@@ -537,7 +518,9 @@ describe('Client-Server File State Parity', () => {
           createdAt: new Date().toISOString(),
           createdBy: 1,
         }],
-      } as ContextContent, []);
+      } as ContextContent;
+      secondContextId = await DocumentDB.create('eval-context', '/org/eval-context', 'context', evalContextContent, []);
+      await DocumentDB.update(secondContextId, 'eval-context', '/org/eval-context', evalContextContent, [], 'init-eval-context');
 
       // home_folder='' → resolveHomeFolderSync('org', '') → '/org' (mode root)
       agentUser = {

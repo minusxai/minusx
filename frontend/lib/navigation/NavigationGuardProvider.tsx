@@ -81,33 +81,18 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   // Get the current file ID from the URL
   const currentFileId = useMemo(() => getFileIdFromPathname(pathname), [pathname]);
 
-  // Check if we're on a /new/[type] page
-  const isOnNewFilePage = useMemo(() => isNewFilePage(pathname), [pathname]);
-
   // Get the current file from Redux (if on a file page)
   const currentFile = useAppSelector(state =>
     currentFileId !== null ? state.files.files[currentFileId] : null
   );
 
-  // For /new pages, find any dirty virtual file (negative ID)
-  const allFiles = useAppSelector(state => state.files.files);
-  const dirtyVirtualFile = useMemo(() => {
-    if (!isOnNewFilePage) return null;
-    for (const fileId in allFiles) {
-      const id = parseInt(fileId, 10);
-      if (id < 0 && isFileDirty(allFiles[id])) return allFiles[id];
-    }
-    return null;
-  }, [isOnNewFilePage, allFiles]);
-
   // Check if the current file is dirty
   const isCurrentFileDirty = useMemo(() => {
     if (currentFile) return isFileDirty(currentFile);
-    if (dirtyVirtualFile) return true;
     return false;
-  }, [currentFile, dirtyVirtualFile]);
+  }, [currentFile]);
 
-  const currentFileName = currentFile?.name || dirtyVirtualFile?.name || 'Untitled';
+  const currentFileName = currentFile?.name || 'Untitled';
 
   // Check if agent is running in active conversation
   const activeConversationID = useAppSelector(selectActiveConversation);

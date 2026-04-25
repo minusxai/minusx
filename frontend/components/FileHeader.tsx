@@ -26,7 +26,7 @@ import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { DocumentContent, FileType } from '@/lib/types';
-import { isVirtualFileId } from '@/store/filesSlice';
+import { selectFile } from '@/store/filesSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
@@ -44,6 +44,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const dispatch = useAppDispatch();
   const router = useRouter();
 
+  const isDraft = useAppSelector(state => selectFile(state, fileId)?.draft === true);
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) ?? '';
   const effectivePath = useAppSelector(state => selectEffectivePath(state, fileId)) ?? '';
   const parentFolder = effectivePath.substring(0, effectivePath.lastIndexOf('/')) || '/';
@@ -132,7 +133,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   }, [fileId, router, dispatchSetEditMode, saveWithChildren]);
 
   const handleSave = useCallback(() => {
-    if (isVirtualFileId(fileId)) {
+    if (isDraft) {
       // New file — show Save modal to pick name + location
       setIsSaveModalOpen(true);
     } else {
@@ -161,7 +162,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     : undefined;
 
   // Read-only badge: shown for real files the user can't edit
-  const readOnlyBadge = !canEdit && !isVirtualFileId(fileId) ? (
+  const readOnlyBadge = !canEdit && !isDraft ? (
     <HStack
       gap={1}
       fontFamily="mono"
@@ -204,8 +205,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         onReviewChanges={totalDirtyCount > 0 ? openPublishModal : undefined}
         dirtyFileCount={totalDirtyCount}
         saveCount={saveCount}
-        hideEditToggle={isVirtualFileId(fileId) || !canEdit}
-        skipNameValidation={isVirtualFileId(fileId)}
+        hideEditToggle={isDraft || !canEdit}
+        skipNameValidation={isDraft}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}

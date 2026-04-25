@@ -71,6 +71,13 @@ const adminUser4: EffectiveUser = {
   home_folder: ''
 };
 
+/** Create and immediately publish a context file so ancestor lookups via getByPath work. */
+async function mkPublishedContext(name: string, path: string, content: ContextContent): Promise<number> {
+  const id = await DocumentDB.create(name, path, 'context', content, []);
+  await DocumentDB.update(id, name, path, content, [], `init-${id}`);
+  return id;
+}
+
 describe('Context Loader Integration with Versioning', () => {
   let duckdbConnectionId: number;
   let bigqueryConnectionId: number;
@@ -160,6 +167,7 @@ describe('Context Loader Integration with Versioning', () => {
       duckdbContent,
       []
     );
+    await DocumentDB.update(duckdbConnectionId, 'duckdb_main', '/org/database/duckdb_main', duckdbContent, [], 'init-duckdb');
 
     bigqueryConnectionId = await DocumentDB.create(
       'bigquery_analytics',
@@ -168,6 +176,7 @@ describe('Context Loader Integration with Versioning', () => {
       bigqueryContent,
       []
     );
+    await DocumentDB.update(bigqueryConnectionId, 'bigquery_analytics', '/org/database/bigquery_analytics', bigqueryContent, [], 'init-bigquery');
 
     // Create versioned context files
 
@@ -222,6 +231,7 @@ describe('Context Loader Integration with Versioning', () => {
       orgContent,
       []
     );
+    await DocumentDB.update(orgContextId, 'context', '/org/context', orgContent, [], 'init-org-context');
 
     // /org/sales/context - Child context
     const salesVersion1: ContextVersion = {
@@ -253,6 +263,7 @@ describe('Context Loader Integration with Versioning', () => {
       salesContent,
       []
     );
+    await DocumentDB.update(salesContextId, 'context', '/org/sales/context', salesContent, [], 'init-sales-context');
   });
 
   describe('Root Context - Version Resolution', () => {
@@ -475,27 +486,21 @@ describe('Context Loader Integration with Versioning', () => {
     it('should filter child context by childPaths in parent whitelist', async () => {
       // Create parent context at /org/testing with childPaths
       // This inherits from /org/context (which has fullSchema from connections)
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              { name: 'public', type: 'schema', children: [
-                { name: 'users', type: 'table', childPaths: ['/org/testing/sales'] },
-                { name: 'orders', type: 'table', childPaths: ['/org/testing/marketing'] }
-              ]}
-            ]}],
-            docs: [{ content: 'Parent context' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table', childPaths: ['/org/testing/sales'] },
+              { name: 'orders', type: 'table', childPaths: ['/org/testing/marketing'] }
+            ]}
+          ]}],
+          docs: [{ content: 'Parent context' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Create child context at /org/testing/sales (should see users, not orders)
       const salesContextId = await DocumentDB.create(
@@ -560,26 +565,20 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('should apply to all children when childPaths is undefined', async () => {
       // Create parent context without childPaths (applies to all)
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing2/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              { name: 'public', type: 'schema', children: [
-                { name: 'products', type: 'table' }  // No childPaths — applies to all children
-              ]}
-            ]}],
-            docs: [{ content: 'Parent context' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing2/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'products', type: 'table' }  // No childPaths — applies to all children
+            ]}
+          ]}],
+          docs: [{ content: 'Parent context' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Create child contexts
       const child1Id = await DocumentDB.create(
@@ -632,26 +631,20 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('should support nested path matching (startsWith)', async () => {
       // Create parent context with childPaths: ['/org/testing3/sales']
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing3/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              { name: 'public', type: 'schema', children: [
-                { name: 'users', type: 'table', childPaths: ['/org/testing3/sales'] }
-              ]}
-            ]}],
-            docs: [{ content: 'Parent context' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing3/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table', childPaths: ['/org/testing3/sales'] }
+            ]}
+          ]}],
+          docs: [{ content: 'Parent context' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Create nested child at /org/testing3/sales/north/context
       const nestedChildId = await DocumentDB.create(
@@ -714,25 +707,19 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('should support schema-level childPaths filtering', async () => {
       // Create parent context with schema-level childPaths
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing4/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              // Whitelist entire schema with childPaths restriction
-              { name: 'public', type: 'schema', childPaths: ['/org/testing4/engineering'] }
-            ]}],
-            docs: [{ content: 'Parent with schema-level childPaths' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing4/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            // Whitelist entire schema with childPaths restriction
+            { name: 'public', type: 'schema', childPaths: ['/org/testing4/engineering'] }
+          ]}],
+          docs: [{ content: 'Parent with schema-level childPaths' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Create child at /org/testing4/engineering (should see entire schema)
       const engineeringContextId = await DocumentDB.create(
@@ -798,27 +785,21 @@ describe('Context Loader Integration with Versioning', () => {
     it('CRITICAL: child fullSchema must respect PARENT whitelist childPaths, not child whitelist', async () => {
       // This test catches the bug where we filtered by child's whitelist instead of parent's
       // Parent whitelists tables with childPaths
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing5/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              { name: 'public', type: 'schema', children: [
-                { name: 'users', type: 'table', childPaths: ['/org/testing5/team_a'] },
-                { name: 'orders', type: 'table', childPaths: ['/org/testing5/team_b'] }
-              ]}
-            ]}],
-            docs: [{ content: 'Parent with childPaths' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing5/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table', childPaths: ['/org/testing5/team_a'] },
+              { name: 'orders', type: 'table', childPaths: ['/org/testing5/team_b'] }
+            ]}
+          ]}],
+          docs: [{ content: 'Parent with childPaths' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Child at /org/testing5/team_a with DIFFERENT whitelist (whitelists orders, not users)
       // But parent only allows users for this path!
@@ -867,27 +848,21 @@ describe('Context Loader Integration with Versioning', () => {
     it('E2E: child can only whitelist from parent-allowed fullSchema', async () => {
       // Test the complete flow: parent restricts → child loads → child can only select allowed tables
       // Parent restricts severely
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing6/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              { name: 'public', type: 'schema', children: [
-                { name: 'users', type: 'table', childPaths: ['/org/testing6/restricted'] }
-                // Only 'users' table, only for /org/testing6/restricted path
-              ]}
-            ]}],
-            docs: [{ content: 'Severely restricted parent' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing6/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table', childPaths: ['/org/testing6/restricted'] }
+              // Only 'users' table, only for /org/testing6/restricted path
+            ]}
+          ]}],
+          docs: [{ content: 'Severely restricted parent' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Child at /org/testing6/restricted uses '*' to expose everything parent allows
       const restrictedContextId = await DocumentDB.create(
@@ -921,28 +896,22 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('E2E: sibling contexts with different childPaths see different schemas', async () => {
       // Real-world scenario: two teams, different access
-      const parentContextId = await DocumentDB.create(
-        'context',
-        '/org/testing7/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
-              { name: 'public', type: 'schema', children: [
-                { name: 'users', type: 'table', childPaths: ['/org/testing7/sales', '/org/testing7/support'] },
-                { name: 'orders', type: 'table', childPaths: ['/org/testing7/sales'] },
-                { name: 'products', type: 'table', childPaths: ['/org/testing7/sales'] }
-              ]}
-            ]}],
-            docs: [{ content: 'Multi-team parent' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1
-          }],
-          published: { all: 1 }
-        } as ContextContent,
-        []
-      );
+      const parentContextId = await mkPublishedContext('context', '/org/testing7/context', {
+        versions: [{
+          version: 1,
+          whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table', childPaths: ['/org/testing7/sales', '/org/testing7/support'] },
+              { name: 'orders', type: 'table', childPaths: ['/org/testing7/sales'] },
+              { name: 'products', type: 'table', childPaths: ['/org/testing7/sales'] }
+            ]}
+          ]}],
+          docs: [{ content: 'Multi-team parent' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      } as ContextContent);
 
       // Sales team - expose everything parent allows (users, orders, products)
       const salesContextId = await DocumentDB.create(
@@ -1209,7 +1178,7 @@ describe('Context Loader Integration with Versioning', () => {
      */
     async function replaceRootContext(whitelist: import('@/lib/types').Whitelist): Promise<number> {
       await getModules().db.exec("DELETE FROM files WHERE path = '/org/context'", []);
-      return DocumentDB.create('context', '/org/context', 'context', {
+      const content: ContextContent = {
         versions: [{
           version: 1,
           whitelist,
@@ -1221,7 +1190,10 @@ describe('Context Loader Integration with Versioning', () => {
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, []);
+      };
+      const id = await DocumentDB.create('context', '/org/context', 'context', content, []);
+      await DocumentDB.update(id, 'context', '/org/context', content, [], 'init-root-context');
+      return id;
     }
 
     /** Unique suffix counter for child context paths — avoids path collisions within a test. */
@@ -1490,21 +1462,27 @@ describe('Context Loader Integration with Versioning', () => {
 
     async function replaceRootCtx(whitelist: Whitelist): Promise<number> {
       await getModules().db.exec("DELETE FROM files WHERE path = '/org/context'", []);
-      return DocumentDB.create('context', '/org/context', 'context', {
+      const content: ContextContent = {
         versions: [{ version: 1, whitelist, docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, []);
+      };
+      const id = await DocumentDB.create('context', '/org/context', 'context', content, []);
+      await DocumentDB.update(id, 'context', '/org/context', content, [], 'init-root-ctx');
+      return id;
     }
 
     async function mkContext(path: string, whitelist: Whitelist): Promise<number> {
-      return DocumentDB.create('context', path, 'context', {
+      const content: ContextContent = {
         versions: [{ version: 1, whitelist, docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
         published: { all: 1 },
         fullSchema: [],
         fullDocs: [],
-      } as ContextContent, []);
+      };
+      const id = await DocumentDB.create('context', path, 'context', content, []);
+      await DocumentDB.update(id, 'context', path, content, [], `init-${id}`);
+      return id;
     }
 
     function tables(content: ContextContent): string[] {
