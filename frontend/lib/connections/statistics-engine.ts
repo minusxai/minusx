@@ -80,7 +80,11 @@ export async function profileDatabase(
       enrichedTables = await profileBigQuery(allTables, countedQueryFn);
       break;
     default:
-      enrichedTables = await profileGeneric(allTables, countedQueryFn, 'double');
+      // Unknown connector — return schema as-is without meta (no risky queries)
+      enrichedTables = allTables.map(t => ({
+        schema: t.schema, table: t.table,
+        columns: t.columns.map(c => ({ name: c.name, type: c.type })),
+      }));
       break;
   }
 
@@ -550,5 +554,6 @@ function escapeSql(value: string): string {
 function parseNumeric(val: unknown): number | undefined {
   if (val == null || val === '' || val === 'NULL') return undefined;
   const n = Number(val);
-  return isNaN(n) ? undefined : n;
+  if (isNaN(n)) return undefined;
+  return Math.round(n * 100) / 100;
 }

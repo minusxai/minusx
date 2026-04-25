@@ -32,7 +32,7 @@ import {
   Textarea,
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck, LuBookOpen, LuPlus, LuLayoutDashboard, LuCompass, LuExternalLink, LuChartBar } from 'react-icons/lu';
+import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck, LuBookOpen, LuPlus, LuLayoutDashboard, LuCompass, LuExternalLink } from 'react-icons/lu';
 import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types';
 import { testConnection } from '@/lib/backend/python-backend';
 import TabSwitcher from '../TabSwitcher';
@@ -321,11 +321,8 @@ export default function ConnectionFormV2({
   const [contextAdded, setContextAdded] = useState(false);
   const [contextExpanded, setContextExpanded] = useState(false);
 
-  // Analyze DB state (dev mode only)
-  const [dbStatistics, setDbStatistics] = useState<any>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState<string | null>(null);
-  const [statsExpanded, setStatsExpanded] = useState(false);
+  // Enriched schema viewer (dev mode only)
+  const [schemaJsonExpanded, setSchemaJsonExpanded] = useState(false);
 
   const handleAddContext = useCallback(async () => {
     if (!contextId || !contextContent?.versions || !userId || !contextInput.trim()) return;
@@ -373,28 +370,6 @@ export default function ConnectionFormV2({
     editFile({ fileId: contextId, changes: { content: { ...contextContent, versions: updatedVersions } as ContextContent } });
     await publishFile({ fileId: contextId });
   }, [contextId, contextContent, userId]);
-
-  const handleAnalyzeDb = useCallback(async () => {
-    setStatsLoading(true);
-    setStatsError(null);
-    setDbStatistics(null);
-    try {
-      const res = await fetch(`/api/connections/${encodeURIComponent(fileName)}/statistics`, {
-        method: 'POST',
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setStatsError(json.error ?? 'Failed to analyze database');
-        return;
-      }
-      setDbStatistics(json.data);
-      setStatsExpanded(true);
-    } catch (err: any) {
-      setStatsError(err?.message ?? 'Failed to analyze database');
-    } finally {
-      setStatsLoading(false);
-    }
-  }, [fileName]);
 
   const [redirectingToStatic, setRedirectingToStatic] = useState<false | 'csv' | 'sheets'>(false);
 
@@ -1291,44 +1266,25 @@ export default function ConnectionFormV2({
             )}
           </HStack>
 
-          {/* Analyze DB (dev mode only) — bottom of tables section, all connection types */}
-          {showJson && (
+          {/* Enriched Schema JSON (dev mode only) */}
+          {showJson && schemas.length > 0 && (
             <Box mt={4}>
-              <HStack gap={2}>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  fontFamily="mono"
-                  fontSize="xs"
-                  onClick={handleAnalyzeDb}
-                  loading={statsLoading}
-                >
-                  <LuChartBar size={12} />
-                  Analyze DB
-                </Button>
-                {dbStatistics && (
-                  <Text
-                    fontSize="2xs"
-                    fontFamily="mono"
-                    color="fg.muted"
-                    cursor="pointer"
-                    onClick={() => setStatsExpanded(!statsExpanded)}
-                  >
-                    {statsExpanded ? '▾' : '▸'} {dbStatistics.tables?.length ?? 0} tables, {dbStatistics.queryCount} queries
-                  </Text>
-                )}
-              </HStack>
-              {statsError && (
-                <Text fontSize="2xs" color="accent.danger" mt={1} fontFamily="mono">
-                  {statsError}
-                </Text>
-              )}
-              {statsExpanded && dbStatistics && (
+              <Text
+                fontSize="2xs"
+                fontFamily="mono"
+                color="fg.muted"
+                cursor="pointer"
+                onClick={() => setSchemaJsonExpanded(!schemaJsonExpanded)}
+              >
+                {schemaJsonExpanded ? '▾' : '▸'} Enriched Schema ({schemas.reduce((sum, s) => sum + s.tables.length, 0)} tables)
+                {content.schema?.updated_at && ` · ${new Date(content.schema.updated_at).toLocaleString()}`}
+              </Text>
+              {schemaJsonExpanded && (
                 <Box mt={2} borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
                   <Editor
                     height="500px"
                     language="json"
-                    value={JSON.stringify(dbStatistics, null, 2)}
+                    value={JSON.stringify(schemas, null, 2)}
                     theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
                     options={{
                       readOnly: true,
