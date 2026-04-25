@@ -12,12 +12,6 @@ jest.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-const mockLoadFile = jest.fn();
-jest.mock('@/lib/data/files.server', () => ({
-  FilesAPI: { loadFile: mockLoadFile },
-  loadFile: mockLoadFile,
-}));
-
 const mockRunQuery = jest.fn();
 jest.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
@@ -38,10 +32,13 @@ import {
   resolveRowIndex,
 } from '@/lib/tests/index';
 import type { Test } from '@/lib/types';
+import { getModules } from '@/lib/modules/registry';
 
 // ─── testRunnerE2E ────────────────────────────────────────────────────────────
 
 const TEST_RUNNER_DB_PATH = getTestDbPath('test_runner_e2e');
+// Fixed high IDs that won't collide with seed data
+const Q = { total: 99001, cnt: 99002, users: 99003, status: 99004, series: 99005 };
 
 function createEvalsRequest(body: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost:3000/api/jobs/test', {
@@ -100,30 +97,40 @@ describe('extractCellValue + resolveRowIndex', () => {
   it('resolveRowIndex: empty → undefined', () => expect(resolveRowIndex([], 0)).toBeUndefined());
 });
 
-describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
-  setupTestDb(TEST_RUNNER_DB_PATH);
-
-  beforeEach(() => {
-    mockLoadFile.mockClear();
-    mockRunQuery.mockClear();
+describe('Query Test Runner E2E', () => {
+  setupTestDb(TEST_RUNNER_DB_PATH, {
+    customInit: async () => {
+      const db = getModules().db;
+      const now = new Date().toISOString();
+      const questions = [
+        { id: Q.total,  name: 'Total Revenue', query: 'SELECT 42 AS total' },
+        { id: Q.cnt,    name: 'Row Count',     query: 'SELECT 5 AS cnt' },
+        { id: Q.users,  name: 'Active Users',  query: 'SELECT 100 AS users' },
+        { id: Q.status, name: 'Status Check',  query: "SELECT 'active' AS status" },
+        { id: Q.series, name: 'Time Series',   query: 'SELECT day, value FROM series' },
+      ];
+      for (const q of questions) {
+        await db.exec(
+          `INSERT INTO files (id,name,path,type,content,file_references,created_at,updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            q.id, q.name, `/org/q/${q.id}`, 'question',
+            JSON.stringify({ query: q.query, connection_name: 'default', vizSettings: { type: 'table' } }),
+            '[]', now, now,
+          ]
+        );
+      }
+    },
   });
 
   it('query test — constant = match → passed', async () => {
-    mockLoadFile.mockResolvedValue({
-      data: {
-        id: 1, name: 'Total Revenue', type: 'question',
-        content: { query: 'SELECT 42 AS total', connection_name: 'default' },
-      },
-    });
     mockRunQuery.mockResolvedValue({ columns: ['total'], types: ['number'], rows: [{ total: 42 }] });
-
     const test: Test = {
       type: 'query',
-      subject: { type: 'query', question_id: 1, column: 'total', row: 0 },
+      subject: { type: 'query', question_id: Q.total, column: 'total', row: 0 },
       answerType: 'number', operator: '=',
       value: { type: 'constant', value: 42 },
     };
-
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
     expect(data.passed).toBe(true);
@@ -132,21 +139,13 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   });
 
   it('query test — constant = mismatch → failed', async () => {
-    mockLoadFile.mockResolvedValue({
-      data: {
-        id: 2, name: 'Row Count', type: 'question',
-        content: { query: 'SELECT 5 AS cnt', connection_name: 'default' },
-      },
-    });
     mockRunQuery.mockResolvedValue({ columns: ['cnt'], types: ['number'], rows: [{ cnt: 5 }] });
-
     const test: Test = {
       type: 'query',
-      subject: { type: 'query', question_id: 2, column: 'cnt' },
+      subject: { type: 'query', question_id: Q.cnt, column: 'cnt' },
       answerType: 'number', operator: '=',
       value: { type: 'constant', value: 999 },
     };
-
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
     expect(data.passed).toBe(false);
@@ -155,21 +154,13 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   });
 
   it('query test — > operator passes when actual > expected', async () => {
-    mockLoadFile.mockResolvedValue({
-      data: {
-        id: 3, name: 'Active Users', type: 'question',
-        content: { query: 'SELECT 100 AS users', connection_name: 'default' },
-      },
-    });
     mockRunQuery.mockResolvedValue({ columns: ['users'], types: ['number'], rows: [{ users: 100 }] });
-
     const test: Test = {
       type: 'query',
-      subject: { type: 'query', question_id: 3 },
+      subject: { type: 'query', question_id: Q.users },
       answerType: 'number', operator: '>',
       value: { type: 'constant', value: 50 },
     };
-
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
     expect(data.passed).toBe(true);
@@ -177,21 +168,13 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   });
 
   it('query test — string regex match ~ → passed', async () => {
-    mockLoadFile.mockResolvedValue({
-      data: {
-        id: 4, name: 'Status Check', type: 'question',
-        content: { query: "SELECT 'active' AS status", connection_name: 'default' },
-      },
-    });
     mockRunQuery.mockResolvedValue({ columns: ['status'], types: ['varchar'], rows: [{ status: 'active' }] });
-
     const test: Test = {
       type: 'query',
-      subject: { type: 'query', question_id: 4, column: 'status' },
+      subject: { type: 'query', question_id: Q.status, column: 'status' },
       answerType: 'string', operator: '~',
       value: { type: 'constant', value: '^act' },
     };
-
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
     expect(data.passed).toBe(true);
@@ -199,24 +182,16 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   });
 
   it('query test — last row (-1) extraction', async () => {
-    mockLoadFile.mockResolvedValue({
-      data: {
-        id: 5, name: 'Time Series', type: 'question',
-        content: { query: 'SELECT day, value FROM series', connection_name: 'default' },
-      },
-    });
     mockRunQuery.mockResolvedValue({
       columns: ['day', 'value'], types: ['varchar', 'number'],
       rows: [{ day: '2024-01-01', value: 10 }, { day: '2024-01-02', value: 20 }, { day: '2024-01-03', value: 30 }],
     });
-
     const test: Test = {
       type: 'query',
-      subject: { type: 'query', question_id: 5, column: 'value', row: -1 },
+      subject: { type: 'query', question_id: Q.series, column: 'value', row: -1 },
       answerType: 'number', operator: '=',
       value: { type: 'constant', value: 30 },
     };
-
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
     expect(data.passed).toBe(true);
