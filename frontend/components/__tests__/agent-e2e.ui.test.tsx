@@ -67,7 +67,7 @@ import { setDashboardEditMode } from '@/store/uiSlice';
 import { setNavigation } from '@/store/navigationSlice';
 import { setUser } from '@/store/authSlice';
 import {
-  createConversation, sendMessage, selectConversation,
+  createConversation, sendMessage, selectConversation, selectActiveConversation,
   setUserInputResult,
 } from '@/store/chatSlice';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -86,6 +86,7 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
+import { POST as chatInitHandler } from '@/app/api/chat/init/route';
 import { GET as filesGetHandler, POST as filesPostHandler } from '@/app/api/files/route';
 import { PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
@@ -301,17 +302,17 @@ describe('Agent creates files via chat', () => {
 
 async function catchAllApiInterceptor(
   urlStr: string,
-  _init?: RequestInit
+  init?: RequestInit
 ): Promise<Response | null> {
-  // /api/chat/init: ChatInterface pre-creates a conversation on mount. Return no ID so the
-  // useEffect short-circuits (conversationID falsy), avoiding a race with the real chat call.
   if (urlStr.includes('/api/chat/init')) {
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ conversationID: null }),
-      text: async () => '',
-    } as Response;
+    const request = new NextRequest('http://localhost:3000/api/chat/init', {
+      method: 'POST',
+      body: init?.body as BodyInit,
+      headers: init?.headers as HeadersInit,
+    });
+    const response = await chatInitHandler(request);
+    const data = await response.json();
+    return { ok: response.status < 400, status: response.status, json: async () => data } as Response;
   }
   const isApi = urlStr.startsWith('/api/') || urlStr.includes('localhost:3000/api/');
   const isChat = urlStr.includes('/api/chat');
@@ -397,21 +398,19 @@ describe('Explore page: submit question → agent responds → see answer → to
         { store: testStore }
       );
 
-      const CONV_ID = -500; // virtual ID — non-streaming test path sends null, Python creates real file
-      testStore.dispatch(
-        createConversation({
-          conversationID: CONV_ID,
-          agent: 'AnalystAgent',
-          agent_args: {
-            connection_id: null,
-            context_path: '/org',
-            context_version: null,
-            schema: [],
-            context: '',
-          },
-          message: 'What is the answer to everything?',
-        })
-      );
+      // Wait for ChatInterface to pre-create the conversation via /api/chat/init
+      await waitFor(() => {
+        const activeId = selectActiveConversation(testStore.getState() as RootState);
+        expect(activeId).toBeTruthy();
+      }, { timeout: 10000 });
+
+      const CONV_ID = selectActiveConversation(testStore.getState() as RootState)!;
+
+      // Send a message to the existing (draft) conversation
+      testStore.dispatch(sendMessage({
+        conversationID: CONV_ID,
+        message: 'What is the answer to everything?',
+      }));
 
       const realConvId = await waitForConversationFinished(
         () => testStore.getState() as RootState,
