@@ -76,7 +76,7 @@ class SearchDBSchema(Tool):
     - Other connectors: No enrichment (name + type only)
 
     Query modes (auto-detected):
-    - No query: returns full schema. Use to inspect all tables/columns/metadata - NOT RECOMMENDED since it downloads whole schema, which can be massive.
+    - No query: returns full schema. Use to inspect all tables/columns/metadata - NOT RECOMMENDED if tables > 20, since it downloads whole schema, which can be massive.
     - String (no $ prefix): weighted scoring across schema/table/column names. e.g. "revenue", "customer", "profit"
     - JSONPath (starts with $): structural queries. e.g. "$..columns[?(@.type=='VARCHAR')]", "$..columns[?(@.meta.category=='categorical')]", "$[?(@.schema=='Sales')]"
 
