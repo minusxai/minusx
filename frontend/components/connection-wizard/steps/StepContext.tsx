@@ -707,7 +707,9 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               </Button>
             )}
             <Button
-              variant="outline"
+              bg="accent.teal"
+              color="white"
+              _hover={{ opacity: 0.9 }}
               size="sm"
               fontFamily="mono"
               onClick={handleSave}
