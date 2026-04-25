@@ -48,27 +48,39 @@ class SearchDBSchema(Tool):
 
     Auto-detects query type: queries starting with '$' use JSONPath, others use weighted string search.
 
-    JSONPath Examples (queries starting with $):
-    - "$[*].tables[*]" - Get all tables across all schemas
-    - "$[?(@.schema=='Sales')]" - Find specific schema by name
-    - "$..columns[?(@.type=='VARCHAR')]" - Find all VARCHAR columns
-    - "$..columns[?(@.name.match(/region/i))]" - Find columns with 'region' in name (regex)
-    - "$..tables[?(@.table.match(/^sales/i))]" - Find tables starting with 'sales'
-    - "$..columns[*].name" - Get all column names only
+    Schema structure (what gets searched):
+    [{
+      schema: str,
+      tables: [{
+        table: str,
+        columns: [{
+          name: str,
+          type: str,
+          meta?: {
+            description?: str,           # Column description (from DB comments; may not exist if users have not explicitly added)
+            category?: 'categorical' | 'numeric' | 'temporal' | 'other', # computed
+            nullCount?: int,             # Number of null values (if any)
+            nDistinct?: int,             # Distinct value count (categorical only)
+            topValues?: [{value, count, fraction}],  # Most common values (categorical only)
+            min?: number, max?: number, avg?: number, # Stats (numeric only)
+            minDate?: str, maxDate?: str  # Date range (temporal only)
+          }
+        }]
+      }]
+    }]
 
-    String Search Examples (no $ prefix - RECOMMENDED for most cases):
-    - "region" - Finds schemas/tables/columns containing 'region' (weighted scoring)
-    - "customer" - Searches ALL levels with relevance ranking
-    - "email" - Returns scored results showing WHERE matches occurred
+    Enrichment level varies by connector (the db schema is enriched with meta key, at column level):
+    - PostgreSQL: Full enrichment from pg_stats (category, nullCount, nDistinct, topValues, min/max via histogram, descriptions)
+    - DuckDB/CSV/Google Sheets: Full enrichment via SUMMARIZE (category, nullCount, nDistinct, min/max/avg, topValues for categoricals, descriptions)
+    - BigQuery: Descriptions only (from INFORMATION_SCHEMA). No stats — use ExecuteQuery for profiling / unique values etc.
+    - Other connectors: No enrichment (name + type only)
 
-    Note: For simple name searches, string search is easier and returns better results with scoring.
-    Use JSONPath for structural queries (filter by type, extract specific fields, etc).
+    Query modes (auto-detected):
+    - No query: returns full schema. Use to inspect all tables/columns/metadata - NOT RECOMMENDED since it downloads whole schema, which can be massive.
+    - String (no $ prefix): weighted scoring across schema/table/column names. e.g. "revenue", "customer", "profit"
+    - JSONPath (starts with $): structural queries. e.g. "$..columns[?(@.type=='VARCHAR')]", "$..columns[?(@.meta.category=='categorical')]", "$[?(@.schema=='Sales')]"
 
-    Returns:
-    - String search: {results: [{schema, score, matchCount, relevantResults}], ...}
-    - JSONPath: {schema: [...extracted data with _schema and _table context...], ...}
-      - Extracted items include _schema and _table fields showing where they came from
-      - Example: {name: "CustomerID", type: "BIGINT", _schema: "Sales", _table: "Customer"}
+    Returns: {success, queryType: 'none'|'string'|'jsonpath', tableCount, schema|results}
     """
 
     def __init__(
