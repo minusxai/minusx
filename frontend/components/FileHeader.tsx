@@ -95,6 +95,13 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-enter edit mode for draft files (newly created, never saved)
+  useEffect(() => {
+    if (isDraft && canEdit) {
+      dispatchSetEditMode(true);
+    }
+  }, [isDraft, canEdit, dispatchSetEditMode]);
+
   // Auto-enter edit mode when current file has unsaved changes (skip for non-editors)
   useEffect(() => {
     if (isDirty && !editMode && canEdit) {
