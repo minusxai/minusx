@@ -103,7 +103,19 @@ export function createMiddleware() {
       requestHeaders.set('x-mode', 'org');
     }
 
-    await getModules().auth.addHeaders(req as AuthReq, requestHeaders);
+    const hasContext = await getModules().auth.addHeaders(req as AuthReq, requestHeaders);
+    if (!hasContext) {
+      const response = NextResponse.redirect(new URL('/login', req.url));
+      for (const name of [
+        'next-auth.session-token',
+        '__Secure-next-auth.session-token',
+        'next-auth.csrf-token',
+        '__Host-next-auth.csrf-token',
+      ]) {
+        response.cookies.set(name, '', { maxAge: 0, path: '/' });
+      }
+      return response;
+    }
 
     const response = NextResponse.next({ request: { headers: requestHeaders } });
 
