@@ -131,6 +131,21 @@ async function templateInterceptor(urlStr: string, init?: RequestInit): Promise<
   return null;
 }
 
+async function filesCreateInterceptor(urlStr: string, init?: RequestInit): Promise<Response | null> {
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  if (method === 'POST' && /\/api\/files\/?$/.test(urlStr)) {
+    const request = new NextRequest('http://localhost:3000/api/files', {
+      method: 'POST',
+      body: init?.body as BodyInit,
+      headers: init?.headers as HeadersInit,
+    });
+    const response = await filesPostHandler(request);
+    const data = await response.json();
+    return { ok: response.status < 400, status: response.status, json: async () => data } as Response;
+  }
+  return null;
+}
+
 describe('UI Agent E2E Suites', () => {
   const { getPythonPort: sharedPythonPort, getLLMMockPort: sharedLLMMockPort, getLLMMockServer: sharedGetLLMMockServer } =
     withPythonBackend({ withLLMMock: true });
@@ -149,7 +164,7 @@ describe('Agent creates files via chat', () => {
         handler: chatPostHandler,
       },
     ],
-    additionalInterceptors: [templateInterceptor],
+    additionalInterceptors: [templateInterceptor, filesCreateInterceptor],
   });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
@@ -288,6 +303,16 @@ async function catchAllApiInterceptor(
   urlStr: string,
   _init?: RequestInit
 ): Promise<Response | null> {
+  // /api/chat/init: ChatInterface pre-creates a conversation on mount. Return no ID so the
+  // useEffect short-circuits (conversationID falsy), avoiding a race with the real chat call.
+  if (urlStr.includes('/api/chat/init')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ conversationID: null }),
+      text: async () => '',
+    } as Response;
+  }
   const isApi = urlStr.startsWith('/api/') || urlStr.includes('localhost:3000/api/');
   const isChat = urlStr.includes('/api/chat');
   if (isApi && !isChat) {
@@ -372,7 +397,7 @@ describe('Explore page: submit question → agent responds → see answer → to
         { store: testStore }
       );
 
-      const CONV_ID = 9001; // Real positive ID (no more virtual IDs)
+      const CONV_ID = -500; // virtual ID — non-streaming test path sends null, Python creates real file
       testStore.dispatch(
         createConversation({
           conversationID: CONV_ID,
