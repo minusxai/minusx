@@ -104,7 +104,7 @@ export default function FloatingChatWrapper({
             left={0}
             width="100vw"
             height="100vh"
-            bg="blackAlpha.600"
+            bg="fg.subtle/20"
             zIndex={999}
           />
         </Portal>

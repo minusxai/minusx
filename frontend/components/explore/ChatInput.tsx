@@ -78,7 +78,8 @@ export default function ChatInput({
   const prevIsPreparingRef = useRef(false);
 
   const isFloating = container === 'floating';
-  const isCollapsed = isFloating && !isFocused;
+  const hasContent = input.trim().length > 0 || attachments.length > 0;
+  const isCollapsed = isFloating && !isFocused && !hasContent;
 
   // Detect platform for keyboard shortcut display
   const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -212,7 +213,7 @@ export default function ChatInput({
         <GridItem colSpan={colSpan} colStart={colStart}>
             <Box
             mx={isFloating ? 'auto' : undefined}
-            width={isFloating ? (isCollapsed ? { base: '85%', md: '350px', lg: '350px' } : { base: '90%', md: '600px', lg: '700px' }) : undefined}
+            width={isFloating ? (isCollapsed ? { base: '85%', md: '450px', lg: '450px' } : { base: '90%', md: '600px', lg: '700px' }) : undefined}
             transition="width 0.25s ease, border-radius 0.25s ease"
             >
             <Box
@@ -230,6 +231,15 @@ export default function ChatInput({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            cursor="text"
+            onMouseDown={(e) => {
+              // Focus editor when clicking empty space — skip if clicking a button/input/select
+              const target = e.target as HTMLElement;
+              if (!target.closest('button, input, select, [role="listbox"], [role="option"], [data-lexical-editor]')) {
+                e.preventDefault(); // Prevent blur from firing
+                editorRef.current?.focus();
+              }
+            }}
             >
             <VStack gap={0} align="stretch">
                 {/* Editor row with inline send button (collapsed only) */}
@@ -394,10 +404,8 @@ export default function ChatInput({
                   <HStack
                   px={3}
                   pb={2}
-                  pt={2}
+                  pt={1}
                   justify="space-between"
-                  borderTop="1px solid"
-                  borderColor="border.muted"
                   gap={2}
                   >
                   {/* Left controls - Context selector + Database selector */}
