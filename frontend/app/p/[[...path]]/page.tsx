@@ -9,7 +9,7 @@ import Breadcrumb from '@/components/Breadcrumb';
 import FolderView from '@/components/FolderView';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
-import SearchBar from '@/components/SearchBar';
+import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
@@ -198,7 +198,7 @@ export default function PathPage({ params }: PathPageProps) {
             showAnalytics={fullPath === '/' + (user.mode || DEFAULT_MODE)}
           />
         </Box>
-        {showChat && <SearchBar />}
+        {showChat && <FloatingChatWrapper />}
       </VStack>
 
       {shouldShowSidebar && (

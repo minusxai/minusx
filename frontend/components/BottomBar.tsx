@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, IconButton, Text, HStack } from '@chakra-ui/react';
-import SearchBar from './SearchBar';
+import FloatingChatWrapper from './FloatingChatWrapper';
 import { LuDownload, LuZap } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 
@@ -37,7 +37,7 @@ export default function BottomBar({ showChat, filePath, databaseName }: BottomBa
       {/* Search bar in the middle — hidden when right sidebar is open (chat visible there) */}
       {showChat && rightSidebarCollapsed && (
         <Box flex="1" width="100%">
-          <SearchBar inBottomBar={true} filePath={filePath} databaseName={databaseName} />
+          <FloatingChatWrapper inBottomBar={true} filePath={filePath} databaseName={databaseName} />
         </Box>
       )}
 

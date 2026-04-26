@@ -17,7 +17,7 @@ import Breadcrumb from './Breadcrumb';
 import RightSidebar, { RightSidebarProps } from './RightSidebar';
 import MobileRightSidebar from './MobileRightSidebar';
 import BottomBar from './BottomBar';
-import SearchBar from './SearchBar';
+import FloatingChatWrapper from './FloatingChatWrapper';
 import { ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';
@@ -133,11 +133,11 @@ export default function FileLayout(props: FileLayoutProps) {
         </Box>
 
         {/* Chat bars live OUTSIDE the dimmed box so they remain accessible when the
-            ViewStack overlay is active. The SearchBar has z-index:1000 which beats the
+            ViewStack overlay is active. The floating chat has z-index:1000 which beats the
             overlay's z-index:50 in this shared stacking context. */}
         {/* Floating search bar — shown on non-question pages (dashboard, context, etc.) */}
         {!shouldShowBottomBar && shouldShowRightSidebar && rightSidebar && rightSidebar.showChat && (
-          <SearchBar filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
+          <FloatingChatWrapper filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
         )}
 
         {/* Bottom bar for question page - includes search bar */}
