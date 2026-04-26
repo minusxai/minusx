@@ -2,6 +2,8 @@ name: Publish Docker Images
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -21,9 +23,11 @@ jobs:
       matrix:
         include:
           - image: minusx-frontend
+            canary_image: minusx-frontend-canary
             context: frontend
             dockerfile: frontend/Dockerfile
           - image: minusx-backend
+            canary_image: minusx-backend-canary
             context: backend
             dockerfile: backend/Dockerfile
     permissions:
@@ -38,27 +42,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            # Strip 'v' prefix from tag (refs/tags/v1.2.3 -> 1.2.3)
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.event_name == 'push' && github.ref_type == 'branch' && matrix.canary_image || matrix.image }}
           tags: |
-            type=semver,pattern={{version}},value=v${{ steps.version.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=v${{ steps.version.outputs.version }}
-            type=raw,value=latest
+            type=sha,prefix=,enable=${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'branch' }}
+            type=semver,pattern={{version}},enable=${{ github.ref_type == 'tag' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - uses: docker/setup-buildx-action@v3
-
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/build-push-action@v6
