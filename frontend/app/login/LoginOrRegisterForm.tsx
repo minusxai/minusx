@@ -450,7 +450,7 @@ export function LoginOrRegisterForm({
                 </Box>
               </Text>
             </VStack>
-          ) : !landingHtml && enableOrgCreation ? (
+          ) : !landingHtml ? (
             <VStack gap={4}>
               {loginError && (
                 <Box p={3} bg="accent.danger/10" borderRadius="md" border="1px solid" borderColor="accent.danger">
