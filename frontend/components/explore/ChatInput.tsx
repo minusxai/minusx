@@ -408,22 +408,20 @@ export default function ChatInput({
                   justify="space-between"
                   gap={2}
                   >
-                  {/* Left controls - Context selector + Database selector */}
-                  <HStack gap={2} align="stretch">
-                    {onContextChange && (
-                      <ContextSelector
-                        selectedContextPath={selectedContextPath || null}
-                        selectedVersion={selectedVersion}
-                        onSelectContext={onContextChange}
-                      />
-                    )}
-                    {!isFloating && (
-                      <DatabaseSelector
-                        value={databaseName}
-                        onChange={({ connection_name }) => onDatabaseChange(connection_name)}
-                        size="sm"
-                      />
-                    )}
+                  {/* Left controls - Context + Database status indicators */}
+                  <HStack gap={1.5} align="center">
+                    <ContextSelector
+                      selectedContextPath={selectedContextPath || null}
+                      selectedVersion={selectedVersion}
+                      onSelectContext={onContextChange || (() => {})}
+                      compact
+                    />
+                    <DatabaseSelector
+                      value={databaseName}
+                      onChange={({ connection_name }) => onDatabaseChange(connection_name)}
+                      size="sm"
+                      compact
+                    />
                   </HStack>
 
                   <HStack gap={1}>
@@ -433,14 +431,14 @@ export default function ChatInput({
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isAgentRunning}
                         variant="ghost"
-                        size="sm"
+                        size="xs"
                         color="fg.muted"
                         _hover={{ color: 'accent.teal' }}
                         _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        borderRadius="md"
+                        borderRadius="full"
                         flexShrink={0}
                       >
-                        <Icon as={LuPaperclip} boxSize={4} />
+                        <Icon as={LuPaperclip} boxSize={3.5} />
                       </IconButton>
                     </Tooltip>
 
@@ -455,11 +453,11 @@ export default function ChatInput({
                         color="white"
                         _hover={{ bg: 'accent.teal', opacity: 0.9 }}
                         _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        size="sm"
-                        borderRadius="md"
+                        size="xs"
+                        borderRadius="full"
                         flexShrink={0}
                       >
-                        <Icon as={LuSendHorizontal} boxSize={4} />
+                        <Icon as={LuSendHorizontal} boxSize={3.5} />
                       </IconButton>
                     )}
                   </HStack>

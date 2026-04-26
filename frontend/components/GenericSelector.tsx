@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { Box, Text, HStack, Icon, Menu, VStack, Spinner } from '@chakra-ui/react';
-import { LuChevronDown, LuBadgeCheck } from 'react-icons/lu';
+import { LuChevronDown, LuBadgeCheck, LuCheck } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 
 export interface SelectorOption {
@@ -24,6 +25,8 @@ interface GenericSelectorProps {
   size?: 'sm' | 'md';
   color?: string;  // Used for border and icon
   label?: string;  // aria-label for the trigger element
+  compact?: boolean;  // Show as small icon-only indicator with expand on hover
+  compactLabel?: string;  // Prefix label shown in compact mode (e.g., "Database")
 }
 
 export default function GenericSelector({
@@ -38,7 +41,11 @@ export default function GenericSelector({
   size = 'sm',
   color = 'accent.secondary',
   label,
+  compact = false,
+  compactLabel,
 }: GenericSelectorProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   // Find the selected option to display
   const selectedOption = options.find(opt => opt.value === value);
 
@@ -63,6 +70,133 @@ export default function GenericSelector({
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
   };
+
+  // Compact mode — small icon that expands to show full label on hover
+  if (compact) {
+    const itemName = loading ? 'Loading...'
+      : options.length === 0 ? (emptyMessage || 'Not available')
+      : selectedOption?.label || options[0]?.label || placeholder || 'Select...';
+    const displayLabel = compactLabel ? `${compactLabel}: ${itemName}` : itemName;
+
+    const isConnected = !loading && options.length > 0;
+    const hasDropdown = !loading && options.length > 1;
+
+    const compactIndicator = (
+      <HStack
+        gap={1.5}
+        px={2}
+        py={1}
+        borderRadius="full"
+        border="1px solid"
+        borderColor={`${isConnected ? color : 'fg.muted'}/30`}
+        bg={`${isConnected ? color : 'fg.muted'}/8`}
+        cursor={hasDropdown ? 'pointer' : 'default'}
+        transition="all 0.2s"
+        aria-label={label}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        _hover={{ bg: `${isConnected ? color : 'fg.muted'}/15` }}
+      >
+        {loading ? (
+          <Spinner size="xs" colorPalette="gray" />
+        ) : (
+          <>
+            <Icon as={LuCheck} boxSize={3.5} color={isConnected ? color : 'fg.muted'} flexShrink={0} strokeWidth={3} />
+            {defaultIcon && <Icon as={defaultIcon} boxSize={3.5} color={isConnected ? color : 'fg.muted'} flexShrink={0} />}
+          </>
+        )}
+        <Box
+          maxW={isHovered ? '250px' : '0px'}
+          overflow="hidden"
+          opacity={isHovered ? 1 : 0}
+          transition="max-width 0.25s ease, opacity 0.2s ease"
+          whiteSpace="nowrap"
+        >
+          <Text fontSize="xs" color={isConnected ? color : 'fg.muted'} fontWeight="500" pl={0.5}>
+            {displayLabel}
+          </Text>
+        </Box>
+        {hasDropdown && (
+          <Box
+            maxW={isHovered ? '20px' : '0px'}
+            overflow="hidden"
+            opacity={isHovered ? 1 : 0}
+            transition="max-width 0.25s ease, opacity 0.2s ease"
+          >
+            <Icon as={LuChevronDown} boxSize={3.5} color="fg.subtle" />
+          </Box>
+        )}
+      </HStack>
+    );
+
+    if (hasDropdown) {
+      return (
+        <Menu.Root>
+          <Menu.Trigger asChild>
+            {compactIndicator}
+          </Menu.Trigger>
+          <Menu.Positioner zIndex={2000}>
+            <Menu.Content
+              minW="240px"
+              maxW="400px"
+              bg="bg.surface"
+              borderColor="border.default"
+              shadow="lg"
+              p={0}
+            >
+              <VStack gap={0} align="stretch">
+                <Box p={1.5}>
+                  <VStack gap={0.5} align="stretch">
+                    {options.map((option) => (
+                      <Box
+                        key={option.value}
+                        cursor="pointer"
+                        borderRadius="sm"
+                        px={2}
+                        py={1.5}
+                        bg={option.value === value ? `${color}/10` : 'transparent'}
+                        _hover={{ bg: option.value === value ? `${color}/20` : 'bg.muted' }}
+                        onClick={() => onChange(option.value)}
+                      >
+                        <HStack gap={1.5} justify="space-between">
+                          <HStack gap={1.5}>
+                            {(option.icon || defaultIcon) && (
+                              <Icon
+                                as={option.icon || defaultIcon}
+                                boxSize={3.5}
+                                color={option.value === value ? color : 'fg.muted'}
+                              />
+                            )}
+                            <Text fontSize="xs" fontWeight={option.value === value ? '600' : '400'}
+                              whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">
+                              {option.label}
+                            </Text>
+                            {option.subtitle && (
+                              <Text fontSize="2xs" color="fg.muted" fontFamily="mono" textTransform="uppercase"
+                                whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis">
+                                ({option.subtitle})
+                              </Text>
+                            )}
+                          </HStack>
+                          {option.showCheckmark && (
+                            <HStack gap={1} flexShrink={0}>
+                              <Icon as={LuBadgeCheck} boxSize={3.5} color={color} />
+                            </HStack>
+                          )}
+                        </HStack>
+                      </Box>
+                    ))}
+                  </VStack>
+                </Box>
+              </VStack>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Menu.Root>
+      );
+    }
+
+    return compactIndicator;
+  }
 
   // Loading state
   if (loading) {
