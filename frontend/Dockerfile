@@ -68,6 +68,4 @@ RUN mkdir -p /app/data/pglite /app/data/analytics
 # Expose frontend port
 EXPOSE 3000
 
-# Set up PostgreSQL user/db (if DB_TYPE=postgres and POSTGRES_SUPERUSER_URL provided), run migrations, start
-# migrate-db handles fresh installs (initializeSchema) and upgrades for both PGLite and Postgres
-CMD ["sh", "-c", "(npm run setup-postgres 2>/dev/null || true) && (npm run migrate-db || echo '⚠️  Migration failed, server starting anyway') && node server.js"]
+CMD ["sh", "-c", "node server.js"]
