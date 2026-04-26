@@ -161,7 +161,9 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       connectionPath,
       'connection',
       content,
-      []  // Phase 6: Connections have no references
+      [],  // Phase 6: Connections have no references
+      undefined,
+      false  // connections are immediately visible after creation
     );
 
     const created = await DocumentDB.getById(id);

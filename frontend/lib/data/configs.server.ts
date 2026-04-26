@@ -248,7 +248,7 @@ class ConfigsDataLayerServer {
       await DocumentDB.update(existing.id, 'config.json', configPath, mergedContent as any, [], hashContent({ id: existing.id, content: mergedContent }));
       id = existing.id;
     } else {
-      id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, []);
+      id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, [], undefined, false);
     }
 
     const { config } = await this._loadConfigs(user.mode);
@@ -321,7 +321,7 @@ export async function saveRawConfig(mode: Mode, content: Partial<OrgConfig>): Pr
   if (existing) {
     await DocumentDB.update(existing.id, existing.name, configPath, content as any, [], hashContent({ id: existing.id, content }));
   } else {
-    await DocumentDB.create('config', configPath, 'config', content as any, []);
+    await DocumentDB.create('config', configPath, 'config', content as any, [], undefined, false);
   }
 }
 
