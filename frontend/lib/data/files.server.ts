@@ -403,14 +403,16 @@ class FilesDataLayerServer implements IFilesDataLayer {
             currentPath,
             'folder',
             { name: pathSegments[i] },
-            []  // Phase 6: Folders have no references
+            [],  // Phase 6: Folders have no references
+            undefined,
+            false  // folders are structural — visible immediately
           );
           // Create default context for the new folder
           const contextPath = `${currentPath}/context`;
           const contextExists = await DocumentDB.getByPath(contextPath);
           if (!contextExists) {
             await DocumentDB.create('Knowledge Base', contextPath, 'context',
-              makeDefaultContextContent(user.userId), []);
+              makeDefaultContextContent(user.userId), [], undefined, false);
           }
         }
       }
@@ -431,9 +433,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new Error(`Cannot create file: references contain unsaved virtual IDs [${negativeCreateRefs.join(', ')}]`);
     }
 
+    // Content types (question/dashboard/notebook/presentation/report) start as drafts until the
+    // user explicitly saves. Structural/config types are immediately visible (draft: false).
+    const DRAFT_ON_CREATE_TYPES = new Set(['question', 'dashboard', 'notebook', 'presentation', 'report']);
+    const startAsDraft = DRAFT_ON_CREATE_TYPES.has(type);
+
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId, startAsDraft);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -466,7 +473,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       const existingContext = await DocumentDB.getByPath(contextPath);
       if (!existingContext) {
         const contextContent = makeDefaultContextContent(user.userId);
-        await DocumentDB.create('Knowledge Base', contextPath, 'context', contextContent, []);
+        await DocumentDB.create('Knowledge Base', contextPath, 'context', contextContent, [], undefined, false);
       }
     }
 

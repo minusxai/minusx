@@ -43,7 +43,7 @@ function rowToDbFile(row: DbRow, includeContent: boolean = true): DbFile {
 }
 
 export class DocumentDB {
-  static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], editId?: string): Promise<number> {
+  static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], editId?: string, draft: boolean = true): Promise<number> {
     if (references.some(ref => ref < 0)) {
       throw new Error(
         `Cannot store negative reference IDs in the database: [${references.filter(r => r < 0).join(', ')}]. ` +
@@ -61,10 +61,10 @@ export class DocumentDB {
         SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) AS next_id FROM files
       )
       INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at)
-      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, true, null, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, null, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, content, references, editId ?? null]);
+    `, [name, path, type, content, references, editId ?? null, draft]);
 
     return result.rows[0].id;
   }

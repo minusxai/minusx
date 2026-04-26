@@ -154,14 +154,10 @@ describe('Job Runs E2E', () => {
         status: 'live', schedule: { cron: '* * * * *', timezone: 'UTC' },
         tests: [liveAlertTest], recipients: [],
       };
-      alertId = await DocumentDB.create('Revenue Alert', '/org/alerts/revenue', 'alert', liveAlertContent, [questionId]);
-      // Publish the live alert so cron's listAll (draft=false filter) can find it
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', liveAlertContent, [questionId], 'init-alert');
+      alertId = await DocumentDB.create('Revenue Alert', '/org/alerts/revenue', 'alert', liveAlertContent, [questionId], undefined, false);
 
       const draftAlertContent: AlertContent = { ...liveAlertContent, status: 'draft' };
-      draftAlertId = await DocumentDB.create('Draft Alert', '/org/alerts/draft', 'alert', draftAlertContent, [questionId]);
-      // Publish the draft alert too so cron can find it (and then skip it because content.status='draft')
-      await DocumentDB.update(draftAlertId, 'Draft Alert', '/org/alerts/draft', draftAlertContent, [questionId], 'init-draft-alert');
+      draftAlertId = await DocumentDB.create('Draft Alert', '/org/alerts/draft', 'alert', draftAlertContent, [questionId], undefined, false);
 
       await JobRunsDB.ensureTable();
     }

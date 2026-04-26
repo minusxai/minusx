@@ -78,12 +78,10 @@ describe('Move operations E2E', () => {
 
   beforeAll(async () => {
     await initTestDatabase(dbPath);
-    // Seed additional folders needed across all tests — must be published so
+    // Seed additional folders needed across all tests — must be non-draft so
     // move handler can verify destination parent exists via getByPath.
-    const sourceId = await DocumentDB.create('source', '/org/source', 'folder', { description: '' }, []);
-    await DocumentDB.update(sourceId, 'source', '/org/source', { description: '' }, [], 'init-source');
-    const destId = await DocumentDB.create('dest', '/org/dest', 'folder', { description: '' }, []);
-    await DocumentDB.update(destId, 'dest', '/org/dest', { description: '' }, [], 'init-dest');
+    await DocumentDB.create('source', '/org/source', 'folder', { description: '' }, [], undefined, false);
+    await DocumentDB.create('dest', '/org/dest', 'folder', { description: '' }, [], undefined, false);
   });
 
   afterAll(async () => {
@@ -119,16 +117,13 @@ describe('Move operations E2E', () => {
 
     it('moves a folder and all its descendants', async () => {
       // Create a folder with two children
-      const folderId = await DocumentDB.create('move-folder', '/org/source/move-folder', 'folder', { description: '' }, []);
+      const folderId = await DocumentDB.create('move-folder', '/org/source/move-folder', 'folder', { description: '' }, [], undefined, false);
       const child1Id = await DocumentDB.create(
-        'child-1', '/org/source/move-folder/child-1', 'question', makeQuestion(), []
+        'child-1', '/org/source/move-folder/child-1', 'question', makeQuestion(), [], undefined, false
       );
       const child2Id = await DocumentDB.create(
-        'child-2', '/org/source/move-folder/child-2', 'question', makeQuestion(), []
+        'child-2', '/org/source/move-folder/child-2', 'question', makeQuestion(), [], undefined, false
       );
-      // Publish children so cascade move (which uses listAll/draft=false filter) can find them
-      await DocumentDB.update(child1Id, 'child-1', '/org/source/move-folder/child-1', makeQuestion(), [], 'init-child1');
-      await DocumentDB.update(child2Id, 'child-2', '/org/source/move-folder/child-2', makeQuestion(), [], 'init-child2');
       const res = await patchMove(folderId, 'moved-folder', '/org/dest/moved-folder');
       expect(res.status).toBe(200);
 
@@ -191,12 +186,10 @@ describe('Move operations E2E', () => {
     });
 
     it('moves a folder and all its descendants via batch-move', async () => {
-      const folderId = await DocumentDB.create('batch-folder', '/org/source/batch-folder', 'folder', { description: '' }, []);
+      const folderId = await DocumentDB.create('batch-folder', '/org/source/batch-folder', 'folder', { description: '' }, [], undefined, false);
       const childId = await DocumentDB.create(
-        'batch-child', '/org/source/batch-folder/batch-child', 'question', makeQuestion(), []
+        'batch-child', '/org/source/batch-folder/batch-child', 'question', makeQuestion(), [], undefined, false
       );
-      // Publish child so cascade move (which uses listAll/draft=false filter) can find it
-      await DocumentDB.update(childId, 'batch-child', '/org/source/batch-folder/batch-child', makeQuestion(), [], 'init-batch-child');
 
       const res = await batchMove([{ id: folderId, name: 'batch-folder', destFolder: '/org/dest' }]);
       expect(res.status).toBe(200);
