@@ -87,7 +87,7 @@ function questionContent(description: string): QuestionContent {
   };
 }
 
-/** Create a real (non-draft) file in the DB: create → update to clear draft flag. */
+/** Create a real (non-draft) file in the DB. */
 async function createPublishedFile(
   name: string,
   path: string,
@@ -95,9 +95,7 @@ async function createPublishedFile(
   content: QuestionContent | DocumentContent,
   references: number[] = []
 ): Promise<number> {
-  const id = await DocumentDB.create(name, path, type, content as any, references);
-  await DocumentDB.update(id, name, path, content as any, references, `init-${id}`);
-  return id;
+  return DocumentDB.create(name, path, type, content as any, references, undefined, false);
 }
 
 // ============================================================================
@@ -334,9 +332,7 @@ describe('createDraftFile', () => {
     await initTestDatabase(dbPath);
     // Pre-create sub-folders so each test can create draft files in a unique location
     for (let i = 1; i <= 4; i++) {
-      const folderId = await DocumentDB.create(`draft-test-${i}`, `/org/draft-test-${i}`, 'folder', { description: '' } as any, []);
-      // Publish the folder (draft:false) so it's a valid parent
-      await DocumentDB.update(folderId, `draft-test-${i}`, `/org/draft-test-${i}`, { description: '' } as any, [], `folder-init-${i}`);
+      await DocumentDB.create(`draft-test-${i}`, `/org/draft-test-${i}`, 'folder', { description: '' } as any, [], undefined, false);
     }
   });
 

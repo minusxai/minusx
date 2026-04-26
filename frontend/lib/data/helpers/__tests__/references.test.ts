@@ -31,14 +31,9 @@ const childResolver: ChildIdResolver = async (folderPath) => {
   return children.map(c => c.id);
 };
 
-/**
- * Create a published (non-draft) fixture file so it appears in listAll().
- * DocumentDB.create() always produces draft:true; update() sets draft:false.
- */
+/** Create a published (non-draft) fixture file so it appears in listAll(). */
 async function mkPublished(name: string, path: string, type: string, content: object, refs: number[] = []): Promise<number> {
-  const id = await DocumentDB.create(name, path, type, content, refs);
-  await DocumentDB.update(id, name, path, content, refs, `init-${id}`);
-  return id;
+  return DocumentDB.create(name, path, type, content, refs, undefined, false);
 }
 
 /** Stub resolver — should never be called for non-folder tests */
