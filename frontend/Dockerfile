@@ -40,6 +40,7 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV=production
 ENV BASE_DUCKDB_DATA_PATH=/app
+ENV DB_TYPE=pglite
 ENV PGLITE_DATA_DIR=/app/data/pglite
 
 # Install curl and ca-certificates for downloading DuckDB files
