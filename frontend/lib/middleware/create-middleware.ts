@@ -6,7 +6,6 @@ import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode, type Mode } from '@/lib/mode/mode-types';
 import { logNetworkRequest } from '@/lib/network-logging';
 import { getModules } from '@/lib/modules/registry';
-import { getConfigsForMode } from '@/lib/data/configs.server';
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
@@ -124,18 +123,6 @@ export function createMiddleware() {
     if (pathname === '/') {
       const user = req.auth.user;
       const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
-
-      // Check wizard status — redirect to /hello-world if onboarding is not complete
-      try {
-        const { config } = await getConfigsForMode(effectiveMode);
-        if (config.setupWizard?.status !== 'complete') {
-          const helloUrl = new URL(`${protocol}://${hostname}/hello-world`);
-          if (mode && mode !== 'org') helloUrl.searchParams.set('mode', mode);
-          return NextResponse.redirect(helloUrl);
-        }
-      } catch {
-        // DB unavailable — fall through to normal home redirect
-      }
 
       const homeHref = user?.role && isAdmin(user.role)
         ? `/p/${effectiveMode}`

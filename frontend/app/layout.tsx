@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { cache } from "react";
+import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import LayoutWrapper from "@/components/LayoutWrapper";
@@ -75,6 +77,13 @@ export default async function RootLayout({
 }>) {
   // Load user + configs + contexts (always) + connections (50ms timeout)
   const initialData = await loadInitialState();
+
+  if (initialData.user && initialData.config.setupWizard?.status !== 'complete') {
+    const reqPath = (await headers()).get('x-request-path') ?? '';
+    if (reqPath.startsWith('/p/')) {
+      redirect('/hello-world');
+    }
+  }
 
   // Load org styles (CSS for logos, etc.)
   let orgStyles = DEFAULT_STYLES;
