@@ -28,7 +28,8 @@ interface LoginFormProps {
   loginText?: string;
   registerText?: string;
   initialMode?: 'login' | 'register';
-  landingText?: string;
+  landingHtml?: string;
+  enableOrgCreation?: boolean;
 }
 
 export function LoginOrRegisterForm({
@@ -37,7 +38,8 @@ export function LoginOrRegisterForm({
   loginText,
   registerText,
   initialMode = 'login',
-  landingText,
+  landingHtml,
+  enableOrgCreation = true,
 }: LoginFormProps) {
   const searchParams = useSearchParams();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -313,25 +315,32 @@ export function LoginOrRegisterForm({
           </Box>
 
           <Heading size="xl" textAlign="center" fontFamily="mono">
-            {mode === 'register' ? 'Set Up Your Workspace' : `${displayName} Login`}
+            {mode === 'register' ? 'Set Up Your Workspace' : `Welcome to ${displayName}`}
           </Heading>
 
-          {landingText && mode === 'login' && (
+          {landingHtml && mode === 'login' && (
             <Box>
-              <Text fontSize="sm" color="fg.muted" mb={4}>{landingText}</Text>
-              <Button
-                w="full"
-                variant="outline"
-                size="lg"
-                onClick={() => setMode('register')}
-              >
-                <LuBuilding2 />
-                Create Company
-              </Button>
+              <Box
+                fontSize="sm"
+                color="fg.muted"
+                mb={enableOrgCreation ? 4 : 0}
+                dangerouslySetInnerHTML={{ __html: landingHtml }}
+              />
+              {enableOrgCreation && (
+                <Button
+                  w="full"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setMode('register')}
+                >
+                  <LuBuilding2 />
+                  Set up workspace
+                </Button>
+              )}
             </Box>
           )}
 
-          {!landingText && mode === 'login' && loginText && (
+          {!landingHtml && mode === 'login' && loginText && (
             <Box fontSize="sm" color="fg.muted">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{loginText}</ReactMarkdown>
             </Box>
@@ -441,7 +450,7 @@ export function LoginOrRegisterForm({
                 </Box>
               </Text>
             </VStack>
-          ) : !landingText ? (
+          ) : !landingHtml && enableOrgCreation ? (
             <VStack gap={4}>
               {loginError && (
                 <Box p={3} bg="accent.danger/10" borderRadius="md" border="1px solid" borderColor="accent.danger">

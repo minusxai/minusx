@@ -46,7 +46,8 @@ interface EnvironmentConfig {
   MD_LOGIN: string;
   MD_REGISTER: string;
   CUSTOM_MODULE: string | undefined;
-  LANDING_TEXT: string | undefined;
+  LANDING_HTML: string | undefined;
+  ENABLE_ORG_CREATION: boolean;
 }
 
 const errors: string[] = [];
@@ -116,7 +117,8 @@ const config: EnvironmentConfig = {
   MD_LOGIN: process.env.MD_LOGIN ?? '',
   MD_REGISTER: process.env.MD_REGISTER ?? '',
   CUSTOM_MODULE: process.env.CUSTOM_MODULE,
-  LANDING_TEXT: process.env.LANDING_TEXT,
+  LANDING_HTML: process.env.LANDING_HTML,
+  ENABLE_ORG_CREATION: process.env.ENABLE_ORG_CREATION !== 'false',
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -175,4 +177,5 @@ export const MD_HOME = config.MD_HOME;
 export const MD_LOGIN = config.MD_LOGIN;
 export const MD_REGISTER = config.MD_REGISTER;
 export const CUSTOM_MODULE = config.CUSTOM_MODULE;
-export const LANDING_TEXT = config.LANDING_TEXT;
+export const LANDING_HTML = config.LANDING_HTML;
+export const ENABLE_ORG_CREATION = config.ENABLE_ORG_CREATION;

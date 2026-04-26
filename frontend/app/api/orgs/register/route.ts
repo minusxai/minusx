@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getModules } from '@/lib/modules/registry';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { ENABLE_ORG_CREATION } from '@/lib/config';
 import {
   validateWorkspaceName,
   validateEmail,
@@ -9,6 +10,8 @@ import {
 } from '@/lib/validation/validators';
 
 export async function POST(request: NextRequest) {
+  if (!ENABLE_ORG_CREATION) return ApiErrors.forbidden('Organization creation is disabled');
+
   try {
     const body = await request.json();
 

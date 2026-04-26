@@ -4,7 +4,7 @@ import { OrgConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import { LoginOrRegisterForm } from './LoginOrRegisterForm';
 import { getConfigsForMode } from '@/lib/data/configs.server';
 import { UserDB } from '@/lib/database/user-db';
-import { MD_LOGIN, MD_REGISTER, LANDING_TEXT, AUTH_URL } from '@/lib/config';
+import { MD_LOGIN, MD_REGISTER, LANDING_HTML, ENABLE_ORG_CREATION, AUTH_URL } from '@/lib/config';
 
 export default async function LoginPage() {
   // Only show landing text on the root domain, not on company subdomains
@@ -38,7 +38,8 @@ export default async function LoginPage() {
         loginText={MD_LOGIN || undefined}
         registerText={MD_REGISTER || undefined}
         initialMode={hasUsers ? 'login' : 'register'}
-        landingText={isRootDomain ? (LANDING_TEXT || undefined) : undefined}
+        landingHtml={isRootDomain ? (LANDING_HTML || undefined) : undefined}
+        enableOrgCreation={ENABLE_ORG_CREATION}
       />
     </Suspense>
   );
