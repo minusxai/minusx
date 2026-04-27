@@ -144,7 +144,9 @@ async function* consumePythonStream(
 async function processStream(
   writer: WritableStreamDefaultWriter<Uint8Array>,
   encoder: TextEncoder,
-  request: NextRequest
+  body: ChatRequest,
+  user: NonNullable<Awaited<ReturnType<typeof getEffectiveUser>>>,
+  signal: AbortSignal
 ): Promise<void> {
   const _t0_stream = Date.now();
 
@@ -153,24 +155,9 @@ async function processStream(
   let currentLogIndex = 0;
   let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
   let accumulatedLogDiff: ConversationLogEntry[] = [];
-  let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
   try {
-    // Parse request
-    const body: ChatRequest = await request.json();
-    const _t1_auth = Date.now();
-    user = await getEffectiveUser();
     const _t2_conv = Date.now();
-    console.log(`[chat/stream] auth: ${_t2_conv - _t1_auth}ms`);
-
-    if (!user) {
-      await safeWrite(writer, encoder, 'error', {
-        type: 'error',
-        error: 'Unauthorized',
-        timestamp: new Date().toISOString()
-      });
-      return;
-    }
 
     // Get or create conversation (pass first message for auto-naming)
     const { fileId, content: conversation } = await getOrCreateConversation(
@@ -220,7 +207,7 @@ async function processStream(
         }
         // Check for abort before processing event - if aborted, stop forwarding events
         // but continue consuming the stream to get the done event
-        if (request.signal.aborted) {
+        if (signal.aborted) {
           if (event.type === 'done') {
             pythonDoneEvent = event;
           }
@@ -264,7 +251,7 @@ async function processStream(
       }
 
       // Check for interruption before saving
-      if (request.signal.aborted) {
+      if (signal.aborted) {
         // Call Python to mark pending tools as interrupted
         const closeResponse = await pythonBackendFetch('/api/chat/close', {
           method: 'POST',
@@ -331,7 +318,7 @@ async function processStream(
         currentLogIndex,
         user,
         {
-          signal: request.signal,
+          signal: signal,
           callbacks: {
             onToolCompleted: (tool: ToolCall, result: ToolExecutionResult) => {
               const event: StreamingEvent = {
@@ -441,10 +428,34 @@ async function processStream(
  */
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  const writer = writable.getWriter(); 
 
-  const response = new Response(readable, {
+  // Parse body and authenticate HERE, while the request context is still active.
+  // getEffectiveUser() calls headers() from next/headers, which is tied to the
+  // request lifecycle. If called from a background task after POST() returns,
+  // the request context is gone and headers() hangs indefinitely — causing the
+  // browser's await fetch() to block for the entire stream duration.
+  const body: ChatRequest = await request.json();
+  const user = await getEffectiveUser();
+
+  if (!user) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+
+  // Ping flushes response headers to the client immediately.
+  void writer.write(encoder.encode(': ping\n\n'));
+
+  processStream(writer, encoder, body, user, request.signal).catch(err => {
+    console.error('[chat/stream] Unhandled processStream error:', err);
+    void writer.close().catch(() => {});
+  });
+
+  return new Response(readable, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -453,14 +464,4 @@ export async function POST(request: NextRequest) {
       'Content-Encoding': 'identity',
     }
   });
-
-  // Start streaming in the background — AFTER the Response is returned below.
-  // Do NOT await this: returning the Response first is what triggers Next.js to
-  // start piping chunks to the client immediately as they are written.
-  processStream(writer, encoder, request).catch(err => {
-    console.error('[chat/stream] Unhandled processStream error:', err);
-    void writer.close().catch(() => {});
-  });
-
-  return response
 }
