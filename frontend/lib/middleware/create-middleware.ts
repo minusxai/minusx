@@ -120,25 +120,7 @@ export function createMiddleware() {
 
     const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
-    if (pathname === '/') {
-      const user = req.auth.user;
-      const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
-
-      const homeHref = user?.role && isAdmin(user.role)
-        ? `/p/${effectiveMode}`
-        : (user?.home_folder ? `/p/${effectiveMode}/${user.home_folder}` : `/p/${effectiveMode}`);
-
-      const homeUrl = new URL(`${protocol}://${hostname}${homeHref}`);
-
-      if (asUser && user?.role && isAdmin(user.role)) {
-        homeUrl.searchParams.set('as_user', asUser);
-      }
-      if (mode && mode !== 'org') {
-        homeUrl.searchParams.set('mode', mode);
-      }
-
-      return NextResponse.redirect(homeUrl);
-    }
+    // Home page (/) renders directly — no redirect needed
 
     if (isApiPath) {
       void logNetworkRequest(requestId, reqInfo, {
