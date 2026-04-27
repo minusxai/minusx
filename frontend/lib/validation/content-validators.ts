@@ -6,6 +6,7 @@
 import Ajv from 'ajv';
 import atlasSchema from './atlas-schema.gen.json';
 import type { FileType, QuestionContent, DashboardContent } from '@/lib/types';
+import { validateOrgConfig } from '@/lib/validation/config-validators';
 
 const ajv = new Ajv({ allErrors: true });
 ajv.addSchema(atlasSchema, 'atlas');
@@ -49,5 +50,7 @@ export function validateFileState(file: { type: FileType; content: unknown }): s
     return validateContent({ type: 'QuestionContent', data: file.content as QuestionContent });
   if (file.type === 'dashboard')
     return validateContent({ type: 'DashboardContent', data: file.content as DashboardContent });
+  if (file.type === 'config')
+    return validateOrgConfig(file.content) ? null : 'Invalid config structure';
   return null;
 }
