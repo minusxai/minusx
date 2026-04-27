@@ -24,6 +24,7 @@ import {
 import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
+import { validateFileState } from '@/lib/validation/content-validators';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
@@ -422,7 +423,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const contentToCreate = content;
 
     // Validate content schema before writing to DB
-    const createValidationError = await validateFileStateServer({ type, content: contentToCreate, name, path: finalPath });
+    const createValidationError = validateFileState({ type, content: contentToCreate, name, path: finalPath });
     if (createValidationError) {
       throw new UserFacingError(`Invalid file content: ${createValidationError}`);
     }
