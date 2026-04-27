@@ -397,8 +397,10 @@ export default function Sidebar() {
               py={2}
               borderRadius="md"
               cursor="pointer"
-              bg="accent.danger"
-              _hover={{ opacity: 0.85 }}
+              bg="transparent"
+              border="1px solid"
+              borderColor="border.default"
+              _hover={{ bg: 'bg.subtle' }}
               transition="all 0.2s"
               display="flex"
               alignItems="center"
@@ -406,10 +408,10 @@ export default function Sidebar() {
               width="100%"
               onClick={() => switchMode('tutorial')}
             >
-              <Box color="white" display="flex" alignItems="center" fontSize="lg">
+              <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                 <LuGraduationCap />
               </Box>
-              <Text fontSize="sm" color="white" fontFamily="mono" fontWeight="400">
+              <Text fontSize="sm" color="fg.muted" fontFamily="mono" fontWeight="400">
                 Try Demo Mode
               </Text>
             </Box>
@@ -431,15 +433,17 @@ export default function Sidebar() {
                 borderRadius="md"
                 cursor="pointer"
                 onClick={() => switchMode('tutorial')}
-                bg="accent.danger"
-                _hover={{ opacity: 0.85 }}
+                bg="transparent"
+                border="1px solid"
+                borderColor="border.default"
+                _hover={{ bg: 'bg.subtle' }}
                 transition="all 0.2s"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 width="100%"
               >
-                <Box color="white" display="flex" alignItems="center" fontSize="lg">
+                <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                   <LuGraduationCap />
                 </Box>
               </Box>
@@ -448,15 +452,17 @@ export default function Sidebar() {
         )}
         {/* Exit Demo Mode (only in tutorial mode) */}
         {mode === 'tutorial' && !isCollapsed && (
-          <Box px={4} py={2} borderTop="1px solid" borderColor="border.default">
+          <Box px={4} py={2}>
             <Box
               as="button"
               px={3}
               py={2}
               borderRadius="md"
               cursor="pointer"
-              bg="accent.danger"
-              _hover={{ opacity: 0.85 }}
+              bg="transparent"
+              border="1px solid"
+              borderColor="border.default"
+              _hover={{ bg: 'bg.subtle' }}
               transition="all 0.2s"
               display="flex"
               alignItems="center"
@@ -464,17 +470,17 @@ export default function Sidebar() {
               width="100%"
               onClick={() => switchMode('org')}
             >
-              <Box color="white" display="flex" alignItems="center" fontSize="lg">
+              <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                 <LuGraduationCap />
               </Box>
-              <Text fontSize="sm" color="white" fontFamily="mono" fontWeight="400">
+              <Text fontSize="sm" color="fg.muted" fontFamily="mono" fontWeight="400">
                 Exit Demo Mode
               </Text>
             </Box>
           </Box>
         )}
         {mode === 'tutorial' && isCollapsed && (
-          <VStack gap={0} py={2} px={3} borderTop="1px solid" borderColor="border.default">
+          <VStack gap={0} py={2} px={3}>
             <Tooltip content="Exit Demo Mode" positioning={{ placement: 'right' }}>
               <Box
                 as="button"
@@ -482,15 +488,17 @@ export default function Sidebar() {
                 borderRadius="md"
                 cursor="pointer"
                 onClick={() => switchMode('org')}
-                bg="accent.danger"
-                _hover={{ opacity: 0.85 }}
+                bg="transparent"
+                border="1px solid"
+                borderColor="border.default"
+                _hover={{ bg: 'bg.subtle' }}
                 transition="all 0.2s"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 width="100%"
               >
-                <Box color="white" display="flex" alignItems="center" fontSize="lg">
+                <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                   <LuGraduationCap />
                 </Box>
               </Box>
