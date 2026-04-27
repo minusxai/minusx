@@ -22,23 +22,36 @@ function QuickLink({ href, icon, label, color }: { href: string; icon: React.Ele
   return (
     <Link href={href}>
       <HStack
-        gap={2.5}
+        gap={2}
         px={4}
-        py={3}
-        borderRadius="lg"
-        bg="bg.surface"
-        border="1px solid"
-        borderColor="border.muted"
+        py={1}
+        borderRadius="full"
+        bg={`${color}/10`}
         cursor="pointer"
-        transition="all 0.2s ease"
-        _hover={{ borderColor: color, bg: `${color}/8`, transform: 'translateY(-1px)', boxShadow: 'sm' }}
+        transition="all 0.15s ease"
+        _hover={{ bg: `${color}/20`, transform: 'translateY(-1px)' }}
       >
-        <Icon as={icon} color={color} boxSize={4} />
-        <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="fg.default">
+        <Icon as={icon} color={color} boxSize={3.5} />
+        <Text fontSize="xs" fontWeight="600" fontFamily="mono" color={color}>
           {label}
         </Text>
       </HStack>
     </Link>
+  );
+}
+
+/** Panel wrapper for homepage sections */
+function SectionPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      bg="bg.subtle"
+      borderRadius="lg"
+      border="1px solid"
+      borderColor="border.muted"
+      p={5}
+    >
+      {children}
+    </Box>
   );
 }
 
@@ -93,18 +106,18 @@ export default function Home() {
           </Heading>
 
           {/* Quick links */}
-          <HStack gap={3} mt={4} mb={8} flexWrap="wrap">
+          <HStack gap={1} mt={4} mb={8} flexWrap="wrap">
             <QuickLink href="/explore" icon={FILE_TYPE_METADATA.explore.icon} label="Explore" color="accent.teal" />
             <QuickLink href={`/p/${mode}`} icon={LuFolder} label="Files" color="accent.primary" />
             <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
           </HStack>
 
           {/* Two-column layout */}
-          <Flex gap={8} direction={{ base: 'column', lg: 'row' }}>
+          <Flex gap={2} direction={{ base: 'column', lg: 'row' }}>
             {/* Left column — summary + recent questions */}
-            <VStack flex="1" minW={0} align="stretch" gap={6}>
-              <FeedSummary />
-              <RecentQuestions />
+            <VStack flex="1" minW={0} align="stretch" gap={2}>
+              <SectionPanel><FeedSummary /></SectionPanel>
+              <SectionPanel><RecentQuestions /></SectionPanel>
             </VStack>
 
             {/* Right column — dashboards + conversations */}
@@ -112,10 +125,10 @@ export default function Home() {
               w={{ base: '100%', lg: '340px' }}
               flexShrink={0}
               align="stretch"
-              gap={6}
+              gap={2}
             >
-              <RecentDashboards />
-              <RecentConversations />
+              <SectionPanel><RecentDashboards /></SectionPanel>
+              <SectionPanel><RecentConversations /></SectionPanel>
             </VStack>
           </Flex>
         </Box>

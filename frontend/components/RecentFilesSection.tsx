@@ -47,10 +47,10 @@ function relativeTime(isoString: string): string {
 function SectionHeader({ label }: { label: string }) {
   return (
     <HStack gap={2}>
+      <Box flex="1" h="1px" bg="border.default" />
       <Text fontSize="2xs" fontFamily="mono" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
         {label}
       </Text>
-      <Box flex="1" h="1px" bg="border.default" />
     </HStack>
   );
 }
@@ -194,8 +194,8 @@ function SummaryCollapsible({ summary }: { summary: string }) {
     : summary;
 
   return (
-    <Box>
-      <Markdown textColor="fg.muted" fontSize="xs">{displayText}</Markdown>
+    <Box lineHeight="1.55">
+      <Markdown textColor="fg.muted" fontSize="sm">{displayText}</Markdown>
       {needsCollapse && (
         <Text
           as="button"
@@ -379,7 +379,7 @@ function FeedSummaryInner({ agentName, devMode }: { agentName: string; devMode: 
   return (
     <VStack gap={3} align="stretch">
       <HStack justify="space-between" align="center">
-        <Text fontSize="2xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing="0.1em" textTransform="uppercase">
+        <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing="0.1em" textTransform="uppercase">
           {agentName} feed
         </Text>
         {data && summary && (
