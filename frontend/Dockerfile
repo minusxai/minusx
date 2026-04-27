@@ -17,7 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 COPY scripts/copy-duckdb-wasm.mjs ./scripts/copy-duckdb-wasm.mjs
 
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --cache /root/.npm
 
 # Copy application source
 COPY . .
@@ -29,7 +30,8 @@ ENV NEXTAUTH_SECRET=build-placeholder
 # Accept git commit SHA from CI build arg — embedded into the Next.js build by next.config.ts
 ARG GIT_COMMIT_SHA
 ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # ===== RUNTIME STAGE ===== #
 FROM node:20-slim AS runner
