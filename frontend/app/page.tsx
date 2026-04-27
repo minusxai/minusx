@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, Flex, Heading, HStack, Text, Icon } from '@chakra-ui/react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAppSelector } from '@/store/hooks';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -15,7 +16,7 @@ import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import { useBreakpointValue } from '@chakra-ui/react';
-import { LuScanSearch, LuLayoutDashboard, LuFolder, LuHistory } from 'react-icons/lu';
+import { LuScanSearch, LuLayoutDashboard, LuFolder, LuHistory, LuBookOpen, LuSparkles, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 
 function QuickLink({ href, icon, label, color }: { href: string; icon: React.ElementType; label: string; color: string }) {
@@ -40,7 +41,7 @@ function QuickLink({ href, icon, label, color }: { href: string; icon: React.Ele
   );
 }
 
-/** Panel wrapper for homepage sections */
+/** Panel wrapper for homepage sections — collapses when children render nothing */
 function SectionPanel({ children }: { children: React.ReactNode }) {
   return (
     <Box
@@ -49,9 +50,91 @@ function SectionPanel({ children }: { children: React.ReactNode }) {
       border="1px solid"
       borderColor="border.muted"
       p={5}
+      css={{ '&:not(:has(*))': { display: 'none' } }}
     >
       {children}
     </Box>
+  );
+}
+
+function ActionCard({ href, icon, color, title, description, step }: {
+  href: string; icon: React.ElementType; color: string; title: string; description: string; step: number;
+}) {
+  return (
+    <Link href={href}>
+      <HStack
+        gap={4}
+        px={4}
+        py={3}
+        borderRadius="lg"
+        bg={`${color}/4`}
+        cursor="pointer"
+        transition="all 0.2s ease"
+        _hover={{ bg: `${color}/10` }}
+        align="center"
+      >
+        <Box
+          w="36px"
+          h="36px"
+          borderRadius="lg"
+          bg={`${color}/15`}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          flexShrink={0}
+        >
+          <Icon as={icon} color={color} boxSize={4} />
+        </Box>
+        <VStack align="start" gap={0} flex="1" minW={0}>
+          <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="fg.default">
+            {title}
+          </Text>
+          <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
+            {description}
+          </Text>
+        </VStack>
+        <Icon as={LuArrowRight} color={color} boxSize={3.5} flexShrink={0} opacity={0.6} />
+      </HStack>
+    </Link>
+  );
+}
+
+function WelcomeBanner({ agentName, mode }: { agentName: string; mode: string }) {
+  return (
+    <VStack align="stretch" gap={3}>
+      <HStack gap={2}>
+        <Text fontSize="2xs" fontFamily="mono" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
+          Get started
+        </Text>
+        <Box flex="1" h="1px" bg="border.default" />
+      </HStack>
+      <VStack align="stretch" gap={2}>
+        <ActionCard
+          href="/explore"
+          icon={FILE_TYPE_METADATA.explore.icon}
+          color="accent.teal"
+          title="Ask a question"
+          description="Query your data with natural language or SQL"
+          step={1}
+        />
+        <ActionCard
+          href="/hello-world"
+          icon={LuBookOpen}
+          color="accent.primary"
+          title="Take the tutorial"
+          description="A quick walkthrough of the key features"
+          step={2}
+        />
+        <ActionCard
+          href={`/?mode=tutorial`}
+          icon={LuPlay}
+          color="accent.secondary"
+          title="Try demo mode"
+          description="Explore sample data and pre-built dashboards"
+          step={3}
+        />
+      </VStack>
+    </VStack>
   );
 }
 
@@ -76,6 +159,13 @@ export default function Home() {
   }, [user, router, config, configLoading]);
 
   const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
+  const searchParams = useSearchParams();
+  const [simulateEmpty, setSimulateEmpty] = useState(false);
+
+  // ?empty URL param to preview empty states
+  useEffect(() => {
+    if (searchParams.has('empty')) setSimulateEmpty(true);
+  }, [searchParams]);
 
   if (!user || configLoading) return null;
 
@@ -105,19 +195,27 @@ export default function Home() {
             {config.branding.displayName}
           </Heading>
 
-          {/* Quick links */}
-          <HStack gap={1} mt={4} mb={8} flexWrap="wrap">
-            <QuickLink href="/explore" icon={FILE_TYPE_METADATA.explore.icon} label="Explore" color="accent.teal" />
-            <QuickLink href={`/p/${mode}`} icon={LuFolder} label="Files" color="accent.primary" />
-            <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
-          </HStack>
+          {/* Quick links — hidden when empty/welcome state */}
+          {!simulateEmpty && (
+            <HStack gap={1} mt={4} mb={8} flexWrap="wrap">
+              <QuickLink href="/explore" icon={FILE_TYPE_METADATA.explore.icon} label="Explore" color="accent.teal" />
+              <QuickLink href={`/p/${mode}`} icon={LuFolder} label="Files" color="accent.primary" />
+              <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
+            </HStack>
+          )}
 
           {/* Two-column layout */}
-          <Flex gap={2} direction={{ base: 'column', lg: 'row' }}>
-            {/* Left column — summary + recent questions */}
+          <Flex gap={2} direction={{ base: 'column', lg: 'row' }} mt={simulateEmpty ? 4 : 0}>
+            {/* Left column */}
             <VStack flex="1" minW={0} align="stretch" gap={2}>
-              <SectionPanel><FeedSummary /></SectionPanel>
-              <SectionPanel><RecentQuestions /></SectionPanel>
+              {simulateEmpty ? (
+                <SectionPanel>
+                  <WelcomeBanner agentName={config.branding.agentName} mode={mode} />
+                </SectionPanel>
+              ) : (
+                <SectionPanel><FeedSummary /></SectionPanel>
+              )}
+              <SectionPanel><RecentQuestions simulateEmpty={simulateEmpty} /></SectionPanel>
             </VStack>
 
             {/* Right column — dashboards + conversations */}
@@ -127,8 +225,8 @@ export default function Home() {
               align="stretch"
               gap={2}
             >
-              <SectionPanel><RecentDashboards /></SectionPanel>
-              <SectionPanel><RecentConversations /></SectionPanel>
+              <SectionPanel><RecentDashboards simulateEmpty={simulateEmpty} /></SectionPanel>
+              <SectionPanel><RecentConversations simulateEmpty={simulateEmpty} /></SectionPanel>
             </VStack>
           </Flex>
         </Box>
