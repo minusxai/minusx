@@ -434,10 +434,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new Error(`Cannot create file: references contain unsaved virtual IDs [${negativeCreateRefs.join(', ')}]`);
     }
 
-    // Content types (question/dashboard/notebook/presentation/report) start as drafts until the
-    // user explicitly saves. Structural/config types are immediately visible (draft: false).
-    const DRAFT_ON_CREATE_TYPES = new Set(['question', 'dashboard', 'notebook', 'presentation', 'report', 'connection', 'conversation']);
-    const startAsDraft = DRAFT_ON_CREATE_TYPES.has(type);
+    // Structural/system types are immediately visible on create. Everything else (user-created
+    // content) starts as draft until the user explicitly saves.
+    const LIVE_ON_CREATE_TYPES = new Set(['folder', 'config', 'styles', 'context', 'context_run', 'alert_run', 'transformation_run', 'report_run', 'session']);
+    const startAsDraft = !LIVE_ON_CREATE_TYPES.has(type);
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
