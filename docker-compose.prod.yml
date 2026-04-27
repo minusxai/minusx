@@ -1,6 +1,6 @@
 services:
   mx-backend:
-    image: ghcr.io/minusxai/minusx-backend:latest
+    image: ghcr.io/minusxai/minusx-backend-canary:latest
     container_name: mx-backend
     restart: unless-stopped
     volumes:
@@ -22,7 +22,7 @@ services:
       start_period: 40s
 
   mx-frontend:
-    image: ghcr.io/minusxai/minusx-frontend:latest
+    image: ghcr.io/minusxai/minusx-frontend-canary:latest
     container_name: mx-frontend
     restart: unless-stopped
     ports:
