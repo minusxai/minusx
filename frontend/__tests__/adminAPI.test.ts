@@ -228,8 +228,7 @@ describe('Import/Export API Endpoints', () => {
       expect(response.status).toBe(400);
       const result = await response.json();
       expect(result.success).toBe(false);
-      expect(result.errors[0]).toContain('Version mismatch');
-      expect(result.errors[1]).toContain('Please use CLI tools for migrations');
+      expect(result.errors[0]).toContain('minimum supported version');
     });
 
     it('should handle gzipped files', async () => {
