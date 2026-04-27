@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
-import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs, Badge, HStack, Icon } from '@chakra-ui/react';
+import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, Icon } from '@chakra-ui/react';
 import { LuRefreshCw, LuUser } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -553,15 +553,20 @@ function SettingsContent() {
   };
 
   return (
-    <Box minH="100vh" bg="bg.canvas">
-      <Container maxW={needsWideLayout ? 'container.xl' : 'container.md'} py={{ base: 4, md: 8 }} px={{ base: 4, md: 8 }} transition="max-width 0.2s">
-        <Breadcrumb items={breadcrumbItems} />
+    <Box minH="90vh" bg="bg.canvas" display="flex">
+      <VStack flex="1" minW="0" position="relative" align="stretch">
+        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
+          <Flex justify="space-between" align="center" mb={4} gap={4}>
+            <Box flex="1" minW={0}>
+              <Breadcrumb items={breadcrumbItems} />
+            </Box>
+          </Flex>
 
         <Heading
           fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
           fontWeight="900"
           letterSpacing="-0.03em"
-          mt={10}
+          mt={6}
           mb={8}
           color="fg.default"
         >
@@ -594,7 +599,8 @@ function SettingsContent() {
           Build: {GIT_COMMIT_SHA}
         </Text>
 
-      </Container>
+        </Box>
+      </VStack>
     </Box>
   );
 }
