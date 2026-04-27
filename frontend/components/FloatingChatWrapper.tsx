@@ -17,13 +17,11 @@ const RIGHTSIDEBAR_WIDTH_COLLAPSED = '49px';
 interface FloatingChatWrapperProps {
   filePath?: string;
   databaseName?: string;
-  inBottomBar?: boolean;
 }
 
 export default function FloatingChatWrapper({
   filePath,
   databaseName: propDatabaseName,
-  inBottomBar = false,
 }: FloatingChatWrapperProps) {
   const [isFocused, setIsFocused] = useState(false);
   const dispatch = useAppDispatch();
@@ -42,7 +40,7 @@ export default function FloatingChatWrapper({
   const rightWidth = rightSidebarCollapsed ? RIGHTSIDEBAR_WIDTH_COLLAPSED : `${rightSidebarWidth}px`;
 
   // Hide floating bar when right sidebar is open (chat visible there)
-  const hideFloatingBar = !inBottomBar && !rightSidebarCollapsed;
+  const hideFloatingBar = !rightSidebarCollapsed;
 
   const handleSend = useCallback((message: string, _attachments: Attachment[]) => {
     if (!message.trim()) return;
@@ -84,10 +82,6 @@ export default function FloatingChatWrapper({
       />
     </Box>
   );
-
-  if (inBottomBar) {
-    return content;
-  }
 
   return (
     <Box

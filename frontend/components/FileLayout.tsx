@@ -16,7 +16,6 @@ import { Box, VStack, Flex, useBreakpointValue } from '@chakra-ui/react';
 import Breadcrumb from './Breadcrumb';
 import RightSidebar, { RightSidebarProps } from './RightSidebar';
 import MobileRightSidebar from './MobileRightSidebar';
-import BottomBar from './BottomBar';
 import FloatingChatWrapper from './FloatingChatWrapper';
 import { ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -83,7 +82,7 @@ export default function FileLayout(props: FileLayoutProps) {
   // Type-based rendering is now handled by FileView component via fileComponents mapping
   const content = props.children;
   const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
-  const shouldShowBottomBar = fileType === 'question' && !isMobile
+  const shouldShowFloatingChat = shouldShowRightSidebar;
   const metadata = getFileTypeMetadata(fileType);
   const dispatch = useAppDispatch();
   const viewStackDepth = useAppSelector(selectViewStackDepth);
@@ -115,7 +114,7 @@ export default function FileLayout(props: FileLayoutProps) {
           <VStack maxW="100%" flex="1" mx="0"
               px={{ base: 4, md: 8, lg: 12 }}
               pt={{ base: 3, md: 4, lg: 5 }}
-              pb={shouldShowBottomBar ? 0 : { base: 4, md: 6, lg: 8 }}
+              pb={shouldShowFloatingChat ? { base: '60px', md: '60px' } : { base: 4, md: 6, lg: 8 }}
               align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'auto'} minHeight="0">
             <Flex justify="space-between" align="center" mb={4} gap={4}>
               <Box flex="1" minW={0}>
@@ -135,14 +134,9 @@ export default function FileLayout(props: FileLayoutProps) {
         {/* Chat bars live OUTSIDE the dimmed box so they remain accessible when the
             ViewStack overlay is active. The floating chat has z-index:1000 which beats the
             overlay's z-index:50 in this shared stacking context. */}
-        {/* Floating search bar — shown on non-question pages (dashboard, context, etc.) */}
-        {!shouldShowBottomBar && shouldShowRightSidebar && rightSidebar && rightSidebar.showChat && (
+        {/* Floating search bar — shown on pages with right sidebar chat */}
+        {shouldShowFloatingChat && rightSidebar && rightSidebar.showChat && (
           <FloatingChatWrapper filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
-        )}
-
-        {/* Bottom bar for question page - includes search bar */}
-        {shouldShowBottomBar && (
-          <BottomBar showChat={rightSidebar?.showChat} filePath={rightSidebar?.filePath} databaseName={appStateDatabaseName} />
         )}
 
         {/* Content stack — absolute overlay, clipped to this VStack */}
