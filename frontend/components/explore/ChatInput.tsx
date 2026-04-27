@@ -435,7 +435,7 @@ export default function ChatInput({
                         color="fg.muted"
                         _hover={{ color: 'accent.teal' }}
                         _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                        borderRadius="full"
+                        borderRadius="md"
                         flexShrink={0}
                       >
                         <Icon as={LuPaperclip} boxSize={3.5} />
@@ -454,7 +454,7 @@ export default function ChatInput({
                         _hover={{ bg: 'accent.teal', opacity: 0.9 }}
                         _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
                         size="xs"
-                        borderRadius="full"
+                        borderRadius="md"
                         flexShrink={0}
                       >
                         <Icon as={LuSendHorizontal} boxSize={3.5} />

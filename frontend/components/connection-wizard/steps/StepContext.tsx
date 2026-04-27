@@ -504,9 +504,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         {/* Actions */}
         <HStack justify="flex-end" gap={3} pt={2}>
           <Button
-            bg="accent.teal"
-            color="white"
-            _hover={{ opacity: 0.9 }}
+            variant="outline"
             size="sm"
             fontFamily="mono"
             onClick={() => setSubStep('docs')}
@@ -708,9 +706,10 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               </Button>
             )}
             <Button
-              bg="accent.teal"
-              color="white"
-              _hover={{ opacity: 0.9 }}
+              {...(showAgentFeed
+                ? { bg: 'accent.teal', color: 'white', _hover: { opacity: 0.9 } }
+                : { variant: 'outline' as const }
+              )}
               size="sm"
               fontFamily="mono"
               onClick={handleSave}

@@ -33,7 +33,9 @@ export default function FloatingChatWrapper({
 
   // Load context databases
   const contextInfo = useContext(filePath || '/');
-  const databaseName = selectDatabase(contextInfo.databases, propDatabaseName);
+  const defaultDatabase = selectDatabase(contextInfo.databases, propDatabaseName);
+  const [localDatabase, setLocalDatabase] = useState<string | null>(null);
+  const databaseName = localDatabase ?? defaultDatabase;
 
   // Calculate sidebar widths for positioning
   const leftWidth = leftSidebarCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED;
@@ -48,6 +50,10 @@ export default function FloatingChatWrapper({
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
   }, [dispatch]);
+
+  const handleDatabaseChange = useCallback((name: string) => {
+    setLocalDatabase(name);
+  }, []);
 
   const noop = useCallback(() => {}, []);
 
@@ -71,7 +77,7 @@ export default function FloatingChatWrapper({
         isAgentRunning={false}
         disabled={false}
         databaseName={databaseName}
-        onDatabaseChange={noop}
+        onDatabaseChange={handleDatabaseChange}
         container="floating"
         isCompact={true}
         whitelistedSchemas={contextInfo.databases}
