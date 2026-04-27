@@ -11,6 +11,9 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { FeedContent } from '@/components/RecentFilesSection';
 import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
+import RightSidebar from '@/components/RightSidebar';
+import MobileRightSidebar from '@/components/MobileRightSidebar';
+import { useBreakpointValue } from '@chakra-ui/react';
 
 /**
  * Home Page (/)
@@ -32,8 +35,11 @@ export default function Home() {
     }
   }, [user, router, config, configLoading]);
 
+  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
+
   if (!user || configLoading) return null;
 
+  const homePath = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const breadcrumbItems = [{ label: 'Home' }];
 
   return (
@@ -55,6 +61,18 @@ export default function Home() {
         </Box>
         <FloatingChatWrapper />
       </VStack>
+      {isMobile === false && (
+        <RightSidebar
+          filePath={homePath}
+          showChat={true}
+        />
+      )}
+      {isMobile === true && (
+        <MobileRightSidebar
+          filePath={homePath}
+          showChat={true}
+        />
+      )}
     </Box>
   );
 }
