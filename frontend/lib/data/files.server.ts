@@ -436,7 +436,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Content types (question/dashboard/notebook/presentation/report) start as drafts until the
     // user explicitly saves. Structural/config types are immediately visible (draft: false).
-    const DRAFT_ON_CREATE_TYPES = new Set(['question', 'dashboard', 'notebook', 'presentation', 'report', 'connection']);
+    const DRAFT_ON_CREATE_TYPES = new Set(['question', 'dashboard', 'notebook', 'presentation', 'report', 'connection', 'conversation']);
     const startAsDraft = DRAFT_ON_CREATE_TYPES.has(type);
 
     // Create file in database (returns numeric ID)
