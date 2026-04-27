@@ -21,7 +21,6 @@ import {
   LuRefreshCw,
   LuFolderOpen,
 } from 'react-icons/lu';
-import RecentFilesSection from './RecentFilesSection';
 import { Tooltip } from '@/components/ui/tooltip';
 import { readFolder } from '@/lib/api/file-state';
 import type { IconType } from 'react-icons';
@@ -149,10 +148,9 @@ export interface FolderViewProps {
   title: string;
   type?: FileType;  // Optional filter by type
   headerRight?: ReactNode;  // Content to show on the right of the header
-  showAnalytics?: boolean;  // Show analytics panel alongside file list
 }
 
-export default function FolderView({ path, title, type, headerRight, showAnalytics }: FolderViewProps) {
+export default function FolderView({ path, title, type, headerRight }: FolderViewProps) {
   // Get user mode for system folder detection
   const user = useAppSelector(state => state.auth.user);
   const mode = user?.mode || DEFAULT_MODE;
@@ -291,7 +289,6 @@ export default function FolderView({ path, title, type, headerRight, showAnalyti
           })()}
         </Box>
 
-        {showAnalytics && <RecentFilesSection />}
       </Flex>
 
     </Box>
