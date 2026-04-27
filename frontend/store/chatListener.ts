@@ -23,6 +23,8 @@ import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
+import { getCurrentAsUser } from '@/lib/navigation/url-utils';
+import { getCurrentMode } from '@/lib/mode/mode-utils';
 
 // AbortController registry for managing conversation interruption
 // Key is conversation._id (stable internal ID that never changes)
@@ -35,6 +37,22 @@ const API_BASE_URL = typeof window === 'undefined'
   : '';  // Browser - use relative URLs
 
 export const chatListenerMiddleware = createListenerMiddleware();
+
+// ---------------------------------------------------------------------------
+// URL helpers
+// ---------------------------------------------------------------------------
+
+/** Mirror the fetch-patch: append as_user and mode params to /api/ URLs. */
+function patchApiUrl(path: string): string {
+  if (typeof window === 'undefined') return path;
+  const asUser = getCurrentAsUser();
+  const mode = getCurrentMode();
+  if (!asUser && mode === 'org') return path;
+  const url = new URL(path, window.location.origin);
+  if (asUser) url.searchParams.set('as_user', asUser);
+  if (mode !== 'org') url.searchParams.set('mode', mode);
+  return url.pathname + url.search;
+}
 
 // ---------------------------------------------------------------------------
 // SSE parsing
@@ -98,7 +116,7 @@ function streamChatSSE(
     console.log(`[chat/stream ${logLabel}] → request start`);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE_URL}/api/chat/stream`);
+    xhr.open('POST', patchApiUrl(`${API_BASE_URL}/api/chat/stream`));
     xhr.setRequestHeader('Content-Type', 'application/json');
 
     let offset = 0;
