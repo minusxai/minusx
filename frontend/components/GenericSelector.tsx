@@ -77,8 +77,8 @@ function CompactSelector({
           {isConnected && (
             <Box
               position="absolute"
-              bottom="-2px"
-              right="-3px"
+              bottom="2px"
+              right="-2px"
               w="9px"
               h="9px"
               borderRadius="full"
