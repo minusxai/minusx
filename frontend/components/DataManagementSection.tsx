@@ -5,6 +5,7 @@ import { Box, Flex, Text, Button, Input, VStack, Icon, Dialog, Portal } from '@c
 import { LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown, LuChevronRight, LuRotateCcw } from 'react-icons/lu';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
+import { MINIMUM_SUPPORTED_DATA_VERSION } from '@/lib/database/constants';
 
 interface ValidationStatus {
   valid: boolean;
@@ -384,7 +385,7 @@ export default function DataManagementSection() {
         </Flex>
 
         {status.errors.length > 0 && expandedErrors === type && (
-          <Box mt={2} p={2} bg="accent.danger" borderRadius="md" borderWidth="1px" borderColor="accent.danger">
+          <Box mt={2} p={2} bg="accent.danger/10" borderRadius="md" borderWidth="1px" borderColor="accent.danger/30">
             <VStack align="stretch" gap={1}>
               {status.errors.map((error, idx) => (
                 <Text key={idx} fontSize="xs" color="accent.danger" fontFamily="mono">
@@ -425,7 +426,7 @@ export default function DataManagementSection() {
 
         {/* Show applied migrations */}
         {result.success && result.migrations.length > 0 && (
-          <Box mt={2} p={2} bg="accent.teal" borderRadius="md" borderWidth="1px" borderColor="accent.teal">
+          <Box mt={2} p={2} bg="accent.teal/10" borderRadius="md" borderWidth="1px" borderColor="accent.teal/30">
             <VStack align="stretch" gap={1}>
               {result.migrations.map((migration, idx) => (
                 <Text key={idx} fontSize="xs" color="accent.teal" fontFamily="mono">
@@ -438,7 +439,7 @@ export default function DataManagementSection() {
 
         {/* Show errors */}
         {result.errors && result.errors.length > 0 && expandedErrors === 'migrate' && (
-          <Box mt={2} p={2} bg="accent.danger" borderRadius="md" borderWidth="1px" borderColor="accent.danger">
+          <Box mt={2} p={2} bg="accent.danger/10" borderRadius="md" borderWidth="1px" borderColor="accent.danger/30">
             <VStack align="stretch" gap={1}>
               {result.errors.map((error, idx) => (
                 <Text key={idx} fontSize="xs" color="accent.danger" fontFamily="mono">
@@ -665,7 +666,7 @@ export default function DataManagementSection() {
             </Text>
             {currentVersion !== null && (
               <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                Current database version: v{currentVersion} (only matching version allowed)
+                Current: v{currentVersion} · Accepts v{MINIMUM_SUPPORTED_DATA_VERSION}+
               </Text>
             )}
           </VStack>

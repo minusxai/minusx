@@ -55,8 +55,12 @@ export class PostgresAdapter implements IDatabaseAdapter {
   async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {
     const pool = this.getPool();
 
+    // pg serializes JS arrays as Postgres arrays {1,2,...} not JSON [1,2,...].
+    // All array columns in this schema are JSONB, so stringify arrays explicitly.
+    const serialized = params.map(p => Array.isArray(p) ? JSON.stringify(p) : p);
+
     try {
-      const result = await pool.query(sql, params);
+      const result = await pool.query(sql, serialized);
       return {
         rows: result.rows as T[],
         rowCount: result.rowCount || 0,
@@ -88,7 +92,8 @@ export class PostgresAdapter implements IDatabaseAdapter {
       // Create transaction context that uses dedicated client
       const txContext: ITransactionContext = {
         query: async <U>(sql: string, params?: any[]) => {
-          const result = await client.query(sql, params || []);
+          const serializedTx = (params || []).map((p: any) => Array.isArray(p) ? JSON.stringify(p) : p);
+          const result = await client.query(sql, serializedTx);
           return {
             rows: result.rows as U[],
             rowCount: result.rowCount || 0,
