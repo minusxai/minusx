@@ -19,7 +19,7 @@ import { orchestratePendingTools, ToolExecutionResult } from '../orchestrator';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 
-// Required to prevent Next.js from buffering the streaming response
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -158,7 +158,10 @@ async function processStream(
   try {
     // Parse request
     const body: ChatRequest = await request.json();
+    const _t1_auth = Date.now();
     user = await getEffectiveUser();
+    const _t2_conv = Date.now();
+    console.log(`[chat/stream] auth: ${_t2_conv - _t1_auth}ms`);
 
     if (!user) {
       await safeWrite(writer, encoder, 'error', {
@@ -177,6 +180,7 @@ async function processStream(
     );
     const conversationID = fileId;
     currentConversationID = conversationID;
+    console.log(`[chat/stream] getOrCreateConversation: ${Date.now() - _t2_conv}ms`);
 
     // Load log
     const initial_log_index = body.log_index ?? conversation.log.length;
@@ -208,9 +212,10 @@ async function processStream(
       let pythonErrorEvent: SSEEvent | null = null;
 
       let firstPythonEvent = true;
+      const _t0_python = Date.now();
       for await (const event of consumePythonStream('/api/chat/stream', requestPayload)) {
         if (firstPythonEvent) {
-          console.log(`[chat/stream route] first Python event after ${Date.now() - _t0_stream}ms`, { type: event.type });
+          console.log(`[chat/stream route] first Python event after ${Date.now() - _t0_python}ms (total from handler start: ${Date.now() - _t0_stream}ms)`, { type: event.type });
           firstPythonEvent = false;
         }
         // Check for abort before processing event - if aborted, stop forwarding events
@@ -437,7 +442,17 @@ async function processStream(
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  const writer = writable.getWriter();
+  const writer = writable.getWriter(); 
+
+  const response = new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Content-Encoding': 'identity',
+    }
+  });
 
   // Start streaming in the background — AFTER the Response is returned below.
   // Do NOT await this: returning the Response first is what triggers Next.js to
@@ -447,13 +462,5 @@ export async function POST(request: NextRequest) {
     void writer.close().catch(() => {});
   });
 
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'Content-Encoding': 'identity',
-    }
-  });
+  return response
 }

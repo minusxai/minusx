@@ -16,6 +16,9 @@ function readGitCommitSha(): string {
 const GIT_COMMIT_SHA = readGitCommitSha();
 
 const nextConfig: NextConfig = {
+  // Disable gzip compression so SSE streams are not buffered by the compressor.
+  // Individual SSE route handlers also set Content-Encoding: identity as belt-and-suspenders.
+  compress: false,
   // Embed git commit SHA at build time — available as process.env.GIT_COMMIT_SHA everywhere
   env: {
     GIT_COMMIT_SHA,
