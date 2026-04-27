@@ -19,6 +19,9 @@ import { orchestratePendingTools, ToolExecutionResult } from '../orchestrator';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 
+// Required to prevent Next.js from buffering the streaming response
+export const dynamic = 'force-dynamic';
+
 /**
  * SSE Event types
  */
@@ -45,14 +48,13 @@ function formatSSE(event: string, data: any): string {
 }
 
 /**
- * Safely enqueue to controller, handling closed controller gracefully
+ * Safely write to a TransformStream writer, ignoring errors from client disconnect
  */
-function safeEnqueue(controller: ReadableStreamDefaultController, encoder: TextEncoder, event: string, data: any): void {
+async function safeWrite(writer: WritableStreamDefaultWriter<Uint8Array>, encoder: TextEncoder, event: string, data: any): Promise<void> {
   try {
-    controller.enqueue(encoder.encode(formatSSE(event, data)));
-  } catch (e) {
-    // Controller already closed by client (page refresh, navigation, abort) - silently ignore
-    // This is expected behavior when the client disconnects
+    await writer.write(encoder.encode(formatSSE(event, data)));
+  } catch {
+    // Writer already closed (client disconnected) - silently ignore
   }
 }
 
@@ -135,313 +137,323 @@ async function* consumePythonStream(
 }
 
 /**
+ * Core streaming logic — runs in a background async task after the Response is returned.
+ * Using TransformStream + async IIFE pattern to avoid Next.js App Router buffering
+ * the ReadableStream until the route handler completes.
+ */
+async function processStream(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+  request: NextRequest
+): Promise<void> {
+  const _t0_stream = Date.now();
+
+  // Declare variables outside try block so they're accessible in catch
+  let currentConversationID = 0;
+  let currentLogIndex = 0;
+  let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
+  let accumulatedLogDiff: ConversationLogEntry[] = [];
+  let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
+
+  try {
+    // Parse request
+    const body: ChatRequest = await request.json();
+    user = await getEffectiveUser();
+
+    if (!user) {
+      await safeWrite(writer, encoder, 'error', {
+        type: 'error',
+        error: 'Unauthorized',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Get or create conversation (pass first message for auto-naming)
+    const { fileId, content: conversation } = await getOrCreateConversation(
+      body.conversationID ?? null,
+      user,
+      body.user_message ?? undefined
+    );
+    const conversationID = fileId;
+    currentConversationID = conversationID;
+
+    // Load log
+    const initial_log_index = body.log_index ?? conversation.log.length;
+    const log: ConversationLogEntry[] = conversation.log.slice(0, initial_log_index);
+
+    // Setup loop variables
+    let completed_tool_calls = body.completed_tool_calls?.map(tuple => tuple[1]) || [];
+    let user_message: string | null = body.user_message || null;
+    accumulatedLogDiff = [];
+    accumulatedCompletedToolCalls = [];
+    let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};
+    let currentFileId = fileId;
+    currentLogIndex = initial_log_index;
+    let finalPendingToolCalls: ToolCall[] = [];
+
+    // Automatic execution loop
+    while (true) {
+      // Call Python backend (streaming)
+      const requestPayload = {
+        log: [...log, ...accumulatedLogDiff],
+        user_message,
+        completed_tool_calls,
+        agent: body.agent || 'DefaultAgent',
+        agent_args: body.agent_args || {}
+      };
+
+      // Consume Python stream and forward events
+      let pythonDoneEvent: SSEEvent | null = null;
+      let pythonErrorEvent: SSEEvent | null = null;
+
+      let firstPythonEvent = true;
+      for await (const event of consumePythonStream('/api/chat/stream', requestPayload)) {
+        if (firstPythonEvent) {
+          console.log(`[chat/stream route] first Python event after ${Date.now() - _t0_stream}ms`, { type: event.type });
+          firstPythonEvent = false;
+        }
+        // Check for abort before processing event - if aborted, stop forwarding events
+        // but continue consuming the stream to get the done event
+        if (request.signal.aborted) {
+          if (event.type === 'done') {
+            pythonDoneEvent = event;
+          }
+          continue;
+        }
+
+        if (event.type === 'done') {
+          pythonDoneEvent = event;
+          // Don't forward done event yet - we may have more work
+        } else if (event.type === 'error') {
+          // Python backend error - treat as terminal event
+          pythonErrorEvent = event;
+          await safeWrite(writer, encoder, 'error', event);
+          break;
+        } else {
+          // Forward streaming events to frontend with conversationID added
+          const eventWithConversationID: StreamingEvent = {
+            ...(event as PythonStreamingEvent),
+            conversationID: currentConversationID
+          };
+          await safeWrite(writer, encoder, 'streaming_event', eventWithConversationID);
+        }
+      }
+
+      // If Python sent an error, throw it to be caught by outer catch block
+      if (pythonErrorEvent) {
+        throw new Error(`Python backend error: ${(pythonErrorEvent as any).error || 'Unknown error'}`);
+      }
+
+      if (!pythonDoneEvent || pythonDoneEvent.type !== 'done') {
+        throw new Error('Python stream ended without done event');
+      }
+
+      // Accumulate results
+      accumulatedLogDiff.push(...pythonDoneEvent.logDiff);
+      accumulatedCompletedToolCalls.push(...pythonDoneEvent.completed_tool_calls);
+
+      // Accumulate LLM calls
+      if (pythonDoneEvent.llm_calls) {
+        accumulatedLLMCalls = { ...accumulatedLLMCalls, ...pythonDoneEvent.llm_calls };
+      }
+
+      // Check for interruption before saving
+      if (request.signal.aborted) {
+        // Call Python to mark pending tools as interrupted
+        const closeResponse = await pythonBackendFetch('/api/chat/close', {
+          method: 'POST',
+          body: JSON.stringify({
+            log: [...log, ...accumulatedLogDiff]
+          })
+        });
+
+        if (closeResponse.ok) {
+          const { logDiff: interruptedLogDiff } = await closeResponse.json();
+          accumulatedLogDiff.push(...interruptedLogDiff);
+        }
+
+        // Save accumulated log (includes interrupted tools)
+        const appendResult = await appendLogToConversation(
+          currentFileId,
+          accumulatedLogDiff,
+          currentLogIndex,
+          user
+        );
+        currentConversationID = appendResult.fileId;
+        currentFileId = appendResult.fileId;
+        currentLogIndex += accumulatedLogDiff.length;
+
+        throw new UserInterruptError();
+      }
+
+      // Append to conversation (may fork)
+      const appendResult = await appendLogToConversation(
+        currentFileId,
+        pythonDoneEvent.logDiff,
+        currentLogIndex,
+        user
+      );
+
+      currentConversationID = appendResult.fileId;
+      currentFileId = appendResult.fileId;
+      currentLogIndex += pythonDoneEvent.logDiff.length;
+
+      // Track LLM call analytics in DuckDB (fire-and-forget)
+      if (pythonDoneEvent.llm_calls && Object.keys(pythonDoneEvent.llm_calls).length > 0) {
+        appEventRegistry.publish(AppEvents.LLM_CALL, {
+          llmCalls: pythonDoneEvent.llm_calls,
+          conversationId: currentConversationID,
+          mode: user.mode,
+          userId: user.userId,
+          userEmail: user.email,
+          userRole: user.role,
+        });
+      }
+
+      // Clear user_message after first call
+      user_message = null;
+
+      // No more pending tools - we're done
+      if (pythonDoneEvent.pending_tool_calls.length === 0) {
+        break;
+      }
+
+      // Orchestrate Next.js backend tool execution
+      const result = await orchestratePendingTools(
+        pythonDoneEvent.pending_tool_calls,
+        currentFileId,
+        currentLogIndex,
+        user,
+        {
+          signal: request.signal,
+          callbacks: {
+            onToolCompleted: (tool: ToolCall, result: ToolExecutionResult) => {
+              const event: StreamingEvent = {
+                conversationID: currentConversationID,
+                type: 'ToolCompleted',
+                payload: {
+                  role: 'tool',
+                  tool_call_id: result.tool_call_id,
+                  content: result.content,
+                  run_id: '',
+                  function: tool.function,
+                  details: result.details,
+                  created_at: new Date().toISOString()
+                } as CompletedToolCallFromPython
+              };
+              void safeWrite(writer, encoder, 'streaming_event', event);
+            }
+          }
+        }
+      );
+
+      // Update state from orchestration result
+      currentFileId = result.updatedFileId;
+      currentLogIndex = result.updatedLogIndex;
+      currentConversationID = result.updatedFileId;
+      accumulatedLogDiff.push(...result.logEntries);
+
+      // Combine remaining pending tools and spawned tools for frontend execution
+      const allPendingTools = [...result.remainingPendingTools, ...result.spawnedTools];
+
+      // Handle pending tools and completed tools
+      if (allPendingTools.length > 0) {
+        if (result.completedTools.length > 0) {
+          completed_tool_calls = result.completedTools;
+        } else {
+          finalPendingToolCalls = allPendingTools;
+          break;
+        }
+      } else if (result.completedTools.length > 0) {
+        completed_tool_calls = result.completedTools;
+      } else {
+        break;
+      }
+    }
+
+    // Send final done event
+    await safeWrite(writer, encoder, 'done', {
+      type: 'done',
+      conversationID: currentConversationID,
+      log_index: currentLogIndex,
+      pending_tool_calls: finalPendingToolCalls,
+      completed_tool_calls: accumulatedCompletedToolCalls,
+      debug: extractDebugMessages(accumulatedLogDiff),
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error: any) {
+    if (error instanceof UserInterruptError) {
+      await safeWrite(writer, encoder, 'done', {
+        type: 'done',
+        conversationID: currentConversationID,
+        log_index: currentLogIndex,
+        pending_tool_calls: [],
+        completed_tool_calls: accumulatedCompletedToolCalls,
+        debug: extractDebugMessages(accumulatedLogDiff),
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    console.error('[CHAT STREAM] Error:', error);
+    if (user) {
+      appEventRegistry.publish(AppEvents.ERROR, {
+        source: 'nextjs_stream',
+        message: error.message || 'Stream error',
+        mode: user.mode,
+        context: { route: '/api/chat/stream' },
+      });
+    }
+    await safeWrite(writer, encoder, 'error', {
+      type: 'error',
+      error: error.message || 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+    await safeWrite(writer, encoder, 'done', {
+      type: 'done',
+      conversationID: currentConversationID,
+      log_index: currentLogIndex,
+      pending_tool_calls: [],
+      completed_tool_calls: accumulatedCompletedToolCalls,
+      debug: extractDebugMessages(accumulatedLogDiff),
+      timestamp: new Date().toISOString()
+    });
+  } finally {
+    try { await writer.close(); } catch { /* already closed */ }
+  }
+}
+
+/**
  * POST /api/chat/stream
- * Streaming chat endpoint with Server-Sent Events
+ * Streaming chat endpoint with Server-Sent Events.
+ *
+ * Uses TransformStream + async IIFE pattern: the Response is returned immediately
+ * with the readable end, while the writable end is populated in a background task.
+ * This prevents Next.js App Router from buffering the entire ReadableStream before
+ * sending it to the client.
  */
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      // Declare variables outside try block so they're accessible in catch
-      let currentConversationID = 0;
-      let currentLogIndex = 0;
-      let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
-      let accumulatedLogDiff: ConversationLogEntry[] = [];
-      let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
-
-      try {
-        // Parse request
-        const body: ChatRequest = await request.json();
-        user = await getEffectiveUser();
-
-        if (!user) {
-          safeEnqueue(controller, encoder, 'error', {
-            type: 'error',
-            error: 'Unauthorized',
-            timestamp: new Date().toISOString()
-          });
-          controller.close();
-          return;
-        }
-
-        // Get or create conversation (pass first message for auto-naming)
-        const { fileId, content: conversation } = await getOrCreateConversation(
-          body.conversationID ?? null,
-          user,
-          body.user_message ?? undefined
-        );
-        const conversationID = fileId;
-        currentConversationID = conversationID;  // Initialize outer scope variable
-
-        // Load log
-        const initial_log_index = body.log_index ?? conversation.log.length;
-        const log: ConversationLogEntry[] = conversation.log.slice(0, initial_log_index);
-
-        // Setup loop variables
-        let completed_tool_calls = body.completed_tool_calls?.map(tuple => tuple[1]) || [];
-        let user_message: string | null = body.user_message || null;
-        accumulatedLogDiff = [];  // Reset outer scope variable
-        accumulatedCompletedToolCalls = [];  // Reset outer scope variable
-        let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};
-        let currentFileId = fileId;
-        currentLogIndex = initial_log_index;  // Initialize outer scope variable
-        let finalPendingToolCalls: ToolCall[] = [];
-
-        // Automatic execution loop
-        while (true) {
-          // Call Python backend (streaming)
-          const requestPayload = {
-            log: [...log, ...accumulatedLogDiff],
-            user_message,
-            completed_tool_calls,
-            agent: body.agent || 'DefaultAgent',
-            agent_args: body.agent_args || {}
-          };
-
-          // Consume Python stream and forward events
-          let pythonDoneEvent: SSEEvent | null = null;
-          let pythonErrorEvent: SSEEvent | null = null;
-
-          for await (const event of consumePythonStream('/api/chat/stream', requestPayload)) {
-            // Check for abort before processing event - if aborted, stop forwarding events
-            // but continue consuming the stream to get the done event
-            if (request.signal.aborted) {
-              if (event.type === 'done') {
-                pythonDoneEvent = event;
-              }
-              // Skip forwarding events if aborted to avoid "Controller is already closed" error
-              continue;
-            }
-
-            if (event.type === 'done') {
-              pythonDoneEvent = event;
-              // Don't forward done event yet - we may have more work
-            } else if (event.type === 'error') {
-              // Python backend error - treat as terminal event
-              pythonErrorEvent = event;
-              safeEnqueue(controller, encoder, 'error', event);
-              // Break immediately - no more processing after error
-              break;
-            } else {
-              // Forward streaming events to frontend with conversationID added
-              const eventWithConversationID: StreamingEvent = {
-                ...(event as PythonStreamingEvent),
-                conversationID: currentConversationID
-              };
-              safeEnqueue(controller, encoder, 'streaming_event', eventWithConversationID);
-            }
-          }
-
-          // If Python sent an error, throw it to be caught by outer catch block
-          if (pythonErrorEvent) {
-            throw new Error(`Python backend error: ${(pythonErrorEvent as any).error || 'Unknown error'}`);
-          }
-
-          if (!pythonDoneEvent || pythonDoneEvent.type !== 'done') {
-            throw new Error('Python stream ended without done event');
-          }
-
-          // Accumulate results
-          accumulatedLogDiff.push(...pythonDoneEvent.logDiff);
-          accumulatedCompletedToolCalls.push(...pythonDoneEvent.completed_tool_calls);
-
-          // Accumulate LLM calls
-          if (pythonDoneEvent.llm_calls) {
-            accumulatedLLMCalls = { ...accumulatedLLMCalls, ...pythonDoneEvent.llm_calls };
-          }
-
-          // Check for interruption before saving
-          if (request.signal.aborted) {
-            // Call Python to mark pending tools as interrupted
-            const closeResponse = await pythonBackendFetch('/api/chat/close', {
-              method: 'POST',
-              body: JSON.stringify({
-                log: [...log, ...accumulatedLogDiff]
-              })
-            });
-
-            if (closeResponse.ok) {
-              const { logDiff: interruptedLogDiff } = await closeResponse.json();
-              accumulatedLogDiff.push(...interruptedLogDiff);
-            }
-
-            // Save accumulated log (includes interrupted tools)
-            const appendResult = await appendLogToConversation(
-              currentFileId,
-              accumulatedLogDiff,
-              currentLogIndex,
-              user
-            );
-            currentConversationID = appendResult.fileId;
-            currentFileId = appendResult.fileId;
-            currentLogIndex += accumulatedLogDiff.length;
-
-            throw new UserInterruptError();
-          }
-
-          // Append to conversation (may fork)
-          // logDiff from Python already contains details in task_result entries
-          // (Python stores details passed in completed_tool_calls directly into TaskResult)
-          const appendResult = await appendLogToConversation(
-            currentFileId,
-            pythonDoneEvent.logDiff,
-            currentLogIndex,
-            user
-          );
-
-          currentConversationID = appendResult.fileId;
-          currentFileId = appendResult.fileId;
-          currentLogIndex += pythonDoneEvent.logDiff.length;
-
-          // Track LLM call analytics in DuckDB (fire-and-forget)
-          // IMPORTANT: Use UPDATED currentConversationID (may have changed due to forking)
-          if (pythonDoneEvent.llm_calls && Object.keys(pythonDoneEvent.llm_calls).length > 0) {
-            appEventRegistry.publish(AppEvents.LLM_CALL, {
-              llmCalls: pythonDoneEvent.llm_calls,
-              conversationId: currentConversationID,
-              
-              mode: user.mode,
-              userId: user.userId,
-              userEmail: user.email,
-              userRole: user.role,
-            });
-          }
-
-          // Clear user_message after first call
-          user_message = null;
-
-          // No more pending tools - we're done
-          if (pythonDoneEvent.pending_tool_calls.length === 0) {
-            break;
-          }
-
-          // Orchestrate Next.js backend tool execution
-          const result = await orchestratePendingTools(
-            pythonDoneEvent.pending_tool_calls,
-            currentFileId,
-            currentLogIndex,
-            user,
-            {
-              signal: request.signal,
-              callbacks: {
-                onToolCompleted: (tool: ToolCall, result: ToolExecutionResult) => {
-                  const event: StreamingEvent = {
-                    conversationID: currentConversationID,
-                    type: 'ToolCompleted',
-                    payload: {
-                      role: 'tool',
-                      tool_call_id: result.tool_call_id,
-                      content: result.content,
-                      run_id: '',
-                      function: tool.function,
-                      details: result.details,
-                      created_at: new Date().toISOString()
-                    } as CompletedToolCallFromPython
-                  };
-                  safeEnqueue(controller, encoder, 'streaming_event', event);
-                }
-              }
-            }
-          );
-
-          // Update state from orchestration result
-          currentFileId = result.updatedFileId;
-          currentLogIndex = result.updatedLogIndex;
-          currentConversationID = result.updatedFileId;
-          accumulatedLogDiff.push(...result.logEntries);
-
-          // Combine remaining pending tools and spawned tools for frontend execution
-          const allPendingTools = [...result.remainingPendingTools, ...result.spawnedTools];
-
-          // Handle pending tools and completed tools
-          if (allPendingTools.length > 0) {
-            if (result.completedTools.length > 0) {
-              // We have both completed and pending tools
-              // Continue loop to send completed tools to Python first
-              completed_tool_calls = result.completedTools;
-              // Don't break yet - we'll handle pending tools on next iteration
-            } else {
-              // No completed tools, just pending - break immediately
-              finalPendingToolCalls = allPendingTools;
-              break;
-            }
-          } else if (result.completedTools.length > 0) {
-            // No pending tools, but we have completed tools
-            // Continue loop to send them to Python
-            completed_tool_calls = result.completedTools;
-          } else {
-            // No completed tools and no pending tools - done
-            break;
-          }
-        }
-
-        // Send final done event
-        // completed_tool_calls already carry details — Python stores and returns them as-is
-        safeEnqueue(controller, encoder, 'done', {
-          type: 'done',
-          conversationID: currentConversationID,
-          log_index: currentLogIndex,
-          pending_tool_calls: finalPendingToolCalls,
-          completed_tool_calls: accumulatedCompletedToolCalls,
-          debug: extractDebugMessages(accumulatedLogDiff),
-          timestamp: new Date().toISOString()
-        });
-        controller.close();
-
-      } catch (error: any) {
-        // Handle user interruption gracefully
-        if (error instanceof UserInterruptError) {
-          // Log already saved before throwing, just return done event
-          safeEnqueue(controller, encoder, 'done', {
-            type: 'done',
-            conversationID: currentConversationID,
-            log_index: currentLogIndex,
-            pending_tool_calls: [],
-            completed_tool_calls: accumulatedCompletedToolCalls,
-            debug: extractDebugMessages(accumulatedLogDiff),
-            timestamp: new Date().toISOString()
-          });
-          controller.close();
-          return;
-        }
-
-        // Handle other errors
-        console.error('[CHAT STREAM] Error:', error);
-        if (user) {
-          appEventRegistry.publish(AppEvents.ERROR, {
-            source: 'nextjs_stream',
-            message: error.message || 'Stream error',
-            mode: user.mode,
-            context: { route: '/api/chat/stream' },
-          });
-        }
-        safeEnqueue(controller, encoder, 'error', {
-          type: 'error',
-          error: error.message || 'Unknown error',
-          timestamp: new Date().toISOString()
-        });
-        // Also send a done event so frontend knows stream is complete
-        safeEnqueue(controller, encoder, 'done', {
-          type: 'done',
-          conversationID: currentConversationID,
-          log_index: currentLogIndex,
-          pending_tool_calls: [],
-          completed_tool_calls: accumulatedCompletedToolCalls,
-          debug: extractDebugMessages(accumulatedLogDiff),
-          timestamp: new Date().toISOString()
-        });
-        controller.close();
-      }
-    }
+  // Start streaming in the background — AFTER the Response is returned below.
+  // Do NOT await this: returning the Response first is what triggers Next.js to
+  // start piping chunks to the client immediately as they are written.
+  processStream(writer, encoder, request).catch(err => {
+    console.error('[chat/stream] Unhandled processStream error:', err);
+    void writer.close().catch(() => {});
   });
 
-  return new Response(stream, {
+  return new Response(readable, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no' // Disable buffering in nginx and other reverse proxies
+      'X-Accel-Buffering': 'no',
+      'Content-Encoding': 'identity',
     }
   });
 }

@@ -333,10 +333,16 @@ chatListenerMiddleware.startListening({
       let buffer = '';
       let doneEventData: any = null;
       let errorData: any = null;
+      let firstChunk = true;
 
       try {
         while (true) {
+          const _t0_read = Date.now();
           const { done, value } = await reader.read();
+          if (firstChunk) {
+            console.log(`[chat/stream #2 sendMessage] first chunk (${Date.now() - _t0_sendMessage}ms from start, ${Date.now() - _t0_read}ms for read)`, { done, bytes: value?.length });
+            firstChunk = false;
+          }
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
