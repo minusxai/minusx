@@ -448,7 +448,7 @@ export async function POST(request: NextRequest) {
   const writer = writable.getWriter();
 
   // Ping flushes response headers to the client immediately.
-  void writer.write(encoder.encode(': ping\n\n'));
+  writer.write(encoder.encode(': ping\n\n'));
 
   processStream(writer, encoder, body, user, request.signal).catch(err => {
     console.error('[chat/stream] Unhandled processStream error:', err);
@@ -458,7 +458,7 @@ export async function POST(request: NextRequest) {
   return new Response(readable, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
       'Content-Encoding': 'identity',
