@@ -19,9 +19,8 @@ import { ConnectionContent } from '@/lib/types';
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
+import { resolvePath } from '@/lib/mode/path-resolver';
 
 interface ConnectionContainerV2Props {
   fileId: FileId;
@@ -60,6 +59,7 @@ export default function ConnectionContainerV2({
   const error = file?.loadError ?? null;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
+  const userMode = useAppSelector(state => state.auth.user?.mode) || 'org';
 
   // Merge content with persistableChanges
   const currentContent = file ? {
@@ -85,26 +85,12 @@ export default function ConnectionContainerV2({
 
     try {
       if (mode === 'create') {
-        // For create mode, use the special /api/connections POST endpoint
-        // This initializes the Python backend connection manager
-        const json = await fetchWithCache('/api/connections', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: effectiveName,  // Use effective name (includes metadata changes)
-            type: currentContent.type,
-            config: currentContent.config
-          }),
-          cacheStrategy: {
-            ttl: 0,
-            deduplicate: false,
-          },
-        });
+        // Set the correct name and path on the draft before saving.
+        // Server validates both (name format, path matches /database/{name}, live connection test).
+        const correctPath = resolvePath(userMode, `/database/${effectiveName}`);
+        editFile({ fileId: fileId as number, changes: { name: effectiveName, path: correctPath } });
 
-        console.log('[ConnectionContainerV2] API response:', json);
-        // successResponse returns { success: true, data: { id, name, ... } }
-        const result = json.data;
-        console.log('[ConnectionContainerV2] Extracted result:', result);
-        console.log('[ConnectionContainerV2] Current fileId:', fileId);
+        const result = await publishFile({ fileId });
         if (onSaveSuccess) {
           onSaveSuccess(result.id, result.name);
         } else {
@@ -135,7 +121,7 @@ export default function ConnectionContainerV2({
       console.error('[ConnectionContainerV2] Failed to save connection:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [currentContent, mode, fileId, router, effectiveName]);
+  }, [currentContent, mode, fileId, router, effectiveName, userMode]);
 
   // Cancel/revert handler
   const handleCancel = useCallback(() => {
