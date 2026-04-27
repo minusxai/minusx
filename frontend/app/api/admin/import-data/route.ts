@@ -17,6 +17,8 @@ import {
 } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion } from '@/lib/database/config-db';
+import { applyMigrations } from '@/lib/database/migrations';
+import { MINIMUM_SUPPORTED_DATA_VERSION } from '@/lib/database/constants';
 import { gunzip } from 'zlib';
 import { promisify } from 'util';
 
@@ -53,20 +55,44 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       );
     }
 
-    // Validate version matches current database
     const currentVersion = await getDataVersion();
-    if (uploadedData.version !== currentVersion) {
+    const fileVersion = uploadedData.version;
+
+    if (fileVersion < MINIMUM_SUPPORTED_DATA_VERSION) {
       return NextResponse.json({
         success: false,
         errors: [
-          `Version mismatch: File is v${uploadedData.version}, database is v${currentVersion}`,
-          'Please use CLI tools for migrations',
+          `File is v${fileVersion}, minimum supported version is v${MINIMUM_SUPPORTED_DATA_VERSION}. Re-export from a newer system.`,
         ],
       }, { status: 400 });
     }
 
+    if (fileVersion > currentVersion) {
+      return NextResponse.json({
+        success: false,
+        errors: [
+          `File is v${fileVersion}, database is v${currentVersion}. Downgrade is not supported.`,
+        ],
+      }, { status: 400 });
+    }
+
+    let importData = uploadedData;
+    const migratedFrom = fileVersion < currentVersion ? fileVersion : undefined;
+
+    if (migratedFrom !== undefined) {
+      try {
+        importData = applyMigrations(uploadedData, fileVersion);
+        importData.version = currentVersion;
+      } catch (migrationError: any) {
+        return NextResponse.json({
+          success: false,
+          errors: [`Migration failed: ${migrationError?.message ?? String(migrationError)}`],
+        }, { status: 400 });
+      }
+    }
+
     // Validate data integrity
-    const validation = validateInitData(uploadedData);
+    const validation = validateInitData(importData);
     if (!validation.valid) {
       return NextResponse.json({
         success: false,
@@ -75,14 +101,15 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }, { status: 400 });
     }
 
-    await atomicImport(uploadedData);
+    await atomicImport(importData);
 
     return NextResponse.json({
       success: true,
       message: 'Data imported successfully',
+      ...(migratedFrom !== undefined && { migratedFrom }),
       stats: {
-        users: uploadedData.users?.length ?? 0,
-        documents: uploadedData.documents?.length ?? 0,
+        users: importData.users?.length ?? 0,
+        documents: importData.documents?.length ?? 0,
       },
       warnings: validation.warnings,
     });
