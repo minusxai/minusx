@@ -25,6 +25,7 @@ import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
+import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
@@ -422,7 +423,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const contentToCreate = content;
 
     // Validate content schema before writing to DB
-    const createValidationError = validateFileState({ type, content: contentToCreate });
+    const createValidationError = validateFileState({ type, content: contentToCreate, name, path: finalPath });
     if (createValidationError) {
       throw new UserFacingError(`Invalid file content: ${createValidationError}`);
     }
@@ -435,7 +436,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Content types (question/dashboard/notebook/presentation/report) start as drafts until the
     // user explicitly saves. Structural/config types are immediately visible (draft: false).
-    const DRAFT_ON_CREATE_TYPES = new Set(['question', 'dashboard', 'notebook', 'presentation', 'report']);
+    const DRAFT_ON_CREATE_TYPES = new Set(['question', 'dashboard', 'notebook', 'presentation', 'report', 'connection', 'conversation']);
     const startAsDraft = DRAFT_ON_CREATE_TYPES.has(type);
 
     // Create file in database (returns numeric ID)
@@ -535,7 +536,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
 
     // Validate content schema before writing to DB
-    const saveValidationError = validateFileState({ type: existingFile.type, content: contentToSave });
+    const saveValidationError = await validateFileStateServer({ type: existingFile.type, content: contentToSave, name, path });
     if (saveValidationError) {
       throw new UserFacingError(`Invalid file content: ${saveValidationError}`);
     }

@@ -101,7 +101,7 @@ describe('Import/Export API Endpoints', () => {
         { id: 2, email: 'user2@alpha.com', name: 'User 2', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
       ],
       documents: [
-        { id: 1, name: 'Connection', path: '/org/connection', type: 'connection', content: { type: 'duckdb', config: { file_path: 'test.duckdb' } }, references: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },
+        { id: 1, name: 'test_db', path: '/org/database/test_db', type: 'connection', content: { type: 'duckdb', config: { file_path: 'test.duckdb' } }, references: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },
         { id: 2, name: 'Document 2', path: '/org/doc2', type: 'question', content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: 'default_db' }, references: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },
         { id: 3, name: 'Document 3', path: '/org/doc3', type: 'question', content: { query: 'SELECT 2', vizSettings: { type: 'table' as const }, connection_name: 'default_db' }, references: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString(), version: 1, last_edit_id: null },
       ],

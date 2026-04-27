@@ -42,15 +42,28 @@ function validateContent(input: ContentValidationInput): string | null {
 }
 
 /**
- * Validate file content by file type. Pass any object with { type, content } —
+ * Validate file content by file type. Pass any object with { type, content, name?, path? } —
  * returns an error string or null if valid / no validator for that type.
  */
-export function validateFileState(file: { type: FileType; content: unknown }): string | null {
+export function validateFileState(file: {
+  type: FileType;
+  content: unknown;
+  name?: string;
+  path?: string;
+}): string | null {
   if (file.type === 'question')
     return validateContent({ type: 'QuestionContent', data: file.content as QuestionContent });
   if (file.type === 'dashboard')
     return validateContent({ type: 'DashboardContent', data: file.content as DashboardContent });
   if (file.type === 'config')
     return validateOrgConfig(file.content) ? null : 'Invalid config structure';
+  if (file.type === 'connection') {
+    const conn = file.content as any;
+    if (!conn?.type || !conn?.config) return 'Connection must have type and config';
+    if (file.name && !/^[a-z0-9_]+$/.test(file.name))
+      return 'Connection name must contain only lowercase letters, numbers, and underscores';
+    if (file.path && file.name && !file.path.endsWith(`/database/${file.name}`))
+      return `Connection path must end with /database/${file.name}`;
+  }
   return null;
 }
