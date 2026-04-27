@@ -186,7 +186,7 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
           fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
           fontWeight="900"
           letterSpacing="-0.03em"
-          mt={2}
+          mt={10}
           mb={2}
           color="fg.default"
         >

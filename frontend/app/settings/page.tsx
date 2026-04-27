@@ -566,8 +566,8 @@ function SettingsContent() {
           fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
           fontWeight="900"
           letterSpacing="-0.03em"
-          mt={6}
-          mb={8}
+          mt={10}
+          mb={2}
           color="fg.default"
         >
           Settings

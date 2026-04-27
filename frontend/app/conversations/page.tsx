@@ -120,7 +120,7 @@ export default function HistoryPage() {
             </Box>
           </Flex>
 
-        <HStack justify="space-between" align="center" mt={6} mb={8}>
+        <HStack justify="space-between" align="flex-start" mt={10} mb={2}>
           <Heading
             fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
             fontWeight="900"
