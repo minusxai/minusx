@@ -129,6 +129,8 @@ chatListenerMiddleware.startListening({
       }
 
       // Streaming path (production) — conversationID is always a real positive ID
+      console.log('[chat/stream #1 createConversation] → request start', { conversationID });
+      const _t0_createConversation = Date.now();
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,6 +143,7 @@ chatListenerMiddleware.startListening({
         }),
         signal: abortController.signal
       });
+      console.log(`[chat/stream #1 createConversation] ← response received (${Date.now() - _t0_createConversation}ms)`, { conversationID, status: response.status });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -301,7 +304,8 @@ chatListenerMiddleware.startListening({
       }
 
       // Streaming path (production) — conversationID is always a real positive ID
-
+      console.log('[chat/stream #2 sendMessage] → request start', { conversationID });
+      const _t0_sendMessage = Date.now();
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -314,6 +318,7 @@ chatListenerMiddleware.startListening({
         }),
         signal: abortController.signal
       });
+      console.log(`[chat/stream #2 sendMessage] ← response received (${Date.now() - _t0_sendMessage}ms)`, { conversationID, status: response.status });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -493,6 +498,8 @@ chatListenerMiddleware.startListening({
       }
 
       // Streaming path
+      console.log('[chat/stream #3 editAndFork] → request start', { conversationID });
+      const _t0_editAndFork = Date.now();
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,6 +512,7 @@ chatListenerMiddleware.startListening({
         }),
         signal: abortController.signal
       });
+      console.log(`[chat/stream #3 editAndFork] ← response received (${Date.now() - _t0_editAndFork}ms)`, { conversationID, status: response.status });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -672,6 +680,8 @@ chatListenerMiddleware.startListening({
       }
 
       // Streaming path (production)
+      console.log('[chat/stream #4 toolResults] → request start', { conversationID });
+      const _t0_toolResults = Date.now();
       const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -685,6 +695,7 @@ chatListenerMiddleware.startListening({
         }),
         signal: abortController.signal
       });
+      console.log(`[chat/stream #4 toolResults] ← response received (${Date.now() - _t0_toolResults}ms)`, { conversationID, status: response.status });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
