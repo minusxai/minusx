@@ -186,9 +186,11 @@ chatListenerMiddleware.startListening({
               // Yield to the macrotask queue so React 18 can render each chunk
               // progressively. Without this, React batches all streaming dispatches
               // (microtask context) and renders everything at once after the stream ends.
-              if (data.type === 'StreamedContent') {
+              if (data.type === 'StreamedContent' || data.type === 'StreamedThinking') {
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
-                console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                if (data.type === 'StreamedContent') {
+                  console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                }
               }
             } else if (event === 'done') {
               doneEventData = data;
@@ -375,9 +377,11 @@ chatListenerMiddleware.startListening({
                 // Yield to the macrotask queue so React 18 can render each chunk
                 // progressively. Without this, React batches all streaming dispatches
                 // (microtask context) and renders everything at once after the stream ends.
-                if (data.type === 'StreamedContent') {
+                if (data.type === 'StreamedContent' || data.type === 'StreamedThinking') {
                   await new Promise<void>(resolve => setTimeout(resolve, 0));
-                  console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                  if (data.type === 'StreamedContent') {
+                    console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                  }
                 }
                 break;
 
@@ -555,9 +559,11 @@ chatListenerMiddleware.startListening({
               // Yield to the macrotask queue so React 18 can render each chunk
               // progressively. Without this, React batches all streaming dispatches
               // (microtask context) and renders everything at once after the stream ends.
-              if (data.type === 'StreamedContent') {
+              if (data.type === 'StreamedContent' || data.type === 'StreamedThinking') {
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
-                console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                if (data.type === 'StreamedContent') {
+                  console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                }
               }
             } else if (event === 'done') {
               doneEventData = data;
@@ -752,9 +758,11 @@ chatListenerMiddleware.startListening({
                 // Yield to the macrotask queue so React 18 can render each chunk
                 // progressively. Without this, React batches all streaming dispatches
                 // (microtask context) and renders everything at once after the stream ends.
-                if (data.type === 'StreamedContent') {
+                if (data.type === 'StreamedContent' || data.type === 'StreamedThinking') {
                   await new Promise<void>(resolve => setTimeout(resolve, 0));
-                  console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                  if (data.type === 'StreamedContent') {
+                    console.log('[chatListener] Resumed after setTimeout at', Date.now());
+                  }
                 }
                 break;
 

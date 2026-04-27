@@ -54,6 +54,78 @@ interface ChatInterfaceProps {
   readOnly?: boolean;
 }
 
+interface StreamingInfoBlockProps {
+  streamingInfo: {
+    thinkingText: string | null;
+    toolCalls: string[];
+    isAnswering: boolean;
+    completedCount: number;
+    totalCount: number;
+    latestAction: string;
+  };
+  viewMode: 'compact' | 'detailed';
+  showThinking: boolean;
+  toggleShowThinking: () => void;
+}
+
+function StreamingInfoBlock({ streamingInfo, viewMode, showThinking, toggleShowThinking }: StreamingInfoBlockProps) {
+  const { thinkingText, toolCalls, isAnswering, completedCount, totalCount, latestAction } = streamingInfo;
+
+  if (isAnswering) return null;
+
+  if (thinkingText && viewMode !== 'compact') {
+    return (
+      <Box my={2}>
+        <HStack
+          gap={1}
+          cursor="pointer"
+          onClick={toggleShowThinking}
+          _hover={{ opacity: 0.8 }}
+          color="fg.subtle"
+          fontSize="sm"
+          overflow="hidden"
+          w="100%"
+        >
+          <Box flexShrink={0}>{showThinking ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}</Box>
+          {!showThinking && (
+            <Text fontFamily="mono" fontSize="sm" color="fg.subtle" fontStyle="italic" truncate>
+              {thinkingText}
+            </Text>
+          )}
+          {showThinking && (
+            <Text fontFamily="mono" fontSize="sm" color="fg.subtle">Thinking</Text>
+          )}
+        </HStack>
+        {showThinking && (
+          <Box mt={1} pl={5} borderLeft="2px solid" borderColor="border.default">
+            <Text color="fg.subtle" fontSize="sm" fontFamily="mono" fontStyle="italic" whiteSpace="pre-wrap">
+              {thinkingText}
+            </Text>
+          </Box>
+        )}
+      </Box>
+    );
+  }
+
+  if (toolCalls.length > 0) {
+    if (viewMode === 'compact') {
+      return <StreamingProgressInline completedCount={completedCount} totalCount={totalCount} latestAction={latestAction} />;
+    }
+    return (
+      <HStack my={2} gap={2} flexWrap="wrap">
+        {toolCalls.map((tool, i) => (
+          <HStack key={i} px={2.5} py={1} borderRadius="full" borderWidth="1px" borderColor="accent.teal/30" bg="accent.teal/5" gap={1.5}>
+            <Spinner size="xs" color="accent.teal" />
+            <Text color="fg.muted" fontSize="xs" fontFamily="mono">{tool}</Text>
+          </HStack>
+        ))}
+      </HStack>
+    );
+  }
+
+  return null;
+}
+
 export default function ChatInterface({
   conversationId: providedConversationId,
   contextPath,
@@ -742,96 +814,14 @@ export default function ChatInterface({
               )}
 
               {/* Streaming info: show thinking text and tool calls while streaming (hide once answer is streaming) */}
-              {isStreaming && (() => {
-                const { thinkingText, toolCalls, isAnswering, completedCount, totalCount, latestAction } = streamingInfo;
-                if (isAnswering) return null;
-
-                // Thinking: one-line preview, expandable to full block (hidden in compact mode)
-                if (thinkingText && viewMode !== 'compact') {
-                  const isExpanded = showThinking;
-                  const toggleExpanded = toggleShowThinking;
-                  return (
-                    <Box my={2}>
-                      <HStack
-                        gap={1}
-                        cursor="pointer"
-                        onClick={toggleExpanded}
-                        _hover={{ opacity: 0.8 }}
-                        color="fg.subtle"
-                        fontSize="sm"
-                        overflow="hidden"
-                        w="100%"
-                      >
-                        <Box flexShrink={0}>{isExpanded ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}</Box>
-                        {!isExpanded && (
-                          <Text fontFamily="mono" fontSize="sm" color="fg.subtle" fontStyle="italic" truncate>
-                            {thinkingText}
-                          </Text>
-                        )}
-                        {isExpanded && (
-                          <Text fontFamily="mono" fontSize="sm" color="fg.subtle">
-                            Thinking
-                          </Text>
-                        )}
-                      </HStack>
-                      {isExpanded && (
-                        <Box
-                          mt={1}
-                          pl={5}
-                          borderLeft="2px solid"
-                          borderColor="border.default"
-                        >
-                          <Text
-                            color="fg.subtle"
-                            fontSize="sm"
-                            fontFamily="mono"
-                            fontStyle="italic"
-                            whiteSpace="pre-wrap"
-                          >
-                            {thinkingText}
-                          </Text>
-                        </Box>
-                      )}
-                    </Box>
-                  );
-                }
-
-                // Tool calls: live counter badge (compact) or pill badges (detailed)
-                if (toolCalls.length > 0) {
-                  if (viewMode === 'compact') {
-                    return (
-                      <StreamingProgressInline
-                        completedCount={completedCount}
-                        totalCount={totalCount}
-                        latestAction={latestAction}
-                      />
-                    );
-                  }
-                  return (
-                    <HStack my={2} gap={2} flexWrap="wrap">
-                      {toolCalls.map((tool, i) => (
-                        <HStack
-                          key={i}
-                          px={2.5}
-                          py={1}
-                          borderRadius="full"
-                          borderWidth="1px"
-                          borderColor="accent.teal/30"
-                          bg="accent.teal/5"
-                          gap={1.5}
-                        >
-                          <Spinner size="xs" color="accent.teal" />
-                          <Text color="fg.muted" fontSize="xs" fontFamily="mono">
-                            {tool}
-                          </Text>
-                        </HStack>
-                      ))}
-                    </HStack>
-                  );
-                }
-
-                return null;
-              })()}
+              {isStreaming && (
+                <StreamingInfoBlock
+                  streamingInfo={streamingInfo}
+                  viewMode={viewMode}
+                  showThinking={showThinking}
+                  toggleShowThinking={toggleShowThinking}
+                />
+              )}
 
               {/* Note: Pending user inputs are rendered via ToolCallDisplay in the message stream */}
             </GridItem></Grid>
