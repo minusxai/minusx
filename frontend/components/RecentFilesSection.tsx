@@ -403,11 +403,11 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
 // ─── Exported section components ─────────────────────────────────────
 
 /** AI-generated summary section */
-export function FeedSummary({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+export function FeedSummary() {
   const { config } = useConfigs();
   const { showFeedSummary } = useAppSelector(selectHomePage);
 
-  if (!showFeedSummary || simulateEmpty) return null;
+  if (!showFeedSummary) return null;
 
   return (
     <FeedDataProvider>
@@ -466,7 +466,7 @@ function FeedSummaryInner({ agentName }: { agentName: string }) {
 }
 
 /** Recent questions carousel section */
-export function RecentQuestions({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+export function RecentQuestions() {
   const { showRecentQuestions } = useAppSelector(selectHomePage);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
 
@@ -482,14 +482,14 @@ export function RecentQuestions({ simulateEmpty }: { simulateEmpty?: boolean } =
 
   if (!showRecentQuestions) return null;
 
-  const recentQuestions = simulateEmpty ? [] : (data?.recent.filter(f => f.fileType === 'question') ?? []);
+  const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
 
   return (
     <VStack gap={3} align="stretch">
       <SectionHeader label="Recently viewed" />
       {recentQuestions.length > 0 ? (
         <QuestionCarousel questions={recentQuestions} />
-      ) : (data || simulateEmpty) ? (
+      ) : data ? (
         <SectionEmptyState message="No questions viewed yet" linkLabel="Start exploring" linkHref="/explore" />
       ) : (
         <CarouselSkeleton />
@@ -499,7 +499,7 @@ export function RecentQuestions({ simulateEmpty }: { simulateEmpty?: boolean } =
 }
 
 /** Recent dashboards list section */
-export function RecentDashboards({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+export function RecentDashboards() {
   const { showRecentDashboards } = useAppSelector(selectHomePage);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
 
@@ -515,7 +515,7 @@ export function RecentDashboards({ simulateEmpty }: { simulateEmpty?: boolean } 
 
   if (!showRecentDashboards) return null;
 
-  const recentDashboards = simulateEmpty ? [] : (data?.recent.filter(f => f.fileType === 'dashboard') ?? []);
+  const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
 
   return (
     <VStack gap={3} align="stretch">
@@ -526,7 +526,7 @@ export function RecentDashboards({ simulateEmpty }: { simulateEmpty?: boolean } 
             <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
           ))}
         </VStack>
-      ) : (data || simulateEmpty) ? (
+      ) : data ? (
         <SectionEmptyState message="No dashboards yet" linkLabel="Create one" linkHref="/explore" />
       ) : (
         <ListSkeleton count={2} />
@@ -536,12 +536,12 @@ export function RecentDashboards({ simulateEmpty }: { simulateEmpty?: boolean } 
 }
 
 /** Recent conversations list section */
-export function RecentConversations({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+export function RecentConversations() {
   const { showRecentConversations } = useAppSelector(selectHomePage);
   const { data: convData } = useFetch(API.conversations.listRecent);
 
   if (!showRecentConversations) return null;
-  const recentConversations: ConversationSummary[] = simulateEmpty ? [] : ((convData as any)?.conversations || []);
+  const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
 
   return (
     <VStack gap={3} align="stretch">
@@ -552,7 +552,7 @@ export function RecentConversations({ simulateEmpty }: { simulateEmpty?: boolean
             <CompactConversationLink key={conv.id} conversation={conv} />
           ))}
         </VStack>
-      ) : (convData || simulateEmpty) ? (
+      ) : convData ? (
         <SectionEmptyState message="No conversations yet" linkLabel="Start a conversation" linkHref="/explore" />
       ) : (
         <ListSkeleton count={3} />

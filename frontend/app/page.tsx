@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, Flex, Heading, HStack, Text, Icon } from '@chakra-ui/react';
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAppSelector } from '@/store/hooks';
 import { selectHomePage } from '@/store/uiSlice';
-import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -17,7 +15,7 @@ import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import { useBreakpointValue } from '@chakra-ui/react';
-import { LuScanSearch, LuLayoutDashboard, LuFolder, LuHistory, LuBookOpen, LuSparkles, LuArrowRight, LuPlay } from 'react-icons/lu';
+import { LuScanSearch, LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 
 function QuickLink({ href, icon, label, color }: { href: string; icon: React.ElementType; label: string; color: string }) {
@@ -58,8 +56,8 @@ function SectionPanel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ActionCard({ href, icon, color, title, description, step }: {
-  href: string; icon: React.ElementType; color: string; title: string; description: string; step: number;
+function ActionCard({ href, icon, color, title, description }: {
+  href: string; icon: React.ElementType; color: string; title: string; description: string;
 }) {
   return (
     <Link href={href}>
@@ -123,7 +121,7 @@ function ColumnEmptyState({ icon, message, linkLabel, linkHref, color }: {
   );
 }
 
-function WelcomeBanner({ agentName, mode }: { agentName: string; mode: string }) {
+function WelcomeBanner() {
   return (
     <VStack align="stretch" gap={3}>
       <HStack gap={2}>
@@ -139,7 +137,6 @@ function WelcomeBanner({ agentName, mode }: { agentName: string; mode: string })
           color="accent.teal"
           title="Ask a question"
           description="Query your data with natural language or SQL"
-          step={1}
         />
         <ActionCard
           href="/hello-world"
@@ -147,7 +144,6 @@ function WelcomeBanner({ agentName, mode }: { agentName: string; mode: string })
           color="accent.primary"
           title="Take the tutorial"
           description="A quick walkthrough of the key features"
-          step={2}
         />
         <ActionCard
           href={`/?mode=tutorial`}
@@ -155,7 +151,6 @@ function WelcomeBanner({ agentName, mode }: { agentName: string; mode: string })
           color="accent.secondary"
           title="Try demo mode"
           description="Explore sample data and pre-built dashboards"
-          step={3}
         />
       </VStack>
     </VStack>
@@ -183,14 +178,6 @@ export default function Home() {
   }, [user, router, config, configLoading]);
 
   const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
-  const searchParams = useSearchParams();
-  const [simulateEmpty, setSimulateEmpty] = useState(false);
-
-  // ?empty URL param to preview empty states
-  useEffect(() => {
-    if (searchParams.has('empty')) setSimulateEmpty(true);
-  }, [searchParams]);
-
   const homePage = useAppSelector(selectHomePage);
 
   if (!user || configLoading) return null;
@@ -200,6 +187,7 @@ export default function Home() {
   const breadcrumbItems = [{ label: 'Home' }];
   const leftColEmpty = !homePage.showFeedSummary && !homePage.showRecentQuestions;
   const rightColEmpty = !homePage.showRecentDashboards && !homePage.showRecentConversations;
+  const isNewUser = config.setupWizard?.status !== 'complete';
 
   return (
     <Box minH="90vh" bg="bg.canvas" display="flex">
@@ -223,22 +211,19 @@ export default function Home() {
             {config.branding.displayName}
           </Heading>
 
-          {/* Quick links — hidden when empty/welcome state */}
-          {!simulateEmpty && (
-            <HStack gap={1} mt={4} mb={8} flexWrap="wrap">
-              <QuickLink href="/explore" icon={FILE_TYPE_METADATA.explore.icon} label="Explore" color="accent.teal" />
-              <QuickLink href={`/p/${mode}`} icon={LuFolder} label="Files" color="accent.primary" />
-              <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
-            </HStack>
-          )}
+          <HStack gap={1} mt={4} mb={8} flexWrap="wrap">
+            <QuickLink href="/explore" icon={FILE_TYPE_METADATA.explore.icon} label="Explore" color="accent.teal" />
+            <QuickLink href={`/p/${mode}`} icon={LuFolder} label="Files" color="accent.primary" />
+            <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
+          </HStack>
 
           {/* Two-column layout */}
-          <Flex gap={2} direction={{ base: 'column', lg: 'row' }} mt={simulateEmpty ? 4 : 0}>
+          <Flex gap={2} direction={{ base: 'column', lg: 'row' }}>
             {/* Left column */}
             <VStack flex="1" minW={0} align="stretch" gap={2}>
-              {simulateEmpty ? (
+              {isNewUser ? (
                 <SectionPanel>
-                  <WelcomeBanner agentName={config.branding.agentName} mode={mode} />
+                  <WelcomeBanner />
                 </SectionPanel>
               ) : leftColEmpty ? (
                 <ColumnEmptyState
@@ -251,7 +236,7 @@ export default function Home() {
               ) : (
                 <>
                   <SectionPanel><FeedSummary /></SectionPanel>
-                  <SectionPanel><RecentQuestions simulateEmpty={simulateEmpty} /></SectionPanel>
+                  <SectionPanel><RecentQuestions /></SectionPanel>
                 </>
               )}
             </VStack>
@@ -273,8 +258,8 @@ export default function Home() {
                 />
               ) : (
                 <>
-                  <SectionPanel><RecentDashboards simulateEmpty={simulateEmpty} /></SectionPanel>
-                  <SectionPanel><RecentConversations simulateEmpty={simulateEmpty} /></SectionPanel>
+                  <SectionPanel><RecentDashboards /></SectionPanel>
+                  <SectionPanel><RecentConversations /></SectionPanel>
                 </>
               )}
             </VStack>
