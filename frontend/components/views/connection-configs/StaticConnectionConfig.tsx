@@ -64,6 +64,8 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   onSave?: () => void;
   /** Override the default tab when not driven by URL params (e.g. wizard). */
   initialTab?: 'csv' | 'sheets';
+  /** When set, only show this tab — hide the tab switcher entirely. */
+  singleTab?: 'csv' | 'sheets';
 }
 
 interface PendingFile {
@@ -301,12 +303,13 @@ export default function StaticConnectionConfig({
   onPendingDeletion,
   onSave,
   initialTab,
+  singleTab,
 }: StaticConnectionConfigProps) {
   // ── Panel toggle ──────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activePanel, setActivePanel] = useState<ActivePanel>(
-    initialTab === 'sheets' || tabParam === 'sheets' ? 'sheets-add' : 'csv-upload'
+      initialTab === 'sheets' || tabParam === 'sheets' ? 'sheets-add' : 'csv-upload'
   );
 
   // ── CSV upload state ──────────────────────────────────────────────────────
@@ -619,8 +622,8 @@ export default function StaticConnectionConfig({
 
       {/* ── Add data — tabbed panel ── */}
       <Box borderRadius="lg" border="1px solid" borderColor="border.default" overflow="hidden">
-        {/* Tab bar */}
-        <HStack gap={0} borderBottom="1px solid" borderColor="border.subtle">
+        {/* Tab bar — hidden when singleTab locks to one mode */}
+        {!singleTab && <HStack gap={0} borderBottom="1px solid" borderColor="border.subtle">
           <Box
             as="button"
             flex={1}
@@ -640,7 +643,7 @@ export default function StaticConnectionConfig({
             <HStack gap={1.5} justify="center">
               <LuUpload size={13} color={activePanel === 'csv-upload' ? 'var(--chakra-colors-accent-teal)' : 'var(--chakra-colors-fg-muted)'} />
               <Text fontSize="xs" fontWeight={activePanel === 'csv-upload' ? '700' : '500'} color={activePanel === 'csv-upload' ? 'accent.teal' : 'fg.muted'}>
-                Upload CSV / xlsx
+                Upload CSV / XLSX
               </Text>
             </HStack>
           </Box>
@@ -668,7 +671,7 @@ export default function StaticConnectionConfig({
               </Text>
             </HStack>
           </Box>
-        </HStack>
+        </HStack>}
 
         {/* ── CSV upload panel ── */}
         {activePanel === 'csv-upload' && (
