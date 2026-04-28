@@ -279,7 +279,7 @@ export default function Sidebar() {
             isActive={pathname === homeItem.href}
           />
 
-          {navSections.map((section) => (
+          {mounted && navSections.map((section) => (
             <Box key={section.category}>
               {/* Section Header (only when expanded) */}
               {!isCollapsed && (
