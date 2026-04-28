@@ -746,6 +746,16 @@ export const buildWaterfallChartOption = ({
     yAxis: {
       type: 'value',
       name: yLabel,
+      ...(() => {
+        const formatter = (v: number) => applyPrefixSuffix(formatWithScale(v, yScale), yPrefix, ySuffix)
+        const allVals = allValues.filter(isFinite)
+        if (allVals.length === 0) return {}
+        const maxAbs = Math.max(...allVals.map(Math.abs))
+        const sampleVals = [0, maxAbs, -maxAbs, maxAbs / 2].filter(isFinite)
+        const maxLen = Math.max(...sampleVals.map(v => formatter(v).length))
+        const gap = Math.max(50, maxLen * 7 + 16)
+        return { nameGap: gap }
+      })(),
       axisLabel: {
         formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
       },
@@ -1573,6 +1583,19 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     applyPrefixSuffix(formatWithScale(value, yScaleLeft), yPrefix, ySuffix)
   const yAxisFormatterRight = (value: number) =>
     applyPrefixSuffix(formatWithScale(value, yScaleRight), yPrefixRight, ySuffixRight)
+
+  // Estimate y-axis nameGap to prevent overlap with tick labels.
+  // Sample a few representative values, format them, and use the longest to estimate pixel width.
+  const estimateYAxisNameGap = (formatter: (v: number) => string, seriesData: Array<{ data: number[] }>) => {
+    const allValues = seriesData.flatMap(s => s.data).filter(v => isFinite(v))
+    if (allValues.length === 0) return undefined // let theme default handle it
+    const maxVal = Math.max(...allValues.map(Math.abs))
+    // Sample the kind of values ECharts would show on ticks
+    const sampleValues = [0, maxVal, -maxVal, maxVal / 2].filter(isFinite)
+    const maxLabelLength = Math.max(...sampleValues.map(v => formatter(v).length))
+    // ~7px per character (monospace font at typical chart size) + 16px padding
+    return Math.max(50, maxLabelLength * 7 + 16)
+  }
   const yLogRangeProps = yScaleType === 'log' && (yMin === undefined || yMax === undefined)
     ? getLogExtent(positiveScatterYValues)
     : {}
@@ -1580,6 +1603,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     ...(yMin !== undefined ? { min: yMin } : {}),
     ...(yMax !== undefined ? { max: yMax } : {}),
   }
+  const yNameGap = estimateYAxisNameGap(yAxisFormatter, series)
+  const yNameGapLeft = useDualYAxis ? estimateYAxisNameGap(yAxisFormatterLeft, series.filter((_, i) => yAxisAssignments[i] === 0)) : undefined
+  const yNameGapRight = useDualYAxis ? estimateYAxisNameGap(yAxisFormatterRight, series.filter((_, i) => yAxisAssignments[i] === 1)) : undefined
   const yAxisConfig = useDualYAxis
     ? [
         {
@@ -1589,6 +1615,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...yExtraProps,
           ...yLogRangeProps,
           ...yRangeProps,
+          ...(yNameGapLeft ? { nameGap: yNameGapLeft } : {}),
           axisLabel: { formatter: yAxisFormatterLeft },
         },
         {
@@ -1598,6 +1625,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...yExtraProps,
           ...yLogRangeProps,
           ...yRangeProps,
+          ...(yNameGapRight ? { nameGap: yNameGapRight } : {}),
           axisLabel: { formatter: yAxisFormatterRight },
         },
       ]
@@ -1607,6 +1635,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         ...yExtraProps,
         ...yLogRangeProps,
         ...yRangeProps,
+        ...(yNameGap ? { nameGap: yNameGap } : {}),
         axisLabel: { formatter: yAxisFormatter },
       }
 
