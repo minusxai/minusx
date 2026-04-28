@@ -114,27 +114,36 @@ interface FunnelChartOptionConfig extends SpecialChartOptionConfig {
   orientation?: 'horizontal' | 'vertical'
 }
 
+// dataKind: the semantic type of the x-axis data (for formatting/tooltip logic)
+// echartsType: the actual ECharts axis type (bar/waterfall always → category)
 type CartesianXAxisKind = 'category' | 'time' | 'value'
+type EChartsXAxisType = 'category' | 'time' | 'value' | 'log'
 
-const resolveCartesianXAxisKind = (
+const resolveXAxisTypes = (
   xAxisColumns?: string[],
   columnTypes?: Record<string, ColumnType>,
-): CartesianXAxisKind => {
+  chartType?: string,
+  xScaleType?: string,
+): { columnKind: CartesianXAxisKind; axisType: EChartsXAxisType } => {
   const primaryXColumn = xAxisColumns?.[0]
-  if (!primaryXColumn) return 'category'
-
-  switch (columnTypes?.[primaryXColumn]) {
-    case 'number':
-      return 'value'
-    case 'date':
-      return 'time'
-    default:
-      return 'category'
+  let columnKind: CartesianXAxisKind = 'category'
+  if (primaryXColumn) {
+    switch (columnTypes?.[primaryXColumn]) {
+      case 'number': columnKind = 'value'; break
+      case 'date': columnKind = 'time'; break
+    }
   }
+
+  // Bar/waterfall charts always use category — bars are discrete, labels must match data points.
+  let axisType: EChartsXAxisType = columnKind
+  if (chartType === 'bar' || chartType === 'waterfall' || chartType === 'combo') axisType = 'category'
+  else if (columnKind === 'value' && xScaleType === 'log') axisType = 'log'
+
+  return { columnKind, axisType }
 }
 
-const toCartesianAxisValue = (rawValue: string, xAxisKind: CartesianXAxisKind): string | number => {
-  return xAxisKind === 'value' ? Number(rawValue) : rawValue
+const toCartesianAxisValue = (rawValue: string, axisType: EChartsXAxisType): string | number => {
+  return axisType === 'value' || axisType === 'log' ? Number(rawValue) : rawValue
 }
 
 const getCartesianYValue = (value: unknown): number | undefined => {
@@ -971,7 +980,7 @@ export const buildAnnotationGraphics = ({
   const plotBottom = rect.y + rect.height
   const plotHeight = rect.height
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
-  const xAxisKind = resolveCartesianXAxisKind(xAxisColumns, columnTypes)
+  const { axisType: echartsXAxisType } = resolveXAxisTypes(xAxisColumns, columnTypes, chartType)
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
   const getSeriesDisplayName = (seriesName: string): string => {
@@ -1053,7 +1062,7 @@ export const buildAnnotationGraphics = ({
 
       const pixel = chart.convertToPixel(
         finder,
-        [typeof annotation.x === 'number' ? annotation.x : toCartesianAxisValue(String(annotation.x), xAxisKind), pointY]
+        [typeof annotation.x === 'number' ? annotation.x : toCartesianAxisValue(String(annotation.x), echartsXAxisType), pointY]
       )
 
       if (!Array.isArray(pixel) || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) {
@@ -1312,7 +1321,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
   const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
-  const xAxisKind = resolveCartesianXAxisKind(xAxisColumns, columnTypes)
+  const { columnKind: xAxisKind, axisType: echartsXAxisType } = resolveXAxisTypes(xAxisColumns, columnTypes, chartType, xScaleType)
 
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix, yDecimalPoints } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -1393,10 +1402,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       : series[index].name
 
     const buildPointValue = (dataIndex: number, y: number) => (
-      [toCartesianAxisValue(xAxisData[dataIndex], xAxisKind), y] as [string | number, number]
+      [toCartesianAxisValue(xAxisData[dataIndex], echartsXAxisType), y] as [string | number, number]
     )
 
-    const usesPointData = type === 'scatter' || xAxisKind !== 'category'
+    const usesPointData = type === 'scatter' || echartsXAxisType !== 'category'
 
     const pointData = series[index].data
       .map((y, dataIndex) => {
@@ -1798,9 +1807,36 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       pageTextStyle: {fontSize: 10},
       formatter: (name: string) => getSeriesDisplayName(name),
     },
-    xAxis: xAxisKind === 'value'
+    xAxis: echartsXAxisType === 'category'
       ? {
-          type: (xScaleType === 'log' ? 'log' : 'value') as 'log' | 'value',
+          type: 'category' as const,
+          data: xAxisData,
+          name: xAxisLabel,
+          ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
+          axisLabel: {
+            hideOverlap: true,
+            // Format labels for date/number columns displayed as categories (e.g. bar charts)
+            ...(xAxisKind === 'time'
+              ? { formatter: (value: string) => formatDateValue(value, xDateFormat || 'dd MMM yyyy') }
+              : xAxisKind === 'value'
+              ? { formatter: (value: string) => formatLargeNumber(Number(value)) }
+              : { overflow: 'truncate' as const, width: 120 }),
+          },
+          ...(chartType === 'line' && { splitLine: { show: false } }),
+        }
+      : echartsXAxisType === 'time'
+      ? {
+          type: 'time' as const,
+          name: xAxisLabel,
+          ...(xMin !== undefined ? { min: xMin } : {}),
+          ...(xMax !== undefined ? { max: xMax } : {}),
+          axisLabel: {
+            hideOverlap: true,
+            formatter: (value: number) => formatDateValue(String(value), xDateFormat || 'dd MMM yyyy'),
+          },
+        }
+      : {
+          type: echartsXAxisType as 'value' | 'log',
           name: xAxisLabel,
           ...(xScaleType === 'log' ? {
             logBase: 10,
@@ -1831,29 +1867,6 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             hideOverlap: true,
             formatter: (value: number) => formatLargeNumber(value),
           },
-        }
-      : xAxisKind === 'time'
-      ? {
-          type: 'time' as const,
-          name: xAxisLabel,
-          ...(xMin !== undefined ? { min: xMin } : {}),
-          ...(xMax !== undefined ? { max: xMax } : {}),
-          axisLabel: {
-            hideOverlap: true,
-            formatter: (value: number) => formatDateValue(String(value), xDateFormat || 'dd MMM yyyy'),
-          },
-        }
-      : {
-          type: 'category' as const,
-          data: xAxisData,
-          name: xAxisLabel,
-          ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
-          axisLabel: {
-            hideOverlap: true,
-            overflow: 'truncate',
-            width: 120,
-          },
-          ...(chartType === 'line' && { splitLine: { show: false } }),
         },
     yAxis: yAxisConfig,
     series: chartSeries,
