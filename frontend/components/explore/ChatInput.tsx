@@ -5,8 +5,7 @@ import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text, 
 import { LuSendHorizontal, LuPaperclip, LuSettings2, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
-import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
-import { Checkbox } from '@/components/ui/checkbox';
+import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -26,7 +25,7 @@ interface ChatInputProps {
   isPreparing?: boolean;
   databaseName: string;
   onDatabaseChange: (name: string) => void;
-  container?: 'page' | 'sidebar';
+  container?: 'page' | 'sidebar' | 'floating';
   isCompact: boolean;
   colSpan?: any;
   colStart?: any;
@@ -65,16 +64,39 @@ export default function ChatInput({
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const pendingMessage = useAppSelector((state) => state.ui.sidebarPendingMessage);
-  const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
+
 
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const attachments = useAppSelector(selectChatAttachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<LexicalMentionEditorRef>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const prevIsPreparingRef = useRef(false);
+
+  const isFloating = container === 'floating';
+  const hasContent = input.trim().length > 0 || attachments.length > 0;
+  const isCollapsed = isFloating && !isFocused && !hasContent;
+
+  // Detect platform for keyboard shortcut display
+  const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const shortcutKey = isMac ? '⌘+k' : 'Ctrl+k';
+
+  // Global Cmd+K shortcut for floating mode
+  useEffect(() => {
+    if (!isFloating) return;
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        editorRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFloating]);
 
   // Clear input only after preparation completes (isPreparing: true → false)
   // so the text stays visible (greyed) while chart images are being uploaded.
@@ -95,12 +117,13 @@ export default function ChatInput({
     }
   }, [prefillText]);
 
-  // Handle pending message from SearchBar — wait for connections/context to finish loading
+  // Handle pending message from floating chat — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
     if (pendingMessage && container === 'sidebar' && !connectionsLoading && !contextsLoading) {
-      onSend(pendingMessage, []);
+      onSend(pendingMessage, attachments);
       dispatch(setSidebarPendingMessage(null));
+      dispatch(clearChatAttachments());
     }
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
@@ -175,8 +198,12 @@ export default function ChatInput({
     }
   };
 
-  const colSpan = colSpanProp ?? (isCompact ? 12 : { base: 12, md: 8, lg: 6 });
-  const colStart = colStartProp ?? (isCompact ? 1 : { base: 1, md: 3, lg: 4 });
+  const colSpan = colSpanProp ?? (isFloating ? 12 : isCompact ? 12 : { base: 12, md: 8, lg: 6 });
+  const colStart = colStartProp ?? (isFloating ? 1 : isCompact ? 1 : { base: 1, md: 3, lg: 4 });
+
+  const placeholder = isFloating
+    ? `Ask ${agentName} anything (${shortcutKey})`
+    : chatLocked ? `${agentName} is still working...` : isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`;
 
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
@@ -185,32 +212,101 @@ export default function ChatInput({
         >
         <GridItem colSpan={colSpan} colStart={colStart}>
             <Box
+            mx={isFloating ? 'auto' : undefined}
+            width={isFloating ? (isCollapsed ? { base: '85%', md: '450px', lg: '450px' } : { base: '90%', md: '600px', lg: '700px' }) : undefined}
+            transition="width 0.25s ease, border-radius 0.25s ease"
+            >
+            <Box
+            ref={containerRef}
             border="1px solid"
-            borderColor={isDraggingOver ? 'accent.teal' : 'border.default'}
-            boxShadow={isDraggingOver ? '0 0 0 1px var(--chakra-colors-accent-teal)' : undefined}
-            borderRadius="md"
-            bg="bg.canvas"
-            _focusWithin={isPreparing ? undefined : { borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
-            transition="all 0.2s"
+            borderColor={isDraggingOver ? 'accent.teal' : isFloating ? 'fg.default/30' : 'border.default'}
+            boxShadow={isDraggingOver ? '0 0 0 1px var(--chakra-colors-accent-teal)' : isFloating ? 'lg' : undefined}
+            borderRadius="xl"
+            bg={isFloating ? 'bg.subtle' : 'bg.canvas'}
+            backdropFilter={isFloating ? 'blur(12px)' : undefined}
+            _focusWithin={isPreparing ? undefined : { borderColor: 'accent.teal', boxShadow: isFloating ? '0 0 0 1px var(--chakra-colors-accent-teal), 0 10px 15px -3px rgba(0, 0, 0, 0.1)' : '0 0 0 1px var(--chakra-colors-accent-teal)' }}
+            transition="border-radius 0.25s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, background 0.2s ease"
             opacity={isPreparing ? 0.5 : 1}
             pointerEvents={isPreparing ? 'none' : undefined}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            cursor="text"
+            onMouseDown={(e) => {
+              // Focus editor when clicking empty space — skip if clicking a button/input/select
+              const target = e.target as HTMLElement;
+              if (!target.closest('button, input, select, [role="listbox"], [role="option"], [data-lexical-editor]')) {
+                e.preventDefault(); // Prevent blur from firing
+                editorRef.current?.focus();
+              }
+            }}
             >
             <VStack gap={0} align="stretch">
-                {/* Textarea with Mentions Support */}
-                <Box px={1} py={2}>
-                  <LexicalMentionEditor
-                    ref={editorRef}
-                    placeholder={chatLocked ? `${agentName} is still working...` : isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`}
-                    databaseName={databaseName}
-                    disabled={disabled || isPreparing || chatLocked}
-                    onSubmit={handleSend}
-                    onChange={setInput}
-                    whitelistedSchemas={whitelistedSchemas}
-                  />
-                </Box>
+                {/* Editor row with inline send button (collapsed only) */}
+                <HStack gap={0} align="center" pr={isCollapsed ? 3 : 0}>
+                  <Box flex="1" px={1} py={isCollapsed ? 0 : 2} transition="padding 0.25s ease">
+                    <Box
+                      maxHeight={isCollapsed ? '40px' : '200px'}
+                      overflow={isCollapsed ? 'hidden' : 'auto'}
+                      transition={isFloating ? 'max-height 0.25s ease' : undefined}
+                    >
+                      <LexicalMentionEditor
+                        ref={editorRef}
+                        placeholder={placeholder}
+                        databaseName={databaseName}
+                        disabled={disabled || isPreparing || chatLocked}
+                        singleLine={isCollapsed}
+                        onSubmit={handleSend}
+                        onChange={setInput}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={() => {
+                          // Delay check so activeElement updates after blur
+                          requestAnimationFrame(() => {
+                            if (!containerRef.current?.contains(document.activeElement)) {
+                              setIsFocused(false);
+                            }
+                          });
+                        }}
+                        whitelistedSchemas={whitelistedSchemas}
+                      />
+                    </Box>
+                  </Box>
+
+                  {/* Inline attach + send buttons — only when collapsed (pill state) */}
+                  {isCollapsed && (
+                    <>
+                      <IconButton
+                        aria-label="Attach file or image"
+                        onClick={() => {
+                          setIsFocused(true);
+                          setTimeout(() => fileInputRef.current?.click(), 300);
+                        }}
+                        variant="ghost"
+                        size="xs"
+                        color="fg.muted"
+                        _hover={{ color: 'accent.teal' }}
+                        borderRadius="md"
+                        flexShrink={0}
+                      >
+                        <Icon as={LuPaperclip} boxSize={3.5} />
+                      </IconButton>
+                      <IconButton
+                        aria-label="Send message"
+                        onClick={handleSend}
+                        disabled={disabled || !input.trim()}
+                        bg="accent.teal"
+                        color="white"
+                        _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                        size="xs"
+                        borderRadius="md"
+                        flexShrink={0}
+                      >
+                        <Icon as={LuSendHorizontal} boxSize={3.5} />
+                      </IconButton>
+                    </>
+                  )}
+                </HStack>
 
                 {/* Hidden file input for documents + images */}
                 <input
@@ -222,152 +318,153 @@ export default function ChatInput({
                   onChange={handleFileSelect}
                 />
 
-                {/* Attachment chips */}
-                {(attachments.length > 0 || uploadingNames.length > 0) && (
-                  <HStack px={3} py={1} gap={2} flexWrap="wrap" borderTop="1px solid" borderColor="border.muted">
-                    {uploadingNames.map((name, idx) => (
-                      <HStack
-                        key={`uploading-${idx}`}
-                        aria-label={`Uploading: ${name}`}
-                        bg="accent.teal/20"
-                        borderRadius="md"
-                        border="1px solid"
-                        borderColor="accent.teal"
-                        px={2}
-                        py={1}
-                        gap={1}
-                        fontSize="xs"
-                        fontFamily="mono"
-                        color="white"
-                      >
-                        <Spinner size="xs" color="accent.teal" />
-                        <Text truncate maxW="150px" color="fg.muted">{name}</Text>
-                      </HStack>
-                    ))}
-                    {attachments.map((att, idx) => (
-                      <HStack
-                        key={idx}
-                        aria-label={`Attachment: ${att.name}`}
-                        bg="accent.teal/50"
-                        borderRadius="md"
-                        border={"1px solid"}
-                        borderColor="accent.teal"
-                        px={2}
-                        py={1}
-                        gap={1}
-                        fontSize="xs"
-                        fontFamily="mono"
-                        color="white"
-                      >
-                        {att.type === 'image' && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={att.content}
-                            alt={att.name}
-                            style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }}
-                          />
-                        )}
-                        <Tooltip content={att.name} positioning={{ placement: 'top' }}>
-                          <Text truncate maxW="150px">{att.name}</Text>
-                        </Tooltip>
-                        {att.metadata?.pages ? (
-                          <Text color="white">({att.metadata.pages} pages)</Text>
-                        ) : att.metadata?.wordCount ? (
-                          <Text color="white">({att.metadata.wordCount} words)</Text>
-                        ) : null}
-                        <IconButton
-                          aria-label={`Remove attachment ${att.name}`}
-                          onClick={() => removeAttachment(idx)}
-                          variant="ghost"
-                          size="2xs"
-                          minW="auto"
-                          h="auto"
-                          p={0}
-                        >
-                          <Icon as={LuX} boxSize={3} />
-                        </IconButton>
-                      </HStack>
-                    ))}
-                  </HStack>
-                )}
-
-                {/* Bottom Control Bar */}
-                <HStack
-                px={3}
-                pb={2}
-                pt={2}
-                justify="space-between"
-                borderTop="1px solid"
-                borderColor="border.muted"
-                gap={2}
+                {/* Attachment chips — collapsed via max-height in floating mode */}
+                <Box
+                  maxHeight={isCollapsed ? '0px' : '200px'}
+                  opacity={isCollapsed ? 0 : 1}
+                  overflow="hidden"
+                  transition={isFloating ? 'max-height 0.2s ease 0.05s, opacity 0.2s ease 0.05s' : undefined}
                 >
-                {/* Left controls - Context selector + Database selector (page) or Auto-accept checkbox (sidebar) */}
-                <HStack gap={2}>
-                    {container === 'sidebar' ? (
-                      <Checkbox
-                        checked={!askForConfirmation}
-                        onCheckedChange={({ checked }) => dispatch(setAskForConfirmation(!checked))}
-                        size="sm"
-                      >
-                        <Text fontSize="xs" color="fg.muted" fontFamily="mono">Auto-accept Changes</Text>
-                      </Checkbox>
-                    ) : (
-                      <HStack gap={2} align="stretch">
-                        {onContextChange && (
-                          <ContextSelector
-                            selectedContextPath={selectedContextPath || null}
-                            selectedVersion={selectedVersion}
-                            onSelectContext={onContextChange}
-                          />
-                        )}
-                        <DatabaseSelector
-                          value={databaseName}
-                          onChange={({ connection_name }) => onDatabaseChange(connection_name)}
-                          size="sm"
-                        />
-                      </HStack>
-                    )}
-                </HStack>
-
-                <HStack gap={1}>
-                  <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
-                    <IconButton
-                      aria-label="Attach file or image"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isAgentRunning}
-                      variant="ghost"
-                      size="sm"
-                      color="fg.muted"
-                      _hover={{ color: 'accent.teal' }}
-                      _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                      borderRadius="md"
-                      flexShrink={0}
-                    >
-                      <Icon as={LuPaperclip} boxSize={4} />
-                    </IconButton>
-                  </Tooltip>
-
-                  {isPreparing ? (
-                    <Spinner size="sm" color="accent.teal" flexShrink={0} />
-                  ) : (
-                    <IconButton
-                      aria-label="Send message"
-                      onClick={handleSend}
-                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked}
-                      bg="accent.teal"
-                      color="white"
-                      _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                      _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                      size="sm"
-                      borderRadius="md"
-                      flexShrink={0}
-                    >
-                      <Icon as={LuSendHorizontal} boxSize={4} />
-                    </IconButton>
+                  {(attachments.length > 0 || uploadingNames.length > 0) && (
+                    <HStack px={3} py={1} gap={2} flexWrap="wrap" borderTop="1px solid" borderColor="border.muted">
+                      {uploadingNames.map((name, idx) => (
+                        <HStack
+                          key={`uploading-${idx}`}
+                          aria-label={`Uploading: ${name}`}
+                          bg="accent.teal/20"
+                          borderRadius="md"
+                          border="1px solid"
+                          borderColor="accent.teal"
+                          px={2}
+                          py={1}
+                          gap={1}
+                          fontSize="xs"
+                          fontFamily="mono"
+                          color="white"
+                        >
+                          <Spinner size="xs" color="accent.teal" />
+                          <Text truncate maxW="150px" color="fg.muted">{name}</Text>
+                        </HStack>
+                      ))}
+                      {attachments.map((att, idx) => (
+                        <HStack
+                          key={idx}
+                          aria-label={`Attachment: ${att.name}`}
+                          bg="accent.teal/50"
+                          borderRadius="md"
+                          border={"1px solid"}
+                          borderColor="accent.teal"
+                          px={2}
+                          py={1}
+                          gap={1}
+                          fontSize="xs"
+                          fontFamily="mono"
+                          color="white"
+                        >
+                          {att.type === 'image' && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={att.content}
+                              alt={att.name}
+                              style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }}
+                            />
+                          )}
+                          <Tooltip content={att.name} positioning={{ placement: 'top' }}>
+                            <Text truncate maxW="150px">{att.name}</Text>
+                          </Tooltip>
+                          {att.metadata?.pages ? (
+                            <Text color="white">({att.metadata.pages} pages)</Text>
+                          ) : att.metadata?.wordCount ? (
+                            <Text color="white">({att.metadata.wordCount} words)</Text>
+                          ) : null}
+                          <IconButton
+                            aria-label={`Remove attachment ${att.name}`}
+                            onClick={() => removeAttachment(idx)}
+                            variant="ghost"
+                            size="2xs"
+                            minW="auto"
+                            h="auto"
+                            p={0}
+                          >
+                            <Icon as={LuX} boxSize={3} />
+                          </IconButton>
+                        </HStack>
+                      ))}
+                    </HStack>
                   )}
-                </HStack>
-                </HStack>
+                </Box>
+
+                {/* Bottom Control Bar — collapsed via max-height in floating mode */}
+                <Box
+                  maxHeight={isCollapsed ? '0px' : '100px'}
+                  opacity={isCollapsed ? 0 : 1}
+                  overflow="hidden"
+                  transition={isFloating ? 'max-height 0.2s ease 0.05s, opacity 0.2s ease 0.05s' : undefined}
+                >
+                  <HStack
+                  px={3}
+                  pb={2}
+                  pt={1}
+                  justify="space-between"
+                  gap={2}
+                  >
+                  {/* Left controls - Context + Database status indicators */}
+                  <HStack gap={1.5} align="center">
+                    <ContextSelector
+                      selectedContextPath={selectedContextPath || null}
+                      selectedVersion={selectedVersion}
+                      onSelectContext={onContextChange || (() => {})}
+                      compact
+                    />
+                    <DatabaseSelector
+                      value={databaseName}
+                      onChange={({ connection_name }) => onDatabaseChange(connection_name)}
+                      size="sm"
+                      compact
+                    />
+                  </HStack>
+
+                  <HStack gap={1}>
+                    <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
+                      <IconButton
+                        aria-label="Attach file or image"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isAgentRunning}
+                        variant="ghost"
+                        size="xs"
+                        color="fg.muted"
+                        _hover={{ color: 'accent.teal' }}
+                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                        borderRadius="md"
+                        flexShrink={0}
+                      >
+                        <Icon as={LuPaperclip} boxSize={3.5} />
+                      </IconButton>
+                    </Tooltip>
+
+                    {isPreparing ? (
+                      <Spinner size="sm" color="accent.teal" flexShrink={0} />
+                    ) : (
+                      <IconButton
+                        aria-label="Send message"
+                        onClick={handleSend}
+                        disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked}
+                        bg="accent.teal"
+                        color="white"
+                        _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                        _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                        size="xs"
+                        borderRadius="md"
+                        flexShrink={0}
+                      >
+                        <Icon as={LuSendHorizontal} boxSize={3.5} />
+                      </IconButton>
+                    )}
+                  </HStack>
+                  </HStack>
+                </Box>
             </VStack>
+            </Box>
             </Box>
         </GridItem>
     </Grid>

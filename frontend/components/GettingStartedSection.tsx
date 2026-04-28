@@ -198,13 +198,13 @@ export default function GettingStartedSection() {
     return null;
   }
 
-  const accentColor = isTutorialMode ? 'accent.danger' : 'accent.teal';
+  const accentColor = 'accent.teal';
 
   return (
     <Box
-      bg={isTutorialMode ? 'accent.danger/5' : 'accent.teal/5'}
+      bg="accent.teal/5"
       border="1px solid"
-      borderColor={isTutorialMode ? 'accent.danger/20' : 'accent.teal/20'}
+      borderColor="accent.teal/20"
       borderRadius="xl"
       mb={6}
       overflow="hidden"
@@ -217,7 +217,7 @@ export default function GettingStartedSection() {
         justify="space-between"
         cursor="pointer"
         onClick={() => setIsCollapsed(!isCollapsed)}
-        _hover={{ bg: isTutorialMode ? 'accent.danger/10' : 'accent.teal/10' }}
+        _hover={{ bg: 'accent.teal/10' }}
         transition="background 0.2s"
       >
         <HStack gap={3}>

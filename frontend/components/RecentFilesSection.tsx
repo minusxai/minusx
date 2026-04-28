@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { Box, HStack, Text, VStack, Icon } from '@chakra-ui/react';
+import { useEffect, useState, useCallback, createContext, useContext as useReactContext } from 'react';
+import { Box, HStack, Text, VStack, Icon, Skeleton } from '@chakra-ui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import { useAppSelector } from '@/store/hooks';
-import { selectRightSidebarUIState, selectShowRecentFiles, selectDevMode } from '@/store/uiSlice';
+import { selectRightSidebarUIState, selectDevMode, selectHomePage } from '@/store/uiSlice';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -43,9 +43,75 @@ function relativeTime(isoString: string): string {
   return `${Math.floor(diffDay / 30)}mo ago`;
 }
 
+/** Section header with horizontal rule */
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <HStack gap={2}>
+      <Box flex="1" h="1px" bg="border.default" />
+      <Text fontSize="2xs" fontFamily="mono" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
+        {label}
+      </Text>
+    </HStack>
+  );
+}
+
+/** Empty state with optional CTA link */
+function SectionEmptyState({ message, linkLabel, linkHref }: { message: string; linkLabel?: string; linkHref?: string }) {
+  return (
+    <VStack gap={2} py={4} align="center">
+      <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+        {message}
+      </Text>
+      {linkLabel && linkHref && (
+        <Link href={linkHref}>
+          <HStack
+            gap={1.5}
+            px={3}
+            py={1}
+            borderRadius="full"
+            bg="accent.teal/10"
+            cursor="pointer"
+            transition="all 0.15s ease"
+            _hover={{ bg: 'accent.teal/20' }}
+          >
+            <Icon as={LuArrowRight} color="accent.teal" boxSize={3} />
+            <Text fontSize="2xs" fontWeight="600" fontFamily="mono" color="accent.teal">
+              {linkLabel}
+            </Text>
+          </HStack>
+        </Link>
+      )}
+    </VStack>
+  );
+}
+
+/** Skeleton for list sections (dashboards, conversations) */
+function ListSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <VStack gap={2} align="stretch">
+      {Array.from({ length: count }, (_, i) => (
+        <HStack key={i} gap={2.5} py={1.5} px={2}>
+          <Skeleton height="12px" width="12px" borderRadius="sm" />
+          <Skeleton height="10px" flex="1" borderRadius="sm" />
+          <Skeleton height="10px" width="40px" borderRadius="sm" />
+        </HStack>
+      ))}
+    </VStack>
+  );
+}
+
+/** Skeleton for the chart carousel */
+function CarouselSkeleton() {
+  return (
+    <Box borderRadius="lg" bg="bg.surface" overflow="hidden" h="340px" p={4}>
+      <Skeleton height="14px" width="60%" borderRadius="sm" mb={4} />
+      <Skeleton height="250px" width="100%" borderRadius="md" />
+    </Box>
+  );
+}
+
 /** Live chart card using the same component as DashboardView */
 function QuestionChartCard({ file }: { file: RecentFile }) {
-  const router = useRouter();
   return (
     <Box
       borderRadius="lg"
@@ -54,9 +120,6 @@ function QuestionChartCard({ file }: { file: RecentFile }) {
       h="340px"
       display="flex"
       flexDirection="column"
-      transition="all 0.2s ease"
-      cursor="pointer"
-      onClick={() => router.push(`/f/${generateFileUrl(file.fileId, file.fileName)}`)}
     >
       <SmartEmbeddedQuestionContainer
         questionId={file.fileId}
@@ -178,16 +241,16 @@ const SUMMARY_COLLAPSED_LINES = 5;
 
 function SummaryCollapsible({ summary }: { summary: string }) {
   const [expanded, setExpanded] = useState(false);
-  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * 60;
-  const maxMaxLen = SUMMARY_COLLAPSED_LINES * 60;
+  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * 90;
+  const maxMaxLen = SUMMARY_COLLAPSED_LINES * 90;
   const needsCollapse = summary.length > maxMaxLen;
   const displayText = !expanded && needsCollapse
     ? summary.slice(0, maxLen).trimEnd() + '...'
     : summary;
 
   return (
-    <Box>
-      <Markdown textColor="fg.muted" fontSize="xs">{displayText}</Markdown>
+    <Box lineHeight="1.55">
+      <Markdown textColor="fg.muted" fontSize="sm">{displayText}</Markdown>
       {needsCollapse && (
         <Text
           as="button"
@@ -242,38 +305,290 @@ function FeedWrapper({ enabled, children }: { enabled?: boolean; children: React
   );
 }
 
-/** Shared feed content — used by both standalone column and sidebar */
-export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
-  const { config } = useConfigs();
-  const devMode = useAppSelector(selectDevMode);
-  const showRecentFiles = useAppSelector(selectShowRecentFiles);
+// ─── Shared data context so split sections share one fetch ───────────
+
+interface FeedDataContextValue {
+  data: HomeAnalyticsData | null;
+  summary: string | null;
+  summaryLoading: boolean;
+  recentConversations: ConversationSummary[];
+  convLoaded: boolean;
+  fetchSummary: (files: RecentFile[], skipCache?: boolean) => Promise<void>;
+}
+
+const FeedDataContext = createContext<FeedDataContextValue | null>(null);
+
+function useFeedData() {
+  const ctx = useReactContext(FeedDataContext);
+  if (!ctx) throw new Error('useFeedData must be used within FeedDataProvider');
+  return ctx;
+}
+
+/** Provider that fetches analytics + conversations once, shares via context */
+function FeedDataProvider({ children }: { children: React.ReactNode }) {
+  const homePageConfig = useAppSelector(selectHomePage);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
   const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const lastAppStateRef = useRef<any>(null);
   const { data: convData } = useFetch(API.conversations.listRecent);
   const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
 
   useEffect(() => {
-    if (!showRecentFiles) return;
     fetch('/api/analytics/recent-files')
       .then(res => res.json())
       .then(json => {
         if (json.success) setData(json.data);
       })
       .catch(() => {});
-  }, [showRecentFiles]);
+  }, []);
 
   const fetchSummary = useCallback(async (files: RecentFile[], skipCache = false) => {
-    if (files.length === 0) return;
+    const questionIds = homePageConfig.feedSummaryQuestionIds.length > 0
+      ? homePageConfig.feedSummaryQuestionIds
+      : files.filter(f => f.fileType === 'question').slice(0, 3).map(f => f.fileId);
 
-    const questionIds = files
-      .filter(f => f.fileType === 'question')
-      .slice(0, 3)
-      .map(f => f.fileId);
+    if (questionIds.length === 0) return;
+
+    setSummaryLoading(true);
+    try {
+      const augmented = await readFiles(questionIds, { runQueries: true });
+
+      const hasData = augmented.some(aug => {
+        return aug.queryResults?.some(qr => qr.rows && qr.rows.length > 0);
+      });
+      if (!hasData) {
+        setSummaryLoading(false);
+        return;
+      }
+
+      const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
+      const fullAppState = { files: appState, context: contextDocs || '' };
+
+      const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
+        method: 'POST',
+        body: JSON.stringify({ appState: fullAppState, prompt: homePageConfig.feedSummaryPrompt || undefined }),
+        cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
+        skipCache,
+      });
+      if (json.success && json.summary) setSummary(json.summary);
+    } catch (err) {
+      console.error('[FeedSummary] Error:', err);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [contextDocs, homePageConfig.feedSummaryPrompt, homePageConfig.feedSummaryQuestionIds]);
+
+  useEffect(() => {
+    if (!data) return;
+    fetchSummary(data.recent);
+  }, [data, fetchSummary]);
+
+  return (
+    <FeedDataContext.Provider value={{
+      data,
+      summary,
+      summaryLoading,
+      recentConversations,
+      convLoaded: !!convData,
+      fetchSummary,
+    }}>
+      {children}
+    </FeedDataContext.Provider>
+  );
+}
+
+// ─── Exported section components ─────────────────────────────────────
+
+/** AI-generated summary section */
+export function FeedSummary() {
+  const { config } = useConfigs();
+  const { showFeedSummary } = useAppSelector(selectHomePage);
+
+  if (!showFeedSummary) return null;
+
+  return (
+    <FeedDataProvider>
+      <FeedSummaryInner agentName={config.branding.agentName} />
+    </FeedDataProvider>
+  );
+}
+
+function FeedSummaryInner({ agentName }: { agentName: string }) {
+  const { data, summary, summaryLoading, fetchSummary } = useFeedData();
+
+  if (!summary && !summaryLoading) return null;
+
+  return (
+    <VStack gap={3} align="stretch">
+      <HStack justify="space-between" align="center">
+        <Text fontSize="xs" fontWeight="700" fontFamily="mono" color="accent.teal" letterSpacing="0.1em" textTransform="uppercase">
+          {agentName} feed
+        </Text>
+        {data && summary && (
+          <Box
+            as="button"
+            aria-label="Re-generate summary"
+            onClick={() => fetchSummary(data.recent, true)}
+            display="inline-flex"
+            alignItems="center"
+            gap={1}
+            px={1.5}
+            py={0.5}
+            borderRadius="sm"
+            fontSize="2xs"
+            fontFamily="mono"
+            color="fg.subtle"
+            cursor={summaryLoading ? 'default' : 'pointer'}
+            opacity={summaryLoading ? 0.4 : 0.6}
+            _hover={summaryLoading ? {} : { color: 'accent.teal', opacity: 1 }}
+            transition="all 0.15s"
+          >
+            <Icon as={LuRefreshCw} boxSize={2.5} css={summaryLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+            Re-generate summary
+          </Box>
+        )}
+      </HStack>
+
+      {summaryLoading && !summary ? (
+        <VStack gap={2} align="stretch">
+          <Skeleton height="10px" width="100%" borderRadius="sm" />
+          <Skeleton height="10px" width="90%" borderRadius="sm" />
+          <Skeleton height="10px" width="75%" borderRadius="sm" />
+        </VStack>
+      ) : summary ? (
+        <SummaryCollapsible summary={summary} />
+      ) : null}
+    </VStack>
+  );
+}
+
+/** Recent questions carousel section */
+export function RecentQuestions() {
+  const { showRecentQuestions } = useAppSelector(selectHomePage);
+  const [data, setData] = useState<HomeAnalyticsData | null>(null);
+
+  useEffect(() => {
+    if (!showRecentQuestions) return;
+    fetch('/api/analytics/recent-files')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setData(json.data);
+      })
+      .catch(() => {});
+  }, [showRecentQuestions]);
+
+  if (!showRecentQuestions) return null;
+
+  const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
+
+  return (
+    <VStack gap={3} align="stretch">
+      <SectionHeader label="Recently viewed" />
+      {recentQuestions.length > 0 ? (
+        <QuestionCarousel questions={recentQuestions} />
+      ) : data ? (
+        <SectionEmptyState message="No questions viewed yet" linkLabel="Start exploring" linkHref="/explore" />
+      ) : (
+        <CarouselSkeleton />
+      )}
+    </VStack>
+  );
+}
+
+/** Recent dashboards list section */
+export function RecentDashboards() {
+  const { showRecentDashboards } = useAppSelector(selectHomePage);
+  const [data, setData] = useState<HomeAnalyticsData | null>(null);
+
+  useEffect(() => {
+    if (!showRecentDashboards) return;
+    fetch('/api/analytics/recent-files')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setData(json.data);
+      })
+      .catch(() => {});
+  }, [showRecentDashboards]);
+
+  if (!showRecentDashboards) return null;
+
+  const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
+
+  return (
+    <VStack gap={3} align="stretch">
+      <SectionHeader label="Recent dashboards" />
+      {recentDashboards.length > 0 ? (
+        <VStack gap={1.5} align="stretch">
+          {recentDashboards.map(file => (
+            <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
+          ))}
+        </VStack>
+      ) : data ? (
+        <SectionEmptyState message="No dashboards yet" linkLabel="Create one" linkHref="/explore" />
+      ) : (
+        <ListSkeleton count={2} />
+      )}
+    </VStack>
+  );
+}
+
+/** Recent conversations list section */
+export function RecentConversations() {
+  const { showRecentConversations } = useAppSelector(selectHomePage);
+  const { data: convData } = useFetch(API.conversations.listRecent);
+
+  if (!showRecentConversations) return null;
+  const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
+
+  return (
+    <VStack gap={3} align="stretch">
+      <SectionHeader label="Recent conversations" />
+      {recentConversations.length > 0 ? (
+        <VStack gap={1.5} align="stretch">
+          {recentConversations.map(conv => (
+            <CompactConversationLink key={conv.id} conversation={conv} />
+          ))}
+        </VStack>
+      ) : convData ? (
+        <SectionEmptyState message="No conversations yet" linkLabel="Start a conversation" linkHref="/explore" />
+      ) : (
+        <ListSkeleton count={3} />
+      )}
+    </VStack>
+  );
+}
+
+// ─── Legacy combined FeedContent (used by sidebar wrapper) ───────────
+
+/** Shared feed content — used by both standalone column and sidebar */
+export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
+  const { config } = useConfigs();
+  const homePageConfig = useAppSelector(selectHomePage);
+  const user = useAppSelector(state => state.auth.user);
+  const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
+  const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
+  const [data, setData] = useState<HomeAnalyticsData | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const { data: convData } = useFetch(API.conversations.listRecent);
+  const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
+
+  useEffect(() => {
+    fetch('/api/analytics/recent-files')
+      .then(res => res.json())
+      .then(json => {
+        if (json.success) setData(json.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const fetchSummary = useCallback(async (files: RecentFile[], skipCache = false) => {
+    const questionIds = homePageConfig.feedSummaryQuestionIds.length > 0
+      ? homePageConfig.feedSummaryQuestionIds
+      : files.filter(f => f.fileType === 'question').slice(0, 3).map(f => f.fileId);
 
     if (questionIds.length === 0) return;
 
@@ -291,13 +606,11 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       }
 
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
-
       const fullAppState = { files: appState, context: contextDocs || '' };
-      lastAppStateRef.current = fullAppState;
 
       const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
         method: 'POST',
-        body: JSON.stringify({ appState: fullAppState }),
+        body: JSON.stringify({ appState: fullAppState, prompt: homePageConfig.feedSummaryPrompt || undefined }),
         cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
         skipCache,
       });
@@ -307,14 +620,12 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
     } finally {
       setSummaryLoading(false);
     }
-  }, [contextDocs]);
+  }, [contextDocs, homePageConfig.feedSummaryPrompt, homePageConfig.feedSummaryQuestionIds]);
 
   useEffect(() => {
     if (!data) return;
     fetchSummary(data.recent);
   }, [data, fetchSummary]);
-
-  if (!showRecentFiles) return null;
 
   const analyticsLoading = !data;
   const hasRecent = (data?.recent.length ?? 0) > 0;
@@ -322,9 +633,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const hasAnything = hasRecent || hasConversations;
 
   // Nothing loaded yet — show skeleton
-  if (analyticsLoading && !devMode) {
-    // Only show skeleton if conversations also haven't loaded yet
-    // (avoids flash of skeleton when analytics will be empty)
+  if (analyticsLoading) {
     if (!convData) {
       return (
         <FeedWrapper enabled={wrapper}><VStack gap={4} align="stretch">
@@ -345,12 +654,11 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
         </VStack></FeedWrapper>
       );
     }
-    // Analytics still loading but conversations loaded — only show feed if conversations exist
     if (!hasConversations) return null;
   }
 
   // Everything loaded but nothing to show
-  if (!analyticsLoading && !hasAnything && !devMode) return null;
+  if (!analyticsLoading && !hasAnything) return null;
 
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
@@ -387,8 +695,8 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
         )}
       </HStack>
 
-      {/* Summary — only render when there's content to show */}
-      {(summary || (summaryLoading && hasRecent) || (devMode && lastAppStateRef.current)) && (
+      {/* Summary */}
+      {(summary || (summaryLoading && hasRecent)) && (
         <Box>
           {summaryLoading && !summary ? (
             <Text fontSize="xs" color="fg.subtle" fontFamily="mono" fontStyle="italic">
@@ -397,52 +705,21 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
           ) : summary ? (
             <SummaryCollapsible summary={summary} />
           ) : null}
-          {devMode && lastAppStateRef.current && (
-            <Box as="details" mt={2} fontSize="2xs" fontFamily="mono" color="fg.subtle">
-              <Box as="summary" cursor="pointer" _hover={{ color: 'fg.muted' }}>
-                app_state
-              </Box>
-              <Box
-                mt={1}
-                p={2}
-                bg="bg.canvas"
-                borderRadius="sm"
-                border="1px solid"
-                borderColor="border.default"
-                maxH="300px"
-                overflowY="auto"
-                whiteSpace="pre-wrap"
-                wordBreak="break-all"
-              >
-                {JSON.stringify(lastAppStateRef.current, null, 2)}
-              </Box>
-            </Box>
-          )}
         </Box>
       )}
 
       {/* Recently viewed — questions carousel */}
-      {hasRecent && recentQuestions.length > 0 && (
+      {homePageConfig.showRecentQuestions && hasRecent && recentQuestions.length > 0 && (
         <>
-          <HStack gap={2}>
-            <Box flex="1" h="1px" bg="border.default" />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
-              Recently viewed
-            </Text>
-          </HStack>
+          <SectionHeader label="Recently viewed" />
           <QuestionCarousel questions={recentQuestions} />
         </>
       )}
 
       {/* Recent dashboards */}
-      {hasRecent && recentDashboards.length > 0 && (
+      {homePageConfig.showRecentDashboards && hasRecent && recentDashboards.length > 0 && (
         <>
-          <HStack gap={2}>
-            <Box flex="1" h="1px" bg="border.default" />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
-              Recent dashboards
-            </Text>
-          </HStack>
+          <SectionHeader label="Recent dashboards" />
           <VStack gap={1.5} align="stretch">
             {recentDashboards.map(file => (
               <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
@@ -452,14 +729,9 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       )}
 
       {/* Recent conversations */}
-      {recentConversations.length > 0 && (
+      {homePageConfig.showRecentConversations && recentConversations.length > 0 && (
         <>
-          <HStack gap={2}>
-            <Box flex="1" h="1px" bg="border.default" />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="500" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
-              Recent conversations
-            </Text>
-          </HStack>
+          <SectionHeader label="Recent conversations" />
           <VStack gap={1.5} align="stretch">
             {recentConversations.map(conv => (
               <CompactConversationLink key={conv.id} conversation={conv} />

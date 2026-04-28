@@ -28,7 +28,7 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean; showRecentFiles?: boolean } = {};
+      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean; homePage?: Record<string, unknown> } = {};
       const dev = localStorage.getItem('devMode');
       if (dev !== null) flags.devMode = dev === 'true';
       const confirm = localStorage.getItem('askForConfirmation');
@@ -47,8 +47,8 @@ export function DataLoader() {
       if (unrestricted !== null) flags.unrestrictedMode = unrestricted === 'true';
       const compactChat = localStorage.getItem('compactChatEnabled');
       if (compactChat !== null) flags.compactChatEnabled = compactChat === 'true';
-      const recentFiles = localStorage.getItem('showRecentFiles');
-      if (recentFiles !== null) flags.showRecentFiles = recentFiles === 'true';
+      const hp = localStorage.getItem('homePage');
+      if (hp !== null) { try { flags.homePage = JSON.parse(hp); } catch { /* ignore */ } }
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
     } catch { /* ignore */ }
   }, []);

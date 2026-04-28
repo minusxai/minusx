@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { Box, Text, HStack, Icon, Menu, VStack, Spinner } from '@chakra-ui/react';
-import { LuChevronDown, LuBadgeCheck } from 'react-icons/lu';
+import { LuChevronDown, LuBadgeCheck, LuCheck } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 
 export interface SelectorOption {
@@ -24,6 +25,180 @@ interface GenericSelectorProps {
   size?: 'sm' | 'md';
   color?: string;  // Used for border and icon
   label?: string;  // aria-label for the trigger element
+  compact?: boolean;  // Show as small icon-only indicator with expand on hover
+  compactLabel?: string;  // Prefix label shown in compact mode (e.g., "Database")
+}
+
+/** Compact mode — icon + tiny badge at rest, label expands on hover or while menu is open */
+function CompactSelector({
+  value,
+  onChange,
+  options,
+  loading = false,
+  placeholder = 'Select...',
+  emptyMessage,
+  defaultIcon,
+  label,
+  compactLabel,
+}: Pick<GenericSelectorProps, 'value' | 'onChange' | 'options' | 'loading' | 'placeholder' | 'emptyMessage' | 'defaultIcon' | 'color' | 'label' | 'compactLabel'>) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Keep label expanded briefly after menu closes so user sees the update
+  const [recentlyClosed, setRecentlyClosed] = useState(false);
+  const selectedOption = options.find(opt => opt.value === value);
+
+  const itemName = loading ? 'Loading...'
+    : options.length === 0 ? (emptyMessage || 'Not available')
+    : selectedOption?.label || options[0]?.label || placeholder || 'Select...';
+  const displayLabel = compactLabel ? `${compactLabel}: ${itemName}` : itemName;
+
+  const isConnected = !loading && options.length > 0;
+  const hasDropdown = !loading && options.length > 1;
+
+  const expanded = menuOpen || recentlyClosed;
+  const expandedStyle = expanded ? { maxWidth: '200px', opacity: 1 } : undefined;
+
+  const pill = (
+    <HStack
+      gap={1}
+      px={1.5}
+      py={0.5}
+      borderRadius="md"
+      cursor={hasDropdown ? 'pointer' : 'default'}
+      transition="background 0.15s ease"
+      aria-label={label}
+      _hover={{ bg: 'bg.muted' }}
+      role="group"
+    >
+      {loading ? (
+        <Spinner size="xs" colorPalette="gray" />
+      ) : (
+        <Box position="relative" flexShrink={0}>
+          <Icon as={defaultIcon || LuCheck} boxSize={3.5} color={isConnected ? 'fg.muted' : 'fg.subtle'} />
+          {isConnected && (
+            <Box
+              position="absolute"
+              bottom="2px"
+              right="-2px"
+              w="9px"
+              h="9px"
+              borderRadius="full"
+              bg="accent.teal"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Icon as={LuCheck} boxSize={2} color="bg.panel" strokeWidth={3} />
+            </Box>
+          )}
+        </Box>
+      )}
+      <Box
+        maxW="0px"
+        overflow="hidden"
+        opacity={0}
+        transition="max-width 0.2s ease, opacity 0.15s ease"
+        whiteSpace="nowrap"
+        css={{ '[role=group]:hover &': { maxWidth: '200px', opacity: 1 } }}
+        style={expandedStyle}
+      >
+        <Text fontSize="xs" color="fg.muted" fontWeight="500" pr={0.5}>
+          {displayLabel}
+        </Text>
+      </Box>
+      {hasDropdown && (
+        <Icon
+          as={LuChevronDown}
+          boxSize={3}
+          color="fg.subtle"
+          flexShrink={0}
+          opacity={0}
+          transition="opacity 0.15s ease"
+          css={{ '[role=group]:hover &': { opacity: 1 } }}
+          style={expanded ? { opacity: 1 } : undefined}
+        />
+      )}
+    </HStack>
+  );
+
+  if (!hasDropdown) return pill;
+
+  return (
+    <Menu.Root
+      open={menuOpen}
+      onOpenChange={(e) => {
+        setMenuOpen(e.open);
+        if (!e.open) {
+          // Keep label visible briefly after close so user sees the selection
+          setRecentlyClosed(true);
+          setTimeout(() => setRecentlyClosed(false), 1500);
+        }
+      }}
+    >
+      <Menu.Trigger asChild>
+        {pill}
+      </Menu.Trigger>
+      <Menu.Positioner zIndex={2000}>
+        <Menu.Content
+          minW="200px"
+          maxW="360px"
+          bg="bg.surface"
+          borderColor="border.default"
+          shadow="lg"
+          py={1}
+          px={0}
+        >
+          {options.map((option) => (
+            <Menu.Item
+              key={option.value}
+              value={option.value}
+              px={3}
+              py={1.5}
+              cursor="pointer"
+              bg={option.value === value ? 'bg.muted' : 'transparent'}
+              _hover={{ bg: 'bg.emphasis' }}
+              onClick={() => onChange(option.value)}
+            >
+              <HStack gap={1.5} justify="space-between" w="100%">
+                <HStack gap={1.5} minW={0} flex={1}>
+                  {(option.icon || defaultIcon) && (
+                    <Icon
+                      as={option.icon || defaultIcon}
+                      boxSize={3.5}
+                      color={option.value === value ? 'fg' : 'fg.muted'}
+                      flexShrink={0}
+                    />
+                  )}
+                  <Text
+                    fontSize="xs"
+                    fontWeight={option.value === value ? '600' : '400'}
+                    whiteSpace="nowrap"
+                    overflow="hidden"
+                    textOverflow="ellipsis"
+                  >
+                    {option.label}
+                  </Text>
+                  {option.subtitle && (
+                    <Text
+                      fontSize="2xs"
+                      color="fg.muted"
+                      fontFamily="mono"
+                      textTransform="uppercase"
+                      whiteSpace="nowrap"
+                    >
+                      ({option.subtitle})
+                    </Text>
+                  )}
+                </HStack>
+                {option.value === value && (
+                  <Icon as={LuCheck} boxSize={3.5} color="fg.muted" flexShrink={0} strokeWidth={2.5} />
+                )}
+              </HStack>
+            </Menu.Item>
+          ))}
+        </Menu.Content>
+      </Menu.Positioner>
+    </Menu.Root>
+  );
 }
 
 export default function GenericSelector({
@@ -38,6 +213,8 @@ export default function GenericSelector({
   size = 'sm',
   color = 'accent.secondary',
   label,
+  compact = false,
+  compactLabel,
 }: GenericSelectorProps) {
   // Find the selected option to display
   const selectedOption = options.find(opt => opt.value === value);
@@ -63,6 +240,24 @@ export default function GenericSelector({
     overflow: 'hidden' as const,
     textOverflow: 'ellipsis' as const,
   };
+
+  // Compact mode — icon + badge at rest, expands label on hover / menu open
+  if (compact) {
+    return (
+      <CompactSelector
+        value={value}
+        onChange={onChange}
+        options={options}
+        loading={loading}
+        placeholder={placeholder}
+        emptyMessage={emptyMessage}
+        defaultIcon={defaultIcon}
+        color={color}
+        label={label}
+        compactLabel={compactLabel}
+      />
+    );
+  }
 
   // Loading state
   if (loading) {

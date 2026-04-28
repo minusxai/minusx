@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
-import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs, Badge, HStack, Icon } from '@chakra-ui/react';
+import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, Icon, Input, Textarea } from '@chakra-ui/react';
 import { LuRefreshCw, LuUser } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setCompactChatEnabled, setShowRecentFiles } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setCompactChatEnabled, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -28,7 +28,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
-type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'integrations';
+type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'integrations';
 
 interface SettingEntry {
   tab: TabId;
@@ -127,6 +127,84 @@ function FileTabContent({ path, Container, createFolder, createType }: {
   );
 }
 
+function HomePageSettings() {
+  const dispatch = useAppDispatch();
+  const homePage = useAppSelector(selectHomePage);
+  const [promptDraft, setPromptDraft] = useState(homePage.feedSummaryPrompt);
+  const [idsDraft, setIdsDraft] = useState(homePage.feedSummaryQuestionIds.join(', '));
+
+  const toggle = (key: 'showFeedSummary' | 'showRecentQuestions' | 'showRecentDashboards' | 'showRecentConversations') =>
+    (checked: boolean) => dispatch(setHomePageConfig({ [key]: checked }));
+
+  const commitPrompt = () => {
+    if (promptDraft !== homePage.feedSummaryPrompt) {
+      dispatch(setHomePageConfig({ feedSummaryPrompt: promptDraft }));
+    }
+  };
+
+  const commitIds = () => {
+    const parsed = idsDraft.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    dispatch(setHomePageConfig({ feedSummaryQuestionIds: parsed }));
+  };
+
+  return (
+    <VStack align="stretch" gap={4}>
+      <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+        <Box px={6} py={3} borderBottomWidth="1px" borderColor="border">
+          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+            Sections
+          </Text>
+        </Box>
+        <VStack align="stretch" gap={0} divideY="1px">
+          <SettingRow section="Home Page" title="Feed Summary" description="AI-generated summary from recent questions" control={<SwitchControl checked={homePage.showFeedSummary} onChange={toggle('showFeedSummary')} />} />
+          <SettingRow section="Home Page" title="Recent Questions" description="Carousel of recently viewed question charts" control={<SwitchControl checked={homePage.showRecentQuestions} onChange={toggle('showRecentQuestions')} />} />
+          <SettingRow section="Home Page" title="Recent Dashboards" description="List of recently viewed dashboards" control={<SwitchControl checked={homePage.showRecentDashboards} onChange={toggle('showRecentDashboards')} />} />
+          <SettingRow section="Home Page" title="Recent Conversations" description="List of recent conversations" control={<SwitchControl checked={homePage.showRecentConversations} onChange={toggle('showRecentConversations')} />} />
+        </VStack>
+      </Box>
+
+      <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+        <Box px={6} py={3} borderBottomWidth="1px" borderColor="border">
+          <Text fontSize="xs" fontWeight="semibold" color="fg.muted" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+            Feed Summary
+          </Text>
+        </Box>
+        <VStack align="stretch" gap={0} divideY="1px">
+          <Flex direction="column" gap={2} py={5} px={6}>
+            <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Summary Prompt</Text>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">Custom prompt sent to the AI when generating the feed summary. Leave empty for default.</Text>
+            <Textarea
+              size="sm"
+              fontFamily="mono"
+              fontSize="xs"
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              onBlur={commitPrompt}
+              placeholder="Generate a feed summary."
+              rows={3}
+              aria-label="Settings > Home Page > Summary Prompt"
+            />
+          </Flex>
+          <Flex direction="column" gap={2} py={5} px={6}>
+            <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Question IDs</Text>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">Comma-separated question IDs to use for the summary. Leave empty to auto-select the 3 most recent.</Text>
+            <Input
+              size="sm"
+              fontFamily="mono"
+              fontSize="xs"
+              value={idsDraft}
+              onChange={(e) => setIdsDraft(e.target.value)}
+              onBlur={commitIds}
+              placeholder="e.g. 42, 87, 123"
+              aria-label="Settings > Home Page > Question IDs"
+            />
+          </Flex>
+        </VStack>
+      </Box>
+    </VStack>
+  );
+}
+
 function SettingsContent() {
   const dispatch = useAppDispatch();
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
@@ -141,7 +219,6 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const compactChatEnabled = useAppSelector((state) => state.ui.compactChatEnabled ?? true);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
-  const showRecentFiles = useAppSelector((state) => state.ui.showRecentFiles ?? true);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -331,19 +408,6 @@ function SettingsContent() {
       ),
       visible: isEditorOrAdmin,
     },
-    {
-      tab: 'general',
-      section: 'Experimental Flags',
-      title: 'Recent Files',
-      description: 'Show recently viewed dashboards and questions on the home page.',
-      control: (
-        <SwitchControl
-          checked={showRecentFiles}
-          onChange={(checked) => dispatch(setShowRecentFiles(checked))}
-        />
-      ),
-      visible: isEditorOrAdmin,
-    },
     // ── General: Developer Tools toggle (admin only, unlabeled card) ──
     {
       tab: 'general',
@@ -411,11 +475,12 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, compactChatEnabled, showRecentFiles]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, compactChatEnabled]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
+    { id: 'homepage', label: 'Home Page', custom: <HomePageSettings /> },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
     {
       id: 'messaging',
@@ -553,16 +618,21 @@ function SettingsContent() {
   };
 
   return (
-    <Box minH="100vh" bg="bg.canvas">
-      <Container maxW={needsWideLayout ? 'container.xl' : 'container.md'} py={{ base: 4, md: 8 }} px={{ base: 4, md: 8 }} transition="max-width 0.2s">
-        <Breadcrumb items={breadcrumbItems} />
+    <Box minH="90vh" bg="bg.canvas" display="flex">
+      <VStack flex="1" minW="0" position="relative" align="stretch">
+        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
+          <Flex justify="space-between" align="center" mb={4} gap={4}>
+            <Box flex="1" minW={0}>
+              <Breadcrumb items={breadcrumbItems} />
+            </Box>
+          </Flex>
 
         <Heading
           fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
           fontWeight="900"
           letterSpacing="-0.03em"
           mt={10}
-          mb={8}
+          mb={2}
           color="fg.default"
         >
           Settings
@@ -594,7 +664,8 @@ function SettingsContent() {
           Build: {GIT_COMMIT_SHA}
         </Text>
 
-      </Container>
+        </Box>
+      </VStack>
     </Box>
   );
 }

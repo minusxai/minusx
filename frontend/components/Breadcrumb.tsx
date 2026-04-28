@@ -44,6 +44,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
   const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
+  const hasDarkBanner = !!bannerColor; // only custom bannerColor is dark; demo banner is light
   const hasBanner = isTutorialMode || !!bannerColor;
   const { unrelatedDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal } = useSaveDecision(currentFileId);
   const isLastItem = (index: number) => index === items.length - 1;
@@ -54,10 +55,10 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
     : undefined;
   const hasDropdown = sortedSiblingFiles && sortedSiblingFiles.length > 0;
 
-  // Colors that adapt based on banner mode (demo or custom banner)
-  const textColor = hasBanner ? 'white' : 'fg.muted';
-  const textColorActive = hasBanner ? 'white' : 'fg.default';
-  const chevronColor = hasBanner ? 'rgba(255,255,255,0.6)' : 'var(--chakra-colors-fg-subtle)';
+  // Colors that adapt based on banner mode (only dark banners get white text)
+  const textColor = hasDarkBanner ? 'white' : 'fg.muted';
+  const textColorActive = hasDarkBanner ? 'white' : 'fg.default';
+  const chevronColor = hasDarkBanner ? 'rgba(255,255,255,0.6)' : 'var(--chakra-colors-fg-subtle)';
 
   const breadcrumbItems = (
     <Flex align="center" gap={2}>
@@ -74,12 +75,12 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                   align="center"
                   gap={1}
                   cursor="pointer"
-                  bg={hasBanner ? 'whiteAlpha.200' : 'bg.surface'}
+                  bg={hasDarkBanner ? 'whiteAlpha.200' : 'bg.surface'}
                   border="1px solid"
-                  borderColor={hasBanner ? 'whiteAlpha.300' : 'border.default'}
+                  borderColor={hasDarkBanner ? 'whiteAlpha.300' : 'border.default'}
                   _hover={{
-                    bg: hasBanner ? 'whiteAlpha.300' : 'bg.subtle',
-                    borderColor: hasBanner ? 'whiteAlpha.400' : 'border.emphasized'
+                    bg: hasDarkBanner ? 'whiteAlpha.300' : 'bg.subtle',
+                    borderColor: hasDarkBanner ? 'whiteAlpha.400' : 'border.emphasized'
                   }}
                   px={1.5}
                   py={0.5}
@@ -94,7 +95,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                   >
                     {item.label}
                   </Text>
-                  <LuChevronDown size={14} color={hasBanner ? 'white' : 'var(--chakra-colors-accent-teal)'} />
+                  <LuChevronDown size={14} color={hasDarkBanner ? 'white' : 'var(--chakra-colors-accent-teal)'} />
                 </Flex>
               </Menu.Trigger>
               <Menu.Positioner>
@@ -218,11 +219,10 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
     <Button
       size="xs"
       variant="solid"
-      bg={hasBanner ? 'whiteAlpha.500' : 'accent.danger/15'}
+      bg="accent.danger/15"
       border="1px solid"
-      borderColor={hasBanner ? 'whiteAlpha.600' : 'accent.danger/30'}
-      color={hasBanner ? 'white' : 'accent.danger'}
-      _hover={hasBanner ? { bg: 'white', color: 'accent.danger' } : undefined}
+      borderColor="accent.danger/30"
+      color="accent.danger"
       fontFamily="mono"
       onClick={openPublishModal}
     >

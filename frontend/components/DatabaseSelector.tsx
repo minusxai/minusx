@@ -12,12 +12,14 @@ interface DatabaseSelectorProps {
   value: string;
   onChange: (connection: Pick<FullQuery, 'connection_name' | 'dialect'>) => void;
   size?: 'sm' | 'md';
+  compact?: boolean;
 }
 
 export default function DatabaseSelector({
   value,
   onChange,
   size = 'sm',
+  compact = false,
 }: DatabaseSelectorProps) {
   // Get connections using hook (display-only component, so skip fetching)
   const { connections: connectionsMap } = useConnections({ skip: true });
@@ -52,6 +54,8 @@ export default function DatabaseSelector({
       size={size}
       color="accent.primary"
       label="Database selector"
+      compact={compact}
+      compactLabel="Database"
     />
   );
 }

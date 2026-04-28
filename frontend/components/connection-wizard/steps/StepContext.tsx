@@ -111,6 +111,7 @@ function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { conn
 
 export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting, staticSchemas }: StepContextProps) {
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
+  console.log("connections", connections)
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
   const dispatch = useAppDispatch();
@@ -503,9 +504,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         {/* Actions */}
         <HStack justify="flex-end" gap={3} pt={2}>
           <Button
-            bg="accent.teal"
-            color="white"
-            _hover={{ opacity: 0.9 }}
+            variant="outline"
             size="sm"
             fontFamily="mono"
             onClick={() => setSubStep('docs')}
@@ -707,7 +706,10 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               </Button>
             )}
             <Button
-              variant="outline"
+              {...(showAgentFeed
+                ? { bg: 'accent.teal', color: 'white', _hover: { opacity: 0.9 } }
+                : { variant: 'outline' as const }
+              )}
               size="sm"
               fontFamily="mono"
               onClick={handleSave}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Box, VStack, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Icon } from '@chakra-ui/react';
 import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuMessageSquare, LuLayers } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState } from '@/store/uiSlice';
@@ -14,7 +14,7 @@ import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import DevToolsPanel from './DevToolsPanel';
-import { FeedContent } from './RecentFilesSection';
+
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import type { Mode } from '@/lib/mode/mode-types';
 import { Tooltip } from './ui/tooltip';
@@ -32,7 +32,7 @@ export interface RightSidebarProps {
   title?: string;
   filePath?: string;  // File path for context filtering
   showChat?: boolean;
-  showRecent?: boolean;
+
   fileId?: number;
   fileType?: FileType;
   contextVersion?: number;  // Selected context version (admin testing)
@@ -160,8 +160,7 @@ function SectionContent({
           />
         </Box>
       );
-    case 'recent':
-      return <Box p={3}><FeedContent /></Box>;
+
     case 'dev':
       return <DevToolsPanel appState={appState} />;
     case 'question-references':
@@ -230,6 +229,7 @@ function TabsLayout({
   onSetActiveSection,
   toggleSection,
   sectionContentProps,
+  onCollapse,
 }: {
   chatSections: SidebarSectionMetadata[];
   refSections: SidebarSectionMetadata[];
@@ -237,6 +237,7 @@ function TabsLayout({
   onSetActiveSection: (id: string) => void;
   toggleSection: (id: string) => void;
   sectionContentProps: SectionContentSharedProps;
+  onCollapse: () => void;
 }) {
   const refSectionIds = useMemo(() => new Set(refSections.map(s => s.id as string)), [refSections]);
   const chatSection = chatSections.find(s => s.id === 'chat');
@@ -247,73 +248,88 @@ function TabsLayout({
   const derivedTab = activeSidebarSection
     ? (refSectionIds.has(activeSidebarSection) ? 'context' : 'chat')
     : null;
-  const [lastTab, setLastTab] = useState<'chat' | 'context'>('chat');
-  const activeTab = derivedTab ?? lastTab;
+  const hasChat = chatSections.length > 0;
+  const [lastTab, setLastTab] = useState<'chat' | 'context'>(hasChat ? 'chat' : 'context');
+  const activeTab = !hasChat ? 'context' : (derivedTab ?? lastTab);
 
   return (
     <VStack gap={0} height="100%" overflow="hidden">
       {/* Tab bar */}
-      <HStack gap={0} w="100%" flexShrink={0} borderBottom="1px solid" borderColor="border.default">
+      <HStack w="100%" flexShrink={0} bg="bg.muted" px={3} py={2} gap={2} borderBottom="1px solid" borderColor="border.default">
         <Box
-          flex="1"
-          px={4}
-          py={2.5}
+          flexShrink={0}
           cursor="pointer"
-          onClick={() => { setLastTab('chat'); onSetActiveSection('chat'); }}
-          bg={activeTab === 'chat' ? 'bg.surface' : 'bg.muted'}
-          borderBottom="2px solid"
-          borderColor={activeTab === 'chat' ? 'accent.primary' : 'transparent'}
-          transition="all 0.2s"
-          _hover={{ bg: activeTab === 'chat' ? 'bg.surface' : 'bg.elevated' }}
+          onClick={onCollapse}
+          color="fg.muted"
+          _hover={{ color: 'fg.default' }}
+          transition="color 0.2s"
+          display="flex"
+          alignItems="center"
         >
-          <HStack gap={2} justify="center">
-            <Icon as={LuMessageSquare} boxSize={3.5} color={activeTab === 'chat' ? 'accent.primary' : 'fg.muted'} />
+          <Icon as={LuChevronRight} boxSize={3.5} />
+        </Box>
+        {hasChat && (
+          <HStack
+            gap={1.5}
+            justify="center"
+            py={1}
+            px={2.5}
+            cursor="pointer"
+            onClick={() => { setLastTab('chat'); onSetActiveSection('chat'); }}
+            bg={activeTab === 'chat' ? 'bg.surface' : 'transparent'}
+            borderRadius="md"
+            border="1px solid"
+            borderColor={activeTab === 'chat' ? 'border.default' : 'transparent'}
+            transition="all 0.2s"
+            _hover={{ bg: activeTab === 'chat' ? 'bg.surface' : 'bg.elevated' }}
+          >
+            <Icon as={LuMessageSquare} boxSize={3} color={activeTab === 'chat' ? 'accent.primary' : 'fg.muted'} />
             <Text
               fontSize="xs"
-              fontWeight="700"
+              fontWeight="600"
               fontFamily="mono"
               color={activeTab === 'chat' ? 'accent.primary' : 'fg.muted'}
             >
               Chat
             </Text>
           </HStack>
-        </Box>
-        <Box
-          flex="1"
-          px={4}
-          py={2.5}
+        )}
+        <HStack
+          gap={1.5}
+          justify="center"
+          py={1}
+          px={2.5}
           cursor="pointer"
           onClick={() => { setLastTab('context'); const first = refSections[0]; if (first) onSetActiveSection(first.id); }}
-          bg={activeTab === 'context' ? 'bg.surface' : 'bg.muted'}
-          borderBottom="2px solid"
-          borderColor={activeTab === 'context' ? 'accent.danger' : 'transparent'}
+          bg={activeTab === 'context' ? 'bg.surface' : 'transparent'}
+          borderRadius="md"
+          border="1px solid"
+          borderColor={activeTab === 'context' ? 'border.default' : 'transparent'}
           transition="all 0.2s"
           _hover={{ bg: activeTab === 'context' ? 'bg.surface' : 'bg.elevated' }}
         >
-          <HStack gap={2} justify="center">
-            <Icon as={LuLayers} boxSize={3.5} color={activeTab === 'context' ? 'accent.danger' : 'fg.muted'} />
-            <Text
-              fontSize="xs"
-              fontWeight="700"
-              fontFamily="mono"
-              color={activeTab === 'context' ? 'accent.danger' : 'fg.muted'}
+          <Icon as={LuLayers} boxSize={3} color={activeTab === 'context' ? 'accent.secondary' : 'fg.muted'} />
+          <Text
+            fontSize="xs"
+            fontWeight="600"
+            fontFamily="mono"
+            color={activeTab === 'context' ? 'accent.secondary' : 'fg.muted'}
+          >
+            Context
+          </Text>
+          {refSections.length > 0 && (
+            <Box
+              bg={activeTab === 'context' ? 'accent.secondary/20' : 'bg.elevated'}
+              borderRadius="full"
+              px={1.5}
+              py={0}
             >
-              Context
-            </Text>
-            {refSections.length > 0 && (
-              <Box
-                bg={activeTab === 'context' ? 'accent.danger/20' : 'bg.elevated'}
-                borderRadius="full"
-                px={1.5}
-                py={0}
-              >
-                <Text fontSize="2xs" fontWeight="700" color={activeTab === 'context' ? 'accent.danger' : 'fg.muted'}>
-                  {refSections.length}
-                </Text>
-              </Box>
-            )}
-          </HStack>
-        </Box>
+              <Text fontSize="2xs" fontWeight="700" color={activeTab === 'context' ? 'accent.secondary' : 'fg.muted'}>
+                {refSections.length}
+              </Text>
+            </Box>
+          )}
+        </HStack>
       </HStack>
 
       {/* Tab content */}
@@ -356,7 +372,7 @@ export default function RightSidebar({
   title = "Misc Info",
   filePath = '/',
   showChat = false,
-  showRecent = false,
+
   fileId,
   fileType,
   contextVersion,
@@ -459,9 +475,6 @@ export default function RightSidebar({
     sections.push(getSidebarSection('question-references'));
   }
 
-  if (showRecent) {
-    sections.push(getSidebarSection('recent'));
-  }
 
   if (IS_DEV || devMode) {
     sections.push(getSidebarSection('dev'));
@@ -570,25 +583,48 @@ export default function RightSidebar({
             </Tooltip>
           </Box>
 
-          {sections.map((section) => (
+          {/* Only show tab-level icons when collapsed: Chat + Context */}
+          {showChat && (
             <Box
-              key={section.id}
               p={3}
               bg="bg.surface"
-              borderStyle={"solid"}
+              borderStyle="solid"
               borderLeftWidth="4px"
-              borderColor={section.color}
+              borderColor="accent.primary"
               cursor="pointer"
               onClick={() => {
-                dispatch(setActiveSidebarSection(section.id));
+                dispatch(setActiveSidebarSection('chat'));
                 dispatch(setRightSidebarCollapsed(false));
               }}
               _hover={{ bg: 'bg.muted' }}
               transition="all 0.2s"
             >
-              <Icon as={section.icon} boxSize={5} color={section.color} />
+              <Tooltip content="Chat">
+                <Icon as={LuMessageSquare} boxSize={5} color="accent.primary" />
+              </Tooltip>
             </Box>
-          ))}
+          )}
+          {refSections.length > 0 && (
+            <Box
+              p={3}
+              bg="bg.surface"
+              borderStyle="solid"
+              borderLeftWidth="4px"
+              borderColor="accent.secondary"
+              cursor="pointer"
+              onClick={() => {
+                const first = refSections[0];
+                if (first) dispatch(setActiveSidebarSection(first.id));
+                dispatch(setRightSidebarCollapsed(false));
+              }}
+              _hover={{ bg: 'bg.muted' }}
+              transition="all 0.2s"
+            >
+              <Tooltip content="Context">
+                <Icon as={LuLayers} boxSize={5} color="accent.secondary" />
+              </Tooltip>
+            </Box>
+          )}
         </VStack>
 
         {/* Main content */}
@@ -602,70 +638,17 @@ export default function RightSidebar({
           pointerEvents={!isCollapsed ? "auto" : "none"}
           transition="opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
         >
-            <HStack
-              px={4}
-              py={3}
-              borderBottom="1px solid"
-              borderColor="border.default"
-              bg="bg.muted"
-              flexShrink={0}
-              w="100%"
-              justify="space-between"
-            >
-              <HStack gap={2}>
-                <IconButton
-                  aria-label="Close sidebar"
-                  size="xs"
-                  variant="ghost"
-                  onClick={handleToggle}
-                  color="fg.muted"
-                  _hover={{ color: 'fg.default' }}
-                  bg="bg.elevated"
-                >
-                  <Icon as={LuChevronRight} boxSize={4} />
-                </IconButton>
-                <Text
-                  fontSize="xs"
-                  fontWeight="700"
-                  color="fg.subtle"
-                  textTransform="uppercase"
-                  letterSpacing="0.05em"
-                  fontFamily="mono"
-                >
-                  {title}
-                </Text>
-              </HStack>
-            </HStack>
-
-            {/* Tabs layout when chat is available, accordion fallback otherwise */}
-            {showChat ? (
-              <Box flex="1" overflow="hidden" w="100%" minH={0}>
-                <TabsLayout
-                  chatSections={chatSections}
-                  refSections={refSections}
-                  activeSidebarSection={activeSidebarSection}
-                  onSetActiveSection={(id) => dispatch(setActiveSidebarSection(id))}
-                  toggleSection={toggleSection}
-                  sectionContentProps={sectionContentProps}
-                />
-              </Box>
-            ) : (
-              <VStack gap={0} align="stretch" flex="1" overflowY="auto" alignItems="stretch" w="100%">
-                {sections.map((section) => {
-                  const isExpanded = activeSidebarSection === section.id;
-                  return (
-                    <Box key={section.id} borderBottom="1px solid" borderColor="border.default">
-                      <SectionHeader section={section} isExpanded={isExpanded} onToggle={() => toggleSection(section.id)} />
-                      {isExpanded && (
-                        <Box maxH={section.maxHeight || "none"} overflowY={section.maxHeight ? "auto" : "visible"}>
-                          <SectionContent section={section} {...sectionContentProps} />
-                        </Box>
-                      )}
-                    </Box>
-                  );
-                })}
-              </VStack>
-            )}
+            <Box flex="1" overflow="hidden" w="100%" minH={0}>
+              <TabsLayout
+                chatSections={chatSections}
+                refSections={refSections}
+                activeSidebarSection={activeSidebarSection}
+                onSetActiveSection={(id) => dispatch(setActiveSidebarSection(id))}
+                toggleSection={toggleSection}
+                sectionContentProps={sectionContentProps}
+                onCollapse={handleToggle}
+              />
+            </Box>
           </VStack>
       </Box>
     </HStack>

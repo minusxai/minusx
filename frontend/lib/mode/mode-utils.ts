@@ -54,7 +54,8 @@ export function getCurrentMode(): Mode {
  * (e.g., /p/org/database doesn't exist in tutorial mode)
  */
 export function switchMode(mode: Mode): void {
-  const url = new URL('/', window.location.origin);
+  const targetPath = mode !== DEFAULT_MODE ? '/p/org' : '/';
+  const url = new URL(targetPath, window.location.origin);
   if (mode !== DEFAULT_MODE) {
     url.searchParams.set('mode', mode);
   }

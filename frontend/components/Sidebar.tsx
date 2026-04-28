@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -40,8 +40,8 @@ function NavItem({ href, icon, label, isCollapsed, isActive }: NavItemProps) {
           py={2}
           borderRadius="md"
           cursor="pointer"
-          bg={isActive ? 'bg.muted' : 'transparent'}
-          _hover={{ bg: 'bg.muted' }}
+          bg={isActive ? 'accent.teal/15' : 'transparent'}
+          _hover={{ bg: 'accent.teal/15'}}
           transition="all 0.2s"
           display="flex"
           alignItems="center"
@@ -56,7 +56,7 @@ function NavItem({ href, icon, label, isCollapsed, isActive }: NavItemProps) {
               fontSize="sm"
               color="fg.default"
               fontFamily="mono"
-              fontWeight={isActive ? '600' : '400'}
+              fontWeight={isActive ? '500' : '400'}
               opacity={isCollapsed ? 0 : 1}
               transition="opacity 0.2s"
             >
@@ -140,6 +140,7 @@ export default function Sidebar() {
         items: [
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
           { href: '/conversations', icon: <LuHistory />, label: 'Conversations' },
+          { href: `/p/${mode}`, icon: <LuFolder />, label: 'Files' },
         ],
       },
       {
@@ -259,7 +260,7 @@ export default function Sidebar() {
       <VStack
         flex={1}
         align="stretch"
-        gap={2}
+        gap={1}
         p={isCollapsed ? 3 : 4}
         overflowY="auto"
         css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
@@ -275,7 +276,7 @@ export default function Sidebar() {
             icon={homeItem.icon}
             label={homeItem.label}
             isCollapsed={isCollapsed}
-            isActive={pathname === homeItem.href || pathname.startsWith('/p/')}
+            isActive={pathname === homeItem.href}
           />
 
           {navSections.map((section) => (
@@ -293,6 +294,7 @@ export default function Sidebar() {
                 <Box h="1px" bg="border.muted" my={3} />
               )}
               {/* Section Items */}
+              <VStack align="stretch" gap={1}>
               {section.items.map((item) => {
                 const [itemPath, itemQuery] = item.href.split('?');
                 const itemParams = new URLSearchParams(itemQuery || '');
@@ -310,6 +312,7 @@ export default function Sidebar() {
                   />
                 );
               })}
+              </VStack>
             </Box>
           ))}
         </VStack>
@@ -394,8 +397,10 @@ export default function Sidebar() {
               py={2}
               borderRadius="md"
               cursor="pointer"
-              bg="accent.danger"
-              _hover={{ opacity: 0.85 }}
+              bg="transparent"
+              border="1px solid"
+              borderColor="border.default"
+              _hover={{ bg: 'bg.subtle' }}
               transition="all 0.2s"
               display="flex"
               alignItems="center"
@@ -403,10 +408,10 @@ export default function Sidebar() {
               width="100%"
               onClick={() => switchMode('tutorial')}
             >
-              <Box color="white" display="flex" alignItems="center" fontSize="lg">
+              <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                 <LuGraduationCap />
               </Box>
-              <Text fontSize="sm" color="white" fontFamily="mono" fontWeight="400">
+              <Text fontSize="sm" color="fg.muted" fontFamily="mono" fontWeight="400">
                 Try Demo Mode
               </Text>
             </Box>
@@ -428,15 +433,17 @@ export default function Sidebar() {
                 borderRadius="md"
                 cursor="pointer"
                 onClick={() => switchMode('tutorial')}
-                bg="accent.danger"
-                _hover={{ opacity: 0.85 }}
+                bg="transparent"
+                border="1px solid"
+                borderColor="border.default"
+                _hover={{ bg: 'bg.subtle' }}
                 transition="all 0.2s"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 width="100%"
               >
-                <Box color="white" display="flex" alignItems="center" fontSize="lg">
+                <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                   <LuGraduationCap />
                 </Box>
               </Box>
@@ -445,15 +452,17 @@ export default function Sidebar() {
         )}
         {/* Exit Demo Mode (only in tutorial mode) */}
         {mode === 'tutorial' && !isCollapsed && (
-          <Box px={4} py={2} borderTop="1px solid" borderColor="border.default">
+          <Box px={4} py={2}>
             <Box
               as="button"
               px={3}
               py={2}
               borderRadius="md"
               cursor="pointer"
-              bg="accent.danger"
-              _hover={{ opacity: 0.85 }}
+              bg="transparent"
+              border="1px solid"
+              borderColor="border.default"
+              _hover={{ bg: 'bg.subtle' }}
               transition="all 0.2s"
               display="flex"
               alignItems="center"
@@ -461,17 +470,17 @@ export default function Sidebar() {
               width="100%"
               onClick={() => switchMode('org')}
             >
-              <Box color="white" display="flex" alignItems="center" fontSize="lg">
+              <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                 <LuGraduationCap />
               </Box>
-              <Text fontSize="sm" color="white" fontFamily="mono" fontWeight="400">
+              <Text fontSize="sm" color="fg.muted" fontFamily="mono" fontWeight="400">
                 Exit Demo Mode
               </Text>
             </Box>
           </Box>
         )}
         {mode === 'tutorial' && isCollapsed && (
-          <VStack gap={0} py={2} px={3} borderTop="1px solid" borderColor="border.default">
+          <VStack gap={0} py={2} px={3}>
             <Tooltip content="Exit Demo Mode" positioning={{ placement: 'right' }}>
               <Box
                 as="button"
@@ -479,15 +488,17 @@ export default function Sidebar() {
                 borderRadius="md"
                 cursor="pointer"
                 onClick={() => switchMode('org')}
-                bg="accent.danger"
-                _hover={{ opacity: 0.85 }}
+                bg="transparent"
+                border="1px solid"
+                borderColor="border.default"
+                _hover={{ bg: 'bg.subtle' }}
                 transition="all 0.2s"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 width="100%"
               >
-                <Box color="white" display="flex" alignItems="center" fontSize="lg">
+                <Box color="fg.muted" display="flex" alignItems="center" fontSize="lg">
                   <LuGraduationCap />
                 </Box>
               </Box>

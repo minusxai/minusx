@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Container, Heading, VStack, Text, Spinner, HStack, Icon, Input, Button, Badge } from '@chakra-ui/react';
+import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Icon, Input, Button, Badge } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
 import { LuSlack, LuSearch, LuPlus, LuMessageSquare } from 'react-icons/lu';
@@ -111,11 +111,16 @@ export default function HistoryPage() {
   ];
 
   return (
-    <Box minH="100vh" bg="bg.canvas">
-      <Container maxW="container.md" py={{ base: 4, md: 8 }} px={{ base: 4, md: 8 }}>
-        <Breadcrumb items={breadcrumbItems} />
+    <Box minH="90vh" bg="bg.canvas" display="flex">
+      <VStack flex="1" minW="0" position="relative" align="stretch">
+        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
+          <Flex justify="space-between" align="center" mb={4} gap={4}>
+            <Box flex="1" minW={0}>
+              <Breadcrumb items={breadcrumbItems} />
+            </Box>
+          </Flex>
 
-        <HStack justify="space-between" align="center" mt={10} mb={8}>
+        <HStack justify="space-between" align="flex-start" mt={10} mb={2}>
           <Heading
             fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
             fontWeight="900"
@@ -191,7 +196,8 @@ export default function HistoryPage() {
             </VStack>
           </Box>
         )}
-      </Container>
+        </Box>
+      </VStack>
     </Box>
   );
 }

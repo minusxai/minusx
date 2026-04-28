@@ -13,9 +13,10 @@ interface ContextSelectorProps {
   selectedContextPath: string | null;
   selectedVersion?: number;
   onSelectContext: (contextPath: string | null, version?: number) => void;
+  compact?: boolean;
 }
 
-export function ContextSelector({ selectedContextPath, selectedVersion, onSelectContext }: ContextSelectorProps) {
+export function ContextSelector({ selectedContextPath, selectedVersion, onSelectContext, compact = false }: ContextSelectorProps) {
   const user = useAppSelector(state => state.auth.user);
 
   // Triggers context loading and provides accurate loading state.
@@ -142,6 +143,8 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
       defaultIcon={LuNotebookText}
       size="sm"
       color="accent.warning"
+      compact={compact}
+      compactLabel="Knowledge Base"
     />
   );
 }
