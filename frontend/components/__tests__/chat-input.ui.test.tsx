@@ -67,7 +67,7 @@ jest.mock('@/components/chat/LexicalMentionEditor', () => {
 });
 
 import React from 'react';
-import { screen, waitFor, act } from '@testing-library/react';
+import { screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
@@ -238,12 +238,13 @@ describe('ChatInput queue toggle', () => {
     const { onSend } = renderChatInputQueue({ allowChatQueue: true });
 
     const editor = screen.getByLabelText('Chat editor');
-    const sendButton = screen.getByLabelText('Send message');
 
     expect(editor).not.toBeDisabled();
     expect(editor).toHaveAttribute('placeholder', 'Add to agent queue...');
 
-    await user.type(editor, 'follow up');
+    fireEvent.change(editor, { target: { value: 'follow up' } });
+
+    const sendButton = await screen.findByLabelText('Send message');
     await user.click(sendButton);
 
     expect(onSend).toHaveBeenCalledWith('follow up', []);
