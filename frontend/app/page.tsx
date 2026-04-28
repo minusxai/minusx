@@ -191,12 +191,13 @@ export default function Home() {
     if (searchParams.has('empty')) setSimulateEmpty(true);
   }, [searchParams]);
 
+  const homePage = useAppSelector(selectHomePage);
+
   if (!user || configLoading) return null;
 
   const homePath = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const mode = user.mode || 'org';
   const breadcrumbItems = [{ label: 'Home' }];
-  const homePage = useAppSelector(selectHomePage);
   const leftColEmpty = !homePage.showFeedSummary && !homePage.showRecentQuestions;
   const rightColEmpty = !homePage.showRecentDashboards && !homePage.showRecentConversations;
 
