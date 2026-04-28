@@ -8,6 +8,7 @@ import { extractDebugMessages } from '@/lib/conversations-utils';
 import { ToolCall, ConversationLogEntry } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import {
   ChatRequest,
   CompletedToolCallFromPython,
@@ -186,12 +187,17 @@ async function processStream(
     // Automatic execution loop
     while (true) {
       // Call Python backend (streaming)
+      const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
       const requestPayload = {
         log: [...log, ...accumulatedLogDiff],
         user_message,
         completed_tool_calls,
         agent: body.agent || 'DefaultAgent',
-        agent_args: body.agent_args || {}
+        agent_args: {
+          ...(body.agent_args || {}),
+          home_folder: resolvedHomeFolder,
+          role: user.role,
+        }
       };
 
       // Consume Python stream and forward events

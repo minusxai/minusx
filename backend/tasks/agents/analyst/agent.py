@@ -92,6 +92,7 @@ class AnalystAgent(Agent):
         attachments: Optional[List[dict]] = None,
         allowed_viz_types: Optional[List[str]] = None,
         unrestricted_mode: bool = False,
+        role: Optional[str] = None,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -106,6 +107,7 @@ class AnalystAgent(Agent):
         self.attachments = attachments or []
         self.allowed_viz_types = allowed_viz_types
         self.unrestricted_mode = unrestricted_mode
+        self.role = role or "viewer"
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -188,6 +190,7 @@ class AnalystAgent(Agent):
                 'max_steps': max_steps,
                 'agent_name': self.agent_name,
                 'allowed_viz_types': allowed_viz_types_str,
+                'role': self.role,
                 'skills_catalog': self._build_skills_catalog(preloaded_set),
                 'preloaded_skills': self._build_preloaded_skills_content(preloaded_names),
             }

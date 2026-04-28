@@ -548,6 +548,7 @@ function SettingsContent() {
         </Box>
       ),
     },
+    { id: 'homepage', label: 'Home Page', visible: isAdvancedAdmin, custom: <HomePageSettings /> },
   ], [isAdmin, isAdvancedAdmin, mode]);
 
   const breadcrumbItems = [
