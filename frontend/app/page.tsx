@@ -177,7 +177,7 @@ export default function Home() {
     }
   }, [user, router, config, configLoading]);
 
-  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
+  const isMobile = useBreakpointValue({ base: true, md: false });
   const homePage = useAppSelector(selectHomePage);
 
   if (!user || configLoading) return null;
