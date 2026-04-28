@@ -371,6 +371,7 @@ export class DocumentDB {
        SET
          content = ${contentUpdate},
          version = version + 1,
+         draft = false,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        ${lengthCondition}`,
