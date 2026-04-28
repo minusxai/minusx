@@ -119,7 +119,7 @@ interface FunnelChartOptionConfig extends SpecialChartOptionConfig {
 type CartesianXAxisKind = 'category' | 'time' | 'value'
 type EChartsXAxisType = 'category' | 'time' | 'value' | 'log'
 
-const resolveXAxisTypes = (
+export const resolveXAxisTypes = (
   xAxisColumns?: string[],
   columnTypes?: Record<string, ColumnType>,
   chartType?: string,
