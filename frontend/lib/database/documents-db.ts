@@ -371,11 +371,24 @@ export class DocumentDB {
        SET
          content = ${contentUpdate},
          version = version + 1,
+         draft = false,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        ${lengthCondition}`,
       params
     );
     return result.rowCount > 0;
+  }
+
+  static async updateNamePath(id: number, name: string, path: string): Promise<void> {
+    const db = getModules().db;
+    await db.exec(
+      `UPDATE files
+       SET name = $2, path = $3,
+           content = jsonb_set(content, '{metadata,name}', to_jsonb($2::text)),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [id, name, path]
+    );
   }
 }
