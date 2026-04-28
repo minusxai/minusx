@@ -156,7 +156,7 @@ export async function appendLogToConversation(
   if (updated) {
     if (log_index === 0) {
       const firstTask = logDiff.find(e => e._type === 'task');
-      const firstMsg = firstTask?.args?.user_message || firstTask?.args?.message;
+      const firstMsg = firstTask?.args?.user_message || firstTask?.args?.message || firstTask?.args?.goal;
       if (firstMsg) {
         const displayName = truncateMessageForName(String(firstMsg));
         const { path: newPath } = buildConversationPath(user, String(firstMsg));
