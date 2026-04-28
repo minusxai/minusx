@@ -4,10 +4,16 @@ import { Box, VStack, HStack, SimpleGrid, Text } from '@chakra-ui/react';
 import Image from 'next/image';
 import { CONNECTION_TYPES, CONNECTION_TYPE_GROUPS } from '@/lib/ui/connection-type-options';
 import type { ConnectionTypeOption } from '@/lib/ui/connection-type-options';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface ConnectionTypePickerProps {
   onSelect: (connType: ConnectionTypeOption) => void;
   disabled?: boolean;
+}
+
+/** Replace {{agentName}} placeholders in strings with the configured agent name. */
+function resolveAgentName(text: string, agentName: string): string {
+  return text.replace(/\{\{agentName\}\}/g, agentName);
 }
 
 /**
@@ -15,6 +21,9 @@ interface ConnectionTypePickerProps {
  * Shared by the onboarding wizard (StepConnection) and inline create (ConnectionFormV2).
  */
 export default function ConnectionTypePicker({ onSelect, disabled = false }: ConnectionTypePickerProps) {
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
+
   return (
     <VStack align="stretch" gap={5}>
       {CONNECTION_TYPE_GROUPS.map((group) => {
@@ -57,7 +66,7 @@ export default function ConnectionTypePicker({ onSelect, disabled = false }: Con
                   textTransform="uppercase"
                   letterSpacing="0.08em"
                 >
-                  {group.title}
+                  {resolveAgentName(group.title, agentName)}
                 </Text>
               </HStack>
               <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
@@ -68,7 +77,7 @@ export default function ConnectionTypePicker({ onSelect, disabled = false }: Con
             {/* Group description */}
             <Box px={4} pt={3} pb={1}>
               <Text color="fg.muted" fontSize="xs" lineHeight="1.5">
-                {group.description}
+                {resolveAgentName(group.description, agentName)}
               </Text>
             </Box>
 
