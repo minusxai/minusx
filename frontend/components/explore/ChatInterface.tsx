@@ -843,8 +843,22 @@ export default function ChatInterface({
                 borderRadius="md"
               >
                   <Text color="accent.danger" fontSize="sm" fontFamily="mono">
-                    {typeof error === 'string' ? error : error?.message || 'An error occurred'}
+                    {devMode
+                      ? (typeof error === 'string' ? error : error?.message || 'An error occurred')
+                      : 'An error occurred'}
                   </Text>
+                  {conversationID && (
+                    <Button
+                      mt={2}
+                      size="xs"
+                      variant="outline"
+                      colorPalette="red"
+                      aria-label="Try again"
+                      onClick={() => dispatch(sendMessage({ conversationID, message: 'Continue' }))}
+                    >
+                      Try again
+                    </Button>
+                  )}
                   </Box>
               </GridItem>
 
