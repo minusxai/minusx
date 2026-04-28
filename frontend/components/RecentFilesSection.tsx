@@ -3,13 +3,12 @@
 import { useEffect, useState, useCallback, createContext, useContext as useReactContext } from 'react';
 import { Box, HStack, Text, VStack, Icon, Skeleton } from '@chakra-ui/react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight, LuSparkles, LuSearch, LuUserPlus } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight, LuSendHorizontal } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
-import { useAppSelector } from '@/store/hooks';
-import { selectRightSidebarUIState, selectDevMode, selectHomePage } from '@/store/uiSlice';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { selectRightSidebarUIState, selectDevMode, selectHomePage, setSidebarPendingMessage, setActiveSidebarSection, setRightSidebarCollapsed } from '@/store/uiSlice';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -563,14 +562,23 @@ export function RecentConversations() {
 }
 
 const suggestedPrompts = [
-  { icon: LuSparkles, text: 'What all can you do?', category: 'Capability' },
-  { icon: LuSearch, text: 'Which is our main dashboard?', category: 'Search' },
-  { icon: LuUserPlus, text: 'How to invite my colleagues?', category: 'App' },
+  'What all can you do?',
+  'Which is our main dashboard?',
+  'How do I invite my colleagues?',
 ];
 
 /** Suggested questions section for the home page */
 export function SuggestedQuestions() {
-  const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { showSuggestedPrompts } = useAppSelector(selectHomePage);
+
+  if (!showSuggestedPrompts) return null;
+
+  const handleClick = (prompt: string) => {
+    dispatch(setSidebarPendingMessage(prompt));
+    dispatch(setActiveSidebarSection('chat'));
+    dispatch(setRightSidebarCollapsed(false));
+  };
 
   return (
     <VStack gap={3} align="stretch">
@@ -586,14 +594,11 @@ export function SuggestedQuestions() {
             cursor="pointer"
             transition="all 0.15s ease"
             _hover={{ bg: 'bg.surface' }}
-            onClick={() => router.push('/explore')}
+            onClick={() => handleClick(prompt)}
           >
-            <Icon as={prompt.icon} color="accent.teal" boxSize={3} flexShrink={0} />
+            <Icon as={LuSendHorizontal} color="accent.teal" boxSize={3} flexShrink={0} />
             <Text flex="1" minW={0} fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
-              {prompt.text}
-            </Text>
-            <Text fontSize="2xs" color="fg.subtle" flexShrink={0} fontFamily="mono" textTransform="uppercase">
-              {prompt.category}
+              {prompt}
             </Text>
           </HStack>
         ))}

@@ -39,6 +39,7 @@ interface UIState {
     showRecentQuestions: boolean;
     showRecentDashboards: boolean;
     showRecentConversations: boolean;
+    showSuggestedPrompts: boolean;
     feedSummaryPrompt: string;
     feedSummaryQuestionIds: number[];
   };
@@ -76,6 +77,7 @@ const initialState: UIState = {
     showRecentQuestions: true,
     showRecentDashboards: true,
     showRecentConversations: true,
+    showSuggestedPrompts: true,
     feedSummaryPrompt: '',
     feedSummaryQuestionIds: [],
   },
