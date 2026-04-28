@@ -9,6 +9,7 @@ import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectRightSidebarUIState, selectDevMode, selectHomePage, setSidebarPendingMessage, setActiveSidebarSection, setRightSidebarCollapsed } from '@/store/uiSlice';
+import { setActiveConversation } from '@/store/chatSlice';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -575,6 +576,7 @@ export function SuggestedQuestions() {
   if (!showSuggestedPrompts) return null;
 
   const handleClick = (prompt: string) => {
+    dispatch(setActiveConversation(null));
     dispatch(setSidebarPendingMessage(prompt));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
