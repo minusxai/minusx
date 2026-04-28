@@ -52,7 +52,7 @@ body {
 }
 
 /* Default logo styling (fallback) */
-[aria-label="Company logo"] {
+[aria-label="Workspace logo"] {
   background-image: url('/logox_dark.svg');
   background-size: contain;
   background-position: center;
@@ -60,7 +60,7 @@ body {
   display: block;
 }
 
-.dark [aria-label="Company logo"] {
+.dark [aria-label="Workspace logo"] {
   background-image: url('/logox.svg');
 }
 
