@@ -15,6 +15,6 @@ data/uploads/
 *.DS_Store
 experiments
 static/
-data/pglite
+data/pglite*
 
 frontend/local

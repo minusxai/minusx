@@ -11,6 +11,7 @@ import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { hashPassword } from '../auth/password-utils';
 import workspaceTemplate from './workspace-template.json';
 import { getModules } from '../modules/registry';
+import { DEFAULT_STYLES } from '../branding/whitelabel';
 
 /**
  * Document structure for export/import — same shape as DbFile
@@ -166,7 +167,8 @@ export async function buildInitData(
     .replace(/\{\{ADMIN_EMAIL\}\}/g, escapeForJson(adminEmail))
     .replace(/\{\{ADMIN_NAME\}\}/g, escapeForJson(adminName))
     .replace(/\{\{ADMIN_PASSWORD_HASH\}\}/g, escapeForJson(hash))
-    .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now));
+    .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now))
+    .replace(/"\{\{DEFAULT_STYLES\}\}"/g, JSON.stringify(DEFAULT_STYLES));
   const rawData: InitData = JSON.parse(templateStr);
   rawData.version = LATEST_DATA_VERSION;
   return rawData;
@@ -187,7 +189,8 @@ export async function initializeDatabase(
     .replace(/\{\{ADMIN_EMAIL\}\}/g, escapeForJson(adminEmail))
     .replace(/\{\{ADMIN_NAME\}\}/g, escapeForJson(adminName))
     .replace(/\{\{ADMIN_PASSWORD_HASH\}\}/g, escapeForJson(hash))
-    .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now));
+    .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now))
+    .replace(/"\{\{DEFAULT_STYLES\}\}"/g, JSON.stringify(DEFAULT_STYLES));
 
   const rawData: InitData = JSON.parse(templateStr);
   rawData.version = LATEST_DATA_VERSION;

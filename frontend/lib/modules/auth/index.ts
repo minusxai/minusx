@@ -7,6 +7,7 @@ import { applyMigrations } from '@/lib/database/migrations';
 import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 import { hashPassword } from '@/lib/auth/password-utils';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
+import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 
 function escapeForJson(s: string): string {
   return JSON.stringify(s).slice(1, -1);
@@ -56,7 +57,8 @@ export class AuthModule implements IAuthModule {
       .replace(/\{\{ADMIN_EMAIL\}\}/g, escapeForJson(input.adminEmail))
       .replace(/\{\{ADMIN_NAME\}\}/g, escapeForJson(input.adminName))
       .replace(/\{\{ADMIN_PASSWORD_HASH\}\}/g, escapeForJson(hash))
-      .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now));
+      .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now))
+      .replace(/"\{\{DEFAULT_STYLES\}\}"/g, JSON.stringify(DEFAULT_STYLES));
 
     const rawData: InitData = JSON.parse(templateStr);
     const initData = applyMigrations(rawData, rawData.version);
