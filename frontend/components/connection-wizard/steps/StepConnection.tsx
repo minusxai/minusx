@@ -48,6 +48,7 @@ export default function StepConnection({ onComplete, onStaticSelect, greeting }:
         skipTypePicker
         onSaveSuccess={onComplete}
         hideCancel
+        onStaticSelect={onStaticSelect}
       />
     );
   }
