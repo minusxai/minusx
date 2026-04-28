@@ -9,7 +9,7 @@ import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import { useAppSelector } from '@/store/hooks';
-import { selectRightSidebarUIState, selectDevMode } from '@/store/uiSlice';
+import { selectRightSidebarUIState, selectDevMode, selectHomePage } from '@/store/uiSlice';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -327,6 +327,7 @@ function useFeedData() {
 
 /** Provider that fetches analytics + conversations once, shares via context */
 function FeedDataProvider({ children }: { children: React.ReactNode }) {
+  const homePageConfig = useAppSelector(selectHomePage);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
   const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
@@ -347,12 +348,9 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchSummary = useCallback(async (files: RecentFile[], skipCache = false) => {
-    if (files.length === 0) return;
-
-    const questionIds = files
-      .filter(f => f.fileType === 'question')
-      .slice(0, 3)
-      .map(f => f.fileId);
+    const questionIds = homePageConfig.feedSummaryQuestionIds.length > 0
+      ? homePageConfig.feedSummaryQuestionIds
+      : files.filter(f => f.fileType === 'question').slice(0, 3).map(f => f.fileId);
 
     if (questionIds.length === 0) return;
 
@@ -374,7 +372,7 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
 
       const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
         method: 'POST',
-        body: JSON.stringify({ appState: fullAppState }),
+        body: JSON.stringify({ appState: fullAppState, prompt: homePageConfig.feedSummaryPrompt || undefined }),
         cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
         skipCache,
       });
@@ -384,7 +382,7 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSummaryLoading(false);
     }
-  }, [contextDocs]);
+  }, [contextDocs, homePageConfig.feedSummaryPrompt, homePageConfig.feedSummaryQuestionIds]);
 
   useEffect(() => {
     if (!data) return;
@@ -412,8 +410,9 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
 export function FeedSummary({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
   const { config } = useConfigs();
   const devMode = useAppSelector(selectDevMode);
+  const { showFeedSummary } = useAppSelector(selectHomePage);
 
-  if (simulateEmpty) return null;
+  if (!showFeedSummary || simulateEmpty) return null;
 
   return (
     <FeedDataProvider>
@@ -424,7 +423,6 @@ export function FeedSummary({ simulateEmpty }: { simulateEmpty?: boolean } = {})
 
 function FeedSummaryInner({ agentName, devMode }: { agentName: string; devMode: boolean }) {
   const { data, summary, summaryLoading, fetchSummary, lastAppStateRef } = useFeedData();
-  const hasRecent = (data?.recent.length ?? 0) > 0;
 
   if (!summary && !summaryLoading && !devMode) return null;
 
@@ -496,16 +494,20 @@ function FeedSummaryInner({ agentName, devMode }: { agentName: string; devMode: 
 
 /** Recent questions carousel section */
 export function RecentQuestions({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+  const { showRecentQuestions } = useAppSelector(selectHomePage);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
 
   useEffect(() => {
+    if (!showRecentQuestions) return;
     fetch('/api/analytics/recent-files')
       .then(res => res.json())
       .then(json => {
         if (json.success) setData(json.data);
       })
       .catch(() => {});
-  }, []);
+  }, [showRecentQuestions]);
+
+  if (!showRecentQuestions) return null;
 
   const recentQuestions = simulateEmpty ? [] : (data?.recent.filter(f => f.fileType === 'question') ?? []);
 
@@ -525,16 +527,20 @@ export function RecentQuestions({ simulateEmpty }: { simulateEmpty?: boolean } =
 
 /** Recent dashboards list section */
 export function RecentDashboards({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+  const { showRecentDashboards } = useAppSelector(selectHomePage);
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
 
   useEffect(() => {
+    if (!showRecentDashboards) return;
     fetch('/api/analytics/recent-files')
       .then(res => res.json())
       .then(json => {
         if (json.success) setData(json.data);
       })
       .catch(() => {});
-  }, []);
+  }, [showRecentDashboards]);
+
+  if (!showRecentDashboards) return null;
 
   const recentDashboards = simulateEmpty ? [] : (data?.recent.filter(f => f.fileType === 'dashboard') ?? []);
 
@@ -558,7 +564,10 @@ export function RecentDashboards({ simulateEmpty }: { simulateEmpty?: boolean } 
 
 /** Recent conversations list section */
 export function RecentConversations({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
+  const { showRecentConversations } = useAppSelector(selectHomePage);
   const { data: convData } = useFetch(API.conversations.listRecent);
+
+  if (!showRecentConversations) return null;
   const recentConversations: ConversationSummary[] = simulateEmpty ? [] : ((convData as any)?.conversations || []);
 
   return (
@@ -585,6 +594,7 @@ export function RecentConversations({ simulateEmpty }: { simulateEmpty?: boolean
 export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const { config } = useConfigs();
   const devMode = useAppSelector(selectDevMode);
+  const homePageConfig = useAppSelector(selectHomePage);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
   const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
@@ -605,12 +615,9 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   }, []);
 
   const fetchSummary = useCallback(async (files: RecentFile[], skipCache = false) => {
-    if (files.length === 0) return;
-
-    const questionIds = files
-      .filter(f => f.fileType === 'question')
-      .slice(0, 3)
-      .map(f => f.fileId);
+    const questionIds = homePageConfig.feedSummaryQuestionIds.length > 0
+      ? homePageConfig.feedSummaryQuestionIds
+      : files.filter(f => f.fileType === 'question').slice(0, 3).map(f => f.fileId);
 
     if (questionIds.length === 0) return;
 
@@ -634,7 +641,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
 
       const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
         method: 'POST',
-        body: JSON.stringify({ appState: fullAppState }),
+        body: JSON.stringify({ appState: fullAppState, prompt: homePageConfig.feedSummaryPrompt || undefined }),
         cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
         skipCache,
       });
@@ -644,7 +651,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
     } finally {
       setSummaryLoading(false);
     }
-  }, [contextDocs]);
+  }, [contextDocs, homePageConfig.feedSummaryPrompt, homePageConfig.feedSummaryQuestionIds]);
 
   useEffect(() => {
     if (!data) return;
@@ -754,7 +761,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       )}
 
       {/* Recently viewed — questions carousel */}
-      {hasRecent && recentQuestions.length > 0 && (
+      {homePageConfig.showRecentQuestions && hasRecent && recentQuestions.length > 0 && (
         <>
           <SectionHeader label="Recently viewed" />
           <QuestionCarousel questions={recentQuestions} />
@@ -762,7 +769,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       )}
 
       {/* Recent dashboards */}
-      {hasRecent && recentDashboards.length > 0 && (
+      {homePageConfig.showRecentDashboards && hasRecent && recentDashboards.length > 0 && (
         <>
           <SectionHeader label="Recent dashboards" />
           <VStack gap={1.5} align="stretch">
@@ -774,7 +781,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       )}
 
       {/* Recent conversations */}
-      {recentConversations.length > 0 && (
+      {homePageConfig.showRecentConversations && recentConversations.length > 0 && (
         <>
           <SectionHeader label="Recent conversations" />
           <VStack gap={1.5} align="stretch">

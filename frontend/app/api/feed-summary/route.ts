@@ -16,13 +16,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { appState } = await request.json();
+    const { appState, prompt } = await request.json();
 
     const response = await pythonBackendFetch('/api/chat', {
       method: 'POST',
       body: JSON.stringify({
         log: [],
-        user_message: 'Generate a feed summary.',
+        user_message: prompt || 'Generate a feed summary.',
         agent: 'FeedSummaryAgent',
         agent_args: {
           app_state: appState,

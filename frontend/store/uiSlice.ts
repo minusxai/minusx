@@ -34,7 +34,14 @@ interface UIState {
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
   compactChatEnabled: boolean;
-
+  homePage: {
+    showFeedSummary: boolean;
+    showRecentQuestions: boolean;
+    showRecentDashboards: boolean;
+    showRecentConversations: boolean;
+    feedSummaryPrompt: string;
+    feedSummaryQuestionIds: number[];
+  };
 }
 
 const initialState: UIState = {
@@ -64,7 +71,14 @@ const initialState: UIState = {
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
   compactChatEnabled: false,
-
+  homePage: {
+    showFeedSummary: true,
+    showRecentQuestions: true,
+    showRecentDashboards: true,
+    showRecentConversations: true,
+    feedSummaryPrompt: '',
+    feedSummaryQuestionIds: [],
+  },
 };
 
 const uiSlice = createSlice({
@@ -240,8 +254,14 @@ const uiSlice = createSlice({
         try { localStorage.setItem('compactChatEnabled', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean }>) => {
-      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, compactChatEnabled } = action.payload;
+    setHomePageConfig: (state, action: PayloadAction<Partial<UIState['homePage']>>) => {
+      Object.assign(state.homePage, action.payload);
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
+      }
+    },
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, compactChatEnabled, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -251,6 +271,7 @@ const uiSlice = createSlice({
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
       if (compactChatEnabled !== undefined) state.compactChatEnabled = compactChatEnabled;
+      if (homePage !== undefined) Object.assign(state.homePage, homePage);
     },
   },
 });
@@ -293,7 +314,7 @@ export const {
   setQueueStrategy,
   setUnrestrictedMode,
   setCompactChatEnabled,
-
+  setHomePageConfig,
   setBulkUiFlags,
   pushView,
   popView,
@@ -354,3 +375,4 @@ export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showS
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
 export const selectUnrestrictedMode = (state: RootState) => state.ui.unrestrictedMode;
 export const selectCompactChatEnabled = (state: RootState) => state.ui.compactChatEnabled ?? false;
+export const selectHomePage = (state: RootState) => state.ui.homePage;

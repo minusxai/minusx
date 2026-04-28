@@ -6,6 +6,7 @@ import { Box, VStack, Flex, Heading, HStack, Text, Icon } from '@chakra-ui/react
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAppSelector } from '@/store/hooks';
+import { selectHomePage } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
@@ -99,6 +100,29 @@ function ActionCard({ href, icon, color, title, description, step }: {
   );
 }
 
+function ColumnEmptyState({ icon, message, linkLabel, linkHref, color }: {
+  icon: React.ElementType; message: string; linkLabel: string; linkHref: string; color: string;
+}) {
+  return (
+    <Box bg="bg.subtle" borderRadius="lg" border="1px solid" borderColor="border.muted" p={6}>
+      <VStack gap={3} align="center" py={4}>
+        <Icon as={icon} color={color} boxSize={6} opacity={0.5} />
+        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">{message}</Text>
+        <Link href={linkHref}>
+          <HStack
+            gap={1.5} px={3} py={1} borderRadius="full"
+            bg={`${color}/10`} cursor="pointer" transition="all 0.15s ease"
+            _hover={{ bg: `${color}/20` }}
+          >
+            <Icon as={LuArrowRight} color={color} boxSize={3} />
+            <Text fontSize="2xs" fontWeight="600" fontFamily="mono" color={color}>{linkLabel}</Text>
+          </HStack>
+        </Link>
+      </VStack>
+    </Box>
+  );
+}
+
 function WelcomeBanner({ agentName, mode }: { agentName: string; mode: string }) {
   return (
     <VStack align="stretch" gap={3}>
@@ -172,6 +196,9 @@ export default function Home() {
   const homePath = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const mode = user.mode || 'org';
   const breadcrumbItems = [{ label: 'Home' }];
+  const homePage = useAppSelector(selectHomePage);
+  const leftColEmpty = !homePage.showFeedSummary && !homePage.showRecentQuestions;
+  const rightColEmpty = !homePage.showRecentDashboards && !homePage.showRecentConversations;
 
   return (
     <Box minH="90vh" bg="bg.canvas" display="flex">
@@ -212,10 +239,20 @@ export default function Home() {
                 <SectionPanel>
                   <WelcomeBanner agentName={config.branding.agentName} mode={mode} />
                 </SectionPanel>
+              ) : leftColEmpty ? (
+                <ColumnEmptyState
+                  icon={LuScanSearch}
+                  message="Start exploring your data"
+                  linkLabel="Go to Explore"
+                  linkHref="/explore"
+                  color="accent.teal"
+                />
               ) : (
-                <SectionPanel><FeedSummary /></SectionPanel>
+                <>
+                  <SectionPanel><FeedSummary /></SectionPanel>
+                  <SectionPanel><RecentQuestions simulateEmpty={simulateEmpty} /></SectionPanel>
+                </>
               )}
-              <SectionPanel><RecentQuestions simulateEmpty={simulateEmpty} /></SectionPanel>
             </VStack>
 
             {/* Right column — dashboards + conversations */}
@@ -225,8 +262,20 @@ export default function Home() {
               align="stretch"
               gap={2}
             >
-              <SectionPanel><RecentDashboards simulateEmpty={simulateEmpty} /></SectionPanel>
-              <SectionPanel><RecentConversations simulateEmpty={simulateEmpty} /></SectionPanel>
+              {rightColEmpty ? (
+                <ColumnEmptyState
+                  icon={LuFolder}
+                  message="Browse your files and dashboards"
+                  linkLabel="View Files"
+                  linkHref={`/p/${mode}`}
+                  color="accent.primary"
+                />
+              ) : (
+                <>
+                  <SectionPanel><RecentDashboards simulateEmpty={simulateEmpty} /></SectionPanel>
+                  <SectionPanel><RecentConversations simulateEmpty={simulateEmpty} /></SectionPanel>
+                </>
+              )}
             </VStack>
           </Flex>
         </Box>
