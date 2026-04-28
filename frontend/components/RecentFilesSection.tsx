@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef, createContext, useContext as useReactContext } from 'react';
+import { useEffect, useState, useCallback, createContext, useContext as useReactContext } from 'react';
 import { Box, HStack, Text, VStack, Icon, Skeleton } from '@chakra-ui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -314,7 +314,6 @@ interface FeedDataContextValue {
   recentConversations: ConversationSummary[];
   convLoaded: boolean;
   fetchSummary: (files: RecentFile[], skipCache?: boolean) => Promise<void>;
-  lastAppStateRef: React.RefObject<any>;
 }
 
 const FeedDataContext = createContext<FeedDataContextValue | null>(null);
@@ -334,7 +333,6 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const lastAppStateRef = useRef<any>(null);
   const { data: convData } = useFetch(API.conversations.listRecent);
   const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
 
@@ -368,7 +366,6 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
 
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
       const fullAppState = { files: appState, context: contextDocs || '' };
-      lastAppStateRef.current = fullAppState;
 
       const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
         method: 'POST',
@@ -397,7 +394,6 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
       recentConversations,
       convLoaded: !!convData,
       fetchSummary,
-      lastAppStateRef,
     }}>
       {children}
     </FeedDataContext.Provider>
@@ -409,22 +405,21 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
 /** AI-generated summary section */
 export function FeedSummary({ simulateEmpty }: { simulateEmpty?: boolean } = {}) {
   const { config } = useConfigs();
-  const devMode = useAppSelector(selectDevMode);
   const { showFeedSummary } = useAppSelector(selectHomePage);
 
   if (!showFeedSummary || simulateEmpty) return null;
 
   return (
     <FeedDataProvider>
-      <FeedSummaryInner agentName={config.branding.agentName} devMode={devMode} />
+      <FeedSummaryInner agentName={config.branding.agentName} />
     </FeedDataProvider>
   );
 }
 
-function FeedSummaryInner({ agentName, devMode }: { agentName: string; devMode: boolean }) {
-  const { data, summary, summaryLoading, fetchSummary, lastAppStateRef } = useFeedData();
+function FeedSummaryInner({ agentName }: { agentName: string }) {
+  const { data, summary, summaryLoading, fetchSummary } = useFeedData();
 
-  if (!summary && !summaryLoading && !devMode) return null;
+  if (!summary && !summaryLoading) return null;
 
   return (
     <VStack gap={3} align="stretch">
@@ -466,28 +461,6 @@ function FeedSummaryInner({ agentName, devMode }: { agentName: string; devMode: 
       ) : summary ? (
         <SummaryCollapsible summary={summary} />
       ) : null}
-
-      {devMode && lastAppStateRef.current && (
-        <Box as="details" mt={2} fontSize="2xs" fontFamily="mono" color="fg.subtle">
-          <Box as="summary" cursor="pointer" _hover={{ color: 'fg.muted' }}>
-            app_state
-          </Box>
-          <Box
-            mt={1}
-            p={2}
-            bg="bg.canvas"
-            borderRadius="sm"
-            border="1px solid"
-            borderColor="border.default"
-            maxH="300px"
-            overflowY="auto"
-            whiteSpace="pre-wrap"
-            wordBreak="break-all"
-          >
-            {JSON.stringify(lastAppStateRef.current, null, 2)}
-          </Box>
-        </Box>
-      )}
     </VStack>
   );
 }
@@ -593,7 +566,6 @@ export function RecentConversations({ simulateEmpty }: { simulateEmpty?: boolean
 /** Shared feed content — used by both standalone column and sidebar */
 export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const { config } = useConfigs();
-  const devMode = useAppSelector(selectDevMode);
   const homePageConfig = useAppSelector(selectHomePage);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
@@ -601,7 +573,6 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const lastAppStateRef = useRef<any>(null);
   const { data: convData } = useFetch(API.conversations.listRecent);
   const recentConversations: ConversationSummary[] = (convData as any)?.conversations || [];
 
@@ -635,9 +606,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       }
 
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
-
       const fullAppState = { files: appState, context: contextDocs || '' };
-      lastAppStateRef.current = fullAppState;
 
       const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
         method: 'POST',
@@ -664,7 +633,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const hasAnything = hasRecent || hasConversations;
 
   // Nothing loaded yet — show skeleton
-  if (analyticsLoading && !devMode) {
+  if (analyticsLoading) {
     if (!convData) {
       return (
         <FeedWrapper enabled={wrapper}><VStack gap={4} align="stretch">
@@ -689,7 +658,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   }
 
   // Everything loaded but nothing to show
-  if (!analyticsLoading && !hasAnything && !devMode) return null;
+  if (!analyticsLoading && !hasAnything) return null;
 
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
@@ -727,7 +696,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       </HStack>
 
       {/* Summary */}
-      {(summary || (summaryLoading && hasRecent) || (devMode && lastAppStateRef.current)) && (
+      {(summary || (summaryLoading && hasRecent)) && (
         <Box>
           {summaryLoading && !summary ? (
             <Text fontSize="xs" color="fg.subtle" fontFamily="mono" fontStyle="italic">
@@ -736,27 +705,6 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
           ) : summary ? (
             <SummaryCollapsible summary={summary} />
           ) : null}
-          {devMode && lastAppStateRef.current && (
-            <Box as="details" mt={2} fontSize="2xs" fontFamily="mono" color="fg.subtle">
-              <Box as="summary" cursor="pointer" _hover={{ color: 'fg.muted' }}>
-                app_state
-              </Box>
-              <Box
-                mt={1}
-                p={2}
-                bg="bg.canvas"
-                borderRadius="sm"
-                border="1px solid"
-                borderColor="border.default"
-                maxH="300px"
-                overflowY="auto"
-                whiteSpace="pre-wrap"
-                wordBreak="break-all"
-              >
-                {JSON.stringify(lastAppStateRef.current, null, 2)}
-              </Box>
-            </Box>
-          )}
         </Box>
       )}
 
