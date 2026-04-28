@@ -14,7 +14,7 @@ import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
-import { useBreakpointValue } from '@chakra-ui/react';
+import { useState } from 'react';
 import { LuScanSearch, LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 
@@ -177,7 +177,13 @@ export default function Home() {
     }
   }, [user, router, config, configLoading]);
 
-  const isMobile = useBreakpointValue({ base: true, md: false });
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   const homePage = useAppSelector(selectHomePage);
 
   if (!user || configLoading) return null;
