@@ -38,6 +38,7 @@ def _build_system_prompt(preloaded_skill_names: list[str] | None = None, **overr
         'home_folder': '/org',
         'max_steps': 10,
         'allowed_viz_types': 'all',
+        'role': 'admin',
         'skills_catalog': AnalystAgent._build_skills_catalog(preloaded_set),
         'preloaded_skills': AnalystAgent._build_preloaded_skills_content(preloaded_skill_names),
     }
