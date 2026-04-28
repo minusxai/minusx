@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, 
 import { LuRefreshCw, LuUser } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setCompactChatEnabled, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -217,7 +217,7 @@ function SettingsContent() {
   const devMode = useAppSelector((state) => state.ui.devMode);
   const showSuggestedQuestions = useAppSelector((state) => state.ui.showSuggestedQuestions);
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
-  const compactChatEnabled = useAppSelector((state) => state.ui.compactChatEnabled ?? true);
+  const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
 
   const searchParams = useSearchParams();
@@ -396,17 +396,15 @@ function SettingsContent() {
       ),
     },
     {
-      tab: 'general',
-      section: 'Experimental Flags',
-      title: 'Compact Conversation',
-      description: 'Enable a compact summary view for agent work in chat. When off, always shows the detailed view.',
+      tab: 'dev',
+      title: 'Show Expanded Messages',
+      description: 'Always show the detailed timeline view for agent work in chat instead of the compact summary.',
       control: (
         <SwitchControl
-          checked={compactChatEnabled}
-          onChange={(checked) => dispatch(setCompactChatEnabled(checked))}
+          checked={showExpandedMessages}
+          onChange={(checked) => dispatch(setShowExpandedMessages(checked))}
         />
       ),
-      visible: isEditorOrAdmin,
     },
     // ── General: Developer Tools toggle (admin only, unlabeled card) ──
     {
@@ -475,7 +473,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, compactChatEnabled]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
