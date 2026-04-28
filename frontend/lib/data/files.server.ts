@@ -967,6 +967,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
   ): Promise<boolean> {
     return DocumentDB.appendJsonArray(id, entries, expectedLength, arrayPath, metaPath);
   }
+
+  async updateNamePath(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
+    return DocumentDB.updateNamePath(id, name, path);
+  }
 }
 
 // Export singleton instance - PREFER using this

@@ -41,6 +41,14 @@ export function truncateMessageForName(message: string): string {
   return cleaned.substring(0, 47) + '...';
 }
 
+function buildConversationPath(user: EffectiveUser, name: string): { userId: string; fileName: string; path: string } {
+  const userId = user.userId?.toString() || user.email;
+  const slug = slugify(name);
+  const fileName = `${Date.now()}-${slug}.chat.json`;
+  const path = resolvePath(user.mode, `/logs/conversations/${userId}/${fileName}`);
+  return { userId, fileName, path };
+}
+
 /**
  * Create a new conversation file and return its real positive ID.
  * Called by /api/chat/init before any streaming starts so the frontend
@@ -50,12 +58,8 @@ export async function createNewConversation(
   user: EffectiveUser,
   firstUserMessage?: string
 ): Promise<{ fileId: number; name: string }> {
-  const userId = user.userId?.toString() || user.email;
-  const timestamp = Date.now();
   const name = truncateMessageForName(firstUserMessage || 'New Conversation');
-  const slug = slugify(firstUserMessage || 'conversation');
-  const fileName = `${timestamp}-${slug}.chat.json`;
-  const path = resolvePath(user.mode, `/logs/conversations/${userId}/${fileName}`);
+  const { userId, fileName, path } = buildConversationPath(user, firstUserMessage || 'conversation');
   const now = new Date().toISOString();
 
   const initialConversation: ConversationFile = {
@@ -150,6 +154,15 @@ export async function appendLogToConversation(
   // Optimistic atomic append — succeeds when log length matches expected index
   const updated = await FilesAPI.appendJsonArray(fileId, logDiff, log_index, user, 'log', 'metadata.updatedAt');
   if (updated) {
+    if (log_index === 0) {
+      const firstTask = logDiff.find(e => e._type === 'task');
+      const firstMsg = firstTask?.args?.user_message || firstTask?.args?.message;
+      if (firstMsg) {
+        const displayName = truncateMessageForName(String(firstMsg));
+        const { path: newPath } = buildConversationPath(user, String(firstMsg));
+        await FilesAPI.updateNamePath(fileId, displayName, newPath, user);
+      }
+    }
     return { conversationID: fileId, fileId };
   }
 
@@ -159,11 +172,8 @@ export async function appendLogToConversation(
   const fileResult = await FilesAPI.loadFile(fileId, user);
   const conversation = fileResult.data.content as unknown as ConversationFile;
 
-  const userId = user.userId?.toString() || user.email;
-  const timestamp = Date.now();
   const forkedName = `${conversation.metadata.name} (forked)`;
-  const slug = slugify(forkedName);
-  const fileName = `${timestamp}-${slug}.chat.json`;
+  const { userId, fileName, path } = buildConversationPath(user, forkedName);
   const now = new Date().toISOString();
 
   const forkedLog = [
@@ -182,8 +192,6 @@ export async function appendLogToConversation(
     },
     log: forkedLog
   };
-
-  const path = resolvePath(user.mode, `/logs/conversations/${userId}/${fileName}`);
   const createResult = await FilesAPI.createFile(
     {
       name: fileName,
