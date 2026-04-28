@@ -481,7 +481,6 @@ function SettingsContent() {
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
-    { id: 'homepage', label: 'Home Page', visible: isAdvancedAdmin, custom: <HomePageSettings /> },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
     {
       id: 'messaging',
