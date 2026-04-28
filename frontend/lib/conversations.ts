@@ -156,12 +156,19 @@ export async function appendLogToConversation(
   const updated = await FilesAPI.appendJsonArray(fileId, logDiff, log_index, user, 'log', 'metadata.updatedAt');
   if (updated) {
     if (log_index === 0) {
-      const firstTask = logDiff.find(e => e._type === 'task');
-      const firstMsg = firstTask?.args?.user_message || firstTask?.args?.message || firstTask?.args?.goal;
-      if (firstMsg) {
-        const displayName = truncateMessageForName(String(firstMsg));
-        const { path: newPath } = buildConversationPath(user, String(firstMsg));
-        await FilesAPI.updateNamePath(fileId, displayName, newPath, user);
+      // Rename the conversation file based on the first user message — but skip
+      // if the conversation was pre-created by an integration (e.g. Slack) with a
+      // specific path and source metadata that must be preserved for thread lookup.
+      const fileResult = await FilesAPI.loadFile(fileId, user);
+      const metadata = (fileResult.data.content as unknown as ConversationFile)?.metadata;
+      if (!metadata?.source) {
+        const firstTask = logDiff.find(e => e._type === 'task');
+        const firstMsg = firstTask?.args?.user_message || firstTask?.args?.message || firstTask?.args?.goal;
+        if (firstMsg) {
+          const displayName = truncateMessageForName(String(firstMsg));
+          const { path: newPath } = buildConversationPath(user, String(firstMsg));
+          await FilesAPI.updateNamePath(fileId, displayName, newPath, user);
+        }
       }
     }
     return { conversationID: fileId, fileId };
