@@ -8,6 +8,8 @@ import type { AnalyticsConfig } from './analytics/types';
 export const IS_DEV = process.env.NODE_ENV !== 'production';
 export const IS_TEST = process.env.NODE_ENV === 'test';
 
+export const DEFAULT_CONVERSATION_NAME = 'New Conversation';
+
 export const APP_VERSION = '0.1.0';
 
 /**

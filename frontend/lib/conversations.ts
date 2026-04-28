@@ -7,6 +7,7 @@ import {
   ConversationLogEntry
 } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { DEFAULT_CONVERSATION_NAME } from '@/lib/constants';
 
 // Type alias for convenience
 export type Task = OrchestrationTask;
@@ -58,7 +59,7 @@ export async function createNewConversation(
   user: EffectiveUser,
   firstUserMessage?: string
 ): Promise<{ fileId: number; name: string }> {
-  const name = truncateMessageForName(firstUserMessage || 'New Conversation');
+  const name = truncateMessageForName(firstUserMessage || DEFAULT_CONVERSATION_NAME);
   const { userId, fileName, path } = buildConversationPath(user, firstUserMessage || 'conversation');
   const now = new Date().toISOString();
 

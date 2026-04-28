@@ -4,6 +4,7 @@
  */
 import { DbFile, BaseFileContent } from '../types';
 import { getModules } from '../modules/registry';
+import { DEFAULT_CONVERSATION_NAME } from '../constants';
 
 /**
  * Type for raw database row returned by database
@@ -387,8 +388,8 @@ export class DocumentDB {
        SET name = $2, path = $3,
            content = jsonb_set(content, '{metadata,name}', to_jsonb($2::text)),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [id, name, path]
+       WHERE id = $1 AND name = $4`,
+      [id, name, path, DEFAULT_CONVERSATION_NAME]
     );
   }
 }
