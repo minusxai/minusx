@@ -3,13 +3,12 @@
 import { useEffect, useState, useCallback, createContext, useContext as useReactContext } from 'react';
 import { Box, HStack, Text, VStack, Icon, Skeleton } from '@chakra-ui/react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight, LuSendHorizontal } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
-import { useAppSelector } from '@/store/hooks';
-import { selectRightSidebarUIState, selectDevMode, selectHomePage } from '@/store/uiSlice';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { selectRightSidebarUIState, selectDevMode, selectHomePage, setSidebarPendingMessage, setActiveSidebarSection, setRightSidebarCollapsed } from '@/store/uiSlice';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -238,11 +237,12 @@ function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: str
 
 
 const SUMMARY_COLLAPSED_LINES = 5;
+const SUMMARY_CHARS_PER_LINE = 45;
 
 function SummaryCollapsible({ summary }: { summary: string }) {
   const [expanded, setExpanded] = useState(false);
-  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * 90;
-  const maxMaxLen = SUMMARY_COLLAPSED_LINES * 90;
+  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * SUMMARY_CHARS_PER_LINE;
+  const maxMaxLen = SUMMARY_COLLAPSED_LINES * SUMMARY_CHARS_PER_LINE;
   const needsCollapse = summary.length > maxMaxLen;
   const displayText = !expanded && needsCollapse
     ? summary.slice(0, maxLen).trimEnd() + '...'
@@ -250,7 +250,7 @@ function SummaryCollapsible({ summary }: { summary: string }) {
 
   return (
     <Box lineHeight="1.55">
-      <Markdown textColor="fg.muted" fontSize="sm">{displayText}</Markdown>
+      <Markdown textColor="fg.muted" fontSize="xs">{displayText}</Markdown>
       {needsCollapse && (
         <Text
           as="button"
@@ -557,6 +557,52 @@ export function RecentConversations() {
       ) : (
         <ListSkeleton count={3} />
       )}
+    </VStack>
+  );
+}
+
+const suggestedPrompts = [
+  'What all can you do?',
+  'Which is our main dashboard?',
+  'How do I invite my colleagues?',
+];
+
+/** Suggested questions section for the home page */
+export function SuggestedQuestions() {
+  const dispatch = useAppDispatch();
+  const { showSuggestedPrompts } = useAppSelector(selectHomePage);
+
+  if (!showSuggestedPrompts) return null;
+
+  const handleClick = (prompt: string) => {
+    dispatch(setSidebarPendingMessage(prompt));
+    dispatch(setActiveSidebarSection('chat'));
+    dispatch(setRightSidebarCollapsed(false));
+  };
+
+  return (
+    <VStack gap={3} align="stretch">
+      <SectionHeader label="Try These" />
+      <VStack gap={1.5} align="stretch">
+        {suggestedPrompts.map((prompt, idx) => (
+          <HStack
+            key={idx}
+            gap={2.5}
+            py={1.5}
+            px={2}
+            borderRadius="md"
+            cursor="pointer"
+            transition="all 0.15s ease"
+            _hover={{ bg: 'bg.surface' }}
+            onClick={() => handleClick(prompt)}
+          >
+            <Icon as={LuSendHorizontal} color="accent.teal" boxSize={3} flexShrink={0} />
+            <Text flex="1" minW={0} fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
+              {prompt}
+            </Text>
+          </HStack>
+        ))}
+      </VStack>
     </VStack>
   );
 }

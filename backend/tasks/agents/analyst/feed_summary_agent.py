@@ -22,7 +22,7 @@ class FeedSummaryAgent(AnalystAgent):
 
     def _get_user_message(self) -> dict:
         app_state_str = json.dumps(self.app_state, indent=2) if self.app_state else "null"
-        print(f"[FeedSummaryAgent] app_state:\n{app_state_str}")
+        # print(f"[FeedSummaryAgent] app_state:\n{app_state_str}")
         content = get_prompt(
             'feed_summary.user',
             app_state=app_state_str,

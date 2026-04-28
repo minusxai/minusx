@@ -144,7 +144,8 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
         agent: body.agent || 'DefaultAgent',
         agent_args: {
           ...(body.agent_args || {}),
-          home_folder: resolvedHomeFolder  // Add resolved home folder to agent args
+          home_folder: resolvedHomeFolder,
+          role: user.role,
         }
       };
       pythonResponse = await callPythonBackend(requestPayload);

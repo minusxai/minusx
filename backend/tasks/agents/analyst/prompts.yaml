@@ -35,6 +35,7 @@ templates:
     - CurrentTime
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
     - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list.
+    - User Role: {role} (admin, editor, or viewer). Relevant for the filetypes they can create, and for the `app_guide` skill.
     - User request: Always the last content block in the user message
 
   schema_section: |
@@ -481,6 +482,85 @@ templates:
         - Single-level only: Referenced questions CANNOT have their own references (no nested composition)
         - Same connection: Only reference questions with matching connection_id
         - No circular references: A question cannot reference itself
+
+  skill_app_guide:
+    description: "App guide — pages, navigation, settings, and how-to for common tasks. Load when users ask 'how do I...', 'where can I find...', or need help using the app."
+    content: |
+      ## Skill: App Guide
+
+      When guiding users, prefer showing the in-app link directly. Only mention docs for complex multi-step tasks.
+
+      ### Pages & Navigation
+
+      | Page | Route | Min Role | Purpose |
+      |------|-------|----------|---------|
+      | Home | `/` | all | Feed summary, recent questions/dashboards, quick actions |
+      | Explore | `/explore` | all | Ad-hoc chat for data exploration via natural language |
+      | Conversations | `/conversations` | all | Past chat sessions — search, filter, continue |
+      | File page | `/f/<id>` | all (view), editor (edit) | View/edit a question, dashboard, context, report, or alert |
+      | Folder browser | `/p/<path>` | all | Navigate folder hierarchy, browse files |
+      | New file | `/new/<type>` | editor (question, dashboard, report, alert); admin (connection, context) | Create a new file — type is one of: question, dashboard, report, alert, connection, context |
+      | Settings | `/settings` | all (some tabs admin-only) | App settings and administration |
+
+      ### Settings Tabs
+
+      | Tab | Route | Min Role | Purpose |
+      |-----|-------|----------|---------|
+      | General | `/settings?tab=general` | all | Dark/light mode, confirm actions, suggested questions, chat queue |
+      | Users | `/settings?tab=users` | admin | Invite colleagues, manage roles and access |
+      | Messaging | `/settings?tab=messaging` | admin | Slack channels, email OTP, error notifications |
+      | Integrations | `/settings?tab=integrations` | admin | Connect Slack workspace, set up MCP servers |
+      
+      ### Common How-To
+
+      **Adding a database connection** (admin only)
+      Navigate to `/new/connection` and follow the setup wizard.
+      Docs: https://docs.minusx.ai/docs/data/connections
+
+      **Inviting colleagues** (admin only)
+      Go to `/settings?tab=users`. Add their email and assign a role (viewer, editor, or admin).
+
+      **Creating a question** (editor+)
+      Navigate to `/new/question`. Write SQL in the editor, run it, then pick a visualization type. Or just ask the agent!
+
+      **Creating a dashboard** (editor+)
+      Navigate to `/new/dashboard`. Add existing questions or create new ones within the dashboard layout. Or just ask the agent!
+      Docs: https://docs.minusx.ai/docs/bi/dashboards
+
+      **Exploring data** (all roles)
+      Go to `/explore` and type a natural language question. The agent will write and run SQL for you.
+
+      **Setting up a report** (editor+)
+      Navigate to `/new/report`. Add references (questions/dashboards), write synthesis instructions, set a schedule, and add recipients.
+      Docs: https://docs.minusx.ai/docs/proactive/reports
+
+      **Setting up an alert** (editor+)
+      Navigate to `/new/alert`. Link a question, define a condition and threshold, set a schedule, and add recipients.
+      Docs: https://docs.minusx.ai/docs/proactive/alerts
+
+      **Connecting to Slack** (admin only)
+      Go to `/settings?tab=integrations` and use the Slack integration section.
+      Docs: https://docs.minusx.ai/docs/integrations
+
+      **Setting up MCP** (admin only)
+      Go to `/settings?tab=integrations` and use the MCP integration section.
+      Docs: https://docs.minusx.ai/docs/integrations
+
+      **Adding knowledge base / context** (admin only)
+      Navigate to `/new/context` or edit an existing context file. Write documentation about metrics, conventions, and schema.
+      Docs: https://docs.minusx.ai/docs/knowledge-base/context
+
+      **Finding existing files** (all roles)
+      Use the folder browser in the left sidebar, or use SearchFiles.
+
+      **Viewing past conversations** (all roles)
+      Go to `/conversations` to search and continue past chats.
+
+      ### Role Guidance
+      - If the user's role is **viewer**: they can browse, chat, and explore, but cannot create or edit files. Guide them to ask an admin or editor for content changes, or to add users, etc.
+      - If the user's role is **editor**: they can create and edit questions, dashboards, reports, and alerts, but cannot manage connections, contexts, users, or integrations. Guide them to ask an admin for those.
+      - If the user's role is **admin**: they have full access to all features.
+      - Always check the user's role (provided in Available Info) before guiding them to admin-only features.
 
   skill_explore:
     description: "Explore/folder page behavior — when to use ExecuteQuery vs Navigate+EditFile, creating new files from explore"
