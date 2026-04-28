@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, createContext, useContext as useReact
 import { Box, HStack, Text, VStack, Icon, Skeleton } from '@chakra-ui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight, LuSparkles, LuSearch, LuUserPlus } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
@@ -238,11 +238,12 @@ function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: str
 
 
 const SUMMARY_COLLAPSED_LINES = 5;
+const SUMMARY_CHARS_PER_LINE = 45;
 
 function SummaryCollapsible({ summary }: { summary: string }) {
   const [expanded, setExpanded] = useState(false);
-  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * 90;
-  const maxMaxLen = SUMMARY_COLLAPSED_LINES * 90;
+  const maxLen = (SUMMARY_COLLAPSED_LINES - 1) * SUMMARY_CHARS_PER_LINE;
+  const maxMaxLen = SUMMARY_COLLAPSED_LINES * SUMMARY_CHARS_PER_LINE;
   const needsCollapse = summary.length > maxMaxLen;
   const displayText = !expanded && needsCollapse
     ? summary.slice(0, maxLen).trimEnd() + '...'
@@ -250,7 +251,7 @@ function SummaryCollapsible({ summary }: { summary: string }) {
 
   return (
     <Box lineHeight="1.55">
-      <Markdown textColor="fg.muted" fontSize="sm">{displayText}</Markdown>
+      <Markdown textColor="fg.muted" fontSize="xs">{displayText}</Markdown>
       {needsCollapse && (
         <Text
           as="button"
@@ -557,6 +558,46 @@ export function RecentConversations() {
       ) : (
         <ListSkeleton count={3} />
       )}
+    </VStack>
+  );
+}
+
+const suggestedPrompts = [
+  { icon: LuSparkles, text: 'What all can you do?', category: 'Capability' },
+  { icon: LuSearch, text: 'Which is our main dashboard?', category: 'Search' },
+  { icon: LuUserPlus, text: 'How to invite my colleagues?', category: 'App' },
+];
+
+/** Suggested questions section for the home page */
+export function SuggestedQuestions() {
+  const router = useRouter();
+
+  return (
+    <VStack gap={3} align="stretch">
+      <SectionHeader label="Try These" />
+      <VStack gap={1.5} align="stretch">
+        {suggestedPrompts.map((prompt, idx) => (
+          <HStack
+            key={idx}
+            gap={2.5}
+            py={1.5}
+            px={2}
+            borderRadius="md"
+            cursor="pointer"
+            transition="all 0.15s ease"
+            _hover={{ bg: 'bg.surface' }}
+            onClick={() => router.push('/explore')}
+          >
+            <Icon as={prompt.icon} color="accent.teal" boxSize={3} flexShrink={0} />
+            <Text flex="1" minW={0} fontSize="xs" fontWeight="500" color="fg.default" truncate fontFamily="mono">
+              {prompt.text}
+            </Text>
+            <Text fontSize="2xs" color="fg.subtle" flexShrink={0} fontFamily="mono" textTransform="uppercase">
+              {prompt.category}
+            </Text>
+          </HStack>
+        ))}
+      </VStack>
     </VStack>
   );
 }

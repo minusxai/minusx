@@ -9,7 +9,7 @@ import { selectHomePage } from '@/store/uiSlice';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations } from '@/components/RecentFilesSection';
+import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, SuggestedQuestions } from '@/components/RecentFilesSection';
 import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
@@ -235,8 +235,8 @@ export default function Home() {
                 />
               ) : (
                 <>
-                  <SectionPanel><FeedSummary /></SectionPanel>
                   <SectionPanel><RecentQuestions /></SectionPanel>
+                  <SectionPanel><RecentDashboards /></SectionPanel>
                 </>
               )}
             </VStack>
@@ -258,8 +258,9 @@ export default function Home() {
                 />
               ) : (
                 <>
-                  <SectionPanel><RecentDashboards /></SectionPanel>
+                  <SectionPanel><FeedSummary /></SectionPanel>
                   <SectionPanel><RecentConversations /></SectionPanel>
+                  <SectionPanel><SuggestedQuestions /></SectionPanel>
                 </>
               )}
             </VStack>
