@@ -1,4 +1,4 @@
-import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue } from '@/lib/chart/chart-utils'
+import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue, resolveXAxisTypes } from '@/lib/chart/chart-utils'
 import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import type { GeoConfig } from '@/lib/types'
@@ -139,19 +139,77 @@ describe('buildChartOption scatter with numeric x-axis', () => {
   })
 })
 
+describe('resolveXAxisTypes', () => {
+  it('returns category for both when column type is text', () => {
+    const result = resolveXAxisTypes(['region'], { region: 'text' }, 'line')
+    expect(result).toEqual({ columnKind: 'category', axisType: 'category' })
+  })
+
+  it('returns time/time for line chart with date column', () => {
+    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'line')
+    expect(result).toEqual({ columnKind: 'time', axisType: 'time' })
+  })
+
+  it('returns time/time for area chart with date column', () => {
+    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'area')
+    expect(result).toEqual({ columnKind: 'time', axisType: 'time' })
+  })
+
+  it('returns time/time for scatter chart with date column', () => {
+    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'scatter')
+    expect(result).toEqual({ columnKind: 'time', axisType: 'time' })
+  })
+
+  it('forces category axis for bar chart with date column', () => {
+    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'bar')
+    expect(result).toEqual({ columnKind: 'time', axisType: 'category' })
+  })
+
+  it('forces category axis for bar chart with number column', () => {
+    const result = resolveXAxisTypes(['rank'], { rank: 'number' }, 'bar')
+    expect(result).toEqual({ columnKind: 'value', axisType: 'category' })
+  })
+
+  it('forces category axis for combo chart with date column', () => {
+    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'combo')
+    expect(result).toEqual({ columnKind: 'time', axisType: 'category' })
+  })
+
+  it('forces category axis for waterfall chart', () => {
+    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'waterfall')
+    expect(result).toEqual({ columnKind: 'time', axisType: 'category' })
+  })
+
+  it('returns value/value for line chart with number column', () => {
+    const result = resolveXAxisTypes(['rank'], { rank: 'number' }, 'line')
+    expect(result).toEqual({ columnKind: 'value', axisType: 'value' })
+  })
+
+  it('returns value/log when xScaleType is log', () => {
+    const result = resolveXAxisTypes(['cost'], { cost: 'number' }, 'scatter', 'log')
+    expect(result).toEqual({ columnKind: 'value', axisType: 'log' })
+  })
+
+  it('bar chart with log scale still gets category (bar overrides log)', () => {
+    const result = resolveXAxisTypes(['cost'], { cost: 'number' }, 'bar', 'log')
+    expect(result).toEqual({ columnKind: 'value', axisType: 'category' })
+  })
+
+  it('defaults to category when no columns provided', () => {
+    const result = resolveXAxisTypes(undefined, undefined, 'line')
+    expect(result).toEqual({ columnKind: 'category', axisType: 'category' })
+  })
+})
+
 describe('buildChartOption cartesian x-axis type resolution', () => {
   it.each([
     ['line'],
-    ['bar'],
     ['area'],
-    ['combo'],
-  ] as const)('uses time axis for %s charts when the SQL x column type is date', (chartType) => {
+  ] as const)('uses time axis for %s charts when x column is date', (chartType) => {
     const option = buildChartOption({
       chartType,
       xAxisData: ['2024-01-15', '2024-02-20', '2024-03-10'],
-      series: [
-        { name: 'revenue', data: [100, 200, 300] },
-      ],
+      series: [{ name: 'revenue', data: [100, 200, 300] }],
       xAxisLabel: 'date',
       yAxisLabel: 'revenue',
       xAxisColumns: ['date'],
@@ -168,17 +226,74 @@ describe('buildChartOption cartesian x-axis type resolution', () => {
   })
 
   it.each([
-    ['line'],
     ['bar'],
-    ['area'],
     ['combo'],
-  ] as const)('uses value axis for %s charts when the SQL x column type is number', (chartType) => {
+  ] as const)('uses category axis for %s charts when x column is date', (chartType) => {
+    const option = buildChartOption({
+      chartType,
+      xAxisData: ['2024-01-31', '2024-02-28', '2024-03-31'],
+      series: [{ name: 'revenue', data: [100, 200, 300] }],
+      xAxisLabel: 'date',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['date'],
+      colorPalette: ['#16a085'],
+      columnTypes: { date: 'date' },
+    })
+
+    const xAxis = option.xAxis as any
+    const chartSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('category')
+    // Category axis: data is plain y values, xAxis.data has the raw date strings
+    expect(xAxis.data).toEqual(['2024-01-31', '2024-02-28', '2024-03-31'])
+    expect(chartSeries.data).toEqual([100, 200, 300])
+  })
+
+  it('bar chart with date column formats axis labels as dates', () => {
+    const option = buildChartOption({
+      chartType: 'bar',
+      xAxisData: ['2024-02-28'],
+      series: [{ name: 'revenue', data: [100] }],
+      xAxisLabel: 'date',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['date'],
+      colorPalette: ['#16a085'],
+      columnTypes: { date: 'date' },
+    })
+
+    const xAxis = option.xAxis as any
+    // The formatter should format date strings into human-readable labels
+    expect(xAxis.axisLabel.formatter('2024-02-28')).toBe('28 Feb 2024')
+  })
+
+  it('bar chart with number column uses category axis with number-formatted labels', () => {
+    const option = buildChartOption({
+      chartType: 'bar',
+      xAxisData: ['1000', '2000', '3000'],
+      series: [{ name: 'revenue', data: [100, 200, 300] }],
+      xAxisLabel: 'rank',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['rank'],
+      colorPalette: ['#16a085'],
+      columnTypes: { rank: 'number' },
+    })
+
+    const xAxis = option.xAxis as any
+    const chartSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('category')
+    expect(xAxis.data).toEqual(['1000', '2000', '3000'])
+    expect(chartSeries.data).toEqual([100, 200, 300])
+  })
+
+  it.each([
+    ['line'],
+    ['area'],
+  ] as const)('uses value axis for %s charts when x column is number', (chartType) => {
     const option = buildChartOption({
       chartType,
       xAxisData: ['10', '20', '30'],
-      series: [
-        { name: 'revenue', data: [100, 200, 300] },
-      ],
+      series: [{ name: 'revenue', data: [100, 200, 300] }],
       xAxisLabel: 'rank',
       yAxisLabel: 'revenue',
       xAxisColumns: ['rank'],
@@ -192,6 +307,22 @@ describe('buildChartOption cartesian x-axis type resolution', () => {
     expect(xAxis.type).toBe('value')
     expect(chartSeries.data[0]).toEqual([10, 100])
     expect(chartSeries.data[1]).toEqual([20, 200])
+  })
+
+  it('scatter chart with date column uses time axis (not category)', () => {
+    const option = buildChartOption({
+      chartType: 'scatter',
+      xAxisData: ['2024-01-15', '2024-02-20'],
+      series: [{ name: 'revenue', data: [100, 200] }],
+      xAxisLabel: 'date',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['date'],
+      colorPalette: ['#16a085'],
+      columnTypes: { date: 'date' },
+    })
+
+    const xAxis = option.xAxis as any
+    expect(xAxis.type).toBe('time')
   })
 })
 
