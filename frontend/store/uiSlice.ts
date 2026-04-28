@@ -33,7 +33,7 @@ interface UIState {
   allowChatQueue: boolean;
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
-  compactChatEnabled: boolean;
+  showExpandedMessages: boolean;
   homePage: {
     showFeedSummary: boolean;
     showRecentQuestions: boolean;
@@ -70,7 +70,7 @@ const initialState: UIState = {
   allowChatQueue: true,
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
-  compactChatEnabled: false,
+  showExpandedMessages: false,
   homePage: {
     showFeedSummary: true,
     showRecentQuestions: true,
@@ -248,10 +248,10 @@ const uiSlice = createSlice({
         try { localStorage.setItem('unrestrictedMode', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setCompactChatEnabled: (state, action: PayloadAction<boolean>) => {
-      state.compactChatEnabled = action.payload;
+    setShowExpandedMessages: (state, action: PayloadAction<boolean>) => {
+      state.showExpandedMessages = action.payload;
       if (typeof window !== 'undefined') {
-        try { localStorage.setItem('compactChatEnabled', String(action.payload)); } catch { /* ignore */ }
+        try { localStorage.setItem('showExpandedMessages', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setHomePageConfig: (state, action: PayloadAction<Partial<UIState['homePage']>>) => {
@@ -260,8 +260,8 @@ const uiSlice = createSlice({
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; compactChatEnabled?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, compactChatEnabled, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -270,7 +270,7 @@ const uiSlice = createSlice({
       if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
-      if (compactChatEnabled !== undefined) state.compactChatEnabled = compactChatEnabled;
+      if (showExpandedMessages !== undefined) state.showExpandedMessages = showExpandedMessages;
       if (homePage !== undefined) Object.assign(state.homePage, homePage);
     },
   },
@@ -313,7 +313,7 @@ export const {
   setAllowChatQueue,
   setQueueStrategy,
   setUnrestrictedMode,
-  setCompactChatEnabled,
+  setShowExpandedMessages,
   setHomePageConfig,
   setBulkUiFlags,
   pushView,
@@ -374,5 +374,5 @@ export const selectViewStackDepth = (state: RootState) => state.ui.viewStack.len
 export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showSuggestedQuestions;
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
 export const selectUnrestrictedMode = (state: RootState) => state.ui.unrestrictedMode;
-export const selectCompactChatEnabled = (state: RootState) => state.ui.compactChatEnabled ?? false;
+export const selectShowExpandedMessages = (state: RootState) => state.ui.showExpandedMessages ?? false;
 export const selectHomePage = (state: RootState) => state.ui.homePage;
