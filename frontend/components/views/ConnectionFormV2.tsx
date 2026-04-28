@@ -46,67 +46,12 @@ import { getPublishedVersion } from '@/lib/context/context-utils';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import StaticTablesBrowser from '../StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import Image from 'next/image';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
+import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
+import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
 
 const TYPEWRITER_SPEED = 35;
-
-// Connection type metadata for the selection screen
-const CONNECTION_TYPES = [
-  {
-    type: 'bigquery' as const,
-    name: 'BigQuery',
-    logo: '/logos/bigquery.svg',
-    comingSoon: false,
-  },
-  {
-    type: 'postgresql' as const,
-    name: 'PostgreSQL',
-    logo: '/logos/postgresql.svg',
-    comingSoon: false,
-  },
-  {
-    type: 'csv' as const,
-    name: 'CSV / xlsx',
-    logo: '/logos/csv.svg',
-    comingSoon: false,
-    redirectToStatic: true,
-    note: 'Managed in your static connection',
-  },
-  {
-    type: 'google-sheets' as const,
-    name: 'Google Sheets',
-    logo: '/logos/google-sheets.svg',
-    comingSoon: false,
-    redirectToStatic: true,
-    note: 'Public sheets only',
-  },
-  {
-    type: 'athena' as const,
-    name: 'Athena',
-    logo: '/logos/athena.svg',
-    comingSoon: false,
-  },
-  {
-    type: 'clickhouse' as const,
-    name: 'ClickHouse',
-    logo: '/logos/clickhouse.svg',
-    comingSoon: true,
-  },
-  {
-    type: 'databricks' as const,
-    name: 'Databricks',
-    logo: '/logos/databricks.svg',
-    comingSoon: true,
-  },
-  {
-    type: 'snowflake' as const,
-    name: 'Snowflake',
-    logo: '/logos/snowflake.svg',
-    comingSoon: true,
-  }
-];
 
 // Logo/name for types not in the type-selector (legacy connections, static)
 const LEGACY_TYPE_INFO: Record<string, { logo: string; name: string }> = {
@@ -427,9 +372,12 @@ export default function ConnectionFormV2({
   }, [greeting]);
 
   // Handle type selection from the initial screen
-  const handleTypeSelect = (selectedType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+  const handleTypeSelect = (connType: { type: string; isStatic?: boolean; comingSoon: boolean }) => {
+    if (connType.comingSoon) return;
+    const selectedType = connType.type;
+
     // CSV and Google Sheets always go to the static connection — no new connection is created
-    if (selectedType === 'csv' || selectedType === 'google-sheets') {
+    if (connType.isStatic || selectedType === 'csv' || selectedType === 'google-sheets') {
       const tab = selectedType === 'google-sheets' ? 'sheets' : 'csv';
       // In wizard mode, notify parent instead of navigating away
       if (onStaticSelect) {
@@ -444,7 +392,7 @@ export default function ConnectionFormV2({
       }
       return;
     }
-    handleTypeChange(selectedType);
+    handleTypeChange(selectedType as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena');
     setStep('configure');
   };
 
@@ -850,69 +798,7 @@ export default function ConnectionFormV2({
             </Progress.Root>
           )}
 
-          {/* Connection Type Cards */}
-          <SimpleGrid columns={{ base: 2, md: 4 }} gap={3}>
-            {CONNECTION_TYPES.map((connType) => (
-              <Box
-                key={connType.type}
-                as="button"
-                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
-                px={4}
-                py={4}
-                borderRadius="lg"
-                border="1px solid"
-                borderColor="border.default"
-                bg="bg.surface"
-                cursor={connType.comingSoon ? 'not-allowed' : 'pointer'}
-                textAlign="center"
-                transition="all 0.15s"
-                position="relative"
-                opacity={connType.comingSoon ? 0.45 : 1}
-                _hover={connType.comingSoon ? {} : {
-                  borderColor: 'accent.teal',
-                  bg: 'bg.muted',
-                }}
-              >
-                {connType.comingSoon && (
-                  <Text
-                    position="absolute"
-                    top={1.5}
-                    right={2}
-                    fontSize="2xs"
-                    color="fg.muted"
-                    fontWeight="600"
-                  >
-                    Soon
-                  </Text>
-                )}
-                <VStack gap={2}>
-                  <Box
-                    w="36px"
-                    h="36px"
-                    position="relative"
-                    flexShrink={0}
-                  >
-                    <Image
-                      src={connType.logo}
-                      alt={connType.name}
-                      fill
-                      style={{ objectFit: 'contain' }}
-                    />
-                  </Box>
-                  <VStack gap={0}>
-                    <Text fontWeight="600" fontSize="sm" fontFamily="mono" color="fg.default">
-                      {connType.name}
-                    </Text>
-                    {('note' in connType) && (connType as { note?: string }).note && (
-                      <Text fontSize="2xs" color="fg.muted">
-                        {(connType as { note?: string }).note}
-                      </Text>
-                    )}
-                  </VStack>
-                </VStack>
-              </Box>
-            ))}
-          </SimpleGrid>
+          <ConnectionTypePicker onSelect={handleTypeSelect} />
         </VStack>
       </Box>
     );
@@ -930,10 +816,10 @@ export default function ConnectionFormV2({
                 onClick={handleBackToTypeSelect}
                 variant="ghost"
                 size="sm"
-                p={0}
+                px={2}
                 minW="auto"
               >
-                <LuArrowLeft size={20} />
+                <LuArrowLeft size={18} />
               </Button>
             )}
             <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">

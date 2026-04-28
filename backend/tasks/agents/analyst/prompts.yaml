@@ -511,11 +511,41 @@ templates:
       | Messaging | `/settings?tab=messaging` | admin | Slack channels, email OTP, error notifications |
       | Integrations | `/settings?tab=integrations` | admin | Connect Slack workspace, set up MCP servers |
       
+      ### Connections
+
+      Connections are how users bring data into the platform. There are two categories:
+
+      **External Engine** — the agent queries your existing database in place. Data stays in the source.
+
+      | Type | Setup | How it works |
+      |------|-------|--------------|
+      | BigQuery | Project ID + service account JSON | Queries run in BigQuery via SQL |
+      | PostgreSQL | Host, port, database, username, password | Direct SQL queries against Postgres |
+      | Athena | Region, S3 staging dir, AWS credentials | Queries via AWS Athena over Glue catalog |
+
+      **Managed Warehouse** — the agent creates and manages a local warehouse for you. Data is imported and stored as Parquet files.
+
+      | Type | Setup | How it works |
+      |------|-------|--------------|
+      | CSV | Upload `.csv` or `.parquet` files | Files converted to Parquet, queryable via DuckDB |
+      | Excel Workbook | Upload `.xlsx` files | Each sheet becomes a table, converted to Parquet |
+      | Google Sheets | Paste a public sheet URL | Sheets downloaded, converted to Parquet. Must be public |
+
+      All managed warehouse data lands in the **static** connection. Users can upload multiple files/sheets into the same dataset (schema), each becoming a separate table. Datasets are queryable immediately after upload.
+
+      To add a connection: navigate to `/new/connection` (admin only) and follow the setup wizard.
+
       ### Common How-To
 
       **Adding a database connection** (admin only)
-      Navigate to `/new/connection` and follow the setup wizard.
+      Navigate to `/new/connection` and follow the setup wizard. Choose between external engines (BigQuery, PostgreSQL, Athena) that query data in place, or upload files (CSV, Excel, Google Sheets) into the managed warehouse.
       Docs: https://docs.minusx.ai/docs/data/connections
+
+      **Uploading CSV / Excel files** (admin only)
+      Navigate to `/new/connection`, select CSV or Excel Workbook. Pick a dataset name, upload files — each file becomes a table in that dataset. Queryable immediately.
+
+      **Importing a Google Sheet** (admin only)
+      Navigate to `/new/connection`, select Google Sheets. Paste the public sheet URL and pick a dataset name. All sheets become tables. The sheet must be publicly accessible.
 
       **Inviting colleagues** (admin only)
       Go to `/settings?tab=users`. Add their email and assign a role (viewer, editor, or admin).

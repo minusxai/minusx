@@ -105,7 +105,7 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
         </Button>
         <Box>
           <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
-            {tab === 'csv' ? 'Upload CSV / xlsx' : 'Import Google Sheets'}
+            {tab === 'csv' ? 'Upload CSV / XLSX' : 'Import Google Sheets'}
           </Heading>
           <Text color="fg.muted" fontSize="sm">
             {tab === 'csv'
@@ -123,6 +123,7 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
         onError={setSaveError}
         onSave={handleInternalSave}
         initialTab={tab}
+        singleTab={tab}
       />
 
       {saveError && (
