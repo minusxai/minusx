@@ -192,7 +192,7 @@ export default function Home() {
   return (
     <Box minH="90vh" bg="bg.canvas" display="flex">
       <VStack flex="1" minW="0" position="relative" align="stretch">
-        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
+        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }} css={{ containerType: 'inline-size' }}>
           <Flex justify="space-between" align="center" mb={4} gap={4}>
             <Box flex="1" minW={0}>
               <Breadcrumb items={breadcrumbItems} />
@@ -217,8 +217,8 @@ export default function Home() {
             <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
           </HStack>
 
-          {/* Two-column layout */}
-          <Flex gap={2} direction={{ base: 'column', lg: 'row' }}>
+          {/* Two-column layout — switches at 700px container width */}
+          <Flex gap={2} css={{ flexDirection: 'column', '@container (min-width: 700px)': { flexDirection: 'row' } }}>
             {/* Left column */}
             <VStack flex="1" minW={0} align="stretch" gap={2}>
               {isNewUser ? (
@@ -243,7 +243,7 @@ export default function Home() {
 
             {/* Right column — dashboards + conversations */}
             <VStack
-              w={{ base: '100%', lg: '340px' }}
+              css={{ width: '100%', '@container (min-width: 700px)': { width: '340px' } }}
               flexShrink={0}
               align="stretch"
               gap={2}
