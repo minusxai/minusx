@@ -170,12 +170,11 @@ export default function DataManagementSection() {
           parsedData = JSON.parse(fileContent);
 
           // Validate version FIRST (before structure checks)
-          if (currentVersion !== null && parsedData.version !== currentVersion) {
+          if (currentVersion !== null && parsedData.version < MINIMUM_SUPPORTED_DATA_VERSION) {
             setImportStatus({
               valid: false,
               errors: [
-                `Version mismatch: File is v${parsedData.version}, current DB is v${currentVersion}`,
-                'Please use CLI tools for migrations'
+                `File is v${parsedData.version}, minimum supported version is v${MINIMUM_SUPPORTED_DATA_VERSION}. Re-export from a newer system.`,
               ],
               warnings: []
             });
@@ -216,13 +215,17 @@ export default function DataManagementSection() {
           setUploadedFile(file);
 
           // Show ready to import with org details
+          const warnings = [
+            `${firstOrgEntry.display_name}: ${firstOrgEntry.users.length} users, ${firstOrgEntry.documents.length} documents`,
+            '⚠ This will OVERWRITE your current data'
+          ];
+          if (currentVersion !== null && parsedData.version < currentVersion) {
+            warnings.unshift(`File is v${parsedData.version}, DB is v${currentVersion} — migrations will be applied automatically`);
+          }
           setImportStatus({
             valid: true,
             errors: [],
-            warnings: [
-              `${firstOrgEntry.display_name}: ${firstOrgEntry.users.length} users, ${firstOrgEntry.documents.length} documents`,
-              '⚠ This will OVERWRITE your current data'
-            ]
+            warnings
           });
         } catch (parseError: any) {
           setImportStatus({
