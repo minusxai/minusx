@@ -201,7 +201,7 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
     }
 
     // Generic internal error — report to bug channel
-    void notifyInternal('api:500', error.message, { stack: (error.stack ?? '').slice(0, 500) });
+    void getRequestPath().then(url => notifyInternal('api:500', error.message, { stack: (error.stack ?? '').slice(0, 500), ...(url ? { url } : {}) }));
     return errorResponse(
       ErrorCodes.INTERNAL_ERROR,
       error.message,
@@ -210,6 +210,6 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
   }
 
   // Unknown error type — report to bug channel
-  void notifyInternal('api:500', 'Unknown error type thrown in API route');
+  void getRequestPath().then(url => notifyInternal('api:500', 'Unknown error type thrown in API route', url ? { url } : undefined));
   return ApiErrors.internalError('An unexpected error occurred');
 }
