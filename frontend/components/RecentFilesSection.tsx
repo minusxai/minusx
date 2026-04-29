@@ -485,13 +485,14 @@ export function RecentQuestions() {
 
   const recentQuestions = data?.recent.filter(f => f.fileType === 'question') ?? [];
 
+  // Data loaded but no questions — render nothing so folder view can take over
+  if (data && recentQuestions.length === 0) return null;
+
   return (
     <VStack gap={3} align="stretch">
       <SectionHeader label="Recently viewed" />
       {recentQuestions.length > 0 ? (
         <QuestionCarousel questions={recentQuestions} />
-      ) : data ? (
-        <SectionEmptyState message="No questions viewed yet" linkLabel="Start exploring" linkHref="/explore" />
       ) : (
         <CarouselSkeleton />
       )}
@@ -518,6 +519,9 @@ export function RecentDashboards() {
 
   const recentDashboards = data?.recent.filter(f => f.fileType === 'dashboard') ?? [];
 
+  // Data loaded but no dashboards — render nothing so folder view can take over
+  if (data && recentDashboards.length === 0) return null;
+
   return (
     <VStack gap={3} align="stretch">
       <SectionHeader label="Recent dashboards" />
@@ -527,8 +531,6 @@ export function RecentDashboards() {
             <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
           ))}
         </VStack>
-      ) : data ? (
-        <SectionEmptyState message="No dashboards yet" linkLabel="Create one" linkHref="/explore" />
       ) : (
         <ListSkeleton count={2} />
       )}
@@ -608,6 +610,10 @@ export function SuggestedQuestions() {
     </VStack>
   );
 }
+
+// ─── Home folder file browser (shown when analytics are empty) ──────
+
+export { default as HomeFolderFiles } from './HomeFolderFiles';
 
 // ─── Legacy combined FeedContent (used by sidebar wrapper) ───────────
 

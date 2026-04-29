@@ -9,13 +9,13 @@ import { selectHomePage } from '@/store/uiSlice';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, SuggestedQuestions } from '@/components/RecentFilesSection';
+import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/RecentFilesSection';
 import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import { useState } from 'react';
-import { LuScanSearch, LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
+import { LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 
 function QuickLink({ href, icon, label, color }: { href: string; icon: React.ElementType; label: string; color: string }) {
@@ -191,7 +191,6 @@ export default function Home() {
   const homePath = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const mode = user.mode || 'org';
   const breadcrumbItems = [{ label: 'Home' }];
-  const leftColEmpty = !homePage.showFeedSummary && !homePage.showRecentQuestions;
   const rightColEmpty = !homePage.showRecentDashboards && !homePage.showRecentConversations;
   const isNewUser = config.setupWizard?.status !== 'complete';
 
@@ -231,18 +230,12 @@ export default function Home() {
                 <SectionPanel>
                   <WelcomeBanner />
                 </SectionPanel>
-              ) : leftColEmpty ? (
-                <ColumnEmptyState
-                  icon={LuScanSearch}
-                  message="Start exploring your data"
-                  linkLabel="Go to Explore"
-                  linkHref="/explore"
-                  color="accent.teal"
-                />
               ) : (
                 <>
                   <SectionPanel><RecentQuestions /></SectionPanel>
                   <SectionPanel><RecentDashboards /></SectionPanel>
+                  {/* Folder view fallback — shown when analytics sections render nothing */}
+                  <HomeFolderFiles />
                 </>
               )}
             </VStack>
