@@ -33,6 +33,7 @@ export const RadarPlot = (props: RadarPlotProps) => {
       xAxisData,
       series,
       colorMode,
+      containerWidth,
       columnFormats,
       xAxisColumns,
       yAxisColumns,

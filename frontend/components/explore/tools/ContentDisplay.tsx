@@ -37,18 +37,9 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
             citations.push(...block.citations);
           }
         }
-        // Extract citations from web_search_tool_result blocks
-        else if (block.type === 'web_search_tool_result' && block.content && Array.isArray(block.content)) {
-          for (const searchItem of block.content) {
-            if (searchItem.type === 'web_search_result') {
-              citations.push({
-                type: 'web_search_result_location',
-                url: searchItem.url,
-                title: searchItem.title,
-                cited_text: searchItem.title // Use title as cited text
-              });
-            }
-          }
+        // Skip web_search_tool_result blocks — rendered in AgentTurnContainer timeline instead
+        else if (block.type === 'web_search_tool_result') {
+          // no-op: web search sources shown in the "Browsing" timeline detail card
         }
       }
 

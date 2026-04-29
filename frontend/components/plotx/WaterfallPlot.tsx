@@ -51,6 +51,7 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
       xAxisData,
       series,
       colorMode,
+      containerWidth,
       columnFormats,
       xAxisColumns,
       yAxisColumns,

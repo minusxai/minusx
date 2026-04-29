@@ -43,6 +43,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
       xAxisData,
       series,
       colorMode,
+      containerWidth,
       columnFormats,
       xAxisColumns,
       yAxisColumns,

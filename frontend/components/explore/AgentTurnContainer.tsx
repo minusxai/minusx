@@ -18,6 +18,7 @@ import { ClarifyDetailCard } from './tools/ClarifyDisplay';
 import { EditFileDetailCard } from './tools/EditFileDisplay';
 import { ReadFilesDetailCard } from './tools/ReadFilesDisplay';
 import { getToolConfig } from '@/lib/api/tool-config';
+import { WebSearchDetailCard, type WebSearchResult } from './tools/WebSearchDisplay';
 import { ToolNames } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
@@ -63,6 +64,7 @@ interface TimelineNode {
   verb: string;           // e.g. "Creating", "Editing", "Executing"
   count: number;
   messages: MessageWithFlags[];
+  webSearchResults?: WebSearchResult[];  // Only set for synthetic web search nodes
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -202,6 +204,41 @@ function parseFileToolContent(msg: MessageWithFlags): {
   }
 }
 
+/** Extract web search results from a CHAT_TOOLS message's content_blocks */
+function extractWebSearchResults(msg: MessageWithFlags): WebSearchResult[] | null {
+  const toolMsg = msg as any;
+  const raw = toolMsg.content || '';
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed?.content_blocks || !Array.isArray(parsed.content_blocks)) return null;
+
+    const results: WebSearchResult[] = [];
+    for (const block of parsed.content_blocks) {
+      if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+        for (const item of block.content) {
+          if (item.type === 'web_search_result') {
+            results.push({ url: item.url, title: item.title });
+          }
+        }
+      }
+    }
+
+    // Enrich with cited_text from top-level citations
+    if (parsed.citations && Array.isArray(parsed.citations)) {
+      for (const citation of parsed.citations) {
+        if (citation.type === 'web_search_result_location' && citation.cited_text) {
+          const match = results.find(r => r.url === citation.url);
+          if (match) match.cited_text = citation.cited_text;
+        }
+      }
+    }
+
+    return results.length > 0 ? results : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Build timeline from messages ──────────────────────────────────
 
 function buildTimeline(
@@ -216,6 +253,17 @@ function buildTimeline(
     const toolName = getToolName(msg);
 
     if (CHAT_TOOLS.has(toolName)) {
+      // Check for web search results embedded in this chat message
+      const webResults = extractWebSearchResults(msg);
+      if (webResults) {
+        const wsConfig = getToolConfig('WebSearch');
+        nodes.push({
+          type: 'tool', icon: wsConfig.chipIcon, label: wsConfig.chipLabel,
+          labelPlural: wsConfig.chipLabelPlural, verb: wsConfig.timelineVerb,
+          count: webResults.length, messages: [msg], webSearchResults: webResults,
+        });
+      }
+
       allChat.push(msg);
       const last = nodes[nodes.length - 1];
       if (last && last.type === 'agent') {
@@ -385,6 +433,11 @@ export default function AgentTurnContainer({
   const FILE_LABELS = new Set(['file create', 'file edit', 'file read']);
 
   const renderToolDetail = (node: TimelineNode) => {
+    // Synthetic web search node — render directly, no carousel
+    if (node.webSearchResults) {
+      return <WebSearchDetailCard results={node.webSearchResults} icon={node.icon} />;
+    }
+
     // File-mutating tools: check for chart items first (questions with query results)
     if (FILE_LABELS.has(node.label)) {
       const chartItems: (import('./tools/ChartCarousel').ChartItem | import('./tools/ChartCarousel').ChartErrorItem)[] = [];
@@ -446,6 +499,15 @@ export default function AgentTurnContainer({
     )),
     [timeline],
   );
+  const hasMultipleCharts = useMemo(() =>
+    timeline.some(n => (n.type === 'query' && n.messages.length > 1) || (
+      FILE_LABELS.has(n.label) && n.messages.filter(m => {
+        const parsed = parseFileToolContent(m);
+        return parsed.fileType === 'question' && parsed.queryResult;
+      }).length > 1
+    )),
+    [timeline],
+  );
   const hasPendingClarify = useMemo(() =>
     timeline.some(n => n.messages.some(m => {
       const name = (m as any).function?.name || '';
@@ -456,7 +518,7 @@ export default function AgentTurnContainer({
     })),
     [timeline],
   );
-  const rightPaneH = hasPendingClarify ? '400px' : hasChartContent ? '400px' : 'auto';
+  const rightPaneH = hasPendingClarify ? '400px' : hasMultipleCharts ? '450px' : hasChartContent ? '400px' : 'auto';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -605,7 +667,7 @@ export default function AgentTurnContainer({
                 gap={0}
                 w="170px"
                 minW="170px"
-                maxH="400px"
+                maxH={rightPaneH === 'auto' ? '400px' : rightPaneH}
                 overflowY="auto"
               >
                 <Text

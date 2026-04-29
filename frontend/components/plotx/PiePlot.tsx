@@ -55,6 +55,7 @@ export const PiePlot = (props: PiePlotProps) => {
       xAxisData,
       series,
       colorMode,
+      containerWidth,
       columnFormats,
       xAxisColumns,
       yAxisColumns,
