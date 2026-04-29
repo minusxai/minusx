@@ -116,7 +116,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
         name: mention.name,
       };
       if (mention.schema) mentionData.schema = mention.schema;
-      if (mention.id !== null && mention.id !== undefined) mentionData.id = mention.id;
+      if (mention.id != null) mentionData.id = mention.id;
 
       // Create mention node
       const mentionNode = $createMentionNode(mentionData);

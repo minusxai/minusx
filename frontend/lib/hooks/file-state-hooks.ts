@@ -165,7 +165,7 @@ export function useFile(id: FileId | undefined, options: UseFileOptions = {}): A
 
   // Trigger fetch — loading state is owned by Redux (file.loading)
   useEffect(() => {
-    if (shouldSkip || id === undefined) return;
+    if (shouldSkip || id == null) return;
     loadFiles([id], ttl, false).catch(() => {});
   }, [optionsKey]);
 

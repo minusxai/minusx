@@ -19,7 +19,7 @@ interface TableProps {
 type ColumnType = 'text' | 'number' | 'date' | 'json'
 
 const formatValue = (value: any, type: ColumnType): string => {
-  if (value === null || value === undefined) {
+  if (value == null) {
     return '-'
   }
 

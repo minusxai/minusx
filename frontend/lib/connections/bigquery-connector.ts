@@ -8,7 +8,7 @@ const POLL_INTERVAL_MS = 500;
 // BigQuery typed values (TIMESTAMP, DATE, DATETIME, TIME) are returned as { value: string }
 // objects by the client library. Flatten them to plain strings so they render correctly.
 function normalizeBigQueryValue(val: unknown): unknown {
-  if (val === null || val === undefined) return val;
+  if (val == null) return val;
   if (Array.isArray(val)) return val.map(normalizeBigQueryValue);
   if (typeof val === 'object') {
     const keys = Object.keys(val as object);

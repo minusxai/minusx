@@ -315,7 +315,7 @@ export function AlertRunView({
             <TestRunResultsList results={testResults} variant="colored" />
           ) : (
             <VStack align="stretch" gap={0} separator={<Separator />}>
-              {actualValue !== null && actualValue !== undefined && (
+              {actualValue != null && (
                 <DetailRow label="Actual value" value={
                   <Badge
                     colorPalette={isTriggered ? 'red' : 'green'}
@@ -511,7 +511,7 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
   })();
 
   // Load the parent alert to read/update its suppressUntil
-  const { fileState: parentAlert } = useFile(parentAlertId ?? null) ?? {};
+  const { fileState: parentAlert } = useFile(parentAlertId ?? undefined) ?? {};
   const parentContent = parentAlert?.content as AlertContent | undefined;
 
   const handleSnooze = useCallback(async (value: string) => {

@@ -7,7 +7,6 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { ApiResponse, ErrorCode, ErrorCodes } from './api-types';
 import { UserFacingError, FileExistsError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
-import { notifyInternal } from '@/lib/messaging/internal-notifier';
 import { logNetworkResponse } from '@/lib/network-logging';
 
 async function getRequestId(): Promise<string | null> {
@@ -200,8 +199,7 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
       return ApiErrors.validationError(error.message);
     }
 
-    // Generic internal error — report to bug channel
-    void notifyInternal('api:500', error.message, { stack: (error.stack ?? '').slice(0, 500) });
+    // Generic internal error
     return errorResponse(
       ErrorCodes.INTERNAL_ERROR,
       error.message,
@@ -209,7 +207,5 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
     );
   }
 
-  // Unknown error type — report to bug channel
-  void notifyInternal('api:500', 'Unknown error type thrown in API route');
   return ApiErrors.internalError('An unexpected error occurred');
 }

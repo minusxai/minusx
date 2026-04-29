@@ -44,6 +44,14 @@ const BASE_RESTRICTED_SYNTAX = [
     selector: "Program > VariableDeclaration NewExpression[callee.name='Set']",
     message: "Module-level Sets are shared across all requests. For mutable state: add eslint-disable-next-line with justification. For immutable constants: use immutableSet() from lib/utils/immutable-collections instead of new Set().",
   },
+  {
+    selector: "LogicalExpression[operator='||'][left.type='BinaryExpression'][left.operator='==='][right.type='BinaryExpression'][right.operator='===']:matches([left.right.type='Literal'][left.right.raw='null'][right.right.type='Identifier'][right.right.name='undefined'], [left.right.type='Identifier'][left.right.name='undefined'][right.right.type='Literal'][right.right.raw='null'])",
+    message: "Use `== null` instead of `=== null || === undefined`. `== null` catches both.",
+  },
+  {
+    selector: "LogicalExpression[operator='&&'][left.type='BinaryExpression'][left.operator='!=='][right.type='BinaryExpression'][right.operator='!==']:matches([left.right.type='Literal'][left.right.raw='null'][right.right.type='Identifier'][right.right.name='undefined'], [left.right.type='Identifier'][left.right.name='undefined'][right.right.type='Literal'][right.right.raw='null'])",
+    message: "Use `!= null` instead of `!== null && !== undefined`. `!= null` catches both.",
+  },
 ];
 
 const eslintConfig = defineConfig([

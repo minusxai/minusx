@@ -29,7 +29,7 @@ export const aggregateData = (
     const groupingCols = xAxisColumns.slice(1) // split variables
 
     const normalizeXValue = (value: any, columnType?: ColumnType) => {
-      if (value === null || value === undefined) return ''
+      if (value == null) return ''
       if (columnType === 'date') {
         return value instanceof Date ? value.toISOString() : String(value)
       }
@@ -54,7 +54,7 @@ export const aggregateData = (
         name: yCol,
         data: rows.map(row => {
           const val = row[yCol]
-          return (val !== null && val !== undefined && !isNaN(Number(val))) ? Number(val) : 0
+          return (val != null && !isNaN(Number(val))) ? Number(val) : 0
         })
       }))
       const pointMeta = rows.map(row => Object.fromEntries(
@@ -80,7 +80,7 @@ export const aggregateData = (
             const rowGroup = groupingCols.map(col => String(row[col] ?? '')).join(' | ')
             if (rowGroup !== group) return NaN
             const val = row[yCol]
-            return (val !== null && val !== undefined && !isNaN(Number(val))) ? Number(val) : NaN
+            return (val != null && !isNaN(Number(val))) ? Number(val) : NaN
           })
         })
       }
@@ -99,7 +99,7 @@ export const aggregateData = (
       const values: number[] = []
       rows.forEach(row => {
         const val = row[yCol]
-        if (val !== null && val !== undefined && !isNaN(Number(val))) {
+        if (val != null && !isNaN(Number(val))) {
           values.push(Number(val))
         }
       })
@@ -143,7 +143,7 @@ export const aggregateData = (
         group[yCol] = []
       }
       const val = row[yCol]
-      if (val !== null && val !== undefined && !isNaN(Number(val))) {
+      if (val != null && !isNaN(Number(val))) {
         group[yCol].push(Number(val))
       }
     })
@@ -208,7 +208,7 @@ export const aggregateData = (
 
       yAxisColumns.forEach(yCol => {
         const val = row[yCol]
-        if (val !== null && val !== undefined && !isNaN(Number(val))) {
+        if (val != null && !isNaN(Number(val))) {
           const key = `${secondaryKey}|${yCol}`
           if (!primaryGroup.has(key)) {
             primaryGroup.set(key, [])

@@ -442,7 +442,7 @@ export async function POST(req: NextRequest) {
   }
 }
 ```
-`handleApiError` calls `notifyInternal` for all unhandled errors, ensuring they reach the bug channel. ESLint enforces this — a direct `NextResponse.json` with `{ status: 500 }` is a lint error in `app/api/**`. If a route genuinely needs a custom response shape for 500s (e.g. `/api/chat` returns `ChatResponse`), suppress inline with `// eslint-disable-next-line no-restricted-syntax` and ensure the error is reported via `AppEvents.ERROR` or `notifyInternal` manually.
+`handleApiError` returns a consistent error shape for all unhandled errors. ESLint enforces this — a direct `NextResponse.json` with `{ status: 500 }` is a lint error in `app/api/**`. If a route genuinely needs a custom response shape for 500s (e.g. `/api/chat` returns `ChatResponse`), suppress inline with `// eslint-disable-next-line no-restricted-syntax` and ensure the error is reported via `appEventRegistry.publish(AppEvents.ERROR, ...)` manually. Error events are forwarded to the mx-llm-provider `/notify` endpoint, which routes `type: "error"` to Slack.
 
 ### Adding Python Backend Endpoints
 1. Add route handler in `backend/main.py`

@@ -147,17 +147,17 @@ export default function ReportView({
 
   // Create collections for select dropdowns
   const questionCollection = useMemo(() => createListCollection({
-    items: questions.map(q => ({ value: q.id.toString(), label: q.name }))
+    items: questions.filter(q => q.id != null).map(q => ({ value: String(q.id), label: q.name }))
   }), [questions]);
 
   const dashboardCollection = useMemo(() => createListCollection({
-    items: dashboards.map(d => ({ value: d.id.toString(), label: d.name }))
+    items: dashboards.filter(d => d.id != null).map(d => ({ value: String(d.id), label: d.name }))
   }), [dashboards]);
 
   // Create collection for runs dropdown
   const runsCollection = useMemo(() => createListCollection({
-    items: runs.map(r => ({
-      value: r.id.toString(),
+    items: runs.filter(r => r.id != null).map(r => ({
+      value: String(r.id),
       label: new Date(r.created_at).toLocaleString()
     }))
   }), [runs]);

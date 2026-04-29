@@ -33,7 +33,7 @@ function escapeHtml(str: string): string {
 }
 
 function formatValue(v: string | number | boolean | null | undefined): string {
-  if (v === null || v === undefined) return 'N/A';
+  if (v == null) return 'N/A';
   if (typeof v === 'number') {
     // Trim long decimals
     return Number.isInteger(v) ? String(v) : v.toFixed(6).replace(/\.?0+$/, '');

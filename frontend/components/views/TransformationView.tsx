@@ -52,7 +52,7 @@ function QuestionSearchSelect({ questions, selectedId, onSelect, disabled }: {
       ? questions.filter(q => q.name.toLowerCase().includes(lower))
       : questions;
     return createListCollection({
-      items: filtered.map(q => ({ value: q.id.toString(), label: q.name }))
+      items: filtered.filter(q => q.id != null).map(q => ({ value: String(q.id), label: q.name }))
     });
   }, [questions, inputValue]);
 
@@ -440,8 +440,8 @@ export default function TransformationView({
   }, [transforms, onChange]);
 
   const runsCollection = useMemo(() => createListCollection({
-    items: runs.map(r => ({
-      value: r.id.toString(),
+    items: runs.filter(r => r.id != null).map(r => ({
+      value: String(r.id),
       label: new Date(r.created_at).toLocaleString(),
     })),
   }), [runs]);

@@ -20,7 +20,7 @@ export default function FileSearchSelect({ files, selectedId, onSelect, placehol
       ? files.filter(f => f.name.toLowerCase().includes(lower))
       : files;
     return createListCollection({
-      items: filtered.map(f => ({ value: f.id.toString(), label: f.name }))
+      items: filtered.filter(f => f.id != null).map(f => ({ value: String(f.id), label: f.name }))
     });
   }, [files, inputValue]);
 

@@ -71,7 +71,7 @@ export function aggregatePivotData(
 
     for (let vi = 0; vi < valueConfigs.length; vi++) {
       const val = row[valueConfigs[vi].column]
-      if (val !== null && val !== undefined && !isNaN(Number(val))) {
+      if (val != null && !isNaN(Number(val))) {
         cellBuckets[vi].push(Number(val))
       }
     }
