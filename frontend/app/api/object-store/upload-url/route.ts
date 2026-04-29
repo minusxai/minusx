@@ -3,6 +3,7 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { createObjectStore, generateUploadKey, generateCsvUploadKey } from '@/lib/object-store';
 import { signStorageToken } from '@/lib/object-store/key-token';
+import { USE_BASE64_UPLOADS } from '@/lib/config';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /**
@@ -92,6 +93,10 @@ export async function GET(req: NextRequest) {
         type: keyType,
         ext,
       });
+    }
+
+    if (USE_BASE64_UPLOADS) {
+      return NextResponse.json({ uploadUrl: 'base64:', publicUrl: '' });
     }
 
     const store = createObjectStore();
