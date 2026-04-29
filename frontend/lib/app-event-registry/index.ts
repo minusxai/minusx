@@ -2,7 +2,6 @@ import 'server-only';
 import { AppEvents } from './events';
 import { appEventRegistry } from './registry';
 import { FileEventType, trackFileEvent, trackLLMCallEvents, trackQueryExecutionEvent } from '@/lib/analytics/file-analytics.server';
-import { notifyErrorEvent } from '@/lib/messaging/error-notifier';
 import { notifyAppEvent } from '@/lib/messaging/app-events-notifier';
 
 export { AppEvents } from './events';
@@ -18,7 +17,7 @@ appEventRegistry.subscribe(AppEvents.FILE_UPDATED,             p => trackFileEve
 appEventRegistry.subscribe(AppEvents.FILE_DELETED,             p => trackFileEvent({ eventType: FileEventType.DELETED,           fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId }));
 appEventRegistry.subscribe(AppEvents.LLM_CALL,                 p => trackLLMCallEvents(p.llmCalls, p.conversationId, p.userId ?? null));
 appEventRegistry.subscribe(AppEvents.QUERY_EXECUTED,           p => trackQueryExecutionEvent({ queryHash: p.queryHash, fileId: p.fileId, fileVersion: p.fileVersion, query: p.query, params: p.params, schemaContext: p.schemaContext, databaseName: p.databaseName, durationMs: p.durationMs, rowCount: p.rowCount, colCount: p.colCount, wasCacheHit: p.wasCacheHit, error: p.error, userId: p.userId }));
-appEventRegistry.subscribe(AppEvents.ERROR,                    p => notifyErrorEvent(p));
+appEventRegistry.subscribe(AppEvents.ERROR,                    p => notifyAppEvent(AppEvents.ERROR,                    p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.FILE_CREATED,             p => notifyAppEvent(AppEvents.FILE_CREATED,             p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.FILE_VIEWED,              p => notifyAppEvent(AppEvents.FILE_VIEWED,              p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.FILE_VIEWED_AS_REFERENCE, p => notifyAppEvent(AppEvents.FILE_VIEWED_AS_REFERENCE, p as unknown as Record<string, unknown>));
