@@ -138,7 +138,13 @@ function parseFileToolContent(msg: MessageWithFlags): {
   const toolMsg = msg as any;
   const empty = { content: null, queryResult: null, fileName: null, filePath: null, fileType: null, assetCount: null };
   try {
-    const parsed = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
+    // content may be a string, an object, or an array of content blocks (text + image)
+    let rawContent = toolMsg.content;
+    if (Array.isArray(rawContent)) {
+      const textBlock = rawContent.find((b: any) => b.type === 'text');
+      rawContent = textBlock?.text ?? rawContent;
+    }
+    const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
     // Handle CreateFile (state.fileState), EditFile (fileState), ReadFiles (files[0].fileState)
     const fileState = parsed?.state?.fileState || parsed?.fileState || parsed?.files?.[0]?.fileState;
     const queryResults = parsed?.state?.queryResults || parsed?.queryResults || parsed?.files?.[0]?.queryResults;
