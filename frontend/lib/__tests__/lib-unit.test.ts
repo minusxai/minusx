@@ -6,9 +6,6 @@ jest.mock('next/cache', () => ({
   revalidateTag: jest.fn(),
   unstable_cache: jest.fn((fn: unknown) => fn),
 }));
-jest.mock('@/lib/messaging/internal-notifier', () => ({
-  notifyInternal: jest.fn().mockResolvedValue(undefined),
-}));
 jest.mock('@/lib/config', () => ({
   NEXTAUTH_SECRET: 'test-secret-for-unit-tests',
   MX_API_BASE_URL: 'http://mx-api.test',
