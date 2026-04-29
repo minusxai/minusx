@@ -363,8 +363,17 @@ export default function ChatInterface({
     if (lastUserIdx < 0) return false;
     return !msgs.slice(lastUserIdx + 1).some(m => {
       const tc = m as import('@/store/chatSlice').CompletedToolCall;
-      return (tc.function?.name === 'TalkToUser' || tc.function?.name === conversation.agent) &&
-        typeof tc.content === 'string' && tc.content.trim().length > 0;
+      const name = tc.function?.name;
+      if (name !== 'TalkToUser' && name !== conversation.agent) return false;
+      const c = tc.content;
+      // TalkToUser content is a JSON string; agent result content is an object { success, content?, content_blocks? }.
+      // content_blocks may include invisible thinking blocks — check the text-only `content` field instead.
+      if (typeof c === 'string') return c.trim().length > 0;
+      if (typeof c === 'object' && c !== null) {
+        const text = (c as Record<string, unknown>).content;
+        return typeof text === 'string' && text.trim().length > 0;
+      }
+      return false;
     });
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
 
