@@ -13,7 +13,7 @@
  * Browser-only — safe to import only from 'use client' components.
  */
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
-import { IS_DEV } from '@/lib/constants';
+import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import type { AppState } from '@/lib/appState';
 import type { Attachment } from '@/lib/types';
@@ -87,40 +87,8 @@ export function extractChartEntries(
  * that the Claude API cannot reach. The data URL avoids the round-trip entirely.
  */
 export async function uploadChartOrEmbed(dataUrl: string): Promise<string> {
-  const params = new URLSearchParams({ filename: 'chart.jpg', contentType: 'image/jpeg', keyType: 'charts' });
-  const res = await fetch(`/api/object-store/upload-url?${params}`);
-  if (!res.ok) throw new Error(`Failed to get upload URL (${res.status})`);
-  const { uploadUrl, publicUrl } = (await res.json()) as { uploadUrl: string; publicUrl: string };
-
-  // Local filesystem adapter in dev: LLM can't reach localhost, so embed as base64 data URL.
-  // The renderer returns a blob: URL — fetch it and convert to a proper data: URL.
-  // In production, build an absolute URL so the LLM can fetch it from the real domain.
-  if (uploadUrl.startsWith('/api/object-store/local-upload')) {
-    if (IS_DEV) {
-      const blob = await fetch(dataUrl).then(r => r.blob());
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    }
-    // Upload, then return absolute URL using the current origin.
-    const blob = await fetch(dataUrl).then(r => r.blob());
-    const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
-    if (!putRes.ok) throw new Error(`Chart upload failed (${putRes.status})`);
-    return `${window.location.origin}${publicUrl}`;
-  }
-
-  // S3 (or any real object store): upload and return the public URL.
   const blob = await fetch(dataUrl).then(r => r.blob());
-  const putRes = await fetch(uploadUrl, {
-    method: 'PUT',
-    body: blob,
-    headers: { 'Content-Type': 'image/jpeg' },
-  });
-  if (!putRes.ok) throw new Error(`Chart upload failed (${putRes.status})`);
-  return publicUrl;
+  return uploadBlobOrEmbed(blob, 'chart.jpg', 'image/jpeg');
 }
 
 /**
