@@ -274,8 +274,17 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     }
   }, [filteredMentions.length, selectedIndex]);
 
-  // Compute dropdown position from anchor ref
-  const anchorRect = anchorRef.current?.getBoundingClientRect();
+  // Track dropdown position in state, updated via effect
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!showDropdown || filteredMentions.length === 0) return;
+    const el = anchorRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDropdownPos({ top: rect.top - 4, left: rect.left, width: rect.width });
+  }, [showDropdown, filteredMentions.length]);
 
   if (!showDropdown || filteredMentions.length === 0) {
     return <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />;
@@ -287,9 +296,9 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
       <Portal>
         <Box
           position="fixed"
-          top={anchorRect ? `${anchorRect.top - 4}px` : 0}
-          left={anchorRect ? `${anchorRect.left}px` : 0}
-          width={anchorRect ? `${anchorRect.width}px` : undefined}
+          top={dropdownPos ? `${dropdownPos.top}px` : 0}
+          left={dropdownPos ? `${dropdownPos.left}px` : 0}
+          width={dropdownPos ? `${dropdownPos.width}px` : undefined}
           transform="translateY(-100%)"
           bg="bg.panel"
           border="1px solid"
