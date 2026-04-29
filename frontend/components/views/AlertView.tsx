@@ -112,8 +112,8 @@ export default function AlertView({
 
   // Runs dropdown collection
   const runsCollection = useMemo(() => createListCollection({
-    items: runs.map(r => ({
-      value: r.id.toString(),
+    items: runs.filter(r => r.id != null).map(r => ({
+      value: String(r.id),
       label: new Date(r.created_at).toLocaleString()
     }))
   }), [runs]);
