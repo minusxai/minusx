@@ -29,10 +29,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 /**
  * Upload a blob and return a usable URL.
- * Handles three cases based on the uploadUrl returned by the server:
- *   'base64:'                      → embed as base64 data URL (USE_BASE64_UPLOADS=true)
- *   '/api/object-store/local-upload' → upload to local FS, return absolute origin URL
- *   anything else (S3 presigned)   → upload to S3, return public URL
+ * Handles two cases based on the uploadUrl returned by the server:
+ *   'base64:'         → embed as base64 data URL (USE_BASE64_UPLOADS=true)
+ *   anything else     → PUT to the URL (S3 presigned or local FS route), return publicUrl
  */
 export async function uploadBlobOrEmbed(
   blob: Blob,
@@ -50,12 +49,6 @@ export async function uploadBlobOrEmbed(
 
   if (uploadUrl === 'base64:') {
     return blobToDataUrl(blob);
-  }
-
-  if (uploadUrl.startsWith('/api/object-store/local-upload')) {
-    const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': contentType } });
-    if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
-    return `${window.location.origin}${publicUrl}`;
   }
 
   const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': contentType } });
@@ -106,9 +99,6 @@ export async function uploadFile(
     }
   }
 
-  if (uploadUrl.startsWith('/api/object-store/local-upload')) {
-    return { publicUrl: `${window.location.origin}${publicUrl}` };
-  }
   return { publicUrl };
 }
 

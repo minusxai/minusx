@@ -102,9 +102,15 @@ export async function GET(req: NextRequest) {
     const store = createObjectStore();
     const result = await store.getUploadUrl({ key, contentType });
 
+    // Make publicUrl absolute if the adapter returned a relative path (local FS).
+    // Clients receive a ready-to-use URL regardless of which adapter is active.
+    const publicUrl = result.publicUrl.startsWith('/')
+      ? `${req.nextUrl.origin}${result.publicUrl}`
+      : result.publicUrl;
+
     // Sign the key into a tamper-proof token so /api/csv/register can trust
     // the echoed-back key without mode-specific validation.
-    return NextResponse.json({ ...result, s3Key: signStorageToken(key) });
+    return NextResponse.json({ ...result, publicUrl, s3Key: signStorageToken(key) });
   } catch (error) {
     return handleApiError(error);
   }
