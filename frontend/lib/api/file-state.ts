@@ -93,6 +93,7 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
 
   // Determine which files need fetching
   const needsFetch = fileIds.filter(id => {
+    if (id == null || !Number.isFinite(id)) return false;
     if (skip) return false;
     return !selectIsFileLoaded(state, id) || !selectIsFileFresh(state, id, ttl);
   });

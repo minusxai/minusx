@@ -33,7 +33,7 @@ function QuestionPicker({
       ? questions.filter(q => q.name.toLowerCase().includes(lower))
       : questions;
     return createListCollection({
-      items: filtered.map(q => ({ value: q.id.toString(), label: q.name }))
+      items: filtered.filter(q => q.id != null).map(q => ({ value: String(q.id), label: q.name }))
     });
   }, [questions, inputValue]);
 
