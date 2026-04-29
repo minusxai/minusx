@@ -13,6 +13,8 @@ def _get_system_prompt(preloaded_skill_names=None, **overrides):
     if preloaded_skill_names is None:
         preloaded_skill_names = DEFAULT_PRELOADED_SKILLS
     preloaded_set = set(preloaded_skill_names)
+    agent = object.__new__(AnalystAgent)
+    agent.skills = {"selected": [], "user_catalog": []}
     defaults = {
         'agent_name': 'Test',
         'schema': '[]',
@@ -22,8 +24,8 @@ def _get_system_prompt(preloaded_skill_names=None, **overrides):
         'max_steps': 10,
         'allowed_viz_types': 'all',
         'role': 'admin',
-        'skills_catalog': AnalystAgent._build_skills_catalog(preloaded_set),
-        'preloaded_skills': AnalystAgent._build_preloaded_skills_content(preloaded_skill_names),
+        'skills_catalog': agent._build_skills_catalog(preloaded_set),
+        'preloaded_skills': agent._build_preloaded_skills_content(preloaded_skill_names),
     }
     defaults.update(overrides)
     return loader.get('default.system', **defaults)

@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from tasks.agents.analyst.prompt_loader import PromptLoader, get_skill, list_skills
+from tasks.agents.analyst.prompt_loader import HIDDEN_SKILLS, PromptLoader, get_skill, list_skills
 from tasks.agents.analyst.agent import (
     AnalystAgent, PAGE_SKILL_MAP, DEFAULT_PRELOADED_SKILLS,
 )
@@ -30,6 +30,8 @@ def _build_system_prompt(preloaded_skill_names: list[str] | None = None, **overr
     if preloaded_skill_names is None:
         preloaded_skill_names = list(DEFAULT_PRELOADED_SKILLS)
     preloaded_set = set(preloaded_skill_names)
+    agent = object.__new__(AnalystAgent)
+    agent.skills = {"selected": [], "user_catalog": []}
     defaults = {
         'agent_name': 'MinusX',
         'schema': SAMPLE_SCHEMA,
@@ -39,8 +41,8 @@ def _build_system_prompt(preloaded_skill_names: list[str] | None = None, **overr
         'max_steps': 10,
         'allowed_viz_types': 'all',
         'role': 'admin',
-        'skills_catalog': AnalystAgent._build_skills_catalog(preloaded_set),
-        'preloaded_skills': AnalystAgent._build_preloaded_skills_content(preloaded_skill_names),
+        'skills_catalog': agent._build_skills_catalog(preloaded_set),
+        'preloaded_skills': agent._build_preloaded_skills_content(preloaded_skill_names),
     }
     defaults.update(overrides)
     return LOADER.get('default.system', **defaults)
@@ -69,6 +71,7 @@ def _make_agent(page_type: str | None) -> AnalystAgent:
     """Create an AnalystAgent with minimal app_state (skips orchestrator)."""
     agent = object.__new__(AnalystAgent)
     agent.app_state = _build_app_state(page_type) if page_type else {}
+    agent.skills = {"selected": [], "user_catalog": []}
     return agent
 
 
@@ -126,18 +129,77 @@ class TestPageAwarePreloading:
 
     @pytest.mark.parametrize("page_type,expected_skills", list(PAGE_SKILL_MAP.items()))
     def test_preloaded_skills_excluded_from_catalog(self, page_type, expected_skills):
-        catalog = AnalystAgent._build_skills_catalog(set(expected_skills))
+        agent = _make_agent(page_type)
+        catalog = agent._build_skills_catalog(set(expected_skills))
         for skill_name in expected_skills:
             assert f'"{skill_name}"' not in catalog
 
     @pytest.mark.parametrize("page_type,expected_skills", list(PAGE_SKILL_MAP.items()))
     def test_non_preloaded_skills_in_catalog(self, page_type, expected_skills):
         preloaded_set = set(expected_skills)
-        catalog = AnalystAgent._build_skills_catalog(preloaded_set)
-        excluded = preloaded_set | AnalystAgent._HIDDEN_SKILLS
+        agent = _make_agent(page_type)
+        catalog = agent._build_skills_catalog(preloaded_set)
+        excluded = preloaded_set | HIDDEN_SKILLS
         for skill_name in list_skills():
             if skill_name not in excluded:
                 assert f'"{skill_name}"' in catalog
+
+
+class TestUserDefinedSkills:
+    """User-defined skills are cataloged and preloaded from agent args."""
+
+    def test_user_catalog_skills_are_listed(self):
+        agent = _make_agent("explore")
+        agent.skills = {
+            "selected": [],
+            "user_catalog": [
+                {"name": "cohort_analysis", "description": "Company-specific cohort rules."},
+            ],
+        }
+
+        catalog = agent._build_skills_catalog(set(DEFAULT_PRELOADED_SKILLS))
+
+        assert "User-defined skills:" in catalog
+        assert '"cohort_analysis"' in catalog
+        assert "Company-specific cohort rules." in catalog
+
+    def test_selected_user_skills_are_preloaded_and_excluded_from_catalog(self):
+        agent = _make_agent("explore")
+        agent.skills = {
+            "selected": [
+                {
+                    "type": "user",
+                    "name": "cohort_analysis",
+                    "description": "Company-specific cohort rules.",
+                    "content": "Always define retained users as customers with activity in week 4.",
+                }
+            ],
+            "user_catalog": [
+                {"name": "cohort_analysis", "description": "Company-specific cohort rules."},
+                {"name": "pricing_analysis", "description": "Pricing analytics conventions."},
+            ],
+        }
+
+        preloaded = agent._build_preloaded_skills_content(list(DEFAULT_PRELOADED_SKILLS))
+        catalog = agent._build_skills_catalog(set(DEFAULT_PRELOADED_SKILLS))
+
+        assert "## User Skill: cohort_analysis" in preloaded
+        assert "Always define retained users" in preloaded
+        assert '"cohort_analysis"' not in catalog
+        assert '"pricing_analysis"' in catalog
+
+    def test_selected_system_skills_are_preloaded_and_excluded_from_catalog(self):
+        agent = _make_agent("explore")
+        agent.skills = {
+            "selected": [{"type": "system", "name": "alerts"}],
+            "user_catalog": [],
+        }
+
+        preloaded_names = agent._get_preloaded_skill_names()
+        catalog = agent._build_skills_catalog(set(preloaded_names))
+
+        assert "alerts" in preloaded_names
+        assert '"alerts"' not in catalog
 
 
 # ── Skill content integrity ──────────────────────────────────────────
