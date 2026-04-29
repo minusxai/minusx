@@ -8,6 +8,7 @@ import { ChartError } from './ChartError'
 import { loadGeoJSON, MAP_DEFAULTS, type MapName } from '@/lib/chart/geo-data'
 import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { useConfigs } from '@/lib/hooks/useConfigs'
 import { formatNumber, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { computeHeatmapOptions } from '@/lib/chart/geo-heatmap-defaults'
@@ -112,6 +113,11 @@ function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, 
 
 export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height, columnFormats = {}, onMapReady }: GeoPlotProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
+  const { config } = useConfigs()
+  const palette = useMemo(() => {
+    const p = config.chartColorPalette
+    return p && p.length > 0 ? p : COLOR_PALETTE
+  }, [config.chartColorPalette])
   const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null)
   const [geoJsonError, setGeoJsonError] = useState<string | null>(null)
   const selectedLayerRef = useRef<L.Layer | null>(null)
@@ -346,7 +352,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           } else {
             const uniqueValues = [...new Set(rows.map(r => String(r[geoConfig.colorCol!] ?? '')))]
             uniqueValues.forEach((val, i) => {
-              categoricalColorMap.set(val, COLOR_PALETTE[i % COLOR_PALETTE.length])
+              categoricalColorMap.set(val, palette[i % palette.length])
             })
           }
         }
