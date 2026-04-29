@@ -355,10 +355,23 @@ export default function ChatInterface({
     );
   }, [conversation?.pending_tool_calls]);
 
+  // Detect silent finish: agent finished but produced no visible reply since last user message
+  const silentFinish = useMemo(() => {
+    if (conversation?.executionState !== 'FINISHED') return false;
+    const msgs = conversation.messages;
+    const lastUserIdx = msgs.reduce((last, m, i) => m.role === 'user' ? i : last, -1);
+    if (lastUserIdx < 0) return false;
+    return !msgs.slice(lastUserIdx + 1).some(m => {
+      const tc = m as import('@/store/chatSlice').CompletedToolCall;
+      return (tc.function?.name === 'TalkToUser' || tc.function?.name === conversation.agent) &&
+        typeof tc.content === 'string' && tc.content.trim().length > 0;
+    });
+  }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
+
   // Get error from conversation or use local state for client-side errors
   const [localError, setLocalError] = useState<LoadError | null>(null);
   // Only show runtime/execution errors here (not loadError - that's shown in dedicated section above)
-  const error = conversation?.error || localError;
+  const error = conversation?.error || localError || (silentFinish ? 'The agent did not respond.' : null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
