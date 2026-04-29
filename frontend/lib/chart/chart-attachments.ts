@@ -1,9 +1,10 @@
 /**
  * Chart → attachment pipeline with caching.
  *
- * S3 configured  → renders chart, uploads to S3, caches the public URL.
- * Local FS (dev) → renders chart, embeds as base64 data URL (localhost URLs are
- *                  inaccessible to the Claude API, so we skip the upload entirely).
+ * S3 configured        → renders chart, uploads to S3, caches the public URL.
+ * USE_BASE64_UPLOADS=true → renders chart, embeds as base64 data URL (no upload).
+ * Local FS, no flag    → renders chart, uploads to local FS; returns localhost URL
+ *                        (inaccessible to the Claude API — set USE_BASE64_UPLOADS=true in dev).
  *
  * On subsequent sends with the same data: returns the cached value instantly.
  *

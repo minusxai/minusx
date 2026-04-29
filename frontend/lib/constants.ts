@@ -63,7 +63,6 @@ export const ANALYTICS_CONFIG = parseAnalyticsConfig(process.env.NEXT_PUBLIC_ANA
 
 export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
 
-export const USE_BASE64_UPLOADS = process.env.NEXT_PUBLIC_USE_BASE64_UPLOADS === 'true';
 
 export const PROTECTED_FILE_PATHS = [
   // System-managed internals DuckDB connection — read-only, cannot be modified or deleted

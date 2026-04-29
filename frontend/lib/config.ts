@@ -40,6 +40,7 @@ interface EnvironmentConfig {
   OBJECT_STORE_ACCESS_KEY_ID: string | undefined;
   OBJECT_STORE_SECRET_ACCESS_KEY: string | undefined;
   OBJECT_STORE_PUBLIC_URL: string | undefined;
+  USE_BASE64_UPLOADS: boolean;
   LOCAL_UPLOAD_PATH: string;
   MXFOOD_DUCKDB_URL: string;
   MD_HOME: string;
@@ -106,6 +107,7 @@ const config: EnvironmentConfig = {
   OBJECT_STORE_ACCESS_KEY_ID: process.env.OBJECT_STORE_ACCESS_KEY_ID,
   OBJECT_STORE_SECRET_ACCESS_KEY: process.env.OBJECT_STORE_SECRET_ACCESS_KEY,
   OBJECT_STORE_PUBLIC_URL: process.env.OBJECT_STORE_PUBLIC_URL,
+  USE_BASE64_UPLOADS: process.env.USE_BASE64_UPLOADS === 'true',
   LOCAL_UPLOAD_PATH: process.env.LOCAL_UPLOAD_PATH
     ? resolve(process.env.LOCAL_UPLOAD_PATH)
     : resolve(join(baseDuckdbDataPath, 'data/uploads')),
@@ -171,6 +173,7 @@ export const OBJECT_STORE_REGION = config.OBJECT_STORE_REGION;
 export const OBJECT_STORE_ACCESS_KEY_ID = config.OBJECT_STORE_ACCESS_KEY_ID;
 export const OBJECT_STORE_SECRET_ACCESS_KEY = config.OBJECT_STORE_SECRET_ACCESS_KEY;
 export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
+export const USE_BASE64_UPLOADS = config.USE_BASE64_UPLOADS;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
 export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
 export const MD_HOME = config.MD_HOME;
