@@ -13,7 +13,7 @@ from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
 from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, LoadSkill
-from .prompt_loader import get_prompt, get_skill, list_skills
+from .prompt_loader import HIDDEN_SKILLS, get_prompt, get_skill, list_skills
 
 # Map page type → skills to preload into the system prompt
 PAGE_SKILL_MAP: dict[str, list[str]] = {
@@ -93,6 +93,7 @@ class AnalystAgent(Agent):
         allowed_viz_types: Optional[List[str]] = None,
         unrestricted_mode: bool = False,
         role: Optional[str] = None,
+        skills: Optional[dict] = None,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -108,6 +109,11 @@ class AnalystAgent(Agent):
         self.allowed_viz_types = allowed_viz_types
         self.unrestricted_mode = unrestricted_mode
         self.role = role or "viewer"
+        skills = skills or {}
+        self.skills = {
+            "user_catalog": [s for s in skills.get("user_catalog", []) if isinstance(s, dict)],
+            "selected": [s for s in skills.get("selected", []) if isinstance(s, dict)],
+        }
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -143,35 +149,66 @@ class AnalystAgent(Agent):
         """Determine which skills to preload based on the current page type and mode."""
         page_type = self._get_page_type()
         skills = list(PAGE_SKILL_MAP.get(page_type, DEFAULT_PRELOADED_SKILLS))
+        selected_skills = getattr(self, 'skills', {}).get('selected', [])
+        for selected in selected_skills:
+            if isinstance(selected, dict) and selected.get('type') == 'system':
+                name = selected.get('name')
+                if name and name not in skills and name not in HIDDEN_SKILLS:
+                    skills.append(name)
         # Add navigation rules based on unrestricted_mode
         nav_skill = 'navigation_unrestricted' if getattr(self, 'unrestricted_mode', False) else 'navigation_restricted'
         skills.append(nav_skill)
         return skills
 
-    # Skills that are mode-selected, not user-loadable — always exclude from catalog
-    _HIDDEN_SKILLS = {'navigation_restricted', 'navigation_unrestricted'}
-
-    @classmethod
-    def _build_skills_catalog(cls, preloaded: set[str] | None = None) -> str:
-        """Generate the LoadSkill catalog, excluding already-preloaded skills."""
+    def _build_skills_catalog(self, preloaded: set[str] | None = None) -> str:
+        """Generate the LoadSkill catalog, excluding already-preloaded/selected skills."""
         if preloaded is None:
             preloaded = set(DEFAULT_PRELOADED_SKILLS)
-        excluded = preloaded | cls._HIDDEN_SKILLS
-        skills = list_skills()
-        lines = []
+        excluded = preloaded | HIDDEN_SKILLS
+        skills = list_skills(skip_hidden=True)
+        system_lines = []
         for name, description in skills.items():
             if name not in excluded:
-                lines.append(f'  - `"{name}"` — {description}')
-        return "\n".join(lines)
+                system_lines.append(f'  - `"{name}"` — {description}')
 
-    @staticmethod
-    def _build_preloaded_skills_content(skill_names: list[str]) -> str:
+        selected = self.skills.get('selected', [])
+        selected_user_names = {
+            str(s.get('name') or '')
+            for s in selected
+            if s.get('type') == 'user'
+        }
+        user_lines = []
+        for skill in self.skills.get('user_catalog', []):
+            name = skill.get('name')
+            description = skill.get('description') or ''
+            if not name or str(name) in selected_user_names:
+                continue
+            user_lines.append(f'  - `"{name}"` — {description}')
+
+        sections = []
+        if system_lines:
+            sections.append("System-defined skills:\n" + "\n".join(system_lines))
+        if user_lines:
+            sections.append("User-defined skills:\n" + "\n".join(user_lines))
+        if not sections:
+            return "No additional skills are available for this turn."
+        return "\n".join(sections)
+
+    def _build_preloaded_skills_content(self, skill_names: list[str]) -> str:
         """Resolve and concatenate the content of preloaded skills."""
+        selected_user_skills = getattr(self, 'skills', {}).get('selected', [])
         sections = []
         for name in skill_names:
             content = get_skill(name)
             if content:
                 sections.append(content)
+        for skill in selected_user_skills:
+            if not isinstance(skill, dict) or skill.get('type') != 'user':
+                continue
+            content = skill.get('content')
+            if content:
+                name = skill.get('name') or 'user_skill'
+                sections.append(f"## User Skill: {name}\n{content}")
         return "\n\n".join(sections)
 
     def _get_prompt_args(self) -> tuple[str, dict]:

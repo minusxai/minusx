@@ -5,6 +5,9 @@ import re
 import yaml
 
 
+HIDDEN_SKILLS = {'navigation_restricted', 'navigation_unrestricted'}
+
+
 class PromptLoader:
     """Loads prompts from YAML and resolves template references."""
 
@@ -78,7 +81,7 @@ class PromptLoader:
 
         return current
 
-    def list_skills(self) -> dict:
+    def list_skills(self, skip_hidden: bool = False) -> dict:
         """Return a dict of skill_name -> description for all available skills.
 
         Skills are templates whose keys start with 'skill_'.
@@ -87,6 +90,8 @@ class PromptLoader:
         for key, value in self.templates.items():
             if key.startswith('skill_') and isinstance(value, dict):
                 name = key[len('skill_'):]  # strip 'skill_' prefix
+                if skip_hidden and name in HIDDEN_SKILLS:
+                    continue
                 skills[name] = value.get('description', '')
         return skills
 
@@ -268,9 +273,9 @@ def get_prompt(prompt_id: str, **variables) -> str:
     return _get_loader().get(prompt_id, **variables)
 
 
-def list_skills() -> dict:
+def list_skills(skip_hidden: bool = False) -> dict:
     """List all available skills with their descriptions."""
-    return _get_loader().list_skills()
+    return _get_loader().list_skills(skip_hidden=skip_hidden)
 
 
 def get_skill(name: str) -> str | None:

@@ -26,7 +26,7 @@ from tasks.conversation import get_latest_root, update_log_with_completed_tool_c
 from tasks.types import ChatCompletionToolMessageParamMX, ChatCompletionMessageToolCallParamMX, CompletedToolCallsMXWithRunId  # noqa: E402
 from internal_notifier import notify_internal  # noqa: E402
 import litellm  # noqa: E402
-from tasks.agents.analyst.prompt_loader import PromptLoader, get_skill  # noqa: E402
+from tasks.agents.analyst.prompt_loader import PromptLoader, get_skill, list_skills  # noqa: E402
 from tasks.agents.analyst.file_schema import ATLAS_FILE_SCHEMA_JSON, vizSettingsJsonStr  # noqa: E402
 from tasks.llm.client import describe_tool  # noqa: E402
 import tasks.agents.analyst.agent  # noqa: E402, F401
@@ -252,6 +252,16 @@ async def get_tool_schemas():
         except Exception:
             pass
     return schemas
+
+
+@app.get("/api/skills/system")
+async def get_system_skills():
+    """Return system skill catalog metadata without full prompt content."""
+    skills = list_skills(skip_hidden=True)
+    return [
+        {"name": name, "description": description}
+        for name, description in skills.items()
+    ]
 
 
 @app.post("/api/chat/close", response_model=CloseConversationResponse)

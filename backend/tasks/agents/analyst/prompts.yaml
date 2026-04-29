@@ -178,7 +178,7 @@ templates:
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
     ### Skills (Dynamic Context)
-    - **LoadSkill(name: string)**: Load detailed instructions for a specific domain. Use this before working with file types or features you need more context on. Available skills:
+    - **LoadSkill(name: string)**: Load detailed instructions for a system or user-defined skill by name. Use this before working with file types or features you need more context on. Available skills:
     {skills_catalog}
 
     ### Web Search
