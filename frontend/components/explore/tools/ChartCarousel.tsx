@@ -311,7 +311,7 @@ export default function ChartCarousel({
         )}
 
         {/* Chart */}
-        <Box px={1} pb={2} minH="200px">
+        <Box px={1} pb={count > 1 ? 1 : 2} minH="200px">
           <Box borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
           {localContent && current?.queryResult ? (
             <QuestionVisualization
@@ -339,6 +339,74 @@ export default function ChartCarousel({
           )}
           </Box>
         </Box>
+
+        {/* Thumbnail strip — only when 2+ charts */}
+        {count > 1 && (
+          <HStack
+            px={1} pb={2} gap={1.5}
+            overflowX="auto"
+            css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+          >
+            {successful.map((item, idx) => (
+              <Box
+                key={idx}
+                as="button"
+                aria-label={`Switch to chart ${idx + 1}: ${item.name}`}
+                onClick={() => setActiveIndex(idx)}
+                flexShrink={0}
+                w="120px" h="80px"
+                borderRadius="md"
+                overflow="hidden"
+                border="2px solid"
+                borderColor={idx === safeIndex ? 'accent.teal' : 'border.default'}
+                bg={idx === safeIndex ? 'accent.teal/5' : 'bg.canvas'}
+                opacity={idx === safeIndex ? 1 : 0.7}
+                _hover={{ opacity: 1, borderColor: idx === safeIndex ? 'accent.teal' : 'accent.teal/40' }}
+                transition="all 0.15s"
+                cursor="pointer"
+                position="relative"
+              >
+                {/* Thumbnail label */}
+                <Box
+                  position="absolute" top={0} left={0} right={0} zIndex={1}
+                  bg="bg.canvas/80" px={1} py={0.5}
+                >
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" truncate>
+                    {item.name === 'Query' ? `Q${idx + 1}` : item.name}
+                  </Text>
+                </Box>
+                {/* Miniaturized chart — non-interactive */}
+                <Box
+                  pointerEvents="none"
+                  transform="scale(0.25)"
+                  transformOrigin="top left"
+                  w="480px" h="320px"
+                >
+                  <QuestionVisualization
+                    currentState={item.question}
+                    config={{
+                      showHeader: false,
+                      showJsonToggle: false,
+                      editable: false,
+                      viz: {
+                        showTypeButtons: false,
+                        showChartBuilder: false,
+                        typesButtonsOrientation: 'horizontal',
+                        showTitle: false,
+                      },
+                      fixError: false,
+                    }}
+                    loading={false}
+                    error={null}
+                    data={item.queryResult}
+                    onVizTypeChange={() => {}}
+                    onAxisChange={() => {}}
+                  />
+                </Box>
+              </Box>
+            ))}
+          </HStack>
+        )}
 
       </Box>
 

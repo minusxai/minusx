@@ -499,6 +499,15 @@ export default function AgentTurnContainer({
     )),
     [timeline],
   );
+  const hasMultipleCharts = useMemo(() =>
+    timeline.some(n => (n.type === 'query' && n.messages.length > 1) || (
+      FILE_LABELS.has(n.label) && n.messages.filter(m => {
+        const parsed = parseFileToolContent(m);
+        return parsed.fileType === 'question' && parsed.queryResult;
+      }).length > 1
+    )),
+    [timeline],
+  );
   const hasPendingClarify = useMemo(() =>
     timeline.some(n => n.messages.some(m => {
       const name = (m as any).function?.name || '';
@@ -509,7 +518,7 @@ export default function AgentTurnContainer({
     })),
     [timeline],
   );
-  const rightPaneH = hasPendingClarify ? '400px' : hasChartContent ? '400px' : 'auto';
+  const rightPaneH = hasPendingClarify ? '400px' : hasMultipleCharts ? '450px' : hasChartContent ? '400px' : 'auto';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -658,7 +667,7 @@ export default function AgentTurnContainer({
                 gap={0}
                 w="170px"
                 minW="170px"
-                maxH="400px"
+                maxH={rightPaneH === 'auto' ? '400px' : rightPaneH}
                 overflowY="auto"
               >
                 <Text
