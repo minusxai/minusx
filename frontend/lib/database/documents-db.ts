@@ -388,7 +388,7 @@ export class DocumentDB {
        SET name = $2, path = $3,
            content = jsonb_set(content, '{metadata,name}', to_jsonb($2::text)),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND name = $4`,
+       WHERE id = $1 AND (content->'metadata'->>'name' = $4 OR name = $4)`,
       [id, name, path, DEFAULT_CONVERSATION_NAME]
     );
   }
