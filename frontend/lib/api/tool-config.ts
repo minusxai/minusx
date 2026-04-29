@@ -16,7 +16,7 @@ import type { IconType } from 'react-icons/lib';
 import {
   LuDatabase, LuMessageSquare, LuBadgeInfo, LuArrowRight,
   LuPencilLine, LuBookOpen, LuSearch, LuFilePlus2,
-  LuUpload, LuBookMarked, LuWrench, LuBrain,
+  LuUpload, LuBookMarked, LuWrench, LuBrain, LuGlobe,
 } from 'react-icons/lu';
 
 // Tool configuration interface
@@ -191,6 +191,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipIcon: LuBookMarked,
 
     timelineVerb: 'Loading',
+  },
+  'WebSearch': {
+    displayComponent: null,
+
+    chipLabel: 'web lookup',
+    chipLabelPlural: 'web lookups',
+    chipIcon: LuGlobe,
+
+    timelineVerb: 'Browsing',
   },
 };
 
