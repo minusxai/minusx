@@ -20,9 +20,8 @@ const CONTENT_TYPES: Record<string, string> = {
 /**
  * GET /api/object-store/serve/{key}
  *
- * Publicly serves a file from the local filesystem (LOCAL_UPLOAD_PATH/{key}).
- * No auth required — keys are UUID-based and unguessable.
- * Used as the "public URL" for files when no S3 is configured (e.g. chart images sent to LLM).
+ * Serves a file from the local filesystem (LOCAL_UPLOAD_PATH/{key}).
+ * Auth enforced by middleware. Used as the file URL when no S3 is configured.
  */
 export async function GET(req: NextRequest, context: { params: Promise<{ key: string[] }> }) {
   try {

@@ -43,8 +43,7 @@ export function createMiddleware() {
       pathname.startsWith('/api/integrations/slack/interact') ||
       pathname.startsWith('/api/integrations/slack/oauth-callback') ||
       pathname.startsWith('/api/health') ||
-      pathname === '/api/jobs/cron' ||
-      pathname.startsWith('/api/object-store/serve')
+      pathname === '/api/jobs/cron'
     ) {
       const requestHeaders = new Headers(req.headers);
       requestHeaders.set('x-request-id', requestId);
