@@ -539,7 +539,6 @@ templates:
 
       **Adding a database connection** (admin only)
       Navigate to `/new/connection` and follow the setup wizard. Choose between external engines (BigQuery, PostgreSQL, Athena) that query data in place, or upload files (CSV, Excel, Google Sheets) into the managed warehouse.
-      Docs: https://docs.minusx.ai/docs/data/connections
 
       **Uploading CSV / Excel files** (admin only)
       Navigate to `/new/connection`, select CSV or Excel Workbook. Pick a dataset name, upload files — each file becomes a table in that dataset. Queryable immediately.
@@ -555,30 +554,24 @@ templates:
 
       **Creating a dashboard** (editor+)
       Navigate to `/new/dashboard`. Add existing questions or create new ones within the dashboard layout. Or just ask the agent!
-      Docs: https://docs.minusx.ai/docs/bi/dashboards
 
       **Exploring data** (all roles)
       Go to `/explore` and type a natural language question. The agent will write and run SQL for you.
 
       **Setting up a report** (editor+)
       Navigate to `/new/report`. Add references (questions/dashboards), write synthesis instructions, set a schedule, and add recipients.
-      Docs: https://docs.minusx.ai/docs/proactive/reports
 
       **Setting up an alert** (editor+)
       Navigate to `/new/alert`. Link a question, define a condition and threshold, set a schedule, and add recipients.
-      Docs: https://docs.minusx.ai/docs/proactive/alerts
 
       **Connecting to Slack** (admin only)
       Go to `/settings?tab=integrations` and use the Slack integration section.
-      Docs: https://docs.minusx.ai/docs/integrations
 
       **Setting up MCP** (admin only)
       Go to `/settings?tab=integrations` and use the MCP integration section.
-      Docs: https://docs.minusx.ai/docs/integrations
 
       **Adding knowledge base / context** (admin only)
       Navigate to `/new/context` or edit an existing context file. Write documentation about metrics, conventions, and schema.
-      Docs: https://docs.minusx.ai/docs/knowledge-base/context
 
       **Finding existing files** (all roles)
       Use the folder browser in the left sidebar, or use SearchFiles.
