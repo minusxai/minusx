@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
-import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, Icon, Input, Textarea } from '@chakra-ui/react';
-import { LuRefreshCw, LuUser } from 'react-icons/lu';
+import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, Icon, IconButton, Input, Textarea } from '@chakra-ui/react';
+import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
@@ -27,8 +27,10 @@ import { captureError } from '@/lib/messaging/capture-error';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
+import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 
-type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'integrations';
+type TabId = 'general' | 'homepage' | 'dev' | 'data' | 'users' | 'appearance' | 'configs' | 'styles' | 'messaging' | 'integrations';
 
 interface SettingEntry {
   tab: TabId;
@@ -200,6 +202,147 @@ function HomePageSettings() {
               aria-label="Settings > Home Page > Question IDs"
             />
           </Flex>
+        </VStack>
+      </Box>
+    </VStack>
+  );
+}
+
+function AppearanceSettings() {
+  const { config } = useConfigs();
+  const [colors, setColors] = useState<string[]>(() =>
+    config.chartColorPalette && config.chartColorPalette.length > 0
+      ? config.chartColorPalette
+      : [...COLOR_PALETTE]
+  );
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [inputValue, setInputValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const isCustom = config.chartColorPalette && config.chartColorPalette.length > 0;
+  const hasChanges = useMemo(() => {
+    const current = config.chartColorPalette && config.chartColorPalette.length > 0
+      ? config.chartColorPalette
+      : COLOR_PALETTE;
+    if (colors.length !== current.length) return true;
+    return colors.some((c, i) => c !== current[i]);
+  }, [colors, config.chartColorPalette]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateConfig({ chartColorPalette: colors });
+      toaster.create({ title: 'Palette saved', type: 'success', duration: 3000 });
+    } catch {
+      toaster.create({ title: 'Failed to save palette', type: 'error', duration: 5000 });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setColors([...COLOR_PALETTE]);
+    setIsSaving(true);
+    try {
+      await updateConfig({ chartColorPalette: [] });
+      toaster.create({ title: 'Reset to default palette', type: 'success', duration: 3000 });
+    } catch {
+      toaster.create({ title: 'Failed to reset palette', type: 'error', duration: 5000 });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const startEditing = (index: number) => {
+    setEditingIndex(index);
+    setInputValue(colors[index]);
+  };
+
+  const commitEdit = () => {
+    if (editingIndex === null) return;
+    const hex = inputValue.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+      const next = [...colors];
+      next[editingIndex] = hex.toLowerCase();
+      setColors(next);
+    }
+    setEditingIndex(null);
+  };
+
+  const addColor = () => {
+    setColors([...colors, '#888888']);
+    startEditing(colors.length);
+  };
+
+  const removeColor = (index: number) => {
+    if (colors.length <= 1) return;
+    setColors(colors.filter((_, i) => i !== index));
+    setEditingIndex(null);
+  };
+
+  return (
+    <VStack align="stretch" gap={4}>
+      <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+        <Box px={6} py={3} borderBottomWidth="1px" borderColor="border">
+          <HStack justify="space-between">
+            <Text fontSize="xs" fontWeight="semibold" color="fg.muted" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+              Chart Color Palette
+            </Text>
+            {isCustom && (
+              <Badge size="sm" colorPalette="teal" variant="subtle" fontFamily="mono">Custom</Badge>
+            )}
+          </HStack>
+        </Box>
+        <VStack align="stretch" gap={0} px={6} py={5}>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={4}>
+            Colors used for chart series in order.
+          </Text>
+          <Flex gap={2} flexWrap="wrap" mb={4}>
+            {colors.map((hex, i) => (
+              <HStack key={i} gap={1.5} px={2} py={1} borderRadius="md" border="1px solid" borderColor="border.muted" bg="bg.subtle">
+                <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" flexShrink={0}>
+                  {i + 1}
+                </Text>
+                <Box w="16px" h="16px" borderRadius="sm" bg={hex} flexShrink={0} border="1px solid" borderColor="border.muted" />
+                <Input
+                  size="sm" fontFamily="mono" fontSize="xs"
+                  value={editingIndex === i ? inputValue : hex}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onFocus={() => startEditing(i)}
+                  onBlur={commitEdit}
+                  onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingIndex(null); }}
+                  w="90px" minW="90px" maxW="90px"
+                  border="none" bg="transparent" p={0} h="auto"
+                  aria-label={`Color ${i + 1} hex value`}
+                />
+                {colors.length > 1 && (
+                  <IconButton
+                    size="2xs" variant="ghost" borderRadius="sm"
+                    color="fg.subtle" _hover={{ color: 'fg.default' }}
+                    onClick={() => removeColor(i)}
+                    aria-label={`Remove color ${i + 1}`}
+                    minW="14px" h="14px" w="14px" p={0}
+                  >
+                    <Icon as={LuX} boxSize="10px" />
+                  </IconButton>
+                )}
+              </HStack>
+            ))}
+          </Flex>
+
+          <HStack gap={2}>
+            <Button size="sm" variant="outline" onClick={addColor} aria-label="Add color to palette">
+              + Add Color
+            </Button>
+            <Button size="sm" bg="accent.teal" color="white" onClick={handleSave} loading={isSaving} disabled={!hasChanges || isSaving}>
+              Save
+            </Button>
+            {isCustom && (
+              <Button size="sm" variant="outline" onClick={handleReset} disabled={isSaving}>
+                Reset to Default
+              </Button>
+            )}
+          </HStack>
         </VStack>
       </Box>
     </VStack>
@@ -480,6 +623,7 @@ function SettingsContent() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
+    { id: 'appearance', label: 'Appearance', visible: isAdmin, custom: <AppearanceSettings /> },
     {
       id: 'messaging',
       label: 'Messaging',
