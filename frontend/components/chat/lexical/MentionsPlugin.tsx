@@ -12,7 +12,7 @@ import {
   KEY_ESCAPE_COMMAND,
 } from 'lexical';
 import { $createMentionNode, MentionData } from './MentionNode';
-import { Box, VStack, Text, Icon } from '@chakra-ui/react';
+import { Box, VStack, Text, Icon, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
@@ -62,6 +62,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
   const [mentionType, setMentionType] = useState<'all' | 'questions'>('all');
   const [query, setQuery] = useState('');
   const selectedItemRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
 
   const fetchMentions = useCallback(async (prefix: string, type: 'all' | 'questions') => {
@@ -273,81 +274,89 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     }
   }, [filteredMentions.length, selectedIndex]);
 
+  // Compute dropdown position from anchor ref
+  const anchorRect = anchorRef.current?.getBoundingClientRect();
+
   if (!showDropdown || filteredMentions.length === 0) {
-    return null;
+    return <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />;
   }
 
   return (
-    <Box
-      position="absolute"
-      bottom="100%"
-      left={0}
-      right={0}
-      bg="bg.panel"
-      border="1px solid"
-      borderColor="border.default"
-      borderRadius="md"
-      boxShadow="lg"
-      maxH="300px"
-      overflowY="auto"
-      mb={1}
-      zIndex={1000}
-    >
-      <VStack align="stretch" gap={0}>
-        {filteredMentions.map((mention, index) => {
-          // Generate unique key including schema for tables
-          const uniqueKey = mention.type === 'table' && mention.schema
-            ? `${mention.type}-${mention.schema}-${mention.name}`
-            : `${mention.type}-${mention.id || mention.name}`;
+    <>
+      <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />
+      <Portal>
+        <Box
+          position="fixed"
+          top={anchorRect ? `${anchorRect.top - 4}px` : 0}
+          left={anchorRect ? `${anchorRect.left}px` : 0}
+          width={anchorRect ? `${anchorRect.width}px` : undefined}
+          transform="translateY(-100%)"
+          bg="bg.panel"
+          border="1px solid"
+          borderColor="border.default"
+          borderRadius="md"
+          boxShadow="lg"
+          maxH="300px"
+          overflowY="auto"
+          zIndex={1000}
+        >
+          <VStack align="stretch" gap={0}>
+            {filteredMentions.map((mention, index) => {
+              // Generate unique key including schema for tables
+              const uniqueKey = mention.type === 'table' && mention.schema
+                ? `${mention.type}-${mention.schema}-${mention.name}`
+                : `${mention.type}-${mention.id || mention.name}`;
 
-          return (
-          <Box
-            key={uniqueKey}
-            ref={index === selectedIndex ? selectedItemRef : null}
-            p={2}
-            cursor="pointer"
-            bg={index === selectedIndex ? 'bg.subtle' : 'transparent'}
-            _hover={{ bg: 'bg.subtle' }}
-            onClick={() => {
-              const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-              insertMention(mention, triggerLength);
-            }}
-          >
-            {(() => {
-              const badgeInfo = getMentionBadgeInfo(mention.type);
               return (
-                <Box
-                  as="span"
-                  display="inline-flex"
-                  alignItems="center"
-                  px={1.5}
-                  py={0.5}
-                  mr={1.5}
-                  bg={badgeInfo.color}
-                  color="white"
-                  borderRadius="sm"
-                  fontSize="2xs"
-                  fontWeight="600"
-                  verticalAlign="middle"
-                  gap={1}
-                >
-                  <Icon as={badgeInfo.icon} boxSize={3} />
-                  {badgeInfo.label}
-                </Box>
+              <Box
+                key={uniqueKey}
+                ref={index === selectedIndex ? selectedItemRef : null}
+                p={2}
+                cursor="pointer"
+                bg={index === selectedIndex ? 'bg.subtle' : 'transparent'}
+                _hover={{ bg: 'bg.subtle' }}
+                onClick={() => {
+                  const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
+                  insertMention(mention, triggerLength);
+                }}
+              >
+                {(() => {
+                  const badgeInfo = getMentionBadgeInfo(mention.type);
+                  return (
+                    <Box
+                      as="span"
+                      display="inline-flex"
+                      alignItems="center"
+                      px={1.5}
+                      py={0.5}
+                      mr={1.5}
+                      bg={badgeInfo.color}
+                      color="white"
+                      borderRadius="sm"
+                      fontSize="2xs"
+                      fontWeight="600"
+                      verticalAlign="middle"
+                      gap={1}
+                    >
+                      <Icon as={badgeInfo.icon} boxSize={3} />
+                      {badgeInfo.label}
+                    </Box>
+                  );
+                })()}
+                <Text as="span" fontSize="sm" fontWeight="500">
+                  {mention.display_text}
+                </Text>
+                {mention.schema && (
+                  <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
+                    ({mention.schema})
+                  </Text>
+                )}
+              </Box>
               );
-            })()}
-            <Text as="span" fontSize="sm" fontWeight="500">
-              {mention.display_text}
-            </Text>
-            {mention.schema && (
-              <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
-                ({mention.schema})
-              </Text>
-            )}
-          </Box>
-          );
-        })}
-      </VStack>
-    </Box>
+            })}
+          </VStack>
+        </Box>
+      </Portal>
+    </>
   );
 }
