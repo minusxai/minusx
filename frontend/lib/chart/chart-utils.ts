@@ -76,6 +76,27 @@ export function truncateLabel(s: string, maxLen: number): string {
   return `${s.slice(0, maxLen - 3)}...`
 }
 
+/** Build a standard ECharts title config with overflow truncation */
+function buildChartTitleOption(chartTitle: string | undefined, showChartTitle: boolean, containerWidth?: number): Record<string, any> {
+  if (!chartTitle) return {}
+  const titleWidth = containerWidth ? containerWidth - 80 : undefined  // leave margin for padding
+  return {
+    title: {
+      text: chartTitle,
+      left: 'center',
+      top: 5,
+      show: showChartTitle,
+      ...(titleWidth ? {
+        textStyle: {
+          width: titleWidth,
+          overflow: 'truncate',
+          ellipsis: '...',
+        },
+      } : {}),
+    },
+  }
+}
+
 interface AnnotationGraphicsConfig {
   chart: EChartsType
   xAxisData: string[]
@@ -96,6 +117,7 @@ interface SpecialChartOptionConfig {
   xAxisData: string[]
   series: Array<{ name: string; data: number[] }>
   colorMode?: 'light' | 'dark'
+  containerWidth?: number
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]
   yAxisColumns?: string[]
@@ -366,6 +388,7 @@ export const buildPieChartOption = ({
   xAxisData,
   series,
   colorMode = 'dark',
+  containerWidth,
   columnFormats,
   xAxisColumns,
   yAxisColumns,
@@ -506,7 +529,7 @@ export const buildPieChartOption = ({
   const legendData = innerData.map(d => d.name)
 
   const baseOption: EChartsOption = {
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+    ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
     ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
@@ -544,6 +567,7 @@ export const buildFunnelChartOption = ({
   xAxisData,
   series,
   colorMode = 'dark',
+  containerWidth,
   columnFormats,
   xAxisColumns,
   yAxisColumns,
@@ -591,7 +615,7 @@ export const buildFunnelChartOption = ({
   const labelColor = '#ffffff'
 
   const baseOption: EChartsOption = {
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+    ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
     ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
@@ -669,6 +693,7 @@ export const buildWaterfallChartOption = ({
   xAxisData,
   series,
   colorMode = 'dark',
+  containerWidth,
   columnFormats,
   xAxisColumns,
   yAxisColumns,
@@ -714,7 +739,7 @@ export const buildWaterfallChartOption = ({
   const totalData = allValues.map((value, index) => (index === allValues.length - 1 ? value : 0))
 
   const baseOption: EChartsOption = {
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+    ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
     ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
@@ -820,6 +845,7 @@ export const buildRadarChartOption = ({
   xAxisData,
   series,
   colorMode = 'dark',
+  containerWidth,
   columnFormats,
   xAxisColumns,
   yAxisColumns,
@@ -871,7 +897,7 @@ export const buildRadarChartOption = ({
   const isDark = colorMode === 'dark'
 
   const baseOption: EChartsOption = {
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+    ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
     ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
@@ -1306,7 +1332,7 @@ interface BaseChartConfig {
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1684,7 +1710,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   }
 
   const baseOption: EChartsOption = {
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+    ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
     toolbox: buildToolbox({
       colorMode,
       downloadCsv,
