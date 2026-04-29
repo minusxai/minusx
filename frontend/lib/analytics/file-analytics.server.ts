@@ -313,6 +313,7 @@ WITH scored AS (
   JOIN files fi ON fi.id = fe.file_id
   JOIN users u ON u.id = fe.user_id
   WHERE fi.type IN ('question', 'dashboard')
+    AND fi.draft = false
     AND u.email = $2
   GROUP BY fe.file_id, fi.type, fi.name, fi.path
 ),
