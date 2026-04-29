@@ -54,7 +54,7 @@ export function extractCellValue(
   const colName = column && columns.includes(column) ? column : columns[0];
   if (!colName) return null;
   const val = actualRow[colName];
-  if (val === null || val === undefined) return null;
+  if (val == null) return null;
   return val as string | number | boolean;
 }
 

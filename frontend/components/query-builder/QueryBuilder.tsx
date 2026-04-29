@@ -278,7 +278,7 @@ function QueryBuilderInner({
       try {
         // Deep serialize for stable comparison (sorts keys at all levels)
         const deepSerialize = (obj: unknown): string => {
-          if (obj === null || obj === undefined) return String(obj);
+          if (obj == null) return String(obj);
           if (typeof obj !== 'object') return JSON.stringify(obj);
           if (Array.isArray(obj)) {
             return '[' + obj.map(deepSerialize).join(',') + ']';

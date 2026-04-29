@@ -315,7 +315,7 @@ export function AlertRunView({
             <TestRunResultsList results={testResults} variant="colored" />
           ) : (
             <VStack align="stretch" gap={0} separator={<Separator />}>
-              {actualValue !== null && actualValue !== undefined && (
+              {actualValue != null && (
                 <DetailRow label="Actual value" value={
                   <Badge
                     colorPalette={isTriggered ? 'red' : 'green'}

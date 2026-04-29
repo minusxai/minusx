@@ -135,7 +135,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
 
   // Parse original/final states from diff for undo/redo
   const { original, final: finalState } = useMemo(() => parseUndoRedoFromDiff(diff), [diff]);
-  const canUndoRedo = original !== null && finalState !== null && fileId !== undefined;
+  const canUndoRedo = original != null && finalState != null && fileId != null;
   const [isUndone, setIsUndone] = useState(false);
 
   const handleUndo = useCallback((e: React.MouseEvent) => {

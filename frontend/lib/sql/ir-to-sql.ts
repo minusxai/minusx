@@ -14,7 +14,7 @@ function dateTruncExpr(colRef: string, unit: string, dialect: string): string {
 }
 
 function formatValue(value: any): string {
-  if (value === null || value === undefined) return 'NULL';
+  if (value == null) return 'NULL';
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
   if (typeof value === 'number') return String(value);

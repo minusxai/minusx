@@ -36,7 +36,7 @@ const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 
 const formatValue = (value: any, type: ColumnType): string => {
-  if (value === null || value === undefined) {
+  if (value == null) {
     return '-'
   }
   switch (type) {

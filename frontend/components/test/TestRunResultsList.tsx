@@ -75,7 +75,7 @@ function ToolCallTrace({ log }: { log: unknown[] }) {
                       </Box>
                     </Box>
                   )}
-                  {call.content !== undefined && call.content !== null && (
+                  {call.content != null && (
                     <Box>
                       <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={0.5}>Result</Text>
                       <Box bg="bg.surface" borderRadius="sm" p={1} overflow="auto" maxH="120px">

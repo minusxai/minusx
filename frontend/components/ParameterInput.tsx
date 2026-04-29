@@ -63,7 +63,7 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
     const result: string[] = [];
     for (const row of data.rows) {
       const v = row[source.column];
-      if (v !== null && v !== undefined) {
+      if (v != null) {
         const str = paramType === 'number' ? formatNumStr(String(v)) : String(v);
         if (!seen.has(str)) {
           seen.add(str);
@@ -94,7 +94,7 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
   }, [values, filterText]);
 
   // What to show in the input — formatted current committed value
-  const defaultDisplayValue = currentValue !== undefined && currentValue !== null
+  const defaultDisplayValue = currentValue != null
     ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
     : '';
 
@@ -238,7 +238,7 @@ function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, d
     const result: string[] = [];
     for (const row of data.rows) {
       const v = row[col];
-      if (v !== null && v !== undefined) {
+      if (v != null) {
         const str = paramType === 'number' ? formatNumStr(String(v)) : String(v);
         if (!seen.has(str)) {
           seen.add(str);
@@ -266,7 +266,7 @@ function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, d
     return createListCollection({ items: [...prefix, ...rest].map(v => ({ value: v, label: v })) });
   }, [values, filterText]);
 
-  const defaultDisplayValue = currentValue !== undefined && currentValue !== null
+  const defaultDisplayValue = currentValue != null
     ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
     : '';
 
