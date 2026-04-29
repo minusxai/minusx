@@ -106,6 +106,9 @@ export async function uploadFile(
     }
   }
 
+  if (uploadUrl.startsWith('/api/object-store/local-upload')) {
+    return { publicUrl: `${window.location.origin}${publicUrl}` };
+  }
   return { publicUrl };
 }
 
