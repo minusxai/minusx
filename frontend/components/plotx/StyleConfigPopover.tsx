@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPalette } from 'react-icons/lu'
 import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { useConfigs } from '@/lib/hooks/useConfigs'
 import type { VisualizationStyleConfig } from '@/lib/types'
 
 interface StyleConfigPopoverProps {
@@ -77,10 +78,15 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const { config } = useConfigs()
+  const palette = useMemo(() => {
+    const p = config.chartColorPalette
+    return p && p.length > 0 ? p : COLOR_PALETTE
+  }, [config.chartColorPalette])
 
   const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
   const supportsStacking = chartType === 'bar' || chartType === 'area' || chartType === 'combo'
-  const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length), [numSeries])
+  const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), palette.length), [numSeries, palette.length])
   const selectedOpacity = styleConfig?.opacity == null ? 1 : styleConfig.opacity
   const isStacked = styleConfig?.stacked ?? true
 
@@ -129,7 +135,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
 
   const getSeriesColor = (index: number) => {
     const key = styleConfig?.colors?.[String(index)]
-    return (key && CHART_COLORS[key as keyof typeof CHART_COLORS]) || COLOR_PALETTE[index % COLOR_PALETTE.length]
+    return (key && CHART_COLORS[key as keyof typeof CHART_COLORS]) || palette[index % palette.length]
   }
 
   const handleColorChange = (index: number, hex?: string) => {
@@ -177,7 +183,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
               </ChoicePill>
             </HStack>
             <HStack gap={1.5} flexWrap="wrap">
-              {COLOR_PALETTE.map(hex => (
+              {palette.map(hex => (
                 <Circle
                   key={`${activeSeriesIndex}-${hex}`}
                   color={hex}

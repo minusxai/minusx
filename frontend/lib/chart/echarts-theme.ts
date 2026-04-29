@@ -43,9 +43,11 @@ export const CHART_COLOR_KEYS = Object.keys(CHART_COLORS) as (keyof typeof CHART
 
 // Resolve color overrides into an effective palette.
 // colorOverrides maps series index (as string) to color key: {"0": "danger", "2": "warning"}
-export function getEffectiveColorPalette(colorOverrides?: Record<string, string> | null): string[] {
-  if (!colorOverrides || Object.keys(colorOverrides).length === 0) return [...COLOR_PALETTE]
-  const palette = [...COLOR_PALETTE]
+// basePalette optionally overrides the default COLOR_PALETTE (e.g. from org config)
+export function getEffectiveColorPalette(colorOverrides?: Record<string, string> | null, basePalette?: string[]): string[] {
+  const base = basePalette && basePalette.length > 0 ? basePalette : COLOR_PALETTE
+  if (!colorOverrides || Object.keys(colorOverrides).length === 0) return [...base]
+  const palette = [...base]
   for (const [idx, key] of Object.entries(colorOverrides)) {
     const hex = CHART_COLORS[key as keyof typeof CHART_COLORS]
     if (hex) palette[parseInt(idx, 10)] = hex
@@ -88,11 +90,12 @@ const getThemeColors = (colorMode: 'light' | 'dark') => {
  * Base ECharts theme configuration for MinusX BI
  * Apply this to all charts for consistent styling
  */
-const getMinusXTheme = (colorMode: 'light' | 'dark'): EChartsOption => {
+const getMinusXTheme = (colorMode: 'light' | 'dark', basePalette?: string[]): EChartsOption => {
   const theme = getThemeColors(colorMode)
+  const palette = basePalette && basePalette.length > 0 ? basePalette : COLOR_PALETTE
 
   return {
-    color: COLOR_PALETTE,
+    color: palette,
 
     backgroundColor: 'transparent',
 
@@ -251,8 +254,8 @@ export const formatTooltipValue = (value: any): string => {
  * Merge user options with MinusX theme
  * Use this helper to ensure theme is consistently applied
  */
-export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'dark' = 'dark'): EChartsOption {
-  const minusXTheme = getMinusXTheme(colorMode)
+export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'dark' = 'dark', basePalette?: string[]): EChartsOption {
+  const minusXTheme = getMinusXTheme(colorMode, basePalette)
   const axisDefaults = getAxisDefaults(colorMode)
 
   const mergedOptions: EChartsOption = {

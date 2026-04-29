@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Box, HStack, Text } from '@chakra-ui/react'
 import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { useConfigs } from '@/lib/hooks/useConfigs'
 
 interface ColorPickerProps {
   colorOverrides: Record<string, string>
@@ -24,6 +25,11 @@ const Circle = ({ color, size, selected, onClick }: { color: string; size: strin
 export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPickerProps) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const { config } = useConfigs()
+  const palette = useMemo(() => {
+    const p = config.chartColorPalette
+    return p && p.length > 0 ? p : COLOR_PALETTE
+  }, [config.chartColorPalette])
 
   useEffect(() => {
     if (activeIndex === null) return
@@ -36,7 +42,7 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
 
   const getColor = (i: number) => {
     const key = colorOverrides[String(i)] || colorOverrides[i as unknown as string]
-    return (key && CHART_COLORS[key as keyof typeof CHART_COLORS]) || COLOR_PALETTE[i % COLOR_PALETTE.length]
+    return (key && CHART_COLORS[key as keyof typeof CHART_COLORS]) || palette[i % palette.length]
   }
 
   const handlePick = (hex: string) => {
@@ -46,7 +52,7 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
     const next: Record<string, string> = {}
     for (let i = 0; i < Math.max(numSeries, 1); i++) {
       const existing = colorOverrides[String(i)] || colorOverrides[i as unknown as string]
-      const defaultKey = HEX_TO_KEY[COLOR_PALETTE[i % COLOR_PALETTE.length]]
+      const defaultKey = HEX_TO_KEY[palette[i % palette.length]]
       next[String(i)] = (i === activeIndex) ? key : (existing || defaultKey)
     }
     onChange(next)
@@ -57,7 +63,7 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
     <Box position="relative" ref={ref}>
       <HStack gap={1.5} px={1} py={0.5} alignItems="center" justify="center">
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" flexShrink={0}>Colors</Text>
-        {Array.from({ length: Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length) }, (_, i) => (
+        {Array.from({ length: Math.min(Math.max(numSeries, 1), palette.length) }, (_, i) => (
           <Circle key={i} color={getColor(i)} size="14px" selected={activeIndex === i}
             onClick={() => setActiveIndex(activeIndex === i ? null : i)} />
         ))}
@@ -67,7 +73,7 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
         <Box position="absolute" top="100%" right={0} mt={1} bg="bg.panel"
           border="1px solid" borderColor="border.muted" borderRadius="md" boxShadow="md" zIndex={20} p={2}>
           <HStack gap={1.5} flexWrap="wrap" justify="center">
-            {COLOR_PALETTE.map((hex) => (
+            {palette.map((hex) => (
               <Circle key={hex} color={hex} size="24px" selected={getColor(activeIndex) === hex}
                 onClick={() => handlePick(hex)} />
             ))}

@@ -62,6 +62,7 @@ export interface OrgConfig {
   setupWizard?: SetupWizard;
   bots?: ConfigBot[];
   allowedVizTypes?: VisualizationType[];  // Restrict available visualization types (default: all)
+  chartColorPalette?: string[];  // Custom color palette for charts (hex values, e.g. ['#16a085', '#2980b9'])
   // Future: theme, features, etc.
 }
 
@@ -138,6 +139,9 @@ export function mergeConfig(
     setupWizard: overrides.setupWizard ?? defaults.setupWizard,
     bots: overrides.bots ?? defaults.bots,
     allowedVizTypes: overrides.allowedVizTypes ?? defaults.allowedVizTypes,
+    chartColorPalette: (overrides.chartColorPalette && overrides.chartColorPalette.length > 0)
+      ? overrides.chartColorPalette
+      : defaults.chartColorPalette,
     // Future: merge other config sections
   };
 }

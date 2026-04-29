@@ -537,7 +537,7 @@ export const buildPieChartOption = ({
     series: pieSeries,
   }
 
-  return withMinusXTheme(baseOption, colorMode)
+  return withMinusXTheme(baseOption, colorMode, colorPalette)
 }
 
 export const buildFunnelChartOption = ({
@@ -662,7 +662,7 @@ export const buildFunnelChartOption = ({
     ],
   }
 
-  return withMinusXTheme(baseOption, colorMode)
+  return withMinusXTheme(baseOption, colorMode, colorPalette)
 }
 
 export const buildWaterfallChartOption = ({
@@ -813,7 +813,7 @@ export const buildWaterfallChartOption = ({
     legend: { show: false },
   }
 
-  return withMinusXTheme(baseOption, colorMode)
+  return withMinusXTheme(baseOption, colorMode, colorPalette)
 }
 
 export const buildRadarChartOption = ({
@@ -947,7 +947,7 @@ export const buildRadarChartOption = ({
     ],
   }
 
-  return withMinusXTheme(baseOption, colorMode)
+  return withMinusXTheme(baseOption, colorMode, colorPalette)
 }
 
 export const buildAnnotationGraphics = ({
@@ -1872,5 +1872,5 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     series: chartSeries,
   }
 
-  return withMinusXTheme({ ...baseOption, ...additionalOptions, color: palette }, colorMode)
+  return withMinusXTheme({ ...baseOption, ...additionalOptions, color: palette }, colorMode, palette)
 }

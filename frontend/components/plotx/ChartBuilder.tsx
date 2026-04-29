@@ -35,6 +35,7 @@ import type { OrgBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { useAppSelector } from '@/store/hooks'
+import { useConfigs } from '@/lib/hooks/useConfigs'
 import { buildColumnTypesMap } from '@/lib/database/column-types'
 import dynamic from 'next/dynamic'
 
@@ -87,7 +88,9 @@ interface GroupedColumns {
 
 export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
-  const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
+  const { config } = useConfigs()
+  const configPalette = config.chartColorPalette
+  const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors, configPalette), [styleConfig?.colors, configPalette])
   const columnTypes = useMemo(() => buildColumnTypesMap(columns, types), [columns, types])
 
   // Group columns by type
