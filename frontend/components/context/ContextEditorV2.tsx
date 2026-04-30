@@ -7,7 +7,7 @@
  */
 
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { LuBookOpen, LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
@@ -73,6 +73,175 @@ interface ContextEditorV2Props {
   onRunAll?: (opts: RunOptions) => void;
   onSelectRun?: (runId: number | null) => void;
 }
+
+const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
+
+interface SkillEditorCardProps {
+  skill: SkillEntry;
+  index: number;
+  canManageSkills: boolean;
+  colorMode: string;
+  siblingNames: Set<string>;
+  systemSkillNames: Set<string>;
+  onUpdate: (index: number, updates: Partial<SkillEntry>) => void;
+  onDelete: (index: number) => void;
+}
+
+const SkillEditorCard = memo(function SkillEditorCard({
+  skill,
+  index,
+  canManageSkills,
+  colorMode,
+  siblingNames,
+  systemSkillNames,
+  onUpdate,
+  onDelete,
+}: SkillEditorCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState({
+    name: skill.name,
+    description: skill.description,
+    content: skill.content,
+  });
+
+  useEffect(() => {
+    setDraft({
+      name: skill.name,
+      description: skill.description,
+      content: skill.content,
+    });
+  }, [skill.name, skill.description, skill.content]);
+
+  useEffect(() => {
+    if (
+      draft.name === skill.name &&
+      draft.description === skill.description &&
+      draft.content === skill.content
+    ) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      onUpdate(index, draft);
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
+
+  const flushDraft = useCallback(() => {
+    if (
+      draft.name !== skill.name ||
+      draft.description !== skill.description ||
+      draft.content !== skill.content
+    ) {
+      onUpdate(index, draft);
+    }
+  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
+
+  const normalizedName = draft.name.trim().toLowerCase();
+  const duplicateName = siblingNames.has(normalizedName);
+  const systemCollision = systemSkillNames.has(normalizedName);
+  const invalidName = !/^[a-z0-9_]+$/.test(draft.name.trim()) || duplicateName || systemCollision;
+
+  return (
+    <Collapsible.Root open={expanded} onOpenChange={(e) => setExpanded(e.open)}>
+      <Box border="1px solid" borderColor={invalidName ? 'accent.danger' : 'border.muted'} borderRadius="md" overflow="hidden">
+        <Collapsible.Trigger asChild>
+          <HStack
+            px={3}
+            py={2.5}
+            justify="space-between"
+            align="center"
+            cursor="pointer"
+            bg="bg.surface"
+            _hover={{ bg: 'bg.muted' }}
+          >
+            <HStack gap={2} minW={0} flex={1}>
+              <Icon as={expanded ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
+              <Badge size="sm" colorPalette={skill.enabled ? 'green' : 'gray'} variant="subtle" flexShrink={0}>
+                {skill.enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+              <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default" truncate maxW="260px">
+                {draft.name || 'unnamed_skill'}
+              </Text>
+              <Text fontSize="sm" color="fg.muted" truncate flex={1}>
+                {draft.description || 'No description'}
+              </Text>
+              {invalidName && (
+                <Text fontSize="xs" color="accent.danger" flexShrink={0}>
+                  {duplicateName ? 'Duplicate name' : systemCollision ? 'Conflicts with system skill' : 'Invalid name'}
+                </Text>
+              )}
+            </HStack>
+            {canManageSkills && (
+              <HStack gap={2} onClick={(event) => event.stopPropagation()} flexShrink={0}>
+                <Switch.Root
+                  size="sm"
+                  checked={skill.enabled}
+                  onCheckedChange={(e) => onUpdate(index, { enabled: e.checked })}
+                  colorPalette="green"
+                >
+                  <Switch.HiddenInput />
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Root>
+                <Button size="xs" variant="ghost" colorPalette="red" onClick={() => onDelete(index)}>
+                  <LuTrash2 />
+                </Button>
+              </HStack>
+            )}
+          </HStack>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <VStack align="stretch" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
+            <HStack gap={3} align="start">
+              <Field.Root flex={1} invalid={invalidName}>
+                <Field.Label>Name</Field.Label>
+                <Input
+                  value={draft.name}
+                  disabled={!canManageSkills}
+                  onChange={(e) => setDraft(prev => ({ ...prev, name: e.target.value }))}
+                  onBlur={flushDraft}
+                  fontFamily="mono"
+                />
+              </Field.Root>
+              <Field.Root flex={2}>
+                <Field.Label>Description</Field.Label>
+                <Input
+                  value={draft.description}
+                  disabled={!canManageSkills}
+                  onChange={(e) => setDraft(prev => ({ ...prev, description: e.target.value }))}
+                  onBlur={flushDraft}
+                />
+              </Field.Root>
+            </HStack>
+
+            <Box border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
+              <Editor
+                height="220px"
+                language="markdown"
+                value={draft.content}
+                onChange={(value) => setDraft(prev => ({ ...prev, content: value || '' }))}
+                onMount={(editor) => editor.onDidBlurEditorText(flushDraft)}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  readOnly: !canManageSkills,
+                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'off',
+                  fontSize: 13,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            </Box>
+          </VStack>
+        </Collapsible.Content>
+      </Box>
+    </Collapsible.Root>
+  );
+});
 
 export default function ContextEditorV2({
   content,
@@ -452,7 +621,7 @@ export default function ContextEditorV2({
   const canManageSkills = editMode && canEdit(user?.role || 'viewer');
   const systemSkillNames = new Set(systemSkills.map(skill => skill.name.toLowerCase()));
 
-  const makeSkillName = (name: string, ignoreIndex?: number) => {
+  const makeSkillName = useCallback((name: string, ignoreIndex?: number) => {
     const base = name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'skill';
     const existing = new Set((content.skills || [])
       .filter((_, index) => index !== ignoreIndex)
@@ -465,7 +634,7 @@ export default function ContextEditorV2({
       suffix += 1;
     }
     return candidate;
-  };
+  }, [content.skills, systemSkills]);
 
   const handleAddSkill = () => {
     const now = new Date().toISOString();
@@ -481,7 +650,7 @@ export default function ContextEditorV2({
     onChange({ skills: [...(content.skills || []), skill] });
   };
 
-  const handleUpdateSkill = (index: number, updates: Partial<SkillEntry>) => {
+  const handleUpdateSkill = useCallback((index: number, updates: Partial<SkillEntry>) => {
     const skills = [...(content.skills || [])];
     const current = skills[index];
     if (!current) return;
@@ -491,11 +660,11 @@ export default function ContextEditorV2({
     }
     skills[index] = next;
     onChange({ skills });
-  };
+  }, [content.skills, makeSkillName, onChange]);
 
-  const handleDeleteSkill = (index: number) => {
+  const handleDeleteSkill = useCallback((index: number) => {
     onChange({ skills: (content.skills || []).filter((_, i) => i !== index) });
-  };
+  }, [content.skills, onChange]);
 
   return (
     <VStack gap={6} align="stretch" p={3}>
@@ -1046,10 +1215,12 @@ export default function ContextEditorV2({
                 language="yaml"
                 value={yamlText}
                 onChange={(value) => handleYamlChange(value || '')}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
+	                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+	                options={{
+	                  readOnly: !editMode,
+	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                  minimap: { enabled: false },
+	                  wordWrap: 'on',
                   lineNumbers: 'on',
                   fontSize: 14,
                   fontFamily: 'JetBrains Mono, monospace',
@@ -1268,10 +1439,12 @@ export default function ContextEditorV2({
                                 value={docEntry.content}
                                 onChange={(value) => handleMarkdownChange(index, value || '')}
                                 onMount={(editor) => { docEditorRefs.current[index] = editor; }}
-                                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                                options={{
-                                  minimap: { enabled: false },
-                                  wordWrap: 'on',
+	                                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+	                                options={{
+	                                  readOnly: !editMode,
+	                                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                                  minimap: { enabled: false },
+	                                  wordWrap: 'on',
                                   lineNumbers: 'on',
                                   fontSize: 14,
                                   fontFamily: 'JetBrains Mono, monospace',
@@ -1382,86 +1555,21 @@ export default function ContextEditorV2({
                   <Collapsible.Content>
                     <VStack align="stretch" gap={3}>
                       {(content.skills || []).map((skill, index) => {
-                        const duplicateName = (content.skills || []).some((other, otherIndex) =>
-                          otherIndex !== index && other.name.trim().toLowerCase() === skill.name.trim().toLowerCase()
-                        );
-                        const systemCollision = systemSkillNames.has(skill.name.trim().toLowerCase());
-                        const invalidName = !/^[a-z0-9_]+$/.test(skill.name.trim()) || duplicateName || systemCollision;
+                        const siblingNames = new Set((content.skills || [])
+                          .filter((_, otherIndex) => otherIndex !== index)
+                          .map(other => other.name.trim().toLowerCase()));
                         return (
-                          <Box key={`skill-${index}`} p={3} border="1px solid" borderColor={invalidName ? 'accent.danger' : 'border.muted'} borderRadius="md">
-                            <VStack align="stretch" gap={3}>
-                              <HStack justify="space-between" align="center">
-                                <HStack gap={2}>
-                                  <Badge size="sm" colorPalette={skill.enabled ? 'green' : 'gray'} variant="subtle">
-                                    {skill.enabled ? 'Enabled' : 'Disabled'}
-                                  </Badge>
-                                  {invalidName && (
-                                    <Text fontSize="xs" color="accent.danger">
-                                      {duplicateName ? 'Duplicate name' : systemCollision ? 'Conflicts with system skill' : 'Invalid name'}
-                                    </Text>
-                                  )}
-                                </HStack>
-                                {canManageSkills && (
-                                  <HStack gap={2}>
-                                    <Switch.Root
-                                      size="sm"
-                                      checked={skill.enabled}
-                                      onCheckedChange={(e) => handleUpdateSkill(index, { enabled: e.checked })}
-                                      colorPalette="green"
-                                    >
-                                      <Switch.HiddenInput />
-                                      <Switch.Control>
-                                        <Switch.Thumb />
-                                      </Switch.Control>
-                                    </Switch.Root>
-                                    <Button size="xs" variant="ghost" colorPalette="red" onClick={() => handleDeleteSkill(index)}>
-                                      <LuTrash2 />
-                                    </Button>
-                                  </HStack>
-                                )}
-                              </HStack>
-
-                              <HStack gap={3} align="start">
-                                <Field.Root flex={1} invalid={invalidName}>
-                                  <Field.Label>Name</Field.Label>
-                                  <Input
-                                    value={skill.name}
-                                    disabled={!canManageSkills}
-                                    onChange={(e) => handleUpdateSkill(index, { name: e.target.value })}
-                                    fontFamily="mono"
-                                  />
-                                </Field.Root>
-                                <Field.Root flex={2}>
-                                  <Field.Label>Description</Field.Label>
-                                  <Input
-                                    value={skill.description}
-                                    disabled={!canManageSkills}
-                                    onChange={(e) => handleUpdateSkill(index, { description: e.target.value })}
-                                  />
-                                </Field.Root>
-                              </HStack>
-
-                              <Box border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
-                                <Editor
-                                  height="220px"
-                                  language="markdown"
-                                  value={skill.content}
-                                  onChange={(value) => handleUpdateSkill(index, { content: value || '' })}
-                                  theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                                  options={{
-                                    readOnly: !canManageSkills,
-                                    minimap: { enabled: false },
-                                    wordWrap: 'on',
-                                    lineNumbers: 'off',
-                                    fontSize: 13,
-                                    fontFamily: 'JetBrains Mono, monospace',
-                                    scrollBeyondLastLine: false,
-                                    automaticLayout: true,
-                                  }}
-                                />
-                              </Box>
-                            </VStack>
-                          </Box>
+                          <SkillEditorCard
+                            key={`skill-${index}`}
+                            skill={skill}
+                            index={index}
+                            canManageSkills={canManageSkills}
+                            colorMode={colorMode}
+                            siblingNames={siblingNames}
+                            systemSkillNames={systemSkillNames}
+                            onUpdate={handleUpdateSkill}
+                            onDelete={handleDeleteSkill}
+                          />
                         );
                       })}
                       {(content.skills || []).length === 0 && (
@@ -1523,8 +1631,9 @@ export default function ContextEditorV2({
                 }}
                 theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
                 options={{
-                  readOnly: !canManageSkills,
-                  minimap: { enabled: false },
+	                  readOnly: !canManageSkills,
+	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                  minimap: { enabled: false },
                   wordWrap: 'on',
                   lineNumbers: 'on',
                   fontSize: 14,
@@ -1621,9 +1730,11 @@ export default function ContextEditorV2({
                     if (Array.isArray(parsed)) onChange({ evals: parsed });
                   } catch { /* ignore parse errors while typing */ }
                 }}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: false },
+	                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+	                options={{
+	                  readOnly: !editMode,
+	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                  minimap: { enabled: false },
                   wordWrap: 'on',
                   lineNumbers: 'on',
                   fontSize: 14,
