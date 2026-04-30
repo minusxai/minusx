@@ -1,5 +1,17 @@
 import yaml from 'js-yaml';
-import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, Whitelist, WhitelistNode } from '../types';
+import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode } from '../types';
+
+export function mergeSkillsByName(...skillGroups: SkillEntry[][]): SkillEntry[] {
+  const byName = new Map<string, SkillEntry>();
+  for (const skills of skillGroups) {
+    for (const skill of skills) {
+      if (!skill.name) continue;
+      byName.delete(skill.name);
+      byName.set(skill.name, skill);
+    }
+  }
+  return [...byName.values()];
+}
 
 /**
  * Serialize databases (or '*') to YAML format.

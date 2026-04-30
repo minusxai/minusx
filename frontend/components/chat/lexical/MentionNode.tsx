@@ -2,13 +2,7 @@ import React from 'react';
 import { DecoratorNode, LexicalNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
 import { Box, Icon } from '@chakra-ui/react';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
-
-export interface MentionData {
-  id?: number;
-  name: string;
-  schema?: string;
-  type: 'table' | 'question' | 'dashboard';
-}
+import type { ChatMentionData } from '@/lib/types';
 
 export type SerializedMentionNode = Spread<
   {
@@ -79,6 +73,14 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
           label: TABLE_MENTION_METADATA.label,
           icon: TABLE_MENTION_METADATA.icon,
           colors: getMentionColors(TABLE_MENTION_METADATA.color),
+        };
+      }
+
+      if (data.type === 'skill') {
+        return {
+          label: data.source === 'user' ? 'USER' : 'SYS',
+          icon: null,
+          colors: getMentionColors(ACCENT_HEX.cyan),
         };
       }
 
@@ -169,3 +171,5 @@ export function $createMentionNode(mentionData: MentionData): MentionNode {
 export function $isMentionNode(node: LexicalNode | null | undefined): node is MentionNode {
   return node instanceof MentionNode;
 }
+
+export type MentionData = ChatMentionData;

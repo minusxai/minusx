@@ -9,17 +9,10 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { Box } from '@chakra-ui/react';
 import { MentionNode } from './lexical/MentionNode';
 import { MentionsPlugin } from './lexical/MentionsPlugin';
-import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, KEY_ENTER_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND } from 'lexical';
+import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, KEY_ENTER_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND, TextNode } from 'lexical';
 import { useEffect } from 'react';
 import { $createMentionNode, MentionData as MentionNodeData } from './lexical/MentionNode';
-import { DatabaseWithSchema } from '@/lib/types';
-
-export interface MentionData {
-  id?: number;
-  name: string;
-  schema?: string;
-  type: 'table' | 'question';
-}
+import type { ChatMentionData, DatabaseWithSchema, SkillMention } from '@/lib/types';
 
 interface LexicalMentionEditorProps {
   placeholder?: string;
@@ -31,12 +24,14 @@ interface LexicalMentionEditorProps {
   onFocus?: () => void;
   onBlur?: () => void;
   whitelistedSchemas?: DatabaseWithSchema[];
+  availableSkills?: SkillMention[];
 }
 
 export interface LexicalMentionEditorRef {
   focus: () => void;
   clear: () => void;
   setText: (text: string) => void;
+  insertMention: (mentionData: ChatMentionData, triggerLength: number) => void;
 }
 
 const editorTheme = {
@@ -213,6 +208,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
       onFocus,
       onBlur,
       whitelistedSchemas,
+      availableSkills = [],
     },
     ref
   ) {
@@ -236,6 +232,26 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
           const paragraph = $createParagraphNode();
           paragraph.append($createTextNode(text));
           root.append(paragraph);
+        });
+      },
+      insertMention: (mentionData: ChatMentionData, triggerLength: number) => {
+        editorRef.current?.update(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) return;
+
+          const anchor = selection.anchor;
+          const anchorNode = anchor.getNode();
+          if (!(anchorNode instanceof TextNode)) return;
+
+          const offset = anchor.offset;
+          const text = anchorNode.getTextContent();
+          anchorNode.setTextContent(text.slice(0, offset - triggerLength) + text.slice(offset));
+          anchorNode.select(offset - triggerLength, offset - triggerLength);
+
+          const newSelection = $getSelection();
+          if ($isRangeSelection(newSelection)) {
+            newSelection.insertNodes([$createMentionNode(mentionData), $createTextNode(' ')]);
+          }
         });
       },
     }));
@@ -310,7 +326,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
             <EditablePlugin disabled={disabled} />
             <PastePlugin />
             <FocusPlugin onFocus={onFocus} onBlur={onBlur} editorRef={editorRef} />
-            <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} />
+            <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} availableSkills={availableSkills} />
           </Box>
         </LexicalComposer>
       </Box>

@@ -16,12 +16,16 @@ import { Box, VStack, Text, Icon, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
-import { DatabaseWithSchema } from '@/lib/types';
+import type { DatabaseWithSchema, SkillMention } from '@/lib/types';
 
 interface MentionsPluginProps {
   databaseName?: string;
   whitelistedSchemas?: DatabaseWithSchema[];
+  availableSkills?: SkillMention[];
 }
+
+type MentionOption = MentionItem | SkillMention;
+type MentionTrigger = 'all' | 'questions' | 'skills';
 
 // Map semantic token to hex value
 const colorMap: Record<string, string> = {
@@ -37,7 +41,16 @@ const colorMap: Record<string, string> = {
 };
 
 // Get badge info (color, label, icon) for a mention type
-function getMentionBadgeInfo(type: 'table' | 'question' | 'dashboard') {
+function getMentionBadgeInfo(option: MentionOption) {
+  if (option.type === 'skill') {
+    return {
+      label: option.source === 'user' ? 'USER' : 'SYS',
+      icon: null,
+      color: ACCENT_HEX.cyan,
+    };
+  }
+
+  const type = option.type;
   if (type === 'table') {
     return {
       label: TABLE_MENTION_METADATA.label,
@@ -54,12 +67,22 @@ function getMentionBadgeInfo(type: 'table' | 'question' | 'dashboard') {
   };
 }
 
-export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPluginProps) {
+function getFilteredMentions(mentions: MentionOption[], mentionType: MentionTrigger) {
+  return mentions.filter(m => mentionType === 'questions' ? m.type !== 'table' : true);
+}
+
+function getDropdownTitle(mentionType: MentionTrigger) {
+  if (mentionType === 'skills') return 'Skills';
+  if (mentionType === 'questions') return 'Questions';
+  return 'Tables, Questions & Dashboards';
+}
+
+export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [] }: MentionsPluginProps) {
   const [editor] = useLexicalComposerContext();
-  const [mentions, setMentions] = useState<MentionItem[]>([]);
+  const [mentions, setMentions] = useState<MentionOption[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [mentionType, setMentionType] = useState<'all' | 'questions'>('all');
+  const [mentionType, setMentionType] = useState<MentionTrigger>('all');
   const [query, setQuery] = useState('');
   const selectedItemRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -92,7 +115,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     }
   }, [databaseName, whitelistedSchemas]);
 
-  const insertMention = useCallback((mention: MentionItem, triggerLength: number) => {
+  const insertMention = useCallback((mention: MentionOption, triggerLength: number) => {
     editor.update(() => {
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;
@@ -116,7 +139,8 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
         type: mention.type,
         name: mention.name,
       };
-      if (mention.schema) mentionData.schema = mention.schema;
+      if ('schema' in mention && mention.schema) mentionData.schema = mention.schema;
+      if (mention.type === 'skill') mentionData.source = mention.source;
       if (mention.id != null) mentionData.id = mention.id;
 
       // Create mention node
@@ -134,7 +158,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
   }, [editor]);
 
   useEffect(() => {
-    // Monitor text changes to detect @ triggers
+    // Monitor text changes to detect @ and / triggers
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
         const selection = $getSelection();
@@ -175,10 +199,32 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
           return;
         }
 
+        const slashMatch = textBeforeCursor.match(/\/([\w-]*)$/);
+        if (slashMatch) {
+          const nextQuery = slashMatch[1].toLowerCase();
+          const seen = new Set<string>();
+          setMentionType('skills');
+          setQuery(slashMatch[1]);
+          setMentions(
+            availableSkills
+              .filter(skill => skill.name.toLowerCase().includes(nextQuery))
+              .filter(skill => {
+                const key = `${skill.source}:${skill.name}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              })
+              .slice(0, 8)
+          );
+          setSelectedIndex(0);
+          setShowDropdown(true);
+          return;
+        }
+
         setShowDropdown(false);
       });
     });
-  }, [editor, fetchMentions]);
+  }, [editor, fetchMentions, availableSkills]);
 
   useEffect(() => {
     // Scroll selected item into view
@@ -192,11 +238,12 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     const removeArrowDown = editor.registerCommand(
       KEY_ARROW_DOWN_COMMAND,
       (event) => {
-        if (showDropdown && mentions.length > 0) {
+        const filteredMentions = getFilteredMentions(mentions, mentionType);
+        if (showDropdown && filteredMentions.length > 0) {
           if (event) {
             event.preventDefault();
           }
-          setSelectedIndex((prev) => (prev + 1) % mentions.length);
+          setSelectedIndex((prev) => (prev + 1) % filteredMentions.length);
           return true;
         }
         return false;
@@ -207,11 +254,12 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     const removeArrowUp = editor.registerCommand(
       KEY_ARROW_UP_COMMAND,
       (event) => {
-        if (showDropdown && mentions.length > 0) {
+        const filteredMentions = getFilteredMentions(mentions, mentionType);
+        if (showDropdown && filteredMentions.length > 0) {
           if (event) {
             event.preventDefault();
           }
-          setSelectedIndex((prev) => (prev - 1 + mentions.length) % mentions.length);
+          setSelectedIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length);
           return true;
         }
         return false;
@@ -222,10 +270,8 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     const removeEnter = editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event) => {
-        if (showDropdown && mentions.length > 0) {
-          const filteredMentions = mentions.filter(m =>
-            mentionType === 'questions' ? m.type !== 'table' : true
-          );
+        const filteredMentions = getFilteredMentions(mentions, mentionType);
+        if (showDropdown && filteredMentions.length > 0) {
           if (filteredMentions[selectedIndex]) {
             // Prevent default Enter behavior (newline)
             if (event) {
@@ -262,9 +308,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     };
   }, [editor, showDropdown, mentions, selectedIndex, mentionType, query, insertMention]);
 
-  const filteredMentions = mentions.filter(m =>
-    mentionType === 'questions' ? m.type !== 'table' : true
-  );
+  const filteredMentions = getFilteredMentions(mentions, mentionType);
 
   // Reset selectedIndex if it's out of bounds after filtering — intentional setState in effect
   useEffect(() => {
@@ -306,64 +350,84 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
           borderRadius="md"
           boxShadow="lg"
           maxH="300px"
-          overflowY="auto"
+          overflow="hidden"
           zIndex={1000}
         >
-          <VStack align="stretch" gap={0}>
-            {filteredMentions.map((mention, index) => {
-              // Generate unique key including schema for tables
-              const uniqueKey = mention.type === 'table' && mention.schema
-                ? `${mention.type}-${mention.schema}-${mention.name}`
-                : `${mention.type}-${mention.id || mention.name}`;
+          <Box
+            px={2}
+            py={1.5}
+            borderBottom="1px solid"
+            borderColor="border.muted"
+            bg="bg.panel"
+          >
+            <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.04em">
+              {getDropdownTitle(mentionType)}
+            </Text>
+          </Box>
+          <Box maxH="260px" overflowY="auto">
+            <VStack align="stretch" gap={0}>
+              {filteredMentions.map((mention, index) => {
+                // Generate unique key including schema for tables
+                const uniqueKey = mention.type === 'table' && 'schema' in mention && mention.schema
+                  ? `${mention.type}-${mention.schema}-${mention.name}`
+                  : mention.type === 'skill'
+                    ? `${mention.type}-${mention.source}-${mention.name}`
+                  : `${mention.type}-${mention.id || mention.name}`;
 
-              return (
-              <Box
-                key={uniqueKey}
-                ref={index === selectedIndex ? selectedItemRef : null}
-                p={2}
-                cursor="pointer"
-                bg={index === selectedIndex ? 'bg.subtle' : 'transparent'}
-                _hover={{ bg: 'bg.subtle' }}
-                onClick={() => {
-                  const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-                  insertMention(mention, triggerLength);
-                }}
-              >
-                {(() => {
-                  const badgeInfo = getMentionBadgeInfo(mention.type);
-                  return (
-                    <Box
-                      as="span"
-                      display="inline-flex"
-                      alignItems="center"
-                      px={1.5}
-                      py={0.5}
-                      mr={1.5}
-                      bg={badgeInfo.color}
-                      color="white"
-                      borderRadius="sm"
-                      fontSize="2xs"
-                      fontWeight="600"
-                      verticalAlign="middle"
-                      gap={1}
-                    >
-                      <Icon as={badgeInfo.icon} boxSize={3} />
-                      {badgeInfo.label}
-                    </Box>
-                  );
-                })()}
-                <Text as="span" fontSize="sm" fontWeight="500">
-                  {mention.display_text}
-                </Text>
-                {mention.schema && (
-                  <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
-                    ({mention.schema})
+                return (
+                <Box
+                  key={uniqueKey}
+                  ref={index === selectedIndex ? selectedItemRef : null}
+                  p={2}
+                  cursor="pointer"
+                  bg={index === selectedIndex ? 'bg.subtle' : 'transparent'}
+                  _hover={{ bg: 'bg.subtle' }}
+                  onClick={() => {
+                    const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
+                    insertMention(mention, triggerLength);
+                  }}
+                >
+                  {(() => {
+                    const badgeInfo = getMentionBadgeInfo(mention);
+                    return (
+                      <Box
+                        as="span"
+                        display="inline-flex"
+                        alignItems="center"
+                        px={1.5}
+                        py={0.5}
+                        mr={1.5}
+                        bg={badgeInfo.color}
+                        color="white"
+                        borderRadius="sm"
+                        fontSize="2xs"
+                        fontWeight="600"
+                        verticalAlign="middle"
+                        gap={1}
+                      >
+                        {badgeInfo.icon && <Icon as={badgeInfo.icon} boxSize={3} />}
+                        {badgeInfo.label}
+                      </Box>
+                    );
+                  })()}
+                  <Text as="span" fontSize="sm" fontWeight="500">
+                    {'display_text' in mention ? mention.display_text : mention.name}
                   </Text>
-                )}
-              </Box>
-              );
-            })}
-          </VStack>
+                  {'schema' in mention && mention.schema && (
+                    <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
+                      ({mention.schema})
+                    </Text>
+                  )}
+                  {mention.type === 'skill' && mention.description && (
+                    <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
+                      {mention.description}
+                    </Text>
+                  )}
+                </Box>
+                );
+              })}
+            </VStack>
+          </Box>
         </Box>
       </Portal>
     </>

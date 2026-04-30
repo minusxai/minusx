@@ -1,13 +1,7 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 import Markdown from '../Markdown';
-
-interface MentionData {
-  id?: number;
-  name: string;
-  schema?: string;
-  type: 'table' | 'question';
-}
+import type { ChatMentionData } from '@/lib/types';
 
 interface MessageWithMentionsProps {
   content: string;
@@ -83,6 +77,7 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
           const displayText = data.type === 'table'
             ? `${data.schema}.${data.name}`
             : data.name;
+          const isSkill = data.type === 'skill';
 
           return (
             <Box
@@ -93,13 +88,13 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
               px={1.5}
               py={0.5}
               mx={0.5}
-              bg={data.type === 'table' ? 'blue.500/20' : 'purple.500/20'}
-              color={data.type === 'table' ? 'blue.400' : 'purple.400'}
+              bg={isSkill ? 'accent.cyan/10' : data.type === 'table' ? 'blue.500/20' : 'purple.500/20'}
+              color={isSkill ? 'accent.cyan' : data.type === 'table' ? 'blue.400' : 'purple.400'}
               borderRadius="sm"
               fontSize="sm"
               fontWeight="600"
               border="1px solid"
-              borderColor={data.type === 'table' ? 'blue.500/30' : 'purple.500/30'}
+              borderColor={isSkill ? 'accent.cyan/40' : data.type === 'table' ? 'blue.500/30' : 'purple.500/30'}
               verticalAlign="middle"
               data-mention-json={part.content}
               userSelect="all"
@@ -108,14 +103,14 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
                 as="span"
                 px={1}
                 py={0.5}
-                bg={data.type === 'table' ? 'blue.500' : 'purple.500'}
+                bg={isSkill ? 'accent.cyan' : data.type === 'table' ? 'blue.500' : 'purple.500'}
                 color="white"
                 borderRadius="sm"
                 fontSize="2xs"
                 fontWeight="700"
                 mr={1}
               >
-                {data.type === 'table' ? 'TABLE' : 'Q'}
+                {isSkill ? (data.source === 'user' ? 'USER' : 'SYS') : data.type === 'table' ? 'TABLE' : 'Q'}
               </Box>
               {displayText}
             </Box>
@@ -129,7 +124,7 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
 interface ParsedPart {
   type: 'text' | 'mention';
   content: string;
-  data?: MentionData;
+  data?: ChatMentionData;
 }
 
 function parseMessageContent(content: string): ParsedPart[] {
@@ -152,7 +147,7 @@ function parseMessageContent(content: string): ParsedPart[] {
 
     // Parse and add the mention
     try {
-      const mentionData = JSON.parse(match[1]) as MentionData;
+      const mentionData = JSON.parse(match[1]) as ChatMentionData;
       parts.push({
         type: 'mention',
         content: match[0],
