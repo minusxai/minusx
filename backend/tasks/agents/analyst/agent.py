@@ -360,7 +360,7 @@ class AnalystAgent(Agent):
                 await self.dispatch(agent_calls)
 
         # Hit max iterations
-        msg = f"Maximum iterations ({MAX_STEPS_LOWER_LEVEL}) reached. Please try a simpler query."
+        msg = f"Maximum iterations ({MAX_STEPS_LOWER_LEVEL}) reached."
         return {
             "success": False,
             "content": msg,
