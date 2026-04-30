@@ -355,26 +355,22 @@ export default function ChatInterface({
     );
   }, [conversation?.pending_tool_calls]);
 
-  // Detect silent finish: agent finished but produced no visible reply since last user message
-  const silentFinish = useMemo(() => {
-    if (conversation?.executionState !== 'FINISHED') return false;
+  // Extract warning_type from the last agent result after the last user message
+  const warningType = useMemo(() => {
+    if (conversation?.executionState !== 'FINISHED') return null;
     const msgs = conversation.messages;
     const lastUserIdx = msgs.reduce((last, m, i) => m.role === 'user' ? i : last, -1);
-    if (lastUserIdx < 0) return false;
-    return !msgs.slice(lastUserIdx + 1).some(m => {
+    if (lastUserIdx < 0) return null;
+    const agentResult = msgs.slice(lastUserIdx + 1).findLast(m => {
       const tc = m as import('@/store/chatSlice').CompletedToolCall;
-      const name = tc.function?.name;
-      if (name !== 'TalkToUser' && name !== conversation.agent) return false;
-      const c = tc.content;
-      // TalkToUser content is a JSON string; agent result content is an object { success, content?, content_blocks? }.
-      // content_blocks may include invisible thinking blocks — check the text-only `content` field instead.
-      if (typeof c === 'string') return c.trim().length > 0;
-      if (typeof c === 'object' && c !== null) {
-        const text = (c as Record<string, unknown>).content;
-        return typeof text === 'string' && text.trim().length > 0;
-      }
-      return false;
-    });
+      return tc.function?.name === conversation.agent;
+    }) as import('@/store/chatSlice').CompletedToolCall | undefined;
+    if (!agentResult) return null;
+    const c = agentResult.content;
+    if (typeof c === 'object' && c !== null) {
+      return (c as Record<string, unknown>).warning_type as string ?? null;
+    }
+    return null;
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
 
   // Check if conversation has exceeded the token limit
@@ -389,7 +385,7 @@ export default function ChatInterface({
   // Get error from conversation or use local state for client-side errors
   const [localError, setLocalError] = useState<LoadError | null>(null);
   // Only show runtime/execution errors here (not loadError - that's shown in dedicated section above)
-  const error = conversation?.error || localError || (silentFinish ? 'The agent did not respond.' : null);
+  const error = conversation?.error || localError;
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -861,38 +857,47 @@ export default function ChatInterface({
           {/* Error Display */}
           {error && (() => {
             return (
-              <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
-                      gap={2}
-                      w="100%"
-                  >
-              <GridItem colSpan={colSpan} colStart={colStart}>
-                  <Box
-                p={3}
-                bg="accent.danger/10"
-                borderLeft="3px solid"
-                borderColor="accent.danger"
-                borderRadius="md"
-              >
-                  <Text color="accent.danger" fontSize="sm" fontFamily="mono">
-                    {devMode
-                      ? (typeof error === 'string' ? error : error?.message || 'An error occurred')
-                      : 'An error occurred'}
-                  </Text>
-                  {conversationID && (
-                    <Button
-                      mt={2}
-                      size="xs"
-                      variant="outline"
-                      colorPalette="red"
-                      aria-label="Try again"
-                      onClick={() => dispatch(sendMessage({ conversationID, message: 'Continue' }))}
-                    >
-                      Try again
-                    </Button>
-                  )}
+              <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+                <GridItem colSpan={colSpan} colStart={colStart}>
+                  <Box p={3} bg="accent.danger/10" borderLeft="3px solid" borderColor="accent.danger" borderRadius="md">
+                    <Text color="accent.danger" fontSize="sm" fontFamily="mono">
+                      {devMode
+                        ? (typeof error === 'string' ? error : error?.message || 'An error occurred')
+                        : 'An error occurred'}
+                    </Text>
+                    {conversationID && (
+                      <Button mt={2} size="xs" variant="outline" colorPalette="red" aria-label="Try again"
+                        onClick={() => dispatch(sendMessage({ conversationID, message: 'Continue' }))}>
+                        Try again
+                      </Button>
+                    )}
                   </Box>
-              </GridItem>
+                </GridItem>
+              </Grid>
+            );
+          })()}
 
+          {/* Warning Display (backend-signalled warnings e.g. context_length, max_iterations) */}
+          {warningType && (() => {
+            const WARNING_CONFIG: Record<string, { msg: string; cta: string }> = {
+              context_length: { msg: 'The output was too long. Do you want to continue?', cta: 'Continue' },
+              max_iterations: { msg: 'Maximum steps reached. Please try a simpler request.', cta: 'Try again' },
+            };
+            const cfg = WARNING_CONFIG[warningType];
+            if (!cfg) return null;
+            return (
+              <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+                <GridItem colSpan={colSpan} colStart={colStart}>
+                  <Box p={3} bg="accent.warning/10" borderLeft="3px solid" borderColor="accent.warning" borderRadius="md">
+                    <Text color="accent.warning" fontSize="sm" fontFamily="mono">{cfg.msg}</Text>
+                    {conversationID && (
+                      <Button mt={2} size="xs" variant="outline" colorPalette="yellow" aria-label={cfg.cta}
+                        onClick={() => dispatch(sendMessage({ conversationID, message: cfg.cta }))}>
+                        {cfg.cta}
+                      </Button>
+                    )}
+                  </Box>
+                </GridItem>
               </Grid>
             );
           })()}
