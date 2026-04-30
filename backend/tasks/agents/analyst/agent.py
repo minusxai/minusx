@@ -343,18 +343,17 @@ class AnalystAgent(Agent):
             #</TESTING_CODE_DONT_REMOVE>
             if finish_reason in ("stop", "length"):
                 blocks = list(content_blocks) if content_blocks else []
-                if not any(b.get("type") == "text" for b in blocks):
-                    fallback = content or (
-                        "\nResponse truncated due to context length. Please try a simpler query."
-                        if finish_reason == "length"
-                        else "\nAgent has ended the chat"
-                    )
-                    blocks.append({"type": "text", "text": fallback})
+                if finish_reason == "length":
+                    blocks.append({"type": "text", "text": "Response truncated due to context length."})
+                elif not any(b.get("type") == "text" for b in blocks):
+                    blocks.append({"type": "text", "text": "Response ended"})
+                extra = {"warning_msg": "Response truncated due to context length.", "warning_cta": "Continue"} if finish_reason == "length" else {}
                 return {
                     "success": True,
                     "content_blocks": blocks,
                     "content": content,
                     "citations": citations,
+                    **extra,
                 }
 
             # Convert tool calls to AgentCalls and dispatch
