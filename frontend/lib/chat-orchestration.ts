@@ -36,6 +36,10 @@ export interface ChatRequest {
     context?: string;
     app_state?: any;
     page_type?: string;
+    skills?: {
+      selected?: import('@/lib/types').AgentSkillSelection[];
+      user_catalog?: import('@/lib/types').AgentUserSkillCatalogItem[];
+    };
   };
 }
 

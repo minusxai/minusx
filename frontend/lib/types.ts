@@ -356,6 +356,7 @@ export interface ContextInfo {
   databases: DatabaseWithSchema[];        // Whitelisted schemas (or all if no context)
   documentation: string | undefined;      // Context docs (undefined if no context)
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
+  availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for slash mentions
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading
 }

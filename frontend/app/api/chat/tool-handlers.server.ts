@@ -99,6 +99,34 @@ registerTool('SearchFiles', async (args, user) => {
   };
 });
 
+/**
+ * LoadSkill - Resolve user-defined Knowledge Base skills.
+ * System skills are resolved directly in Python; unresolved LoadSkill calls
+ * are delegated here as user-defined skills by name.
+ */
+registerTool('LoadSkill', async (args, _user, childResults) => {
+  const name = String(args.name ?? '');
+
+  if (!name) {
+    return { success: false, error: 'name is required' };
+  }
+
+  if (childResults && childResults.length > 0) {
+    const allChildren = childResults.flat();
+    return allChildren[0].result;
+  }
+
+  throw new FrontendToolException({
+    spawnedTools: [{
+      type: 'function',
+      function: {
+        name: 'LoadSkillFrontend',
+        arguments: { name }
+      }
+    }]
+  });
+});
+
 
 /**
  * Clarify - Ask user for clarification with options

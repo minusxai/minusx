@@ -5,7 +5,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
 import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
-import type { Attachment } from '@/lib/types';
+import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
@@ -215,6 +215,37 @@ export default function ChatInterface({
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
   const unrestrictedMode = useAppSelector(selectUnrestrictedMode);
+
+  const chatSkills = contextInfo.availableSkills;
+
+  const uniqueSkills = useCallback((skills: SkillMention[]) => {
+    const seen = new Set<string>();
+    return skills.filter(skill => {
+      const key = `${skill.source}:${skill.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, []);
+
+  const getSkillsFromMessage = useCallback((message: string) => {
+    const refs: SkillMention[] = [];
+    for (const match of message.matchAll(/@(\{.+?\})/g)) {
+      try {
+        const data = JSON.parse(match[1]);
+        if (data?.type !== 'skill' || !data.name || !data.source) {
+          continue;
+        }
+        const skill = chatSkills.find(candidate =>
+          candidate.source === data.source && candidate.name === data.name
+        );
+        if (skill) {
+          refs.push(skill);
+        }
+      } catch {}
+    }
+    return uniqueSkills(refs);
+  }, [chatSkills, uniqueSkills]);
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const conversations = useAppSelector(state => state.chat.conversations);
@@ -511,6 +542,7 @@ export default function ChatInterface({
 
   const handleSendMessage = async (userInput: string, attachments: Attachment[] = []) => {
     if (!userInput.trim()) return;
+    const selectedSkillMentions = getSkillsFromMessage(userInput);
 
     // Block sending if connections or contexts are still loading
     if (connectionsLoading || contextsLoading) {
@@ -598,6 +630,31 @@ export default function ChatInterface({
       dispatch(clearQueuedMessages({ conversationID: convId }));
     }
 
+    const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
+    const selectedUserNames = new Set(
+      uniqueSelectedSkills
+        .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
+        .map(skill => skill.name)
+    );
+    const agentSelectedSkills: AgentSkillSelection[] = uniqueSelectedSkills.map(skill => {
+      if (skill.source === 'system') {
+        return { type: 'system', name: skill.name };
+      }
+      return {
+        type: 'user',
+        name: skill.name,
+        description: skill.description || '',
+        content: skill.content || '',
+      };
+    });
+    const uniqueUserCatalog: AgentUserSkillCatalogItem[] = uniqueSkills(chatSkills)
+      .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
+      .filter(skill => !selectedUserNames.has(skill.name))
+      .map(skill => ({
+        name: skill.name,
+        description: skill.description || '',
+      }));
+
     // Update agent_args with fresh appState before sending message
     dispatch(updateAgentArgs({
       conversationID: convId,
@@ -611,6 +668,10 @@ export default function ChatInterface({
         city: config.city,
         agent_name: config.branding.agentName || 'MinusX',
         unrestricted_mode: unrestrictedMode,
+        skills: {
+          selected: agentSelectedSkills,
+          user_catalog: uniqueUserCatalog,
+        },
         ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
         ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
       }
@@ -1085,6 +1146,7 @@ export default function ChatInterface({
               selectedVersion={contextVersion}
               onContextChange={onContextChange}
               whitelistedSchemas={databases}
+              availableSkills={chatSkills}
               prefillText={!isAgentRunning && !isStreaming && conversation?.wasInterrupted && conversation?.queuedMessages?.length
                 ? conversation.queuedMessages.map(qm => qm.message).join('\n')
                 : undefined}

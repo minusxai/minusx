@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
-import { LuSendHorizontal, LuPaperclip, LuSettings2, LuX } from 'react-icons/lu';
+import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
+import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
@@ -10,7 +10,7 @@ import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
-import { DatabaseWithSchema, Attachment } from '@/lib/types';
+import type { DatabaseWithSchema, Attachment, SkillMention } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
@@ -35,6 +35,7 @@ interface ChatInputProps {
   selectedVersion?: number;
   onContextChange?: (contextPath: string | null, version?: number) => void;
   whitelistedSchemas?: DatabaseWithSchema[];
+  availableSkills?: SkillMention[];
   prefillText?: string;
 }
 
@@ -57,6 +58,7 @@ export default function ChatInput({
   selectedVersion,
   onContextChange,
   whitelistedSchemas,
+  availableSkills = [],
   prefillText,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
@@ -125,7 +127,7 @@ export default function ChatInput({
       dispatch(setSidebarPendingMessage(null));
       dispatch(clearChatAttachments());
     }
-  }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
+  }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading, attachments]);
 
   const chatLocked = isAgentRunning && !allowChatQueue;
 
@@ -268,6 +270,7 @@ export default function ChatInput({
                           });
                         }}
                         whitelistedSchemas={whitelistedSchemas}
+                        availableSkills={availableSkills}
                       />
                     </Box>
                   </Box>

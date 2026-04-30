@@ -7,7 +7,7 @@ import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSec
 import { useContext } from '@/lib/hooks/useContext';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import ChatInput from './explore/ChatInput';
-import { Attachment } from '@/lib/types';
+import type { Attachment } from '@/lib/types';
 
 // Sidebar width constants (must match Sidebar.tsx)
 const SIDEBAR_WIDTH_EXPANDED = '260px';
@@ -30,7 +30,7 @@ export default function FloatingChatWrapper({
   const rightSidebarWidth = useAppSelector(state => state.ui.rightSidebarWidth);
 
   // Load context databases
-  const contextInfo = useContext(filePath || '/');
+  const contextInfo = useContext(filePath || '/', undefined, true);
   const defaultDatabase = selectDatabase(contextInfo.databases, propDatabaseName);
   const [localDatabase, setLocalDatabase] = useState<string | null>(null);
   const databaseName = localDatabase ?? defaultDatabase;
@@ -79,6 +79,7 @@ export default function FloatingChatWrapper({
         container="floating"
         isCompact={true}
         whitelistedSchemas={contextInfo.databases}
+        availableSkills={contextInfo.availableSkills}
       />
     </Box>
   );

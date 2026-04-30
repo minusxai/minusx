@@ -5,14 +5,15 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile } from '@/lib/types';
-import { setEphemeral, selectMergedContent, selectDirtyFiles, type FileId } from '@/store/filesSlice';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent } from '@/lib/types';
+import { setEphemeral, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { FilesAPI } from '../data/files';
+import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp, deleteFile as deleteDraftFile } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
@@ -38,6 +39,7 @@ export interface FrontendToolContext {
   dispatch?: AppDispatch;
   signal?: AbortSignal;
   state?: RootState;
+  contextPath?: string;
   userInputs?: UserInput[];      // Previous user inputs for this tool
 }
 
@@ -115,6 +117,11 @@ export async function executeToolCall(
     dispatch,
     signal,
     state,
+    contextPath: state
+      ? Object.values(state.chat.conversations)
+          .find(conversation => conversation.pending_tool_calls.some(pending => pending.toolCall.id === toolCall.id))
+          ?.agent_args?.context_path
+      : undefined,
     userInputs  // Include in context
   };
 
@@ -184,6 +191,81 @@ registerFrontendTool('UserInputFrontend', async () => {
 
 registerFrontendTool('UserInputTool', async () => {
   return { content: 'User provided input', details: { success: true } };
+});
+
+/**
+ * LoadSkillFrontend - Resolve a user-defined Knowledge Base skill from
+ * the active conversation's already-loaded context state.
+ */
+registerFrontendTool('LoadSkillFrontend', async (args, context) => {
+  const name = String(args.name ?? '');
+
+  if (!name) {
+    return {
+      content: { success: false, error: 'name is required' },
+      details: { success: false, error: 'name is required' }
+    };
+  }
+
+  if (!context.state) {
+    const error = `No active frontend context available to resolve user skill '${name}'`;
+    return {
+      content: { success: false, error },
+      details: { success: false, error }
+    };
+  }
+
+  if (!context.contextPath) {
+    const error = `No active Knowledge Base context available to resolve user skill '${name}'`;
+    return {
+      content: { success: false, error },
+      details: { success: false, error }
+    };
+  }
+
+  const contextFile = selectContextFromPath(context.state, context.contextPath);
+  const content = contextFile
+    ? selectMergedContent(context.state, contextFile.id) as ContextContent | undefined
+    : undefined;
+
+  if (!content) {
+    const error = `Active Knowledge Base context is not loaded for user skill '${name}'`;
+    return {
+      content: { success: false, error },
+      details: { success: false, error }
+    };
+  }
+
+  const skill = mergeSkillsByName(content.fullSkills || [], content.skills || []).find(s => s.name === name);
+
+  if (!skill) {
+    const error = `User skill '${name}' not found in the active Knowledge Base context`;
+    return {
+      content: { success: false, error },
+      details: { success: false, error }
+    };
+  }
+
+  if (!skill.enabled) {
+    const error = `User skill '${skill.name}' is disabled`;
+    return {
+      content: { success: false, error },
+      details: { success: false, error }
+    };
+  }
+
+  return {
+    content: {
+      success: true,
+      skill: skill.name,
+      description: skill.description,
+      content: skill.content,
+    },
+    details: {
+      success: true,
+      message: `Loaded skill ${skill.name}`,
+    }
+  };
 });
 
 /**
@@ -806,4 +888,3 @@ registerFrontendTool('PublishAll', async (_args, context) => {
   const msg = `Published ${fileCount} file${fileCount === 1 ? '' : 's'} successfully.`;
   return { content: { success: true, message: msg }, details: { success: true, message: msg } };
 });
-
