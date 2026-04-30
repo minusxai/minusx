@@ -7,6 +7,7 @@
  * No Redux. No server-only APIs. Pure functions only.
  */
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import type {
   AugmentedFile,
   CompressedAugmentedFile,
@@ -77,7 +78,7 @@ export function computeQueryResultId(file: DbFile): string | undefined {
 export function dbFileToFileState(file: DbFile): FileState {
   return {
     ...file,
-    content: stripQueryResultId(file),
+    content: sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'],
     references: extractReferences(file),
     queryResultId: computeQueryResultId(file),
     loading: false,
