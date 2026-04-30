@@ -55,7 +55,7 @@ export default function PathPage({ params }: PathPageProps) {
   const pathSegments = path || [];
 
   // Construct full path from segments
-  const fullPath = '/' + pathSegments.join('/');
+  const fullPath = '/' + pathSegments.map(decodeURIComponent).join('/');
 
   // Find the nearest context for this folder path and use as default
   const nearestContext = useAppSelector(state => selectContextFromPath(state, fullPath));
