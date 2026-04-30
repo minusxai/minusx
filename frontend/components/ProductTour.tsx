@@ -105,7 +105,7 @@ export default function ProductTour() {
           padding: 16px 20px 8px !important;
         }
         .shepherd-element .shepherd-title {
-          font-family: 'JetBrains Mono', monospace !important;
+          font-family: var(--font-jetbrains-mono) !important;
           font-size: 16px !important;
           font-weight: 600 !important;
           color: #1abc9c !important;

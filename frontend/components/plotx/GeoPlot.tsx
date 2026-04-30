@@ -64,7 +64,7 @@ function geoTooltipHtml(
     (r) =>
       `<tr><td style="padding:1px 10px 1px 0;color:${t.fgMuted};white-space:nowrap">${r.key}</td><td style="text-align:right;font-weight:600;color:${t.fg};white-space:nowrap">${r.value}</td></tr>`,
   ).join('')
-  return `<div style="font-family:JetBrains Mono,Consolas,monospace;font-size:12px;background:${t.bg};color:${t.fg};border:1px solid ${t.border};border-radius:4px;padding:6px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">${headerHtml}<table style="border-collapse:collapse">${rowsHtml}</table></div>`
+  return `<div style="font-family:var(--font-jetbrains-mono);font-size:12px;background:${t.bg};color:${t.fg};border:1px solid ${t.border};border-radius:4px;padding:6px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">${headerHtml}<table style="border-collapse:collapse">${rowsHtml}</table></div>`
 }
 
 const GEO_TOOLTIP_OPTIONS: L.TooltipOptions = {

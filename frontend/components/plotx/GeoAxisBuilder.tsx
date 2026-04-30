@@ -45,7 +45,7 @@ const NUM_INPUT_STYLE = {
   width: '60px',
   padding: '2px 6px',
   fontSize: '12px',
-  fontFamily: 'JetBrains Mono, Consolas, monospace',
+  fontFamily: 'var(--font-jetbrains-mono)',
   background: 'var(--chakra-colors-bg-subtle)',
   color: 'var(--chakra-colors-fg-default)',
   border: '1px solid var(--chakra-colors-border-muted)',

@@ -1183,7 +1183,7 @@ export default function ConnectionFormV2({
                       folding: true,
                       lineNumbers: 'off',
                       fontSize: 12,
-                      fontFamily: 'JetBrains Mono, monospace',
+                      fontFamily: 'var(--font-jetbrains-mono)',
                       scrollBeyondLastLine: false,
                       wordWrap: 'on',
                     }}

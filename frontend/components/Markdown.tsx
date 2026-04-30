@@ -556,7 +556,7 @@ export default function Markdown({
       css={{
         WebkitFontSmoothing: 'antialiased',
         MozOsxFontSmoothing: 'grayscale',
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: 'var(--font-jetbrains-mono)',
         '& h1': {
           fontSize: styles.h1.fontSize,
           fontWeight: styles.h1.fontWeight,
@@ -599,7 +599,7 @@ export default function Markdown({
           color: 'var(--chakra-colors-fg-emphasized)',
         },
         '& code': {
-          fontFamily: 'JetBrains Mono, monospace',
+          fontFamily: 'var(--font-jetbrains-mono)',
           fontSize: styles.code.fontSize,
           backgroundColor: 'var(--chakra-colors-bg-muted)',
           color: 'inherit',
@@ -609,7 +609,7 @@ export default function Markdown({
           display: 'inline-block',
         },
         '& pre': {
-          fontFamily: 'JetBrains Mono, monospace',
+          fontFamily: 'var(--font-jetbrains-mono)',
           fontSize: styles.code.fontSize,
           backgroundColor: 'var(--chakra-colors-bg-muted)',
           padding: `${styles.pre.p * 0.25}rem`,
