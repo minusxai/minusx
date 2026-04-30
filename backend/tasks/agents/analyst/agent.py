@@ -330,30 +330,42 @@ class AnalystAgent(Agent):
                     call.args['_schema'] = self.schema
             finish_reason = response.get("finish_reason", "")
             
+            #<TESTING_CODE_DONT_REMOVE>
+            # finish_reason = "length"
+            # content = "HELOOO"
+            # content_blocks = [{"type": "text", "text": "YOLOOO"}]
+            #</TESTING_CODE_DONT_REMOVE>
 
             # "stop" = normal completion; "length" = context window exhausted.
             # Both are terminal — "length" must not loop or it will make the
             # context even longer and leave the thread ending with a bare
             # assistant message, which the Anthropic API rejects.
             if finish_reason in ("stop", "length"):
-                response = {"success": True}
-                if content_blocks:
-                    response["content_blocks"] = content_blocks
-                if content:
-                    response["content"] = content
-                    response["citations"] = citations
-                elif finish_reason == "length":
-                    response["content"] = "Response truncated due to context length."
-                return response
+                blocks = list(content_blocks) if content_blocks else []
+                if finish_reason == "length":
+                    blocks.append({"type": "text", "text": "Response truncated due to context length."})
+                elif not any(b.get("type") == "text" for b in blocks):
+                    blocks.append({"type": "text", "text": content or "Response ended"})
+                warning_type = "context_length" if finish_reason == "length" else None
+                return {
+                    "success": True,
+                    "content_blocks": blocks,
+                    "content": content,
+                    "citations": citations,
+                    **({"warning_type": warning_type} if warning_type else {}),
+                }
 
             # Convert tool calls to AgentCalls and dispatch
             if agent_calls:
                 await self.dispatch(agent_calls)
 
         # Hit max iterations
+        msg = f"Maximum iterations ({MAX_STEPS_LOWER_LEVEL}) reached."
         return {
             "success": False,
-            "content": f"Maximum iterations ({MAX_STEPS_LOWER_LEVEL}) reached. Please try a simpler query."
+            "content": msg,
+            "content_blocks": [{"type": "text", "text": msg}],
+            "warning_type": "max_iterations",
         }
 
 
