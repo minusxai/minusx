@@ -345,7 +345,7 @@ class AnalystAgent(Agent):
                 if finish_reason == "length":
                     blocks.append({"type": "text", "text": "Response truncated due to context length."})
                 elif not any(b.get("type") == "text" for b in blocks):
-                    blocks.append({"type": "text", "text": "Response ended"})
+                    blocks.append({"type": "text", "text": content or "Response ended"})
                 warning_type = "context_length" if finish_reason == "length" else None
                 return {
                     "success": True,
