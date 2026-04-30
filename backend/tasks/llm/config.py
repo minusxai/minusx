@@ -12,7 +12,7 @@ ANALYST_V2_MODEL = CODING_MODEL
 ONBOARDING_MODEL = 'claude-haiku-4-5'
 
 # Token and step limits
-MAX_TOKENS = 4000
+MAX_TOKENS = 8000
 MAX_STEPS_LOWER_LEVEL = 35
 
 # Debug flags
