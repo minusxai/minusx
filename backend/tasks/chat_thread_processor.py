@@ -165,13 +165,11 @@ def root_tasks_to_thread(root_tasks: List[CompressedTask], orchestrator: Orchest
 
         # Add final root task result if available
         if root_task.result is not None:
-            content = root_task.result
-            if isinstance(content, dict):
-                content = content.get('content')
-            if content:
-                thread.append({
-                    "role": "assistant",
-                    "content": content
-                })
+            content_blocks = root_task.result.get('content_blocks') if isinstance(root_task.result, dict) else None
+            content = root_task.result.get('content') if isinstance(root_task.result, dict) else root_task.result
+            if content_blocks:
+                thread.append({"role": "assistant", "content": content_blocks})
+            elif content:
+                thread.append({"role": "assistant", "content": content})
 
     return thread
