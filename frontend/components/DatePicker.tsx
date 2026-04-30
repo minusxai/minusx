@@ -143,7 +143,7 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                 p={4}
                 color="fg.default"
                 style={{
-                  fontFamily: '"JetBrains Mono", monospace',
+                  fontFamily: 'var(--font-jetbrains-mono)',
                 }}
               >
                 <style>{`
@@ -153,7 +153,7 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                     --rdp-accent-background-color: #16a085;
                     --rdp-selected-border: 2px solid #16a085;
                     --rdp-today-color: #16a085;
-                    font-family: "JetBrains Mono", monospace;
+                    font-family: var(--font-jetbrains-mono);
                     color: var(--chakra-colors-fg-default);
                   }
                   .rdp-day {
@@ -161,7 +161,7 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                     font-size: 0.875rem;
                     font-weight: 600;
                     transition: all 0.2s;
-                    font-family: "JetBrains Mono", monospace;
+                    font-family: var(--font-jetbrains-mono);
                   }
                   .rdp-day:hover:not(.rdp-selected) {
                     background-color: var(--chakra-colors-bg-muted);
@@ -187,14 +187,14 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                     font-weight: 700;
                     font-size: 0.75rem;
                     text-transform: uppercase;
-                    font-family: "JetBrains Mono", monospace;
+                    font-family: var(--font-jetbrains-mono);
                     letter-spacing: 0.05em;
                   }
                   .rdp-month_caption {
                     color: var(--chakra-colors-fg-default);
                     font-weight: 800;
                     font-size: 0.875rem;
-                    font-family: "JetBrains Mono", monospace;
+                    font-family: var(--font-jetbrains-mono);
                     letter-spacing: 0.02em;
                   }
                   .rdp-today:not(.rdp-outside) {

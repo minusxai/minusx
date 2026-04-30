@@ -171,7 +171,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         .choropleth-value-label span {
           display: block;
           transform: translate(-50%, -50%);
-          font-family: JetBrains Mono, Consolas, monospace;
+          font-family: var(--font-jetbrains-mono);
           font-size: 10px;
           font-weight: 600;
           white-space: nowrap;

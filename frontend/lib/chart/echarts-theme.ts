@@ -7,6 +7,15 @@ import type { EChartsOption } from 'echarts'
  * Uses Inter for titles/legends
  */
 
+// Reads the CSS variable so ECharts honors the same font override as the rest of the app
+export function getChartFontFamily(): string {
+  const fallback = 'JetBrains Mono, Consolas, Monaco, Courier New, monospace'
+  if (typeof document === 'undefined') return fallback
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue('--font-jetbrains-mono')
+    .trim() || fallback
+}
+
 // Flat UI Colors from theme.ts
 export const CHART_COLORS = {
   primary: '#2980b9',      // Belize Hole (blue)
@@ -100,20 +109,20 @@ const getMinusXTheme = (colorMode: 'light' | 'dark', basePalette?: string[]): EC
     backgroundColor: 'transparent',
 
     textStyle: {
-      fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+      fontFamily: getChartFontFamily(),
       fontSize: 12,
       color: theme.fgMuted,
     },
 
     title: {
       textStyle: {
-        fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+        fontFamily: getChartFontFamily(),
         fontSize: 16,
         fontWeight: 700,
         color: theme.fgDefault,
       },
       subtextStyle: {
-        fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+        fontFamily: getChartFontFamily(),
         fontSize: 13,
         color: theme.fgDefault,
       },
@@ -121,7 +130,7 @@ const getMinusXTheme = (colorMode: 'light' | 'dark', basePalette?: string[]): EC
 
     legend: {
       textStyle: {
-        fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+        fontFamily: getChartFontFamily(),
         fontSize: 12,
         color: theme.fgDefault,
       },
@@ -136,7 +145,7 @@ const getMinusXTheme = (colorMode: 'light' | 'dark', basePalette?: string[]): EC
       borderColor: theme.borderDefault,
       borderWidth: 1,
       textStyle: {
-        fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+        fontFamily: getChartFontFamily(),
         fontSize: 12,
         color: theme.fgDefault,
       },
@@ -215,7 +224,7 @@ const getAxisDefaults = (colorMode: 'light' | 'dark') => {
       },
     },
     axisLabel: {
-      fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+      fontFamily: getChartFontFamily(),
       fontSize: 11,
       color: theme.fgMuted,
     },
@@ -226,7 +235,7 @@ const getAxisDefaults = (colorMode: 'light' | 'dark') => {
       },
     },
     nameTextStyle: {
-      fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+      fontFamily: getChartFontFamily(),
       fontSize: 16,
       fontWeight: 600,
       color: theme.fgDefault,
