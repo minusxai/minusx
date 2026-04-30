@@ -335,13 +335,19 @@ class AnalystAgent(Agent):
             # Both are terminal — "length" must not loop or it will make the
             # context even longer and leave the thread ending with a bare
             # assistant message, which the Anthropic API rejects.
+
+            #<TESTING_CODE_DONT_REMOVE>
+            finish_reason = "length"
+            content = ""
+            content_blocks = []
+            #</TESTING_CODE_DONT_REMOVE>
             if finish_reason in ("stop", "length"):
                 blocks = list(content_blocks) if content_blocks else []
                 if not any(b.get("type") == "text" for b in blocks):
                     fallback = content or (
-                        "Response truncated due to context length."
+                        "\nResponse truncated due to context length. Please try a simpler query."
                         if finish_reason == "length"
-                        else "Agent has ended the chat"
+                        else "\nAgent has ended the chat"
                     )
                     blocks.append({"type": "text", "text": fallback})
                 return {
