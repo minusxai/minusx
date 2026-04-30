@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 import json
 
 from tasks.agents.analyst.file_schema import vizSettingsJsonStr, ATLAS_FILE_SCHEMA_NO_VIZ_JSON
-from tasks.agents.analyst.prompt_loader import get_skill, list_skills
+from tasks.agents.analyst.prompt_loader import get_skill
 
 @register_agent
 class LoadSkill(Tool):
