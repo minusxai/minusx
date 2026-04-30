@@ -174,6 +174,36 @@ export type Attachment = {
   metadata?: { pages?: number; wordCount?: number; auto?: boolean };
 };
 
+export interface ChatMentionData {
+  id?: number;
+  name: string;
+  schema?: string;
+  source?: 'system' | 'user';
+  type: 'table' | 'question' | 'dashboard' | 'skill';
+}
+
+export type SkillMention =
+  | (Omit<ChatMentionData, 'type' | 'source'> & {
+      type: 'skill';
+      source: 'system';
+      description?: string;
+    })
+  | (Omit<ChatMentionData, 'type' | 'source'> & {
+      type: 'skill';
+      source: 'user';
+      description?: string;
+      content?: string;
+    });
+
+export type AgentSkillSelection =
+  | { type: 'system'; name: string }
+  | { type: 'user'; name: string; content: string; description?: string };
+
+export interface AgentUserSkillCatalogItem {
+  name: string;
+  description?: string;
+}
+
 // Context.md types (database schema whitelisting)
 
 /**
@@ -217,6 +247,16 @@ export interface DocEntry {
   content: string;           // Markdown documentation content
   childPaths?: string[];     // Optional: which child paths inherit this doc
   draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
+}
+
+export interface SkillEntry {
+  name: string;
+  description: string;
+  content: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: number;
 }
 
 /** @deprecated Use Whitelist/WhitelistNode instead. Kept for backward compatibility during migration. */
@@ -275,6 +315,7 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullSchema?: DatabaseWithSchema[];   // Computed by loader - what this context actually exposes (own whitelist applied)
   parentSchema?: DatabaseWithSchema[]; // Computed by loader - what parent offers (before own whitelist); used by editor
   fullDocs?: DocEntry[];               // Computed by loader - inherited docs
+  fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
   // Working fields (exposed by container for editing current version)
   databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all
@@ -282,6 +323,9 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
 
   // Evals (stored at content level, independent of versions)
   evals?: Test[];
+
+  // User-defined skills (stored at content level, independent of versions)
+  skills?: SkillEntry[];
 };
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
@@ -311,6 +355,7 @@ export interface ContextInfo {
   contextId: number | undefined;          // ID of context file (undefined if no context)
   databases: DatabaseWithSchema[];        // Whitelisted schemas (or all if no context)
   documentation: string | undefined;      // Context docs (undefined if no context)
+  skills: SkillEntry[];                   // Resolved user-defined skills for this context
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading
 }

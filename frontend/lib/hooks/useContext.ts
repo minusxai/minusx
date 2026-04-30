@@ -7,6 +7,18 @@ import { ContextContent, ContextInfo } from '@/lib/types';
 import { getWhitelistedSchemaForUser, getDocumentationForUser, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
 import { getPublishedVersion } from '@/lib/context/context-utils';
 
+function mergeSkillsByName(...skillGroups: NonNullable<ContextContent['skills']>[]): NonNullable<ContextContent['skills']> {
+  const byName = new Map<string, NonNullable<ContextContent['skills']>[number]>();
+  for (const skills of skillGroups) {
+    for (const skill of skills) {
+      if (!skill.name) continue;
+      byName.delete(skill.name);
+      byName.set(skill.name, skill);
+    }
+  }
+  return [...byName.values()];
+}
+
 /**
  * useContext Hook
  *
@@ -90,11 +102,13 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
             .map(doc => typeof doc === 'string' ? doc : doc.content);
           const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
           const documentation = allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
+          const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
 
           return {
             contextId: loadedContext.id,
             databases,
             documentation,
+            skills,
             hasContext: true,
             contextLoading: contextLoading
           };
@@ -110,11 +124,13 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
         : path.substring(0, path.lastIndexOf('/')) || '/';
       const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, scopePath, contextDir);
       const documentation = getDocumentationForUser(contextContent, currentUser.id);
+      const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
 
       return {
         contextId: loadedContext.id,
         databases,
         documentation,
+        skills,
         hasContext: true,
         contextLoading: contextLoading
       };
@@ -133,6 +149,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       contextId: undefined,
       databases,
       documentation: undefined,
+      skills: [],
       hasContext: false,
       contextLoading: contextLoading || connectionsLoading
     };

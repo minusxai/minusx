@@ -522,7 +522,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Older clients may send version.databases (legacy) instead of version.whitelist (new).
     // Normalize on every save so the DB always uses the canonical format.
     if (existingFile.type === 'context') {
-      const { fullSchema, parentSchema, fullDocs, ...ctx } = content as ContextContent;
+      const { fullSchema, parentSchema, fullDocs, fullSkills, ...ctx } = content as ContextContent;
       if (ctx.versions) {
         ctx.versions = ctx.versions.map(v => {
           const { databases: _legacy, ...vClean } = v as any;
@@ -530,7 +530,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         });
       }
       contentToSave = ctx as BaseFileContent;
-      console.log(`[FILES DataLayer] Stripped fullSchema/parentSchema/fullDocs and normalized version format for context ${name}`);
+      console.log(`[FILES DataLayer] Stripped fullSchema/parentSchema/fullDocs/fullSkills and normalized version format for context ${name}`);
     }
 
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
@@ -724,7 +724,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         // Compute fullSchema, parentSchema and fullDocs using the new whitelist loader
         // New contexts default to whitelist:'*' (expose all available schemas)
-        const { fullSchema, parentSchema, fullDocs } = await computeSchemaFromWhitelist(
+        const { fullSchema, parentSchema, fullDocs, fullSkills } = await computeSchemaFromWhitelist(
           '*',
           contextPath,
           user
@@ -743,7 +743,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
           published: { all: 1 },
           fullSchema,
           parentSchema,
-          fullDocs
+          fullDocs,
+          fullSkills
         };
 
         return {
