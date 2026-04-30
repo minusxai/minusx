@@ -1,5 +1,5 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   $getSelection,
   $isRangeSelection,
@@ -12,7 +12,7 @@ import {
   KEY_ESCAPE_COMMAND,
 } from 'lexical';
 import { $createMentionNode, MentionData } from './MentionNode';
-import { Box, VStack, Text, Icon, Portal } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
@@ -44,9 +44,9 @@ const colorMap: Record<string, string> = {
 function getMentionBadgeInfo(option: MentionOption) {
   if (option.type === 'skill') {
     return {
-      label: option.source === 'user' ? 'USER' : 'SYS',
+      label: 'SKILL',
       icon: null,
-      color: ACCENT_HEX.cyan,
+      color: ACCENT_HEX.teal,
     };
   }
 
@@ -68,13 +68,37 @@ function getMentionBadgeInfo(option: MentionOption) {
 }
 
 function getFilteredMentions(mentions: MentionOption[], mentionType: MentionTrigger) {
-  return mentions.filter(m => mentionType === 'questions' ? m.type !== 'table' : true);
+  const filtered = mentions.filter(m => mentionType === 'questions' ? m.type !== 'table' : true);
+  // Sort skills: user skills first, then system
+  if (mentionType === 'skills') {
+    filtered.sort((a, b) => {
+      const aSource = a.type === 'skill' ? a.source : 'system';
+      const bSource = b.type === 'skill' ? b.source : 'system';
+      if (aSource === bSource) return 0;
+      return aSource === 'user' ? -1 : 1;
+    });
+  }
+  return filtered;
 }
 
 function getDropdownTitle(mentionType: MentionTrigger) {
   if (mentionType === 'skills') return 'Skills';
   if (mentionType === 'questions') return 'Questions';
   return 'Tables, Questions & Dashboards';
+}
+
+function getMentionPrimaryText(mention: MentionOption) {
+  return 'display_text' in mention ? mention.display_text : mention.name;
+}
+
+function getMentionMetaText(mention: MentionOption) {
+  if (mention.type === 'table' && 'schema' in mention && mention.schema) {
+    return mention.schema;
+  }
+  if (mention.type === 'skill') {
+    return mention.description;
+  }
+  return undefined;
 }
 
 export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [] }: MentionsPluginProps) {
@@ -347,24 +371,30 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           bg="bg.panel"
           border="1px solid"
           borderColor="border.default"
-          borderRadius="md"
+          borderRadius="lg"
           boxShadow="lg"
-          maxH="300px"
+          maxH="360px"
           overflow="hidden"
           zIndex={1000}
+          fontFamily="mono"
         >
           <Box
-            px={2}
-            py={1.5}
+            px={3}
+            py={2}
             borderBottom="1px solid"
             borderColor="border.muted"
-            bg="bg.panel"
+            bg="bg.subtle"
           >
-            <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.04em">
-              {getDropdownTitle(mentionType)}
-            </Text>
+            <HStack justify="space-between" gap={2}>
+              <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0">
+                {getDropdownTitle(mentionType)}
+              </Text>
+              <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+                {filteredMentions.length}
+              </Text>
+            </HStack>
           </Box>
-          <Box maxH="260px" overflowY="auto">
+          <Box maxH="312px" overflowY="auto">
             <VStack align="stretch" gap={0}>
               {filteredMentions.map((mention, index) => {
                 // Generate unique key including schema for tables
@@ -374,14 +404,41 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                     ? `${mention.type}-${mention.source}-${mention.name}`
                   : `${mention.type}-${mention.id || mention.name}`;
 
+                // Show group headers for user/system skill sections
+                const prevMention = index > 0 ? filteredMentions[index - 1] : null;
+                const isUserSkillHeader = mentionType === 'skills'
+                  && mention.type === 'skill' && mention.source === 'user' && index === 0;
+                const isSystemSkillHeader = mentionType === 'skills'
+                  && mention.type === 'skill' && mention.source === 'system'
+                  && (index === 0 || (prevMention?.type === 'skill' && prevMention.source === 'user'));
+
                 return (
+                <React.Fragment key={uniqueKey}>
+                {isUserSkillHeader && (
+                  <Box px={3} py={1.5} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
+                    <Text fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.02em">
+                      Your skills
+                    </Text>
+                  </Box>
+                )}
+                {isSystemSkillHeader && (
+                  <Box px={3} py={1.5} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
+                    <Text fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.02em">
+                      System
+                    </Text>
+                  </Box>
+                )}
                 <Box
                   key={uniqueKey}
                   ref={index === selectedIndex ? selectedItemRef : null}
-                  p={2}
+                  px={3}
+                  py={2.5}
                   cursor="pointer"
-                  bg={index === selectedIndex ? 'bg.subtle' : 'transparent'}
-                  _hover={{ bg: 'bg.subtle' }}
+                  bg={index === selectedIndex ? 'bg.muted' : 'transparent'}
+                  borderBottom="1px solid"
+                  borderColor="border.muted"
+                  _last={{ borderBottom: 'none' }}
+                  _hover={{ bg: 'bg.muted' }}
                   onClick={() => {
                     const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
                     insertMention(mention, triggerLength);
@@ -389,41 +446,51 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                 >
                   {(() => {
                     const badgeInfo = getMentionBadgeInfo(mention);
+                    const primary = getMentionPrimaryText(mention);
+                    const meta = getMentionMetaText(mention);
                     return (
-                      <Box
-                        as="span"
-                        display="inline-flex"
-                        alignItems="center"
-                        px={1.5}
-                        py={0.5}
-                        mr={1.5}
-                        bg={badgeInfo.color}
-                        color="white"
-                        borderRadius="sm"
-                        fontSize="2xs"
-                        fontWeight="600"
-                        verticalAlign="middle"
-                        gap={1}
-                      >
-                        {badgeInfo.icon && <Icon as={badgeInfo.icon} boxSize={3} />}
-                        {badgeInfo.label}
-                      </Box>
+                      <HStack gap={2.5} align="start" minW={0}>
+                        <Box
+                          as="span"
+                          display="inline-flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          minW="54px"
+                          h="20px"
+                          px={1.5}
+                          bg={`color-mix(in srgb, ${badgeInfo.color} 12%, transparent)`}
+                          color={badgeInfo.color}
+                          borderRadius="full"
+                          fontSize="2xs"
+                          fontWeight="700"
+                          flexShrink={0}
+                          gap={1}
+                        >
+                          {badgeInfo.icon && <Icon as={badgeInfo.icon} boxSize={3} />}
+                          {badgeInfo.label}
+                        </Box>
+                        <VStack gap={0.5} align="stretch" minW={0} flex={1}>
+                          <HStack gap={1.5} minW={0} align="baseline">
+                            <Text fontSize="sm" fontWeight="650" color="fg.default" truncate>
+                              {primary}
+                            </Text>
+                            {mention.type === 'table' && meta && (
+                              <Text fontSize="xs" color="fg.subtle" flexShrink={0}>
+                                {meta}
+                              </Text>
+                            )}
+                          </HStack>
+                          {mention.type === 'skill' && meta && (
+                            <Text fontSize="xs" color="fg.muted" lineClamp={2}>
+                              {meta}
+                            </Text>
+                          )}
+                        </VStack>
+                      </HStack>
                     );
                   })()}
-                  <Text as="span" fontSize="sm" fontWeight="500">
-                    {'display_text' in mention ? mention.display_text : mention.name}
-                  </Text>
-                  {'schema' in mention && mention.schema && (
-                    <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
-                      ({mention.schema})
-                    </Text>
-                  )}
-                  {mention.type === 'skill' && mention.description && (
-                    <Text as="span" fontSize="xs" color="fg.muted" ml={1}>
-                      {mention.description}
-                    </Text>
-                  )}
                 </Box>
+                </React.Fragment>
                 );
               })}
             </VStack>

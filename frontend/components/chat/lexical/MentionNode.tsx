@@ -4,6 +4,43 @@ import { Box, Icon } from '@chakra-ui/react';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
 import type { ChatMentionData } from '@/lib/types';
 
+/**
+ * Get chip metadata (icon, colors) for a mention based on its type.
+ * Shared between MentionNode (editor) and MessageWithMentions (chat display).
+ */
+export function getMentionChipMetadata(
+  data: ChatMentionData,
+  colorMap: Record<string, string>,
+) {
+  if (data.type === 'table') {
+    return {
+      icon: TABLE_MENTION_METADATA.icon,
+      colors: getMentionColors(TABLE_MENTION_METADATA.color),
+    };
+  }
+
+  if (data.type === 'skill') {
+    return {
+      icon: null,
+      colors: getMentionColors(ACCENT_HEX.teal),
+    };
+  }
+
+  const fileMetadata = FILE_TYPE_METADATA[data.type as keyof typeof FILE_TYPE_METADATA];
+  if (fileMetadata) {
+    const hex = colorMap[fileMetadata.color] || ACCENT_HEX.muted;
+    return {
+      icon: fileMetadata.icon,
+      colors: getMentionColors(hex),
+    };
+  }
+
+  return {
+    icon: null,
+    colors: getMentionColors(ACCENT_HEX.muted),
+  };
+}
+
 export type SerializedMentionNode = Spread<
   {
     mentionData: MentionData;
@@ -49,11 +86,10 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
 
   decorate(): React.ReactElement {
     const data = this.__mentionData;
-    const displayText = data.type === 'table'
-      ? `${data.schema}.${data.name}`
-      : data.name;
+    const displayText = data.name;
+    const metaText = data.type === 'table' ? data.schema : undefined;
+    const isSkill = data.type === 'skill';
 
-    // Map semantic token to hex value
     const colorMap: Record<string, string> = {
       'accent.primary': ACCENT_HEX.primary,
       'accent.danger': ACCENT_HEX.danger,
@@ -66,78 +102,38 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
       'accent.muted': ACCENT_HEX.muted,
     };
 
-    // Get metadata based on mention type
-    const getMentionMetadata = () => {
-      if (data.type === 'table') {
-        return {
-          label: TABLE_MENTION_METADATA.label,
-          icon: TABLE_MENTION_METADATA.icon,
-          colors: getMentionColors(TABLE_MENTION_METADATA.color),
-        };
-      }
+    const metadata = getMentionChipMetadata(data, colorMap);
 
-      if (data.type === 'skill') {
-        return {
-          label: data.source === 'user' ? 'USER' : 'SYS',
-          icon: null,
-          colors: getMentionColors(ACCENT_HEX.cyan),
-        };
-      }
-
-      // Type assertion since we know 'question' and 'dashboard' are valid keys
-      const fileMetadata = FILE_TYPE_METADATA[data.type as keyof typeof FILE_TYPE_METADATA];
-      if (fileMetadata) {
-        const hex = colorMap[fileMetadata.color] || ACCENT_HEX.muted;
-        return {
-          label: fileMetadata.label.charAt(0).toUpperCase(),
-          icon: fileMetadata.icon,
-          colors: getMentionColors(hex),
-        };
-      }
-
-      // Fallback
-      return {
-        label: '?',
-        icon: null,
-        colors: getMentionColors(ACCENT_HEX.muted),
-      };
-    };
-
-    const metadata = getMentionMetadata();
+    // Map mention type to Chakra semantic color token for the icon
+    const iconColorToken = isSkill ? 'accent.teal'
+      : data.type === 'table' ? 'accent.cyan'
+      : data.type === 'question' ? 'accent.primary'
+      : data.type === 'dashboard' ? 'accent.danger'
+      : 'fg.muted';
 
     return (
       <Box
         as="span"
-        display="inline-flex"
-        alignItems="center"
-        px={1.5}
-        py={0.5}
-        mx={0.5}
-        bg={metadata.colors.bg}
-        color={metadata.colors.color}
+        display="inline"
+        px="4px"
+        py="2px"
+        mx="1px"
+        bg="bg.muted"
         borderRadius="sm"
-        fontSize="sm"
+        fontSize="0.85em"
+        fontFamily="mono"
+        lineHeight="inherit"
+        color="fg.default"
         fontWeight="600"
-        border="1px solid"
-        borderColor={metadata.colors.border}
+        whiteSpace="nowrap"
       >
-        <Box
-          as="span"
-          display="inline-flex"
-          alignItems="center"
-          px={1}
-          py={0.5}
-          bg={metadata.colors.labelBg}
-          color="white"
-          borderRadius="sm"
-          fontSize="2xs"
-          fontWeight="700"
-          mr={1}
-          gap={0.5}
-        >
-          {metadata.icon && <Icon as={metadata.icon} boxSize={2.5} />}
-          {metadata.label}
+        <Box as="span" color={iconColorToken}>
+          {isSkill ? '/' : metadata.icon ? <Icon as={metadata.icon} boxSize="0.85em" verticalAlign="-0.1em" /> : null}
         </Box>
+        {' '}
+        {metaText && (
+          <Box as="span" color="fg.muted" fontWeight="500">{metaText}.</Box>
+        )}
         {displayText}
       </Box>
     );
