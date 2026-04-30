@@ -336,24 +336,31 @@ class AnalystAgent(Agent):
             # context even longer and leave the thread ending with a bare
             # assistant message, which the Anthropic API rejects.
             if finish_reason in ("stop", "length"):
-                response = {"success": True}
-                if content_blocks:
-                    response["content_blocks"] = content_blocks
-                if content:
-                    response["content"] = content
-                    response["citations"] = citations
-                elif finish_reason == "length":
-                    response["content"] = "Response truncated due to context length."
-                return response
+                blocks = list(content_blocks) if content_blocks else []
+                if not any(b.get("type") == "text" for b in blocks):
+                    fallback = content or (
+                        "Response truncated due to context length."
+                        if finish_reason == "length"
+                        else "Agent has ended the chat"
+                    )
+                    blocks.append({"type": "text", "text": fallback})
+                return {
+                    "success": True,
+                    "content_blocks": blocks,
+                    "content": content,
+                    "citations": citations,
+                }
 
             # Convert tool calls to AgentCalls and dispatch
             if agent_calls:
                 await self.dispatch(agent_calls)
 
         # Hit max iterations
+        msg = f"Maximum iterations ({MAX_STEPS_LOWER_LEVEL}) reached. Please try a simpler query."
         return {
             "success": False,
-            "content": f"Maximum iterations ({MAX_STEPS_LOWER_LEVEL}) reached. Please try a simpler query."
+            "content": msg,
+            "content_blocks": [{"type": "text", "text": msg}],
         }
 
 
