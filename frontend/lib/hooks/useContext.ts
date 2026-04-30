@@ -1,22 +1,40 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { useFile } from './file-state-hooks';
 import { useConnections } from './useConnections';
-import { ContextContent, ContextInfo } from '@/lib/types';
+import { ContextContent, ContextInfo, SkillMention } from '@/lib/types';
 import { getWhitelistedSchemaForUser, getDocumentationForUser, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
-import { getPublishedVersion } from '@/lib/context/context-utils';
+import { getPublishedVersion, mergeSkillsByName } from '@/lib/context/context-utils';
 
-function mergeSkillsByName(...skillGroups: NonNullable<ContextContent['skills']>[]): NonNullable<ContextContent['skills']> {
-  const byName = new Map<string, NonNullable<ContextContent['skills']>[number]>();
-  for (const skills of skillGroups) {
-    for (const skill of skills) {
-      if (!skill.name) continue;
-      byName.delete(skill.name);
-      byName.set(skill.name, skill);
-    }
+let cachedSystemSkills: SkillMention[] | null = null;
+let systemSkillsRequest: Promise<SkillMention[]> | null = null;
+
+function loadSystemSkills(): Promise<SkillMention[]> {
+  if (cachedSystemSkills) {
+    return Promise.resolve(cachedSystemSkills);
   }
-  return [...byName.values()];
+  if (!systemSkillsRequest) {
+    systemSkillsRequest = fetch('/api/skills/system')
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        const skills: SkillMention[] = json?.success && Array.isArray(json.data)
+          ? json.data.map((skill: { name: string; description?: string }) => ({
+              type: 'skill' as const,
+              source: 'system' as const,
+              name: skill.name,
+              description: skill.description,
+            }))
+          : [];
+        cachedSystemSkills = skills;
+        return skills;
+      })
+      .catch(() => {
+        cachedSystemSkills = [];
+        return [];
+      });
+  }
+  return systemSkillsRequest;
 }
 
 /**
@@ -50,6 +68,20 @@ function mergeSkillsByName(...skillGroups: NonNullable<ContextContent['skills']>
  * ```
  */
 export function useContext(path: string, version?: number, isFolderScope?: boolean): ContextInfo {
+  const [systemSkills, setSystemSkills] = useState<SkillMention[]>(cachedSystemSkills || []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadSystemSkills().then(skills => {
+      if (!cancelled) {
+        setSystemSkills(skills);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 1. Find context file for this path (selector finds nearest ancestor)
   const contextFile = useAppSelector(state => selectContextFromPath(state, path));
 
@@ -68,6 +100,18 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
   // 5. Derive context info (domain logic)
   const contextInfo = useMemo((): ContextInfo => {
     const contextContent = loadedContext?.content as ContextContent | undefined;
+    const toAvailableSkills = (skills: NonNullable<ContextContent['skills']>): SkillMention[] => [
+      ...skills
+        .filter(skill => skill.enabled)
+        .map(skill => ({
+          type: 'skill' as const,
+          source: 'user' as const,
+          name: skill.name,
+          description: skill.description,
+          content: skill.content,
+        })),
+      ...systemSkills,
+    ];
 
     // If context exists and is loaded, filter by version
     if (contextContent && loadedContext && currentUser) {
@@ -109,6 +153,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
             databases,
             documentation,
             skills,
+            availableSkills: toAvailableSkills(skills),
             hasContext: true,
             contextLoading: contextLoading
           };
@@ -131,6 +176,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
         databases,
         documentation,
         skills,
+        availableSkills: toAvailableSkills(skills),
         hasContext: true,
         contextLoading: contextLoading
       };
@@ -150,10 +196,11 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       databases,
       documentation: undefined,
       skills: [],
+      availableSkills: systemSkills,
       hasContext: false,
       contextLoading: contextLoading || connectionsLoading
     };
-  }, [loadedContext, connectionsMap, contextLoading, connectionsLoading, currentUser, version, path, isFolderScope, contextFile]);
+  }, [loadedContext, connectionsMap, contextLoading, connectionsLoading, currentUser, version, path, isFolderScope, contextFile, systemSkills]);
 
   return contextInfo;
 }

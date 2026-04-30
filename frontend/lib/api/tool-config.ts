@@ -192,6 +192,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 
     timelineVerb: 'Loading',
   },
+  'LoadSkillFrontend': {
+    displayComponent: null,
+
+    chipLabel: 'skill load',
+    chipLabelPlural: 'skill loads',
+    chipIcon: LuBookMarked,
+
+    timelineVerb: 'Loading',
+  },
   'WebSearch': {
     displayComponent: null,
 
@@ -216,4 +225,3 @@ export const DEFAULT_TOOL_CONFIG: ToolConfig = {
 export function getToolConfig(toolName: string): ToolConfig {
   return TOOL_CONFIGS[toolName] || DEFAULT_TOOL_CONFIG;
 }
-

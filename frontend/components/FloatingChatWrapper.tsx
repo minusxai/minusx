@@ -8,7 +8,7 @@ import { setActiveConversation } from '@/store/chatSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import ChatInput from './explore/ChatInput';
-import { Attachment } from '@/lib/types';
+import type { Attachment } from '@/lib/types';
 
 // Sidebar width constants (must match Sidebar.tsx)
 const SIDEBAR_WIDTH_EXPANDED = '260px';
@@ -91,6 +91,7 @@ export default function FloatingChatWrapper({
         selectedContextPath={effectiveContextPath}
         selectedVersion={contextVersion}
         onContextChange={onContextChange}
+        availableSkills={contextInfo.availableSkills}
       />
     </Box>
   );
