@@ -879,9 +879,9 @@ export default function ChatInterface({
 
           {/* Warning Display (backend-signalled warnings e.g. context_length, max_iterations) */}
           {warningType && (() => {
-            const WARNING_CONFIG: Record<string, { msg: string; cta: string }> = {
-              context_length: { msg: 'The output was too long. Do you want to continue?', cta: 'Continue' },
-              max_iterations: { msg: 'Maximum steps reached. Please try a simpler request.', cta: 'Try again' },
+            const WARNING_CONFIG: Record<string, { msg: string; label: string; cta: string }> = {
+              context_length: { msg: 'The output was too long. Do you want to continue?', label: 'Continue', cta: 'Continue with the previous request. Break the previous request down and proceed part by part and not all at once' },
+              max_iterations: { msg: 'Maximum steps reached. Please try a simpler request.', label: 'Try again', cta: 'Try again' },
             };
             const cfg = WARNING_CONFIG[warningType];
             if (!cfg) return null;
@@ -891,9 +891,9 @@ export default function ChatInterface({
                   <Box p={3} bg="accent.warning/10" borderLeft="3px solid" borderColor="accent.warning" borderRadius="md">
                     <Text color="accent.warning" fontSize="sm" fontFamily="mono">{cfg.msg}</Text>
                     {conversationID && (
-                      <Button mt={2} size="xs" variant="outline" colorPalette="yellow" aria-label={cfg.cta}
+                      <Button mt={2} size="xs" variant="outline" colorPalette="yellow" aria-label={cfg.label}
                         onClick={() => dispatch(sendMessage({ conversationID, message: cfg.cta }))}>
-                        {cfg.cta}
+                        {cfg.label}
                       </Button>
                     )}
                   </Box>
