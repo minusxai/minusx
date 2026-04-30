@@ -488,9 +488,12 @@ describe('Phase 1: Unified File System API E2E', () => {
         vizSettings: { type: 'line', xCols: ['id'], yCols: ['name'] }
       };
 
+      // Build oldMatch from normalized Redux state (post-dbFileToFileState), not raw DB object,
+      // mirroring how the LLM builds oldMatch from ReadFiles/AppState output.
+      const normalizedContent = (store.getState() as any).files.files[questionId].content;
       await editFileStr({
         fileId: questionId,
-        oldMatch: `"content":${JSON.stringify(questionFile?.content)}`,
+        oldMatch: `"content":${JSON.stringify(normalizedContent)}`,
         newMatch: `"content":${JSON.stringify(editedContent)}`
       });
 
