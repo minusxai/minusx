@@ -308,7 +308,7 @@ export const ACCENT_HEX = {
 export const TABLE_MENTION_METADATA = {
   label: 'TABLE',
   icon: LuTable,
-  color: ACCENT_HEX.muted,
+  color: ACCENT_HEX.cyan,
 };
 
 /**
@@ -317,9 +317,9 @@ export const TABLE_MENTION_METADATA = {
  */
 export function getMentionColors(hex: string) {
   return {
-    bg: `color-mix(in srgb, ${hex} 20%, transparent)`,
+    bg: `color-mix(in srgb, ${hex} 15%, transparent)`,
     color: hex,
-    border: `color-mix(in srgb, ${hex} 30%, transparent)`,
+    border: `color-mix(in srgb, ${hex} 25%, transparent)`,
     labelBg: hex,
   };
 }
