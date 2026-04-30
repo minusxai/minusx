@@ -198,7 +198,17 @@ export default function PathPage({ params }: PathPageProps) {
 
           />
         </Box>
-        {showChat && <FloatingChatWrapper />}
+        {showChat && (
+          <FloatingChatWrapper
+            filePath={fullPath}
+            selectedContextPath={effectiveContextPath}
+            contextVersion={selectedVersion}
+            onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
+              setSelectedVersion(version);
+              setSelectedContextPath(_path);
+            } : undefined}
+          />
+        )}
       </VStack>
 
       {shouldShowSidebar && (

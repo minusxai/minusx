@@ -152,11 +152,12 @@ function SectionContent({
         <Box height="100%" overflow="hidden">
           <ChatInterface
             conversationId={conversationID}
-            contextPath={filePath}
+            contextPath={selectedContextPath || filePath}
             contextVersion={contextVersion}
             databaseName={null}
             appState={appState}
             container="sidebar"
+            onContextChange={onContextChange}
           />
         </Box>
       );

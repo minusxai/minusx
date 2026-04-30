@@ -18,11 +18,17 @@ const RIGHTSIDEBAR_WIDTH_COLLAPSED = '49px';
 interface FloatingChatWrapperProps {
   filePath?: string;
   databaseName?: string;
+  selectedContextPath?: string | null;
+  contextVersion?: number;
+  onContextChange?: (path: string | null, version?: number) => void;
 }
 
 export default function FloatingChatWrapper({
   filePath,
   databaseName: propDatabaseName,
+  selectedContextPath,
+  contextVersion,
+  onContextChange,
 }: FloatingChatWrapperProps) {
   const [isFocused, setIsFocused] = useState(false);
   const dispatch = useAppDispatch();
@@ -30,8 +36,9 @@ export default function FloatingChatWrapper({
   const rightSidebarCollapsed = useAppSelector(state => state.ui.rightSidebarCollapsed);
   const rightSidebarWidth = useAppSelector(state => state.ui.rightSidebarWidth);
 
-  // Load context databases
-  const contextInfo = useContext(filePath || '/');
+  // Load context databases using the shared context path from the parent
+  const effectiveContextPath = selectedContextPath || filePath || '/';
+  const contextInfo = useContext(effectiveContextPath, contextVersion);
   const defaultDatabase = selectDatabase(contextInfo.databases, propDatabaseName);
   const [localDatabase, setLocalDatabase] = useState<string | null>(null);
   const databaseName = localDatabase ?? defaultDatabase;
@@ -81,6 +88,9 @@ export default function FloatingChatWrapper({
         container="floating"
         isCompact={true}
         whitelistedSchemas={contextInfo.databases}
+        selectedContextPath={effectiveContextPath}
+        selectedVersion={contextVersion}
+        onContextChange={onContextChange}
       />
     </Box>
   );
