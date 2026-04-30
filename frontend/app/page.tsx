@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, Flex, Heading, HStack, Text, Icon } from '@chakra-ui/react';
 import Link from 'next/link';
 import { useAppSelector } from '@/store/hooks';
 import { selectHomePage } from '@/store/uiSlice';
+import { selectContextFromPath } from '@/store/filesSlice';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { isAdmin } from '@/lib/auth/role-helpers';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/RecentFilesSection';
@@ -14,7 +16,6 @@ import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
-import { useState } from 'react';
 import { LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 
@@ -178,6 +179,8 @@ export default function Home() {
   }, [user, router, config, configLoading]);
 
   const [isMobile, setIsMobile] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
+  const [selectedContextPath, setSelectedContextPath] = useState<string | null>(null);
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -185,10 +188,13 @@ export default function Home() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   const homePage = useAppSelector(selectHomePage);
+  const homePath = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '';
+  const nearestContext = useAppSelector(state => selectContextFromPath(state, homePath));
+  const effectiveContextPath = selectedContextPath || nearestContext?.path || null;
+  const shouldShowContextSelector = user ? isAdmin(user.role) : false;
 
   if (!user || configLoading) return null;
 
-  const homePath = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const mode = user.mode || 'org';
   const breadcrumbItems = [{ label: 'Home' }];
   const rightColEmpty = !homePage.showRecentDashboards && !homePage.showRecentConversations;
@@ -265,18 +271,38 @@ export default function Home() {
             </VStack>
           </Flex>
         </Box>
-        <FloatingChatWrapper />
+        <FloatingChatWrapper
+          filePath={homePath}
+          selectedContextPath={effectiveContextPath}
+          contextVersion={selectedVersion}
+          onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
+            setSelectedVersion(version);
+            setSelectedContextPath(_path);
+          } : undefined}
+        />
       </VStack>
       {isMobile === false && (
         <RightSidebar
           filePath={homePath}
           showChat={true}
+          contextVersion={selectedVersion}
+          selectedContextPath={effectiveContextPath}
+          onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
+            setSelectedVersion(version);
+            setSelectedContextPath(_path);
+          } : undefined}
         />
       )}
       {isMobile === true && (
         <MobileRightSidebar
           filePath={homePath}
           showChat={true}
+          contextVersion={selectedVersion}
+          selectedContextPath={effectiveContextPath}
+          onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
+            setSelectedVersion(version);
+            setSelectedContextPath(_path);
+          } : undefined}
         />
       )}
     </Box>

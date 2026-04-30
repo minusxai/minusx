@@ -48,7 +48,7 @@ function CompactSelector({
 
   const itemName = loading ? 'Loading...'
     : options.length === 0 ? (emptyMessage || 'Not available')
-    : selectedOption?.label || options[0]?.label || placeholder || 'Select...';
+    : selectedOption?.label || placeholder || 'Select...';
   const displayLabel = compactLabel ? `${compactLabel}: ${itemName}` : itemName;
 
   const isConnected = !loading && options.length > 0;

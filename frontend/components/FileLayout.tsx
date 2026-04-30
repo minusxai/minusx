@@ -136,7 +136,13 @@ export default function FileLayout(props: FileLayoutProps) {
             overlay's z-index:50 in this shared stacking context. */}
         {/* Floating search bar — shown on pages with right sidebar chat */}
         {shouldShowFloatingChat && rightSidebar && rightSidebar.showChat && (
-          <FloatingChatWrapper filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
+          <FloatingChatWrapper
+            filePath={rightSidebar.filePath}
+            databaseName={appStateDatabaseName}
+            selectedContextPath={rightSidebar.selectedContextPath}
+            contextVersion={rightSidebar.contextVersion}
+            onContextChange={rightSidebar.onContextChange}
+          />
         )}
 
         {/* Content stack — absolute overlay, clipped to this VStack */}

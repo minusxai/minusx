@@ -305,11 +305,12 @@ export default function MobileRightSidebar({
                 <Box height="calc(75vh - 60px)" overflow="hidden">
                   <ChatInterface
                     conversationId={conversationID}
-                    contextPath={filePath}
+                    contextPath={selectedContextPath || filePath}
                     contextVersion={contextVersion}
                     databaseName={null}  // Auto-select from context
                     appState={appState || null}
                     container="sidebar"
+                    onContextChange={onContextChange}
                   />
                 </Box>
               )}

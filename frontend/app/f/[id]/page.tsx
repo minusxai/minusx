@@ -31,6 +31,7 @@ export default function FilePage({ params }: FilePageProps) {
   // ALL HOOKS MUST BE BEFORE EARLY RETURNS
   const filesState = useAppSelector(state => state.files.files);
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
+  const [selectedContextPath, setSelectedContextPath] = useState<string | null>(null);
 
   // Compute context while handling file being undefined (before early returns)
   const currentContext = useMemo(() => {
@@ -93,6 +94,7 @@ export default function FilePage({ params }: FilePageProps) {
   const shouldShowContextSelector = user?.role === 'admin';
 
   // Right sidebar config
+  const effectiveContextPath = selectedContextPath || currentContext?.path || null;
   const rightSidebar = {
     showChat: true,
     filePath: file.path,  // Use file's actual path so selector can find covering context
@@ -100,9 +102,10 @@ export default function FilePage({ params }: FilePageProps) {
     fileId: file.id,
     fileType: file.type,
     contextVersion: selectedVersion,  // Pass selected context version for admin testing
-    selectedContextPath: currentContext?.path || null,
-    onContextChange: shouldShowContextSelector && file.type === 'context' ? (_path: string | null, version?: number) => {
+    selectedContextPath: effectiveContextPath,
+    onContextChange: shouldShowContextSelector ? (_path: string | null, version?: number) => {
       setSelectedVersion(version);
+      setSelectedContextPath(_path);
     } : undefined
   };
 
