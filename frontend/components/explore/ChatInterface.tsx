@@ -10,7 +10,7 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -376,6 +376,15 @@ export default function ChatInterface({
       return false;
     });
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
+
+  // Check if conversation has exceeded the token limit
+  const TOKEN_LIMIT = 250_000;
+  const tokenLimitExceeded = useMemo(() => {
+    if (!conversation?.messages) return false;
+    const lastDebug = [...conversation.messages].reverse().find(m => m.role === 'debug') as DebugMessage | undefined;
+    if (!lastDebug?.llmDebug?.length) return false;
+    return lastDebug.llmDebug.some((llm: { total_tokens: number }) => llm.total_tokens > TOKEN_LIMIT);
+  }, [conversation?.messages]);
 
   // Get error from conversation or use local state for client-side errors
   const [localError, setLocalError] = useState<LoadError | null>(null);
@@ -1065,6 +1074,12 @@ export default function ChatInterface({
             </Grid>
           )}
 
+{tokenLimitExceeded && !isAgentRunning && !isStreaming ? (
+            <HStack justify="center" py={2} px={4} gap={3} borderTop="1px solid" borderColor="border.muted" fontFamily="mono">
+              <Text fontSize="xs"><Text as="span" fontWeight="semibold">Conversation too long.</Text>{' '}<Text as="span" color="fg.muted">Long conversations degrade agent performance. Please start a new chat.</Text></Text>
+              <Button size="xs" bg="accent.teal" color="white" fontFamily="mono" _hover={{ bg: 'accent.teal', opacity: 0.9 }} onClick={handleNewChat} flexShrink={0}><Icon as={LuPlus} boxSize={4} mr={1} />New Chat</Button>
+            </HStack>
+          ) : (
 <Box width="100%">
             <ChatInput
               onSend={handleSendMessage}
@@ -1090,6 +1105,7 @@ export default function ChatInterface({
                 : undefined}
             />
           </Box>
+          )}
         </Box>
       )}
     </VStack>

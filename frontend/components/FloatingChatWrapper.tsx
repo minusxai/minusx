@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { Box, Portal } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
+import { setActiveConversation } from '@/store/chatSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import ChatInput from './explore/ChatInput';
@@ -44,6 +45,7 @@ export default function FloatingChatWrapper({
 
   const handleSend = useCallback((message: string, _attachments: Attachment[]) => {
     if (!message.trim()) return;
+    dispatch(setActiveConversation(null));
     dispatch(setSidebarPendingMessage(message.trim()));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
