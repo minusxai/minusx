@@ -6,6 +6,7 @@ import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { dbFileToFileState } from '@/lib/api/compress-augmented';
+import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 // System file types that save in-place and are excluded from bulk Publish.
@@ -349,7 +350,7 @@ const filesSlice = createSlice({
           ...edits
         };
 
-        state.files[fileId].persistableChanges = newPersistableChanges;
+        state.files[fileId].persistableChanges = sortObjectKeysDeep(newPersistableChanges) as any;
       }
     },
 
@@ -362,7 +363,7 @@ const filesSlice = createSlice({
       if (state.files[fileId]) {
         // Store the full new content as persistableChanges
         // On save, this replaces file.content entirely
-        state.files[fileId].persistableChanges = content;
+        state.files[fileId].persistableChanges = sortObjectKeysDeep(content) as any;
       }
     },
 

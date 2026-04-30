@@ -577,9 +577,9 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      // PGLite JSONB: single-char keys (h,w,x,y) before two-char (id) → "h":4,"w":6 is consecutive
-      oldMatch: '"h":4,"w":6',
-      newMatch: '"h":6,"w":4',
+      // Canonical alphabetical key order (h < id < w < x < y) after sortObjectKeysDeep normalisation
+      oldMatch: '"h":4,"id":99,"w":6,"x":0,"y":0',
+      newMatch: '"h":6,"id":99,"w":4,"x":0,"y":0',
     });
     expect(result.success).toBe(true);
   });

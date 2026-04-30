@@ -34,6 +34,18 @@ export function encodeFileStr(obj: unknown): string {
   return JSON.stringify(obj);
 }
 
+/** Recursively sort all object keys alphabetically, normalising key order across all write paths. */
+export function sortObjectKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortObjectKeysDeep);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value as object).sort()
+        .map(k => [k, sortObjectKeysDeep((value as Record<string, unknown>)[k])])
+    );
+  }
+  return value;
+}
+
 export function decodeFileStr(str: string): unknown {
   // In compact JSON (no formatting whitespace between tokens), raw control
   // characters only appear inside string values — safe to escape them globally
