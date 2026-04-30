@@ -1,6 +1,6 @@
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
-import { withMinusXTheme } from './echarts-theme'
+import { withMinusXTheme, getChartFontFamily } from './echarts-theme'
 import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
@@ -938,7 +938,7 @@ export const buildRadarChartOption = ({
       axisName: {
         color: isDark ? '#a0aec0' : '#4a5568',
         fontSize: 11,
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: getChartFontFamily(),
       },
       axisLabel: {
         show: false,
@@ -1179,7 +1179,7 @@ export const buildAnnotationGraphics = ({
           y: top + 7,
           text: lines.join('\n'),
           fill: labelText,
-          font: '11px JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+          font: `11px ${getChartFontFamily()}`,
           lineHeight: 14,
           width: width - 16,
           overflow: 'break',
