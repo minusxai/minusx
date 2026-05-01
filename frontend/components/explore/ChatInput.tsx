@@ -110,6 +110,14 @@ export default function ChatInput({
     }
     prevIsPreparingRef.current = isPreparing;
   }, [isPreparing, dispatch]);
+  // Refocus input when agent finishes so user can keep chatting without clicking
+  const prevIsAgentRunningRef = useRef(isAgentRunning);
+  useEffect(() => {
+    if (prevIsAgentRunningRef.current && !isAgentRunning) {
+      editorRef.current?.focus();
+    }
+    prevIsAgentRunningRef.current = isAgentRunning;
+  }, [isAgentRunning]);
   // Handle prefill text (e.g., from queued messages after stop)
   useEffect(() => {
     if (prefillText) {
