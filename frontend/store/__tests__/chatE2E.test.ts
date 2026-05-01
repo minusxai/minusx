@@ -1057,7 +1057,11 @@ describe('LLM-Mocked Agent Suites', () => {
         }
         const hasMsg1 = messages.some((m: any) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('Q3'));
         if (!hasMsg1) throw new Error('Turn 1 user message (Q3) not found in history for Turn 3 LLM call');
-        const hasResponse1 = messages.some((m: any) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('$4.2M'));
+        const hasResponse1 = messages.some((m: any) => {
+          if (m.role !== 'assistant') return false;
+          const text = Array.isArray(m.content) ? m.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : typeof m.content === 'string' ? m.content : '';
+          return text.includes('$4.2M');
+        });
         if (!hasResponse1) throw new Error('Turn 1 assistant response ($4.2M) not found in history for Turn 3 LLM call');
         const hasMsg3 = messages.some((m: any) => {
           if (m.role !== 'user') return false;
