@@ -199,7 +199,7 @@ templates:
   skill_questions:
     description: "Question file structure (query, vizSettings, parameters, references), question page behavior guidelines"
     content: |
-      ## Skill: Questions
+      ## Instructions: Questions
 
       ### File Structure
       ```json
@@ -224,7 +224,7 @@ templates:
   skill_dashboards:
     description: "Dashboard file structure (assets, 12-column grid layout, inline elements), dashboard page behavior guidelines"
     content: |
-      ## Skill: Dashboards
+      ## Instructions: Dashboards
 
       ### File Structure
       ```json
@@ -260,7 +260,7 @@ templates:
   skill_contexts:
     description: "Context file structure (versions, docs, databases), context page behavior guidelines — editing docs only"
     content: |
-      ## Skill: Contexts
+      ## Instructions: Contexts
 
       ### File Structure
       ```json
@@ -297,7 +297,7 @@ templates:
   skill_reports:
     description: "Dealing with report files — file structure (schedule, references, synthesis instructions, recipients), report page behavior guidelines"
     content: |
-      ## Skill: Reports
+      ## Instructions: Reports
 
       ### File Structure
       ```json
@@ -317,7 +317,7 @@ templates:
   skill_alerts:
     description: "Dealing with alert files — file structure (conditions, schedules, recipients), alert page behavior guidelines"
     content: |
-      ## Skill: Alerts
+      ## Instructions: Alerts
 
       ### File Structure
       ```json
@@ -344,7 +344,7 @@ templates:
   skill_parameters:
     description: "Parameter syntax (:paramName), types, sources (dropdown from query), dashboard parameter merging, EditFile ordering. Basic parameter usage is covered in the questions skill, but Load this skill for complex parameter scenarios, dashboard parameters, and source-driven dropdowns."
     content: |
-      ## Skill: Parameters
+      ## Instructions: Parameters
 
       ### Question Parameters
       - Syntax: `:paramName` in SQL (e.g., `WHERE date > :start_date AND status = :status`)
@@ -386,7 +386,7 @@ templates:
   skill_visualizations:
     description: "VizSettings types (line, bar, area, scatter, funnel, pie, radar, pivot, geo), xCols/yCols config, pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
     content: |
-      ## Skill: Visualizations
+      ## Instructions: Visualizations
 
       **VizSettings types**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`
 
@@ -469,7 +469,7 @@ templates:
   skill_composed_questions:
     description: "Composed Questions (Question References) — @alias syntax for referencing other questions as CTEs in SQL. Read this skill for guidelines on how to use question references in your SQL queries, or if the SQL you are looking at contains question references(@alias)"
     content: |
-      ## Skill: Composed Questions
+      ## Instructions: Composed Questions
 
       - Questions can reference other questions as composable building blocks using the @alias syntax
       - Referenced questions become CTEs (Common Table Expressions) at execution time
@@ -486,7 +486,7 @@ templates:
   skill_app_guide:
     description: "App guide — pages, navigation, settings, and how-to for common tasks. Load when users ask 'how do I...', 'where can I find...', or need help using the app."
     content: |
-      ## Skill: App Guide
+      ## Instructions: App Guide
 
       When guiding users, prefer showing the in-app link directly. Only mention docs for complex multi-step tasks.
 
@@ -588,7 +588,7 @@ templates:
   skill_explore:
     description: "Explore/folder page behavior — when to use ExecuteQuery vs Navigate+EditFile, creating new files from explore"
     content: |
-      ## Skill: Explore / Folder Page
+      ## Instructions: Explore / Folder Page
 
       ### Behavior
       - ALWAYS prefer ExecuteQuery. NEVER call CreateFile or EditFile on the explore page unless the user explicitly asks you to.
@@ -600,7 +600,7 @@ templates:
   skill_navigation_restricted:
     description: "Navigation and background file creation rules (restricted mode — require navigation before creating/editing)"
     content: |
-      ## Navigation & Background File Rules
+      ## Instructions: Navigation & Background File Rules
 
       ### Question Page
       - ONLY navigate to a different question if the user explicitly asks to go to that question
@@ -628,7 +628,7 @@ templates:
   skill_navigation_unrestricted:
     description: "Navigation and background file creation rules (unrestricted mode — freely create/edit in background)"
     content: |
-      ## Navigation & Background File Rules (Background Agent Mode)
+      ## Instructions: Navigation & Background File Rules (Background Agent Mode)
       Background agent mode is enabled. You can freely CreateFile and EditFile for any file type in the background without navigating to the target page first. Navigation is still available but not required.
 
       ### Explore / Folder Page
@@ -636,6 +636,24 @@ templates:
         - "show me...", "what's the...", "tell me how many..." → ExecuteQuery.
         - "Add a question to the dashboard that shows..." → CreateFile + EditFile in the background, or Navigate + EditFile
         - "Create a question/dashboard that shows...", "Create a new alert" → CreateFile in the background, or Navigate + EditFile
+
+  skill_large_file:
+    description: "Large file handling — make small targeted edits to avoid context and output limits"
+    content: |
+      ## Instructions: Large File Handling
+
+      Reason for these instructions: 
+      The current AppState you are working with is very large (>50k tokens). 3 issues can occur:
+        - You can exceed context limit
+        - You can exceed output limit
+        - Edits are more likely to fail, and you are more likely to get derailed
+          
+      To avoid hitting them:
+      1. **Make small, targeted edits** — never rewrite the entire file content. Use EditFile with only the fields you need to change.
+      2. **Avoid echoing back large content** — don't repeat the full file content in your responses or tool calls.
+      3. **Break complex changes into steps** — if multiple changes are needed, do them one at a time.
+      
+      MANDATORY FIRST STEP — DO THIS BEFORE ANY TOOL CALL: Send a prominent message to the user, nicely formatted, informing them about the large file, and that you will make small, targeted changes. Do NOT call any tool until after sending this message. This is non-negotiable.
 
   guidelines: |
     ## Guidelines
@@ -707,10 +725,9 @@ prompts:
       {file_state_schema}
 
       {guidelines}
-
-      ## Preloaded Skills
-      The following skills are preloaded based on your current page. For other file types or advanced features, use `LoadSkill`.
-
+      
+      ## Important Page/App State specific instructions
+      The following instructions are specifically crafted for your current page and app state. Follow them strictly — they are not optional.
       {preloaded_skills}
 
       {connection_section}

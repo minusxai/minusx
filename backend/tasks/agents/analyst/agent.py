@@ -208,7 +208,7 @@ class AnalystAgent(Agent):
             content = skill.get('content')
             if content:
                 name = skill.get('name') or 'user_skill'
-                sections.append(f"## User Skill: {name}\n{content}")
+                sections.append(f"## Instructions: {name} (user-defined)\n{content}")
         return "\n\n".join(sections)
 
     def _get_prompt_args(self) -> tuple[str, dict]:

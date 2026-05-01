@@ -652,6 +652,13 @@ export default function ChatInterface({
         content: skill.content || '',
       };
     });
+    // Auto-inject large_file skill when app state is very large
+    const LARGE_APP_STATE_THRESHOLD = 200_000; // characters
+    const appStateSize = appState ? JSON.stringify(appState).length : 0;
+    if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
+      agentSelectedSkills.push({ type: 'system', name: 'large_file' });
+    }
+
     const uniqueUserCatalog: AgentUserSkillCatalogItem[] = uniqueSkills(chatSkills)
       .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
       .filter(skill => !selectedUserNames.has(skill.name))
