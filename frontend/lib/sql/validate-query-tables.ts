@@ -100,25 +100,24 @@ export async function validateQueryTables(
   return validateQueryTablesLocal(sql, whitelist);
 }
 
-/** Recursively collect CTE alias names from the AST */
+/** Recursively collect CTE alias names from the AST at all nesting levels */
 function collectCteNames(node: any, names: Set<string>): void {
   if (!node || typeof node !== 'object') return;
 
-  // Check for 'with' block containing ctes
-  if (node.with?.ctes) {
-    for (const cte of node.with.ctes) {
-      if (cte.alias?.name) {
-        names.add(cte.alias.name.toLowerCase());
-      }
-    }
+  if (Array.isArray(node)) {
+    for (const item of node) collectCteNames(item, names);
+    return;
   }
-  // Also check inside select.with
-  if (node.select?.with?.ctes) {
-    for (const cte of node.select.with.ctes) {
-      if (cte.alias?.name) {
-        names.add(cte.alias.name.toLowerCase());
-      }
-    }
+
+  // Collect aliases from any 'with' block at this node
+  for (const cte of node.with?.ctes ?? node.select?.with?.ctes ?? []) {
+    if (cte.alias?.name) names.add(cte.alias.name.toLowerCase());
+  }
+
+  // Recurse into all children so nested CTEs (e.g. inside subqueries) are found
+  for (const key of Object.keys(node)) {
+    const val = node[key];
+    if (val && typeof val === 'object') collectCteNames(val, names);
   }
 }
 
