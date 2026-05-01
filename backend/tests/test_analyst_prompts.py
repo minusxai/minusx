@@ -183,7 +183,7 @@ class TestUserDefinedSkills:
         preloaded = agent._build_preloaded_skills_content(list(DEFAULT_PRELOADED_SKILLS))
         catalog = agent._build_skills_catalog(set(DEFAULT_PRELOADED_SKILLS))
 
-        assert "## User Skill: cohort_analysis" in preloaded
+        assert "## Instructions: cohort_analysis (user-defined)" in preloaded
         assert "Always define retained users" in preloaded
         assert '"cohort_analysis"' not in catalog
         assert '"pricing_analysis"' in catalog
