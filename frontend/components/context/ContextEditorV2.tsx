@@ -98,19 +98,22 @@ const SkillEditorCard = memo(function SkillEditorCard({
   onDelete,
 }: SkillEditorCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const prevSkillRef = useRef({ name: skill.name, description: skill.description, content: skill.content });
   const [draft, setDraft] = useState({
     name: skill.name,
     description: skill.description,
     content: skill.content,
   });
 
-  useEffect(() => {
-    setDraft({
-      name: skill.name,
-      description: skill.description,
-      content: skill.content,
-    });
-  }, [skill.name, skill.description, skill.content]);
+  // Reset draft when skill prop changes externally (not from our own edits)
+  if (
+    prevSkillRef.current.name !== skill.name ||
+    prevSkillRef.current.description !== skill.description ||
+    prevSkillRef.current.content !== skill.content
+  ) {
+    prevSkillRef.current = { name: skill.name, description: skill.description, content: skill.content };
+    setDraft({ name: skill.name, description: skill.description, content: skill.content });
+  }
 
   useEffect(() => {
     if (
