@@ -25,6 +25,7 @@ import { selectUnrestrictedMode } from '@/store/uiSlice';
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import { uploadChartOrEmbed } from '@/lib/chart/chart-attachments';
+import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -582,6 +583,11 @@ registerFrontendTool('EditFile', async (args, _context) => {
     return qr;
   });
 
+  // Check viz constraint violations to feed back to the LLM
+  const vizWarning = fileState?.type === 'question'
+    ? getVizSettingsWarning((selectMergedContent(getStore().getState(), fileId) as any)?.vizSettings)
+    : null;
+
   const diff = diffs.join('\n');
   const content: Record<string, any> = {
     success: true,
@@ -589,6 +595,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
     references: deltaReferences,
     queryResults: deltaQueryResults,
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
+    ...(vizWarning ? { vizWarning } : {}),
   };
   // Image delta: only render chart when query result or vizSettings changed.
   const queryResultChanged = compressed.queryResults.some((qr: any) => {
@@ -758,7 +765,13 @@ registerFrontendTool('CreateFile', async (args, context) => {
     return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 
-  const result = { success: true, state: compressAugmentedFile(augmented) };
+  // Check viz constraint violations to feed back to the LLM
+  const vizWarning = file_type === 'question'
+    ? getVizSettingsWarning((selectMergedContent(getStore().getState(), draftId) as any)?.vizSettings)
+    : null;
+
+  const result: Record<string, any> = { success: true, state: compressAugmentedFile(augmented) };
+  if (vizWarning) result.vizWarning = vizWarning;
   const imageBlocks = await renderFileChartImageBlocks([augmented]);
   if (imageBlocks.length === 0) {
     return { content: result, details: { success: true } };

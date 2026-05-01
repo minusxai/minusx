@@ -30,7 +30,8 @@ export type VisualizationType =
   | "waterfall"
   | "combo"
   | "radar"
-  | "geo";
+  | "geo"
+  | "single_value";
 /**
  * list of column names in the x axis (for non-pivot chart types)
  */
