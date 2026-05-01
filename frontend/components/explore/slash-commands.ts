@@ -7,6 +7,7 @@ import { toaster } from '@/components/ui/toaster';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { interruptChat, setActiveConversation, selectActiveConversation, selectOptionalConversation } from '@/store/chatSlice';
 import { clearChatAttachments } from '@/store/uiSlice';
+import { selectFile, selectIsDirty } from '@/store/filesSlice';
 
 /**
  * Hook that clears the current chat: stops the agent, deactivates the conversation,
@@ -44,14 +45,18 @@ export function useSlashCommands({
 }) {
   const clearChat = useClearChat(container);
   const fileId = appState?.type === 'file' ? appState.state?.fileState?.id : null;
+  const isDirty = useAppSelector(state => fileId != null ? selectIsDirty(state, fileId) : false);
+  const isDraft = useAppSelector(state => fileId != null ? selectFile(state, fileId)?.draft === true : false);
 
   const availableCommands = useMemo((): SlashCommand[] => [
     { type: 'command', name: 'clear', label: '/clear', description: 'Start a new chat' },
     {
       type: 'command', name: 'save', label: '/save', description: 'Save current file',
-      ...(fileId == null ? { disabled: true, disabledReason: 'No file to save' } : {}),
+      ...(fileId == null ? { disabled: true, disabledReason: 'No file to save' } :
+          isDraft ? { disabled: true, disabledReason: 'Use the save button to name this file first' } :
+          !isDirty ? { disabled: true, disabledReason: 'No unsaved changes' } : {}),
     }
-  ], [fileId]);
+  ], [fileId, isDirty, isDraft]);
 
   const handleCommandExecute = useCallback((command: SlashCommand) => {
     switch (command.name) {

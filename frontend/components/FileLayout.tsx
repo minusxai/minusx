@@ -142,6 +142,7 @@ export default function FileLayout(props: FileLayoutProps) {
             selectedContextPath={rightSidebar.selectedContextPath}
             contextVersion={rightSidebar.contextVersion}
             onContextChange={rightSidebar.onContextChange}
+            appState={appState}
           />
         )}
 

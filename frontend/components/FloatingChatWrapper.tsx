@@ -9,6 +9,7 @@ import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './explor
 import { selectDatabase } from '@/lib/utils/database-selector';
 import ChatInput from './explore/ChatInput';
 import type { Attachment } from '@/lib/types';
+import type { AppState } from '@/lib/appState';
 
 // Sidebar width constants (must match Sidebar.tsx)
 const SIDEBAR_WIDTH_EXPANDED = '260px';
@@ -21,6 +22,7 @@ interface FloatingChatWrapperProps {
   selectedContextPath?: string | null;
   contextVersion?: number;
   onContextChange?: (path: string | null, version?: number) => void;
+  appState?: AppState | null;
 }
 
 export default function FloatingChatWrapper({
@@ -29,6 +31,7 @@ export default function FloatingChatWrapper({
   selectedContextPath,
   contextVersion,
   onContextChange,
+  appState,
 }: FloatingChatWrapperProps) {
   const [isFocused, setIsFocused] = useState(false);
   const dispatch = useAppDispatch();
@@ -51,7 +54,7 @@ export default function FloatingChatWrapper({
   const hideFloatingBar = !rightSidebarCollapsed;
 
   const clearChat = useClearChat();
-  const { availableCommands, handleCommandExecute } = useSlashCommands({});
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState });
   const handleSend = useCallback((message: string, _attachments: Attachment[]) => {
     if (!message.trim()) return;
     if (tryExecuteSlashCommand(message.trim(), availableCommands, handleCommandExecute)) return;
