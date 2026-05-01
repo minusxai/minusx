@@ -272,3 +272,42 @@ describe('Files Data Layer - getTemplate', () => {
     });
   });
 });
+
+describe('Files Data Layer - rename-only save', () => {
+  // Reuse the same DB path; initTestDatabase is idempotent when already initialised
+  beforeAll(async () => {
+    await initTestDatabase(TEST_DB_PATH);
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase(TEST_DB_PATH);
+  });
+
+  it('should persist a rename when content is unchanged between saves', async () => {
+    const content: QuestionContent = {
+      query: 'SELECT 1',
+      parameters: [],
+      references: [],
+      description: '',
+      vizSettings: { type: 'table' },
+      connection_name: 'test_db',
+      parameterValues: {},
+    };
+
+    // Create the file with original name under /org (seeded by initTestDatabase)
+    const id = await DocumentDB.create('Original Name', '/org/rename-test-original', 'question', content, []);
+
+    // First save — establishes last_edit_id (no explicit editId → falls back to hashContent)
+    const first = await FilesAPI.saveFile(id, 'Original Name', '/org/rename-test-original', content, [], testUser);
+    expect(first.data.name).toBe('Original Name');
+
+    // Second save — name-only change, content identical
+    // Bug: hashContent({id, content}) is the same as before → alreadyApplied → name NOT updated
+    const second = await FilesAPI.saveFile(id, 'New Name', '/org/rename-test-original', content, [], testUser);
+    expect(second.data.name).toBe('New Name');
+
+    // Confirm it actually persisted to the DB
+    const fromDb = await DocumentDB.getById(id);
+    expect(fromDb?.name).toBe('New Name');
+  });
+});

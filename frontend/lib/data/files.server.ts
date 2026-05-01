@@ -558,7 +558,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Phase 6: Server is dumb - just saves what client sends (no extraction)
-    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, editId ?? hashContent({ id, content: contentToSave }), expectedVersion);
+    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, editId ?? hashContent({ id, name, path, content: contentToSave }), expectedVersion);
 
     if ('alreadyApplied' in updateResult && updateResult.alreadyApplied) {
       // Already applied — return the current file as success
