@@ -128,7 +128,7 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
         whiteSpace="nowrap"
       >
         <Box as="span" color={iconColorToken}>
-          {isSkill ? '/' : metadata.icon ? <Icon as={metadata.icon} boxSize="0.85em" verticalAlign="-0.1em" /> : null}
+          {isSkill ? '#' : metadata.icon ? <Icon as={metadata.icon} boxSize="0.85em" verticalAlign="-0.1em" /> : null}
         </Box>
         {' '}
         {metaText && (

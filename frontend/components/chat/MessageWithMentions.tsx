@@ -120,7 +120,7 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
               userSelect="all"
             >
               <Text as="span" color={iconColorToken}>
-                {isSkill ? '/' : metadata.icon ? <Icon as={metadata.icon} boxSize="0.85em" verticalAlign="-0.1em" /> : null}
+                {isSkill ? '#' : metadata.icon ? <Icon as={metadata.icon} boxSize="0.85em" verticalAlign="-0.1em" /> : null}
               </Text>
               {' '}
               {metaText && (

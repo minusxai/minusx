@@ -223,12 +223,12 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           return;
         }
 
-        const slashMatch = textBeforeCursor.match(/\/([\w-]*)$/);
-        if (slashMatch) {
-          const nextQuery = slashMatch[1].toLowerCase();
+        const hashMatch = textBeforeCursor.match(/#([\w-]*)$/);
+        if (hashMatch) {
+          const nextQuery = hashMatch[1].toLowerCase();
           const seen = new Set<string>();
           setMentionType('skills');
-          setQuery(slashMatch[1]);
+          setQuery(hashMatch[1]);
           setMentions(
             availableSkills
               .filter(skill => skill.name.toLowerCase().includes(nextQuery))
