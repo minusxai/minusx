@@ -342,7 +342,7 @@ export default function QuestionViewV2({
   };
 
   // Handle viz type change
-  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo') => {
+  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value') => {
     onChange({ vizSettings: { ...content.vizSettings, type } });
   };
 

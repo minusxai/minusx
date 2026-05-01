@@ -48,7 +48,7 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value'
   initialXCols?: string[]
   initialYCols?: string[]
   initialYRightCols?: string[]
@@ -547,20 +547,52 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           {constraintError ? (
             <ChartError message={constraintError} variant={constraint.variant} />
           ) : hasData ? (
-            xAxisColumns.length === 0 ? (
-              <SingleValue series={aggregatedData.series} />
-            ) : (
-              <TrendPlot
-                series={aggregatedData.series}
-                xAxisData={aggregatedData.xAxisData}
-                columnFormats={columnFormats}
-                yAxisColumns={yAxisColumns}
-                xAxisColumns={xAxisColumns}
-                compareMode={trendConfig?.compareMode ?? 'last'}
-              />
-            )
+            <TrendPlot
+              series={aggregatedData.series}
+              xAxisData={aggregatedData.xAxisData}
+              columnFormats={columnFormats}
+              yAxisColumns={yAxisColumns}
+              xAxisColumns={xAxisColumns}
+              compareMode={trendConfig?.compareMode ?? 'last'}
+            />
           ) : (
             <ChartError variant="info" title="No data to display" message="Drag metric columns to see trend values" />
+          )}
+        </Box>
+      </Box>
+    )
+  }
+
+  // Single value mode: big number display, only Y-axis (metrics) needed
+  if (chartType === 'single_value') {
+    const hasData = allYColumns.length > 0
+    const singleValueZones: AxisZone[] = [{
+      label: 'Metrics',
+      items: yAxisColumns.map(col => ({ column: col })),
+      emptyText: 'Drop column to display',
+      onDrop: (col) => { if (!yAxisColumns.includes(col)) onAxisChange?.([], [...yAxisColumns, col]) },
+      onRemove: (col) => onAxisChange?.([], yAxisColumns.filter(c => c !== col)),
+    }]
+    return (
+      <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
+        {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
+          <AxisBuilder
+            columns={columns}
+            types={types}
+            zones={singleValueZones}
+            columnFormats={columnFormats}
+            onColumnFormatChange={handleColumnFormatChange}
+            chartType={chartType}
+          />
+        )}
+        <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
+          {hasData ? (
+            <SingleValue values={yAxisColumns.map(col => ({
+              name: columnFormats[col]?.alias || col,
+              value: rows[0]?.[col] ?? null,
+            }))} />
+          ) : (
+            <ChartError variant="info" title="No data to display" message="Drag metric columns to see values" />
           )}
         </Box>
       </Box>
@@ -725,44 +757,37 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           {constraintError ? (
             <ChartError message={constraintError} variant={constraint.variant} />
           ) : hasData ? (
-            <>
-              {/* Show SingleValue when no X-axis columns selected */}
-              {xAxisColumns.length === 0 ? (
-                <SingleValue series={aggregatedData.series} />
-              ) : (
-                <Box width="100%" flex="1" display="flex" alignItems="center" justifyContent="center" minWidth="100px" minHeight="0">
-                  {(() => {
-                    const sharedProps = {
-                      xAxisData: aggregatedData.xAxisData,
-                      series: aggregatedData.series,
-                      xAxisLabel: getDisplayName(xAxisColumns[0]),
-                      yAxisLabel: buildCompactYLabel(yAxisColumns.map(getDisplayName)),
-                      xAxisColumns,
-                      pointMeta: aggregatedData.pointMeta,
-                      tooltipColumns,
-                      columnFormats,
-                      yAxisColumns,
-                      yRightCols: yRightColumns,
-                      height: useCompactView && !fillHeight ? 300 : undefined,
-                      onChartClick: handleChartClick,
-                      chartTitle,
-                      showChartTitle,
-                      colorPalette,
-                      axisConfig,
-                      styleConfig,
-                      annotations,
-                      columnTypes,
-                      exportBranding,
-                      onDownloadImage,
-                    }
-                    const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
-                    const Plot = plotMap[chartType as keyof typeof plotMap]
-                    if (Plot) return <Plot {...sharedProps} />
-                    return null
-                  })()}
-                </Box>
-              )}
-            </>
+            <Box width="100%" flex="1" display="flex" alignItems="center" justifyContent="center" minWidth="100px" minHeight="0">
+              {(() => {
+                const sharedProps = {
+                  xAxisData: aggregatedData.xAxisData,
+                  series: aggregatedData.series,
+                  xAxisLabel: getDisplayName(xAxisColumns[0]),
+                  yAxisLabel: buildCompactYLabel(yAxisColumns.map(getDisplayName)),
+                  xAxisColumns,
+                  pointMeta: aggregatedData.pointMeta,
+                  tooltipColumns,
+                  columnFormats,
+                  yAxisColumns,
+                  yRightCols: yRightColumns,
+                  height: useCompactView && !fillHeight ? 300 : undefined,
+                  onChartClick: handleChartClick,
+                  chartTitle,
+                  showChartTitle,
+                  colorPalette,
+                  axisConfig,
+                  styleConfig,
+                  annotations,
+                  columnTypes,
+                  exportBranding,
+                  onDownloadImage,
+                }
+                const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
+                const Plot = plotMap[chartType as keyof typeof plotMap]
+                if (Plot) return <Plot {...sharedProps} />
+                return null
+              })()}
+            </Box>
           ) : (
             <ChartError
               variant="info"

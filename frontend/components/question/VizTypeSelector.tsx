@@ -19,6 +19,7 @@ import {
   LuChartNoAxesCombined,
   LuRadar,
   LuMapPinned,
+  LuHash,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -43,6 +44,7 @@ const ALL_VIZ_TYPES: VizTypeOption[] = [
   { type: 'waterfall', icon: <LuChartNoAxesColumn size={18} />, label: 'Waterfall chart' },
   { type: 'radar', icon: <LuRadar size={18} />, label: 'Radar chart' },
   { type: 'geo', icon: <LuMapPinned size={18} />, label: 'Geo map' },
+  { type: 'single_value', icon: <LuHash size={18} />, label: 'Single value' },
 ];
 
 interface VizTypeSelectorProps {
