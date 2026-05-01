@@ -227,7 +227,8 @@ describe('ChartBuilder axis selection', () => {
       />
     )
 
-    expect(screen.getByText('250')).toBeInTheDocument()
+    // Bar charts require at least 1 X-axis column — constraint error shown instead of rendering
+    expect(screen.getByText(/Bar charts require at least 1 X-axis column/i)).toBeInTheDocument()
   })
 
   it('preserves an explicitly empty Y axis instead of auto-selecting a fallback column', () => {
