@@ -2342,6 +2342,33 @@ describe('validateQueryTablesLocal (polyglot WASM)', () => {
     expect(result).toMatch(/secret_table/i);
   });
 
+  it('does not flag a CTE name defined inside a subquery (non-recursive collectCteNames bug)', async () => {
+    // DuckDB supports CTEs inside subqueries. The validator must not report the CTE
+    // alias as a blocked table — only real base tables matter.
+    const sql = 'SELECT * FROM (WITH inner_cte AS (SELECT id FROM users) SELECT id FROM inner_cte) sub';
+    const result = await validateQueryTablesLocal(sql, WHITELIST_USERS_ONLY);
+    // inner_cte is a CTE alias, not a real table — should not appear in the error
+    if (result !== null) {
+      expect(result).not.toMatch(/inner_cte/i);
+    }
+  });
+
+  it('does not flag nested CTE aliases at multiple levels', async () => {
+    // outer_cte is top-level, inner_cte is inside a subquery — neither is a real table
+    const sql = [
+      'WITH outer_cte AS (SELECT id FROM users)',
+      'SELECT * FROM (',
+      '  WITH inner_cte AS (SELECT id FROM outer_cte)',
+      '  SELECT id FROM inner_cte',
+      ') sub',
+    ].join('\n');
+    const result = await validateQueryTablesLocal(sql, WHITELIST_USERS_ONLY);
+    if (result !== null) {
+      expect(result).not.toMatch(/inner_cte/i);
+      expect(result).not.toMatch(/outer_cte/i);
+    }
+  });
+
   // ── Error tolerance ───────────────────────────────────────────────────────
 
   it('returns null for unparseable SQL (allow through)', async () => {
