@@ -5,19 +5,18 @@ from pydantic import BaseModel, Field
 import json
 
 from tasks.agents.analyst.file_schema import vizSettingsJsonStr, ATLAS_FILE_SCHEMA_NO_VIZ_JSON
-from tasks.agents.analyst.prompt_loader import get_skill, list_skills
+from tasks.agents.analyst.prompt_loader import get_skill
 
 @register_agent
 class LoadSkill(Tool):
-    """Load detailed instructions for a specific domain (e.g., alerts, reports, parameters, visualizations, composed_questions).
+    """Load detailed instructions for a system or user-defined skill.
 
-    Use this before working with file types or features you need more context on.
-    Returns the full skill content as a tool result — no round-trip to the frontend.
+    Use `name` for both system skills and user-defined Knowledge Base skills.
     """
 
     def __init__(
         self,
-        name: str = Field(..., description="Skill name to load (e.g., 'alerts', 'reports'). See the skills catalog in the system prompt for the full list."),
+        name: Optional[str] = Field(None, description="Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name)."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -27,13 +26,15 @@ class LoadSkill(Tool):
         pass
 
     async def run(self) -> str:
-        content = get_skill(self.name)
-        if content is None:
-            available = list(list_skills().keys())
+        if not self.name:
             return json.dumps({
                 'success': False,
-                'error': f"Skill '{self.name}' not found. Available skills: {available}"
+                'error': 'LoadSkill requires a skill name'
             })
+
+        content = get_skill(self.name)
+        if content is None:
+            raise UserInputException(self._unique_id)
         return json.dumps({
             'success': True,
             'skill': self.name,

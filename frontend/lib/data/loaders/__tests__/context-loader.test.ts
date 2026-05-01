@@ -220,8 +220,29 @@ describe('Context Loader Integration with Versioning', () => {
       published: {
         all: 1      // Everyone sees version 1
       },
+      skills: [
+        {
+          name: 'parent_skill',
+          description: 'Parent skill',
+          content: 'Use parent guidance',
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdBy: 1
+        },
+        {
+          name: 'shared_skill',
+          description: 'Parent shared skill',
+          content: 'Use parent shared guidance',
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdBy: 1
+        }
+      ],
       fullSchema: [],
-      fullDocs: []
+      fullDocs: [],
+      fullSkills: []
     };
 
     orgContextId = await DocumentDB.create(
@@ -252,8 +273,29 @@ describe('Context Loader Integration with Versioning', () => {
     const salesContent: ContextContent = {
       versions: [salesVersion1],
       published: { all: 1 },
+      skills: [
+        {
+          name: 'shared_skill',
+          description: 'Sales shared skill',
+          content: 'Use sales shared guidance',
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdBy: 1
+        },
+        {
+          name: 'sales_skill',
+          description: 'Sales skill',
+          content: 'Use sales guidance',
+          enabled: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdBy: 1
+        }
+      ],
       fullSchema: [],
-      fullDocs: []
+      fullDocs: [],
+      fullSkills: []
     };
 
     salesContextId = await DocumentDB.create(
@@ -340,6 +382,14 @@ describe('Context Loader Integration with Versioning', () => {
 
       // fullDocs inherited from parent's version 1
       expect(content.fullDocs).toEqual([{ content: 'Version 1: Full public schema' }]);
+    });
+
+    it('should always inherit parent skills to children', async () => {
+      const { data: contexts } = await FilesAPI.loadFiles([salesContextId], nonAdminUser);
+      const content = contexts[0].content as ContextContent;
+
+      expect(content.fullSkills?.map(skill => skill.name).sort()).toEqual(['parent_skill', 'shared_skill']);
+      expect(content.skills?.map(skill => skill.name).sort()).toEqual(['sales_skill', 'shared_skill']);
     });
 
     it('should inherit parent schema based on published version (admin sees same as non-admin)', async () => {

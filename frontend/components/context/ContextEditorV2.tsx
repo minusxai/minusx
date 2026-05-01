@@ -7,12 +7,12 @@
  */
 
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
+import { LuBookOpen, LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
 import { uploadFile } from '@/lib/object-store/client';
-import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
+import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, Test, SkillEntry } from '@/lib/types';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
@@ -21,7 +21,7 @@ import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
-import SchemaTreeView from '../SchemaTreeView';
+import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor, { DiffEditor } from '@monaco-editor/react';
@@ -31,6 +31,13 @@ import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
 import { selectConnectionsLoading } from '@/store/filesSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
+import { canEdit } from '@/lib/auth/role-helpers';
+import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
+
+type DatabaseSelection = {
+  databaseName: string;
+  whitelist: WhitelistItem[];
+};
 
 interface ContextEditorV2Props {
   content: ContextContent;
@@ -67,6 +74,175 @@ interface ContextEditorV2Props {
   onSelectRun?: (runId: number | null) => void;
 }
 
+const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
+
+interface SkillEditorCardProps {
+  skill: SkillEntry;
+  index: number;
+  canManageSkills: boolean;
+  colorMode: string;
+  siblingNames: Set<string>;
+  systemSkillNames: Set<string>;
+  onUpdate: (index: number, updates: Partial<SkillEntry>) => void;
+  onDelete: (index: number) => void;
+}
+
+const SkillEditorCard = memo(function SkillEditorCard({
+  skill,
+  index,
+  canManageSkills,
+  colorMode,
+  siblingNames,
+  systemSkillNames,
+  onUpdate,
+  onDelete,
+}: SkillEditorCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  // Reset draft when skill prop changes externally — use a serialized key to detect changes
+  const skillKey = `${skill.name}\0${skill.description}\0${skill.content}`;
+  const [prevSkillKey, setPrevSkillKey] = useState(skillKey);
+  const [draft, setDraft] = useState({
+    name: skill.name,
+    description: skill.description,
+    content: skill.content,
+  });
+
+  if (prevSkillKey !== skillKey) {
+    setPrevSkillKey(skillKey);
+    setDraft({ name: skill.name, description: skill.description, content: skill.content });
+  }
+
+  useEffect(() => {
+    if (
+      draft.name === skill.name &&
+      draft.description === skill.description &&
+      draft.content === skill.content
+    ) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      onUpdate(index, draft);
+    }, 300);
+    return () => window.clearTimeout(timeout);
+  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
+
+  const flushDraft = useCallback(() => {
+    if (
+      draft.name !== skill.name ||
+      draft.description !== skill.description ||
+      draft.content !== skill.content
+    ) {
+      onUpdate(index, draft);
+    }
+  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
+
+  const normalizedName = draft.name.trim().toLowerCase();
+  const duplicateName = siblingNames.has(normalizedName);
+  const systemCollision = systemSkillNames.has(normalizedName);
+  const invalidName = !/^[a-z0-9_]+$/.test(draft.name.trim()) || duplicateName || systemCollision;
+
+  return (
+    <Collapsible.Root open={expanded} onOpenChange={(e) => setExpanded(e.open)}>
+      <Box border="1px solid" borderColor={invalidName ? 'accent.danger' : 'border.muted'} borderRadius="md" overflow="hidden">
+        <Collapsible.Trigger asChild>
+          <HStack
+            px={3}
+            py={2.5}
+            justify="space-between"
+            align="center"
+            cursor="pointer"
+            bg="bg.surface"
+            _hover={{ bg: 'bg.muted' }}
+          >
+            <HStack gap={2} minW={0} flex={1}>
+              <Icon as={expanded ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
+              <Badge size="sm" colorPalette={skill.enabled ? 'green' : 'gray'} variant="subtle" flexShrink={0}>
+                {skill.enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+              <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default" truncate maxW="260px">
+                {draft.name || 'unnamed_skill'}
+              </Text>
+              <Text fontSize="sm" color="fg.muted" truncate flex={1}>
+                {draft.description || 'No description'}
+              </Text>
+              {invalidName && (
+                <Text fontSize="xs" color="accent.danger" flexShrink={0}>
+                  {duplicateName ? 'Duplicate name' : systemCollision ? 'Conflicts with system skill' : 'Invalid name'}
+                </Text>
+              )}
+            </HStack>
+            {canManageSkills && (
+              <HStack gap={2} onClick={(event) => event.stopPropagation()} flexShrink={0}>
+                <Switch.Root
+                  size="sm"
+                  checked={skill.enabled}
+                  onCheckedChange={(e) => onUpdate(index, { enabled: e.checked })}
+                  colorPalette="green"
+                >
+                  <Switch.HiddenInput />
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Root>
+                <Button size="xs" variant="ghost" colorPalette="red" onClick={() => onDelete(index)}>
+                  <LuTrash2 />
+                </Button>
+              </HStack>
+            )}
+          </HStack>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <VStack align="stretch" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
+            <HStack gap={3} align="start">
+              <Field.Root flex={1} invalid={invalidName}>
+                <Field.Label>Name</Field.Label>
+                <Input
+                  value={draft.name}
+                  disabled={!canManageSkills}
+                  onChange={(e) => setDraft(prev => ({ ...prev, name: e.target.value }))}
+                  onBlur={flushDraft}
+                  fontFamily="mono"
+                />
+              </Field.Root>
+              <Field.Root flex={2}>
+                <Field.Label>Description</Field.Label>
+                <Input
+                  value={draft.description}
+                  disabled={!canManageSkills}
+                  onChange={(e) => setDraft(prev => ({ ...prev, description: e.target.value }))}
+                  onBlur={flushDraft}
+                />
+              </Field.Root>
+            </HStack>
+
+            <Box border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
+              <Editor
+                height="220px"
+                language="markdown"
+                value={draft.content}
+                onChange={(value) => setDraft(prev => ({ ...prev, content: value || '' }))}
+                onMount={(editor) => editor.onDidBlurEditorText(flushDraft)}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  readOnly: !canManageSkills,
+                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'off',
+                  fontSize: 13,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            </Box>
+          </VStack>
+        </Collapsible.Content>
+      </Box>
+    </Collapsible.Root>
+  );
+});
+
 export default function ContextEditorV2({
   content,
   fileName,
@@ -100,8 +276,8 @@ export default function ContextEditorV2({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  type TopTab = 'databases' | 'docs' | 'evals';
-  const validTabs: TopTab[] = ['databases', 'docs', 'evals'];
+  type TopTab = 'databases' | 'docs' | 'skills' | 'evals';
+  const validTabs: TopTab[] = ['databases', 'docs', 'skills', 'evals'];
   const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
 
   const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
@@ -132,6 +308,15 @@ export default function ContextEditorV2({
   const [isDeleteVersionOpen, setIsDeleteVersionOpen] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<number | null>(null);
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+  const [userSkillsOpen, setUserSkillsOpen] = useState(true);
+  const [systemSkillsOpen, setSystemSkillsOpen] = useState(false);
+  const contextDir = useMemo(() => file?.path.substring(0, file.path.lastIndexOf('/')) || '/', [file?.path]);
+  const contextInfo = useKnowledgeContext(contextDir, currentVersion, true);
+  const systemSkills = useMemo(() => (
+    contextInfo.availableSkills
+      .filter(skill => skill.source === 'system')
+      .map(skill => ({ name: skill.name, description: skill.description || '' }))
+  ), [contextInfo.availableSkills]);
 
   // Collapsible database state
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
@@ -249,7 +434,7 @@ export default function ContextEditorV2({
   // Initialize databases array if empty (and not '*') when availableDatabases loads
   useEffect(() => {
     if (content.databases !== '*' && content.databases && content.databases.length === 0 && availableDatabases.length > 0) {
-      const initialDatabases: DatabaseContext[] = availableDatabases.map((db) => ({
+      const initialDatabases: DatabaseSelection[] = availableDatabases.map((db) => ({
         databaseName: db.databaseName,
         whitelist: []
       }));
@@ -341,13 +526,13 @@ export default function ContextEditorV2({
   const handleWhitelistChange = (databaseName: string, newWhitelist: WhitelistItem[]) => {
     // When databases === '*', synthesize a full whitelist for all connections as the starting point
     // so that modifying one connection doesn't implicitly exclude all others.
-    const databases: DatabaseContext[] = content.databases === '*'
+    const databases: DatabaseSelection[] = content.databases === '*'
       ? availableDatabases.map(db => ({
           databaseName: db.databaseName,
           whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
         }))
       : (content.databases || []);
-    const dbIndex = databases.findIndex((db: DatabaseContext) => db.databaseName === databaseName);
+    const dbIndex = databases.findIndex((db: DatabaseSelection) => db.databaseName === databaseName);
 
     if (dbIndex >= 0) {
       // Update existing database
@@ -389,7 +574,7 @@ export default function ContextEditorV2({
   // Count total whitelisted items ('*' = all available)
   const totalWhitelisted = content.databases === '*'
     ? availableDatabases.reduce((sum: number, db) => sum + db.schemas.reduce((s: number, sc) => s + sc.tables.length, 0), 0)
-    : (content.databases || []).reduce((sum: number, db: DatabaseContext) => sum + db.whitelist.length, 0);
+    : (content.databases || []).reduce((sum: number, db: DatabaseSelection) => sum + db.whitelist.length, 0);
 
   // Version management helpers
   const getVersionLabel = (version: ContextVersion) => {
@@ -433,6 +618,53 @@ export default function ContextEditorV2({
   };
 
   const evalsSelectedRun = runs.find(r => r.id === selectedRunId) ?? runs[0] ?? null;
+  const canManageSkills = editMode && canEdit(user?.role || 'viewer');
+  const systemSkillNames = new Set(systemSkills.map(skill => skill.name.toLowerCase()));
+
+  const makeSkillName = useCallback((name: string, ignoreIndex?: number) => {
+    const base = name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'skill';
+    const existing = new Set((content.skills || [])
+      .filter((_, index) => index !== ignoreIndex)
+      .map(skill => skill.name)
+      .concat(systemSkills.map(skill => skill.name)));
+    let candidate = base;
+    let suffix = 2;
+    while (existing.has(candidate)) {
+      candidate = `${base}_${suffix}`;
+      suffix += 1;
+    }
+    return candidate;
+  }, [content.skills, systemSkills]);
+
+  const handleAddSkill = () => {
+    const now = new Date().toISOString();
+    const skill: SkillEntry = {
+      name: makeSkillName('new_skill'),
+      description: '',
+      content: '',
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: user?.id || 1,
+    };
+    onChange({ skills: [...(content.skills || []), skill] });
+  };
+
+  const handleUpdateSkill = useCallback((index: number, updates: Partial<SkillEntry>) => {
+    const skills = [...(content.skills || [])];
+    const current = skills[index];
+    if (!current) return;
+    const next = { ...current, ...updates, updatedAt: new Date().toISOString() };
+    if (updates.name !== undefined) {
+      next.name = makeSkillName(updates.name, index);
+    }
+    skills[index] = next;
+    onChange({ skills });
+  }, [content.skills, makeSkillName, onChange]);
+
+  const handleDeleteSkill = useCallback((index: number) => {
+    onChange({ skills: (content.skills || []).filter((_, i) => i !== index) });
+  }, [content.skills, onChange]);
 
   return (
     <VStack gap={6} align="stretch" p={3}>
@@ -725,6 +957,14 @@ export default function ContextEditorV2({
               </Box>
             )}
           </Tabs.Trigger>
+          <Tabs.Trigger value="skills" fontFamily="mono" fontSize="sm">
+            Skills
+            {(content.skills?.length ?? 0) > 0 && (
+              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
+                {content.skills!.length}
+              </Badge>
+            )}
+          </Tabs.Trigger>
           <Tabs.Trigger value="evals" fontFamily="mono" fontSize="sm">
             Evals
             {(content.evals?.length ?? 0) > 0 && (
@@ -760,7 +1000,7 @@ export default function ContextEditorV2({
                         size="xs"
                         variant="outline"
                         onClick={() => {
-                          const explicitDbs: DatabaseContext[] = availableDatabases.map(db => ({
+                          const explicitDbs: DatabaseSelection[] = availableDatabases.map(db => ({
                             databaseName: db.databaseName,
                             whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
                           }));
@@ -814,8 +1054,8 @@ export default function ContextEditorV2({
                       // When databases === '*', pass empty whitelist and let connectionWhitelisted prop handle visuals
                       const whitelist: WhitelistItem[] = isConnectionWildcard
                         ? []
-                        : ((content.databases || []) as DatabaseContext[]).find(
-                            (db: DatabaseContext) => db.databaseName === database.databaseName
+                        : ((content.databases || []) as DatabaseSelection[]).find(
+                            (db: DatabaseSelection) => db.databaseName === database.databaseName
                           )?.whitelist || [];
 
                       const isExpanded = expandedDatabases.has(database.databaseName);
@@ -975,10 +1215,12 @@ export default function ContextEditorV2({
                 language="yaml"
                 value={yamlText}
                 onChange={(value) => handleYamlChange(value || '')}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
+	                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+	                options={{
+	                  readOnly: !editMode,
+	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                  minimap: { enabled: false },
+	                  wordWrap: 'on',
                   lineNumbers: 'on',
                   fontSize: 14,
                   fontFamily: 'var(--font-jetbrains-mono)',
@@ -1197,10 +1439,12 @@ export default function ContextEditorV2({
                                 value={docEntry.content}
                                 onChange={(value) => handleMarkdownChange(index, value || '')}
                                 onMount={(editor) => { docEditorRefs.current[index] = editor; }}
-                                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                                options={{
-                                  minimap: { enabled: false },
-                                  wordWrap: 'on',
+	                                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+	                                options={{
+	                                  readOnly: !editMode,
+	                                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                                  minimap: { enabled: false },
+	                                  wordWrap: 'on',
                                   lineNumbers: 'on',
                                   fontSize: 14,
                                   fontFamily: 'var(--font-jetbrains-mono)',
@@ -1281,6 +1525,128 @@ export default function ContextEditorV2({
         </Tabs.Content>
 
         {/* Evals Tab */}
+        <Tabs.Content value="skills">
+          {activeTab === 'picker' ? (
+            <VStack gap={4} align="stretch">
+              <Collapsible.Root open={userSkillsOpen} onOpenChange={(e) => setUserSkillsOpen(e.open)}>
+                <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
+                  <Collapsible.Trigger asChild>
+                    <HStack mb={userSkillsOpen ? 3 : 0} justify="space-between" cursor="pointer">
+                      <HStack gap={2}>
+                        <Icon as={userSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
+                        <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">User Skills</Text>
+                        <Badge size="xs" colorPalette="teal" variant="subtle">{content.skills?.length ?? 0}</Badge>
+                      </HStack>
+                      {canManageSkills && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleAddSkill();
+                          }}
+                        >
+                          <LuPlus />
+                          Add skill
+                        </Button>
+                      )}
+                    </HStack>
+                  </Collapsible.Trigger>
+                  <Collapsible.Content>
+                    <VStack align="stretch" gap={3}>
+                      {(content.skills || []).map((skill, index) => {
+                        const siblingNames = new Set((content.skills || [])
+                          .filter((_, otherIndex) => otherIndex !== index)
+                          .map(other => other.name.trim().toLowerCase()));
+                        return (
+                          <SkillEditorCard
+                            key={`skill-${index}`}
+                            skill={skill}
+                            index={index}
+                            canManageSkills={canManageSkills}
+                            colorMode={colorMode}
+                            siblingNames={siblingNames}
+                            systemSkillNames={systemSkillNames}
+                            onUpdate={handleUpdateSkill}
+                            onDelete={handleDeleteSkill}
+                          />
+                        );
+                      })}
+                      {(content.skills || []).length === 0 && (
+                        <Text fontSize="sm" color="fg.muted">
+                          No user-defined skills yet.
+                        </Text>
+                      )}
+                    </VStack>
+                  </Collapsible.Content>
+                </Box>
+              </Collapsible.Root>
+
+              <Collapsible.Root open={systemSkillsOpen} onOpenChange={(e) => setSystemSkillsOpen(e.open)}>
+                <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
+                  <Collapsible.Trigger asChild>
+                    <HStack mb={systemSkillsOpen ? 3 : 0} justify="space-between" cursor="pointer">
+                      <HStack gap={2}>
+                        <Icon as={systemSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
+                        <Icon as={LuBookOpen} boxSize={4} color="fg.muted" />
+                        <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">System Skills</Text>
+                        <Badge size="xs" colorPalette="gray" variant="subtle">{systemSkills.length}</Badge>
+                      </HStack>
+                      <Badge size="xs" colorPalette="gray" variant="subtle">Read only</Badge>
+                    </HStack>
+                  </Collapsible.Trigger>
+                  <Collapsible.Content>
+                    <VStack align="stretch" gap={2}>
+                      {systemSkills.map(skill => (
+                        <Box key={skill.name} p={3} border="1px solid" borderColor="border.muted" borderRadius="md" bg="bg.subtle">
+                          <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default">{skill.name}</Text>
+                          <Text fontSize="xs" color="fg.muted" mt={1}>{skill.description}</Text>
+                        </Box>
+                      ))}
+                      {systemSkills.length === 0 && (
+                        <Text fontSize="sm" color="fg.muted">System skills are not loaded yet.</Text>
+                      )}
+                    </VStack>
+                  </Collapsible.Content>
+                </Box>
+              </Collapsible.Root>
+            </VStack>
+          ) : (
+            <Box
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              overflow="hidden"
+              minH="600px"
+            >
+              <Editor
+                height="600px"
+                language="json"
+                value={JSON.stringify(content.skills || [], null, 2)}
+                onChange={(value) => {
+                  try {
+                    const parsed = JSON.parse(value || '[]');
+                    if (Array.isArray(parsed)) onChange({ skills: parsed });
+                  } catch { /* ignore parse errors while typing */ }
+                }}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+	                  readOnly: !canManageSkills,
+	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  fontSize: 14,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                }}
+              />
+            </Box>
+          )}
+        </Tabs.Content>
+
         <Tabs.Content value="evals">
           {activeTab === 'picker' ? (
             <Box display="flex" flexDirection="row" gap={4} alignItems="stretch" minH="400px">
@@ -1364,9 +1730,11 @@ export default function ContextEditorV2({
                     if (Array.isArray(parsed)) onChange({ evals: parsed });
                   } catch { /* ignore parse errors while typing */ }
                 }}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: false },
+	                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+	                options={{
+	                  readOnly: !editMode,
+	                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+	                  minimap: { enabled: false },
                   wordWrap: 'on',
                   lineNumbers: 'on',
                   fontSize: 14,

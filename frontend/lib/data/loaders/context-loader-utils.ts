@@ -4,12 +4,12 @@
  * Used by both context loader and file template generation
  */
 
-import { DatabaseWithSchema, ContextVersion, DatabaseContext, DbFile, DocEntry, Whitelist } from '@/lib/types';
+import { DatabaseWithSchema, ContextVersion, DatabaseContext, DbFile, DocEntry, SkillEntry, Whitelist } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { getPublishedVersionForUser as getPublishedVersionForUserId } from '@/lib/context/context-utils';
+import { getPublishedVersionForUser as getPublishedVersionForUserId, mergeSkillsByName } from '@/lib/context/context-utils';
 
 /**
  * Filter doc entries by childPaths for a specific child path
@@ -58,7 +58,7 @@ export async function computeSchemaFromWhitelist(
   whitelist: Whitelist,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[] }> {
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullSkills: SkillEntry[] }> {
   const contextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
   const pathSegments = contextPath.split('/').filter(Boolean);
   const isRoot = pathSegments.length === 2; // e.g., /org/context
@@ -70,7 +70,7 @@ export async function computeSchemaFromWhitelist(
     // Apply own whitelist (no currentPath for root — childPaths has no effect at root level)
     const fullSchema = applyWhitelistToConnections(allConnections, whitelist);
     // parentSchema for root = all connections (what is available to select from)
-    return { fullSchema, parentSchema: allConnections, fullDocs: [] };
+    return { fullSchema, parentSchema: allConnections, fullDocs: [], fullSkills: [] };
   }
 
   // Child: Find nearest ancestor context
@@ -83,7 +83,7 @@ export async function computeSchemaFromWhitelist(
 
   if (!ancestorContext) {
     // No ancestor found — nothing to inherit
-    return { fullSchema: [], parentSchema: [], fullDocs: [] };
+    return { fullSchema: [], parentSchema: [], fullDocs: [], fullSkills: [] };
   }
 
   // Load ancestor (triggers its own loader recursively)
@@ -97,7 +97,7 @@ export async function computeSchemaFromWhitelist(
   );
 
   if (!publishedVersion) {
-    return { fullSchema: [], parentSchema: [], fullDocs: [] };
+    return { fullSchema: [], parentSchema: [], fullDocs: [], fullSkills: [] };
   }
 
   // The ancestor's fullSchema is what the ancestor exposes (already filtered by its own whitelist).
@@ -117,9 +117,10 @@ export async function computeSchemaFromWhitelist(
   const parentFullDocs = filterDocsByChildPaths(ancestorContent.fullDocs || [], contextDir);
   const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], contextDir);
   const fullDocs = [...parentFullDocs, ...parentOwnDocs];
+  const fullSkills = mergeSkillsByName(ancestorContent.fullSkills || [], ancestorContent.skills || []);
 
   // parentOffering = what the parent makes available to this context (before own whitelist)
-  return { fullSchema, parentSchema: parentOffering, fullDocs };
+  return { fullSchema, parentSchema: parentOffering, fullDocs, fullSkills };
 }
 
 /**
