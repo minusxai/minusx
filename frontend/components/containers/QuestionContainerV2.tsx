@@ -77,7 +77,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   useEffect(() => {
     const q = queryToExecute.query;
     const db = queryToExecute.database;
-    if (!q || !db) return;
+    if (!q || !db || (file?.draft && !lastExecuted)) return;
     fetch('/api/query-estimate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -99,7 +99,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     queryToExecute.params,
     queryToExecute.database,
     queryToExecute.references,
-    { skip: !queryToExecute.query, parameterTypes, filePath: file?.path }  // Skip if no query
+    { skip: !queryToExecute.query || (!!file?.draft && !lastExecuted), parameterTypes, filePath: file?.path }
   );
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts
@@ -131,9 +131,11 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
   // even if lastExecuted is stale from a prior edit session on this file.
+  // Skip auto-execute for draft files — user should explicitly run with Cmd+Enter.
   useEffect(() => {
     if (!file || !mergedContent) return;
     if (hasAutoExecutedRef.current) return;
+    if (file.draft) return;
 
     hasAutoExecutedRef.current = true;
     handleExecute();

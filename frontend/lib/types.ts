@@ -195,6 +195,15 @@ export type SkillMention =
       content?: string;
     });
 
+export interface SlashCommand {
+  type: 'command';
+  name: string;
+  label: string;
+  description: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
 export type AgentSkillSelection =
   | { type: 'system'; name: string }
   | { type: 'user'; name: string; content: string; description?: string };
@@ -356,7 +365,7 @@ export interface ContextInfo {
   databases: DatabaseWithSchema[];        // Whitelisted schemas (or all if no context)
   documentation: string | undefined;      // Context docs (undefined if no context)
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
-  availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for slash mentions
+  availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for # mentions
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading
 }

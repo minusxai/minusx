@@ -34,7 +34,7 @@ import type { AgentSkillSelection } from '@/lib/types';
 
 /**
  * Push auto-generated skill_load messages into conv.messages for explicitly
- * selected skills (page-type preloads + user slash-command mentions).
+ * selected skills (page-type preloads + user hash mentions).
  * These are UI-only and ignored by LLM message reconstruction.
  */
 function emitSyntheticSkillLoads(

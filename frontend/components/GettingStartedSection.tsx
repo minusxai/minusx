@@ -32,7 +32,7 @@ import {
   setActiveSidebarSection,
   setRightSidebarCollapsed
 } from '@/store/uiSlice';
-import { setActiveConversation } from '@/store/chatSlice';
+import { useClearChat } from './explore/slash-commands';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { switchMode } from '@/lib/mode/mode-utils';
 
@@ -142,8 +142,9 @@ export default function GettingStartedSection() {
   const hasInvitedUsers = userCount > 1;
 
   // Ask AI action
+  const clearChat = useClearChat();
   const handleAskAI = () => {
-    dispatch(setActiveConversation(null));
+    clearChat();
     dispatch(setSidebarPendingMessage('What can MinusX do?'));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));

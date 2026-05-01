@@ -6,6 +6,7 @@ import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from
 import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
+import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
@@ -16,7 +17,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
-import { clearChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode } from '@/store/uiSlice';
+import { selectShowExpandedMessages, selectUnrestrictedMode } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
@@ -521,22 +522,10 @@ export default function ChatInterface({
     prevStreamingAnswerLength.current = streamingAnswerLength;
   }, [streamingAnswerLength]);
 
+  const clearChat = useClearChat(container);
   const handleNewChat = () => {
     setLocalError(null);
-    dispatch(clearChatAttachments());
-
-    // Stop agent if running
-    if (conversationID && isAgentRunning) {
-      dispatch(interruptChat({ conversationID }));
-    }
-
-    // Deactivate all conversations (saves current to history)
-    dispatch(setActiveConversation(null));
-
-    // For explore page: navigate to /explore to show empty state
-    if (container === 'page') {
-      router.push('/explore');
-    }
+    clearChat();
   };
 
   const handleStopAgent = () => {
@@ -545,8 +534,14 @@ export default function ChatInterface({
     }
   };
 
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container });
+
   const handleSendMessage = async (userInput: string, attachments: Attachment[] = []) => {
     if (!userInput.trim()) return;
+
+    // Safety net: intercept slash commands typed directly without dropdown
+    if (tryExecuteSlashCommand(userInput, availableCommands, handleCommandExecute)) return;
+
     const selectedSkillMentions = getSkillsFromMessage(userInput);
 
     // Block sending if connections or contexts are still loading
@@ -1174,6 +1169,8 @@ export default function ChatInterface({
               onContextChange={onContextChange}
               whitelistedSchemas={databases}
               availableSkills={chatSkills}
+              availableCommands={availableCommands}
+              onCommandExecute={handleCommandExecute}
               prefillText={!isAgentRunning && !isStreaming && conversation?.wasInterrupted && conversation?.queuedMessages?.length
                 ? conversation.queuedMessages.map(qm => qm.message).join('\n')
                 : undefined}

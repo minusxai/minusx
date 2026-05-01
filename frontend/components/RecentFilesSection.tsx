@@ -9,7 +9,7 @@ import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectRightSidebarUIState, selectDevMode, selectHomePage, setSidebarPendingMessage, setActiveSidebarSection, setRightSidebarCollapsed } from '@/store/uiSlice';
-import { setActiveConversation } from '@/store/chatSlice';
+import { useClearChat } from './explore/slash-commands';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -573,12 +573,13 @@ const suggestedPrompts = [
 /** Suggested questions section for the home page */
 export function SuggestedQuestions() {
   const dispatch = useAppDispatch();
+  const clearChat = useClearChat();
   const { showSuggestedPrompts } = useAppSelector(selectHomePage);
 
   if (!showSuggestedPrompts) return null;
 
   const handleClick = (prompt: string) => {
-    dispatch(setActiveConversation(null));
+    clearChat();
     dispatch(setSidebarPendingMessage(prompt));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));

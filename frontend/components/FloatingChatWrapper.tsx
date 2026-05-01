@@ -4,11 +4,12 @@ import { useState, useCallback } from 'react';
 import { Box, Portal } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
-import { setActiveConversation } from '@/store/chatSlice';
 import { useContext } from '@/lib/hooks/useContext';
+import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './explore/slash-commands';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import ChatInput from './explore/ChatInput';
 import type { Attachment } from '@/lib/types';
+import type { AppState } from '@/lib/appState';
 
 // Sidebar width constants (must match Sidebar.tsx)
 const SIDEBAR_WIDTH_EXPANDED = '260px';
@@ -21,6 +22,7 @@ interface FloatingChatWrapperProps {
   selectedContextPath?: string | null;
   contextVersion?: number;
   onContextChange?: (path: string | null, version?: number) => void;
+  appState?: AppState | null;
 }
 
 export default function FloatingChatWrapper({
@@ -29,6 +31,7 @@ export default function FloatingChatWrapper({
   selectedContextPath,
   contextVersion,
   onContextChange,
+  appState,
 }: FloatingChatWrapperProps) {
   const [isFocused, setIsFocused] = useState(false);
   const dispatch = useAppDispatch();
@@ -50,13 +53,16 @@ export default function FloatingChatWrapper({
   // Hide floating bar when right sidebar is open (chat visible there)
   const hideFloatingBar = !rightSidebarCollapsed;
 
+  const clearChat = useClearChat();
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState });
   const handleSend = useCallback((message: string, _attachments: Attachment[]) => {
     if (!message.trim()) return;
-    dispatch(setActiveConversation(null));
+    if (tryExecuteSlashCommand(message.trim(), availableCommands, handleCommandExecute)) return;
+    clearChat();
     dispatch(setSidebarPendingMessage(message.trim()));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
-  }, [dispatch]);
+  }, [dispatch, clearChat, availableCommands, handleCommandExecute]);
 
   const handleDatabaseChange = useCallback((name: string) => {
     setLocalDatabase(name);
@@ -92,6 +98,8 @@ export default function FloatingChatWrapper({
         selectedVersion={contextVersion}
         onContextChange={onContextChange}
         availableSkills={contextInfo.availableSkills}
+        availableCommands={availableCommands}
+        onCommandExecute={handleCommandExecute}
       />
     </Box>
   );

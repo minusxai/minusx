@@ -1,8 +1,10 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
+  $getRoot,
   $getSelection,
   $isRangeSelection,
+  $createParagraphNode,
   TextNode,
   $createTextNode,
   COMMAND_PRIORITY_CRITICAL,
@@ -16,16 +18,19 @@ import { Box, HStack, VStack, Text, Icon, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
-import type { DatabaseWithSchema, SkillMention } from '@/lib/types';
+import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
+import { LuTerminal } from 'react-icons/lu';
 
 interface MentionsPluginProps {
   databaseName?: string;
   whitelistedSchemas?: DatabaseWithSchema[];
   availableSkills?: SkillMention[];
+  availableCommands?: SlashCommand[];
+  onCommandExecute?: (command: SlashCommand) => void;
 }
 
-type MentionOption = MentionItem | SkillMention;
-type MentionTrigger = 'all' | 'questions' | 'skills';
+type MentionOption = MentionItem | SkillMention | SlashCommand;
+type MentionTrigger = 'all' | 'questions' | 'skills' | 'commands';
 
 // Map semantic token to hex value
 const colorMap: Record<string, string> = {
@@ -40,8 +45,20 @@ const colorMap: Record<string, string> = {
   'accent.muted': ACCENT_HEX.muted,
 };
 
+function isSlashCommand(option: MentionOption): option is SlashCommand {
+  return option.type === 'command';
+}
+
 // Get badge info (color, label, icon) for a mention type
 function getMentionBadgeInfo(option: MentionOption) {
+  if (isSlashCommand(option)) {
+    return {
+      label: 'CMD',
+      icon: LuTerminal,
+      color: ACCENT_HEX.info,
+    };
+  }
+
   if (option.type === 'skill') {
     return {
       label: 'SKILL',
@@ -82,16 +99,19 @@ function getFilteredMentions(mentions: MentionOption[], mentionType: MentionTrig
 }
 
 function getDropdownTitle(mentionType: MentionTrigger) {
+  if (mentionType === 'commands') return 'Commands';
   if (mentionType === 'skills') return 'Skills';
   if (mentionType === 'questions') return 'Questions';
   return 'Tables, Questions & Dashboards';
 }
 
 function getMentionPrimaryText(mention: MentionOption) {
+  if (isSlashCommand(mention)) return mention.label;
   return 'display_text' in mention ? mention.display_text : mention.name;
 }
 
 function getMentionMetaText(mention: MentionOption) {
+  if (isSlashCommand(mention)) return mention.description;
   if (mention.type === 'table' && 'schema' in mention && mention.schema) {
     return mention.schema;
   }
@@ -101,7 +121,7 @@ function getMentionMetaText(mention: MentionOption) {
   return undefined;
 }
 
-export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [] }: MentionsPluginProps) {
+export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute }: MentionsPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [mentions, setMentions] = useState<MentionOption[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -140,6 +160,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
   }, [databaseName, whitelistedSchemas]);
 
   const insertMention = useCallback((mention: MentionOption, triggerLength: number) => {
+    if (isSlashCommand(mention)) return; // Commands are executed, not inserted
     editor.update(() => {
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;
@@ -223,12 +244,12 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           return;
         }
 
-        const slashMatch = textBeforeCursor.match(/\/([\w-]*)$/);
-        if (slashMatch) {
-          const nextQuery = slashMatch[1].toLowerCase();
+        const hashMatch = textBeforeCursor.match(/#([\w-]*)$/);
+        if (hashMatch) {
+          const nextQuery = hashMatch[1].toLowerCase();
           const seen = new Set<string>();
           setMentionType('skills');
-          setQuery(slashMatch[1]);
+          setQuery(hashMatch[1]);
           setMentions(
             availableSkills
               .filter(skill => skill.name.toLowerCase().includes(nextQuery))
@@ -245,10 +266,24 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           return;
         }
 
+        // Check for / (commands) — only at start of input
+        const slashMatch = textBeforeCursor.match(/^\/([\w-]*)$/);
+        if (slashMatch && availableCommands.length > 0) {
+          const cmdQuery = slashMatch[1].toLowerCase();
+          setMentionType('commands');
+          setQuery(slashMatch[1]);
+          setMentions(
+            availableCommands.filter(cmd => cmd.name.toLowerCase().includes(cmdQuery))
+          );
+          setSelectedIndex(0);
+          setShowDropdown(true);
+          return;
+        }
+
         setShowDropdown(false);
       });
     });
-  }, [editor, fetchMentions, availableSkills]);
+  }, [editor, fetchMentions, availableSkills, availableCommands]);
 
   useEffect(() => {
     // Scroll selected item into view
@@ -296,14 +331,28 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       (event) => {
         const filteredMentions = getFilteredMentions(mentions, mentionType);
         if (showDropdown && filteredMentions.length > 0) {
-          if (filteredMentions[selectedIndex]) {
-            // Prevent default Enter behavior (newline)
+          const selected = filteredMentions[selectedIndex];
+          if (selected) {
             if (event) {
               event.preventDefault();
             }
+            // Commands: execute and clear editor instead of inserting
+            if (mentionType === 'commands' && isSlashCommand(selected)) {
+              if (!selected.disabled && onCommandExecute) {
+                editor.update(() => {
+                  const root = $getRoot();
+                  root.clear();
+                  root.append($createParagraphNode());
+                });
+                setShowDropdown(false);
+                setQuery('');
+                onCommandExecute(selected);
+              }
+              return true;
+            }
             // Calculate trigger length: @ or @@ plus query length
             const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-            insertMention(filteredMentions[selectedIndex], triggerLength);
+            insertMention(selected, triggerLength);
             return true;
           }
         }
@@ -330,7 +379,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       removeEnter();
       removeEscape();
     };
-  }, [editor, showDropdown, mentions, selectedIndex, mentionType, query, insertMention]);
+  }, [editor, showDropdown, mentions, selectedIndex, mentionType, query, insertMention, onCommandExecute]);
 
   const filteredMentions = getFilteredMentions(mentions, mentionType);
 
@@ -398,7 +447,9 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
             <VStack align="stretch" gap={0}>
               {filteredMentions.map((mention, index) => {
                 // Generate unique key including schema for tables
-                const uniqueKey = mention.type === 'table' && 'schema' in mention && mention.schema
+                const uniqueKey = isSlashCommand(mention)
+                  ? `cmd-${mention.name}`
+                  : mention.type === 'table' && 'schema' in mention && mention.schema
                   ? `${mention.type}-${mention.schema}-${mention.name}`
                   : mention.type === 'skill'
                     ? `${mention.type}-${mention.source}-${mention.name}`
@@ -407,10 +458,10 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                 // Show group headers for user/system skill sections
                 const prevMention = index > 0 ? filteredMentions[index - 1] : null;
                 const isUserSkillHeader = mentionType === 'skills'
-                  && mention.type === 'skill' && mention.source === 'user' && index === 0;
+                  && !isSlashCommand(mention) && mention.type === 'skill' && mention.source === 'user' && index === 0;
                 const isSystemSkillHeader = mentionType === 'skills'
-                  && mention.type === 'skill' && mention.source === 'system'
-                  && (index === 0 || (prevMention?.type === 'skill' && prevMention.source === 'user'));
+                  && !isSlashCommand(mention) && mention.type === 'skill' && mention.source === 'system'
+                  && (index === 0 || (prevMention && !isSlashCommand(prevMention) && prevMention.type === 'skill' && prevMention.source === 'user'));
 
                 return (
                 <React.Fragment key={uniqueKey}>
@@ -433,13 +484,27 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                   ref={index === selectedIndex ? selectedItemRef : null}
                   px={3}
                   py={2.5}
-                  cursor="pointer"
+                  cursor={isSlashCommand(mention) && mention.disabled ? 'not-allowed' : 'pointer'}
+                  opacity={isSlashCommand(mention) && mention.disabled ? 0.4 : 1}
                   bg={index === selectedIndex ? 'bg.muted' : 'transparent'}
                   borderBottom="1px solid"
                   borderColor="border.muted"
                   _last={{ borderBottom: 'none' }}
-                  _hover={{ bg: 'bg.muted' }}
+                  _hover={isSlashCommand(mention) && mention.disabled ? {} : { bg: 'bg.muted' }}
                   onClick={() => {
+                    if (mentionType === 'commands' && isSlashCommand(mention)) {
+                      if (!mention.disabled && onCommandExecute) {
+                        editor.update(() => {
+                          const root = $getRoot();
+                          root.clear();
+                          root.append($createParagraphNode());
+                        });
+                        setShowDropdown(false);
+                        setQuery('');
+                        onCommandExecute(mention);
+                      }
+                      return;
+                    }
                     const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
                     insertMention(mention, triggerLength);
                   }}
@@ -474,13 +539,13 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                             <Text fontSize="sm" fontWeight="650" color="fg.default" truncate>
                               {primary}
                             </Text>
-                            {mention.type === 'table' && meta && (
+                            {!isSlashCommand(mention) && mention.type === 'table' && meta && (
                               <Text fontSize="xs" color="fg.subtle" flexShrink={0}>
                                 {meta}
                               </Text>
                             )}
                           </HStack>
-                          {mention.type === 'skill' && meta && (
+                          {(isSlashCommand(mention) || (!isSlashCommand(mention) && mention.type === 'skill')) && meta && (
                             <Text fontSize="xs" color="fg.muted" lineClamp={2}>
                               {meta}
                             </Text>
