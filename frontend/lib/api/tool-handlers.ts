@@ -117,7 +117,7 @@ export async function executeToolCall(
     dispatch,
     signal,
     state,
-    contextPath: state
+    contextPath: state?.chat?.conversations
       ? Object.values(state.chat.conversations)
           .find(conversation => conversation.pending_tool_calls.some(pending => pending.toolCall.id === toolCall.id))
           ?.agent_args?.context_path

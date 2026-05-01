@@ -1055,7 +1055,8 @@ describe('LLM-Mocked Agent Suites', () => {
         for (let i = 1; i < messages.length; i++) {
           if (messages[i].role === messages[i - 1].role && messages[i].role !== 'system') throw new Error('Consecutive ' + messages[i].role + ' messages at indices ' + (i - 1) + ' and ' + i);
         }
-        const hasMsg1 = messages.some((m: any) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('Q3'));
+        const extractText = (m: any) => Array.isArray(m.content) ? m.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : typeof m.content === 'string' ? m.content : '';
+        const hasMsg1 = messages.some((m: any) => m.role === 'user' && extractText(m).includes('Q3'));
         if (!hasMsg1) throw new Error('Turn 1 user message (Q3) not found in history for Turn 3 LLM call');
         const hasResponse1 = messages.some((m: any) => {
           if (m.role !== 'assistant') return false;
@@ -1065,8 +1066,7 @@ describe('LLM-Mocked Agent Suites', () => {
         if (!hasResponse1) throw new Error('Turn 1 assistant response ($4.2M) not found in history for Turn 3 LLM call');
         const hasMsg3 = messages.some((m: any) => {
           if (m.role !== 'user') return false;
-          const text = Array.isArray(m.content) ? m.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : typeof m.content === 'string' ? m.content : '';
-          return text.includes('Q4');
+          return extractText(m).includes('Q4');
         });
         if (!hasMsg3) throw new Error('Turn 3 user message (Q4) not found as current message');
         for (let i = 0; i < messages.length; i++) {
