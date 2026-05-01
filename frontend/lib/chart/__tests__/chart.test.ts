@@ -7,7 +7,7 @@ import { parseGeoNumber } from '@/lib/chart/geo-value-utils'
 import { aggregatePivotData } from '../pivot-utils'
 import type { PivotConfig } from '@/lib/types'
 import { computeTrendComparison } from '@/lib/chart/trend-utils'
-import { getVizConstraintError } from '@/lib/chart/viz-constraints'
+import { getVizConstraintError, getVizSettingsWarning } from '@/lib/chart/viz-constraints'
 
 // ─── chart-utils.test.ts ───
 
@@ -1128,17 +1128,29 @@ describe('getVizConstraintError', () => {
       expect(result.error).toBeTruthy()
     })
 
-    it('returns no error when no X columns (shows aggregate)', () => {
+    it('returns error when no X columns', () => {
       const result = getVizConstraintError('trend', {
         xColCount: 0,
         yColCount: 1,
         xColTypes: [],
       })
-      expect(result.error).toBeNull()
+      expect(result.error).toBeTruthy()
+      expect(result.error).toMatch(/date|time/i)
     })
   })
 
-  describe('other chart types unaffected', () => {
+  describe('standard charts require X-axis', () => {
+    it.each(['line', 'bar', 'area', 'scatter'] as const)('%s chart returns error when no X columns', (type) => {
+      const result = getVizConstraintError(type, { xColCount: 0, yColCount: 1 })
+      expect(result.error).toBeTruthy()
+      expect(result.error).toMatch(/X-axis/i)
+    })
+
+    it.each(['line', 'bar', 'area', 'scatter'] as const)('%s chart passes with 1 X column', (type) => {
+      const result = getVizConstraintError(type, { xColCount: 1, yColCount: 1 })
+      expect(result.error).toBeNull()
+    })
+
     it('bar chart ignores xColTypes', () => {
       const result = getVizConstraintError('bar', {
         xColCount: 1,
@@ -1147,5 +1159,61 @@ describe('getVizConstraintError', () => {
       })
       expect(result.error).toBeNull()
     })
+  })
+
+  describe('waterfall requires X-axis', () => {
+    it('returns error when no X columns', () => {
+      const result = getVizConstraintError('waterfall', { xColCount: 0, yColCount: 1 })
+      expect(result.error).toBeTruthy()
+    })
+  })
+
+  describe('single_value constraints', () => {
+    it('returns error when more than 1 Y column', () => {
+      const result = getVizConstraintError('single_value', { xColCount: 0, yColCount: 2 })
+      expect(result.error).toBeTruthy()
+    })
+
+    it('passes with exactly 1 Y column', () => {
+      const result = getVizConstraintError('single_value', { xColCount: 0, yColCount: 1 })
+      expect(result.error).toBeNull()
+    })
+  })
+})
+
+// ─── getVizSettingsWarning ───
+
+describe('getVizSettingsWarning', () => {
+  it('returns null for table type', () => {
+    expect(getVizSettingsWarning({ type: 'table' })).toBeNull()
+  })
+
+  it('returns null for undefined/null vizSettings', () => {
+    expect(getVizSettingsWarning(undefined)).toBeNull()
+    expect(getVizSettingsWarning(null)).toBeNull()
+  })
+
+  it('returns warning for line chart with no xCols', () => {
+    const warning = getVizSettingsWarning({ type: 'line', xCols: [], yCols: ['revenue'] })
+    expect(warning).toBeTruthy()
+    expect(warning).toMatch(/X-axis/i)
+  })
+
+  it('returns null for line chart with valid xCols and yCols', () => {
+    expect(getVizSettingsWarning({ type: 'line', xCols: ['month'], yCols: ['revenue'] })).toBeNull()
+  })
+
+  it('returns warning for single_value with multiple yCols', () => {
+    const warning = getVizSettingsWarning({ type: 'single_value', yCols: ['a', 'b'] })
+    expect(warning).toBeTruthy()
+  })
+
+  it('returns null for single_value with one yCols', () => {
+    expect(getVizSettingsWarning({ type: 'single_value', yCols: ['total'] })).toBeNull()
+  })
+
+  it('returns warning for combo chart with only 1 Y column', () => {
+    const warning = getVizSettingsWarning({ type: 'combo', xCols: ['month'], yCols: ['revenue'] })
+    expect(warning).toBeTruthy()
   })
 })

@@ -1,4 +1,4 @@
-import type { VisualizationType } from '@/lib/types.gen'
+import type { VisualizationType, VizSettings } from '@/lib/types.gen'
 
 export interface ConstraintResult {
   error: string | null
@@ -83,4 +83,16 @@ export function getVizConstraintError(
     default:
       return { error: null }
   }
+}
+
+/**
+ * Check viz constraints from vizSettings alone (no query result columns needed for type checks).
+ * Returns a warning string or null. Used by tool handlers to feed constraint errors back to the LLM.
+ */
+export function getVizSettingsWarning(vizSettings: VizSettings | undefined | null): string | null {
+  if (!vizSettings || vizSettings.type === 'table') return null
+  const xColCount = vizSettings.xCols?.length ?? 0
+  const yColCount = vizSettings.yCols?.length ?? 0
+  const result = getVizConstraintError(vizSettings.type, { xColCount, yColCount })
+  return result.error
 }

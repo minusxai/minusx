@@ -17,6 +17,7 @@ import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
+import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 
 // ============================================================================
 // Tool Implementations
@@ -135,14 +136,23 @@ registerTool('Clarify', async (args, _user, childResults) => {
  * DuckDB connections are handled in Node.js; all other types fall through to Python.
  */
 registerTool('ExecuteQuery', async (args, user) => {
-  const { query, connectionId, parameters = {}, maxChars: rawMaxChars, _schema: whitelist } = args;
+  const { query, connectionId, parameters = {}, maxChars: rawMaxChars, _schema: whitelist, vizSettings } = args;
   if (Array.isArray(whitelist)) {
     const error = await validateQueryTablesLocal(query, whitelist);
     if (error) {
       return { content: { success: false, error }, details: { success: false, error } };
     }
   }
-  return execQuery({ query, connectionId, parameters, maxChars: rawMaxChars }, user);
+  const result = await execQuery({ query, connectionId, parameters, maxChars: rawMaxChars }, user);
+
+  // Append viz constraint warning if vizSettings were provided
+  const parsedViz = vizSettings ? (typeof vizSettings === 'string' ? JSON.parse(vizSettings) : vizSettings) : null;
+  const vizWarning = getVizSettingsWarning(parsedViz);
+  if (vizWarning && result.content && typeof result.content === 'object') {
+    (result.content as Record<string, any>).vizWarning = vizWarning;
+  }
+
+  return result;
 });
 
 // ============================================================================

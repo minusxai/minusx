@@ -830,4 +830,69 @@ describe('CreateFile tool - content validation', () => {
     expect(parsed.success).toBe(false);
     expect(parsed.error).toMatch(/Cannot create a dashboard in the background/);
   });
+
+  it('returns vizWarning when line chart has no xCols', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Bad Viz',
+        content: {
+          vizSettings: { type: 'line', xCols: [], yCols: ['revenue'] },
+        },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.vizWarning).toBeTruthy();
+    expect(parsed.vizWarning).toMatch(/X-axis/i);
+  });
+
+  it('returns vizWarning when single_value has multiple yCols', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Multi Metric',
+        content: {
+          vizSettings: { type: 'single_value', yCols: ['a', 'b'] },
+        },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.vizWarning).toBeTruthy();
+  });
+
+  it('does not return vizWarning for valid vizSettings', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Valid Viz',
+        content: {
+          vizSettings: { type: 'bar', xCols: ['category'], yCols: ['revenue'] },
+        },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.vizWarning).toBeUndefined();
+  });
+
+  it('does not return vizWarning for table type', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Table',
+        content: {
+          vizSettings: { type: 'table' },
+        },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.vizWarning).toBeUndefined();
+  });
 });
