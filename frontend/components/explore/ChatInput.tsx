@@ -10,7 +10,7 @@ import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
-import type { DatabaseWithSchema, Attachment, SkillMention } from '@/lib/types';
+import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
@@ -36,6 +36,8 @@ interface ChatInputProps {
   onContextChange?: (contextPath: string | null, version?: number) => void;
   whitelistedSchemas?: DatabaseWithSchema[];
   availableSkills?: SkillMention[];
+  availableCommands?: SlashCommand[];
+  onCommandExecute?: (command: SlashCommand) => void;
   prefillText?: string;
 }
 
@@ -59,6 +61,8 @@ export default function ChatInput({
   onContextChange,
   whitelistedSchemas,
   availableSkills = [],
+  availableCommands,
+  onCommandExecute,
   prefillText,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
@@ -279,6 +283,8 @@ export default function ChatInput({
                         }}
                         whitelistedSchemas={whitelistedSchemas}
                         availableSkills={availableSkills}
+                        availableCommands={availableCommands}
+                        onCommandExecute={onCommandExecute}
                       />
                     </Box>
                   </Box>

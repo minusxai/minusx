@@ -195,6 +195,15 @@ export type SkillMention =
       content?: string;
     });
 
+export interface SlashCommand {
+  type: 'command';
+  name: string;
+  label: string;
+  description: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
 export type AgentSkillSelection =
   | { type: 'system'; name: string }
   | { type: 'user'; name: string; content: string; description?: string };

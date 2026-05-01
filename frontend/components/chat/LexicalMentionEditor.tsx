@@ -12,7 +12,7 @@ import { MentionsPlugin } from './lexical/MentionsPlugin';
 import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, KEY_ENTER_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND, TextNode } from 'lexical';
 import { useEffect } from 'react';
 import { $createMentionNode, MentionData as MentionNodeData } from './lexical/MentionNode';
-import type { ChatMentionData, DatabaseWithSchema, SkillMention } from '@/lib/types';
+import type { ChatMentionData, DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
 
 interface LexicalMentionEditorProps {
   placeholder?: string;
@@ -25,6 +25,8 @@ interface LexicalMentionEditorProps {
   onBlur?: () => void;
   whitelistedSchemas?: DatabaseWithSchema[];
   availableSkills?: SkillMention[];
+  availableCommands?: SlashCommand[];
+  onCommandExecute?: (command: SlashCommand) => void;
 }
 
 export interface LexicalMentionEditorRef {
@@ -209,6 +211,8 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
       onBlur,
       whitelistedSchemas,
       availableSkills = [],
+      availableCommands,
+      onCommandExecute,
     },
     ref
   ) {
@@ -326,7 +330,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
             <EditablePlugin disabled={disabled} />
             <PastePlugin />
             <FocusPlugin onFocus={onFocus} onBlur={onBlur} editorRef={editorRef} />
-            <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} availableSkills={availableSkills} />
+            <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} availableSkills={availableSkills} availableCommands={availableCommands} onCommandExecute={onCommandExecute} />
           </Box>
         </LexicalComposer>
       </Box>
