@@ -46,21 +46,7 @@ NEXTAUTH_SECRET=<generated-secret-here>
 
 The backend requires no configuration for local development - all defaults work out of the box!
 
-### 3. Download Sample DuckDB Database
-
-The application uses DuckDB for analytics. Download the sample database:
-
-```bash
-# From project root
-mkdir -p data
-cd data
-curl -L -o default_db.duckdb https://raw.githubusercontent.com/minusxai/sample_datasets/refs/heads/master/adventureworks/adventureworks.duckdb
-
-```
-
-This downloads the AdventureWorks sample database (~5MB) used in the default connection.
-
-### 4. Start the Services
+### 3. Start the Services
 
 Now you're ready to start both services:
 
@@ -78,8 +64,14 @@ npm run dev
 
 The application will be available at http://localhost:3000
 
-### 5. Enable in production
-After adding your `.env` files, use the following command in the root project folder to run your services in production:
+### 4. Run in production
+
+`docker-compose.yml` pulls the latest stable images from ghcr.io:
 ```bash
 docker compose up -d
+```
+
+`docker-compose.prod.yml` pulls canary images and expects an external Postgres database (set `DATABASE_URL` in `frontend/.env`):
+```bash
+docker compose -f docker-compose.prod.yml up -d
 ```
