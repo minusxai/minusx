@@ -17,7 +17,7 @@ import { selectEffectiveUser } from '@/store/authSlice';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { isViewer } from '@/lib/auth/role-helpers';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import NewFolderModal from './NewFolderModal';
 
 interface CreateMenuProps {
@@ -55,6 +55,11 @@ export default function CreateMenu({
     let targetFolder = currentPath === '/'
       ? (effectiveUser ? resolveHomeFolderSync(effectiveUser.mode, effectiveUser.home_folder || '') : '/org')
       : currentPath;
+
+    // If browsing a system folder, fall back to the user's home folder
+    if (effectiveUser && isUnderSystemFolder(targetFolder, effectiveUser.mode)) {
+      targetFolder = resolveHomeFolderSync(effectiveUser.mode, effectiveUser.home_folder || '');
+    }
 
     // Apply minimum path constraints based on file type
     if ((fileType === 'question' || fileType === 'dashboard') && targetFolder === '/') {
