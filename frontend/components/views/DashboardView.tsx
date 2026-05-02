@@ -510,7 +510,8 @@ export default function DashboardView({
               showTitle={true}
               editMode={editMode}
               index={index}
-              onEdit={() => dispatch(pushView({ type: 'question', fileId: questionId }))}
+              dashboardId={fileId}
+              onEdit={() => dispatch(pushView({ type: 'question', fileId: questionId, dashboardId: fileId, dashboardParamValues: effectiveSubmittedValues }))}
               onRemove={() => handleRemoveAsset(questionId.toString())}
             />
           </Box>

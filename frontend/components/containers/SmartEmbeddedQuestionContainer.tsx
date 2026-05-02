@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
@@ -20,6 +20,7 @@ interface SmartEmbeddedQuestionContainerProps {
   onEdit?: () => void;  // Callback for edit button
   onRemove?: () => void;  // Callback for remove button
   index?: number;  // Optional index for numbering (e.g., #01, #02)
+  dashboardId?: number;  // Source dashboard ID (appended as ?dashboard= to question links)
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -30,6 +31,7 @@ function SmartEmbeddedQuestionContainerInner({
   editMode = false,
   onEdit,
   onRemove,
+  dashboardId,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
 
@@ -44,6 +46,20 @@ function SmartEmbeddedQuestionContainerInner({
 
   // Use effective name so pending renames are reflected immediately in the dashboard card
   const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
+
+  // Build question URL with optional dashboard context and param values
+  const questionHref = useMemo(() => {
+    const base = `/f/${questionId}`;
+    if (!dashboardId) return base;
+    const params = new URLSearchParams();
+    params.set('dashboard', String(dashboardId));
+    if (externalParamValues) {
+      for (const [key, value] of Object.entries(externalParamValues)) {
+        if (value != null) params.set(`p.${key}`, String(value));
+      }
+    }
+    return `${base}?${params.toString()}`;
+  }, [questionId, dashboardId, externalParamValues]);
 
   // Show loading state while file loads
   if (loading || !file || !mergedContent) {
@@ -82,7 +98,7 @@ function SmartEmbeddedQuestionContainerInner({
         >
           <Box flex="1" mr={2}>
             <Link
-              href={`/f/${questionId}`}
+              href={questionHref}
               prefetch={true}
               onClick={(e) => {
                 if (editMode) {
@@ -151,7 +167,7 @@ function SmartEmbeddedQuestionContainerInner({
                         px={3}
                         py={2}
                         _hover={{ bg: 'bg.muted' }}
-                        onClick={() => onEdit ? onEdit() : window.open(`/f/${questionId}`, '_blank')}
+                        onClick={() => onEdit ? onEdit() : window.open(questionHref, '_blank')}
                         aria-label="Edit question"
                       >
                         <HStack gap={2}>
@@ -256,6 +272,7 @@ const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainer
   prev.externalParamValues === next.externalParamValues &&
   prev.showTitle === next.showTitle &&
   prev.editMode === next.editMode &&
-  prev.index === next.index
+  prev.index === next.index &&
+  prev.dashboardId === next.dashboardId
 );
 export default SmartEmbeddedQuestionContainer;

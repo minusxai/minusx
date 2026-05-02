@@ -42,6 +42,8 @@ export default function ViewStackOverlay() {
                 fileId={item.fileId}
                 folderPath=""
                 isCreateMode={false}
+                dashboardId={item.dashboardId}
+                dashboardParamValues={item.dashboardParamValues}
               />
             );
           }
