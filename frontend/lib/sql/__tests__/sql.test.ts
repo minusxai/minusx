@@ -1137,6 +1137,28 @@ describe('Complex expressions (raw passthrough)', () => {
     expect(generated).toContain("'New Customers'");
     expect(generated.toUpperCase()).toContain('NULL');
   });
+
+  it('positional GROUP BY 1 on DATE_TRUNC column with a null param: no alias leaks into GROUP BY', async () => {
+    // Reproduces: "syntax error at or near 'AS'" when platform param is skipped
+    // and GROUP BY 1 resolves to DATE_TRUNC('month', created_at) AS month.
+    // The alias must be stripped from the GROUP BY output.
+    const sql = `SELECT DATE_TRUNC('month', created_at) AS month, COUNT(*) AS orders
+                 FROM orders
+                 WHERE status = 'completed' AND created_at >= :start_date AND platform = :platform
+                 GROUP BY 1 ORDER BY 1`;
+    const ir = await parseSqlToIrLocal(sql, 'duckdb') as QueryIR;
+    const noneSet = new Set(['platform']);
+    const transformed = removeNoneParamConditions(ir, noneSet);
+    const generated = irToSqlLocal(transformed, 'duckdb');
+
+    // GROUP BY must not contain an alias (AS ...) — that is invalid SQL
+    const groupByClause = generated.match(/GROUP BY([\s\S]+?)(?:\nORDER BY|\nLIMIT|$)/i)?.[1] ?? '';
+    expect(groupByClause.toUpperCase()).not.toContain(' AS ');
+    // The query must still have a valid GROUP BY clause
+    expect(generated.toUpperCase()).toContain('GROUP BY');
+    // The platform filter must be gone
+    expect(generated).not.toContain('platform');
+  });
 });
 
 // ---------------------------------------------------------------------------
