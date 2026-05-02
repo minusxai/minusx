@@ -67,6 +67,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             GIT_COMMIT_SHA=${{ github.sha }}
-            NEXT_PUBLIC_ANALYTICS_CONFIG=${{ vars.NEXT_PUBLIC_ANALYTICS_CONFIG }}
+            NEXT_PUBLIC_ANALYTICS_CONFIG=${{ secrets.NEXT_PUBLIC_ANALYTICS_CONFIG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
