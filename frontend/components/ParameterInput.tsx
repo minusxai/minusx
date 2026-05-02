@@ -790,6 +790,8 @@ export default function ParameterInput({
       gap={0}
       bg="bg.muted"
       borderRadius="md"
+      border="1px solid"
+      borderColor="border.muted"
       h={ROW_H}
       align="center"
       onMouseEnter={() => onHoverParam?.(paramKey)}
@@ -801,12 +803,14 @@ export default function ParameterInput({
         gap={1}
         px={2}
         h="full"
-        bg={getTypeColor(parameter.type)}
-        color="white"
+        bg={`${getTypeColor(parameter.type)}/20`}
+        color="fg.emphasized"
         fontSize="xs"
         fontWeight="600"
         fontFamily="mono"
         flexShrink={0}
+        borderLeft="3px solid"
+        borderLeftColor={getTypeColor(parameter.type)}
       >
         {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
         <Text fontSize="xs" fontFamily="mono" fontWeight="600">:{parameter.name}</Text>
