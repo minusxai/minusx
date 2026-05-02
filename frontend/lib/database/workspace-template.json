@@ -1320,6 +1320,7 @@
       "type": "config",
       "content": {
         "name": "config",
+        "analytics": { "enabled": true },
         "setupWizard": {
           "status": "complete"
         },
@@ -2176,6 +2177,7 @@
       "type": "config",
       "content": {
         "name": "config",
+        "analytics": { "enabled": true },
         "branding": {
           "displayName": "{{ORG_NAME}}",
           "agentName": "MinusX",
@@ -2287,6 +2289,7 @@
       "path": "/internals/configs/config",
       "type": "config",
       "content": {
+        "analytics": { "enabled": true },
         "setupWizard": {
           "status": "complete"
         },

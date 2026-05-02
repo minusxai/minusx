@@ -5,15 +5,16 @@ import { useSession } from 'next-auth/react';
 import { analytics } from '@/lib/analytics';
 import { ANALYTICS_CONFIG } from '@/lib/constants';
 import { useAppSelector } from '@/store/hooks';
+import { selectConfig } from '@/store/configsSlice';
 
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
   const user = useAppSelector(state => state.auth.user);
+  const analyticsEnabled = useAppSelector(state => selectConfig(state).analytics?.enabled ?? true);
 
-  // Initialize once on mount
   useEffect(() => {
-    analytics.init(ANALYTICS_CONFIG);
-  }, []);
+    analytics.init(analyticsEnabled ? ANALYTICS_CONFIG : { ...ANALYTICS_CONFIG, enabled: false });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Identify user when authenticated
   useEffect(() => {
