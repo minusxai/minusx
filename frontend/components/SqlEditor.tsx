@@ -786,38 +786,34 @@ export default function SqlEditor({
         </Box>
 
         {!readOnly && (showFormatButton || showRunButton) && (
-          <VStack gap={2} justify="space-between" py={2}>
-            <VStack flex={1} justify="flex-start" gap={2}>
-              {showFormatButton && (
-                <Tooltip content="Format SQL" positioning={{ placement: 'left' }}>
-                  <IconButton
-                    onClick={handleFormat}
-                    aria-label="Format SQL"
-                    size="sm"
-                    variant="ghost"
-                    color="accent.teal"
-                    _hover={{ bg: 'accent.teal', color: 'white' }}
-                  >
-                    <LuAlignLeft />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </VStack>
-            <VStack flex={1} justify="flex-end">
-              {showRunButton && onRun && (
-                <Tooltip content="Run Query (Cmd+Enter)" positioning={{ placement: 'left' }}>
-                  <IconButton
-                    onClick={onRun}
-                    aria-label="Run query"
-                    size="sm"
-                    colorPalette="teal"
-                    loading={isRunning}
-                  >
-                    <LuPlay fill="white" />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </VStack>
+          <VStack gap={2} justify="flex-start" py={2}>
+            {showFormatButton && (
+              <Tooltip content="Format SQL" positioning={{ placement: 'left' }}>
+                <IconButton
+                  onClick={handleFormat}
+                  aria-label="Format SQL"
+                  size="sm"
+                  variant="ghost"
+                  color="accent.teal"
+                  _hover={{ bg: 'accent.teal', color: 'white' }}
+                >
+                  <LuAlignLeft />
+                </IconButton>
+              </Tooltip>
+            )}
+            {showRunButton && onRun && (
+              <Tooltip content="Run Query (Cmd+Enter)" positioning={{ placement: 'left' }}>
+                <IconButton
+                  onClick={onRun}
+                  aria-label="Run query"
+                  size="sm"
+                  colorPalette="teal"
+                  loading={isRunning}
+                >
+                  <LuPlay fill="white" />
+                </IconButton>
+              </Tooltip>
+            )}
           </VStack>
         )}
       </HStack>
