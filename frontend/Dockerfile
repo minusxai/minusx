@@ -30,6 +30,8 @@ ENV NEXTAUTH_SECRET=build-placeholder
 # Accept git commit SHA from CI build arg — embedded into the Next.js build by next.config.ts
 ARG GIT_COMMIT_SHA
 ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
+ARG NEXT_PUBLIC_ANALYTICS_CONFIG
+ENV NEXT_PUBLIC_ANALYTICS_CONFIG=$NEXT_PUBLIC_ANALYTICS_CONFIG
 RUN --mount=type=cache,target=/app/.next/cache \
     npm run build
 
