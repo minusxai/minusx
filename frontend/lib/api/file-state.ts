@@ -387,11 +387,6 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
     ? { ...baseContent, ...fileState.persistableChanges }
     : baseContent;
   const currentName = selectEffectiveName(state, fileId) || '';
-  const isDirty = !!(
-    (fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0) ||
-    fileState.metadataChanges?.name !== undefined ||
-    fileState.metadataChanges?.path !== undefined
-  );
   let queryResultId = fileState.queryResultId;
   if (fileState.type === 'question') {
     const qc = mergedContent as QuestionContent;
@@ -405,7 +400,6 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
     path: fileState.metadataChanges?.path ?? fileState.path,
     type: fileState.type,
     content: mergedContent,
-    isDirty,
     ...(queryResultId ? { queryResultId } : {}),
   });
   return { success: true, fullFileStr, mergedContent };
@@ -459,7 +453,7 @@ export async function editFileStr(
   }
 
   // Decode back to object
-  let editedFile: { id: number; name: string; path: string; type: FileType; isDirty: boolean; queryResultId?: string; content: any };
+  let editedFile: { id: number; name: string; path: string; type: FileType; queryResultId?: string; content: any };
   try {
     editedFile = decodeFileStr(editedStr) as typeof editedFile;
   } catch (error) {
