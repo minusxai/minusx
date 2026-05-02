@@ -13,6 +13,7 @@ import { AnalyticsProvider } from './AnalyticsProvider';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { OrgConfig } from '@/lib/branding/whitelabel';
 import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
+import type { AnalyticsConfig } from '@/lib/analytics/types';
 
 // Import fetch patch to auto-initialize (don't remove - needed for side effect)
 import '@/lib/api/fetch-patch';
@@ -22,6 +23,7 @@ interface ProvidersProps {
   initialData?: {
     user: EffectiveUser | null;
     config: OrgConfig;  // Always present (from SSR or defaults)
+    analyticsConfig?: AnalyticsConfig;
   };
 }
 
@@ -59,7 +61,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       <SessionProvider refetchOnWindowFocus={false}>
         <ChakraProvider value={system}>
           <AuthProvider>
-            <AnalyticsProvider>
+            <AnalyticsProvider config={initialData?.analyticsConfig}>
               <ColorModeSync />
               <NavigationSync />
               <DataLoader />

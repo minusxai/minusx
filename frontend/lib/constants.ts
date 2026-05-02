@@ -18,7 +18,7 @@ export const APP_VERSION = '0.1.0';
  */
 export const GIT_COMMIT_SHA = process.env.GIT_COMMIT_SHA ?? 'unknown';
 
-function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
+export function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
   const defaultConfig: AnalyticsConfig = { enabled: false, debug: false, provider: 'noop' };
 
   if (!jsonString || jsonString.trim() === '') return defaultConfig;
@@ -58,8 +58,6 @@ function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
     return defaultConfig;
   }
 }
-
-export const ANALYTICS_CONFIG = parseAnalyticsConfig(process.env.NEXT_PUBLIC_ANALYTICS_CONFIG);
 
 export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
 
