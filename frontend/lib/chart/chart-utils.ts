@@ -403,7 +403,8 @@ export const buildPieChartOption = ({
   const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
   const borderColor = colorMode === 'dark' ? '#1a1a1a' : '#ffffff'
   const labelColor = colorMode === 'dark' ? '#ffffff' : '#1a1a1a'
-  const opacityStyle = styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}
+  const scaleOpacity = (base: number) => styleConfig?.opacity != null ? base * styleConfig.opacity : base
+  const opacityStyle = styleConfig?.opacity != null ? { opacity: scaleOpacity(1) } : {}
 
   // Inner/summary data: one slice per xAxisData entry, summing all series
   const innerData = xAxisData.map((name, index) => {
@@ -603,7 +604,8 @@ export const buildFunnelChartOption = ({
   const bB = parseInt(hex.substring(4, 6), 16) || 0
 
   const funnelData = rawData.map((item, i) => {
-    const alpha = styleConfig?.opacity ?? (n > 1 ? 1 - (i / (n - 1)) * 0.5 : 1)
+    const baseAlpha = n > 1 ? 1 - (i / (n - 1)) * 0.5 : 1
+    const alpha = styleConfig?.opacity != null ? baseAlpha * styleConfig.opacity : baseAlpha
     return {
       ...item,
       itemStyle: {
@@ -1341,7 +1343,13 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const yMax = axisConfig?.yMax ?? undefined
   const tooltipKeyColor = 'var(--chakra-colors-fg-muted)'
   const tooltipValueColor = 'var(--chakra-colors-fg-default)'
-  const seriesOpacity = styleConfig?.opacity
+  // When user hasn't touched opacity (null), each chart type uses its own aesthetic
+  // default (e.g. 0.95 for lines, 0.35 for area fill). When user explicitly sets a
+  // value, we scale the type-default by that fraction so 75% = 75% of the default,
+  // not a raw 0.75 that can be brighter than the untouched default.
+  const rawOpacity = styleConfig?.opacity
+  const scaleOpacity = (typeDefault: number) =>
+    rawOpacity != null ? typeDefault * rawOpacity : typeDefault
   const markerSize = styleConfig?.markerSize
   const isStacked = styleConfig?.stacked ?? true
   const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
@@ -1459,7 +1467,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       data: usesPointData ? pointData : series[index].data,
       itemStyle: {
         color: palette[index % palette.length],
-        ...(seriesOpacity != null ? { opacity: seriesOpacity } : {}),
+        ...(rawOpacity != null ? { opacity: scaleOpacity(1) } : {}),
       },
       ...(useDualYAxis && { yAxisIndex: yAxisAssignments[index] }),
     }
@@ -1471,7 +1479,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           symbol: 'circle',
           symbolSize: markerSize ?? 5,
           showSymbol: true,
-          lineStyle: { opacity: seriesOpacity ?? 0.95 },
+          lineStyle: { opacity: scaleOpacity(0.95) },
         }
       case 'bar': {
         const stackGroup = useDualYAxis ? (yAxisAssignments[index] === 0 ? 'left' : 'right') : 'total'
@@ -1483,8 +1491,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       case 'area': {
         const stackGroup = useDualYAxis ? (yAxisAssignments[index] === 0 ? 'left' : 'right') : 'total'
         const areaColor = palette[index % palette.length]
-        const bottomOpacity = seriesOpacity ?? 0.5
-        const topOpacity = bottomOpacity * 0.5
+        const fillOpacity = scaleOpacity(0.35)
 
         return {
           ...baseConfig,
@@ -1493,17 +1500,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           showSymbol: false,
           ...(isStacked ? { stack: stackGroup } : {}),
           areaStyle: {
-            color: {
-              type: 'linear' as const,
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: withAlpha(areaColor, bottomOpacity) },
-                { offset: 1, color: withAlpha(areaColor, topOpacity) },
-              ],
-            },
+            color: withAlpha(areaColor, fillOpacity),
           },
         }
       }
@@ -1515,10 +1512,16 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             type: 'line' as const,
             z: 10,
             symbol: 'circle',
-            symbolSize: markerSize ?? 6,
+            symbolSize: markerSize ?? 8,
             showSymbol: true,
             showAllSymbol: true,
-            lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
+            lineStyle: {
+              opacity: scaleOpacity(0.95),
+              width: 3,
+            },
+            itemStyle: {
+              ...baseConfig.itemStyle,
+            },
           }
         }
         // Left Y-axis (or no dual axis) → bar
@@ -1530,7 +1533,6 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             ...(isStacked ? { stack: stackGroup } : {}),
             itemStyle: {
               ...baseConfig.itemStyle,
-              opacity: seriesOpacity ?? 0.5,
             },
           }
         }
