@@ -1015,7 +1015,10 @@ function parseGroupBy(selectNode: any, dialect: string): GroupByClause | undefin
             unit: resolved.unit,
           });
         } else {
-          columns.push({ column: generateSqlFromAst(refExpr, dialect) });
+          // Use raw_sql from the parsed result: it comes from `actual` (alias-stripped),
+          // so the alias never leaks into GROUP BY. refExpr still carries the alias and
+          // would produce "expr AS alias" which is invalid SQL in a GROUP BY clause.
+          columns.push({ column: resolved.raw_sql ?? generateSqlFromAst(refExpr, dialect) });
         }
       }
     } else {
