@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, MutableRefObject } from 'react';
+import { useState, useCallback, useEffect, useRef, MutableRefObject } from 'react';
 import { Box, Button, HStack, Input, Text } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -26,6 +26,7 @@ interface CreateQuestionModalContainerProps {
    * (e.g. via the dashboard's "Edit" button) so cancel doesn't delete it.
    */
   isNewQuestion?: boolean;
+  dashboardParamValues?: Record<string, any>;
 }
 
 /**
@@ -41,6 +42,7 @@ export default function CreateQuestionModalContainer({
   questionId,
   onAttemptCloseRef,
   isNewQuestion,
+  dashboardParamValues,
 }: CreateQuestionModalContainerProps) {
   const dispatch = useAppDispatch();
   const [virtualId, setVirtualId] = useState<number | undefined>(undefined);
@@ -96,21 +98,33 @@ export default function CreateQuestionModalContainer({
   }, [effectiveId, dispatch]);
 
   // Set initial lastExecuted (only once when file is ready)
+  // If dashboardParamValues are provided, merge them into initial params
+  const initializedRef = useRef(false);
   useEffect(() => {
     if (!file || !mergedContent || !effectiveId) return;
-    if (lastExecuted) return; // Already set
+    if (initializedRef.current) return; // Already initialized by this modal
+    initializedRef.current = true;
+
+    const baseParams = mergedContent.parameterValues || {};
+    const params = dashboardParamValues ? { ...baseParams, ...dashboardParamValues } : baseParams;
 
     const initialQuery = {
       query: mergedContent.query || '',
-      params: mergedContent.parameterValues || {},
+      params,
       database: mergedContent.connection_name
     };
 
+    const changes: any = { lastExecuted: initialQuery };
+    // Set parameterValues directly so the UI inputs show dashboard values
+    if (dashboardParamValues) {
+      changes.parameterValues = params;
+    }
+
     dispatch(setEphemeral({
       fileId: effectiveId,
-      changes: { lastExecuted: initialQuery } as any
+      changes
     }));
-  }, [file, mergedContent, lastExecuted, effectiveId, dispatch]);
+  }, [file, mergedContent, effectiveId, dispatch, dashboardParamValues]);
 
   // Handle content changes
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {

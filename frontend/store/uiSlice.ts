@@ -4,7 +4,7 @@ import type { RootState } from './store';
 import type { Attachment } from '@/lib/types';
 
 export type ViewStackItem =
-  | { type: 'question'; fileId: number }
+  | { type: 'question'; fileId: number; dashboardId?: number; dashboardParamValues?: Record<string, any> }
   | { type: 'create-question'; folderPath: string; dashboardId: number; fileId: number };
 
 interface UIState {

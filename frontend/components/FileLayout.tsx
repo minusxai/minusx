@@ -20,7 +20,8 @@ import FloatingChatWrapper from './FloatingChatWrapper';
 import { ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';
-import { useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
+import { selectEffectiveName } from '@/store/filesSlice';
+import { useFile, useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { setLeftSidebarCollapsed, selectViewStackDepth, selectDashboardEditMode } from '@/store/uiSlice';
 import ViewStackOverlay from './ViewStack';
@@ -36,14 +37,21 @@ interface FileLayoutProps {
   fileType: DbFile['type'];
   fileId?: number;
   children: ReactNode;
-  rightSidebar: RightSidebarProps
+  rightSidebar: RightSidebarProps;
+  sourceDashboardId?: number;
 }
 
 export default function FileLayout(props: FileLayoutProps) {
-  const { filePath, fileName, fileType, fileId, rightSidebar } = props;
+  const { filePath, fileName, fileType, fileId, rightSidebar, sourceDashboardId } = props;
   const user = useAppSelector(state => state.auth.user);
   const isDashboardEditing = useAppSelector(state =>
     fileType === 'dashboard' && fileId ? selectDashboardEditMode(state, fileId) : false
+  );
+
+  // Load source dashboard name if navigated from a dashboard via URL param
+  useFile(sourceDashboardId);
+  const sourceDashboardName = useAppSelector(state =>
+    sourceDashboardId ? selectEffectiveName(state, sourceDashboardId) : undefined
   );
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop)
@@ -72,6 +80,11 @@ export default function FileLayout(props: FileLayoutProps) {
       label: pathParts[i] === currentMode ? config.branding.displayName : decodeURIComponent(pathParts[i]),
       href: `/p${accumulatedPath}`
     });
+  }
+
+  // If navigated from a dashboard, add it to the breadcrumb trail
+  if (sourceDashboardId && sourceDashboardName) {
+    breadcrumbItems.push({ label: sourceDashboardName, href: `/f/${sourceDashboardId}` });
   }
 
   // Add filename as final item (no href) - show type-based placeholder for untitled files

@@ -13,9 +13,10 @@ interface QuestionStackLayerProps {
   folderPath: string;
   isCreateMode: boolean;
   dashboardId?: number;  // required when isCreateMode=true
+  dashboardParamValues?: Record<string, any>;
 }
 
-export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, dashboardId }: QuestionStackLayerProps) {
+export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, dashboardId, dashboardParamValues }: QuestionStackLayerProps) {
   const dispatch = useAppDispatch();
   const fileName = useAppSelector(state =>
     fileId > 0 ? selectEffectiveName(state, fileId) || 'Question' : 'New Question'
@@ -74,15 +75,37 @@ export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, d
         <IconButton size="xs" variant="ghost" onClick={handleBack} aria-label="Back to dashboard" flexShrink={0}>
           <LuChevronLeft />
         </IconButton>
-        {breadcrumbSegments.map((seg, i) => (
-          <HStack key={i} gap={1.5} minW="0" flexShrink={i < breadcrumbSegments.length - 1 ? 1 : 0}>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>{seg}</Text>
-            <Box color="fg.subtle" flexShrink={0}><LuChevronRight size={10} /></Box>
-          </HStack>
-        ))}
+        {breadcrumbSegments.map((seg, i) => {
+          const isLast = i === breadcrumbSegments.length - 1;
+          return (
+            <HStack key={i} gap={1.5} minW="0" flexShrink={isLast ? 0 : 1}>
+              <Text
+                fontSize="xs"
+                color="fg.muted"
+                fontFamily="mono"
+                truncate
+                cursor={isLast ? 'pointer' : undefined}
+                _hover={isLast ? { color: 'accent.primary', textDecoration: 'underline' } : undefined}
+                onClick={isLast ? handleBack : undefined}
+              >
+                {seg}
+              </Text>
+              <Box color="fg.subtle" flexShrink={0}><LuChevronRight size={10} /></Box>
+            </HStack>
+          );
+        })}
         {breadcrumbSegments.length === 0 && (
           <>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono">Dashboard</Text>
+            <Text
+              fontSize="xs"
+              color="fg.muted"
+              fontFamily="mono"
+              cursor="pointer"
+              _hover={{ color: 'accent.primary', textDecoration: 'underline' }}
+              onClick={handleBack}
+            >
+              Dashboard
+            </Text>
             <Box color="fg.subtle"><LuChevronRight size={10} /></Box>
           </>
         )}
@@ -100,6 +123,7 @@ export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, d
         questionId={fileId}
         onAttemptCloseRef={attemptCloseRef}
         isNewQuestion={isCreateMode}
+        dashboardParamValues={dashboardParamValues}
       />
     </Box>
   );
