@@ -9,6 +9,9 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitelabel';
+import { ANALYTICS_CONFIG } from '@/lib/config';
+import { parseAnalyticsConfig } from '@/lib/constants';
+import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
 import FileModal from '@/components/modals/FileModal';
@@ -51,6 +54,7 @@ export async function generateMetadata(): Promise<Metadata> {
 async function loadInitialState(): Promise<{
   user: EffectiveUser | null;
   config: OrgConfig;
+  analyticsConfig: AnalyticsConfig;
 }> {
   const user = await getEffectiveUserCached();
   let config: OrgConfig = DEFAULT_CONFIG;
@@ -67,7 +71,7 @@ async function loadInitialState(): Promise<{
       config = result.config;
     } catch {}
   }
-  return { user, config };
+  return { user, config, analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG) };
 }
 
 export default async function RootLayout({
