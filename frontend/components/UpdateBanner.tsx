@@ -41,9 +41,8 @@ export default function UpdateBanner() {
   const user = useAppSelector(selectEffectiveUser);
   const [visible, setVisible] = useState(false);
 
-  if (user?.role !== 'admin') return null;
-
   useEffect(() => {
+    if (user?.role !== 'admin') return;
     if (GIT_COMMIT_SHA === 'unknown' || DISABLE_UPDATE_BANNER) return;
 
     let cancelled = false;
@@ -83,9 +82,9 @@ export default function UpdateBanner() {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.role]);
 
-  if (!visible) return null;
+  if (user?.role !== 'admin' || !visible) return null;
 
   const handleDismiss = () => {
     writeCache({ dismissedAt: Date.now() });
