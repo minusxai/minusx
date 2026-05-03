@@ -363,6 +363,7 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
+  const { config } = useConfigs();
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -450,6 +451,16 @@ function SettingsContent() {
       setIsTestingError(false);
     }
   };
+
+  const handleTelemetryToggle = useCallback(async (enabled: boolean) => {
+    await updateConfig({ analytics: { enabled } });
+    toaster.create({
+      title: enabled ? 'Telemetry enabled' : 'Telemetry disabled',
+      description: 'Reload the page for changes to take effect.',
+      type: 'info',
+      duration: 5000,
+    });
+  }, []);
 
   // ── Settings config ──────────────────────────────────────────────
   const settings: SettingEntry[] = useMemo(() => [
@@ -592,6 +603,17 @@ function SettingsContent() {
     },
     {
       tab: 'dev',
+      title: 'Telemetry',
+      description: 'Send anonymous usage data to help improve the product',
+      control: (
+        <SwitchControl
+          checked={config.analytics?.enabled ?? true}
+          onChange={handleTelemetryToggle}
+        />
+      ),
+    },
+    {
+      tab: 'dev',
       title: 'Session Recording',
       description: 'Record your session for debugging and support',
       control: <RecordingControl />,
@@ -617,7 +639,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
