@@ -82,7 +82,9 @@ export async function POST(request: NextRequest) {
 
     const otp = generateOTP();
     const otpHash = hashOTP(otp);
-    console.log('[send-otp/phone] Generated OTP:', otp, 'Hash:', otpHash);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[send-otp/phone] Generated OTP:', otp, 'Hash:', otpHash);
+    }
 
     const token = createOTPToken({
       email: user.email,
