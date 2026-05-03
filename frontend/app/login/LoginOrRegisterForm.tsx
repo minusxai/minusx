@@ -3,7 +3,8 @@
 import { useState, FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { Box, VStack, Input, Button, Heading, Text } from '@chakra-ui/react';
+import { Box, VStack, HStack, Input, Button, Heading, Text } from '@chakra-ui/react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { LuLogIn, LuBuilding2 } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -73,6 +74,8 @@ export function LoginOrRegisterForm({
   const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registerLoading, setRegisterLoading] = useState(false);
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [tosError, setTosError] = useState<string | null>(null);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -242,7 +245,8 @@ export function LoginOrRegisterForm({
     setAdminEmailError(emailVal.valid ? null : emailVal.error!);
     setAdminPasswordError(passwordVal.valid ? null : passwordVal.error!);
 
-    if (!nameVal.valid || !adminNameVal.valid || !emailVal.valid || !passwordVal.valid) return;
+    if (!tosAccepted) setTosError('You must accept the Terms of Service to continue.');
+    if (!nameVal.valid || !adminNameVal.valid || !emailVal.valid || !passwordVal.valid || !tosAccepted) return;
 
     setRegisterLoading(true);
     try {
@@ -262,6 +266,7 @@ export function LoginOrRegisterForm({
       setAdminName('');
       setAdminEmail('');
       setAdminPassword('');
+      setTosAccepted(false);
       setMode('login');
     } catch (err: any) {
       setRegisterError(err.message || 'Registration failed. Please try again.');
@@ -421,6 +426,21 @@ export function LoginOrRegisterForm({
                       borderColor={adminPasswordError ? 'accent.danger' : undefined}
                     />
                     {adminPasswordError && <Text fontSize="xs" color="accent.danger" mt={1}>{adminPasswordError}</Text>}
+                  </Box>
+                  <Box>
+                    <HStack gap={2} alignItems="center">
+                      <Checkbox
+                        checked={tosAccepted}
+                        onCheckedChange={(e) => { setTosAccepted(!!e.checked); setTosError(null); }}
+                      />
+                      <Text fontSize="sm" color="fg.muted">
+                        I agree to the{' '}
+                        <a href="https://minusx.ai/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
+                          Terms of Service
+                        </a>
+                      </Text>
+                    </HStack>
+                    {tosError && <Text fontSize="xs" color="accent.danger" mt={1}>{tosError}</Text>}
                   </Box>
                   <Button
                     type="submit"
