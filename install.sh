@@ -68,6 +68,13 @@ if [ "$BACKEND_PORT" -ne 8001 ]; then
   info "Port 8001 is in use — using $BACKEND_PORT for backend"
 fi
 
+# ── working directory ────────────────────────────────────────────────────────
+
+INSTALL_DIR="minusx"
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+info "Using directory: $(pwd)"
+
 # ── env files ────────────────────────────────────────────────────────────────
 
 mkdir -p backend frontend data data/pglite static
@@ -88,7 +95,7 @@ fi
 ANTHROPIC_API_KEY=$(get_env_val backend/.env ANTHROPIC_API_KEY)
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   info "Enter your Anthropic API key (get one at https://console.anthropic.com):"
-  read -r ANTHROPIC_API_KEY
+  read -r ANTHROPIC_API_KEY </dev/tty
   if [ -z "$ANTHROPIC_API_KEY" ]; then
     err "ANTHROPIC_API_KEY is required."
     exit 1
