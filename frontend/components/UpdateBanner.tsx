@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Flex, Text, Icon, IconButton, Box, Code } from '@chakra-ui/react';
+import { Flex, Text, Icon, IconButton, Code } from '@chakra-ui/react';
 import { LuRefreshCw, LuX } from 'react-icons/lu';
 import { GIT_COMMIT_SHA, BUILD_TIME, DISABLE_UPDATE_BANNER } from '@/lib/constants';
+import { useAppSelector } from '@/store/hooks';
+import { selectEffectiveUser } from '@/store/authSlice';
 
 const INSTALL_CMD = 'curl -fsSL https://raw.githubusercontent.com/minusxai/minusx/main/install.sh | bash';
 const CACHE_KEY = 'minusx-update-check';
@@ -36,7 +38,10 @@ function writeCache(patch: Partial<UpdateCache>) {
 }
 
 export default function UpdateBanner() {
+  const user = useAppSelector(selectEffectiveUser);
   const [visible, setVisible] = useState(false);
+
+  if (user?.role !== 'admin') return null;
 
   useEffect(() => {
     if (GIT_COMMIT_SHA === 'unknown' || DISABLE_UPDATE_BANNER) return;
@@ -64,7 +69,7 @@ export default function UpdateBanner() {
 
       try {
         const r = await fetch(
-          `https://api.github.com/repos/minusxai/minusx/compare/${GIT_COMMIT_SHA}...main`,
+          `https://api.github.com/repos/minusxai/minusx/compare/25bd27d...main`,
           { headers: { Accept: 'application/vnd.github+json' } },
         );
         if (!r.ok) throw new Error(`status ${r.status}`);
@@ -108,7 +113,7 @@ export default function UpdateBanner() {
         A new version of MinusX is available.
       </Text>
       <Flex align="center" gap={2} flex={1} flexWrap="wrap">
-        <Text fontSize="xs" opacity={0.9} flexShrink={0}>To update, re-run:</Text>
+        <Text fontSize="xs" opacity={0.9} flexShrink={0}>To update, in the same directory re-run:</Text>
         <Code
           fontSize="xs"
           bg="whiteAlpha.200"
@@ -128,14 +133,6 @@ export default function UpdateBanner() {
         </Code>
       </Flex>
       <Flex gap={2} align="center" flexShrink={0}>
-        <a
-          href="https://github.com/minusxai/minusx/releases"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ fontSize: '0.75rem', opacity: 0.85, textDecoration: 'underline', color: 'white' }}
-        >
-          Changelog
-        </a>
         <IconButton
           aria-label="Dismiss update banner"
           size="xs"

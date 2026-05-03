@@ -39,7 +39,6 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
 
   return (
     <RecordingProvider>
-      <UpdateBanner />
       <Suspense fallback={null}>
         <Sidebar />
       </Suspense>
@@ -50,6 +49,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         transition="margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
         minH="100vh"
       >
+        <UpdateBanner />
         {children}
       </Box>
     </RecordingProvider>
