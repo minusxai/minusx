@@ -16,6 +16,7 @@ import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { UserState } from '@/lib/types';
 import { buildOTPEmailHtml } from '@/lib/messaging/otp-email-html';
+import { IS_DEV } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     const otp = generateOTP();
     const otpHash = hashOTP(otp);
-    if (process.env.NODE_ENV === 'development') {
+    if (IS_DEV) {
       console.log('[send-otp/phone] Generated OTP:', otp, 'Hash:', otpHash);
     }
 
