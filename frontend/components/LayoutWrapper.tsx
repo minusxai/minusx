@@ -9,6 +9,7 @@ import MobileBottomNav from './MobileBottomNav';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { clearViewStack } from '@/store/uiSlice';
+import UpdateBanner from './UpdateBanner';
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -38,6 +39,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
 
   return (
     <RecordingProvider>
+      <UpdateBanner />
       <Suspense fallback={null}>
         <Sidebar />
       </Suspense>

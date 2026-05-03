@@ -16,9 +16,10 @@ function readGitCommitSha(): string {
 const GIT_COMMIT_SHA = readGitCommitSha();
 
 const nextConfig: NextConfig = {
-  // Embed git commit SHA at build time — available as process.env.GIT_COMMIT_SHA everywhere
+  // Embed git commit SHA and build time at build time — available as process.env.* everywhere
   env: {
     GIT_COMMIT_SHA,
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
   // Enable standalone output for optimized Docker deployments (60% smaller images)
   output: 'standalone',

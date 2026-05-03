@@ -17,6 +17,8 @@ export const APP_VERSION = '0.1.0';
  * Available on both client and server. Falls back to 'unknown' if not set.
  */
 export const GIT_COMMIT_SHA = process.env.GIT_COMMIT_SHA ?? 'unknown';
+export const BUILD_TIME = process.env.NEXT_PUBLIC_BUILD_TIME ?? '';
+export const DISABLE_UPDATE_BANNER = process.env.NEXT_PUBLIC_DISABLE_UPDATE_BANNER === 'true';
 
 export function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
   const defaultConfig: AnalyticsConfig = { enabled: false, debug: false, provider: 'noop' };
