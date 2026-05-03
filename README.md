@@ -21,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/minusxai/minusx/main/install.sh | b
 
 Requires [Docker](https://docs.docker.com/get-docker/). The script checks for Docker, finds available ports, sets up your API keys, and starts the app.
 
-# Local development
+## Local development
 
 ### 1. Install Dependencies
 
