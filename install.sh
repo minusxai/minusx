@@ -70,9 +70,12 @@ fi
 
 # ── working directory ────────────────────────────────────────────────────────
 
-INSTALL_DIR="minusx"
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+if [ "$(basename "$(pwd)")" = "minusx" ]; then
+  info "Already in a 'minusx' directory — using current directory"
+else
+  mkdir -p minusx
+  cd minusx
+fi
 info "Using directory: $(pwd)"
 
 # ── env files ────────────────────────────────────────────────────────────────
