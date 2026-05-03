@@ -533,7 +533,7 @@ export default function AgentTurnContainer({
     timeline.some(n => n.type === 'query' || (
       FILE_LABELS.has(n.label) && n.messages.some(m => {
         const parsed = parseFileToolContent(m);
-        return parsed.fileType === 'question';
+        return parsed.fileType === 'question' && parsed.queryResult;
       })
     )),
     [timeline],
