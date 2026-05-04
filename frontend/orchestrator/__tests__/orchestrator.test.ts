@@ -458,6 +458,50 @@ describe('runAgent result discriminated union', () => {
   });
 });
 
+describe('debug log: per-LLM-turn stats', () => {
+  it('appends a TaskDebugLog with one LLMDebug entry per LLM turn', async () => {
+    const mock = new MockStreamFn();
+    mock.configure([
+      [{ type: 'toolCall', id: 'tc-1', name: 'simpleTool', arguments: { value: 'a' } }],
+      [{ type: 'text', text: 'done' }],
+    ]);
+
+    const result = await runAgent(new TestAgent(), 'Hi', [], ctx, mock.asStreamFn());
+    expect(result.state).toBe('success');
+
+    // Exactly one TaskDebugLog entry per runAgent call, attached to the root task.
+    const debugEntries = result.logDiff.filter(
+      (e): e is ConversationLogEntry & { _type: 'task_debug' } => e._type === 'task_debug',
+    );
+    expect(debugEntries.length).toBe(1);
+
+    const debug = debugEntries[0];
+    const rootTaskId = result.logDiff.find(
+      (e): e is ConversationLogEntry & { _type: 'task' } =>
+        e._type === 'task' && e._parent_unique_id === null,
+    )!.unique_id;
+    expect(debug._task_unique_id).toBe(rootTaskId);
+    expect(debug.duration).toBeGreaterThanOrEqual(0);
+    expect(debug.created_at).toMatch(/\d{4}-\d{2}-\d{2}T/);
+
+    // Two LLM turns → two LLMDebug entries
+    expect(debug.llmDebug.length).toBe(2);
+
+    const [turn1, turn2] = debug.llmDebug;
+    // Model id comes from the streamFn's `model` arg (mockModel.id = 'mock-model')
+    expect(turn1.model).toBe('mock-model');
+    expect(turn2.model).toBe('mock-model');
+    // First turn ended with toolUse (tool call), second with stop (final reply)
+    expect(turn1.finishReason).toBe('toolUse');
+    expect(turn2.finishReason).toBe('stop');
+    // Token counts come from MockStreamFn's ZERO_USAGE stub — present and zero,
+    // proving the wiring works end-to-end (real provider would emit real numbers)
+    expect(turn1.totalTokens).toBe(0);
+    expect(turn1.cost).toBe(0);
+    expect(turn1.duration).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe('buildMessagesFromLog', () => {
   it('returns empty array for empty log', () => {
     expect(buildMessagesFromLog([])).toEqual([]);

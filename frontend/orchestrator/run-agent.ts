@@ -12,6 +12,7 @@ import {
   CompressedConversationLog,
   CompressedTask,
   type ConversationLogEntry,
+  type LLMDebug,
   getLatestRootTask,
 } from './conversation';
 import { buildMessagesFromLog, userMessageArgs } from './log-messages';
@@ -58,6 +59,13 @@ export async function runAgent(
   let turnIndex = 0;
   let lastStopReason: AssistantMessage['stopReason'] | undefined;
   let stoppedByAgent = false;
+
+  // Per-turn LLM stats accumulated from `message_end` events. Written to a
+  // TaskDebugLog entry at the end so callers (admin debug UI, eval harnesses,
+  // cost reporting) can see what each LLM call cost. Mirrors Python's LLMDebug.
+  const llmDebug: LLMDebug[] = [];
+  const turnStartTimes: number[] = [];
+  const runStart = Date.now();
 
   const agentTools: AgentTool[] = agent.buildAgentTools(ctx);
   const priorMessages = buildMessagesFromLog(existingLog);
@@ -161,6 +169,27 @@ export async function runAgent(
 
   const stream = agentLoop(prompts, agentContext, config, ctx.signal, streamFn);
   for await (const event of stream) {
+    // Per-LLM-turn debug capture. message_start fires once per LLM call (start of
+    // streaming); message_end fires when the assistant message is complete.
+    if (event.type === 'message_start' && event.message.role === 'assistant') {
+      turnStartTimes.push(Date.now());
+    }
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
+      const m = event.message as AssistantMessage;
+      const startedAt = turnStartTimes[turnStartTimes.length - 1] ?? Date.now();
+      llmDebug.push({
+        model: m.model,
+        responseId: m.responseId,
+        duration: (Date.now() - startedAt) / 1000,
+        finishReason: m.stopReason,
+        promptTokens: m.usage.input,
+        completionTokens: m.usage.output,
+        totalTokens: m.usage.totalTokens,
+        cacheReadTokens: m.usage.cacheRead,
+        cacheWriteTokens: m.usage.cacheWrite,
+        cost: m.usage.cost?.total ?? 0,
+      });
+    }
     if (event.type === 'agent_end') {
       const msgs = event.messages;
       for (let i = msgs.length - 1; i >= 0; i--) {
@@ -179,6 +208,10 @@ export async function runAgent(
       }
     }
   }
+
+  // Append per-task debug entry. One per runAgent call, attached to the root task.
+  const totalDuration = (Date.now() - runStart) / 1000;
+  log.addDebug(rootTaskId, totalDuration, llmDebug);
 
   // Distinguish the three terminal states for the caller.
   if (pendingTools.length > 0) {

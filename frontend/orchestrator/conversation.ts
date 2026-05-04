@@ -17,11 +17,34 @@ export interface TaskResult {
   created_at: string;
 }
 
+/**
+ * Stats for a single LLM API call. Mirrors Python `LLMDebug` in `tasks/debug_context.py`.
+ * One entry per `streamFn` invocation (= one LLM turn).
+ */
+export interface LLMDebug {
+  /** Model id (e.g. 'claude-sonnet-4-6') */
+  model: string;
+  /** LLM provider's response/call id (analogous to Python's call_id). May be missing for some providers. */
+  responseId?: string;
+  /** Wall-clock duration of this LLM call in seconds */
+  duration: number;
+  /** Why the LLM stopped this turn ('stop' | 'length' | 'toolUse' | 'error' | 'aborted') */
+  finishReason: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cost: number;
+}
+
 export interface TaskDebugLog {
   _type: 'task_debug';
   _task_unique_id: string;
+  /** Total wall-clock duration of the task in seconds (covers all LLM turns + tool execution). */
   duration: number;
-  llmDebug: unknown[];
+  /** Per-turn LLM stats, in order. */
+  llmDebug: LLMDebug[];
   extra?: unknown;
   created_at: string;
 }
@@ -145,6 +168,21 @@ export class CompressedConversationLog {
       _type: 'task_result',
       _task_unique_id: taskUniqueId,
       result,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Append a TaskDebugLog entry for `taskUniqueId` (typically the root task) with
+   * total duration and per-LLM-call stats. Mirrors Python `add_debug` in
+   * `tasks/orchestrator.py`.
+   */
+  addDebug(taskUniqueId: string, duration: number, llmDebug: LLMDebug[]): void {
+    this.log.push({
+      _type: 'task_debug',
+      _task_unique_id: taskUniqueId,
+      duration,
+      llmDebug,
       created_at: new Date().toISOString(),
     });
   }
