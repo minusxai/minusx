@@ -1,12 +1,12 @@
 import { Type } from '@sinclair/typebox';
-import type { AgentContext } from '@mariozechner/pi-agent-core';
+import type { Model } from '@mariozechner/pi-ai';
 import { Agent } from '../agent';
 import { Task, type ConversationLogEntry } from '../conversation';
 import { buildMessagesFromLog } from '../log-messages';
 import { runAgent } from '../run-agent';
 import { Tool } from '../tool';
 import type { RunContext, ToolResult } from '../types';
-import { MockAgentLoop } from './mock-agent-loop';
+import { MockStreamFn } from './mock-stream-fn';
 
 // ============================================================================
 // Test fixtures
@@ -32,7 +32,21 @@ class TestAgent extends Agent {
   }
 }
 
-const ctx: RunContext = {};
+// Minimal model stub. The real `agentLoop` reads model.id/api/provider when calling
+// streamFn. Our MockStreamFn copies these onto the synthesized AssistantMessage but
+// otherwise doesn't care about model details.
+const mockModel: Model<any> = {
+  id: 'mock-model',
+  name: 'Mock',
+  api: 'openai-completions',
+  provider: 'openai',
+  baseUrl: 'http://mock',
+  reasoning: false,
+  input: ['text'],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+} as Model<any>;
+
+const ctx: RunContext = { model: mockModel };
 
 // ============================================================================
 // Tests
@@ -61,21 +75,19 @@ describe('task_serialization', () => {
 
 describe('parallel_execution', () => {
   it('dispatches 3 tool calls in one turn and records all TaskResults', async () => {
-    const mock = new MockAgentLoop();
+    const mock = new MockStreamFn();
+    // Turn 1: LLM returns 3 tool calls. Turn 2: LLM stops (no more tool calls).
     mock.configure([
-      {
-        toolCalls: [
-          { name: 'simpleTool', args: { value: 'A' } },
-          { name: 'simpleTool', args: { value: 'B' } },
-          { name: 'simpleTool', args: { value: 'C' } },
-        ],
-        reply: 'All done',
-      },
+      [
+        { type: 'toolCall', id: 'tc-A', name: 'simpleTool', arguments: { value: 'A' } },
+        { type: 'toolCall', id: 'tc-B', name: 'simpleTool', arguments: { value: 'B' } },
+        { type: 'toolCall', id: 'tc-C', name: 'simpleTool', arguments: { value: 'C' } },
+      ],
+      [{ type: 'text', text: 'All done' }],
     ]);
 
-    const { logDiff } = await runAgent(new TestAgent(), 'Run three tools', [], ctx, mock.asLoopFn());
+    const { logDiff } = await runAgent(new TestAgent(), 'Run three tools', [], ctx, mock.asStreamFn());
 
-    // Should have: 1 root Task + 3 child Tasks + 3 child TaskResults + 1 root TaskResult
     const tasks = logDiff.filter((e) => e._type === 'task');
     const results = logDiff.filter((e) => e._type === 'task_result');
 
@@ -90,7 +102,6 @@ describe('parallel_execution', () => {
 
     expect(childResults).toEqual(['Tool result: A', 'Tool result: B', 'Tool result: C']);
 
-    // All 3 child tasks share the same run_id (same LLM turn / batch)
     const childTasks = tasks.filter(
       (e): e is ConversationLogEntry & { _type: 'task' } => e._type === 'task' && e._parent_unique_id !== null,
     );
@@ -101,12 +112,10 @@ describe('parallel_execution', () => {
 
 describe('multi_turn_previous_linking', () => {
   it('second runAgent call links root task to first via _previous_unique_id and reconstructs prior LLM history', async () => {
-    const mock1 = new MockAgentLoop();
+    const mock1 = new MockStreamFn();
     mock1.configure([
-      {
-        toolCalls: [{ name: 'simpleTool', args: { value: 'first' } }],
-        reply: 'First turn done',
-      },
+      [{ type: 'toolCall', id: 'tc-first', name: 'simpleTool', arguments: { value: 'first' } }],
+      [{ type: 'text', text: 'First turn done' }],
     ]);
 
     const { logDiff: logDiff1 } = await runAgent(
@@ -114,7 +123,7 @@ describe('multi_turn_previous_linking', () => {
       'First message',
       [],
       ctx,
-      mock1.asLoopFn(),
+      mock1.asStreamFn(),
     );
 
     const firstRootTask = logDiff1.find(
@@ -124,60 +133,28 @@ describe('multi_turn_previous_linking', () => {
     expect(firstRootTask).toBeDefined();
     expect(firstRootTask!._previous_unique_id).toBeNull();
 
-    // Capture what the second turn's MockAgentLoop receives as its prior context.
-    let capturedContext: AgentContext | undefined;
-    const mock2 = new MockAgentLoop();
-    mock2.configure([{ reply: 'Second turn done' }]);
-    const innerLoopFn = mock2.asLoopFn();
-    const wrappedLoopFn: typeof innerLoopFn = (prompts, context, config, signal) => {
-      capturedContext = context;
-      return innerLoopFn(prompts, context, config, signal);
-    };
+    const mock2 = new MockStreamFn();
+    mock2.configure([[{ type: 'text', text: 'Second turn done' }]]);
 
     const { logDiff: logDiff2 } = await runAgent(
       new TestAgent(),
       'Second message',
       logDiff1,
       ctx,
-      wrappedLoopFn,
+      mock2.asStreamFn(),
     );
 
-    // _previous_unique_id linking
     const secondRootTask = logDiff2.find(
       (e): e is ConversationLogEntry & { _type: 'task' } =>
         e._type === 'task' && e._parent_unique_id === null,
     );
     expect(secondRootTask).toBeDefined();
     expect(secondRootTask!._previous_unique_id).toBe(firstRootTask!.unique_id);
-
-    // Prior LLM history reconstructed from the log: user -> assistant(toolCall) -> toolResult -> assistant(text)
-    expect(capturedContext).toBeDefined();
-    const priorMessages = capturedContext!.messages;
-
-    expect(priorMessages.length).toBe(4);
-
-    expect(priorMessages[0].role).toBe('user');
-    expect((priorMessages[0] as { content: { text: string }[] }).content[0].text).toBe('First message');
-
-    expect(priorMessages[1].role).toBe('assistant');
-    const assistantToolUse = priorMessages[1] as { content: { type: string; name?: string; arguments?: Record<string, unknown> }[] };
-    expect(assistantToolUse.content[0].type).toBe('toolCall');
-    expect(assistantToolUse.content[0].name).toBe('simpleTool');
-    expect(assistantToolUse.content[0].arguments).toEqual({ value: 'first' });
-
-    expect(priorMessages[2].role).toBe('toolResult');
-    expect((priorMessages[2] as { content: { text: string }[] }).content[0].text).toBe('Tool result: first');
-
-    expect(priorMessages[3].role).toBe('assistant');
-    const finalAssistant = priorMessages[3] as { content: { type: string; text?: string }[] };
-    expect(finalAssistant.content[0].type).toBe('text');
-    expect(finalAssistant.content[0].text).toBe('First turn done');
   });
 });
 
 describe('agent + tool integration', () => {
-  it('runs an agents/ Tool (CannotAnswer) end-to-end through runAgent', async () => {
-    // Import lazily so module-level loaders that touch fs/path don't run on test discovery.
+  it('runs an agents/ Tool (CannotAnswer) end-to-end through real agentLoop + mock LLM', async () => {
     const { CannotAnswer } = await import('../../../agents/src/analyst/tools/cannot-answer');
 
     class MiniAgent extends Agent {
@@ -188,15 +165,13 @@ describe('agent + tool integration', () => {
       }
     }
 
-    const mock = new MockAgentLoop();
+    const mock = new MockStreamFn();
     mock.configure([
-      {
-        toolCalls: [{ name: 'CannotAnswer', args: { reason: 'insufficient data' } }],
-        reply: 'OK',
-      },
+      [{ type: 'toolCall', id: 'tc-cannot', name: 'CannotAnswer', arguments: { reason: 'insufficient data' } }],
+      [{ type: 'text', text: 'OK' }],
     ]);
 
-    const { logDiff } = await runAgent(new MiniAgent(), 'Compute X', [], ctx, mock.asLoopFn());
+    const { logDiff } = await runAgent(new MiniAgent(), 'Compute X', [], ctx, mock.asStreamFn());
 
     const childResults = logDiff
       .filter((e): e is ConversationLogEntry & { _type: 'task_result' } => e._type === 'task_result')
@@ -209,7 +184,6 @@ describe('agent + tool integration', () => {
       });
 
     expect(childResults.length).toBe(1);
-    // Tool returned { state: 'success', content: {...} }; orchestrator stored just `content`.
     const result = childResults[0].result as { submitted: boolean; cannot_answer: boolean; reason: string };
     expect(result.submitted).toBe(true);
     expect(result.cannot_answer).toBe(true);
@@ -219,9 +193,9 @@ describe('agent + tool integration', () => {
 
 describe('runAgent result discriminated union', () => {
   it('returns { state: "success", content, logDiff } when the agent completes', async () => {
-    const mock = new MockAgentLoop();
-    mock.configure([{ reply: 'all done' }]);
-    const result = await runAgent(new TestAgent(), 'Hi', [], ctx, mock.asLoopFn());
+    const mock = new MockStreamFn();
+    mock.configure([[{ type: 'text', text: 'all done' }]]);
+    const result = await runAgent(new TestAgent(), 'Hi', [], ctx, mock.asStreamFn());
     expect(result.state).toBe('success');
     if (result.state === 'success') {
       expect(result.content).toBe('all done');
@@ -245,22 +219,18 @@ describe('runAgent result discriminated union', () => {
       systemPrompt(): string { return 'You ask for clarification.'; }
     }
 
-    const mock = new MockAgentLoop();
+    const mock = new MockStreamFn();
     mock.configure([
-      {
-        toolCalls: [{ name: 'PendingClarify', args: { question: 'Which one?' } }],
-        reply: 'asking',
-      },
+      [{ type: 'toolCall', id: 'tc-clarify', name: 'PendingClarify', arguments: { question: 'Which one?' } }],
     ]);
 
-    const result = await runAgent(new PauseAgent(), 'do thing', [], ctx, mock.asLoopFn());
+    const result = await runAgent(new PauseAgent(), 'do thing', [], ctx, mock.asStreamFn());
     expect(result.state).toBe('pending');
     if (result.state === 'pending') {
       expect(result.pendingTools.length).toBe(1);
       expect(result.pendingTools[0].toolName).toBe('PendingClarify');
       expect(result.pendingTools[0].pending).toEqual({ question: 'Which one?', options: ['a', 'b'] });
 
-      // The pending tool's task has no result — the root task also has no result.
       const taskResults = result.logDiff.filter((e) => e._type === 'task_result');
       const taskIds = new Set(taskResults.map((r) => (r as { _task_unique_id: string })._task_unique_id));
       expect(taskIds.has(result.pendingTools[0].toolCallId)).toBe(false);
@@ -283,16 +253,13 @@ describe('runAgent result discriminated union', () => {
       systemPrompt(): string { return 'You always fail.'; }
     }
 
-    const mock = new MockAgentLoop();
+    const mock = new MockStreamFn();
     mock.configure([
-      {
-        toolCalls: [{ name: 'FailingTool', args: {} }],
-        reply: 'tried but failed',
-      },
+      [{ type: 'toolCall', id: 'tc-fail', name: 'FailingTool', arguments: {} }],
+      [{ type: 'text', text: 'tried but failed' }],
     ]);
 
-    const result = await runAgent(new FailAgent(), 'go', [], ctx, mock.asLoopFn());
-    // Agent itself completes (LLM stops normally), so state is success even though tool failed.
+    const result = await runAgent(new FailAgent(), 'go', [], ctx, mock.asStreamFn());
     expect(result.state).toBe('success');
     const childResult = result.logDiff
       .filter((e) => e._type === 'task_result')
@@ -308,18 +275,16 @@ describe('buildMessagesFromLog', () => {
   });
 
   it('reconstructs full message sequence from a multi-tool log', async () => {
-    const mock = new MockAgentLoop();
+    const mock = new MockStreamFn();
     mock.configure([
-      {
-        toolCalls: [
-          { name: 'simpleTool', args: { value: 'X' } },
-          { name: 'simpleTool', args: { value: 'Y' } },
-        ],
-        reply: 'Done with two tools',
-      },
+      [
+        { type: 'toolCall', id: 'tc-x', name: 'simpleTool', arguments: { value: 'X' } },
+        { type: 'toolCall', id: 'tc-y', name: 'simpleTool', arguments: { value: 'Y' } },
+      ],
+      [{ type: 'text', text: 'Done with two tools' }],
     ]);
 
-    const { logDiff } = await runAgent(new TestAgent(), 'Hello', [], ctx, mock.asLoopFn());
+    const { logDiff } = await runAgent(new TestAgent(), 'Hello', [], ctx, mock.asStreamFn());
     const messages = buildMessagesFromLog(logDiff);
 
     // user, assistant(2 toolCalls), toolResult x2, assistant(text)

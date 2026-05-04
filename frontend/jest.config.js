@@ -11,6 +11,9 @@
 
 const mainProject = {
   displayName: 'main',
+  // Per-project cache dir prevents transform-cache contamination between the
+  // CJS main project and the ESM orchestrator project.
+  cacheDirectory: '<rootDir>/.jest-cache/main',
   preset: 'ts-jest',
   testEnvironment: 'node',
   testTimeout: 45000,
@@ -44,6 +47,7 @@ const mainProject = {
 
 const orchestratorProject = {
   displayName: 'orchestrator',
+  cacheDirectory: '<rootDir>/.jest-cache/orchestrator',
   preset: 'ts-jest',
   testEnvironment: 'node',
   testTimeout: 45000,
@@ -56,6 +60,10 @@ const orchestratorProject = {
     '^@/(.*)$': '<rootDir>/$1',
     // ts-jest ESM convention: allow `import './foo.js'` to resolve to `./foo.ts`
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // Stub `server-only` — it throws when imported outside a Next.js Server Component
+    // context. agents/ tools transitively pull it in via @/lib/config; in node tests
+    // we only care that the import resolves.
+    '^server-only$': '<rootDir>/orchestrator/src/__tests__/stubs/server-only.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

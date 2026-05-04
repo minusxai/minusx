@@ -1,10 +1,10 @@
 import { agentLoop } from '@mariozechner/pi-agent-core';
 import type {
   AgentContext,
-  AgentEvent,
   AgentLoopConfig,
   AgentMessage,
   AgentTool,
+  StreamFn,
 } from '@mariozechner/pi-agent-core';
 import type { AssistantMessage, Model, Message } from '@mariozechner/pi-ai';
 import type { Agent } from './agent';
@@ -18,19 +18,17 @@ import { buildMessagesFromLog, userMessageArgs } from './log-messages';
 import type { AgentResult, PendingToolCall, RunContext, ToolResult } from './types';
 import { generateId } from './utils';
 
-export type LoopFn = (
-  prompts: AgentMessage[],
-  context: AgentContext,
-  config: AgentLoopConfig,
-  signal?: AbortSignal,
-) => AsyncIterable<AgentEvent>;
-
 export async function runAgent(
   agent: Agent,
   userMessage: string | null,
   existingLog: ConversationLogEntry[],
   ctx: RunContext,
-  loopFn: LoopFn = agentLoop as unknown as LoopFn,
+  /**
+   * Optional override of the LLM stream function (the inner-most call agentLoop
+   * makes to the model). Tests pass a mock streamFn; production omits this and
+   * the real provider streamSimple is used.
+   */
+  streamFn?: StreamFn,
 ): Promise<AgentResult> {
   const log = new CompressedConversationLog(existingLog);
 
@@ -151,7 +149,7 @@ export async function runAgent(
   let finalContent = '';
   let agentLoopError: string | undefined;
 
-  const stream = loopFn(prompts, agentContext, config, ctx.signal);
+  const stream = agentLoop(prompts, agentContext, config, ctx.signal, streamFn);
   for await (const event of stream) {
     if (event.type === 'agent_end') {
       const msgs = event.messages;

@@ -1,6 +1,22 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+
+// Resolve this module's directory in both ESM and CJS contexts. ts-jest runs the
+// orchestrator project as ESM (import.meta.url) and the main project as CJS (__dirname).
+// We reference import.meta inside a try block so the CJS branch never evaluates it.
+function moduleDir(): string {
+  // CJS path first — when __dirname exists, import.meta is a syntax error in some runtimes.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maybeDirname = (globalThis as any).__dirname ?? (typeof __dirname !== 'undefined' ? __dirname : undefined);
+  if (typeof maybeDirname === 'string') return maybeDirname;
+  // ESM path — import.meta.url is the URL of this module.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metaUrl = (import.meta as any)?.url as string | undefined;
+  if (metaUrl) return dirname(fileURLToPath(metaUrl));
+  throw new Error('Cannot resolve module directory (neither __dirname nor import.meta.url available)');
+}
 
 /**
  * Port of `backend/tasks/agents/analyst/prompt_loader.py`.
@@ -22,7 +38,7 @@ export class PromptLoader {
   readonly prompts: Record<string, unknown>;
 
   constructor(promptsFile?: string) {
-    const path = promptsFile ?? join(__dirname, 'prompts.yaml');
+    const path = promptsFile ?? join(moduleDir(), 'prompts.yaml');
     const raw = readFileSync(path, 'utf8');
     const data = yaml.load(raw) as PromptsFile;
     this.templates = data.templates ?? {};
