@@ -1,20 +1,22 @@
-import { Type } from '@sinclair/typebox';
-import { Tool } from '@/orchestrator/src/tool';
-import type { RunContext, ToolResult } from '@/orchestrator/src/types';
+import { Type, type Static } from '@sinclair/typebox';
+import { Tool } from '@/orchestrator/tool';
+import type { RunContext, ToolResult } from '@/orchestrator/types';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { ConnectionContent } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { FilesAPI } from '@/lib/data/files.server';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import '../types';
-import type { SchemaWhitelistEntry } from '../types';
 
-interface Args {
-  connection_id: string;
-  query?: string;
+const SCHEMA = Type.Object({
+  connection_id: Type.String({ description: 'the database connection ID to use' }),
+  query: Type.Optional(Type.String({ description: "JSONPath query (starts with '$') or string search term" })),
   /** Underscore-prefixed: stripped from LLM schema, injected by AnalystAgent.buildAgentTools(). */
-  _schema?: SchemaWhitelistEntry[];
-}
+  _schema: Type.Optional(Type.Array(Type.Object({
+    schema: Type.String(),
+    tables: Type.Array(Type.String()),
+  }))),
+});
 
 const SEARCH_DB_SCHEMA_DESCRIPTION = `Search database schema for tables, columns, and metadata.
 
@@ -27,19 +29,12 @@ Query modes (auto-detected):
 
 Returns: {success, queryType: 'none'|'string'|'jsonpath', tableCount, schema|results}`;
 
-export class SearchDBSchema extends Tool<Args> {
+export class SearchDBSchema extends Tool<typeof SCHEMA> {
   readonly name = 'SearchDBSchema';
   readonly description = SEARCH_DB_SCHEMA_DESCRIPTION;
-  readonly schema = Type.Object({
-    connection_id: Type.String({ description: 'the database connection ID to use' }),
-    query: Type.Optional(Type.String({ description: "JSONPath query (starts with '$') or string search term" })),
-    _schema: Type.Optional(Type.Array(Type.Object({
-      schema: Type.String(),
-      tables: Type.Array(Type.String()),
-    }))),
-  });
+  readonly schema = SCHEMA;
 
-  async run({ connection_id, query, _schema: whitelistedSchema }: Args, ctx: RunContext): Promise<ToolResult> {
+  async run({ connection_id, query, _schema: whitelistedSchema }: Static<typeof SCHEMA>, ctx: RunContext): Promise<ToolResult> {
     if (!ctx.user) {
       return { state: 'failure', error: 'SearchDBSchema requires authenticated user context' };
     }

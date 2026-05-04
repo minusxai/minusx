@@ -1,21 +1,23 @@
-import { Type } from '@sinclair/typebox';
-import { Tool } from '@/orchestrator/src/tool';
-import type { RunContext, ToolResult } from '@/orchestrator/src/types';
+import { Type, type Static } from '@sinclair/typebox';
+import { Tool } from '@/orchestrator/tool';
+import type { RunContext, ToolResult } from '@/orchestrator/types';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 import '../types';
-import type { SchemaWhitelistEntry } from '../types';
 
-interface Args {
-  query: string;
-  connectionId: string;
-  parameters?: Record<string, unknown>;
-  vizSettings?: string;
-  maxChars?: number;
+const SCHEMA = Type.Object({
+  query: Type.String({ description: 'SQL query to execute' }),
+  connectionId: Type.String({ description: 'Database connection name' }),
+  parameters: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: 'Query parameters as key-value pairs' })),
+  vizSettings: Type.Optional(Type.String({ description: 'JSON string for visualization settings' })),
+  maxChars: Type.Optional(Type.Integer({ description: 'Max characters of table output (default 10,000, max 100,000)' })),
   /** Underscore-prefixed: stripped from LLM schema, injected by AnalystAgent.buildAgentTools(). */
-  _schema?: SchemaWhitelistEntry[];
-}
+  _schema: Type.Optional(Type.Array(Type.Object({
+    schema: Type.String(),
+    tables: Type.Array(Type.String()),
+  }))),
+});
 
 const EXECUTE_QUERY_DESCRIPTION = `Execute a standalone SQL query without modifying any files.
 
@@ -31,22 +33,15 @@ Text table data is truncated at maxChars characters (default 10,000):
 - Increase maxChars (up to 100,000) to expose more rows in text form.
 - To page through results, add OFFSET N to the SQL.`;
 
-export class ExecuteQuery extends Tool<Args> {
+export class ExecuteQuery extends Tool<typeof SCHEMA> {
   readonly name = 'ExecuteQuery';
   readonly description = EXECUTE_QUERY_DESCRIPTION;
-  readonly schema = Type.Object({
-    query: Type.String({ description: 'SQL query to execute' }),
-    connectionId: Type.String({ description: 'Database connection name' }),
-    parameters: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: 'Query parameters as key-value pairs' })),
-    vizSettings: Type.Optional(Type.String({ description: 'JSON string for visualization settings' })),
-    maxChars: Type.Optional(Type.Integer({ description: 'Max characters of table output (default 10,000, max 100,000)' })),
-    _schema: Type.Optional(Type.Array(Type.Object({
-      schema: Type.String(),
-      tables: Type.Array(Type.String()),
-    }))),
-  });
+  readonly schema = SCHEMA;
 
-  async run({ query, connectionId, parameters = {}, maxChars, vizSettings, _schema: whitelist }: Args, ctx: RunContext): Promise<ToolResult> {
+  async run(
+    { query, connectionId, parameters = {}, maxChars, vizSettings, _schema: whitelist }: Static<typeof SCHEMA>,
+    ctx: RunContext,
+  ): Promise<ToolResult> {
     if (!ctx.user) {
       return { state: 'failure', error: 'ExecuteQuery requires authenticated user context' };
     }

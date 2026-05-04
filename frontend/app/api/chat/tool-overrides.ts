@@ -7,10 +7,10 @@
  * `runAgent` terminates the loop and the route handler returns the pending tool to
  * the frontend, which presents UI and posts the answer back via the next /api/chat call.
  */
-import type { ToolResult } from '@/orchestrator/src/types';
-import { AnalystAgent, type AnalystAgentOptions } from '@/agents/src';
-import { Clarify, EditFile, CreateFile, PublishAll, ReadFiles } from '@/agents/src';
-import type { Tool } from '@/orchestrator/src/tool';
+import type { ToolResult } from '@/orchestrator/types';
+import { AnalystAgent, type AnalystAgentOptions } from '@/agents';
+import { Clarify, EditFile, CreateFile, PublishAll, ReadFiles } from '@/agents';
+import type { Tool } from '@/orchestrator/tool';
 
 /**
  * Web Clarify — pauses the agent until the user answers via the next /api/chat POST.

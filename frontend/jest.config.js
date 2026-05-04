@@ -51,7 +51,10 @@ const orchestratorProject = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testTimeout: 45000,
-  testMatch: ['<rootDir>/orchestrator/**/__tests__/**/*.test.ts'],
+  testMatch: [
+    '<rootDir>/orchestrator/**/__tests__/**/*.test.ts',
+    '<rootDir>/agents/**/__tests__/**/*.test.ts',
+  ],
   // Treat .ts as ESM so `import { agentLoop } from '@mariozechner/pi-agent-core'`
   // resolves natively under --experimental-vm-modules.
   extensionsToTreatAsEsm: ['.ts'],
@@ -63,7 +66,7 @@ const orchestratorProject = {
     // Stub `server-only` — it throws when imported outside a Next.js Server Component
     // context. agents/ tools transitively pull it in via @/lib/config; in node tests
     // we only care that the import resolves.
-    '^server-only$': '<rootDir>/orchestrator/src/__tests__/stubs/server-only.ts',
+    '^server-only$': '<rootDir>/orchestrator/__tests__/stubs/server-only.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

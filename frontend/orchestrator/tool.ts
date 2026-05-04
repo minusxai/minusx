@@ -2,12 +2,23 @@ import { Type, type TSchema, type Static } from '@sinclair/typebox';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { RunContext, ToolResult } from './types';
 
-export abstract class Tool<TArgs = unknown> {
+/**
+ * Tool base class. The single source of truth for a tool's argument shape is its
+ * TypeBox `schema`; the TypeScript type for `run`'s args is derived via `Static<S>`.
+ *
+ * Subclass pattern:
+ *   const SCHEMA = Type.Object({ reason: Type.String() });
+ *   class CannotAnswer extends Tool<typeof SCHEMA> {
+ *     readonly schema = SCHEMA;
+ *     async run({ reason }) { ... }   // arg type inferred
+ *   }
+ */
+export abstract class Tool<S extends TSchema = TSchema> {
   abstract readonly name: string;
   abstract readonly description: string;
-  abstract readonly schema: TSchema;
+  abstract readonly schema: S;
 
-  abstract run(args: TArgs, ctx: RunContext): Promise<ToolResult>;
+  abstract run(args: Static<S>, ctx: RunContext): Promise<ToolResult>;
 
   toAgentTool(ctx: RunContext): AgentTool {
     const llmSchema = stripUnderscoreProps(this.schema);
@@ -18,7 +29,7 @@ export abstract class Tool<TArgs = unknown> {
       parameters: llmSchema,
       execute: async (_id: string, params: Static<typeof llmSchema>) => {
         const allArgs = { ...(params as Record<string, unknown>), ...(ctx.contextArgs ?? {}) };
-        const result = await this.run(allArgs as TArgs, ctx);
+        const result = await this.run(allArgs as Static<S>, ctx);
         return {
           // Strip `state` from LLM-facing content; the discriminator is an internal
           // contract, not something the model needs to see. `details` carries the full

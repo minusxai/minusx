@@ -1,22 +1,20 @@
-import { Agent } from '@/orchestrator/src/agent';
-import type { Tool } from '@/orchestrator/src/tool';
-import type { RunContext } from '@/orchestrator/src/types';
-import {
-  CannotAnswer,
-  Clarify,
-  CreateFile,
-  EditFile,
-  ExecuteQuery,
-  LoadSkill,
-  PublishAll,
-  ReadFiles,
-  SearchDBSchema,
-  SearchFiles,
-  SubmitBinary,
-  SubmitNumber,
-  SubmitString,
-  TalkToUser,
-} from './tools';
+import { Agent } from '@/orchestrator/agent';
+import type { Tool } from '@/orchestrator/tool';
+import type { RunContext } from '@/orchestrator/types';
+import { Clarify } from './tools/clarify';
+import { CreateFile } from './tools/create-file';
+import { EditFile } from './tools/edit-file';
+import { ExecuteQuery } from './tools/execute-query';
+import { LoadSkill } from './tools/load-skill';
+import { PublishAll } from './tools/publish-all';
+import { ReadFiles } from './tools/read-files';
+import { SearchDBSchema } from './tools/search-db-schema';
+import { SearchFiles } from './tools/search-files';
+import { CannotAnswer } from '../CommonTools/cannot-answer';
+import { SubmitBinary } from '../CommonTools/submit-binary';
+import { SubmitNumber } from '../CommonTools/submit-number';
+import { SubmitString } from '../CommonTools/submit-string';
+import { TalkToUser } from '../CommonTools/talk-to-user';
 import { getPrompt } from './prompt-loader';
 import './types';
 import type { SchemaWhitelistEntry } from './types';

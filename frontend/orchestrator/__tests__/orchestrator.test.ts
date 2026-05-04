@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from '@sinclair/typebox';
 import type { Model } from '@mariozechner/pi-ai';
 import { Agent } from '../agent';
 import { Task, type ConversationLogEntry } from '../conversation';
@@ -12,14 +12,16 @@ import { MockStreamFn } from './mock-stream-fn';
 // Test fixtures
 // ============================================================================
 
-class SimpleTool extends Tool<{ value: string }> {
+const SIMPLE_TOOL_SCHEMA = Type.Object({
+  value: Type.String({ description: 'The value to echo' }),
+});
+
+class SimpleTool extends Tool<typeof SIMPLE_TOOL_SCHEMA> {
   readonly name = 'simpleTool';
   readonly description = 'Returns a fixed result for the given value';
-  readonly schema = Type.Object({
-    value: Type.String({ description: 'The value to echo' }),
-  });
+  readonly schema = SIMPLE_TOOL_SCHEMA;
 
-  async run({ value }: { value: string }): Promise<ToolResult> {
+  async run({ value }: Static<typeof SIMPLE_TOOL_SCHEMA>): Promise<ToolResult> {
     return { state: 'success', content: `Tool result: ${value}` };
   }
 }
@@ -55,11 +57,12 @@ const ctx: RunContext = { model: mockModel };
 describe('resume path: pending → inject result → continue', () => {
   // A tool that always returns pending. Frontend would render UI for the user;
   // here we'll skip that and inject the answer directly into the log.
-  class PendingClarify extends Tool<{ question: string }> {
+  const PENDING_CLARIFY_SCHEMA = Type.Object({ question: Type.String() });
+  class PendingClarify extends Tool<typeof PENDING_CLARIFY_SCHEMA> {
     readonly name = 'PendingClarify';
     readonly description = 'Pauses for user input';
-    readonly schema = Type.Object({ question: Type.String() });
-    async run({ question }: { question: string }): Promise<ToolResult> {
+    readonly schema = PENDING_CLARIFY_SCHEMA;
+    async run({ question }: Static<typeof PENDING_CLARIFY_SCHEMA>): Promise<ToolResult> {
       return { state: 'pending', pending: { question } };
     }
   }
@@ -310,7 +313,7 @@ describe('multi-turn follow-up: user sends another message after previous turn c
 
 describe('agent + tool integration', () => {
   it('runs an agents/ Tool (CannotAnswer) end-to-end through real agentLoop + mock LLM', async () => {
-    const { CannotAnswer } = await import('../../../agents/src/analyst/tools/cannot-answer');
+    const { CannotAnswer } = await import('@/agents/CommonTools/cannot-answer');
 
     class MiniAgent extends Agent {
       readonly name = 'MiniAgent';
@@ -359,11 +362,12 @@ describe('runAgent result discriminated union', () => {
   });
 
   it('returns { state: "pending", pendingTools } when a tool returns pending', async () => {
-    class PendingClarify extends Tool<{ question: string }> {
+    const SCHEMA = Type.Object({ question: Type.String() });
+    class PendingClarify extends Tool<typeof SCHEMA> {
       readonly name = 'PendingClarify';
       readonly description = 'Pauses for user input';
-      readonly schema = Type.Object({ question: Type.String() });
-      async run({ question }: { question: string }): Promise<ToolResult> {
+      readonly schema = SCHEMA;
+      async run({ question }: Static<typeof SCHEMA>): Promise<ToolResult> {
         return { state: 'pending', pending: { question, options: ['a', 'b'] } };
       }
     }
@@ -393,10 +397,11 @@ describe('runAgent result discriminated union', () => {
   });
 
   it('records state: "failure" tool results as errors in the log', async () => {
-    class FailingTool extends Tool<Record<string, never>> {
+    const SCHEMA = Type.Object({});
+    class FailingTool extends Tool<typeof SCHEMA> {
       readonly name = 'FailingTool';
       readonly description = 'Always fails';
-      readonly schema = Type.Object({});
+      readonly schema = SCHEMA;
       async run(): Promise<ToolResult> {
         return { state: 'failure', error: 'expected failure for testing' };
       }

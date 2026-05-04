@@ -1,21 +1,19 @@
-import { Type } from '@sinclair/typebox';
-import { Tool } from '@/orchestrator/src/tool';
-import type { ToolResult } from '@/orchestrator/src/types';
+import { Type, type Static } from '@sinclair/typebox';
+import { Tool } from '@/orchestrator/tool';
+import type { ToolResult } from '@/orchestrator/types';
 import { getSkill } from '../prompt-loader';
 
-interface Args {
-  name?: string;
-}
+const SCHEMA = Type.Object({
+  name: Type.Optional(Type.String({ description: "Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name)." })),
+});
 
-export class LoadSkill extends Tool<Args> {
+export class LoadSkill extends Tool<typeof SCHEMA> {
   readonly name = 'LoadSkill';
   readonly description =
     'Load detailed instructions for a system or user-defined skill. Use `name` for both system skills and user-defined Knowledge Base skills.';
-  readonly schema = Type.Object({
-    name: Type.Optional(Type.String({ description: "Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name)." })),
-  });
+  readonly schema = SCHEMA;
 
-  async run({ name }: Args): Promise<ToolResult> {
+  async run({ name }: Static<typeof SCHEMA>): Promise<ToolResult> {
     if (!name) {
       return { state: 'failure', error: 'LoadSkill requires a skill name' };
     }

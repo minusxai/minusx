@@ -1,14 +1,14 @@
-import { Type } from '@sinclair/typebox';
-import { Tool } from '@/orchestrator/src/tool';
-import type { RunContext, ToolResult } from '@/orchestrator/src/types';
+import { Type, type Static } from '@sinclair/typebox';
+import { Tool } from '@/orchestrator/tool';
+import type { RunContext, ToolResult } from '@/orchestrator/types';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import '../types';
 
-interface Args {
-  fileIds: number[];
-  maxChars?: number;
-  runQueries?: boolean;
-}
+const SCHEMA = Type.Object({
+  fileIds: Type.Array(Type.Integer(), { description: 'Array of file IDs to load' }),
+  maxChars: Type.Optional(Type.Integer({ description: 'Max characters of table data per query result (default 10,000, max 100,000)' })),
+  runQueries: Type.Optional(Type.Boolean({ description: 'Execute queries to include fresh data (default true)' })),
+});
 
 const READ_FILES_DESCRIPTION = `Load files with their content, references, and cached query results.
 
@@ -27,16 +27,12 @@ Text table data (queryResults[].data) is truncated at maxChars characters (defau
 Only call this for files NOT already in AppState or AppState.references — calling it for
 files already in AppState is wasteful and redundant.`;
 
-export class ReadFiles extends Tool<Args> {
+export class ReadFiles extends Tool<typeof SCHEMA> {
   readonly name = 'ReadFiles';
   readonly description = READ_FILES_DESCRIPTION;
-  readonly schema = Type.Object({
-    fileIds: Type.Array(Type.Integer(), { description: 'Array of file IDs to load' }),
-    maxChars: Type.Optional(Type.Integer({ description: 'Max characters of table data per query result (default 10,000, max 100,000)' })),
-    runQueries: Type.Optional(Type.Boolean({ description: 'Execute queries to include fresh data (default true)' })),
-  });
+  readonly schema = SCHEMA;
 
-  async run({ fileIds, runQueries }: Args, ctx: RunContext): Promise<ToolResult> {
+  async run({ fileIds, runQueries }: Static<typeof SCHEMA>, ctx: RunContext): Promise<ToolResult> {
     if (!ctx.user) {
       return { state: 'failure', error: 'ReadFiles requires authenticated user context' };
     }

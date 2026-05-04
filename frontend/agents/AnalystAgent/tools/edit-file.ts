@@ -1,17 +1,18 @@
-import { Type } from '@sinclair/typebox';
-import { Tool } from '@/orchestrator/src/tool';
-import type { ToolResult } from '@/orchestrator/src/types';
+import { Type, type Static } from '@sinclair/typebox';
+import { Tool } from '@/orchestrator/tool';
+import type { ToolResult } from '@/orchestrator/types';
 
-interface EditChange {
-  oldMatch: string;
-  newMatch: string;
-  replaceAll?: boolean;
-}
-
-interface Args {
-  fileId: number;
-  changes: EditChange[];
-}
+const SCHEMA = Type.Object({
+  fileId: Type.Integer({ description: 'File ID to edit' }),
+  changes: Type.Array(
+    Type.Object({
+      oldMatch: Type.String({ description: 'String to search for in full file JSON' }),
+      newMatch: Type.String({ description: 'String to replace with' }),
+      replaceAll: Type.Optional(Type.Boolean({ description: 'Replace ALL occurrences (true) or error if not unique (false)' })),
+    }),
+    { description: 'Ordered list of find-and-replace changes to apply sequentially' },
+  ),
+});
 
 const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes.
 
@@ -36,22 +37,12 @@ Changes are staged as drafts. The user reviews and publishes via the Publish All
 
 String Matching: Use oldMatch copied directly from AppState content — never call ReadFiles just to get content already in AppState.`;
 
-export class EditFile extends Tool<Args> {
+export class EditFile extends Tool<typeof SCHEMA> {
   readonly name = 'EditFile';
   readonly description = EDIT_FILE_DESCRIPTION;
-  readonly schema = Type.Object({
-    fileId: Type.Integer({ description: 'File ID to edit' }),
-    changes: Type.Array(
-      Type.Object({
-        oldMatch: Type.String({ description: 'String to search for in full file JSON' }),
-        newMatch: Type.String({ description: 'String to replace with' }),
-        replaceAll: Type.Optional(Type.Boolean({ description: 'Replace ALL occurrences (true) or error if not unique (false)' })),
-      }),
-      { description: 'Ordered list of find-and-replace changes to apply sequentially' },
-    ),
-  });
+  readonly schema = SCHEMA;
 
-  async run(_args: Args): Promise<ToolResult> {
+  async run(_args: Static<typeof SCHEMA>): Promise<ToolResult> {
     return {
       state: 'failure',
       error: 'EditFile is not available in server-run mode. File editing requires an interactive session.',

@@ -1,12 +1,14 @@
 import { Type } from '@sinclair/typebox';
-import { Tool } from '@/orchestrator/src/tool';
-import type { ToolResult } from '@/orchestrator/src/types';
+import { Tool } from '@/orchestrator/tool';
+import type { ToolResult } from '@/orchestrator/types';
 
-export class PublishAll extends Tool<Record<string, never>> {
+const SCHEMA = Type.Object({});
+
+export class PublishAll extends Tool<typeof SCHEMA> {
   readonly name = 'PublishAll';
   readonly description =
     'Request the user to review and publish all unsaved changes. Opens a modal showing all draft files. If there are no unsaved changes, returns immediately.';
-  readonly schema = Type.Object({});
+  readonly schema = SCHEMA;
 
   async run(): Promise<ToolResult> {
     return {

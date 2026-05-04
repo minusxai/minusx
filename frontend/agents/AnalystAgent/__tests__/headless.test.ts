@@ -1,7 +1,7 @@
 /**
  * Headless AnalystAgent test.
  *
- * Imports `AnalystAgent` from `agents/src` and runs it through the real
+ * Imports `AnalystAgent` from `agents/AnalystAgent` and runs it through the real
  * `agentLoop` with a mock LLM (MockStreamFn). Proves the entire `agents/`
  * module loads in pure node ESM context (no Next.js, no PGLite, no browser).
  *
@@ -10,10 +10,11 @@
  * result was recorded in the conversation log.
  */
 import type { Model } from '@mariozechner/pi-ai';
-import { runAgent } from '../run-agent';
-import type { ConversationLogEntry } from '../conversation';
-import type { RunContext } from '../types';
-import { MockStreamFn } from './mock-stream-fn';
+import { runAgent } from '@/orchestrator/run-agent';
+import type { ConversationLogEntry } from '@/orchestrator/conversation';
+import type { RunContext } from '@/orchestrator/types';
+import { MockStreamFn } from '@/orchestrator/__tests__/mock-stream-fn';
+import { AnalystAgent, SlackAgent } from '../agent';
 
 const mockModel: Model<any> = {
   id: 'mock-model',
@@ -28,9 +29,6 @@ const mockModel: Model<any> = {
 
 describe('headless AnalystAgent', () => {
   it('imports cleanly and runs to completion via real agentLoop', async () => {
-    // Lazy import so failure here is clearly attributed to "loading agents/" rather than test setup.
-    const { AnalystAgent } = await import('../../../agents/src');
-
     const agent = new AnalystAgent({
       goal: 'Eval test',
       // No connection / schema / appState — exercising pure-JS tools only.
@@ -70,8 +68,7 @@ describe('headless AnalystAgent', () => {
     expect(mock.calls).toBe(2);
   });
 
-  it('SlackAgent loads with restricted tool set', async () => {
-    const { SlackAgent } = await import('../../../agents/src');
+  it('SlackAgent loads with restricted tool set', () => {
     const agent = new SlackAgent({ goal: 'Slack eval' });
 
     // SlackAgent should have fewer tools than AnalystAgent (no EditFile, CreateFile, etc.)
