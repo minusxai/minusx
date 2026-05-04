@@ -53,6 +53,12 @@ export async function runAgent(
   // POST resumes by injecting actual results.
   const pendingTools: PendingToolCall[] = [];
 
+  // Track turn count + last stopReason so we can compute `truncated` and let the
+  // agent's shouldStopAfterTurn enforce its turn budget (default: agent.maxTurns).
+  let turnIndex = 0;
+  let lastStopReason: AssistantMessage['stopReason'] | undefined;
+  let stoppedByAgent = false;
+
   const agentTools: AgentTool[] = agent.buildAgentTools(ctx);
   const priorMessages = buildMessagesFromLog(existingLog);
 
@@ -140,9 +146,13 @@ export async function runAgent(
       }
     },
 
-    shouldStopAfterTurn: async () => {
+    shouldStopAfterTurn: async ({ message }) => {
       currentBatchRunId = generateId();
-      return false;
+      turnIndex += 1;
+      lastStopReason = message.stopReason;
+      const stop = await agent.shouldStopAfterTurn(turnIndex);
+      if (stop) stoppedByAgent = true;
+      return stop;
     },
   };
 
@@ -189,10 +199,18 @@ export async function runAgent(
     };
   }
 
+  // Truncated = the response is incomplete because something cut us short:
+  //   - LLM hit its max output token budget (`length`), OR
+  //   - agent.shouldStopAfterTurn returned true while the LLM still wanted to
+  //     call more tools (`toolUse`). Typically this is `maxTurns` reached.
+  const truncated =
+    lastStopReason === 'length' || (stoppedByAgent && lastStopReason === 'toolUse');
+
   log.assignResult(rootTaskId, finalContent || 'done');
   return {
     state: 'success',
     content: finalContent,
+    truncated,
     logDiff: log.getLogDiff(),
   };
 }

@@ -350,14 +350,43 @@ describe('agent + tool integration', () => {
 });
 
 describe('runAgent result discriminated union', () => {
-  it('returns { state: "success", content, logDiff } when the agent completes', async () => {
+  it('returns { state: "success", content, truncated: false, logDiff } when the agent completes naturally', async () => {
     const mock = new MockStreamFn();
     mock.configure([[{ type: 'text', text: 'all done' }]]);
     const result = await runAgent(new TestAgent(), 'Hi', [], ctx, mock.asStreamFn());
     expect(result.state).toBe('success');
     if (result.state === 'success') {
       expect(result.content).toBe('all done');
+      expect(result.truncated).toBe(false);
       expect(result.logDiff.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('returns { state: "success", truncated: true } when agent.maxTurns cuts off mid-conversation', async () => {
+    // Agent that allows only 2 turns. Mock LLM keeps wanting to call tools,
+    // so it would loop forever without the cap.
+    class CappedAgent extends Agent {
+      readonly name = 'CappedAgent';
+      tools = [new SimpleTool()];
+      maxTurns = 2;
+      systemPrompt(): string { return 'You loop forever.'; }
+    }
+
+    const mock = new MockStreamFn();
+    mock.configure([
+      // Turn 1: tool call
+      [{ type: 'toolCall', id: 'tc-1', name: 'simpleTool', arguments: { value: 'a' } }],
+      // Turn 2: another tool call (LLM still wants to keep going)
+      [{ type: 'toolCall', id: 'tc-2', name: 'simpleTool', arguments: { value: 'b' } }],
+      // We'd never get here because shouldStopAfterTurn fires after turn 2.
+      // If we did, MockStreamFn would throw "no more turns configured".
+    ]);
+
+    const result = await runAgent(new CappedAgent(), 'Loop', [], ctx, mock.asStreamFn());
+    expect(result.state).toBe('success');
+    if (result.state === 'success') {
+      expect(result.truncated).toBe(true); // cut short by maxTurns
+      expect(mock.calls).toBe(2);          // exactly 2 LLM calls
     }
   });
 

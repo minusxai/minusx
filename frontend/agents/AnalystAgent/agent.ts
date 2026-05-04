@@ -38,6 +38,9 @@ export class AnalystAgent extends Agent {
   readonly name: string = 'AnalystAgent';
   tools: Tool[];
 
+  // Mirrors Python `MAX_STEPS_LOWER_LEVEL = 35`. Override on subclass to change.
+  maxTurns = MAX_STEPS;
+
   protected readonly opts: AnalystAgentOptions;
 
   constructor(opts: AnalystAgentOptions) {

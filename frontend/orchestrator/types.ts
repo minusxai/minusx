@@ -40,8 +40,14 @@ export interface PendingToolCall {
 /**
  * Result returned by `runAgent`. Mirrors the tool-level `ToolResult` shape so
  * callers can switch on `state` uniformly.
+ *
+ * `success.truncated` is `true` when the response is incomplete due to either:
+ *   - The LLM hit its max output token limit (stopReason === 'length'), or
+ *   - The agent's `shouldStopAfterTurn` returned true while the LLM still wanted
+ *     to call more tools (stopReason === 'toolUse'). Typically this means
+ *     `maxTurns` was reached mid-conversation.
  */
 export type AgentResult =
-  | { state: 'success'; content: string; logDiff: ConversationLogEntry[] }
+  | { state: 'success'; content: string; truncated: boolean; logDiff: ConversationLogEntry[] }
   | { state: 'pending'; pendingTools: PendingToolCall[]; logDiff: ConversationLogEntry[] }
   | { state: 'failure'; error: string; logDiff: ConversationLogEntry[] };
