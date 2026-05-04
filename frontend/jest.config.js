@@ -52,6 +52,8 @@ const orchestratorProject = {
   // resolves natively under --experimental-vm-modules.
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
+    // Match the main project's `@/` alias so agents/ tools can import @/orchestrator/...
+    '^@/(.*)$': '<rootDir>/$1',
     // ts-jest ESM convention: allow `import './foo.js'` to resolve to `./foo.ts`
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },

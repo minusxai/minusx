@@ -15,13 +15,8 @@ import {
   getLatestRootTask,
 } from './conversation';
 import { buildMessagesFromLog, userMessageArgs } from './log-messages';
-import type { RunContext } from './types';
+import type { AgentResult, PendingToolCall, RunContext, ToolResult } from './types';
 import { generateId } from './utils';
-
-export interface RunAgentResult {
-  logDiff: ConversationLogEntry[];
-  finalContent: string;
-}
 
 export type LoopFn = (
   prompts: AgentMessage[],
@@ -36,7 +31,7 @@ export async function runAgent(
   existingLog: ConversationLogEntry[],
   ctx: RunContext,
   loopFn: LoopFn = agentLoop as unknown as LoopFn,
-): Promise<RunAgentResult> {
+): Promise<AgentResult> {
   const log = new CompressedConversationLog(existingLog);
 
   const latestRoot = getLatestRootTask(existingLog);
@@ -55,9 +50,12 @@ export async function runAgent(
   // Each LLM tool-use turn gets its own run_id; resets in shouldStopAfterTurn.
   let currentBatchRunId = generateId();
 
-  const agentTools: AgentTool[] = agent.buildAgentTools(ctx);
+  // Tools that returned `state: 'pending'` during this run. Their tasks have no
+  // result; the caller (route.ts) returns them as pending_tool_calls and the next
+  // POST resumes by injecting actual results.
+  const pendingTools: PendingToolCall[] = [];
 
-  // Reconstruct prior LLM history from the existing log so multi-turn works.
+  const agentTools: AgentTool[] = agent.buildAgentTools(ctx);
   const priorMessages = buildMessagesFromLog(existingLog);
 
   const agentContext: AgentContext = {
@@ -109,12 +107,39 @@ export async function runAgent(
       return undefined;
     },
 
-    afterToolCall: async ({ toolCall, result, isError }) => {
-      const resultValue = isError
-        ? (result.content[0]?.type === 'text' ? result.content[0].text : 'error')
-        : (result.details ?? (result.content[0]?.type === 'text' ? result.content[0].text : null));
-      log.assignResult(toolCall.id, resultValue);
-      return undefined;
+    afterToolCall: async ({ toolCall, args, result }) => {
+      // Tools always return a typed ToolResult on `details`. Dispatch on state.
+      const tr = result.details as ToolResult | undefined;
+      if (!tr || typeof tr !== 'object' || !('state' in tr)) {
+        // Defensive: a tool that didn't go through Tool.toAgentTool() — fall back
+        // to using whatever text content the tool emitted.
+        const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+        log.assignResult(toolCall.id, text);
+        return undefined;
+      }
+
+      switch (tr.state) {
+        case 'success':
+          log.assignResult(toolCall.id, tr.content);
+          return undefined;
+
+        case 'failure':
+          // Record the failure in the log and tell agentLoop this is an error so
+          // the LLM sees it as a tool_error message and can adjust its plan.
+          log.assignResult(toolCall.id, { error: tr.error });
+          return { isError: true };
+
+        case 'pending':
+          // Don't write a result — the task stays pending in the log. Track it
+          // for runAgent's return value, then terminate the loop.
+          pendingTools.push({
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            args: args as Record<string, unknown>,
+            pending: tr.pending,
+          });
+          return { terminate: true };
+      }
     },
 
     shouldStopAfterTurn: async () => {
@@ -124,6 +149,7 @@ export async function runAgent(
   };
 
   let finalContent = '';
+  let agentLoopError: string | undefined;
 
   const stream = loopFn(prompts, agentContext, config, ctx.signal);
   for await (const event of stream) {
@@ -133,6 +159,9 @@ export async function runAgent(
         const msg = msgs[i];
         if (msg.role === 'assistant') {
           const assistantMsg = msg as AssistantMessage;
+          if (assistantMsg.stopReason === 'error' || assistantMsg.stopReason === 'aborted') {
+            agentLoopError = assistantMsg.errorMessage ?? `agent ${assistantMsg.stopReason}`;
+          }
           const textBlock = assistantMsg.content.find((c) => c.type === 'text');
           if (textBlock && textBlock.type === 'text') {
             finalContent = textBlock.text;
@@ -143,10 +172,29 @@ export async function runAgent(
     }
   }
 
-  log.assignResult(rootTaskId, finalContent || 'done');
+  // Distinguish the three terminal states for the caller.
+  if (pendingTools.length > 0) {
+    // Don't assign a root TaskResult — the agent isn't done; it's paused.
+    return {
+      state: 'pending',
+      pendingTools,
+      logDiff: log.getLogDiff(),
+    };
+  }
 
+  if (agentLoopError) {
+    log.assignResult(rootTaskId, { error: agentLoopError });
+    return {
+      state: 'failure',
+      error: agentLoopError,
+      logDiff: log.getLogDiff(),
+    };
+  }
+
+  log.assignResult(rootTaskId, finalContent || 'done');
   return {
+    state: 'success',
+    content: finalContent,
     logDiff: log.getLogDiff(),
-    finalContent,
   };
 }

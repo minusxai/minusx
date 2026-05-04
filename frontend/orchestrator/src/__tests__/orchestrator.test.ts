@@ -5,7 +5,7 @@ import { Task, type ConversationLogEntry } from '../conversation';
 import { buildMessagesFromLog } from '../log-messages';
 import { runAgent } from '../run-agent';
 import { Tool } from '../tool';
-import type { RunContext } from '../types';
+import type { RunContext, ToolResult } from '../types';
 import { MockAgentLoop } from './mock-agent-loop';
 
 // ============================================================================
@@ -19,8 +19,8 @@ class SimpleTool extends Tool<{ value: string }> {
     value: Type.String({ description: 'The value to echo' }),
   });
 
-  async run({ value }: { value: string }): Promise<string> {
-    return `Tool result: ${value}`;
+  async run({ value }: { value: string }): Promise<ToolResult> {
+    return { state: 'success', content: `Tool result: ${value}` };
   }
 }
 
@@ -172,6 +172,133 @@ describe('multi_turn_previous_linking', () => {
     const finalAssistant = priorMessages[3] as { content: { type: string; text?: string }[] };
     expect(finalAssistant.content[0].type).toBe('text');
     expect(finalAssistant.content[0].text).toBe('First turn done');
+  });
+});
+
+describe('agent + tool integration', () => {
+  it('runs an agents/ Tool (CannotAnswer) end-to-end through runAgent', async () => {
+    // Import lazily so module-level loaders that touch fs/path don't run on test discovery.
+    const { CannotAnswer } = await import('../../../agents/src/analyst/tools/cannot-answer');
+
+    class MiniAgent extends Agent {
+      readonly name = 'MiniAgent';
+      tools = [new CannotAnswer()];
+      systemPrompt(): string {
+        return 'You are a test agent.';
+      }
+    }
+
+    const mock = new MockAgentLoop();
+    mock.configure([
+      {
+        toolCalls: [{ name: 'CannotAnswer', args: { reason: 'insufficient data' } }],
+        reply: 'OK',
+      },
+    ]);
+
+    const { logDiff } = await runAgent(new MiniAgent(), 'Compute X', [], ctx, mock.asLoopFn());
+
+    const childResults = logDiff
+      .filter((e): e is ConversationLogEntry & { _type: 'task_result' } => e._type === 'task_result')
+      .filter((r) => {
+        const childTask = logDiff.find(
+          (e): e is ConversationLogEntry & { _type: 'task' } =>
+            e._type === 'task' && e.unique_id === r._task_unique_id && e._parent_unique_id !== null,
+        );
+        return childTask !== undefined;
+      });
+
+    expect(childResults.length).toBe(1);
+    // Tool returned { state: 'success', content: {...} }; orchestrator stored just `content`.
+    const result = childResults[0].result as { submitted: boolean; cannot_answer: boolean; reason: string };
+    expect(result.submitted).toBe(true);
+    expect(result.cannot_answer).toBe(true);
+    expect(result.reason).toBe('insufficient data');
+  });
+});
+
+describe('runAgent result discriminated union', () => {
+  it('returns { state: "success", content, logDiff } when the agent completes', async () => {
+    const mock = new MockAgentLoop();
+    mock.configure([{ reply: 'all done' }]);
+    const result = await runAgent(new TestAgent(), 'Hi', [], ctx, mock.asLoopFn());
+    expect(result.state).toBe('success');
+    if (result.state === 'success') {
+      expect(result.content).toBe('all done');
+      expect(result.logDiff.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('returns { state: "pending", pendingTools } when a tool returns pending', async () => {
+    class PendingClarify extends Tool<{ question: string }> {
+      readonly name = 'PendingClarify';
+      readonly description = 'Pauses for user input';
+      readonly schema = Type.Object({ question: Type.String() });
+      async run({ question }: { question: string }): Promise<ToolResult> {
+        return { state: 'pending', pending: { question, options: ['a', 'b'] } };
+      }
+    }
+
+    class PauseAgent extends Agent {
+      readonly name = 'PauseAgent';
+      tools = [new PendingClarify()];
+      systemPrompt(): string { return 'You ask for clarification.'; }
+    }
+
+    const mock = new MockAgentLoop();
+    mock.configure([
+      {
+        toolCalls: [{ name: 'PendingClarify', args: { question: 'Which one?' } }],
+        reply: 'asking',
+      },
+    ]);
+
+    const result = await runAgent(new PauseAgent(), 'do thing', [], ctx, mock.asLoopFn());
+    expect(result.state).toBe('pending');
+    if (result.state === 'pending') {
+      expect(result.pendingTools.length).toBe(1);
+      expect(result.pendingTools[0].toolName).toBe('PendingClarify');
+      expect(result.pendingTools[0].pending).toEqual({ question: 'Which one?', options: ['a', 'b'] });
+
+      // The pending tool's task has no result — the root task also has no result.
+      const taskResults = result.logDiff.filter((e) => e._type === 'task_result');
+      const taskIds = new Set(taskResults.map((r) => (r as { _task_unique_id: string })._task_unique_id));
+      expect(taskIds.has(result.pendingTools[0].toolCallId)).toBe(false);
+    }
+  });
+
+  it('records state: "failure" tool results as errors in the log', async () => {
+    class FailingTool extends Tool<Record<string, never>> {
+      readonly name = 'FailingTool';
+      readonly description = 'Always fails';
+      readonly schema = Type.Object({});
+      async run(): Promise<ToolResult> {
+        return { state: 'failure', error: 'expected failure for testing' };
+      }
+    }
+
+    class FailAgent extends Agent {
+      readonly name = 'FailAgent';
+      tools = [new FailingTool()];
+      systemPrompt(): string { return 'You always fail.'; }
+    }
+
+    const mock = new MockAgentLoop();
+    mock.configure([
+      {
+        toolCalls: [{ name: 'FailingTool', args: {} }],
+        reply: 'tried but failed',
+      },
+    ]);
+
+    const result = await runAgent(new FailAgent(), 'go', [], ctx, mock.asLoopFn());
+    // Agent itself completes (LLM stops normally), so state is success even though tool failed.
+    expect(result.state).toBe('success');
+    const childResult = result.logDiff
+      .filter((e) => e._type === 'task_result')
+      .map((r) => (r as { result: unknown }).result)
+      .find((r) => r && typeof r === 'object' && 'error' in r);
+    expect(childResult).toEqual({ error: 'expected failure for testing' });
   });
 });
 
