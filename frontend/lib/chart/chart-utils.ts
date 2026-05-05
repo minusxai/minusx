@@ -292,6 +292,32 @@ export const findMatchingXIndex = (xAxisData: string[], annotationX: string | nu
   })
 }
 
+/**
+ * Resolve the x value and matched data index for an annotation.
+ * - Category axis: snap to nearest xAxisData entry (required for discrete buckets)
+ * - Time/value/log axis: use the raw annotation value (continuous scale, any position valid)
+ */
+export const resolveAnnotationX = ({
+  annotationX,
+  xAxisData,
+  axisType,
+}: {
+  annotationX: string | number
+  xAxisData: string[]
+  axisType: string
+}): { xValue: string | number; matchedIndex: number } => {
+  const isContinuous = axisType === 'time' || axisType === 'value' || axisType === 'log'
+
+  if (isContinuous) {
+    return { xValue: annotationX, matchedIndex: -1 }
+  }
+
+  // Category axis — must snap to an existing data point
+  const matchedIndex = findMatchingXIndex(xAxisData, annotationX)
+  const xValue = matchedIndex !== -1 ? xAxisData[matchedIndex] : String(annotationX)
+  return { xValue, matchedIndex }
+}
+
 // Format large numbers with k, M, B suffixes for compact display (axis labels)
 export const formatLargeNumber = (value: number): string => {
   const absValue = Math.abs(value)
@@ -1114,12 +1140,13 @@ export const buildAnnotationGraphics = ({
   const annotationsWithPixels = annotations
     .slice(0, 8)
     .map((annotation: ChartAnnotation) => {
-      // Resolve the actual xAxisData value via fuzzy matching (handles date format mismatches)
-      const matchedXIndex = findMatchingXIndex(xAxisData, annotation.x)
-      const resolvedX = matchedXIndex !== -1 ? xAxisData[matchedXIndex] : String(annotation.x)
-      const xValue = typeof annotation.x === 'number' && matchedXIndex === -1
-        ? annotation.x
-        : toCartesianAxisValue(resolvedX, echartsXAxisType)
+      // Resolve x: category axes snap to data points; continuous axes use the raw value
+      const { xValue: resolvedX, matchedIndex: matchedXIndex } = resolveAnnotationX({
+        annotationX: annotation.x,
+        xAxisData,
+        axisType: echartsXAxisType,
+      })
+      const xValue = toCartesianAxisValue(String(resolvedX), echartsXAxisType)
 
       // x-only annotation (no series) — vertical marker at x position
       if (!annotation.series) {
@@ -1139,10 +1166,17 @@ export const buildAnnotationGraphics = ({
         || getSeriesDisplayName(item.name) === annotation.series
       ))
       if (matchedSeriesIndex === -1) return null
-      if (matchedXIndex === -1) return null
+
+      // For category axis, must have matched a data point; for continuous, find nearest for y lookup
+      let pointIndex: number | null = matchedXIndex !== -1 ? matchedXIndex : null
+      if (pointIndex == null && matchedXIndex === -1) {
+        // Continuous axis — find the closest x data point to anchor y value
+        pointIndex = findMatchingXIndex(xAxisData, annotation.x)
+        if (pointIndex === -1) pointIndex = null
+      }
+      if (pointIndex == null) return null
 
       const seriesMatch = series[matchedSeriesIndex]
-      const pointIndex = matchedXIndex
       const pointY = seriesMatch.data[pointIndex]
       if (typeof pointY !== 'number' || !Number.isFinite(pointY)) return null
 

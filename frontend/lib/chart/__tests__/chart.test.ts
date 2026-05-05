@@ -1,4 +1,4 @@
-import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue, resolveXAxisTypes, resolveAnnotationY, findMatchingXIndex } from '@/lib/chart/chart-utils'
+import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue, resolveXAxisTypes, resolveAnnotationY, findMatchingXIndex, resolveAnnotationX } from '@/lib/chart/chart-utils'
 import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import type { GeoConfig } from '@/lib/types'
@@ -1353,5 +1353,41 @@ describe('findMatchingXIndex', () => {
   it('works with numeric x values', () => {
     const xAxisData = ['10', '20', '30']
     expect(findMatchingXIndex(xAxisData, 20)).toBe(1)
+  })
+})
+
+// ─── resolveAnnotationX ───
+
+describe('resolveAnnotationX', () => {
+  const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-02-28T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
+
+  it('snaps to nearest xAxisData for category axis', () => {
+    const result = resolveAnnotationX({ annotationX: '2026-02-28', xAxisData, axisType: 'category' })
+    expect(result).toEqual({ xValue: '2026-02-28T00:00:00.000Z', matchedIndex: 1 })
+  })
+
+  it('uses raw value for time axis even when data point exists', () => {
+    const result = resolveAnnotationX({ annotationX: '2026-02-28', xAxisData, axisType: 'time' })
+    expect(result).toEqual({ xValue: '2026-02-28', matchedIndex: -1 })
+  })
+
+  it('uses raw value for time axis with arbitrary date', () => {
+    const result = resolveAnnotationX({ annotationX: '2026-02-15', xAxisData, axisType: 'time' })
+    expect(result).toEqual({ xValue: '2026-02-15', matchedIndex: -1 })
+  })
+
+  it('uses raw number for value axis', () => {
+    const result = resolveAnnotationX({ annotationX: 42, xAxisData: ['10', '20', '30'], axisType: 'value' })
+    expect(result).toEqual({ xValue: 42, matchedIndex: -1 })
+  })
+
+  it('snaps numeric value on category axis', () => {
+    const result = resolveAnnotationX({ annotationX: 20, xAxisData: ['10', '20', '30'], axisType: 'category' })
+    expect(result).toEqual({ xValue: '20', matchedIndex: 1 })
+  })
+
+  it('returns raw value for category axis when no match found', () => {
+    const result = resolveAnnotationX({ annotationX: 'missing', xAxisData: ['a', 'b', 'c'], axisType: 'category' })
+    expect(result).toEqual({ xValue: 'missing', matchedIndex: -1 })
   })
 })
