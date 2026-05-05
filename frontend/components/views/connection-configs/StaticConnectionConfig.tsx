@@ -18,7 +18,7 @@
  * - Re-import a Google Sheet (refresh data from the live spreadsheet)
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -66,6 +66,8 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   initialTab?: 'csv' | 'sheets';
   /** When set, only show this tab — hide the tab switcher entirely. */
   singleTab?: 'csv' | 'sheets';
+  /** Called when pending (un-uploaded) files change — true if files are staged but not yet uploaded. */
+  onPendingChange?: (hasPending: boolean) => void;
 }
 
 interface PendingFile {
@@ -304,6 +306,7 @@ export default function StaticConnectionConfig({
   onSave,
   initialTab,
   singleTab,
+  onPendingChange,
 }: StaticConnectionConfigProps) {
   // ── Panel toggle ──────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
@@ -316,6 +319,11 @@ export default function StaticConnectionConfig({
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadStage, setUploadStage] = useState<string>('');
+
+  // Notify parent when pending files change
+  useEffect(() => {
+    onPendingChange?.(pendingFiles.length > 0);
+  }, [pendingFiles.length, onPendingChange]);
 
   // ── Google Sheets add state ───────────────────────────────────────────────
   const [pendingSheets, setPendingSheets] = useState<Array<{ url: string; schema: string; tableName: string }>>([
@@ -779,7 +787,7 @@ export default function StaticConnectionConfig({
                       borderColor="border.subtle"
                     >
                       <LuFile size={12} color="var(--chakra-colors-fg-muted)" style={{ flexShrink: 0 }} />
-                      <Text fontSize="2xs" color="fg.muted" truncate flex={1} minW={0} title={file.name}>
+                      <Text fontSize="xs" color="fg.muted" truncate flex={1} minW={0} title={file.name}>
                         {file.name}
                       </Text>
                       <Text fontSize="2xs" color="fg.subtle" whiteSpace="nowrap">
@@ -822,6 +830,11 @@ export default function StaticConnectionConfig({
                 >
                   <LuUpload size={14} /> Upload
                 </Button>
+                {!pendingFiles[0]?.schemaName && (
+                  <Text fontSize="2xs" color="accent.warning">
+                    Enter a dataset name above to enable upload.
+                  </Text>
+                )}
                 {uploadProgress === 'uploading' && uploadStage && (
                   <Text fontSize="xs" color="accent.teal">{uploadStage}</Text>
                 )}

@@ -244,21 +244,6 @@ export function HelloWorldContent() {
           </VStack>
 
           <Box minH="200px">
-            {cardsVisible && hasConnections && (
-              <Text
-                fontSize="sm"
-                color="fg.muted"
-                fontFamily="mono"
-                mb={4}
-                cursor="pointer"
-                textDecoration="underline"
-                _hover={{ color: 'fg.default' }}
-                onClick={handleSkipConnection}
-                css={{ animation: 'fadeInUp 0.5s ease-out forwards', opacity: 0 }}
-              >
-                I&apos;ve already connected my data &rarr;
-              </Text>
-            )}
             {cardsVisible && (
               <Flex
                 direction={{ base: 'column', md: 'row' }}
@@ -296,7 +281,7 @@ export function HelloWorldContent() {
                       Connect Your Data
                     </Heading>
                     <Text color="fg.muted" fontSize="sm">
-                      Wire up your database and dive in
+                      Wire up your data and dive straight in
                     </Text>
                   </Box>
                 </Box>
@@ -332,7 +317,7 @@ export function HelloWorldContent() {
                       Try Demo
                     </Heading>
                     <Text color="fg.muted" fontSize="sm">
-                      Explore with sample data — no setup needed
+                      Explore all features with included sample data
                     </Text>
                   </Box>
                 </Box>

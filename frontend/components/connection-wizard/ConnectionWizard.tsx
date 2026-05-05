@@ -94,27 +94,11 @@ export default function ConnectionWizard({
         css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
       >
         {step === 'connection' && !staticTab && (
-          <>
             <StepConnection
               onComplete={handleConnectionComplete}
               onStaticSelect={handleStaticSelect}
               greeting={greeting('connection')}
             />
-            {showSkipConnection && hasConnections && (
-              <Text
-                mt={4}
-                fontSize="sm"
-                color="fg.muted"
-                fontFamily="mono"
-                cursor="pointer"
-                textDecoration="underline"
-                _hover={{ color: 'fg.default' }}
-                onClick={handleSkipConnection}
-              >
-                I&apos;ve already connected my data &rarr;
-              </Text>
-            )}
-          </>
         )}
         {step === 'connection' && staticTab && (
           <StepStaticUpload

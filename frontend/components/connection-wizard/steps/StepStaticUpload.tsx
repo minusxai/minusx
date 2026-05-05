@@ -32,6 +32,8 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
   const [saving, setSaving] = useState(false);
   // Track schemas added during this session
   const addedSchemasRef = useRef<Set<string>>(new Set());
+  // Track whether there are un-uploaded pending files
+  const [hasPendingFiles, setHasPendingFiles] = useState(false);
 
   const content = fileState
     ? { ...fileState.content, ...fileState.persistableChanges } as ConnectionContent
@@ -124,6 +126,7 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
         onSave={handleInternalSave}
         initialTab={tab}
         singleTab={tab}
+        onPendingChange={setHasPendingFiles}
       />
 
       {saveError && (
@@ -138,7 +141,7 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
           size="sm"
           fontFamily="mono"
           onClick={handleContinue}
-          disabled={!hasFiles || saving}
+          disabled={!hasFiles || saving || hasPendingFiles}
           loading={saving}
         >
           Save & Continue &rarr;

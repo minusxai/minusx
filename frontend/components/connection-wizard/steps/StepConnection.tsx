@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, VStack, Text, Spinner } from '@chakra-ui/react';
+import { Box, VStack, Text, Spinner, Icon } from '@chakra-ui/react';
+import { LuPlug } from 'react-icons/lu';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
 import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
 import { createDraftFile, editFile } from '@/lib/api/file-state';
 import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { ConnectionTypeOption } from '@/lib/ui/connection-type-options';
+
+const DATASOURCE_REQUEST_URL = 'https://forms.gle/9mXUGYUhULRRn68K6';
 
 interface StepConnectionProps {
   onComplete: (connectionId: number, connectionName: string) => void;
@@ -72,6 +75,13 @@ export default function StepConnection({ onComplete, onStaticSelect, greeting }:
         )}
 
         <ConnectionTypePicker onSelect={handleTypeSelect} disabled={creating} />
+
+        <Text fontSize="sm" color="fg.muted" textAlign="center">
+          Can&apos;t see your data source? <Icon as={LuPlug} boxSize={3.5} verticalAlign="text-bottom" />{' '}
+          <a href={DATASOURCE_REQUEST_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
+            Request it here.
+          </a>
+        </Text>
       </VStack>
     </Box>
   );
