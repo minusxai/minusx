@@ -1,6 +1,5 @@
 
 import {
-  streamSimple,
   type AssistantMessage,
   type AssistantMessageEvent,
   type Context,
@@ -145,18 +144,7 @@ export class MXAgent<
       messages: this.buildMessages(),
       tools: ctor.tools,
     };
-    const stream = streamSimple(ctor.model, context, { signal: this.orchestrator.signal });
-
-    let result: AssistantMessage | null = null;
-    for await (const ev of stream) {
-      this.orchestrator.emit({ ...ev, parent_id: this.id });
-      if (ev.type === 'done') result = ev.message;
-      else if (ev.type === 'error') result = ev.error;
-    }
-    if (!result) {
-      throw new Error(`${this.constructor.name}.llm: stream ended without done/error event`);
-    }
-    return result;
+    return this.orchestrator.callLLM(ctor.model, context, this.id);
   }
 
   async run(): Promise<AssistantMessage> {

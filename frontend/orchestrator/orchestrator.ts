@@ -1,8 +1,12 @@
 
 import {
   EventStream,
+  streamSimple,
+  type Api,
   type AssistantMessage,
+  type Context,
   type Message,
+  type Model,
   type TextContent,
   type ToolCall,
   type ToolResultMessage,
@@ -38,8 +42,34 @@ export class Orchestrator {
     return this.controller?.signal;
   }
 
-  emit(event: StreamEvent): void {
-    this.stream?.push(event);
+  async callLLM(
+    model: Model<Api>,
+    context: Context,
+    agentId: string,
+  ): Promise<AssistantMessage> {
+    const targetStream = this.stream;
+    const controller = this.controller;
+    const piStream = streamSimple(model, context, { signal: controller?.signal });
+
+    let result: AssistantMessage | null = null;
+    let errored = false;
+    for await (const ev of piStream) {
+      targetStream?.push({ ...ev, parent_id: agentId });
+      if (ev.type === 'done') result = ev.message;
+      else if (ev.type === 'error') {
+        result = ev.error;
+        errored = true;
+      }
+    }
+    if (!result) {
+      throw new Error(`callLLM: pi-ai stream ended without done/error event (agent=${agentId})`);
+    }
+    if (errored) {
+      throw new Error(
+        `callLLM: pi-ai stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
+      );
+    }
+    return result;
   }
 
   run(root: MXAgent): EventStream<StreamEvent, AssistantMessage | null> {
@@ -139,22 +169,26 @@ export class Orchestrator {
 
     void (async () => {
       let rootResult: AssistantMessage | null = null;
-      try {
-        const results = await Promise.all(
-          Array.from(byPausedAgent.keys()).map((id) =>
-            resumeChain(id, this.findCallingAgent(id)),
-          ),
-        );
-        rootResult = results.find((r) => r !== null) ?? null;
-      } catch (err) {
-        if (err instanceof UserInputException) {
-          stream.push({ type: 'pending', toolCallIds: err.toolCallIds });
+      const ids = Array.from(byPausedAgent.keys());
+      const settled = await Promise.allSettled(
+        ids.map((id) => resumeChain(id, this.findCallingAgent(id))),
+      );
+
+      const pendingIds: string[] = [];
+      for (let i = 0; i < settled.length; i++) {
+        const r = settled[i];
+        if (r.status === 'fulfilled') {
+          if (r.value !== null) rootResult = r.value;
+        } else if (r.reason instanceof UserInputException) {
+          pendingIds.push(...r.reason.toolCallIds);
         } else {
-          stream.push(this.synthErrorEvent('unknown', err));
+          stream.push(this.synthErrorEvent(ids[i], r.reason));
         }
-      } finally {
-        stream.end(rootResult);
       }
+      if (pendingIds.length > 0) {
+        stream.push({ type: 'pending', toolCallIds: pendingIds });
+      }
+      stream.end(rootResult);
     })();
 
     return stream;
