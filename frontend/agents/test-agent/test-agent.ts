@@ -71,6 +71,27 @@ export class PendingTool extends MXTool<typeof PendingToolParams> {
 }
 
 // ============================================================================
+// NestedAgent — a small MXAgent the parent can dispatch as a tool. Validates
+// agent-as-tool semantics + the appendAgentResult sub-agent path.
+// ============================================================================
+
+const NestedAgentParams = Type.Object({
+  userMessage: Type.String(),
+});
+
+export class NestedAgent extends MXAgent<typeof NestedAgentParams> {
+  static readonly schema: Tool<typeof NestedAgentParams> = {
+    name: 'NestedAgent',
+    description: 'A nested test agent that finishes after one LLM turn.',
+    parameters: NestedAgentParams,
+  };
+  static readonly tools: Tool<TSchema>[] = [EchoTool.schema];
+  static readonly model = FAUX_MODEL;
+
+  protected systemPrompt = 'You are a nested test agent.';
+}
+
+// ============================================================================
 // TestAgent — uses base MXAgent.llm() which calls pi-ai (via faux provider)
 // ============================================================================
 
@@ -84,7 +105,11 @@ export class TestAgent extends MXAgent<typeof TestAgentParams> {
     description: 'Test agent. LLM calls go through pi-ai\'s faux provider.',
     parameters: TestAgentParams,
   };
-  static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema];
+  static readonly tools: Tool<TSchema>[] = [
+    EchoTool.schema,
+    PendingTool.schema,
+    NestedAgent.schema,
+  ];
   static readonly model = FAUX_MODEL;
 
   protected systemPrompt = 'You are a test agent.';

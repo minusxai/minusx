@@ -48,6 +48,9 @@ describe('orchestrator e2e', () => {
 
     expect(events2.some((e) => e.type === 'done')).toBe(true);
     expect(result2).not.toBeNull();
+    // result2 is the final AssistantMessage from the stop turn — full pi-ai shape.
+    expect(result2!.role).toBe('assistant');
+    expect(result2!.stopReason).toBe('stop');
     expect((result2!.content[0] as TextContent).text).toContain('All done!');
   });
 });

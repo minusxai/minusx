@@ -3,35 +3,36 @@
 // rebuilds agents from log on resume() via the registrables array.
 //
 // Base classes (MXTool, MXAgent) and the data types live in ./types.ts.
-// Helpers (gen_id, EMPTY_USAGE) live in ./utils.ts.
+// Helpers (gen_id, EMPTY_USAGE, normalizeArgs) live in ./utils.ts.
 
 import {
   EventStream,
   type Api,
   type AssistantMessage,
   type Message,
+  type TextContent,
   type ToolCall,
   type ToolResultMessage,
 } from '@mariozechner/pi-ai';
 import {
+  MXAgent,
+  MXTool,
   UserInputException,
   type AgentContext,
   type AgentInvocation,
   type ConversationLog,
   type ConversationLogEntry,
-  type MXAgent,
-  type MXTool,
   type RegistrableClass,
   type StreamEvent,
   type ToolMessage,
   type ToolResponse,
 } from './types';
-import { EMPTY_USAGE } from './utils';
+import { EMPTY_USAGE, normalizeArgs } from './utils';
 
 export class Orchestrator {
   // Public read access — host UI / tests inspect the log directly.
   log: ConversationLog;
-  protected stream: EventStream<StreamEvent, ToolResponse | null> | null = null;
+  protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
   protected controller: AbortController | null = null;
   protected readonly registrables: RegistrableClass[];
 
@@ -54,7 +55,7 @@ export class Orchestrator {
   // Start a new run rooted at `root`. Interrupts any in-flight run by
   // aborting the previous controller and inlining synthetic 'interrupted'
   // ToolResultMessages for any dangling tool_calls in the log.
-  run(root: MXAgent): EventStream<StreamEvent, ToolResponse | null> {
+  run(root: MXAgent): EventStream<StreamEvent, AssistantMessage | null> {
     this.controller?.abort();
 
     // Interrupt danglers: for each tool_call without a matching tool_result,
@@ -97,13 +98,17 @@ export class Orchestrator {
       parent_id: null,
     });
 
-    const stream = new EventStream<StreamEvent, ToolResponse | null>(() => false, () => null);
+    const stream = new EventStream<StreamEvent, AssistantMessage | null>(() => false, () => null);
     this.stream = stream;
 
     void (async () => {
-      let result: ToolResponse | null = null;
+      let result: AssistantMessage | null = null;
       try {
-        result = (await root.run()) as ToolResponse;
+        const finalMsg = await root.run();
+        // root.run() returns the stop AssistantMessage (skip-dispatch-on-stop).
+        // appendAgentResult logs it as AssistantMessage in the root case.
+        this.appendAgentResult(finalMsg, root, null);
+        result = finalMsg;
       } catch (err) {
         if (err instanceof UserInputException) {
           stream.push({ type: 'pending', toolCallIds: err.toolCallIds });
@@ -119,14 +124,15 @@ export class Orchestrator {
   }
 
   // Host calls this when frontend-executed tool results arrive. Does NOT
-  // interrupt other in-flight work.
-  resume(completed: { toolCallId: string; response: ToolResponse }[]): EventStream<StreamEvent, ToolResponse | null> {
+  // interrupt other in-flight work. Bubbles results up the agent chain:
+  // when a paused agent finishes, its result lands in the calling agent's
+  // thread, and the calling agent re-runs once all its outstanding
+  // tool_calls are resolved.
+  resume(completed: { toolCallId: string; response: ToolResponse }[]): EventStream<StreamEvent, AssistantMessage | null> {
     this.controller = new AbortController();
 
-    // Append each result. parent_id + toolName are looked up via a single
-    // log scan per toolCallId (tool_calls only ever live inside an assistant
-    // message's content array).
-    const byParent = new Map<string, ToolResultMessage[]>();
+    // (a) Append each result to log + collect by paused agent id.
+    const byPausedAgent = new Map<string, ToolResultMessage[]>();
     for (const c of completed) {
       let parent_id: string | null = null;
       let toolName: string | null = null;
@@ -154,25 +160,45 @@ export class Orchestrator {
         timestamp: Date.now(),
       };
       this.log.push({ ...trm, parent_id });
-      if (!byParent.has(parent_id)) byParent.set(parent_id, []);
-      byParent.get(parent_id)!.push(trm);
+      if (!byPausedAgent.has(parent_id)) byPausedAgent.set(parent_id, []);
+      byPausedAgent.get(parent_id)!.push(trm);
     }
 
-    const stream = new EventStream<StreamEvent, ToolResponse | null>(() => false, () => null);
+    const stream = new EventStream<StreamEvent, AssistantMessage | null>(() => false, () => null);
     this.stream = stream;
 
+    // Tracks agents already resumed in this call to avoid re-running on
+    // multiple bubble-up paths (e.g. parallel sub-agents converging on root).
+    const processing = new Set<string>();
+
+    const resumeChain = async (
+      agentId: string,
+      callingAgent: MXAgent | null,
+    ): Promise<AssistantMessage | null> => {
+      if (processing.has(agentId)) return null;
+      // Bubble guard: only proceed if this agent's last dispatched turn has
+      // matching tool_results for every tool_call. Sibling children must
+      // resolve before the agent re-runs.
+      if (!this.allToolCallsResolved(agentId)) return null;
+      processing.add(agentId);
+
+      const agent = this.reconstructAgent(agentId);
+      const finalMsg = await agent.run();   // may throw UIE if pauses again
+      this.appendAgentResult(finalMsg, agent, callingAgent);
+
+      if (callingAgent === null) return finalMsg;   // root reached
+      return resumeChain(callingAgent.id, this.findCallingAgent(callingAgent.id));
+    };
+
     void (async () => {
-      let rootResult: ToolResponse | null = null;
+      let rootResult: AssistantMessage | null = null;
       try {
-        await Promise.all(
-          Array.from(byParent.keys()).map(async (parentId) => {
-            const agent = this.reconstructAgent(parentId);
-            const result = await agent.run();
-            // Capture the result if this agent is the root — its ToolResponse
-            // is the run's final output exposed via stream.result().
-            if (this.findRootInvocation(parentId)) rootResult = result as ToolResponse;
-          }),
+        const results = await Promise.all(
+          Array.from(byPausedAgent.keys()).map((id) =>
+            resumeChain(id, this.findCallingAgent(id)),
+          ),
         );
+        rootResult = results.find((r) => r !== null) ?? null;
       } catch (err) {
         if (err instanceof UserInputException) {
           stream.push({ type: 'pending', toolCallIds: err.toolCallIds });
@@ -187,9 +213,11 @@ export class Orchestrator {
     return stream;
   }
 
-  // Single mutation site per LLM turn. Appends the AssistantMessage, then
-  // executes any tool_calls in parallel. AssistantMessages with no tool_calls
-  // (stop) still go through here for log consistency.
+  // Mid-loop mutation site: appends the AssistantMessage to log + parent's
+  // toolThread, then executes any tool_calls in parallel. The stop turn is
+  // NOT routed through here — MXAgent.run() returns it directly and the
+  // caller (Orchestrator.run for root, dispatch's sub-agent branch for
+  // nested agents) decides how to log it via appendAgentResult.
   async dispatch(message: AssistantMessage, parent: MXAgent): Promise<void> {
     this.log.push({ ...message, parent_id: parent.id });
     parent.toolThread.push(message);
@@ -200,21 +228,34 @@ export class Orchestrator {
     const settled = await Promise.allSettled(
       toolCalls.map(async (tc) => {
         const Cls = this.lookupCallable(tc.name);
+        const normalized = normalizeArgs(Cls.schema.parameters, tc.arguments);
         const Ctor = Cls as unknown as new (
           o: Orchestrator,
           p: Record<string, unknown>,
           c: AgentContext,
           id?: string,
         ) => MXTool;
-        const instance = new Ctor(this, tc.arguments, parent.context, tc.id);
-        const response = await instance.run();
-        return { tc, response };
+        const instance = new Ctor(this, normalized as Record<string, unknown>, parent.context, tc.id);
+
+        if (instance instanceof MXAgent) {
+          // Sub-agent: run it, then route its final AssistantMessage through
+          // appendAgentResult (which wraps as ToolResultMessage in parent).
+          const subFinal = await (instance as MXAgent).run();
+          // run() returns AssistantMessage — narrow via cast (the union
+          // signature on MXTool.run() doesn't auto-narrow here).
+          this.appendAgentResult(subFinal as AssistantMessage, instance as MXAgent, parent);
+          return { tc, handled: true as const };
+        }
+        // Plain tool: ToolResponse path (existing behavior).
+        const response = (await instance.run()) as ToolResponse;
+        return { tc, handled: false as const, response };
       }),
     );
 
     const pending: string[] = [];
     for (const r of settled) {
       if (r.status === 'fulfilled') {
+        if (r.value.handled) continue; // sub-agent already logged via appendAgentResult
         const { tc, response } = r.value;
         const trm: ToolResultMessage = {
           role: 'toolResult',
@@ -239,6 +280,36 @@ export class Orchestrator {
     if (pending.length > 0) throw new UserInputException(pending);
   }
 
+  // Single decision point for "log final agent result as AssistantMessage
+  // (root) or wrap as ToolResultMessage (sub-agent invoked by another agent)".
+  private appendAgentResult(
+    msg: AssistantMessage,
+    agent: MXAgent,
+    callingAgent: MXAgent | null,
+  ): void {
+    if (callingAgent === null) {
+      // Root case → log as AssistantMessage.
+      this.log.push({ ...msg, parent_id: agent.id });
+      agent.toolThread.push(msg);
+      return;
+    }
+    // Sub-agent case → wrap as ToolResultMessage in calling agent's thread.
+    const ctor = agent.constructor as unknown as RegistrableClass;
+    const trm: ToolResultMessage = {
+      role: 'toolResult',
+      toolCallId: agent.id,
+      toolName: ctor.schema.name,
+      // AssistantMessage.content can hold TextContent | ThinkingContent | ToolCall;
+      // ToolResultMessage.content takes TextContent | ImageContent. Strip down
+      // to text — thinking/tool_call shouldn't appear in a stop turn anyway.
+      content: msg.content.filter((c): c is TextContent => c.type === 'text'),
+      isError: msg.stopReason === 'error',
+      timestamp: Date.now(),
+    };
+    this.log.push({ ...trm, parent_id: callingAgent.id });
+    callingAgent.toolThread.push(trm);
+  }
+
   // Stateless rebuild of an agent from log. Looks up the class in
   // registrables by schema.name. Root: from AgentInvocation entry. Sub-agent:
   // from the ToolCall in the parent's AssistantMessage.
@@ -246,6 +317,7 @@ export class Orchestrator {
     const rootInv = this.findRootInvocation(invocationId);
     if (rootInv) {
       const Cls = this.lookupCallable(rootInv.name);
+      const normalized = normalizeArgs(Cls.schema.parameters, rootInv.arguments);
       const Ctor = Cls as unknown as new (
         o: Orchestrator,
         p: Record<string, unknown>,
@@ -256,7 +328,7 @@ export class Orchestrator {
       ) => MXAgent;
       return new Ctor(
         this,
-        rootInv.arguments,
+        normalized as Record<string, unknown>,
         rootInv.context,
         invocationId,
         this.projectRootThreadHistory(),
@@ -265,26 +337,13 @@ export class Orchestrator {
     }
 
     // Sub-agent: find its invoking ToolCall in the log.
-    let subToolCall: ToolCall | null = null;
-    let assistantParentId: string | null = null;
-    for (const e of this.log) {
-      if (!('role' in e) || e.role !== 'assistant') continue;
-      for (const block of e.content) {
-        if (block.type === 'toolCall' && block.id === invocationId) {
-          subToolCall = block;
-          assistantParentId = e.parent_id;
-          break;
-        }
-      }
-      if (subToolCall) break;
-    }
-    if (!subToolCall || !assistantParentId) {
-      throw new Error(`reconstructAgent: invocation ${invocationId} not found`);
-    }
+    const sub = this.findSubAgentToolCall(invocationId);
+    if (!sub) throw new Error(`reconstructAgent: invocation ${invocationId} not found`);
 
     // Walk up just for context inheritance.
-    const parentAgent = this.reconstructAgent(assistantParentId);
-    const Cls = this.lookupCallable(subToolCall.name);
+    const parentAgent = this.reconstructAgent(sub.assistantParentId);
+    const Cls = this.lookupCallable(sub.toolCall.name);
+    const normalized = normalizeArgs(Cls.schema.parameters, sub.toolCall.arguments);
     const Ctor = Cls as unknown as new (
       o: Orchestrator,
       p: Record<string, unknown>,
@@ -295,12 +354,43 @@ export class Orchestrator {
     ) => MXAgent;
     return new Ctor(
       this,
-      subToolCall.arguments,
+      normalized as Record<string, unknown>,
       parentAgent.context,
       invocationId,
       [], // sub-agents have empty threadHistory
       this.collectToolThread(invocationId),
     );
+  }
+
+  // Returns the calling agent (reconstructed) for `agentId`, or null if
+  // `agentId` is the root.
+  protected findCallingAgent(agentId: string): MXAgent | null {
+    const sub = this.findSubAgentToolCall(agentId);
+    if (!sub) return null; // agentId is root (no enclosing AssistantMessage)
+    return this.reconstructAgent(sub.assistantParentId);
+  }
+
+  // True iff the agent's most recent dispatched AssistantMessage (in its own
+  // thread) has a matching ToolResultMessage for every tool_call it issued.
+  // Used to gate bubble-up: a calling agent only re-runs after all its
+  // outstanding sub-tasks finish.
+  protected allToolCallsResolved(agentId: string): boolean {
+    let lastDispatched: AssistantMessage | null = null;
+    const resolvedToolCallIds = new Set<string>();
+    for (const e of this.log) {
+      if (e.parent_id !== agentId) continue;
+      if ('role' in e && e.role === 'assistant') {
+        // Track only AssistantMessages that issued tool_calls. The most
+        // recent such message is the one whose results we wait for.
+        if (e.content.some((c) => c.type === 'toolCall')) lastDispatched = e;
+      } else if ('role' in e && e.role === 'toolResult') {
+        resolvedToolCallIds.add(e.toolCallId);
+      }
+    }
+    if (!lastDispatched) return true; // no dispatch pending; agent is fresh
+    return lastDispatched.content
+      .filter((c): c is ToolCall => c.type === 'toolCall')
+      .every((tc) => resolvedToolCallIds.has(tc.id));
   }
 
   // ===== Helpers (each called from 2+ sites) =====
@@ -342,6 +432,22 @@ export class Orchestrator {
   protected findRootInvocation(id: string): AgentInvocation | null {
     for (const e of this.log) {
       if (this.isAgentInvocation(e) && e.id === id && e.parent_id === null) return e;
+    }
+    return null;
+  }
+
+  // Find a sub-agent's invoking ToolCall + the AssistantMessage carrying it.
+  protected findSubAgentToolCall(
+    id: string,
+  ): { toolCall: ToolCall; assistantParentId: string } | null {
+    for (const e of this.log) {
+      if (!('role' in e) || e.role !== 'assistant') continue;
+      for (const block of e.content) {
+        if (block.type === 'toolCall' && block.id === id) {
+          if (e.parent_id == null) return null; // shouldn't happen, but defensive
+          return { toolCall: block, assistantParentId: e.parent_id };
+        }
+      }
     }
     return null;
   }

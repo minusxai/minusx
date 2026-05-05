@@ -128,7 +128,10 @@ export abstract class MXTool<
     this.id = id ?? gen_id();
   }
 
-  abstract run(): Promise<ToolResponse<TDetails>>;
+  // Tools return ToolResponse; agents (MXAgent subclasses) narrow to
+  // AssistantMessage. dispatch branches on `instanceof MXAgent` to handle
+  // the two shapes — see Orchestrator.appendAgentResult.
+  abstract run(): Promise<ToolResponse<TDetails> | AssistantMessage>;
 }
 
 // ============================================================================
@@ -203,20 +206,16 @@ export class MXAgent<
     return result;
   }
 
-  // Loop: llm() → dispatch → repeat until stopReason==='stop'.
-  async run(): Promise<ToolResponse<TDetails>> {
+  // Loop: llm() → (dispatch unless stop) → repeat. The stop turn is NOT
+  // dispatched here — the caller (Orchestrator.run for root, Orchestrator.
+  // dispatch for sub-agents) decides how to log it via appendAgentResult.
+  async run(): Promise<AssistantMessage> {
     while (true) {
       const msg = await this.llm();
+      if (msg.stopReason === 'stop') return msg;
       // Cast to base MXAgent — TS gets pickier about generic variance after
       // the file split (protected-field visibility check on `this`).
       await this.orchestrator.dispatch(msg, this as unknown as MXAgent);
-      if (msg.stopReason === 'stop') {
-        const text = msg.content
-          .filter((c): c is TextContent => c.type === 'text')
-          .map((c) => c.text)
-          .join('\n');
-        return { content: [{ type: 'text', text }], isError: false } as ToolResponse<TDetails>;
-      }
     }
   }
 }
