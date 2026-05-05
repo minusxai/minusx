@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react'
 import { Box, HStack, Input, Text, VStack } from '@chakra-ui/react'
 import { LuPlus, LuTrash2 } from 'react-icons/lu'
 import type { ChartAnnotation } from '@/lib/types'
+import { findMatchingXIndex } from '@/lib/chart/chart-utils'
 
 interface AnnotationEditorProps {
   annotations?: ChartAnnotation[] | null
@@ -32,16 +33,21 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
   const defaultSeries = seriesOptions[0] ?? ''
 
   const normalizedItems = useMemo(() => (
-    items.map((item) => ({
-      ...item,
-      x: item.x ?? defaultX,
-      series: item.series ?? defaultSeries,
-    }))
-  ), [items, defaultSeries, defaultX])
+    items.map((item) => {
+      if (item.x == null) return { ...item, x: defaultX }
+      // Fuzzy-resolve x values that don't exactly match an option (e.g. date format mismatch)
+      const exactMatch = xOptions.includes(String(item.x))
+      if (!exactMatch) {
+        const fuzzyIndex = findMatchingXIndex(xOptions, item.x)
+        if (fuzzyIndex !== -1) return { ...item, x: xOptions[fuzzyIndex] }
+      }
+      return item
+    })
+  ), [items, defaultX, xOptions])
 
   useEffect(() => {
     if (!enabled || items.length === 0) return
-    const needsNormalization = items.some(item => item.x == null || item.series == null)
+    const needsNormalization = items.some((item, i) => item !== normalizedItems[i])
     if (needsNormalization) {
       onChange(normalizedItems)
     }
@@ -54,7 +60,7 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
 
   const addItem = () => {
     if (items.length >= MAX_ANNOTATIONS) return
-    onChange([...items, { x: xOptions[0] ?? '', series: seriesOptions[0] ?? '', text: '' }])
+    onChange([...items, { x: xOptions[0] ?? '', series: null, text: '' }])
   }
 
   const removeItem = (index: number) => {
@@ -142,9 +148,10 @@ export const AnnotationEditor = ({ annotations, onChange, enabled, xOptions, ser
                   </Text>
                   <select
                     value={annotation.series ?? ''}
-                    onChange={(e) => updateItem(index, { series: e.target.value })}
+                    onChange={(e) => updateItem(index, { series: e.target.value || null })}
                     style={selectStyle}
                   >
+                    <option value="">None (x-axis only)</option>
                     {seriesOptions.map(option => (
                       <option key={option} value={option}>
                         {option}
