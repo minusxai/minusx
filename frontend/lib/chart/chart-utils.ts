@@ -109,8 +109,45 @@ interface AnnotationGraphicsConfig {
   columnFormats?: Record<string, ColumnFormatConfig>
   annotations?: ChartAnnotation[]
   axisConfig?: AxisConfig
+  styleConfig?: VisualizationStyleConfig | null
   colorMode?: 'light' | 'dark'
   colorPalette: string[]
+}
+
+/**
+ * Compute the y-value to pass to convertToPixel for an annotation.
+ * For stacked charts, sums all series values in the same stack group
+ * at or below the target series index. For x-only annotations (no series),
+ * returns null.
+ */
+export const resolveAnnotationY = ({
+  series,
+  matchedSeriesIndex,
+  pointIndex,
+  pointY,
+  isStacked,
+  yAxisAssignments,
+}: {
+  series: Array<{ name: string; data: number[] }>
+  matchedSeriesIndex: number | null
+  pointIndex: number | null
+  pointY: number | null
+  isStacked: boolean
+  yAxisAssignments: number[]
+}): number | null => {
+  if (matchedSeriesIndex == null || pointIndex == null || pointY == null) return null
+  if (!isStacked) return pointY
+
+  const targetAxis = yAxisAssignments[matchedSeriesIndex] ?? 0
+  let cumulative = 0
+  for (let i = 0; i <= matchedSeriesIndex; i++) {
+    if ((yAxisAssignments[i] ?? 0) !== targetAxis) continue
+    const val = series[i].data[pointIndex]
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      cumulative += val
+    }
+  }
+  return cumulative
 }
 
 interface SpecialChartOptionConfig {
@@ -234,6 +271,51 @@ const wrapAnnotationText = (text: string, maxCharsPerLine = 24, maxLines = 3): s
   }
 
   return lines
+}
+
+/**
+ * Find the index in xAxisData that matches annotationX, with fuzzy date matching.
+ * Handles cases where the agent writes "2026-02-28" but xAxisData has "2026-02-28T00:00:00.000Z"
+ * (or vice versa). Returns -1 if no match found.
+ */
+export const findMatchingXIndex = (xAxisData: string[], annotationX: string | number): number => {
+  const needle = String(annotationX)
+
+  // Try exact match first
+  const exactIndex = xAxisData.findIndex(item => String(item) === needle)
+  if (exactIndex !== -1) return exactIndex
+
+  // Try prefix matching (date-only vs full ISO)
+  return xAxisData.findIndex(item => {
+    const hay = String(item)
+    return hay.startsWith(needle) || needle.startsWith(hay)
+  })
+}
+
+/**
+ * Resolve the x value and matched data index for an annotation.
+ * - Category axis: snap to nearest xAxisData entry (required for discrete buckets)
+ * - Time/value/log axis: use the raw annotation value (continuous scale, any position valid)
+ */
+export const resolveAnnotationX = ({
+  annotationX,
+  xAxisData,
+  axisType,
+}: {
+  annotationX: string | number
+  xAxisData: string[]
+  axisType: string
+}): { xValue: string | number; matchedIndex: number } => {
+  const isContinuous = axisType === 'time' || axisType === 'value' || axisType === 'log'
+
+  if (isContinuous) {
+    return { xValue: annotationX, matchedIndex: -1 }
+  }
+
+  // Category axis — must snap to an existing data point
+  const matchedIndex = findMatchingXIndex(xAxisData, annotationX)
+  const xValue = matchedIndex !== -1 ? xAxisData[matchedIndex] : String(annotationX)
+  return { xValue, matchedIndex }
 }
 
 // Format large numbers with k, M, B suffixes for compact display (axis labels)
@@ -990,6 +1072,7 @@ export const buildAnnotationGraphics = ({
   columnFormats,
   annotations,
   axisConfig,
+  styleConfig,
   colorMode = 'dark',
   colorPalette,
 }: AnnotationGraphicsConfig): EChartsOption['graphic'] => {
@@ -1010,6 +1093,7 @@ export const buildAnnotationGraphics = ({
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
   const { axisType: echartsXAxisType } = resolveXAxisTypes(xAxisColumns, columnTypes, chartType)
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
+  const isStacked = (styleConfig?.stacked ?? true) && ['bar', 'area'].includes(chartType)
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
   const getSeriesDisplayName = (seriesName: string): string => {
     const axisMatch = seriesName.match(/^(.*) \(([LR])\)$/)
@@ -1056,7 +1140,26 @@ export const buildAnnotationGraphics = ({
   const annotationsWithPixels = annotations
     .slice(0, 8)
     .map((annotation: ChartAnnotation) => {
-      if (!annotation.series) return null
+      // Resolve x: category axes snap to data points; continuous axes use the raw value
+      const { xValue: resolvedX, matchedIndex: matchedXIndex } = resolveAnnotationX({
+        annotationX: annotation.x,
+        xAxisData,
+        axisType: echartsXAxisType,
+      })
+      const xValue = toCartesianAxisValue(String(resolvedX), echartsXAxisType)
+
+      // x-only annotation (no series) — vertical marker at x position
+      if (!annotation.series) {
+        const pixel = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [xValue, 0])
+        if (!Array.isArray(pixel) || !Number.isFinite(pixel[0])) return null
+
+        return {
+          annotation,
+          xPixel: pixel[0],
+          pointYPixel: null as number | null,
+          seriesIndex: null as number | null,
+        }
+      }
 
       const matchedSeriesIndex = series.findIndex(item => (
         item.name === annotation.series
@@ -1064,34 +1167,34 @@ export const buildAnnotationGraphics = ({
       ))
       if (matchedSeriesIndex === -1) return null
 
-      const seriesMatch = series[matchedSeriesIndex]
-      const matchingIndices = xAxisData
-        .map((item, index) => ({ item, index }))
-        .filter(({ item }) => String(item) === String(annotation.x))
-        .map(({ index }) => index)
-
-      let pointIndex: number | null = null
-      let pointY: number | null = null
-      for (const index of matchingIndices) {
-        const candidate = seriesMatch.data[index]
-        if (typeof candidate === 'number' && Number.isFinite(candidate)) {
-          pointIndex = index
-          pointY = candidate
-          break
-        }
+      // For category axis, must have matched a data point; for continuous, find nearest for y lookup
+      let pointIndex: number | null = matchedXIndex !== -1 ? matchedXIndex : null
+      if (pointIndex == null && matchedXIndex === -1) {
+        // Continuous axis — find the closest x data point to anchor y value
+        pointIndex = findMatchingXIndex(xAxisData, annotation.x)
+        if (pointIndex === -1) pointIndex = null
       }
+      if (pointIndex == null) return null
 
-      if (pointIndex == null || pointY == null) return null
+      const seriesMatch = series[matchedSeriesIndex]
+      const pointY = seriesMatch.data[pointIndex]
+      if (typeof pointY !== 'number' || !Number.isFinite(pointY)) return null
+
+      const effectiveY = resolveAnnotationY({
+        series,
+        matchedSeriesIndex,
+        pointIndex,
+        pointY,
+        isStacked,
+        yAxisAssignments,
+      }) ?? pointY
 
       const finder = {
         xAxisIndex: 0,
         yAxisIndex: yAxisAssignments[matchedSeriesIndex] ?? 0,
       }
 
-      const pixel = chart.convertToPixel(
-        finder,
-        [typeof annotation.x === 'number' ? annotation.x : toCartesianAxisValue(String(annotation.x), echartsXAxisType), pointY]
-      )
+      const pixel = chart.convertToPixel(finder, [xValue, effectiveY])
 
       if (!Array.isArray(pixel) || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) {
         return null
@@ -1100,11 +1203,11 @@ export const buildAnnotationGraphics = ({
       return {
         annotation,
         xPixel: pixel[0],
-        pointYPixel: pixel[1],
-        seriesIndex: matchedSeriesIndex,
+        pointYPixel: pixel[1] as number | null,
+        seriesIndex: matchedSeriesIndex as number | null,
       }
     })
-    .filter((item): item is { annotation: ChartAnnotation; xPixel: number; pointYPixel: number; seriesIndex: number } => item !== null)
+    .filter((item): item is { annotation: ChartAnnotation; xPixel: number; pointYPixel: number | null; seriesIndex: number | null } => item !== null)
     .sort((a, b) => a.xPixel - b.xPixel)
 
   return annotationsWithPixels.flatMap(({ annotation, xPixel, pointYPixel, seriesIndex }, index) => {
@@ -1113,7 +1216,8 @@ export const buildAnnotationGraphics = ({
     const height = 12 + lines.length * 14
 
     const left = Math.min(plotRight - width, Math.max(plotLeft, xPixel - width / 2))
-    const preferBottom = pointYPixel < plotTop + plotHeight * 0.42
+    const isXOnly = pointYPixel == null
+    const preferBottom = isXOnly ? false : pointYPixel < plotTop + plotHeight * 0.42
     const primaryBand = preferBottom ? 'bottom' : 'top'
     const primaryRow = findOpenRow(primaryBand === 'top' ? topRowOccupancy : bottomRowOccupancy, left, width)
     const secondaryBand = primaryBand === 'top' ? 'bottom' : 'top'
@@ -1131,7 +1235,11 @@ export const buildAnnotationGraphics = ({
       ? plotTop + bandPadding + rowIndex * rowHeight
       : plotBottom - bandPadding - height - rowIndex * rowHeight
     const leaderStartY = band === 'top' ? top + height + 4 : top - 4
-    const leaderEndY = Math.min(plotBottom, Math.max(plotTop, pointYPixel))
+
+    // x-only: leader line spans full plot height; series-anchored: ends at data point
+    const leaderEndY = isXOnly
+      ? (band === 'top' ? plotBottom : plotTop)
+      : Math.min(plotBottom, Math.max(plotTop, pointYPixel))
 
     const graphics: any[] = [
       {
@@ -1166,7 +1274,7 @@ export const buildAnnotationGraphics = ({
         style: {
           fill: labelFill,
           stroke: labelStroke,
-          lineWidth: 1,
+          lineWidth: 0.5,
           shadowBlur: 2,
           shadowColor: 'rgba(0, 0, 0, 0.12)',
         },
@@ -1177,17 +1285,22 @@ export const buildAnnotationGraphics = ({
         z: 102,
         zlevel: 10,
         style: {
-          x: left + 8,
+          x: left + width / 2,
           y: top + 7,
           text: lines.join('\n'),
           fill: labelText,
           font: `11px ${getChartFontFamily()}`,
           lineHeight: 14,
           width: width - 16,
+          align: 'center',
           overflow: 'break',
         },
       },
-      {
+    ]
+
+    // Only draw the dot for series-anchored annotations
+    if (!isXOnly) {
+      graphics.push({
         type: 'circle',
         silent: true,
         z: 103,
@@ -1202,8 +1315,8 @@ export const buildAnnotationGraphics = ({
           stroke: labelFill,
           lineWidth: 1,
         },
-      },
-    ]
+      })
+    }
 
     return graphics
   })

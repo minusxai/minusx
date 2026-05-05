@@ -1,4 +1,4 @@
-import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue, resolveXAxisTypes } from '@/lib/chart/chart-utils'
+import { buildChartOption, buildRadarChartOption, buildPieChartOption, formatDateValue, resolveXAxisTypes, resolveAnnotationY, findMatchingXIndex, resolveAnnotationX } from '@/lib/chart/chart-utils'
 import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import type { GeoConfig } from '@/lib/types'
@@ -1215,5 +1215,179 @@ describe('getVizSettingsWarning', () => {
   it('returns warning for combo chart with only 1 Y column', () => {
     const warning = getVizSettingsWarning({ type: 'combo', xCols: ['month'], yCols: ['revenue'] })
     expect(warning).toBeTruthy()
+  })
+})
+
+// ─── resolveAnnotationY ───
+
+describe('resolveAnnotationY', () => {
+  const series = [
+    { name: 'A', data: [10, 20, 30] },
+    { name: 'B', data: [5, 15, 25] },
+    { name: 'C', data: [3, 7, 12] },
+  ]
+
+  it('returns individual value when not stacked', () => {
+    const result = resolveAnnotationY({
+      series,
+      matchedSeriesIndex: 1,
+      pointIndex: 2,
+      pointY: 25,
+      isStacked: false,
+      yAxisAssignments: [0, 0, 0],
+    })
+    expect(result).toBe(25)
+  })
+
+  it('returns cumulative value for bottom series when stacked', () => {
+    // Series A is index 0 (bottom of stack), its cumulative = its own value
+    const result = resolveAnnotationY({
+      series,
+      matchedSeriesIndex: 0,
+      pointIndex: 1,
+      pointY: 20,
+      isStacked: true,
+      yAxisAssignments: [0, 0, 0],
+    })
+    expect(result).toBe(20)
+  })
+
+  it('returns cumulative value for middle series when stacked', () => {
+    // Series B is index 1, stacked on A. cumulative = A[1] + B[1] = 20 + 15 = 35
+    const result = resolveAnnotationY({
+      series,
+      matchedSeriesIndex: 1,
+      pointIndex: 1,
+      pointY: 15,
+      isStacked: true,
+      yAxisAssignments: [0, 0, 0],
+    })
+    expect(result).toBe(35)
+  })
+
+  it('returns cumulative value for top series when stacked', () => {
+    // Series C is index 2, stacked on A+B. cumulative = A[1] + B[1] + C[1] = 20 + 15 + 7 = 42
+    const result = resolveAnnotationY({
+      series,
+      matchedSeriesIndex: 2,
+      pointIndex: 1,
+      pointY: 7,
+      isStacked: true,
+      yAxisAssignments: [0, 0, 0],
+    })
+    expect(result).toBe(42)
+  })
+
+  it('only sums series in the same stack group (dual axis)', () => {
+    // A and C on left (axis 0), B on right (axis 1)
+    // C is index 2, stacked with A only. cumulative = A[0] + C[0] = 10 + 3 = 13
+    const result = resolveAnnotationY({
+      series,
+      matchedSeriesIndex: 2,
+      pointIndex: 0,
+      pointY: 3,
+      isStacked: true,
+      yAxisAssignments: [0, 1, 0],
+    })
+    expect(result).toBe(13)
+  })
+
+  it('returns null when no series specified (x-only annotation)', () => {
+    const result = resolveAnnotationY({
+      series,
+      matchedSeriesIndex: null,
+      pointIndex: null,
+      pointY: null,
+      isStacked: false,
+      yAxisAssignments: [0, 0, 0],
+    })
+    expect(result).toBeNull()
+  })
+
+  it('skips NaN values in stack summation', () => {
+    const seriesWithNaN = [
+      { name: 'A', data: [10, NaN, 30] },
+      { name: 'B', data: [5, 15, 25] },
+    ]
+    const result = resolveAnnotationY({
+      series: seriesWithNaN,
+      matchedSeriesIndex: 1,
+      pointIndex: 1,
+      pointY: 15,
+      isStacked: true,
+      yAxisAssignments: [0, 0],
+    })
+    // A[1] is NaN, so only B[1] = 15
+    expect(result).toBe(15)
+  })
+})
+
+// ─── findMatchingXIndex ───
+
+describe('findMatchingXIndex', () => {
+  it('returns exact match index', () => {
+    const xAxisData = ['Jan', 'Feb', 'Mar']
+    expect(findMatchingXIndex(xAxisData, 'Feb')).toBe(1)
+  })
+
+  it('matches date-only string against full ISO timestamp', () => {
+    const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-02-28T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
+    expect(findMatchingXIndex(xAxisData, '2026-02-28')).toBe(1)
+  })
+
+  it('matches full ISO against date-only xAxisData', () => {
+    const xAxisData = ['2026-01-01', '2026-02-28', '2026-03-15']
+    expect(findMatchingXIndex(xAxisData, '2026-02-28T00:00:00.000Z')).toBe(1)
+  })
+
+  it('returns -1 when no match found', () => {
+    const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
+    expect(findMatchingXIndex(xAxisData, '2026-02-28')).toBe(-1)
+  })
+
+  it('prefers exact match over prefix match', () => {
+    const xAxisData = ['2026-02-28', '2026-02-28T00:00:00.000Z']
+    expect(findMatchingXIndex(xAxisData, '2026-02-28')).toBe(0)
+  })
+
+  it('works with numeric x values', () => {
+    const xAxisData = ['10', '20', '30']
+    expect(findMatchingXIndex(xAxisData, 20)).toBe(1)
+  })
+})
+
+// ─── resolveAnnotationX ───
+
+describe('resolveAnnotationX', () => {
+  const xAxisData = ['2026-01-01T00:00:00.000Z', '2026-02-28T00:00:00.000Z', '2026-03-15T00:00:00.000Z']
+
+  it('snaps to nearest xAxisData for category axis', () => {
+    const result = resolveAnnotationX({ annotationX: '2026-02-28', xAxisData, axisType: 'category' })
+    expect(result).toEqual({ xValue: '2026-02-28T00:00:00.000Z', matchedIndex: 1 })
+  })
+
+  it('uses raw value for time axis even when data point exists', () => {
+    const result = resolveAnnotationX({ annotationX: '2026-02-28', xAxisData, axisType: 'time' })
+    expect(result).toEqual({ xValue: '2026-02-28', matchedIndex: -1 })
+  })
+
+  it('uses raw value for time axis with arbitrary date', () => {
+    const result = resolveAnnotationX({ annotationX: '2026-02-15', xAxisData, axisType: 'time' })
+    expect(result).toEqual({ xValue: '2026-02-15', matchedIndex: -1 })
+  })
+
+  it('uses raw number for value axis', () => {
+    const result = resolveAnnotationX({ annotationX: 42, xAxisData: ['10', '20', '30'], axisType: 'value' })
+    expect(result).toEqual({ xValue: 42, matchedIndex: -1 })
+  })
+
+  it('snaps numeric value on category axis', () => {
+    const result = resolveAnnotationX({ annotationX: 20, xAxisData: ['10', '20', '30'], axisType: 'category' })
+    expect(result).toEqual({ xValue: '20', matchedIndex: 1 })
+  })
+
+  it('returns raw value for category axis when no match found', () => {
+    const result = resolveAnnotationX({ annotationX: 'missing', xAxisData: ['a', 'b', 'c'], axisType: 'category' })
+    expect(result).toEqual({ xValue: 'missing', matchedIndex: -1 })
   })
 })

@@ -44,7 +44,10 @@ export const EChart = ({
       debounce(() => {
         if (chartRef.current) {
           const chart = getInstanceByDom(chartRef.current)
-          chart?.resize()
+          if (chart) {
+            chart.resize()
+            onChartUpdateRef.current?.(chart)
+          }
         }
       }, 100),
     []

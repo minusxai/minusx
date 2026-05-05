@@ -72,6 +72,7 @@ export const BaseChart = (props: BaseChartProps) => {
       columnFormats,
       annotations,
       axisConfig,
+      styleConfig,
       colorMode,
       colorPalette,
       columnTypes,
@@ -81,7 +82,7 @@ export const BaseChart = (props: BaseChartProps) => {
       { graphic },
       { notMerge: false, replaceMerge: ['graphic'] }
     )
-  }, [annotations, chartType, colorMode, colorPalette, columnFormats, series, xAxisColumns, xAxisData, yAxisColumns, yRightCols, axisConfig, columnTypes])
+  }, [annotations, chartType, colorMode, colorPalette, columnFormats, series, xAxisColumns, xAxisData, yAxisColumns, yRightCols, axisConfig, styleConfig, columnTypes])
 
   if (!isValidChartData(xAxisData, series)) {
     return (
