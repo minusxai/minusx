@@ -1,6 +1,3 @@
-// Scaffolding tools + agent that exercise the Orchestrator + MXAgent contract
-// end-to-end. The base `MXAgent.llm()` (which calls `streamSimple`) is used
-// unchanged — pi-ai's faux provider in tests scripts the LLM responses.
 
 import {
   Type,
@@ -15,21 +12,12 @@ import {
   type ToolResponse,
 } from '@/orchestrator/types';
 
-// ============================================================================
-// Faux provider — registered once per process; tests call setResponses() on
-// the returned handle per scenario.
-// ============================================================================
-
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-test-api',
   provider: 'faux-test',
   models: [{ id: 'stub-model' }],
 });
 const FAUX_MODEL = fauxRegistration.getModel();
-
-// ============================================================================
-// EchoTool — leaf tool that echoes its input
-// ============================================================================
 
 const EchoToolParams = Type.Object({
   text: Type.String(),
@@ -50,10 +38,6 @@ export class EchoTool extends MXTool<typeof EchoToolParams> {
   }
 }
 
-// ============================================================================
-// PendingTool — leaf tool that always throws UserInputException
-// ============================================================================
-
 const PendingToolParams = Type.Object({
   prompt: Type.String(),
 });
@@ -70,11 +54,6 @@ export class PendingTool extends MXTool<typeof PendingToolParams> {
   }
 }
 
-// ============================================================================
-// NestedAgent — a small MXAgent the parent can dispatch as a tool. Validates
-// agent-as-tool semantics + the appendAgentResult sub-agent path.
-// ============================================================================
-
 const NestedAgentParams = Type.Object({
   userMessage: Type.String(),
 });
@@ -90,10 +69,6 @@ export class NestedAgent extends MXAgent<typeof NestedAgentParams> {
 
   protected systemPrompt = 'You are a nested test agent.';
 }
-
-// ============================================================================
-// TestAgent — uses base MXAgent.llm() which calls pi-ai (via faux provider)
-// ============================================================================
 
 const TestAgentParams = Type.Object({
   userMessage: Type.String(),

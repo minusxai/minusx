@@ -6,7 +6,6 @@ import { EchoTool, PendingTool, NestedAgent, TestAgent, fauxRegistration } from 
 describe('parallel mixed-state dispatch', () => {
   it('runs two parallel tool_calls; one succeeds, one pauses; resume completes', async () => {
     fauxRegistration.setResponses([
-      // Turn 1: emit BOTH an EchoTool call (succeeds) and a PendingTool call (UIE).
       fauxAssistantMessage(
         [
           fauxToolCall('EchoTool', { text: 'parallel hello' }),
@@ -14,7 +13,6 @@ describe('parallel mixed-state dispatch', () => {
         ],
         { stopReason: 'toolUse' },
       ),
-      // Turn 2 (after resume): final stop reply.
       fauxAssistantMessage('Both done.', { stopReason: 'stop' }),
     ]);
 
@@ -22,7 +20,6 @@ describe('parallel mixed-state dispatch', () => {
     const orch = new Orchestrator([EchoTool, PendingTool, NestedAgent, TestAgent]);
     const agent = new TestAgent(orch, { userMessage: 'parallel test' }, ctx);
 
-    // Phase 1: run → expect a 'pending' event (PendingTool's id), no final result.
     const phase1 = orch.run(agent);
     const events1: StreamEvent[] = [];
     for await (const ev of phase1) events1.push(ev);
@@ -32,8 +29,6 @@ describe('parallel mixed-state dispatch', () => {
     const pendingEvent = events1.find((e) => e.type === 'pending');
     expect(pendingEvent).toBeDefined();
 
-    // Both tool_calls live in the same AssistantMessage; one was resolved
-    // (EchoTool's result is in the log), the other isn't.
     const echoResult = orch.log.find(
       (e) => 'role' in e && e.role === 'toolResult' && e.toolName === 'EchoTool',
     );
@@ -43,13 +38,11 @@ describe('parallel mixed-state dispatch', () => {
     expect(echoResult).toBeDefined();
     expect(pendingResult).toBeUndefined();
 
-    // Locate the pending tool call to resume.
     const pendingCall = orch.log
       .flatMap((e) => ('role' in e && e.role === 'assistant' ? e.content.filter((c) => c.type === 'toolCall') : []))
       .find((tc): tc is ToolCall => tc.name === 'PendingTool');
     expect(pendingCall).toBeDefined();
 
-    // Phase 2: resume → expect final AssistantMessage.
     const phase2 = orch.resume([
       {
         toolCallId: pendingCall!.id,

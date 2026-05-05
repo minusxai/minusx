@@ -13,7 +13,6 @@ describe('log replay (stateless rehydration)', () => {
     const ctx: AgentContext = { userId: 'u', mode: 'org' };
     const registrables = [EchoTool, PendingTool, NestedAgent, TestAgent];
 
-    // Turn 1 on Orchestrator A
     const orchA = new Orchestrator(registrables);
     const a1 = new TestAgent(orchA, { userMessage: 'first' }, ctx);
     const streamA = orchA.run(a1);
@@ -22,11 +21,9 @@ describe('log replay (stateless rehydration)', () => {
     expect(result1).not.toBeNull();
     expect((result1!.content[0] as TextContent).text).toBe('First reply.');
 
-    // Snapshot the log: round-trip through JSON to verify it's serializable.
     const serialized = JSON.stringify(orchA.log);
     const rehydratedLog: ConversationLog = JSON.parse(serialized);
 
-    // Turn 2 on Orchestrator B (fresh instance, same registrables, rehydrated log)
     const orchB = new Orchestrator(registrables, rehydratedLog);
     const a2 = new TestAgent(orchB, { userMessage: 'second' }, ctx);
     const streamB = orchB.run(a2);
@@ -35,7 +32,6 @@ describe('log replay (stateless rehydration)', () => {
     expect(result2).not.toBeNull();
     expect((result2!.content[0] as TextContent).text).toBe('Second reply.');
 
-    // a2 should have seen the first turn's user/assistant pair via threadHistory.
     const firstUser = a2.threadHistory.find((m): m is UserMessage => m.role === 'user');
     expect(firstUser).toBeDefined();
     expect(firstUser!.content).toBe('first');
