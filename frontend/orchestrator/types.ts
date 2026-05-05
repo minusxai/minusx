@@ -35,6 +35,15 @@ export type ToolMessage = AssistantMessage | ToolResultMessage;
 
 export type RegistrableClass = {
   readonly schema: Tool<TSchema>;
+  new (
+    orchestrator: Orchestrator,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    parameters: any,
+    context: AgentContext,
+    id?: string,
+    threadHistory?: Message[],
+    toolThread?: ToolMessage[],
+  ): MXTool;
 };
 
 export interface AgentInvocation extends ToolCall {

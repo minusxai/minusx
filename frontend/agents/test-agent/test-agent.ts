@@ -54,6 +54,22 @@ export class PendingTool extends MXTool<typeof PendingToolParams> {
   }
 }
 
+const ErrorToolParams = Type.Object({
+  reason: Type.String(),
+});
+
+export class ErrorTool extends MXTool<typeof ErrorToolParams> {
+  static readonly schema: Tool<typeof ErrorToolParams> = {
+    name: 'ErrorTool',
+    description: 'Always throws a non-UserInputException error.',
+    parameters: ErrorToolParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    throw new Error(`ErrorTool exploded: ${this.parameters.reason}`);
+  }
+}
+
 const NestedAgentParams = Type.Object({
   userMessage: Type.String(),
 });
@@ -64,7 +80,7 @@ export class NestedAgent extends MXAgent<typeof NestedAgentParams> {
     description: 'A nested test agent that finishes after one LLM turn.',
     parameters: NestedAgentParams,
   };
-  static readonly tools: Tool<TSchema>[] = [EchoTool.schema];
+  static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema];
   static readonly model = FAUX_MODEL;
 
   protected systemPrompt = 'You are a nested test agent.';
@@ -83,6 +99,7 @@ export class TestAgent extends MXAgent<typeof TestAgentParams> {
   static readonly tools: Tool<TSchema>[] = [
     EchoTool.schema,
     PendingTool.schema,
+    ErrorTool.schema,
     NestedAgent.schema,
   ];
   static readonly model = FAUX_MODEL;

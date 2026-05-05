@@ -172,20 +172,11 @@ export class Orchestrator {
         const instance = this.instantiate(Cls, tc.arguments, parent.context, tc.id);
 
         if (instance instanceof MXAgent) {
-          const subFinal = await (instance as MXAgent).run();
-          this.appendAgentResult(subFinal as AssistantMessage, instance as MXAgent, parent);
-          return { tc, handled: true as const };
+          const subFinal = await instance.run();
+          this.appendAgentResult(subFinal, instance, parent);
+          return;
         }
         const response = (await instance.run()) as ToolResponse;
-        return { tc, handled: false as const, response };
-      }),
-    );
-
-    const pending: string[] = [];
-    for (const r of settled) {
-      if (r.status === 'fulfilled') {
-        if (r.value.handled) continue;
-        const { tc, response } = r.value;
         const trm: ToolResultMessage = {
           role: 'toolResult',
           toolCallId: tc.id,
@@ -197,14 +188,14 @@ export class Orchestrator {
         };
         this.log.push({ ...trm, parent_id: parent.id });
         parent.toolThread.push(trm);
-      } else {
-        const err = r.reason;
-        if (err instanceof UserInputException) {
-          pending.push(...err.toolCallIds);
-        } else {
-          throw err;
-        }
-      }
+      }),
+    );
+
+    const pending: string[] = [];
+    for (const r of settled) {
+      if (r.status === 'fulfilled') continue;
+      if (r.reason instanceof UserInputException) pending.push(...r.reason.toolCallIds);
+      else throw r.reason;
     }
     if (pending.length > 0) throw new UserInputException(pending);
   }
@@ -298,16 +289,7 @@ export class Orchestrator {
     threadHistory?: Message[],
     toolThread?: ToolMessage[],
   ): MXTool {
-    const normalized = normalizeArgs(Cls.schema.parameters, args);
-    const Ctor = Cls as unknown as new (
-      o: Orchestrator,
-      p: Record<string, unknown>,
-      c: AgentContext,
-      id?: string,
-      th?: Message[],
-      tt?: ToolMessage[],
-    ) => MXTool;
-    return new Ctor(this, normalized as Record<string, unknown>, ctx, id, threadHistory, toolThread);
+    return new Cls(this, normalizeArgs(Cls.schema.parameters, args), ctx, id, threadHistory, toolThread);
   }
 
   protected projectRootThreadHistory(): Message[] {
