@@ -75,10 +75,10 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
     fontFamily: 'var(--fonts-mono, monospace)',
     padding: '4px 8px',
     width: '100%',
-    border: '1px dashed var(--colors-border-muted, #333)',
+    border: '1px solid var(--chakra-colors-border-muted)',
     borderRadius: '4px',
-    background: 'var(--colors-bg-surface, transparent)',
-    color: 'var(--colors-fg-default, inherit)',
+    background: 'var(--chakra-colors-bg-canvas)',
+    color: 'var(--chakra-colors-fg-default)',
     outline: 'none',
   }
 
@@ -305,29 +305,25 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
         p={3}
         bg="bg.surface"
         borderRadius="md"
-        border="2px dashed"
+        border="1px solid"
         borderColor="border.muted"
         minW={0}
       >
-        <HStack justify="space-between" align="center">
+        <HStack
+          justify="space-between"
+          align="center"
+          cursor="pointer"
+          onClick={() => togglePanel(panelKey)}
+          role="button"
+          aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+          userSelect="none"
+        >
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
             {title}
           </Text>
-          <button
-            onClick={() => togglePanel(panelKey)}
-            aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
-            style={{
-              color: 'var(--chakra-colors-fg-subtle)',
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
-          >
+          <Box color="fg.subtle">
             {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
-          </button>
+          </Box>
         </HStack>
         {!collapsed && children}
       </VStack>
@@ -335,7 +331,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" border="1px dashed" borderColor="border.muted" borderRadius="md">
+    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" border="1px solid" borderColor="border.muted" borderRadius="md">
       {/* Tab bar + column chips on same row */}
       {hasSettingsTab && (
         <HStack gap={2} justify="flex-start">
@@ -440,8 +436,8 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
       )}
 
       {hasSettingsTab && activeTab === 'settings' && (
-        <Box display="grid" gridTemplateColumns="minmax(240px, 1.1fr) minmax(280px, 1fr)" gap={3} minWidth={0}>
-          <VStack align="stretch" gap={3} minW={0}>
+        <VStack align="stretch" gap={3} minW={0}>
+          <Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(240px, 1fr))" gap={3} minWidth={0} alignItems="start">
             {showXAxisSettings && onAxisConfigChange && (
               renderSettingsCard('X Axis', 'xAxis',
                 <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
@@ -452,20 +448,18 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
                 <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
               )
             )}
-          </VStack>
-          <VStack align="stretch" gap={3} minW={0}>
             {showStylePanel && stylePanel ? (
               renderSettingsCard('Style', 'style',
                 stylePanel
               )
             ) : null}
-            {showAnnotationPanel && annotationPanel ? (
-              renderSettingsCard('Annotations', 'annotations',
-                annotationPanel
-              )
-            ) : null}
-          </VStack>
-        </Box>
+          </Box>
+          {showAnnotationPanel && annotationPanel ? (
+            renderSettingsCard('Annotations', 'annotations',
+              annotationPanel
+            )
+          ) : null}
+        </VStack>
       )}
     </Box>
   )
