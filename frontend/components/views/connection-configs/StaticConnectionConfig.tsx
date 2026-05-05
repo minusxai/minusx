@@ -18,7 +18,7 @@
  * - Re-import a Google Sheet (refresh data from the live spreadsheet)
  */
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -358,10 +358,10 @@ export default function StaticConnectionConfig({
   const [editTable, setEditTable] = useState('');
   const [editError, setEditError] = useState('');
 
-  const existingFiles = (config.files ?? []) as CsvFileInfo[];
-  const { sheetsGroups } = groupFiles(existingFiles);
-  const displayItems = buildDisplayItems(existingFiles);
-  const collisionSet = findCollisions(existingFiles);
+  const existingFiles = useMemo(() => (config.files ?? []) as CsvFileInfo[], [config.files]);
+  const { sheetsGroups } = useMemo(() => groupFiles(existingFiles), [existingFiles]);
+  const displayItems = useMemo(() => buildDisplayItems(existingFiles), [existingFiles]);
+  const collisionSet = useMemo(() => findCollisions(existingFiles), [existingFiles]);
 
   // ── Rename handlers ───────────────────────────────────────────────────────
 
@@ -686,17 +686,29 @@ export default function StaticConnectionConfig({
           <Box p={3}>
             {pendingFiles.length === 0 ? (
               <VStack align="stretch" gap={3}>
-                {/* Success feedback */}
+                {/* Success feedback + compact add-more */}
                 {uploadProgress === 'done' && (
-                  <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30">
-                    <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
-                    <Text fontSize="xs" color="accent.teal" fontWeight="600">
-                      Uploaded successfully. Save connection to persist.
-                    </Text>
-                  </HStack>
+                  <VStack align="stretch" gap={2}>
+                    <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30">
+                      <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
+                      <Text fontSize="xs" color="accent.teal" fontWeight="600">
+                        Uploaded successfully. Save connection to persist.
+                      </Text>
+                    </HStack>
+                    <Button as="label" size="xs" variant="ghost" cursor="pointer" color="accent.teal" alignSelf="flex-start">
+                      <LuUpload size={12} /> Add more files
+                      <input
+                        type="file"
+                        accept=".csv,.parquet,.pq,.xlsx"
+                        multiple
+                        onChange={(e) => handleFilesSelected(Array.from(e.target.files ?? []))}
+                        style={{ display: 'none' }}
+                      />
+                    </Button>
+                  </VStack>
                 )}
                 {/* Empty state — prominent drop zone */}
-                <Box
+                {uploadProgress !== 'done' && <Box
                   as="label"
                   display="flex"
                   flexDirection="column"
@@ -705,7 +717,7 @@ export default function StaticConnectionConfig({
                   py={6}
                   borderRadius="md"
                   border="2px dashed"
-                  borderColor={uploadProgress === 'done' ? 'accent.teal/30' : 'border.default'}
+                  borderColor="border.default"
                   bg="bg.muted"
                   cursor="pointer"
                   _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
@@ -725,7 +737,7 @@ export default function StaticConnectionConfig({
                     onChange={(e) => handleFilesSelected(Array.from(e.target.files ?? []))}
                     style={{ display: 'none' }}
                   />
-                </Box>
+                </Box>}
               </VStack>
             ) : (
               <VStack align="stretch" gap={3}>

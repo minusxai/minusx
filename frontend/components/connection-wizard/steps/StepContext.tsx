@@ -425,7 +425,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   /* ─── Sub-step 1: Select Tables ─── */
   if (subStep === 'tables') {
     return (
-      <VStack gap={6} align="stretch">
+      <VStack gap={6} align="stretch" minH="400px">
         {greeting && <style>{cursorBlinkKeyframes}</style>}
 
         {/* Header */}
@@ -501,8 +501,11 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
           </Box>
         )}
 
+        {/* Spacer pushes button to bottom */}
+        <Box flex={1} />
+
         {/* Actions */}
-        <HStack justify="flex-end" gap={3} pt={2}>
+        <HStack justify="flex-end" gap={3}>
           <Button
             variant="outline"
             size="sm"
