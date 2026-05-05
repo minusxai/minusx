@@ -29,7 +29,7 @@ curl -fsSL https://minusx.ai/install.sh | bash
 </div>
 
 ---
-![Schematic](./mxbi2.gif)
+![Schematic](./assets/mxbi2.gif)
 
 ## What you can do with MinusX
 
