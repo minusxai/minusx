@@ -3,7 +3,7 @@
 <img src="https://minusx.ai/logo_light.png#gh-dark-mode-only" width="300" alt="MinusX Logo">
 <!-- ![Logo](https://minusx.ai/logo_light.png#gh-dark-mode-only) -->
 
-MinusX is an open source agentic business intelligence platform for founders. <br>It is the Claude Code / Codex for serious data work.
+MinusX is an open source agentic business intelligence platform for founders. <br>Your data stack, staffed by agents.
 
 
 <h3>
@@ -11,8 +11,8 @@ MinusX is an open source agentic business intelligence platform for founders. <b
   <span> · </span>
   <a href="https://docsv2.minusx.ai">Docs</a>
   <span> · </span>
-  <a href="https://github.com/orgs/minusxai/projects/14">Roadmap</a>
-  <span> · </span>
+  <!-- <a href="https://github.com/orgs/minusxai/projects/14">Roadmap</a>
+  <span> · </span> -->
   <a href="https://minusx.app">Try MinusX Cloud</a>
 </h3>
 
@@ -22,14 +22,19 @@ MinusX is an open source agentic business intelligence platform for founders. <b
 [![Slack](https://img.shields.io/badge/slack-community-4A154B?logo=slack&logoColor=white)](https://minusx.ai/slack/)
 
 
-```bash
-# MinusX OSS install (needs docker pre-installed)
-curl -fsSL https://minusx.ai/install.sh | bash
-```
+MinusX OSS installation cmd: `curl -fsSL https://minusx.ai/install.sh | bash`
 </div>
 
 ---
-![Schematic](./assets/mxbi2.gif)
+![MinusX in Action](./assets/mxbi2.gif)
+<table>
+  <tr>
+    <td><img src="./assets/tile1.png"></td>
+    <td><img src="./assets/tile3.png"></td>
+    <td><img src="./assets/tile2.png"></td>
+  </tr>
+</table>
+
 
 ## What you can do with MinusX
 
