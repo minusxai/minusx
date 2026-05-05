@@ -28,6 +28,11 @@ const ALLOWED_CONTENT_TYPES = immutableSet([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  // xlsx
 ]);
 
+/** Content types that can be embedded as base64 data URLs in dev mode. */
+function isImageContentType(contentType: string): boolean {
+  return contentType.startsWith('image/');
+}
+
 /** 50 MB — presigned PUT URLs can't enforce this at S3 level, so we document the intent here.
  *  Client-side enforcement is in client.ts. */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -95,7 +100,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    if (USE_BASE64_UPLOADS) {
+    if (USE_BASE64_UPLOADS && isImageContentType(contentType)) {
       return NextResponse.json({ uploadUrl: 'base64:', publicUrl: '' });
     }
 
