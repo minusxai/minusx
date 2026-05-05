@@ -48,3 +48,4 @@ next-env.d.ts
 /public/duckdb/
 
 .eslintcache
+.jest-cache/

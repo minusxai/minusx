@@ -1,38 +1,88 @@
-/** @type {import('jest').Config} */
-const config = {
+/**
+ * Jest config — split into two projects:
+ *
+ *   main         — CJS mode. Existing tests use `jest.mock` as a global, plus
+ *                  PGLite WASM + Next.js plumbing all assume CJS.
+ *   orchestrator — ESM mode. Required so orchestrator + agent tests can import
+ *                  the pure-ESM `@mariozechner/pi-ai` package via a real
+ *                  `import`. Jest with `--experimental-vm-modules` defers ESM
+ *                  loading to Node, which refuses to `require()` ESM packages,
+ *                  so transforms can't help.
+ */
+
+const mainProject = {
+  displayName: 'main',
+  cacheDirectory: '<rootDir>/.jest-cache/main',
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testTimeout: 45000, // 45 seconds for E2E tests (default is 5000)
+  testTimeout: 45000,
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js', '<rootDir>/test/setup/jest.setup.ts'],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1'
+    '^@/(.*)$': '<rootDir>/$1',
   },
   testMatch: [
     '**/__tests__/**/*.test.ts',
-    '**/__tests__/**/*.test.tsx'
+    '**/__tests__/**/*.test.tsx',
   ],
   testPathIgnorePatterns: [
     '/node_modules/',
+    '<rootDir>/orchestrator/',
+    '<rootDir>/agents/',
     '\\.ui\\.test\\.(ts|tsx)$',
   ],
-  collectCoverageFrom: [
-    'app/**/*.{ts,tsx}',
-    'lib/**/*.{ts,tsx}',
-    '!**/*.d.ts',
-    '!**/node_modules/**'
-  ],
   transformIgnorePatterns: [
-    'node_modules/(?!(next-auth|@auth)/)'
+    'node_modules/(?!(next-auth|@auth)/)',
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
         jsx: 'react',
         esModuleInterop: true,
-        allowSyntheticDefaultImports: true
-      }
-    }]
-  }
+        allowSyntheticDefaultImports: true,
+      },
+    }],
+  },
+};
+
+const orchestratorProject = {
+  displayName: 'orchestrator',
+  cacheDirectory: '<rootDir>/.jest-cache/orchestrator',
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  testTimeout: 45000,
+  testMatch: [
+    '<rootDir>/orchestrator/**/__tests__/**/*.test.ts',
+    '<rootDir>/agents/**/__tests__/**/*.test.ts',
+  ],
+  // Treat .ts as ESM so `import` of pure-ESM packages (pi-ai) resolves
+  // natively under --experimental-vm-modules.
+  extensionsToTreatAsEsm: ['.ts'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+    // ts-jest ESM convention: allow `import './foo.js'` to resolve to `./foo.ts`.
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
+      useESM: true,
+      tsconfig: {
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+      },
+    }],
+  },
+};
+
+/** @type {import('jest').Config} */
+const config = {
+  collectCoverageFrom: [
+    'app/**/*.{ts,tsx}',
+    'lib/**/*.{ts,tsx}',
+    'orchestrator/**/*.{ts,tsx}',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+  ],
+  projects: [mainProject, orchestratorProject],
 };
 
 module.exports = config;
