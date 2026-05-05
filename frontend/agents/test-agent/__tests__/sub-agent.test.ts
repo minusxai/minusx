@@ -51,6 +51,11 @@ describe('sub-agent dispatch (agent-as-tool)', () => {
     expect(wrappedResult!.parent_id).toBe(root.id);
     expect(((wrappedResult as { content: TextContent[] }).content[0]).text).toContain('Nested done.');
 
+    const details = (wrappedResult as { details?: { type?: string; assistantMessage?: { usage?: unknown; stopReason?: string } } }).details;
+    expect(details?.type).toBe('mx_agent');
+    expect(details?.assistantMessage?.usage).toBeDefined();
+    expect(details?.assistantMessage?.stopReason).toBe('stop');
+
     const rootStop = log.find(
       (e) =>
         'role' in e &&

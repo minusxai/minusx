@@ -15,6 +15,7 @@ import {
   type AgentInvocation,
   type ConversationLog,
   type ConversationLogEntry,
+  type MXAgentDetails,
   type RegistrableClass,
   type StreamEvent,
   type ToolMessage,
@@ -211,12 +212,13 @@ export class Orchestrator {
       return;
     }
     const ctor = agent.constructor as unknown as RegistrableClass;
-    const trm: ToolResultMessage = {
+    const trm: ToolResultMessage<MXAgentDetails> = {
       role: 'toolResult',
       toolCallId: agent.id,
       toolName: ctor.schema.name,
       content: msg.content.filter((c): c is TextContent => c.type === 'text'),
       isError: msg.stopReason === 'error',
+      details: { type: 'mx_agent', assistantMessage: msg },
       timestamp: Date.now(),
     };
     this.log.push({ ...trm, parent_id: callingAgent.id });

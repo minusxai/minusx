@@ -50,6 +50,11 @@ export interface AgentInvocation extends ToolCall {
   context: AgentContext;
 }
 
+export interface MXAgentDetails {
+  type: 'mx_agent';
+  assistantMessage: AssistantMessage;
+}
+
 export type ConversationLogEntry =
   (AgentInvocation | AssistantMessage | ToolResultMessage) & { parent_id: string | null };
 

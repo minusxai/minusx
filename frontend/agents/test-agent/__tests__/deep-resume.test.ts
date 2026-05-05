@@ -77,6 +77,11 @@ describe('deep resume (paused sub-agent bubbles up)', () => {
     expect(wrappedNestedResult!.parent_id).toBe(root.id);
     expect(((wrappedNestedResult as { content: TextContent[] }).content[0]).text).toContain('NestedAgent done.');
 
+    const details = (wrappedNestedResult as { details?: { type?: string; assistantMessage?: { usage?: unknown; stopReason?: string } } }).details;
+    expect(details?.type).toBe('mx_agent');
+    expect(details?.assistantMessage?.usage).toBeDefined();
+    expect(details?.assistantMessage?.stopReason).toBe('stop');
+
     const nestedAssistantStops = log.filter(
       (e) =>
         'role' in e &&
