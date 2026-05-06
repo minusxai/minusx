@@ -4,8 +4,8 @@ set -euo pipefail
 # ── config ───────────────────────────────────────────────────────────────────
 
 REPO_RAW="https://raw.githubusercontent.com/minusxai/minusx/main"
-BACKEND_IMAGE="ghcr.io/minusxai/minusx-backend-canary:latest"
-FRONTEND_IMAGE="ghcr.io/minusxai/minusx-frontend-canary:latest"
+BACKEND_IMAGE="ghcr.io/minusxai/minusx-backend:latest"
+FRONTEND_IMAGE="ghcr.io/minusxai/minusx-frontend:latest"
 TOTAL_STEPS=6
 CURRENT_STEP=0
 

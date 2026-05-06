@@ -51,7 +51,7 @@ Note: This is on top of obvious BI features like connecting to databases/warehou
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/minusxai/minusx/main/install.sh | bash
+curl -fsSL https://minusx.ai/install.sh | bash
 ```
 
 Requires [Docker](https://docs.docker.com/get-docker/). The script checks for Docker, finds available ports, sets up your API keys, and starts the app.
