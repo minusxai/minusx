@@ -601,7 +601,7 @@ export default function QuestionViewV2({
             >
             {<Box flexShrink={0}>
               {/* Tab selector + DB selector row */}
-              <HStack px={3} pt={2} pb={1} gap={2} align="center">
+              <HStack px={3} py={2} gap={2} align="center">
                 <Box flex={1} minWidth={0}>
                   <QueryModeSelector
                     mode={queryMode}

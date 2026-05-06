@@ -38,7 +38,7 @@ export function QueryModeSelector({
       bg="bg.muted"
       borderRadius="md"
       p={0.5}
-      maxW="240px"
+    //   maxW="240px"
     >
       {tabs.map(({ key, label, icon, disabledKey }) => {
         const isActive = mode === key;
