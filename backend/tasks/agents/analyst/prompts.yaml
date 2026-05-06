@@ -213,7 +213,7 @@ templates:
         "description": "User demographics query"
       }}
       ```
-      - **VizSettings**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`. Use `LoadSkill("visualizations")` for complex configs.
+      - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`. Use `LoadSkill("visualizations")` for complex configs.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
       - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
 
@@ -385,13 +385,13 @@ templates:
       - **Never** match query + parameters in one oldMatch — JSON key order is not guaranteed.
 
   skill_visualizations:
-    description: "VizSettings types (line, bar, area, scatter, funnel, pie, radar, pivot, geo), xCols/yCols config, pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
+    description: "VizSettings types (line, bar, row, area, scatter, funnel, pie, radar, pivot, geo), xCols/yCols config, pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
     content: |
       ## Instructions: Visualizations
 
-      **VizSettings types**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`
+      **VizSettings types**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`
 
-      ### Standard Charts (line, bar, area, scatter)
+      ### Standard Charts (line, bar, row, area, scatter)
       - `xCols`: grouping columns — the first one is used as x-axis, rest as grouping cols
       - `yCols`: value columns (aggregated with SUM)
       - Example: `{{"type": "bar", "xCols": ["month"], "yCols": ["revenue"]}}`
@@ -756,7 +756,8 @@ prompts:
 
     ## Chart Visualization in Slack
     When running ExecuteQuery, include appropriate `vizSettings` so the results can be visualized as a chart image in Slack.
-    - Use `bar` for comparisons across categories (e.g., revenue by month)
+    - Use `bar` for vertical comparisons across categories (e.g., revenue by month)
+    - Use `row` for horizontal bar comparisons (e.g., ranked lists, long category labels)
     - Use `line` for trends over time (e.g., daily users over 30 days)
     - Use `area` for cumulative/stacked trends
     - Use `pie` for proportional breakdowns (e.g., market share)
