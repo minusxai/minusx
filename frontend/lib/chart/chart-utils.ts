@@ -1917,7 +1917,16 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
               const yValue = getCartesianYValue(p.value)
               return yValue === undefined ? true : yValue !== 0
             })
-            const rows = nonZeroItems.map((p: any) => {
+            // Sort by value descending (largest first)
+            nonZeroItems.sort((a: any, b: any) => {
+              const aVal = getCartesianYValue(a.value) ?? 0
+              const bVal = getCartesianYValue(b.value) ?? 0
+              return bVal - aVal
+            })
+            const MAX_TOOLTIP_ITEMS = 15
+            const truncated = nonZeroItems.length > MAX_TOOLTIP_ITEMS
+            const visibleItems = truncated ? nonZeroItems.slice(0, MAX_TOOLTIP_ITEMS) : nonZeroItems
+            const rows = visibleItems.map((p: any) => {
               // Resolve per-series format config: use column name stripped of axis indicator
               const baseSeriesName = p.seriesName?.replace(/ \([LR]\)$/, '') ?? ''
               const colCfg = columnFormats?.[baseSeriesName] ?? columnFormats?.[p.seriesName]
@@ -1936,7 +1945,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
               }
               return `<tr><td>${p.marker} ${p.seriesName}</td><td style="text-align:right;padding-left:12px;font-weight:600">${val}</td></tr>`
             })
-            return `${header}<table style="width:100%">${rows.join('')}</table>`
+            const moreLabel = truncated ? `<tr><td colspan="2" style="color:#888;padding-top:4px">+ ${nonZeroItems.length - MAX_TOOLTIP_ITEMS} more</td></tr>` : ''
+            return `${header}<table style="width:100%">${rows.join('')}${moreLabel}</table>`
           },
         },
     legend: {
