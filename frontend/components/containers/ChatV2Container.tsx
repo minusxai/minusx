@@ -1,13 +1,12 @@
 'use client';
 
 // ChatV2Container — renders a `type: 'chat'` file (TS-orchestrator log).
-// Minimal first cut: shows the conversation log in a scrollable panel and
-// posts new user messages via `sendChatV2Message`. Designed to slot into the
-// FileView routing for /f/<id> when the file is a chat.
-//
-// Future polish: tool-call detail rendering, streaming consumer, etc.
+// Routes recognised tool names to existing detail components from
+// `components/explore/tools/*` (EditFileDisplay, ExecuteSQLDisplay, etc.) so
+// chat-v2 reuses the polished display surfaces. Unknown tool names fall back
+// to a generic JSON renderer.
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Box, VStack, HStack, Text, Textarea, Button, Spinner } from '@chakra-ui/react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -19,6 +18,14 @@ import {
 } from '@/store/chatV2Slice';
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 import type { FileComponentProps } from '@/lib/ui/fileComponents';
+import type { ToolCall, ToolMessage, CompletedToolCall, DisplayProps } from '@/lib/types';
+import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
+import CreateFileDisplay from '@/components/explore/tools/CreateFileDisplay';
+import ExecuteSQLDisplay from '@/components/explore/tools/ExecuteSQLDisplay';
+import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
+import SearchDBSchemaDisplay from '@/components/explore/tools/SearchDBSchemaDisplay';
+import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
+import DefaultToolDisplay from '@/components/explore/tools/DefaultToolDisplay';
 
 interface ChatFileContent {
   log: ConversationLog;
@@ -26,6 +33,18 @@ interface ChatFileContent {
   agent_args: Record<string, unknown>;
   forkedFrom?: number;
 }
+
+// Tool name → DisplayProps component. Names match the WebAnalystAgent /
+// RemoteAnalystAgent tool schema names so the existing components plug in
+// directly.
+const TOOL_DISPLAY_BY_NAME: Record<string, React.ComponentType<DisplayProps>> = {
+  EditFile: EditFileDisplay,
+  CreateFile: CreateFileDisplay,
+  ExecuteSQL: ExecuteSQLDisplay,
+  ReadFiles: ReadFilesDisplay,
+  SearchDBSchema: SearchDBSchemaDisplay,
+  SearchFiles: SearchFilesDisplay,
+};
 
 export default function ChatV2Container({ fileId }: FileComponentProps) {
   const numericId = typeof fileId === 'number' ? fileId : 0;
@@ -54,6 +73,28 @@ export default function ChatV2Container({ fileId }: FileComponentProps) {
     dispatch(sendChatV2Message({ chatId: numericId, message }));
   }, [input, numericId, dispatch]);
 
+  const log = chatState?.log ?? (file?.content as unknown as ChatFileContent | undefined)?.log ?? [];
+  const executionState = chatState?.executionState ?? 'idle';
+
+  // Pair toolCall blocks with their matching toolResult entries so we can
+  // render via the [ToolCall, ToolMessage] DisplayProps shape.
+  const toolResultByCallId = useMemo(() => {
+    const map = new Map<string, ToolMessage>();
+    for (const entry of log) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = entry as any;
+      if (e.role === 'toolResult') {
+        map.set(e.toolCallId, {
+          role: 'tool',
+          tool_call_id: e.toolCallId,
+          content: pickText(e.content),
+          details: e.details,
+        });
+      }
+    }
+    return map;
+  }, [log]);
+
   if (!file || file.loading) {
     return (
       <Box display="flex" alignItems="center" justifyContent="center" minH="400px">
@@ -61,9 +102,6 @@ export default function ChatV2Container({ fileId }: FileComponentProps) {
       </Box>
     );
   }
-
-  const log = chatState?.log ?? (file.content as unknown as ChatFileContent | undefined)?.log ?? [];
-  const executionState = chatState?.executionState ?? 'idle';
 
   return (
     <VStack align="stretch" h="100%" gap={3} p={4}>
@@ -73,7 +111,7 @@ export default function ChatV2Container({ fileId }: FileComponentProps) {
         ) : (
           <VStack align="stretch" gap={2}>
             {log.map((entry, i) => (
-              <ChatLogEntry key={i} entry={entry} />
+              <ChatLogEntry key={i} entry={entry} toolResultByCallId={toolResultByCallId} />
             ))}
           </VStack>
         )}
@@ -110,12 +148,16 @@ export default function ChatV2Container({ fileId }: FileComponentProps) {
   );
 }
 
-function ChatLogEntry({ entry }: { entry: ConversationLogEntry }) {
-  // Pi-ai entries have `role: 'assistant' | 'toolResult'`. Root agent
-  // invocations carry `type: 'toolCall'` with `parent_id: null` and
-  // `arguments.userMessage` — render those as user messages.
+interface ChatLogEntryProps {
+  entry: ConversationLogEntry;
+  toolResultByCallId: Map<string, ToolMessage>;
+}
+
+function ChatLogEntry({ entry, toolResultByCallId }: ChatLogEntryProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const e = entry as any;
+
+  // Root user message — the first AgentInvocation log entry.
   if (e.type === 'toolCall' && e.parent_id === null) {
     const userText = String(e.arguments?.userMessage ?? '(no message)');
     return (
@@ -125,41 +167,78 @@ function ChatLogEntry({ entry }: { entry: ConversationLogEntry }) {
       </Box>
     );
   }
+
   if (e.role === 'assistant') {
-    const text = (e.content ?? [])
-      .filter((c: { type?: string }) => c?.type === 'text')
-      .map((c: { text: string }) => c.text)
-      .join('\n');
-    const hasToolCall = (e.content ?? []).some((c: { type?: string }) => c?.type === 'toolCall');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const blocks = (e.content ?? []) as Array<any>;
+    const text = blocks.filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
+    const toolCalls = blocks.filter((c) => c?.type === 'toolCall');
     return (
       <Box aria-label="chat-message-assistant" borderRadius="md" p={2} bg="bg.muted">
-        <Text fontSize="xs" color="fg.muted">Assistant{hasToolCall ? ' (tool call)' : ''}</Text>
-        {text && <Text fontSize="sm" whiteSpace="pre-wrap">{text}</Text>}
-        {hasToolCall && (
-          <VStack align="stretch" gap={1} mt={1}>
-            {(e.content as Array<{ type?: string; name?: string; arguments?: unknown }>)
-              .filter((c) => c.type === 'toolCall')
-              .map((c, i) => (
-                <Text key={i} fontSize="xs" fontFamily="mono" color="accent.secondary">
-                  → {c.name}({JSON.stringify(c.arguments)})
-                </Text>
-              ))}
+        {text && (
+          <>
+            <Text fontSize="xs" color="fg.muted">Assistant</Text>
+            <Text fontSize="sm" whiteSpace="pre-wrap">{text}</Text>
+          </>
+        )}
+        {toolCalls.length > 0 && (
+          <VStack align="stretch" gap={2} mt={text ? 2 : 0}>
+            {toolCalls.map((tc, i) => (
+              <ToolCallEntry
+                key={tc.id ?? i}
+                toolCall={tc}
+                toolResult={toolResultByCallId.get(tc.id)}
+              />
+            ))}
           </VStack>
         )}
       </Box>
     );
   }
-  if (e.role === 'toolResult') {
-    const text = (e.content ?? [])
-      .filter((c: { type?: string }) => c?.type === 'text')
-      .map((c: { text: string }) => c.text)
-      .join('\n');
+
+  // Standalone toolResult entries are rendered as part of their assistant
+  // parent; skip here so we don't double-render.
+  return null;
+}
+
+interface ToolCallEntryProps {
+  toolCall: { id: string; name: string; arguments: Record<string, unknown> };
+  toolResult: ToolMessage | undefined;
+}
+
+function ToolCallEntry({ toolCall, toolResult }: ToolCallEntryProps) {
+  const Display = TOOL_DISPLAY_BY_NAME[toolCall.name] ?? DefaultToolDisplay;
+  const ariaLabel = `chat-tool-${toolCall.name}`;
+  if (!toolResult) {
+    // Pending — show a placeholder instead of rendering an unfinished tuple.
     return (
-      <Box aria-label="chat-message-tool-result" borderRadius="md" p={2} borderLeftWidth="2px" borderColor={e.isError ? 'accent.danger' : 'accent.success'}>
-        <Text fontSize="xs" color="fg.muted">{e.toolName} result{e.isError ? ' (error)' : ''}</Text>
-        <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{text}</Text>
+      <Box aria-label={`${ariaLabel}-pending`} borderRadius="md" borderWidth="1px" borderColor="accent.secondary/50" p={2}>
+        <Text fontSize="xs" color="fg.muted">{toolCall.name} (running…)</Text>
+        <Text fontSize="xs" fontFamily="mono">{JSON.stringify(toolCall.arguments)}</Text>
       </Box>
     );
   }
-  return null;
+  const tc: ToolCall = {
+    id: toolCall.id,
+    type: 'function',
+    function: { name: toolCall.name, arguments: toolCall.arguments },
+  };
+  const tuple: CompletedToolCall = [tc, toolResult];
+  return (
+    <Box aria-label={ariaLabel}>
+      <Display toolCallTuple={tuple} showThinking={false} readOnly={true} />
+    </Box>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pickText(content: any): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => c?.type === 'text')
+      .map((c) => c.text)
+      .join('\n');
+  }
+  return JSON.stringify(content ?? '');
 }

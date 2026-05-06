@@ -16,12 +16,19 @@
 // dispatches; UI components read from this slice.
 
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
+import type { ConversationLog, PendingToolCall, StreamEvent } from '@/orchestrator/types';
 
 export type ChatV2ExecutionState = 'idle' | 'running' | 'pending' | 'finished' | 'error';
 
 export interface ChatV2State {
   log: ConversationLog;
+  /**
+   * Live orchestrator events received during the current turn. Cleared at
+   * the start of each turn and replaced by the canonical `log` when the
+   * `done` SSE frame arrives. Useful for rendering streaming tokens before
+   * the full assistant message is emitted.
+   */
+  streamingEvents: StreamEvent[];
   executionState: ChatV2ExecutionState;
   pendingToolCalls: PendingToolCall[];
   error?: string;
@@ -36,6 +43,7 @@ export interface ChatV2RootState {
 
 const initialChatState: ChatV2State = {
   log: [],
+  streamingEvents: [],
   executionState: 'idle',
   pendingToolCalls: [],
 };
@@ -67,9 +75,24 @@ const chatV2Slice = createSlice({
 
     chatTurnStarted(state, action: PayloadAction<{ chatId: number }>) {
       const { chatId } = action.payload;
-      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState };
+      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState, streamingEvents: [] };
       state.chats[chatId].executionState = 'running';
       state.chats[chatId].error = undefined;
+      state.chats[chatId].streamingEvents = [];
+    },
+
+    /**
+     * Incremental orchestrator event received over SSE during the current
+     * turn. Appended to `streamingEvents`; the canonical `log` is replaced
+     * by the `done` frame.
+     */
+    chatV2OrchestratorEvent(
+      state,
+      action: PayloadAction<{ chatId: number; event: StreamEvent }>,
+    ) {
+      const { chatId, event } = action.payload;
+      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState, streamingEvents: [] };
+      state.chats[chatId].streamingEvents.push(event);
     },
 
     chatTurnCompleted(
@@ -83,17 +106,18 @@ const chatV2Slice = createSlice({
       }>,
     ) {
       const { chatId, log, pendingToolCalls, done, forkedFrom } = action.payload;
-      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState };
+      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState, streamingEvents: [] };
       state.chats[chatId].log = log;
       state.chats[chatId].pendingToolCalls = pendingToolCalls;
       state.chats[chatId].executionState =
         done === 'pending' ? 'pending' : done === 'error' ? 'error' : 'finished';
+      state.chats[chatId].streamingEvents = []; // canonical log supersedes streaming buffer
       if (forkedFrom !== undefined) state.chats[chatId].forkedFrom = forkedFrom;
     },
 
     chatTurnFailed(state, action: PayloadAction<{ chatId: number; error: string }>) {
       const { chatId, error } = action.payload;
-      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState };
+      if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState, streamingEvents: [] };
       state.chats[chatId].executionState = 'error';
       state.chats[chatId].error = error;
     },
@@ -106,6 +130,7 @@ const chatV2Slice = createSlice({
       const { chatId, log } = action.payload;
       state.chats[chatId] = {
         ...initialChatState,
+        streamingEvents: [],
         log,
         executionState: 'finished',
       };
@@ -120,6 +145,7 @@ export const {
   chatTurnCompleted,
   chatTurnFailed,
   loadChatV2,
+  chatV2OrchestratorEvent,
 } = chatV2Slice.actions;
 
 export const selectChatV2 = (state: { chatV2: ChatV2RootState }, chatId: number) =>

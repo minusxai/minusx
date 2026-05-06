@@ -1,15 +1,15 @@
 import 'server-only';
 import { NextRequest } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { runChatTurn, type ChatV2RequestBody } from '../shared';
+import { runChatTurnStream, type ChatV2RequestBody } from '../shared';
 
 /**
- * SSE variant of /api/chat/v2. Until the orchestrator's EventStream is wired
- * through, this is a pragmatic implementation that runs the turn and emits a
- * single `done` event with the same payload as the non-streaming route. The
- * /api/chat/v2 (non-streaming) route remains the gated test target.
+ * Server-Sent Events stream for /api/chat/v2.
  *
- * Future: stream `pi-ai` events as they arrive so the UI updates token-by-token.
+ * Each orchestrator stream event becomes a `event: orchestrator` SSE frame;
+ * the final state arrives as a single `event: done` frame whose payload
+ * matches the non-streaming /api/chat/v2 response. This is the streaming
+ * surface chatV2Listener uses on the client.
  */
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as ChatV2RequestBody;
@@ -24,14 +24,21 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const write = (event: string, data: unknown) => {
+        const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(encoder.encode(frame));
+      };
       try {
-        const response = await runChatTurn(body, user);
-        const payload = `event: done\ndata: ${JSON.stringify(response)}\n\n`;
-        controller.enqueue(encoder.encode(payload));
+        for await (const ev of runChatTurnStream(body, user)) {
+          if (ev.type === 'orchestrator') {
+            write('orchestrator', ev.event);
+          } else {
+            write('done', ev.response);
+          }
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        const payload = `event: error\ndata: ${JSON.stringify({ error: errorMsg })}\n\n`;
-        controller.enqueue(encoder.encode(payload));
+        write('error', { error: errorMsg });
       } finally {
         controller.close();
       }

@@ -6,6 +6,7 @@ import type {
   ConversationLogEntry,
   PendingToolCall,
   RegistrableClass,
+  StreamEvent,
 } from '@/orchestrator/types';
 import { WebAnalystAgent, EditFile, CreateFile, DeleteFile } from '@/agents/web-analyst/web-analyst';
 import { ReadFiles, SearchFiles } from '@/agents/analyst/file-tools';
@@ -48,34 +49,42 @@ export interface ChatV2Response {
 }
 
 /**
- * Run a single chat turn — either a new user message or a resume with
- * completed tool results. Loads the chat's saved log, runs/resumes the
- * orchestrator, persists the diff (with atomic-or-fork semantics), and
- * returns the new state.
+ * SSE event yielded by `runChatTurnStream`. Mirrors a subset of the
+ * orchestrator's internal `StreamEvent` plus a `done` envelope carrying the
+ * full final-state payload (same shape as the non-streaming response).
  */
-export async function runChatTurn(
+export type ChatV2StreamEvent =
+  | { type: 'orchestrator'; event: StreamEvent }
+  | { type: 'done'; response: ChatV2Response };
+
+interface OrchestrationSetup {
+  chatId: number;
+  expectedLogIndex: number;
+  orchestrator: Orchestrator;
+  rawStream: ReturnType<Orchestrator['run']> | null;
+  fatalError?: string;
+}
+
+async function setupOrchestration(
   body: ChatV2RequestBody,
   user: EffectiveUser,
-): Promise<ChatV2Response> {
+): Promise<OrchestrationSetup> {
   const agentName = 'WebAnalystAgent';
   const agentArgs = body.agentArgs ?? {};
 
-  // Step 1: Resolve the chat (create on first call).
   let chatId = body.chatId;
   if (chatId == null) {
     const created = await createDraftChat(user, agentName, agentArgs);
     chatId = created.chatId;
   }
 
-  // Step 2: Load the saved log.
   const chat: ChatContent = await loadChatLog(chatId, user);
   const savedLog: ConversationLog = chat.log;
   const expectedLogIndex = savedLog.length;
 
-  // Step 3: Build agent context.
   // EffectiveUser.mode is a broader Mode union (includes 'internals' etc.)
-  // RemoteAnalystContext narrows it to 'org' | 'tutorial' since the analyst
-  // hierarchy doesn't operate in internals. Treat anything else as 'org'.
+  // RemoteAnalystContext narrows to 'org' | 'tutorial' — anything else
+  // collapses to 'org'.
   const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
   const ctx: RemoteAnalystContext = {
     userId: String(user.userId ?? user.email),
@@ -83,39 +92,36 @@ export async function runChatTurn(
     effectiveUser: user,
   };
 
-  // Step 4: Construct orchestrator with saved-log copy. Run or resume.
   const orch = new Orchestrator(CHAT_V2_REGISTRABLES, [...savedLog]);
-  let runError: string | undefined;
-  let stream: ReturnType<Orchestrator['run']>;
 
   if (body.message != null) {
     const agent = new WebAnalystAgent(orch, { userMessage: body.message }, ctx);
-    stream = orch.run(agent);
-  } else if (body.completedToolCalls && body.completedToolCalls.length > 0) {
-    stream = orch.resume(body.completedToolCalls);
-  } else {
+    return { chatId, expectedLogIndex, orchestrator: orch, rawStream: orch.run(agent) };
+  }
+  if (body.completedToolCalls && body.completedToolCalls.length > 0) {
     return {
       chatId,
-      forked: false,
-      log: savedLog,
-      pendingToolCalls: [],
-      done: 'error',
-      error: 'runChatTurn: must supply either `message` or `completedToolCalls`',
+      expectedLogIndex,
+      orchestrator: orch,
+      rawStream: orch.resume(body.completedToolCalls),
     };
   }
+  return {
+    chatId,
+    expectedLogIndex,
+    orchestrator: orch,
+    rawStream: null,
+    fatalError: 'runChatTurn: must supply either `message` or `completedToolCalls`',
+  };
+}
 
-  try {
-    for await (const _ev of stream) {
-      // Drain — events are accumulated in orch.log; the SSE wrapper consumes
-      // these directly, but the non-streaming endpoint just snapshots the
-      // final log.
-    }
-    await stream.result();
-  } catch (err) {
-    runError = err instanceof Error ? err.message : String(err);
-  }
-
-  // Step 5: Persist log diff.
+async function persistAndBuildResponse(
+  chatId: number,
+  expectedLogIndex: number,
+  orch: Orchestrator,
+  user: EffectiveUser,
+  runError: string | undefined,
+): Promise<ChatV2Response> {
   const fullLog = orch.log;
   const logDiff: ConversationLogEntry[] = fullLog.slice(expectedLogIndex);
   let finalChatId = chatId;
@@ -125,15 +131,12 @@ export async function runChatTurn(
     finalChatId = appendResult.chatId;
     forked = appendResult.forked;
   }
-
-  // Step 6: Compute response shape.
   const pendingToolCalls = orch.getPendingToolCalls();
   const done: 'stop' | 'pending' | 'error' = runError
     ? 'error'
     : pendingToolCalls.length > 0
       ? 'pending'
       : 'stop';
-
   return {
     chatId: finalChatId,
     forked,
@@ -142,4 +145,87 @@ export async function runChatTurn(
     done,
     error: runError,
   };
+}
+
+/**
+ * Drain-and-snapshot variant. Used by the non-streaming /api/chat/v2 route
+ * + most tests.
+ */
+export async function runChatTurn(
+  body: ChatV2RequestBody,
+  user: EffectiveUser,
+): Promise<ChatV2Response> {
+  const setup = await setupOrchestration(body, user);
+  if (setup.fatalError) {
+    return {
+      chatId: setup.chatId,
+      forked: false,
+      log: setup.orchestrator.log,
+      pendingToolCalls: [],
+      done: 'error',
+      error: setup.fatalError,
+    };
+  }
+  let runError: string | undefined;
+  try {
+    if (setup.rawStream) {
+      for await (const _ev of setup.rawStream) { /* drain */ }
+      await setup.rawStream.result();
+    }
+  } catch (err) {
+    runError = err instanceof Error ? err.message : String(err);
+  }
+  return persistAndBuildResponse(
+    setup.chatId,
+    setup.expectedLogIndex,
+    setup.orchestrator,
+    user,
+    runError,
+  );
+}
+
+/**
+ * Streaming variant: yields each orchestrator stream event as it arrives,
+ * then a final `done` event carrying the same payload as `runChatTurn`.
+ * The SSE route (/api/chat/v2/stream) wraps this; the client-side listener
+ * parses the SSE frames into Redux updates.
+ */
+export async function* runChatTurnStream(
+  body: ChatV2RequestBody,
+  user: EffectiveUser,
+): AsyncGenerator<ChatV2StreamEvent, void, unknown> {
+  const setup = await setupOrchestration(body, user);
+  if (setup.fatalError) {
+    yield {
+      type: 'done',
+      response: {
+        chatId: setup.chatId,
+        forked: false,
+        log: setup.orchestrator.log,
+        pendingToolCalls: [],
+        done: 'error',
+        error: setup.fatalError,
+      },
+    };
+    return;
+  }
+  let runError: string | undefined;
+  try {
+    if (setup.rawStream) {
+      for await (const ev of setup.rawStream) {
+        yield { type: 'orchestrator', event: ev };
+      }
+      await setup.rawStream.result();
+    }
+  } catch (err) {
+    runError = err instanceof Error ? err.message : String(err);
+  }
+  const response = await persistAndBuildResponse(
+    setup.chatId,
+    setup.expectedLogIndex,
+    setup.orchestrator,
+    user,
+    runError,
+  );
+  yield { type: 'done', response };
 }
