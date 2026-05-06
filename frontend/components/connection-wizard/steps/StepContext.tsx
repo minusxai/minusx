@@ -23,7 +23,7 @@ import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35;
 
-const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database. A new empty doc entry has been added at the end of the docs array — write your documentation into that entry using EditFile.';
+const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database.';
 
 type ContextSubStep = 'tables' | 'docs';
 
@@ -391,7 +391,7 @@ export default function StepContext({
       AGENT_DESCRIBE_MESSAGE,
       `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
       staticSchemas?.length
-        ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not document other existing data in the connection.`
+        ? `Dataset(s) to focus on: ${staticSchemas.join(', ')}.`
         : '',
       questionnaireAnswers?.datasetDescription
         ? `The user describes this dataset as: "${questionnaireAnswers.datasetDescription}"`

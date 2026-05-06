@@ -171,8 +171,8 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     const message = [
       DASHBOARD_PROMPT,
       `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
-      `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
-      staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
+      `Dashboard to be saved in ${modeRoot}/ folder.`,
+      staticSchemas?.length ? `Dataset(s) to focus on : ${staticSchemas.join(', ')}.` : '',
       questionnaireAnswers?.datasetDescription ? `About the data: ${questionnaireAnswers.datasetDescription}` : '',
       questionnaireAnswers?.keyMetrics ? `Key metrics to focus on: ${questionnaireAnswers.keyMetrics}` : '',
       userPreference.trim() ? `What the user wants to see in the dashboard: ${userPreference.trim()}` : '',
