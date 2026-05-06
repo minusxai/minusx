@@ -23,7 +23,7 @@ describe('SearchDBSchema', () => {
     setSchemaSource({ search: async () => hits });
 
     const orch = new Orchestrator([]);
-    const tool = new SearchDBSchema(orch, { query: 'users' }, ctx);
+    const tool = new SearchDBSchema(orch, { connection: 'main', query: 'users' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
@@ -35,7 +35,7 @@ describe('SearchDBSchema', () => {
     setSchemaSource({ search: async () => [] });
 
     const orch = new Orchestrator([]);
-    const tool = new SearchDBSchema(orch, { query: 'foobars' }, ctx);
+    const tool = new SearchDBSchema(orch, { connection: 'main', query: 'foobars' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
@@ -51,7 +51,7 @@ describe('ExecuteSQL', () => {
     setSqlExecutor({ execute: async () => ({ rows }) });
 
     const orch = new Orchestrator([]);
-    const tool = new ExecuteSQL(orch, { sql: 'SELECT count(*) FROM users' }, ctx);
+    const tool = new ExecuteSQL(orch, { connection: 'main', sql: 'SELECT count(*) FROM users' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
@@ -62,7 +62,7 @@ describe('ExecuteSQL', () => {
     setSqlExecutor({ execute: async () => ({ rows: [], error: 'syntax error near "FRM"' }) });
 
     const orch = new Orchestrator([]);
-    const tool = new ExecuteSQL(orch, { sql: 'SELECT * FRM bad' }, ctx);
+    const tool = new ExecuteSQL(orch, { connection: 'main', sql: 'SELECT * FRM bad' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(true);
