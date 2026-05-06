@@ -17,6 +17,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { resolvePath, resolveHomeFolderSync, SYSTEM_FOLDERS, isHiddenSystemPath, isUnderSystemFolder } from '@/lib/mode/path-resolver';
+import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 
 
@@ -33,6 +34,13 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Get org configs
   const { config } = useConfigs();
+
+  // Onboarding redirect
+  useEffect(() => {
+    if (config.setupWizard?.status !== 'complete') {
+      router.replace(preserveModeParam('/hello-world'));
+    }
+  }, [config, router]);
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop).
   // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
