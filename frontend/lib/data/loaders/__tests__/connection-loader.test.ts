@@ -191,6 +191,42 @@ describe('connectionLoader — Python fetch failure', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Defense-in-depth: empty refresh result must not clobber non-empty cache
+// ---------------------------------------------------------------------------
+
+describe('connectionLoader — empty refresh result', () => {
+  it('keeps non-empty cached schema when refresh returns []', async () => {
+    // Reproduces the production failure mode: refresh would otherwise overwrite
+    // a healthy cached schema with [] (e.g. when pg_stats enrichment silently
+    // returns nothing). The loader should detect the empty result and bail.
+    mockGetSchemaFromPython.mockResolvedValue({ schemas: [], updated_at: new Date().toISOString() });
+
+    const cachedSchema: DatabaseSchema = {
+      schemas: [{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'id', type: 'integer' }] }] }],
+      updated_at: staleTimestamp(),
+    };
+    const file = await createConnection('conn_empty_refresh', '/org/database/conn_empty_refresh', cachedSchema);
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await connectionLoader(file!, testUser, { refresh: true });
+
+      const content = result.content as ConnectionContent;
+      expect(content.schema?.schemas).toEqual(cachedSchema.schemas);
+      expect(content.schema?.updated_at).toBe(cachedSchema.updated_at);
+      expect(warnSpy).toHaveBeenCalled();
+
+      // DB should still hold the original cached schema, not [].
+      const reloaded = await DocumentDB.getById(file!.id);
+      const reloadedContent = reloaded?.content as ConnectionContent;
+      expect(reloadedContent.schema?.schemas).toEqual(cachedSchema.schemas);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Metadata-only load (content === null)
 // ---------------------------------------------------------------------------
 

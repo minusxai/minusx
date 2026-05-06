@@ -129,12 +129,18 @@ describe('profilePostgres', () => {
     expect(col?.meta?.max).toBe(5);
   });
 
-  it('skips tables when pg_stats is empty', async () => {
+  it('preserves tables (with plain columns) when pg_stats is empty', async () => {
+    // Production scenario: connecting role lacks SELECT on tables (pg_stats is filtered
+    // by readability) OR ANALYZE has never run. Previously this dropped every table
+    // and wiped the cached schema; now we emit plain columns instead.
     const queryFn = jest.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, []);
     const s = schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'id', type: 'integer' }] }] }]);
     const result = await profileDatabase('postgresql', s, queryFn);
-    expect(result.schema).toHaveLength(0);
+    expect(result.schema).toHaveLength(1);
+    const cols = getTable(result, 'public', 'orders');
+    expect(cols.map(c => c.name)).toEqual(['id']);
+    expect(cols[0].meta).toBeUndefined();
   });
 
   it('batches across schemas and tables — still 2 queries', async () => {

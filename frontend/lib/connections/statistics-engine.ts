@@ -194,7 +194,9 @@ async function profilePostgres(tables: TableEntry[], queryFn: QueryFn): Promise<
     for (const row of countResult.rows) {
       rowCountMap.set(`${row.schema_name}.${row.table_name}`, Number(row.row_count ?? 0));
     }
-  } catch { /* continue */ }
+  } catch (err) {
+    console.warn(`[profilePostgres] pg_class row-count query failed for schemas ${schemaList}; continuing with row_count=0`, err);
+  }
 
   // 2. Batch pg_stats + descriptions
   const pgStatsMap = new Map<string, Record<string, unknown>>();
@@ -215,7 +217,9 @@ async function profilePostgres(tables: TableEntry[], queryFn: QueryFn): Promise<
     for (const row of statsResult.rows) {
       pgStatsMap.set(`${row.schema_name}.${row.table_name}.${row.column_name}`, row);
     }
-  } catch { /* empty → skip tables */ }
+  } catch (err) {
+    console.warn(`[profilePostgres] pg_stats query failed for schemas ${schemaList}; tables will be returned without enrichment`, err);
+  }
 
   const results: EnrichedTable[] = [];
   const fallbackTables: TableEntry[] = [];
@@ -224,7 +228,14 @@ async function profilePostgres(tables: TableEntry[], queryFn: QueryFn): Promise<
     const rowCount = rowCountMap.get(`${schema}.${table}`) ?? 0;
     const hasStats = columns.some(col => pgStatsMap.has(`${schema}.${table}.${col.name}`));
     if (!hasStats) {
-      if (PG_FALLBACK_TO_GENERIC) fallbackTables.push({ schema, table, columns });
+      // No pg_stats coverage — common when the role lacks SELECT on the table or
+      // when ANALYZE has never run. Either upgrade via the generic profiler (heavy
+      // queries, opt-in) or emit plain columns so the table survives the refresh.
+      if (PG_FALLBACK_TO_GENERIC) {
+        fallbackTables.push({ schema, table, columns });
+      } else {
+        results.push({ schema, table, columns: columns.map(plainColumn) });
+      }
       continue;
     }
 
