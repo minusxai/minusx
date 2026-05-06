@@ -1,0 +1,87 @@
+[
+  {
+    "name": "happy_path_signups",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "how many users signed up last week?" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "users signups" } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "ExecuteSQL", "args": { "sql": "SELECT count(*) FROM users WHERE created_at > now() - interval '7 days'" } }
+        ]
+      },
+      { "type": "stop", "text": "You had 42 signups last week." }
+    ],
+    "assertions": [
+      { "kind": "callOrder", "names": ["SearchDBSchema", "ExecuteSQL"] },
+      {
+        "kind": "toolCalled",
+        "name": "ExecuteSQL",
+        "args": [{ "arg": "sql", "op": "~", "value": ".*users.*" }]
+      },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "42" }
+    ]
+  },
+  {
+    "name": "empty_schema_match",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "show me the foobars" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "foobars" } }
+        ]
+      },
+      { "type": "stop", "text": "I couldn't find any tables matching 'foobars'." }
+    ],
+    "assertions": [
+      { "kind": "toolCalled", "name": "SearchDBSchema" },
+      { "kind": "noToolCalled", "name": "ExecuteSQL" },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "couldn't find" }
+    ]
+  },
+  {
+    "name": "two_schema_searches_then_sql",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "show me orders from active users" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "users" } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "orders" } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "ExecuteSQL", "args": { "sql": "SELECT o.* FROM orders o JOIN users u ON o.user_id = u.id WHERE u.active" } }
+        ]
+      },
+      { "type": "stop", "text": "Found 7 orders from active users." }
+    ],
+    "assertions": [
+      { "kind": "callOrder", "names": ["SearchDBSchema", "SearchDBSchema", "ExecuteSQL"] },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "7 orders" },
+      { "kind": "maxTurns", "n": 4 }
+    ]
+  }
+]

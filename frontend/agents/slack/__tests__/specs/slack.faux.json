@@ -1,0 +1,49 @@
+[
+  {
+    "name": "happy_path_signups",
+    "agent": "SlackAgent",
+    "parameters": { "userMessage": "how many signups last week?" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "users signups" } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "ExecuteSQL", "args": { "sql": "SELECT count(*) FROM users WHERE created_at > now() - interval '7 days'" } }
+        ]
+      },
+      { "type": "stop", "text": "*42* signups last week." }
+    ],
+    "assertions": [
+      { "kind": "callOrder", "names": ["SearchDBSchema", "ExecuteSQL"] },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "42" }
+    ]
+  },
+  {
+    "name": "empty_schema_match",
+    "agent": "SlackAgent",
+    "parameters": { "userMessage": "show me the foobars" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "foobars" } }
+        ]
+      },
+      { "type": "stop", "text": "Couldn't find a `foobars` table." }
+    ],
+    "assertions": [
+      { "kind": "toolCalled", "name": "SearchDBSchema" },
+      { "kind": "noToolCalled", "name": "ExecuteSQL" },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "Couldn't find" }
+    ]
+  }
+]
