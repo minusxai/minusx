@@ -7,7 +7,7 @@
 
 import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Button, Icon } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { LuMessageSquare, LuPlus } from 'react-icons/lu';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
@@ -19,6 +19,32 @@ export default function ChatsPage() {
     criteria: { type: 'chat', depth: -1 },
     partial: true,
   });
+  const [creating, setCreating] = useState(false);
+
+  const onNewChat = useCallback(async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch('/api/chat/v2/new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        // Fall back to legacy explore so the user isn't stranded.
+        router.push('/explore');
+        return;
+      }
+      const data = (await res.json()) as { chatId: number; error?: string };
+      if (!data.chatId) {
+        router.push('/explore');
+        return;
+      }
+      router.push(`/f/${data.chatId}`);
+    } finally {
+      setCreating(false);
+    }
+  }, [creating, router]);
 
   const sortedFiles = [...files].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
@@ -30,7 +56,8 @@ export default function ChatsPage() {
         <Button
           aria-label="new-chat"
           colorPalette="teal"
-          onClick={() => router.push('/explore?v=2')}
+          onClick={onNewChat}
+          loading={creating}
         >
           <Icon as={LuPlus} mr={1} />New Chat
         </Button>

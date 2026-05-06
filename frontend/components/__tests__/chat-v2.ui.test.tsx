@@ -67,6 +67,8 @@ import {
   sendChatV2Message,
   selectChatV2,
 } from '@/store/chatV2Slice';
+import { setUseChatV2 } from '@/store/uiSlice';
+import { resolveUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
 import type { ConversationLog } from '@/orchestrator/types';
 
 const mockedUseFilesByCriteria = useFilesByCriteria as unknown as ReturnType<typeof vi.fn>;
@@ -253,5 +255,170 @@ describe('Phase 3 UI — Streaming consumer (SSE)', () => {
     const finalState = selectChatV2(store.getState(), 777);
     expect(finalState!.streamingEvents).toEqual([]);
     expect(finalState!.pendingToolCalls).toEqual([]);
+  });
+});
+
+describe('Phase 3 UI — end-to-end user journey', () => {
+  // Walks the entire path the user actually takes:
+  //   1. Toggle is off → resolveUseChatV2 says "Conversations" surface.
+  //   2. Toggle is on → resolveUseChatV2 says "Chats" surface.
+  //   3. Click "New Chat" on /chats → fetch /api/chat/v2/new → router pushed
+  //      to /f/<newId>.
+  //   4. ChatV2Container loads the new draft → user types → /api/chat/v2/stream
+  //      drives a faux turn → executionState reaches 'finished' with log filled.
+
+  beforeEach(() => {
+    mockedUseFilesByCriteria.mockReset();
+    mockedUseFile.mockReset();
+    mockRouterPush.mockReset();
+    mockedUseFilesByCriteria.mockReturnValue({ files: [], loading: false, error: null });
+  });
+
+  it('Step A — toggle gates which sidebar link shows', () => {
+    // Off → Conversations.
+    expect(resolveUseChatV2(false, '')).toBe(false);
+    // On (pref) → Chats.
+    expect(resolveUseChatV2(true, '')).toBe(true);
+    // URL override forces Chats even when pref is off.
+    expect(resolveUseChatV2(false, '?v=2')).toBe(true);
+  });
+
+  it('Step B — flipping setUseChatV2 updates the live store value', () => {
+    const store = makeStore();
+    expect(store.getState().ui.useChatV2).toBe(false);
+    act(() => { store.dispatch(setUseChatV2(true)); });
+    expect(store.getState().ui.useChatV2).toBe(true);
+  });
+
+  it('Step C — clicking "New Chat" hits /api/chat/v2/new and routes to /f/<chatId>', async () => {
+    const originalFetch = global.fetch;
+    const fetchSpy = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = url.toString();
+      if (u.includes('/api/chat/v2/new') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ chatId: 4242 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return originalFetch(url);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any;
+    global.fetch = fetchSpy;
+
+    try {
+      renderWithProviders(<ChatsPage />);
+      const newChatBtn = await screen.findByLabelText('new-chat');
+      await act(async () => {
+        await userEvent.click(newChatBtn);
+      });
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalled();
+        const calledNew = fetchSpy.mock.calls.some(
+          (args: unknown[]) => String(args[0]).includes('/api/chat/v2/new'),
+        );
+        expect(calledNew).toBe(true);
+      });
+      await waitFor(() => {
+        expect(mockRouterPush).toHaveBeenCalledWith('/f/4242');
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('Step D — typing+sending in ChatV2Container drives /api/chat/v2/stream and reaches finished state', async () => {
+    const fileId = 4242;
+
+    // Mock useFile so ChatV2Container has a draft to render.
+    mockedUseFile.mockReturnValue({
+      fileState: {
+        id: fileId,
+        name: 'New Chat',
+        type: 'chat',
+        path: '/org/chats/draft-x.chat.json',
+        loading: false,
+        updatedAt: 1700000000,
+        content: { log: [], agent: 'WebAnalystAgent', agent_args: {}, metadata: { updatedAt: '' } },
+      },
+    });
+
+    const sseBody = [
+      'event: orchestrator',
+      'data: {"type":"start","parent_id":"root"}',
+      '',
+      'event: done',
+      `data: ${JSON.stringify({
+        chatId: fileId,
+        forked: false,
+        log: [
+          {
+            type: 'toolCall',
+            id: 'root',
+            name: 'WebAnalystAgent',
+            arguments: { userMessage: 'hello world' },
+            context: {},
+            parent_id: null,
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Hi there.' }],
+            stopReason: 'stop',
+            parent_id: 'root',
+          },
+        ],
+        pendingToolCalls: [],
+        done: 'stop',
+      })}`,
+      '',
+      '',
+    ].join('\n');
+
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = url.toString();
+      if (u.includes('/api/chat/v2/stream')) {
+        return new Response(sseBody, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      }
+      return originalFetch(url);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any;
+
+    try {
+      const store = makeStore();
+      renderWithProviders(<ChatV2Container fileId={fileId} />, { store });
+
+      const textarea = await screen.findByLabelText('chat-input');
+      await act(async () => {
+        await userEvent.type(textarea, 'hello world');
+      });
+
+      const sendBtn = await screen.findByLabelText('chat-send');
+      await act(async () => {
+        await userEvent.click(sendBtn);
+      });
+
+      // Wait for finished state.
+      await waitFor(() => {
+        const c = selectChatV2(store.getState(), fileId);
+        expect(c).toBeDefined();
+        expect(c!.executionState).toBe('finished');
+        expect(c!.log.length).toBeGreaterThanOrEqual(2);
+      }, { timeout: 5000 });
+
+      // Final assistant turn rendered.
+      const finalLog = selectChatV2(store.getState(), fileId)!.log;
+      const stopEntry = finalLog.find(
+        (e) =>
+          'role' in e && e.role === 'assistant' &&
+          (e as { stopReason?: string }).stopReason === 'stop',
+      );
+      expect(stopEntry).toBeDefined();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
