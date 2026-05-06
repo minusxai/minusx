@@ -16,7 +16,7 @@ export function getChartFontFamily(): string {
     .trim() || fallback
 }
 
-// Flat UI Colors from theme.ts
+// Flat UI Colors from theme.ts + extended palette for many-series charts
 export const CHART_COLORS = {
   primary: '#2980b9',      // Belize Hole (blue)
   danger: '#c0392b',       // Pomegranate (red)
@@ -32,19 +32,49 @@ export const CHART_COLORS = {
   sunflower: '#f1c40f',    // Sun Flower (yellow)
   carrot: '#e67e22',       // Carrot (dark orange)
   silver: '#bdc3c7',       // Silver (light gray)
-  moonlight: '#34495e',     // Midnight Blue (dark gray)
+  moonlight: '#34495e',    // Midnight Blue (dark gray)
+  // Extended palette for many-series charts (all flat/saturated)
+  coral: '#e74c3c',        // Alizarin (coral red)
+  rose: '#d63384',         // Rose pink
+  indigo: '#5b4cc4',       // Indigo
+  cyan: '#0097a7',         // Cyan
+  olive: '#7cb342',        // Olive green
+  magenta: '#c2185b',      // Magenta
+  brown: '#8d6e63',        // Brown
+  slate: '#546e7a',        // Slate blue-gray
+  ocean: '#0984e3',        // Ocean blue
+  forest: '#00897b',       // Forest green
+  wine: '#880e4f',         // Wine
+  steel: '#455a64',        // Steel
 }
 
-// Color palette for multi-series charts
+// Color palette for multi-series charts (24 visually distinct colors)
+// First 8 preserve original order; extended colors alternate hues for contrast
 export const COLOR_PALETTE = [
-  CHART_COLORS.teal,       // 1. Teal
-  CHART_COLORS.primary,    // 2. Blue
-  CHART_COLORS.danger,     // 3. Red
-  CHART_COLORS.sunflower,    // 4. Yellow
-  CHART_COLORS.purple,     // 5. Purple
-  CHART_COLORS.carrot,     // 6. Dark Orange
-  CHART_COLORS.silver,     // 7. Silver (light gray)
-  CHART_COLORS.moonlight   // 8. Midnight Blue (dark gray)
+  CHART_COLORS.teal,        // 1. Teal (original)
+  CHART_COLORS.primary,     // 2. Blue (original)
+  CHART_COLORS.danger,      // 3. Red (original)
+  CHART_COLORS.sunflower,   // 4. Yellow (original)
+  CHART_COLORS.purple,      // 5. Purple (original)
+  CHART_COLORS.carrot,      // 6. Dark orange (original)
+  CHART_COLORS.silver,      // 7. Silver (original)
+  CHART_COLORS.moonlight,   // 8. Midnight blue (original)
+  CHART_COLORS.rose,        // 9. Rose pink
+  CHART_COLORS.forest,      // 10. Forest green
+  CHART_COLORS.ocean,       // 11. Ocean blue
+  CHART_COLORS.olive,       // 12. Olive green
+  CHART_COLORS.magenta,     // 13. Magenta
+  CHART_COLORS.cyan,        // 14. Cyan
+  CHART_COLORS.indigo,      // 15. Indigo
+  CHART_COLORS.brown,       // 16. Brown
+  CHART_COLORS.coral,       // 17. Coral red
+  CHART_COLORS.nephritis,   // 18. Dark green
+  CHART_COLORS.wine,        // 19. Wine
+  CHART_COLORS.peterRiver,  // 20. Light blue
+  CHART_COLORS.slate,       // 21. Slate
+  CHART_COLORS.success,     // 22. Emerald
+  CHART_COLORS.wisteria,    // 23. Dark purple
+  CHART_COLORS.steel,       // 24. Steel
 ]
 
 // Ordered keys for UI display
