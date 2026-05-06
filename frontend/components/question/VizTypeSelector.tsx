@@ -44,15 +44,15 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'bar', icon: <LuChartColumn size={16} />, label: 'Bar' },
       { type: 'line', icon: <LuChartLine size={16} />, label: 'Line' },
       { type: 'area', icon: <LuChartArea size={16} />, label: 'Area' },
+      { type: 'row', icon: <LuChartBar size={16} />, label: 'Row' },
+      { type: 'scatter', icon: <LuChartScatter size={16} />, label: 'Scatter' },
       { type: 'pie', icon: <LuChartPie size={16} />, label: 'Pie' },
     ],
   },
   {
     label: 'Advanced',
     types: [
-      { type: 'row', icon: <LuChartBar size={16} />, label: 'Row' },
       { type: 'combo', icon: <LuChartNoAxesCombined size={16} />, label: 'Combo' },
-      { type: 'scatter', icon: <LuChartScatter size={16} />, label: 'Scatter' },
       { type: 'funnel', icon: <LuFilter size={16} />, label: 'Funnel' },
       { type: 'waterfall', icon: <LuChartNoAxesColumn size={16} />, label: 'Waterfall' },
       { type: 'radar', icon: <LuRadar size={16} />, label: 'Radar' },
@@ -121,22 +121,20 @@ export function VizTypeSelector({
               justifyContent="center"
               gap={0.5}
               py={1.5}
-              borderRadius="sm"
-              border="1px solid"
-              borderColor={isActive ? 'accent.teal' : 'transparent'}
-              bg={isActive ? 'accent.teal/10' : 'transparent'}
+              borderRadius="md"
+              bg={isActive ? 'accent.teal/15' : 'transparent'}
               color={isActive ? 'accent.teal' : 'fg.muted'}
               cursor="pointer"
               transition="all 0.12s ease"
               _hover={{
-                bg: isActive ? 'accent.teal/15' : 'bg.muted',
+                bg: isActive ? 'accent.teal/20' : 'bg.muted',
                 color: isActive ? 'accent.teal' : 'fg.default',
               }}
               onClick={() => onChange(type)}
               aria-label={label}
             >
               {icon}
-              <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '600' : '500'} lineHeight="1">
+              <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '700' : '500'} lineHeight="1">
                 {label}
               </Text>
             </Box>

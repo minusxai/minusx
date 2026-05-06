@@ -280,27 +280,34 @@ export const PivotAxisBuilder = ({
 
   return (
     <VStack align="stretch" gap={0}>
-      {/* Tab bar */}
-      <HStack gap={2} justify="flex-start" px={3} pt={3} pb={1} bg="bg.canvas">
+      {/* Tab bar — segmented control matching AxisBuilder */}
+      <HStack
+        gap={0}
+        bg="bg.muted"
+        borderRadius="md"
+        p={0.5}
+        mb={3}
+        maxW="240px"
+      >
         {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
           <HStack
             key={key}
             as="button"
-            gap={1}
-            px={2}
-            py={1}
+            flex={1}
+            gap={1.5}
+            justify="center"
+            py={1.5}
             cursor="pointer"
-            bg="transparent"
-            color={activeTab === key ? 'accent.teal' : 'fg.subtle'}
-            borderBottom="2px solid"
-            borderColor={activeTab === key ? 'accent.teal' : 'transparent'}
-            _hover={{ color: 'accent.teal' }}
+            bg={activeTab === key ? 'bg.canvas' : 'transparent'}
+            color={activeTab === key ? 'fg.default' : 'fg.subtle'}
+            borderRadius="sm"
+            boxShadow={activeTab === key ? 'xs' : undefined}
+            _hover={{ color: activeTab === key ? 'fg.default' : 'fg.muted' }}
             transition="all 0.15s"
             onClick={() => setActiveTab(key)}
-            borderRadius={0}
           >
-            <Box as={Icon} fontSize="xs" />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+            <Box as={Icon} fontSize="sm" />
+            <Text fontSize="xs" fontFamily="mono" fontWeight="600">
               {label}
             </Text>
           </HStack>
@@ -309,12 +316,12 @@ export const PivotAxisBuilder = ({
 
       {/* Fields tab — AxisBuilder renders its own styled container */}
       {activeTab === 'fields' && (
-        <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} />
+        <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} borderless />
       )}
 
       {/* Settings tab */}
       {activeTab === 'settings' && (
-        <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3}>
+        <Box display="flex" flexDirection="column" gap={3}>
           {renderSettingsCard('Options', 'options',
             <HStack gap={4} flexWrap="wrap">
               <Checkbox
@@ -355,47 +362,42 @@ export const PivotAxisBuilder = ({
             </HStack>
           )}
           {(showRowFormulas || showColFormulas) && renderSettingsCard('Formulas', 'formulas',
-            <HStack gap={4} align="stretch">
-              <Box flex={1} minW={0}>
-                {showRowFormulas ? (
-                  <FormulaBuilder
-                    axis="row"
-                    formulas={config.rowFormulas || []}
-                    availableValues={availableRowValues!}
-                    dimensionName={config.rows[0]}
-                    onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
-                    dimensions={rowDimensions}
-                    getValuesAtLevel={getRowValuesAtLevel}
-                  />
-                ) : (
-                  <VStack align="start" gap={0}>
-                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
-                      Row Formulas
-                    </Text>
-                    <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
-                  </VStack>
-                )}
-              </Box>
-              <Box width="1px" bg="border.muted" alignSelf="stretch" />
-              <Box flex={1} minW={0}>
-                {showColFormulas ? (
-                  <FormulaBuilder
-                    axis="column"
-                    formulas={config.columnFormulas || []}
-                    availableValues={availableColumnValues!}
-                    dimensionName={config.columns[0]}
-                    onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
-                  />
-                ) : (
-                  <VStack align="start" gap={0}>
-                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
-                      Column Formulas
-                    </Text>
-                    <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
-                  </VStack>
-                )}
-              </Box>
-            </HStack>
+            <VStack gap={3} align="stretch">
+              {showRowFormulas ? (
+                <FormulaBuilder
+                  axis="row"
+                  formulas={config.rowFormulas || []}
+                  availableValues={availableRowValues!}
+                  dimensionName={config.rows[0]}
+                  onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
+                  dimensions={rowDimensions}
+                  getValuesAtLevel={getRowValuesAtLevel}
+                />
+              ) : (
+                <VStack align="start" gap={0}>
+                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                    Row Formulas
+                  </Text>
+                  <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
+                </VStack>
+              )}
+              {showColFormulas ? (
+                <FormulaBuilder
+                  axis="column"
+                  formulas={config.columnFormulas || []}
+                  availableValues={availableColumnValues!}
+                  dimensionName={config.columns[0]}
+                  onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
+                />
+              ) : (
+                <VStack align="start" gap={0}>
+                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                    Column Formulas
+                  </Text>
+                  <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
+                </VStack>
+              )}
+            </VStack>
           )}
         </Box>
       )}

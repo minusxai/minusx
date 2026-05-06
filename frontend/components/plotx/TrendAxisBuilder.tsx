@@ -58,28 +58,50 @@ export const TrendAxisBuilder = ({
   }, [xAxisColumns, yAxisColumns, onAxisChange])
 
   return (
-    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" border="1px dashed" borderColor="border.muted" borderRadius="md">
+    <Box display="flex" flexDirection="column" gap={3} width="100%">
       {/* Column chips */}
-      <HStack gap={2} flexWrap="wrap">
-        {columns.map(col => (
-          <ColumnChip
-            key={col}
-            column={col}
-            type={resolveColumnType(col, columns, types)}
-            isAssigned={assignedColumns.has(col)}
-            isDragging={draggedColumn === col}
-            isMobileSelected={selectedColumnForMobile === col}
-            isTouchDevice={isTouchDevice}
-            onDragStart={(e) => handleDragStart(e, col)}
-            onDragEnd={handleDragEnd}
-            onMobileSelect={() => setSelectedColumnForMobile(prev => prev === col ? null : col)}
-          />
-        ))}
-      </HStack>
+      <Box
+        bg="bg.muted"
+        borderRadius="md"
+        p={2}
+        pt={3}
+        position="relative"
+      >
+        <Text
+          position="absolute"
+          top={-2}
+          fontSize="2xs"
+          fontWeight="700"
+          color="fg.subtle"
+          textTransform="uppercase"
+          letterSpacing="0.05em"
+          bg="bg.muted"
+          px={1.5}
+          borderRadius="sm"
+        >
+          Columns
+        </Text>
+        <HStack gap={2} flexWrap="wrap">
+          {columns.map(col => (
+            <ColumnChip
+              key={col}
+              column={col}
+              type={resolveColumnType(col, columns, types)}
+              isAssigned={assignedColumns.has(col)}
+              isDragging={draggedColumn === col}
+              isMobileSelected={selectedColumnForMobile === col}
+              isTouchDevice={isTouchDevice}
+              onDragStart={(e) => handleDragStart(e, col)}
+              onDragEnd={handleDragEnd}
+              onMobileSelect={() => setSelectedColumnForMobile(prev => prev === col ? null : col)}
+            />
+          ))}
+        </HStack>
+      </Box>
 
       {/* Drop zones */}
-      <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
-        <Box minW={0} flex={1} display="flex" alignItems="stretch">
+      <Box display="grid" gridTemplateColumns="repeat(2, 1fr)" gap={2} minWidth={0}>
+        <Box minW={0} display="flex" alignItems="stretch">
           <DropZone
             label="Time Axis"
             onDrop={() => {
@@ -107,7 +129,7 @@ export const TrendAxisBuilder = ({
             )}
           </DropZone>
         </Box>
-        <Box minW={0} flex={2} display="flex" alignItems="stretch">
+        <Box minW={0} display="flex" alignItems="stretch">
           <DropZone
             label="Metrics"
             onDrop={() => {

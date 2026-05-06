@@ -372,8 +372,25 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
 
       {(!hasSettingsTab || activeTab === 'fields') && (
         <VStack gap={3} align="stretch">
-        <Box bg="bg.muted" borderRadius="md" p={2.5}>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+        <Box
+          bg="bg.muted"
+          borderRadius="md"
+          p={2}
+          pt={3}
+          position="relative"
+        >
+          <Text
+            position="absolute"
+            top={-2}
+            fontSize="2xs"
+            fontWeight="700"
+            color="fg.subtle"
+            textTransform="uppercase"
+            letterSpacing="0.05em"
+            bg="bg.muted"
+            px={1.5}
+            borderRadius="sm"
+          >
             Columns
           </Text>
         <HStack gap={2} flexWrap="wrap">
