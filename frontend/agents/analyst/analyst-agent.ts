@@ -64,25 +64,6 @@ export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams> {
   }
 }
 
-const TalkToUserParams = Type.Object({
-  text: Type.String(),
-});
-
-export class TalkToUser extends MXTool<typeof TalkToUserParams> {
-  static readonly schema: Tool<typeof TalkToUserParams> = {
-    name: 'TalkToUser',
-    description: 'Send a message to the user. Use this to communicate findings or progress.',
-    parameters: TalkToUserParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    return {
-      content: [{ type: 'text', text: this.parameters.text }],
-      isError: false,
-    };
-  }
-}
-
 const AnalystAgentParams = Type.Object({
   userMessage: Type.String(),
 });
@@ -96,14 +77,12 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams> {
   static readonly tools: Tool<TSchema>[] = [
     SearchDBSchema.schema,
     ExecuteSQL.schema,
-    TalkToUser.schema,
   ];
   static model = FAUX_MODEL;
 
   protected systemPrompt = [
     'You are a data analyst.',
     'Use SearchDBSchema to find relevant tables and columns, then ExecuteSQL to answer the user.',
-    'Use TalkToUser to communicate findings or to ask clarifying questions.',
-    'When you have answered the user\'s question, end your turn with a stop message containing the answer.',
+    'Reply to the user as plain text in your final stop turn. Do not call any tool to deliver the final answer — just emit the text.',
   ].join('\n');
 }

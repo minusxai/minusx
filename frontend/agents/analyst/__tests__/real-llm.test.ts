@@ -13,7 +13,6 @@ import {
   AnalystAgent,
   ExecuteSQL,
   SearchDBSchema,
-  TalkToUser,
 } from '../analyst-agent';
 import { setSchemaSource, setSqlExecutor } from '../sources';
 import specs from './specs/analyst.real.json';
@@ -21,7 +20,7 @@ import specs from './specs/analyst.real.json';
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
 
-const registrables = [SearchDBSchema, ExecuteSQL, TalkToUser, AnalystAgent];
+const registrables = [SearchDBSchema, ExecuteSQL, AnalystAgent];
 
 beforeAll(() => {
   if (!RUN_REAL) return;

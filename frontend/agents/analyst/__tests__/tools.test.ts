@@ -3,7 +3,6 @@ import type { AgentContext } from '@/orchestrator/types';
 import {
   ExecuteSQL,
   SearchDBSchema,
-  TalkToUser,
 } from '../analyst-agent';
 import {
   resetSources,
@@ -68,16 +67,5 @@ describe('ExecuteSQL', () => {
 
     expect(res.isError).toBe(true);
     expect((res.content[0] as { text: string }).text).toContain('syntax error');
-  });
-});
-
-describe('TalkToUser', () => {
-  it('echoes the input text as a tool result', async () => {
-    const orch = new Orchestrator([]);
-    const tool = new TalkToUser(orch, { text: 'hello user' }, ctx);
-    const res = await tool.run();
-
-    expect(res.isError).toBe(false);
-    expect(res.content).toEqual([{ type: 'text', text: 'hello user' }]);
   });
 });

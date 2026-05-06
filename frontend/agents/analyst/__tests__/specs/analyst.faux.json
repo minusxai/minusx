@@ -52,35 +52,35 @@
     ]
   },
   {
-    "name": "talks_to_user_mid_flow",
+    "name": "two_schema_searches_then_sql",
     "agent": "AnalystAgent",
-    "parameters": { "userMessage": "list the active users" },
+    "parameters": { "userMessage": "show me orders from active users" },
     "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
     "fauxResponses": [
       {
         "type": "toolUse",
         "toolCalls": [
-          { "name": "SearchDBSchema", "args": { "query": "active users" } }
+          { "name": "SearchDBSchema", "args": { "query": "users" } }
         ]
       },
       {
         "type": "toolUse",
         "toolCalls": [
-          { "name": "TalkToUser", "args": { "text": "Found the users table; running the query now." } }
+          { "name": "SearchDBSchema", "args": { "query": "orders" } }
         ]
       },
       {
         "type": "toolUse",
         "toolCalls": [
-          { "name": "ExecuteSQL", "args": { "sql": "SELECT id FROM users WHERE active" } }
+          { "name": "ExecuteSQL", "args": { "sql": "SELECT o.* FROM orders o JOIN users u ON o.user_id = u.id WHERE u.active" } }
         ]
       },
-      { "type": "stop", "text": "Done." }
+      { "type": "stop", "text": "Found 7 orders from active users." }
     ],
     "assertions": [
-      { "kind": "callOrder", "names": ["SearchDBSchema", "TalkToUser", "ExecuteSQL"] },
-      { "kind": "toolCalled", "name": "TalkToUser" },
+      { "kind": "callOrder", "names": ["SearchDBSchema", "SearchDBSchema", "ExecuteSQL"] },
       { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "7 orders" },
       { "kind": "maxTurns", "n": 4 }
     ]
   }

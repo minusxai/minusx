@@ -3,13 +3,12 @@ import {
   AnalystAgent,
   ExecuteSQL,
   SearchDBSchema,
-  TalkToUser,
   fauxRegistration,
 } from '../analyst-agent';
 import { resetSources, setSchemaSource, setSqlExecutor } from '../sources';
 import specs from './specs/analyst.faux.json';
 
-const registrables = [SearchDBSchema, ExecuteSQL, TalkToUser, AnalystAgent];
+const registrables = [SearchDBSchema, ExecuteSQL, AnalystAgent];
 
 describe.each(specs as TestSpec[])('faux spec: $name', (spec) => {
   beforeEach(() => {
