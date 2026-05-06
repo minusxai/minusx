@@ -240,7 +240,28 @@ export class Orchestrator {
 
     const settled = await Promise.allSettled(
       toolCalls.map(async (tc) => {
-        const Cls = this.lookupCallable(tc.name);
+        let Cls: RegistrableClass;
+        try {
+          Cls = this.lookupCallable(tc.name);
+        } catch {
+          const available = ((parent.constructor as typeof MXAgent).tools ?? [])
+            .map((t) => t.name)
+            .join(', ');
+          const trm: ToolResultMessage = {
+            role: 'toolResult',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: [{
+              type: 'text',
+              text: `Unknown tool '${tc.name}'. Available tools: ${available || '(none)'}.`,
+            }],
+            isError: true,
+            timestamp: Date.now(),
+          };
+          this.log.push({ ...trm, parent_id: parent.id });
+          parent.toolThread.push(trm);
+          return;
+        }
         const instance = this.instantiate(Cls, tc.arguments, parent.context, tc.id);
 
         if (instance instanceof MXAgent) {

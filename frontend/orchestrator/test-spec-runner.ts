@@ -67,10 +67,16 @@ export async function runAgentTestSpec(
   const orch = new Orchestrator(registrables);
   const agent = new Cls(orch, spec.parameters, spec.context);
   const stream = orch.run(agent as Parameters<Orchestrator['run']>[0]);
-  for await (const _ of stream) {/* drain */}
+  const orchestratorErrors: string[] = [];
+  for await (const ev of stream) {
+    if ((ev as { type?: string }).type === 'error') {
+      const errMsg = (ev as { error?: { errorMessage?: string } }).error?.errorMessage ?? 'unknown';
+      orchestratorErrors.push(`Orchestrator error: ${errMsg}`);
+    }
+  }
   await stream.result();
 
-  const failures: string[] = [];
+  const failures: string[] = [...orchestratorErrors];
   for (const a of spec.assertions) {
     const err = evalAssertion(a, orch.log, agent.id);
     if (err) failures.push(err);

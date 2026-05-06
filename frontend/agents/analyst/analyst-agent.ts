@@ -82,7 +82,7 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams> {
   static model = FAUX_MODEL;
 
   protected getSystemPrompt(): string {
-    const base = renderPrompt('default.system', {
+    return renderPrompt('default.system', {
       agent_name: 'AnalystAgent',
       max_steps: '40',
       allowed_viz_types: '',
@@ -94,14 +94,5 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams> {
       home_folder: '',
       preloaded_skills: '',
     });
-    // Production prompt enumerates many tools (ReadFiles, EditFile, ExecuteQuery,
-    // Navigate, Clarify, etc.) that aren't wired in the TS port yet. Constrain
-    // the model to the actual tool set; this addendum shrinks as tools land.
-    const constraint = [
-      '## Tools Available in This Mode',
-      'You ONLY have `SearchDBSchema` and `ExecuteSQL`. Do not call any other tool, regardless of what the catalog above suggests.',
-      'Reply as plain text in your final stop turn — do not call any tool to deliver the answer.',
-    ].join('\n');
-    return `${base}\n\n${constraint}`;
   }
 }
