@@ -2032,13 +2032,13 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   if (isRowChart) {
     const categoryAxis = baseOption.xAxis as any
     const valueAxis = baseOption.yAxis as any
-    // Hide the axis name on the category side — labels are self-explanatory
-    if (categoryAxis) categoryAxis.name = undefined
-    // Truncate long category labels
+    // Truncate long category labels — containLabel auto-expands the grid to fit
     if (categoryAxis?.axisLabel) {
       categoryAxis.axisLabel.overflow = 'truncate'
-      categoryAxis.axisLabel.width = 100
+      categoryAxis.axisLabel.width = 75
     }
+    // Push axis name further left so it doesn't overlap truncated labels
+    if (categoryAxis) categoryAxis.nameGap = 70
     baseOption.xAxis = valueAxis as any
     baseOption.yAxis = categoryAxis as any
   }
