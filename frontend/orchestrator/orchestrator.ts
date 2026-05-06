@@ -269,8 +269,8 @@ export class Orchestrator {
           if (err instanceof UserInputException) {
             this.stream?.push({
               type: 'pending',
-              toolCallId: tc.id,
-              toolName: tc.name,
+              id: tc.id,
+              name: tc.name,
               parameters: instance.parameters as Record<string, unknown>,
               context: parent.context,
               parent_id: parent.id,

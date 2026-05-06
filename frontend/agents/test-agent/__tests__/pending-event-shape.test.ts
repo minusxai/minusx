@@ -29,8 +29,8 @@ describe('rich pending event + getPendingToolCalls', () => {
     expect(pendingEvents).toHaveLength(2);
 
     for (const pe of pendingEvents) {
-      expect(typeof pe.toolCallId).toBe('string');
-      expect(pe.toolName).toBe('PendingTool');
+      expect(typeof pe.id).toBe('string');
+      expect(pe.name).toBe('PendingTool');
       expect(typeof pe.parameters).toBe('object');
       expect(pe.parameters).toHaveProperty('prompt');
       expect(pe.context).toEqual(ctx);
@@ -49,7 +49,7 @@ describe('rich pending event + getPendingToolCalls', () => {
       expect(p.parameters).toHaveProperty('prompt');
     }
 
-    const eventIds = pendingEvents.map((pe) => pe.toolCallId).sort();
+    const eventIds = pendingEvents.map((pe) => pe.id).sort();
     const logIds = pending.map((p) => p.id).sort();
     expect(eventIds).toEqual(logIds);
   });

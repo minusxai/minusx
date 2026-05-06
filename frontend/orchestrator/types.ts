@@ -29,7 +29,6 @@ export interface ToolResponse<TDetails = Record<string, unknown>> {
   isError: boolean;
 }
 
-export type AgentTParams = TSchema;
 export type ToolMessage = AssistantMessage | ToolResultMessage;
 
 export type RegistrableClass = {
@@ -59,19 +58,6 @@ export type ConversationLogEntry =
 
 export type ConversationLog = ConversationLogEntry[];
 
-export interface PendingToolEvent {
-  type: 'pending';
-  toolCallId: string;
-  toolName: string;
-  parameters: Record<string, unknown>;
-  context: AgentContext;
-  parent_id: string;
-}
-
-export type StreamEvent =
-  | (AssistantMessageEvent & { parent_id: string })
-  | PendingToolEvent;
-
 export interface PendingToolCall {
   id: string;
   name: string;
@@ -79,6 +65,14 @@ export interface PendingToolCall {
   context: AgentContext;
   parent_id: string;
 }
+
+export interface PendingToolEvent extends PendingToolCall {
+  type: 'pending';
+}
+
+export type StreamEvent =
+  | (AssistantMessageEvent & { parent_id: string })
+  | PendingToolEvent;
 
 export class UserInputException extends Error {
   readonly toolCallIds: string[];
@@ -119,7 +113,7 @@ export abstract class MXTool<
 }
 
 export class MXAgent<
-  TParams extends AgentTParams = AgentTParams,
+  TParams extends TSchema = TSchema,
   TContext extends AgentContext = AgentContext,
   TDetails = unknown,
 > extends MXTool<TParams, TContext, TDetails> {
@@ -129,7 +123,6 @@ export class MXAgent<
 
   protected systemPrompt = '';
   threadHistory: Message[];
-  userMessage: string | (TextContent | ImageContent)[];
   toolThread: ToolMessage[];
 
   constructor(
@@ -143,7 +136,10 @@ export class MXAgent<
     super(orchestrator, parameters, context, id);
     this.threadHistory = threadHistory ?? [];
     this.toolThread = toolThread ?? [];
-    this.userMessage = (parameters as { userMessage: string | (TextContent | ImageContent)[] }).userMessage;
+  }
+
+  get userMessage(): string | (TextContent | ImageContent)[] {
+    return (this.parameters as { userMessage: string | (TextContent | ImageContent)[] }).userMessage;
   }
 
   buildMessages(): Message[] {
