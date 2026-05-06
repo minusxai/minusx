@@ -801,6 +801,25 @@ class FilesDataLayerServer implements IFilesDataLayer {
         };
       }
 
+      case 'chat': {
+        // ChatContent template — empty log, WebAnalystAgent, blank metadata.
+        // Lives in lib/chat-v2/chat-file.ts as the canonical shape; mirrored
+        // here so /new/chat (or any other createDraftFile entry point) yields
+        // a valid empty chat. The standard `/api/chat/v2/new` endpoint goes
+        // through createDraftChat directly with the same shape.
+        const content = {
+          log: [],
+          agent: 'WebAnalystAgent',
+          agent_args: {},
+          metadata: { updatedAt: new Date().toISOString() },
+        };
+        return {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ChatContent isn't in the BaseFileContent template union; intentional
+          content: content as any,
+          fileName: '',
+        };
+      }
+
       default:
         throw new Error(`Unsupported template type: ${type}`);
     }
