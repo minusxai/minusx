@@ -27,7 +27,7 @@ import type { Tool, TSchema } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AgentContext, ConnectionInfo, ToolResponse } from '@/orchestrator/types';
 import { getNodeConnector } from '@/lib/connections';
-import type { NodeConnector } from '@/lib/connections/base';
+import { NodeConnector } from '@/lib/connections/base';
 import {
   AnalystAgent,
   ExecuteSQL,
@@ -63,6 +63,38 @@ function loadConnections(): void {
   }
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function errorResponse(text: string): ToolResponse {
+  return { content: [{ type: 'text', text }], isError: true };
+}
+
+/**
+ * Look up a connector by name, enforcing the per-row allowlist in
+ * `ctx.connections`. Returns the `NodeConnector` on success, or an error
+ * `ToolResponse` ready to return from a tool's `run()`.
+ */
+function resolveConnector(
+  name: string,
+  ctx: { connections?: ConnectionInfo[] },
+): NodeConnector | ToolResponse {
+  if (!ctx.connections?.some((c) => c.name === name)) {
+    return errorResponse(`'${name}' is not in this agent's connections`);
+  }
+  const conn = CONNECTIONS.get(name);
+  if (!conn) return errorResponse(`connector '${name}' not loaded`);
+  return conn;
+}
+
+/** Wrap a thrown error into an isError ToolResponse. */
+async function tryRun(fn: () => Promise<ToolResponse>): Promise<ToolResponse> {
+  try {
+    return await fn();
+  } catch (err) {
+    return errorResponse(err instanceof Error ? err.message : String(err));
+  }
+}
+
 // ── Benchmark tool subclasses ──────────────────────────────────────────────
 
 // Inherits run() from production: returns this.context.connections ?? [].
@@ -71,20 +103,10 @@ class BMListDBConnections extends ListDBConnections {}
 class BMSearchDBSchema extends SearchDBSchema {
   async run(): Promise<ToolResponse> {
     const { connection, query } = this.parameters;
-    if (!this.context.connections?.some((c) => c.name === connection)) {
-      return {
-        content: [{ type: 'text', text: `'${connection}' is not in this agent's connections` }],
-        isError: true,
-      };
-    }
-    const conn = CONNECTIONS.get(connection);
-    if (!conn) {
-      return {
-        content: [{ type: 'text', text: `connector '${connection}' not loaded` }],
-        isError: true,
-      };
-    }
-    try {
+    const conn = resolveConnector(connection, this.context);
+    if (!(conn instanceof NodeConnector)) return conn;
+
+    return tryRun(async () => {
       const schema = await conn.getSchema();
       const q = query.toLowerCase();
       const hits = schema.flatMap((s) =>
@@ -97,40 +119,20 @@ class BMSearchDBSchema extends SearchDBSchema {
           .map((t) => ({ schema: s.schema, table: t.table, columns: t.columns })),
       );
       return { content: [{ type: 'text', text: JSON.stringify(hits) }], isError: false };
-    } catch (err) {
-      return {
-        content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }],
-        isError: true,
-      };
-    }
+    });
   }
 }
 
 class BMExecuteSQL extends ExecuteSQL {
   async run(): Promise<ToolResponse> {
     const { connection, sql } = this.parameters;
-    if (!this.context.connections?.some((c) => c.name === connection)) {
-      return {
-        content: [{ type: 'text', text: `'${connection}' is not in this agent's connections` }],
-        isError: true,
-      };
-    }
-    const conn = CONNECTIONS.get(connection);
-    if (!conn) {
-      return {
-        content: [{ type: 'text', text: `connector '${connection}' not loaded` }],
-        isError: true,
-      };
-    }
-    try {
+    const conn = resolveConnector(connection, this.context);
+    if (!(conn instanceof NodeConnector)) return conn;
+
+    return tryRun(async () => {
       const result = await conn.query(sql);
       return { content: [{ type: 'text', text: JSON.stringify(result.rows) }], isError: false };
-    } catch (err) {
-      return {
-        content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }],
-        isError: true,
-      };
-    }
+    });
   }
 }
 
