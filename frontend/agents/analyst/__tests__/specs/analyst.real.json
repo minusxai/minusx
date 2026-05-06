@@ -1,0 +1,12 @@
+[
+  {
+    "name": "real_simple_count",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "how many rows are in the users table?" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "assertions": [
+      { "kind": "toolCalled", "name": "ExecuteSQL" },
+      { "kind": "stopReached" }
+    ]
+  }
+]

@@ -1,0 +1,87 @@
+[
+  {
+    "name": "happy_path_signups",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "how many users signed up last week?" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "users signups" } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "ExecuteSQL", "args": { "sql": "SELECT count(*) FROM users WHERE created_at > now() - interval '7 days'" } }
+        ]
+      },
+      { "type": "stop", "text": "You had 42 signups last week." }
+    ],
+    "assertions": [
+      { "kind": "callOrder", "names": ["SearchDBSchema", "ExecuteSQL"] },
+      {
+        "kind": "toolCalled",
+        "name": "ExecuteSQL",
+        "args": [{ "arg": "sql", "op": "~", "value": ".*users.*" }]
+      },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "42" }
+    ]
+  },
+  {
+    "name": "empty_schema_match",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "show me the foobars" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "foobars" } }
+        ]
+      },
+      { "type": "stop", "text": "I couldn't find any tables matching 'foobars'." }
+    ],
+    "assertions": [
+      { "kind": "toolCalled", "name": "SearchDBSchema" },
+      { "kind": "noToolCalled", "name": "ExecuteSQL" },
+      { "kind": "stopReached" },
+      { "kind": "finalText", "op": "contains", "value": "couldn't find" }
+    ]
+  },
+  {
+    "name": "talks_to_user_mid_flow",
+    "agent": "AnalystAgent",
+    "parameters": { "userMessage": "list the active users" },
+    "context": { "userId": "u", "mode": "org", "connectionId": "test-db" },
+    "fauxResponses": [
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "SearchDBSchema", "args": { "query": "active users" } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "TalkToUser", "args": { "text": "Found the users table; running the query now." } }
+        ]
+      },
+      {
+        "type": "toolUse",
+        "toolCalls": [
+          { "name": "ExecuteSQL", "args": { "sql": "SELECT id FROM users WHERE active" } }
+        ]
+      },
+      { "type": "stop", "text": "Done." }
+    ],
+    "assertions": [
+      { "kind": "callOrder", "names": ["SearchDBSchema", "TalkToUser", "ExecuteSQL"] },
+      { "kind": "toolCalled", "name": "TalkToUser" },
+      { "kind": "stopReached" },
+      { "kind": "maxTurns", "n": 4 }
+    ]
+  }
+]
