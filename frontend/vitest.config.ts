@@ -58,6 +58,7 @@ export default defineConfig({
             'agents/**/__tests__/**/*.test.ts',
           ],
           exclude: ['**/node_modules/**'],
+          setupFiles: ['./test/setup/vitest.setup.orchestrator.ts'],
         },
       },
     ],

@@ -197,6 +197,27 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY] }],
     },
   },
+
+  // orchestrator/** — must stay app-agnostic. The orchestrator is the generic
+  // agent runtime; it knows about pi-ai, MXTool, MXAgent, and not much else.
+  // App-specific concerns (Files, Auth, Connections, Redux state, etc.) belong
+  // on agents that extend `AgentContext` with their own context type, NOT in
+  // the orchestrator core.
+  {
+    files: ["orchestrator/**/*.ts", "orchestrator/**/*.tsx"],
+    ignores: ["orchestrator/**/__tests__/**"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          {
+            group: ["@/lib/**", "@/app/**", "@/store/**", "@/components/**", "@/agents/**"],
+            message:
+              "orchestrator/ must stay app-agnostic. Move this dependency into agents/<agent>/ , for example: extend AgentContext with what your agent needs.",
+          },
+        ],
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;

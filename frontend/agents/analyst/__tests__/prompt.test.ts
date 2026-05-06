@@ -1,10 +1,10 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { AnalystAgent } from '../analyst-agent';
-import type { AgentContext } from '@/orchestrator/types';
+import type { AnalystAgentContext } from '../types';
 
-const ctx: AgentContext = { userId: 'u', mode: 'org', connectionId: 'conn-7' };
+const ctx: AnalystAgentContext = { userId: 'u', mode: 'org', connectionId: 'conn-7' };
 
-function newAgent(overrides: Partial<AgentContext> = {}) {
+function newAgent(overrides: Partial<AnalystAgentContext> = {}) {
   const orch = new Orchestrator([AnalystAgent]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agent: any = new AnalystAgent(

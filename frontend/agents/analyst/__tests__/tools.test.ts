@@ -1,5 +1,5 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import type { AgentContext } from '@/orchestrator/types';
+import type { AnalystAgentContext } from '../types';
 import {
   ExecuteSQL,
   SearchDBSchema,
@@ -11,7 +11,7 @@ import {
   type SchemaHit,
 } from '../sources';
 
-const ctx: AgentContext = { userId: 'u', mode: 'org' };
+const ctx: AnalystAgentContext = { userId: 'u', mode: 'org' };
 
 describe('SearchDBSchema', () => {
   beforeEach(() => resetSources());

@@ -17,19 +17,14 @@ import {
 import type { Orchestrator } from './orchestrator';
 import { gen_id } from './utils';
 
-export interface ConnectionInfo {
-  name: string;
-  dialect: string;
-  description?: string;
-}
-
-export interface AgentContext {
-  userId: string;
-  connectionId?: string;
-  mode: 'org' | 'tutorial';
-  appState?: unknown;
-  connections?: ConnectionInfo[];
-}
+/**
+ * Empty by design. Each agent extends this with the context shape its tools
+ * need (e.g. `AnalystAgentContext` carries `userId`, `effectiveUser`,
+ * `connections`, etc.). The orchestrator never dereferences context fields —
+ * it just passes the object through to tools/agents.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface AgentContext {}
 
 export interface ToolResponse<TDetails = Record<string, unknown>> {
   content: (TextContent | ImageContent)[];
@@ -39,13 +34,19 @@ export interface ToolResponse<TDetails = Record<string, unknown>> {
 
 export type ToolMessage = AssistantMessage | ToolResultMessage;
 
+// `parameters` and `context` are bivariant `any` so RegistrableClass is
+// assignable from subclasses with narrower TParams / TContext (e.g.
+// MXTool<typeof MyParams, MyContext>). The orchestrator passes objects through
+// without dereferencing fields — type safety at the construction site is the
+// caller's job, not the registry's.
 export type RegistrableClass = {
   readonly schema: Tool<TSchema>;
   new (
     orchestrator: Orchestrator,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parameters: any,
-    context: AgentContext,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    context: any,
     id?: string,
     threadHistory?: Message[],
     toolThread?: ToolMessage[],
@@ -153,26 +154,14 @@ export class MXAgent<
     return '';
   }
 
+  /**
+   * Default: wraps `userMessage` as a single user-message content array.
+   * Subclasses (e.g. `AnalystAgent`) override to inject app-specific blocks
+   * like `<AppState>`/`<CurrentDate>`/`<Question>`.
+   */
   protected buildUserContent(): (TextContent | ImageContent)[] {
     const raw = this.userMessage;
-    const items: (TextContent | ImageContent)[] =
-      typeof raw === 'string' ? [{ type: 'text', text: raw }] : raw;
-
-    const images = items.filter((c): c is ImageContent => c.type === 'image');
-    const goal = items
-      .filter((c): c is TextContent => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n');
-
-    const appStateJson =
-      this.context.appState !== undefined ? JSON.stringify(this.context.appState) : 'null';
-    const date = new Date().toISOString().slice(0, 10);
-
-    return [
-      { type: 'text', text: `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` },
-      ...images,
-      { type: 'text', text: `<Question>${goal}</Question>` },
-    ];
+    return typeof raw === 'string' ? [{ type: 'text', text: raw }] : raw;
   }
 
   buildMessages(): Message[] {
