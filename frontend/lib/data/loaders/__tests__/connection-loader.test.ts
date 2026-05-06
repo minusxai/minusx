@@ -20,12 +20,13 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // Force the Python path for all schema fetches — no Node.js connector
-jest.mock('@/lib/connections', () => ({
+vi.mock('@/lib/connections', () => ({
   getNodeConnector: () => null,
 }));
 
 // Database-specific mock — must be at module top level (Jest hoisting)
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -42,7 +43,7 @@ const testUser: EffectiveUser = {
   home_folder: '',
 };
 
-const mockGetSchemaFromPython = jest.spyOn(pythonBackend, 'getSchemaFromPython');
+const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
 const FRESH_SCHEMA: DatabaseSchema = {
   schemas: [{ schema: 'public', tables: [{ table: 'users', columns: [{ name: 'id', type: 'INTEGER' }] }] }],
@@ -207,7 +208,7 @@ describe('connectionLoader — empty refresh result', () => {
     };
     const file = await createConnection('conn_empty_refresh', '/org/database/conn_empty_refresh', cachedSchema);
 
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const result = await connectionLoader(file!, testUser, { refresh: true });
 

@@ -27,12 +27,13 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // Mock Node.js connector so schema falls through to getSchemaFromPython mock below
-jest.mock('@/lib/connections', () => ({
+vi.mock('@/lib/connections', () => ({
   getNodeConnector: () => null,
 }));
 
 // Database-specific mock
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -41,7 +42,7 @@ jest.mock('@/lib/database/db-config', () => ({
 const TEST_DB_PATH = getTestDbPath('context_loader');
 
 // Mock getSchemaFromPython to bypass unstable_cache
-const mockGetSchemaFromPython = jest.spyOn(pythonBackend, 'getSchemaFromPython');
+const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
 // Test users
 const adminUser: EffectiveUser = {
@@ -89,7 +90,7 @@ describe('Context Loader Integration with Versioning', () => {
   beforeEach(async () => {
     mockGetSchemaFromPython.mockClear();
 
-    // Clean up existing test data (setupTestDb already called jest.clearAllMocks())
+    // Clean up existing test data (setupTestDb already called vi.clearAllMocks())
     await getModules().db.exec('DELETE FROM files', []);
 
     // Mock getSchemaFromPython to return schemas directly

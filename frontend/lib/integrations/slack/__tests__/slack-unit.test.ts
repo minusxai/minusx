@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 import { uploadSlackFile } from '@/lib/integrations/slack/api';
 import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks, extractQueryChart, extractQueryCharts } from '@/lib/integrations/slack/messages';
 import type { ConversationLogEntry } from '@/lib/types';
@@ -8,7 +9,7 @@ describe('uploadSlackFile', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    global.fetch = jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    global.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
 
       if (url.startsWith('https://slack.com/api/files.getUploadURLExternal')) {
@@ -41,7 +42,7 @@ describe('uploadSlackFile', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('uploads file and associates with channel via completeUploadExternal', async () => {
@@ -53,7 +54,7 @@ describe('uploadSlackFile', () => {
 
     expect(result).toEqual({ fileId: 'F_TEST_FILE' });
 
-    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    const fetchMock = global.fetch as MockedFunction<typeof fetch>;
     expect(fetchMock).toHaveBeenCalledTimes(3);
 
     const completeCall = fetchMock.mock.calls[2];

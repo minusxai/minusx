@@ -9,8 +9,8 @@
  */
 
 // Must be before any imports — overrides the global stub in jest.setup.ts
-jest.unmock('@/lib/analytics/file-analytics.server');
-jest.unmock('@/lib/analytics/file-analytics.db');
+vi.unmock('@/lib/analytics/file-analytics.server');
+vi.unmock('@/lib/analytics/file-analytics.db');
 
 import { getTestDbPath } from './test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -20,7 +20,8 @@ import { getModules } from '@/lib/modules/registry';
 // DB mock (same as read-write-e2e)
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -30,8 +31,8 @@ jest.mock('@/lib/database/db-config', () => ({
 // next/headers — return null request-id so fire-and-forget gracefully skips it
 // ---------------------------------------------------------------------------
 
-jest.mock('next/headers', () => ({
-  headers: jest.fn().mockResolvedValue({ get: () => null }),
+vi.mock('next/headers', () => ({
+  headers: vi.fn().mockResolvedValue({ get: () => null }),
 }));
 
 // ---------------------------------------------------------------------------

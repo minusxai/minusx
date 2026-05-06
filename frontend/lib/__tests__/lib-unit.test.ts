@@ -1,19 +1,21 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 // ─── lib-unit.test.ts ───
 // Merged: conversations-client, oauth, context-utils-yaml, api-responses-network,
 //         permissions, content-validators, xml-parser, file-search
 
-jest.mock('next/cache', () => ({
-  revalidateTag: jest.fn(),
-  unstable_cache: jest.fn((fn: unknown) => fn),
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+  unstable_cache: vi.fn((fn: unknown) => fn),
 }));
-jest.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', () => ({
+  OBJECT_STORE_PUBLIC_URL: undefined,
+  MX_NETWORK_LOG_EXCLUDE: '',
   NEXTAUTH_SECRET: 'test-secret-for-unit-tests',
   MX_API_BASE_URL: 'http://mx-api.test',
   MX_API_KEY: 'test-key',
-  MX_NETWORK_LOG_EXCLUDE: '',
   BASE_DUCKDB_DATA_PATH: '/tmp',
 }));
-jest.mock('next/headers', () => ({ headers: jest.fn() }));
+vi.mock('next/headers', () => ({ headers: vi.fn() }));
 
 import { extractDebugMessages, parseLogToMessages } from '../conversations-utils';
 import type { ConversationLogEntry } from '../types';
@@ -43,8 +45,8 @@ import type { QuestionContent, DocumentContent, ConnectionContent } from '@/lib/
 
 // ── api-responses-network setup ──
 
-const mockHeaders = mockHeadersFn as jest.MockedFunction<typeof mockHeadersFn>;
-const mockFetch = jest.fn().mockResolvedValue({ ok: true });
+const mockHeaders = mockHeadersFn as MockedFunction<typeof mockHeadersFn>;
+const mockFetch = vi.fn().mockResolvedValue({ ok: true });
 global.fetch = mockFetch;
 
 type ReadonlyHeaders = Awaited<ReturnType<typeof import('next/headers')['headers']>>;
@@ -692,9 +694,9 @@ const OTHER_USER_ID = '99';
 
 describe('canAccessFile — system folder access', () => {
   beforeEach(() => {
-    jest.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
 
   describe('non-admin with root home_folder (home_folder="")', () => {
     const editor = makeUser({ role: 'editor' });
@@ -771,9 +773,9 @@ describe('canAccessFile — system folder access', () => {
 
 describe('checkFileAccess — system folder access', () => {
   beforeEach(() => {
-    jest.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
 
   describe('non-admin with root home_folder (home_folder="")', () => {
     const editor = makeUser({ role: 'editor' });

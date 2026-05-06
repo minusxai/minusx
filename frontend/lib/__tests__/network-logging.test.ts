@@ -8,17 +8,22 @@
 import { logNetworkRequest, logNetworkResponse } from '../network-logging';
 
 // Mock config so tests control MX_API_BASE_URL / MX_API_KEY
-jest.mock('@/lib/config', () => ({
+vi.mock("@/lib/config", () => ({
   MX_API_BASE_URL: 'http://mx-api.test',
   MX_API_KEY: 'test-key',
+  MX_NETWORK_LOG_EXCLUDE: '',
 }));
 
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+const mockFetch = vi.fn();
 
 beforeEach(() => {
   mockFetch.mockReset();
   mockFetch.mockResolvedValue({ ok: true });
+  vi.stubGlobal('fetch', mockFetch);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('logNetworkRequest', () => {
@@ -141,8 +146,8 @@ describe('logNetworkResponse', () => {
 
 describe('logNetworkRequest when MX_API_BASE_URL is empty', () => {
   beforeEach(() => {
-    jest.resetModules();
-    jest.mock('@/lib/config', () => ({
+    vi.resetModules();
+    vi.doMock("@/lib/config", () => ({
       MX_API_BASE_URL: '',
       MX_API_KEY: '',
       MX_NETWORK_LOG_EXCLUDE: '',
@@ -160,8 +165,8 @@ describe('logNetworkRequest when MX_API_BASE_URL is empty', () => {
 
 describe('path exclusion — MX_NETWORK_LOG_EXCLUDE patterns', () => {
   beforeEach(() => {
-    jest.resetModules();
-    jest.mock('@/lib/config', () => ({
+    vi.resetModules();
+    vi.doMock("@/lib/config", () => ({
       MX_API_BASE_URL: 'http://mx-api.test',
       MX_API_KEY: 'test-key',
       MX_NETWORK_LOG_EXCLUDE: '^/api/health,^/api/jobs/cron',
@@ -207,8 +212,8 @@ describe('path exclusion — MX_NETWORK_LOG_EXCLUDE patterns', () => {
 
 describe('path exclusion — custom MX_NETWORK_LOG_EXCLUDE patterns', () => {
   beforeEach(() => {
-    jest.resetModules();
-    jest.mock('@/lib/config', () => ({
+    vi.resetModules();
+    vi.doMock("@/lib/config", () => ({
       MX_API_BASE_URL: 'http://mx-api.test',
       MX_API_KEY: 'test-key',
       MX_NETWORK_LOG_EXCLUDE: '^/api/query-estimate,^/api/cache',

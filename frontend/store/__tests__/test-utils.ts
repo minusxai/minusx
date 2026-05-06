@@ -7,10 +7,12 @@
 
 import { configureStore } from '@reduxjs/toolkit';
 import { join } from 'path';
-import { ChildProcess } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import treeKill from 'tree-kill';
+import { NextRequest } from 'next/server';
 import { initializeDatabase } from '@/lib/database/import-export';
 import chatReducer from '../chatSlice';
+import uiReducer from '../uiSlice';
 import { chatListenerMiddleware } from '../chatListener';
 import { waitForPortRelease } from './port-manager';
 
@@ -116,9 +118,6 @@ export async function isPythonBackendRunning(port: number = 8001): Promise<boole
  * @returns ChildProcess
  */
 export function startPythonBackend(port: number = 8004) {
-  const { spawn } = require('child_process');
-  const { join } = require('path');
-
   const backendDir = join(process.cwd(), '..', 'backend');
   const pythonServer = spawn('uv', ['run', 'uvicorn', 'main:app', '--port', port.toString()], {
     cwd: backendDir,
@@ -266,9 +265,6 @@ export async function waitFor(
  * Use this for Redux integration tests.
  */
 export function setupTestStore() {
-  // Import all necessary reducers for full integration testing
-  const uiReducer = require('../uiSlice').default;
-
   return configureStore({
     reducer: {
       chat: chatReducer,
@@ -308,7 +304,6 @@ export function getTestDbPath(testName: string): string {
  * Simplifies the creation of test requests.
  */
 export function createNextRequest(body: any) {
-  const { NextRequest } = require('next/server');
   return new NextRequest('http://localhost:3000/api/chat', {
     method: 'POST',
     body: JSON.stringify(body)

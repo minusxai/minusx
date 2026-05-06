@@ -25,7 +25,7 @@ if (typeof structuredClone === 'undefined') {
 // Components using @monaco-editor/react will render a textarea in tests.
 // The mock fires onMount so hooks that depend on the editor instance work.
 // ---------------------------------------------------------------------------
-jest.mock('@monaco-editor/react', () => {
+vi.mock('@monaco-editor/react', () => {
   const React = require('react');
   const MockEditor = ({ value, onChange, onMount, ...props }: any) => {
     React.useEffect(() => {
@@ -35,32 +35,32 @@ jest.mock('@monaco-editor/react', () => {
       // getModel() returns null so updateDecorations/triggerValidation return early.
       const editorStub = {
         getValue: () => value ?? '',
-        setValue: jest.fn(),
-        focus: jest.fn(),
-        trigger: jest.fn(),
+        setValue: vi.fn(),
+        focus: vi.fn(),
+        trigger: vi.fn(),
         getPosition: () => null,
         getModel: () => null,
-        onDidDispose: jest.fn(),
-        onKeyUp: jest.fn(),
-        onDidChangeModelContent: jest.fn(),
-        deltaDecorations: jest.fn(() => []),
-        addCommand: jest.fn(),
+        onDidDispose: vi.fn(),
+        onKeyUp: vi.fn(),
+        onDidChangeModelContent: vi.fn(),
+        deltaDecorations: vi.fn(() => []),
+        addCommand: vi.fn(),
       };
       // Monaco instance stub — covers everything SqlEditor.onMount references on
       // the second arg: languages providers, editor theme/markers/keybindings,
       // Range constructor, KeyMod/KeyCode constants, MarkerSeverity.
       const monacoStub = {
         languages: {
-          registerCompletionItemProvider: jest.fn(() => ({ dispose: jest.fn() })),
-          registerHoverProvider: jest.fn(() => ({ dispose: jest.fn() })),
+          registerCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+          registerHoverProvider: vi.fn(() => ({ dispose: vi.fn() })),
         },
         editor: {
-          defineTheme: jest.fn(),
-          setTheme: jest.fn(),
-          setModelMarkers: jest.fn(),
-          addKeybindingRules: jest.fn(),
+          defineTheme: vi.fn(),
+          setTheme: vi.fn(),
+          setModelMarkers: vi.fn(),
+          addKeybindingRules: vi.fn(),
         },
-        Range: jest.fn((sl: number, sc: number, el: number, ec: number) => ({
+        Range: vi.fn((sl: number, sc: number, el: number, ec: number) => ({
           startLineNumber: sl, startColumn: sc, endLineNumber: el, endColumn: ec,
         })),
         KeyMod: { CtrlCmd: 0 },
@@ -89,7 +89,7 @@ jest.mock('@monaco-editor/react', () => {
 // ChatInput uses LexicalMentionEditor. The mock calls onChange/onSubmit so
 // tests can type into it and submit messages.
 // ---------------------------------------------------------------------------
-jest.mock('@/components/chat/LexicalMentionEditor', () => {
+vi.mock('@/components/chat/LexicalMentionEditor', () => {
   const React = require('react');
   const MockLexical = ({ onChange, onSubmit, placeholder, disabled }: any) =>
     React.createElement('textarea', {
@@ -114,7 +114,7 @@ jest.mock('@/components/chat/LexicalMentionEditor', () => {
 // aria-label selectors on the real FileHeader; the modal content itself is
 // outside scope for UI unit tests.
 // ---------------------------------------------------------------------------
-jest.mock('@/components/PublishModal', () => {
+vi.mock('@/components/PublishModal', () => {
   const React = require('react');
   return {
     __esModule: true,
@@ -132,14 +132,14 @@ jest.mock('@/components/PublishModal', () => {
 // ESM-only packages that Jest can't parse. Mock with a simple passthrough
 // that renders children as text (sufficient for UI tests).
 // ---------------------------------------------------------------------------
-jest.mock('react-markdown', () => {
+vi.mock('react-markdown', () => {
   const React = require('react');
   return {
     __esModule: true,
     default: ({ children }: any) => React.createElement('div', { 'data-testid': 'markdown' }, children),
   };
 });
-jest.mock('remark-gfm', () => ({
+vi.mock('remark-gfm', () => ({
   __esModule: true,
   default: () => {},
 }));
@@ -150,50 +150,50 @@ jest.mock('remark-gfm', () => ({
 // echarts-init.ts runs echarts.use() at module-load time using echarts/core
 // (an ESM-only sub-path).  Mock the init module so nothing executes.
 // ---------------------------------------------------------------------------
-jest.mock('@/lib/chart/echarts-init', () => ({}));
-jest.mock('echarts', () => ({
-  init: jest.fn(() => ({
-    setOption: jest.fn(),
-    resize: jest.fn(),
-    dispose: jest.fn(),
-    on: jest.fn(),
-    off: jest.fn(),
-    getWidth: jest.fn(() => 0),
-    getHeight: jest.fn(() => 0),
+vi.mock('@/lib/chart/echarts-init', () => ({}));
+vi.mock('echarts', () => ({
+  init: vi.fn(() => ({
+    setOption: vi.fn(),
+    resize: vi.fn(),
+    dispose: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    getWidth: vi.fn(() => 0),
+    getHeight: vi.fn(() => 0),
   })),
-  use: jest.fn(),
-  registerTheme: jest.fn(),
-  graphic: { LinearGradient: jest.fn() },
+  use: vi.fn(),
+  registerTheme: vi.fn(),
+  graphic: { LinearGradient: vi.fn() },
 }));
 
 // ---------------------------------------------------------------------------
 // Next.js navigation
 // ---------------------------------------------------------------------------
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), forward: jest.fn(), refresh: jest.fn(), prefetch: jest.fn() }),
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
 }));
 
 // Custom navigation wrapper (used by FileHeader)
-jest.mock('@/lib/navigation/use-navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), forward: jest.fn(), refresh: jest.fn(), prefetch: jest.fn() }),
-  getRouter: jest.fn(() => null),
+vi.mock('@/lib/navigation/use-navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+  getRouter: vi.fn(() => null),
 }));
 
 // ---------------------------------------------------------------------------
 // ResizeObserver polyfill (react-grid-layout uses it)
 // ---------------------------------------------------------------------------
-global.ResizeObserver = jest.fn().mockImplementation(() => ({
-  observe: jest.fn(),
-  unobserve: jest.fn(),
-  disconnect: jest.fn(),
-}));
+global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {
+  this.observe = vi.fn();
+  this.unobserve = vi.fn();
+  this.disconnect = vi.fn();
+});
 
 // ---------------------------------------------------------------------------
 // HTMLCanvasElement.getContext stub (ECharts touches canvas in some paths)
 // ---------------------------------------------------------------------------
-HTMLCanvasElement.prototype.getContext = jest.fn(() => null) as any;
+HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
 
 // ---------------------------------------------------------------------------
 // Mute console.error for known JSDOM/Chakra noise during tests

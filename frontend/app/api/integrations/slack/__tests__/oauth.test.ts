@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Tests for the Slack OAuth 2.0 flow.
  *
@@ -10,35 +11,37 @@
  *  6. oauth-callback — direct install (no state)
  */
 
-jest.mock('server-only', () => ({}));
+vi.mock('server-only', () => ({}));
 
-jest.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', () => ({
+  OBJECT_STORE_PUBLIC_URL: undefined,
+  MX_NETWORK_LOG_EXCLUDE: '',
   NEXTAUTH_SECRET: 'test-secret-that-is-long-enough-32x',
   SLACK_CLIENT_ID: 'test-client-id',
   SLACK_CLIENT_SECRET: 'test-client-secret',
   AUTH_URL: 'https://minusx.app',
 }));
 
-jest.mock('@/lib/integrations/slack/config', () => ({
-  isSlackOAuthConfigured: jest.fn(() => true),
+vi.mock('@/lib/integrations/slack/config', () => ({
+  isSlackOAuthConfigured: vi.fn(() => true),
   SLACK_BOT_SCOPES: ['app_mentions:read', 'chat:write'],
-  buildOAuthUrl: jest.fn((state: string) => `https://slack.com/oauth/v2/authorize?state=${state}`),
+  buildOAuthUrl: vi.fn((state: string) => `https://slack.com/oauth/v2/authorize?state=${state}`),
 }));
 
-jest.mock('@/lib/integrations/slack/api', () => ({
-  slackAuthTest: jest.fn(),
+vi.mock('@/lib/integrations/slack/api', () => ({
+  slackAuthTest: vi.fn(),
 }));
 
-jest.mock('@/lib/integrations/slack/store', () => ({
-  upsertSlackBotConfig: jest.fn(),
+vi.mock('@/lib/integrations/slack/store', () => ({
+  upsertSlackBotConfig: vi.fn(),
 }));
 
 
-jest.mock('@/lib/auth/role-helpers', () => ({
+vi.mock('@/lib/auth/role-helpers', () => ({
   isAdmin: (role: string) => role === 'admin',
 }));
 
-jest.mock('@/lib/api/with-auth', () => ({
+vi.mock('@/lib/api/with-auth', () => ({
   withAuth: (handler: (req: any, user: any) => Promise<any>) => async (request: any) =>
     handler(request, {
       email: 'admin@acme.com',
@@ -49,7 +52,7 @@ jest.mock('@/lib/api/with-auth', () => ({
     }),
 }));
 
-// Must be after jest.mock calls
+// Must be after vi.mock calls
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { buildState, GET as oauthStartHandler } from '../oauth-start/route';
@@ -112,20 +115,20 @@ function makeCallbackRequest(params: Record<string, string>): NextRequest {
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
 
-let fetchMock: jest.Mock;
+let fetchMock: Mock;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 
-  fetchMock = jest.fn().mockResolvedValue({
+  fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => MOCK_SLACK_OAUTH,
   });
   global.fetch = fetchMock;
 
-  (slackAuthTest as jest.Mock).mockResolvedValue(MOCK_AUTH_TEST);
-  (upsertSlackBotConfig as jest.Mock).mockResolvedValue(undefined);
-  (isSlackOAuthConfigured as jest.Mock).mockReturnValue(true);
+  (slackAuthTest as Mock).mockResolvedValue(MOCK_AUTH_TEST);
+  (upsertSlackBotConfig as Mock).mockResolvedValue(undefined);
+  (isSlackOAuthConfigured as Mock).mockReturnValue(true);
 });
 
 // ─── 1. buildState ────────────────────────────────────────────────────────────
@@ -222,7 +225,7 @@ describe('oauth-callback — happy path', () => {
       }),
     );
     // signing_secret must NOT be stored — shared env var is used instead
-    const [, bot] = (upsertSlackBotConfig as jest.Mock).mock.calls[0];
+    const [, bot] = (upsertSlackBotConfig as Mock).mock.calls[0];
     expect(bot.signing_secret).toBeUndefined();
   });
 
@@ -282,7 +285,7 @@ describe('oauth-callback — edge cases', () => {
   });
 
   it('returns 400 when OAuth is not configured', async () => {
-    (isSlackOAuthConfigured as jest.Mock).mockReturnValue(false);
+    (isSlackOAuthConfigured as Mock).mockReturnValue(false);
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'code', state }));
     expect(res.status).toBe(400);

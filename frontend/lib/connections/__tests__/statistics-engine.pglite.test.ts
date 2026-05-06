@@ -112,7 +112,7 @@ describe('profilePostgres (PGLite-backed)', () => {
       return realQueryFn(sql);
     };
 
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const result = await profileDatabase('postgresql', asSchemaList(), queryFn);
       const t1 = result.schema.find(s => s.schema === 's1')?.tables.find(t => t.table === 't1');

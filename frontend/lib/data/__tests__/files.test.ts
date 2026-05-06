@@ -22,7 +22,8 @@ import type {
 import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // Database-specific mock
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -31,7 +32,7 @@ jest.mock('@/lib/database/db-config', () => ({
 const TEST_DB_PATH = getTestDbPath('files');
 
 // Mock Python backend
-const mockGetSchemaFromPython = jest.spyOn(pythonBackend, 'getSchemaFromPython');
+const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
 // Test user
 const testUser: EffectiveUser = {

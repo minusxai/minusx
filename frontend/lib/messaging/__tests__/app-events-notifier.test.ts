@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * notifyAppEvent enrichment tests
  *
@@ -6,18 +7,20 @@
  * call site passes — and that explicit call-site values are not overwritten.
  */
 
-jest.mock('server-only', () => ({}));
+vi.mock('server-only', () => ({}));
 
-const mockGet = jest.fn();
-jest.mock('next/headers', () => ({
-  headers: jest.fn().mockResolvedValue({ get: mockGet }),
+const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
+vi.mock('next/headers', () => ({
+  headers: vi.fn().mockResolvedValue({ get: mockGet }),
 }));
 
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn(),
+vi.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: vi.fn(),
 }));
 
-jest.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', () => ({
+  OBJECT_STORE_PUBLIC_URL: undefined,
+  MX_NETWORK_LOG_EXCLUDE: '',
   MX_API_BASE_URL: 'https://notify.example.com',
   MX_API_KEY: 'test-key',
 }));
@@ -25,10 +28,10 @@ jest.mock('@/lib/config', () => ({
 import { notifyAppEvent } from '../app-events-notifier';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 
-const mockFetch = jest.fn().mockResolvedValue({ ok: true } as Response);
+const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
 global.fetch = mockFetch;
 
-const mockGetEffectiveUser = getEffectiveUser as jest.Mock;
+const mockGetEffectiveUser = getEffectiveUser as Mock;
 
 function sentBody(): Record<string, unknown> {
   const raw = mockFetch.mock.calls[0][1].body as string;

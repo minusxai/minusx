@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Bulk Move UI tests
  *
@@ -8,7 +9,8 @@
  *   4. Move button is disabled when no files are selected
  */
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -121,7 +123,7 @@ function makeApiFetch() {
     return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
   };
 
-  return jest.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
+  return vi.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = url.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
 
@@ -162,11 +164,11 @@ describe('Bulk Move Files', () => {
   setupTestDb(getTestDbPath('bulk_move_ui'), { customInit: insertTestFiles });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     // Pre-populate Redux with files
     for (const file of allFiles) {
       testStore.dispatch(setFile({ file, references: [] }));
@@ -177,7 +179,7 @@ describe('Bulk Move Files', () => {
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('enters selection mode when "Select" is clicked from file action menu', async () => {

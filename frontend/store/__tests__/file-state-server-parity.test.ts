@@ -60,7 +60,8 @@ import { NextRequest } from 'next/server';
 // ---------------------------------------------------------------------------
 // Mock: test database
 // ---------------------------------------------------------------------------
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -70,7 +71,7 @@ jest.mock('@/lib/database/db-config', () => ({
 // Mock: Redux store (file-state.ts reads from this via getStore())
 // ---------------------------------------------------------------------------
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore,
 }));
@@ -78,8 +79,8 @@ jest.mock('@/store/store', () => ({
 // ---------------------------------------------------------------------------
 // Mock: Python backend (for executeQueries tests)
 // ---------------------------------------------------------------------------
-jest.mock('@/lib/api/python-backend-client', () => ({
-  pythonBackendFetch: jest.fn(async (url: string, init?: any) => {
+vi.mock('@/lib/api/python-backend-client', () => ({
+  pythonBackendFetch: vi.fn(async (url: string, init?: any) => {
     if (url.includes('/api/execute-query')) {
       return {
         ok: true,

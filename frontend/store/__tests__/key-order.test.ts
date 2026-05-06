@@ -18,15 +18,18 @@ import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
+import { NextRequest } from "next/server";
+import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore,
 }));
@@ -34,8 +37,6 @@ jest.mock('@/store/store', () => ({
 describe('key-order - JSON key ordering consistency', () => {
   const dbPath = getTestDbPath('key_order');
   let dashId: number;
-
-  const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
 
   function setupStore() {
     return configureStore({
@@ -48,16 +49,12 @@ describe('key-order - JSON key ordering consistency', () => {
   }
 
   beforeAll(() => {
-    global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new Request(fullUrl, {
-          method: 'POST',
-          ...init,
-          headers: { ...init?.headers, 'x-user-id': '1' },
-        });
-        const response = await batchPostHandler(request);
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
         const data = await response.json();
         return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
       }
@@ -66,7 +63,7 @@ describe('key-order - JSON key ordering consistency', () => {
   });
 
   afterAll(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {
@@ -87,7 +84,7 @@ describe('key-order - JSON key ordering consistency', () => {
     );
 
     testStore = setupStore();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {

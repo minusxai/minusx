@@ -3,9 +3,10 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 
-jest.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', () => ({
   LOCAL_UPLOAD_PATH: join(require('os').tmpdir(), `local-fs-adapter-test-${require('crypto').randomUUID()}`),
   NEXTAUTH_SECRET: 'test-secret',
+  OBJECT_STORE_PUBLIC_URL: undefined,
 }));
 
 // Import after mock so LOCAL_UPLOAD_PATH is resolved

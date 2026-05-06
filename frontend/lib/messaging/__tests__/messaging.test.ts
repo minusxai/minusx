@@ -26,7 +26,7 @@ function config(overrides: Partial<OrgConfig> = {}): OrgConfig {
 
 // ─── webhook-executor fixtures ────────────────────────────────────────────────
 
-const mockFetch = jest.fn();
+const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 const okResponse = () =>

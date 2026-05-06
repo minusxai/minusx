@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Centralized fetch mocking for E2E tests
  *
@@ -79,9 +80,9 @@ export interface MockFetchOptions {
 export function setupMockFetch(options: MockFetchOptions) {
   const { getPythonPort, interceptors = [], getLLMMockPort, additionalInterceptors = [] } = options;
   let originalFetch: typeof fetch;
-  let spy: jest.SpyInstance;
+  let spy: MockInstance;
 
-  const mockFetch = jest.fn(async (url: string | Request | URL, init?: any) => {
+  const mockFetch = vi.fn(async (url: string | Request | URL, init?: any) => {
     const urlStr = url.toString();
 
     // Try additional interceptors first (legacy pattern)
@@ -169,7 +170,7 @@ export function setupMockFetch(options: MockFetchOptions) {
 
   beforeAll(() => {
     originalFetch = global.fetch;
-    spy = jest.spyOn(global, 'fetch').mockImplementation(mockFetch as any);
+    spy = vi.spyOn(global, 'fetch').mockImplementation(mockFetch as any);
   });
 
   afterEach(() => {

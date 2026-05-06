@@ -11,8 +11,9 @@
 
 // Workspace mock is already in jest.setup.ts (getWorkspaceId → 1, runWithWorkspace → no-op)
 
-jest.mock('@/lib/database/db-config', () => ({
-  getDbType: jest.fn().mockReturnValue('pglite'),
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
+  getDbType: vi.fn().mockReturnValue('pglite'),
   DB_PATH: undefined,
   DB_DIR: undefined,
 }));
