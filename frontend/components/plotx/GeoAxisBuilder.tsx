@@ -283,9 +283,10 @@ export function GeoAxisBuilder({
   return (
     <VStack align="stretch" gap={3}>
       {/* Map sub-type selector — grid matching viz type selector */}
-      <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
-        Geo Subtypes
-      </Text>
+      <Box>
+        <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle" mb={1.5}>
+          Geo Subtypes
+        </Text>
       <Box
         display="grid"
         gridTemplateColumns={`repeat(${SUB_TYPES.length}, 1fr)`}
@@ -326,6 +327,7 @@ export function GeoAxisBuilder({
             </Box>
           )
         })}
+      </Box>
       </Box>
 
       {/* Tab bar — segmented control */}
