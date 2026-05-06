@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Tests for readFiles - File State Manager with Promise Deduplication and TTL Caching
  *
@@ -86,12 +87,12 @@ vi.mock('@/store/store', () => ({
   getStore: () => mockStore
 }));
 
-const mockLoadFiles = FilesAPI.loadFiles as vi.MockedFunction<typeof FilesAPI.loadFiles>;
-const mockLoadFile = FilesAPI.loadFile as vi.MockedFunction<typeof FilesAPI.loadFile>;
-const mockGetFiles = FilesAPI.getFiles as vi.MockedFunction<typeof FilesAPI.getFiles>;
-const mockSaveFile = FilesAPI.saveFile as vi.MockedFunction<typeof FilesAPI.saveFile>;
-const mockCreateFile = FilesAPI.createFile as vi.MockedFunction<typeof FilesAPI.createFile>;
-const mockFetch = global.fetch as vi.MockedFunction<typeof fetch>;
+const mockLoadFiles = FilesAPI.loadFiles as MockedFunction<typeof FilesAPI.loadFiles>;
+const mockLoadFile = FilesAPI.loadFile as MockedFunction<typeof FilesAPI.loadFile>;
+const mockGetFiles = FilesAPI.getFiles as MockedFunction<typeof FilesAPI.getFiles>;
+const mockSaveFile = FilesAPI.saveFile as MockedFunction<typeof FilesAPI.saveFile>;
+const mockCreateFile = FilesAPI.createFile as MockedFunction<typeof FilesAPI.createFile>;
+const mockFetch = global.fetch as MockedFunction<typeof fetch>;
 
 // Base time for testing (Jan 1, 2024)
 const BASE_TIME = new Date('2024-01-01T00:00:00Z').getTime();
@@ -758,7 +759,7 @@ describe('readFiles - File State Manager', () => {
     });
 
     it('should auto-retry once on 409 conflict, merging edits onto server version', async () => {
-      const { ConflictError } = await vi.importMock('@/lib/data/files');
+      const { ConflictError } = await vi.importMock<any>('@/lib/data/files');
       const mockFile = createMockFile(1);
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
       mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));

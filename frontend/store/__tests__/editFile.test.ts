@@ -13,6 +13,7 @@ import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import uiReducer from '../uiSlice';
+import { NextRequest } from "next/server";
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 
 // Mock db-config to use test database
@@ -60,15 +61,8 @@ describe('editFile - Question Editing Flow', () => {
       if (urlStr.includes('/api/files/batch')) {
         // Need full URL for Request constructor
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new Request(fullUrl, {
-          method: 'POST',
-          ...init,
-          headers: {
-            ...init?.headers,
-            'x-user-id': '1'
-          }
-        });
-        const response = await batchPostHandler(request);
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
         const data = await response.json();
         return {
           ok: response.status === 200,
@@ -328,12 +322,8 @@ describe('editFile - Question content validation', () => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new Request(fullUrl, {
-          method: 'POST',
-          ...init,
-          headers: { ...init?.headers, 'x-user-id': '1' }
-        });
-        const response = await batchPostHandler(request);
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
         const data = await response.json();
         return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
       }
@@ -484,12 +474,8 @@ describe('editFile - Dashboard content validation', () => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new Request(fullUrl, {
-          method: 'POST',
-          ...init,
-          headers: { ...init?.headers, 'x-user-id': '1' },
-        });
-        const response = await batchPostHandler(request);
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
         const data = await response.json();
         return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
       }

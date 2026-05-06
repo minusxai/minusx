@@ -72,14 +72,15 @@ const mockGeoJsonLayer = {
   eachLayer: vi.fn(),
 }
 
-vi.mock('leaflet', () => ({
-  map: vi.fn(() => ({
-    setView: mockSetView,
-    remove: mockRemove,
-    fitBounds: mockFitBounds,
-    invalidateSize: mockInvalidateSize,
-    addLayer: mockAddLayer,
-  })),
+vi.mock('leaflet', () => {
+  const leafletMock = {
+    map: vi.fn(() => ({
+      setView: mockSetView,
+      remove: mockRemove,
+      fitBounds: mockFitBounds,
+      invalidateSize: mockInvalidateSize,
+      addLayer: mockAddLayer,
+    })),
   tileLayer: vi.fn(() => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn() })),
   circleMarker: vi.fn(() => ({
     addTo: vi.fn().mockReturnThis(),
@@ -97,11 +98,13 @@ vi.mock('leaflet', () => ({
     isValid: () => true,
     extend: vi.fn().mockReturnThis(),
   }),
-  heatLayer: vi.fn(() => ({ addTo: vi.fn().mockReturnThis() })),
-}))
+    heatLayer: vi.fn(() => ({ addTo: vi.fn().mockReturnThis() })),
+  };
+  return { ...leafletMock, default: leafletMock };
+})
 
-vi.mock('leaflet.heat', () => {})
-vi.mock('leaflet/dist/leaflet.css', () => {})
+vi.mock('leaflet.heat', () => ({}))
+vi.mock('leaflet/dist/leaflet.css', () => ({}))
 
 vi.mock('@/lib/chart/geo-data', () => ({
   loadGeoJSON: vi.fn().mockResolvedValue({

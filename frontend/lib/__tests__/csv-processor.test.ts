@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Tests for csv-processor.ts
  *
@@ -59,10 +60,10 @@ async function* makeStream(buf: Buffer): AsyncIterable<Uint8Array> {
 
 // ─── Shared mock setup ────────────────────────────────────────────────────────
 
-let mockSend: vi.Mock;
-let mockConnRun: vi.Mock;
-let mockConnCloseSync: vi.Mock;
-let mockInstanceCloseSync: vi.Mock;
+let mockSend: Mock;
+let mockConnRun: Mock;
+let mockConnCloseSync: Mock;
+let mockInstanceCloseSync: Mock;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,7 +71,7 @@ beforeEach(() => {
   // S3 mock — default: all sends succeed
   mockSend = vi.fn().mockResolvedValue({});
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (S3Client as vi.Mock).mockImplementation(function (this: any) { this.send = mockSend; });
+  (S3Client as Mock).mockImplementation(function (this: any) { this.send = mockSend; });
 
   // DuckDB mock — COUNT returns 5 rows, DESCRIBE returns two columns
   mockConnRun = vi.fn().mockImplementation(async (sql: string) => {
@@ -85,7 +86,7 @@ beforeEach(() => {
   });
   mockConnCloseSync = vi.fn();
   mockInstanceCloseSync = vi.fn();
-  (DuckDBInstance.create as vi.Mock).mockResolvedValue({
+  (DuckDBInstance.create as Mock).mockResolvedValue({
     connect: vi.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockConnCloseSync }),
     closeSync: mockInstanceCloseSync,
   });
@@ -186,9 +187,9 @@ describe('processFilesFromS3', () => {
     }]);
 
     const createViewCall = mockConnRun.mock.calls.find(
-      ([sql]: [string]) => sql.includes('CREATE OR REPLACE TEMP VIEW'),
+      (args: any) => (args[0] as string).includes('CREATE OR REPLACE TEMP VIEW'),
     );
-    expect(createViewCall[0]).toContain('read_parquet(');
+    expect(createViewCall![0]).toContain('read_parquet(');
   });
 
   it('uses read_csv_auto for csv files', async () => {
@@ -199,9 +200,9 @@ describe('processFilesFromS3', () => {
     }]);
 
     const createViewCall = mockConnRun.mock.calls.find(
-      ([sql]: [string]) => sql.includes('CREATE OR REPLACE TEMP VIEW'),
+      (args: any) => (args[0] as string).includes('CREATE OR REPLACE TEMP VIEW'),
     );
-    expect(createViewCall[0]).toContain('read_csv_auto(');
+    expect(createViewCall![0]).toContain('read_csv_auto(');
   });
 
   it('auto-generates table name from filename when not provided', async () => {
@@ -417,7 +418,7 @@ describe('importGoogleSheetToS3', () => {
     const xlsxBuf = makeXlsxBuffer({
       Orders: [['id', 'total'], ['1', '99']],
     });
-    (global.fetch as vi.Mock).mockResolvedValue({
+    (global.fetch as Mock).mockResolvedValue({
       ok: true,
       status: 200,
       arrayBuffer: async () => xlsxBuf.buffer.slice(xlsxBuf.byteOffset, xlsxBuf.byteOffset + xlsxBuf.byteLength),
@@ -440,7 +441,7 @@ describe('importGoogleSheetToS3', () => {
       Orders: [['id'], ['1']],
       Users: [['name'], ['Alice']],
     });
-    (global.fetch as vi.Mock).mockResolvedValue({
+    (global.fetch as Mock).mockResolvedValue({
       ok: true,
       status: 200,
       arrayBuffer: async () => xlsxBuf.buffer.slice(xlsxBuf.byteOffset, xlsxBuf.byteOffset + xlsxBuf.byteLength),
@@ -452,7 +453,7 @@ describe('importGoogleSheetToS3', () => {
   });
 
   it('throws when spreadsheet is not publicly accessible (403)', async () => {
-    (global.fetch as vi.Mock).mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+    (global.fetch as Mock).mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
 
     await expect(
       importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
@@ -460,7 +461,7 @@ describe('importGoogleSheetToS3', () => {
   });
 
   it('throws when spreadsheet is not found (404)', async () => {
-    (global.fetch as vi.Mock).mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+    (global.fetch as Mock).mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
 
     await expect(
       importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
@@ -468,7 +469,7 @@ describe('importGoogleSheetToS3', () => {
   });
 
   it('throws on other HTTP errors', async () => {
-    (global.fetch as vi.Mock).mockResolvedValue({ ok: false, status: 500, statusText: 'Server Error' });
+    (global.fetch as Mock).mockResolvedValue({ ok: false, status: 500, statusText: 'Server Error' });
 
     await expect(
       importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),

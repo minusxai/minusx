@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 // ─── lib-unit.test.ts ───
 // Merged: conversations-client, oauth, context-utils-yaml, api-responses-network,
 //         permissions, content-validators, xml-parser, file-search
@@ -12,7 +13,6 @@ vi.mock('@/lib/config', () => ({
   NEXTAUTH_SECRET: 'test-secret-for-unit-tests',
   MX_API_BASE_URL: 'http://mx-api.test',
   MX_API_KEY: 'test-key',
-  MX_NETWORK_LOG_EXCLUDE: '',
   BASE_DUCKDB_DATA_PATH: '/tmp',
 }));
 vi.mock('next/headers', () => ({ headers: vi.fn() }));
@@ -45,7 +45,7 @@ import type { QuestionContent, DocumentContent, ConnectionContent } from '@/lib/
 
 // ── api-responses-network setup ──
 
-const mockHeaders = mockHeadersFn as vi.MockedFunction<typeof mockHeadersFn>;
+const mockHeaders = mockHeadersFn as MockedFunction<typeof mockHeadersFn>;
 const mockFetch = vi.fn().mockResolvedValue({ ok: true });
 global.fetch = mockFetch;
 

@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * GET /api/object-store/upload-url — route integration test
  *
@@ -58,7 +59,7 @@ function makeRequest(params: Record<string, string>): NextRequest {
 }
 
 beforeEach(() => {
-  (getEffectiveUser as vi.Mock).mockResolvedValue(mockUser);
+  (getEffectiveUser as Mock).mockResolvedValue(mockUser);
 });
 
 describe('GET /api/object-store/upload-url', () => {
@@ -106,7 +107,7 @@ describe('GET /api/object-store/upload-url', () => {
   });
 
   it('returns 401 when not authenticated (null user)', async () => {
-    (getEffectiveUser as vi.Mock).mockResolvedValue(null);
+    (getEffectiveUser as Mock).mockResolvedValue(null);
     const req = makeRequest({ filename: 'photo.png', contentType: 'image/png' });
     const res = await GET(req);
     expect(res.status).toBe(401);

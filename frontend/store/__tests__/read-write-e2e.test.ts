@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 /**
  * Phase 1 E2E Test - Unified File System API
  *
@@ -677,8 +678,8 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     it('error result has success:false and error message in both content and details', async () => {
       // Override the mock for this one call to simulate a backend error
-      const { pythonBackendFetch } = await vi.importMock('@/lib/api/python-backend-client');
-      pythonBackendFetch.mockImplementationOnce(async () => ({
+      const { pythonBackendFetch } = await vi.importMock<any>('@/lib/api/python-backend-client');
+      (pythonBackendFetch as unknown as Mock).mockImplementationOnce(async () => ({
         ok: false,
         status: 400,
         json: async () => ({ detail: 'Table "nonexistent_table_xyz" does not exist' })
@@ -1561,7 +1562,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('\n[TEST] EditFile tool handler: auto-execute uses parameterValues from content');
 
       const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      const callsBefore = pythonBackendFetch.mock.calls.length;
+      const callsBefore = (pythonBackendFetch as unknown as Mock).mock.calls.length;
 
       // Call the registered EditFile frontend tool handler
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
@@ -1586,10 +1587,10 @@ describe('Phase 1: Unified File System API E2E', () => {
       );
 
       // Verify auto-execute was triggered and used parameterValues.limit=50 (not empty string)
-      const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
-      const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
+      const newCalls = (pythonBackendFetch as unknown as Mock).mock.calls.slice(callsBefore);
+      const executeCall = newCalls.find((args: any) => (args[0] as string).includes('/api/execute-query'));
       expect(executeCall).toBeDefined();
-      const body = JSON.parse(executeCall[1].body);
+      const body = JSON.parse((executeCall as any[])[1].body);
       expect(body.parameters).toEqual({ limit: 50 });
 
       console.log('✓ Auto-execute used parameterValues.limit=50 from content, not empty string');
@@ -1602,7 +1603,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       editFile({ fileId: paramQuestionId, changes: { content: { parameterValues: { limit: 99 } } } });
 
       const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      const callsBefore = pythonBackendFetch.mock.calls.length;
+      const callsBefore = (pythonBackendFetch as unknown as Mock).mock.calls.length;
 
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
       const toolCall: ToolCall = {
@@ -1626,10 +1627,10 @@ describe('Phase 1: Unified File System API E2E', () => {
       );
 
       // Verify auto-execute used updated value=99, NOT original 50
-      const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
-      const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
+      const newCalls = (pythonBackendFetch as unknown as Mock).mock.calls.slice(callsBefore);
+      const executeCall = newCalls.find((args: any) => (args[0] as string).includes('/api/execute-query'));
       expect(executeCall).toBeDefined();
-      const body = JSON.parse(executeCall[1].body);
+      const body = JSON.parse((executeCall as any[])[1].body);
       expect(body.parameters).toEqual({ limit: 99 });
 
       console.log('✓ Auto-execute used updated parameterValues.limit=99 from edited content');
@@ -1768,7 +1769,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     beforeAll(async () => {
       // Override auth mock to return the subfolder viewer
-      const authMock = await vi.importMock('@/lib/auth/auth-helpers');
+      const authMock = await vi.importMock<any>('@/lib/auth/auth-helpers');
       authMock.getEffectiveUser.mockResolvedValue(subfolderViewerEffective);
 
       // Ancestor context at /org/context — outside the viewer's home /org/sales.
@@ -1797,9 +1798,9 @@ describe('Phase 1: Unified File System API E2E', () => {
       }
     });
 
-    afterAll(() => {
+    afterAll(async () => {
       // Restore admin mock
-      const authMock = await vi.importMock('@/lib/auth/auth-helpers');
+      const authMock = await vi.importMock<any>('@/lib/auth/auth-helpers');
       authMock.getEffectiveUser.mockResolvedValue({
         userId: 1, email: 'test@example.com', name: 'Test User',
         role: 'admin', companyName: 'test-workspace',

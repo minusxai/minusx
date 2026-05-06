@@ -18,6 +18,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
+import { NextRequest } from "next/server";
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 
 vi.mock('@/lib/database/db-config', () => ({
@@ -52,12 +53,8 @@ describe('key-order - JSON key ordering consistency', () => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new Request(fullUrl, {
-          method: 'POST',
-          ...init,
-          headers: { ...init?.headers, 'x-user-id': '1' },
-        });
-        const response = await batchPostHandler(request);
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
         const data = await response.json();
         return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
       }

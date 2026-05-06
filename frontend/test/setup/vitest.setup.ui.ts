@@ -184,11 +184,11 @@ vi.mock('@/lib/navigation/use-navigation', () => ({
 // ---------------------------------------------------------------------------
 // ResizeObserver polyfill (react-grid-layout uses it)
 // ---------------------------------------------------------------------------
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {
+  this.observe = vi.fn();
+  this.unobserve = vi.fn();
+  this.disconnect = vi.fn();
+});
 
 // ---------------------------------------------------------------------------
 // HTMLCanvasElement.getContext stub (ECharts touches canvas in some paths)

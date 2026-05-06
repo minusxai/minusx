@@ -190,7 +190,7 @@ describe('Chat API Tests', () => {
     });
 
     it('should handle auth errors', async () => {
-      const { getEffectiveUser } = await import('@/lib/auth/auth-helpers');
+      const { getEffectiveUser } = (await import("@/lib/auth/auth-helpers")) as any;
       getEffectiveUser.mockResolvedValueOnce(null);
 
       const response = await chatPostHandler(createNextRequest({

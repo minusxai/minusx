@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
 vi.mock('@/lib/database/db-config', () => ({
@@ -7,8 +8,8 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-vi.mock('@/store/filesSlice', () => {
-  const actual = vi.importActual('@/store/filesSlice');
+vi.mock('@/store/filesSlice', async () => {
+  const actual = await vi.importActual<typeof import('@/store/filesSlice')>('@/store/filesSlice');
   return {
     __esModule: true,
     ...actual,
@@ -16,7 +17,7 @@ vi.mock('@/store/filesSlice', () => {
   };
 });
 
-const mockRouterPush = vi.fn();
+const { mockRouterPush } = vi.hoisted(() => ({ mockRouterPush: vi.fn() }));
 vi.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({
     push: mockRouterPush,
@@ -170,8 +171,8 @@ describe('Agent creates files via chat', () => {
   });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
-  let fetchSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
+  let fetchSpy: MockInstance;
 
   beforeEach(() => {
     // Re-install this describe's mock fetch so later setupMockFetch calls don't override it
@@ -371,8 +372,8 @@ describe('Explore page: submit question → agent responds → see answer → to
   });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
-  let fetchSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
+  let fetchSpy: MockInstance;
 
   beforeEach(() => {
     // Re-install mock because the prior describe's setupMockFetch afterAll
@@ -714,7 +715,7 @@ describe('Add question to existing dashboard and save', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
@@ -774,7 +775,7 @@ describe('Add question to existing dashboard and save', () => {
     expect(savedContent.assets![0]).toMatchObject({ type: 'question', id: QUESTION_ID });
 
     // Save now goes through publishAll → batch-save (not single-file PATCH)
-    const saveCalls = (global.fetch as vi.Mock).mock.calls.filter(
+    const saveCalls = (global.fetch as Mock).mock.calls.filter(
       ([url, init]) =>
         typeof url === 'string' &&
         (url.includes('/api/files/batch-save') || url.includes(`/api/files/${DASHBOARD_ID}`)) &&
@@ -790,7 +791,7 @@ describe('Dashboard edit/cancel mode toggle', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
@@ -836,7 +837,7 @@ describe('Dashboard agentic scenarios', () => {
 
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
@@ -945,13 +946,13 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
   const Q_NAME = 'Revenue Query';
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
-    (useNavModule.getRouter as vi.Mock).mockReturnValue({
+    (useNavModule.getRouter as Mock).mockReturnValue({
       push: (url: string) => {
         const u = new URL(url, 'http://localhost');
         const vid = u.searchParams.get('virtualId');
@@ -1014,7 +1015,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
 
     await act(async () => { await publishAll(); });
 
-    const batchCreateCalls1 = (global.fetch as vi.Mock).mock.calls.filter(
+    const batchCreateCalls1 = (global.fetch as Mock).mock.calls.filter(
       ([u]) => String(u).includes('/api/files/batch-create')
     );
     expect(batchCreateCalls1).toHaveLength(1);
@@ -1066,7 +1067,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
 
     await act(async () => { await publishAll(); });
 
-    const batchCreateCalls2 = (global.fetch as vi.Mock).mock.calls.filter(
+    const batchCreateCalls2 = (global.fetch as Mock).mock.calls.filter(
       ([u]) => String(u).includes('/api/files/batch-create')
     );
     expect(batchCreateCalls2).toHaveLength(2);
@@ -1183,7 +1184,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
 
     expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
 
-    const batchCreateCalls3 = (global.fetch as vi.Mock).mock.calls.filter(
+    const batchCreateCalls3 = (global.fetch as Mock).mock.calls.filter(
       ([u]) => String(u).includes('/api/files/batch-create')
     );
     expect(batchCreateCalls3).toHaveLength(2);
@@ -1202,7 +1203,7 @@ describe('publishAll error handling', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
@@ -1240,7 +1241,7 @@ describe('Multiple questions in dashboard', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndTwoQuestions });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
@@ -1342,7 +1343,7 @@ describe('Dashboard parameter merging', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertQuestionsWithSharedParams });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   const paramDash = () => ({
     id: DASHBOARD_ID, name: 'Param Dashboard', type: 'dashboard' as const,
@@ -1566,10 +1567,10 @@ describe('Viewer role: dashboard header hides edit controls', () => {
   setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertViewerDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
-  beforeEach(() => {
-    vi.importMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+  beforeEach(async () => {
+    (await vi.importMock<typeof import('@/lib/auth/auth-helpers')>('@/lib/auth/auth-helpers')).getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
     testStore = storeModule.makeStore();
     testStore.dispatch(setUser(VIEWER_AUTH_USER));
@@ -1622,10 +1623,10 @@ describe('Viewer role: agent CreateFile is rejected', () => {
   setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertViewerDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
-  beforeEach(() => {
-    vi.importMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+  beforeEach(async () => {
+    (await vi.importMock<typeof import('@/lib/auth/auth-helpers')>('@/lib/auth/auth-helpers')).getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
     const pythonPort = sharedPythonPort();
     const llmPort = sharedLLMMockPort?.();
@@ -1720,10 +1721,10 @@ describe('Viewer role: agent EditFile on dashboard is rejected', () => {
   setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertViewerDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
-  beforeEach(() => {
-    vi.importMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+  beforeEach(async () => {
+    (await vi.importMock<typeof import('@/lib/auth/auth-helpers')>('@/lib/auth/auth-helpers')).getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
     const pythonPort = sharedPythonPort();
     const llmPort = sharedLLMMockPort?.();

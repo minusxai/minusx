@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 vi.mock('@aws-sdk/client-athena', () => ({
   AthenaClient: vi.fn(),
   StartQueryExecutionCommand: vi.fn(function (this: any, args: any) { this.input = args; }),
@@ -48,10 +49,10 @@ import { PostgresConnector } from '../postgres-connector';
 import { CsvConnector } from '../csv-connector';
 import { getNodeConnector } from '../index';
 
-const MockAthenaClient = AthenaClient as vi.MockedClass<typeof AthenaClient>;
-const MockGlueClient = GlueClient as vi.MockedClass<typeof GlueClient>;
-const MockBigQuery = BigQuery as vi.MockedClass<typeof BigQuery>;
-const MockPool = Pool as vi.MockedClass<typeof Pool>;
+const MockAthenaClient = AthenaClient as MockedClass<typeof AthenaClient>;
+const MockGlueClient = GlueClient as MockedClass<typeof GlueClient>;
+const MockBigQuery = BigQuery as MockedClass<typeof BigQuery>;
+const MockPool = Pool as MockedClass<typeof Pool>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,11 +71,11 @@ const ATHENA_BASE_CONFIG = {
   aws_secret_access_key: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
 };
 
-function makeAthenaSend(impl: vi.Mock) {
+function makeAthenaSend(impl: Mock) {
   MockAthenaClient.mockImplementation(function (this: any) { this.send = impl; } as any);
 }
 
-function makeGlueSend(impl: vi.Mock) {
+function makeGlueSend(impl: Mock) {
   MockGlueClient.mockImplementation(function (this: any) { this.send = impl; } as any);
 }
 
@@ -395,8 +396,8 @@ function makeJob(state: 'DONE' | 'RUNNING', errorResult?: { message: string }, q
 }
 
 function makeBigQueryClient(overrides: {
-  createQueryJob?: vi.Mock;
-  getDatasets?: vi.Mock;
+  createQueryJob?: Mock;
+  getDatasets?: Mock;
 } = {}) {
   const createQueryJob = overrides.createQueryJob ?? vi.fn();
   const getDatasets = overrides.getDatasets ?? vi.fn().mockResolvedValue([[]]);
@@ -700,8 +701,8 @@ describe('CsvConnector.query()', () => {
       connect: vi.fn().mockResolvedValue(mockConn),
     };
 
-    const { DuckDBInstance } = await vi.importMock('@duckdb/node-api');
-    (DuckDBInstance.create as vi.Mock).mockResolvedValue(mockInstance);
+    const { DuckDBInstance } = await vi.importMock<any>('@duckdb/node-api');
+    (DuckDBInstance.create as Mock).mockResolvedValue(mockInstance);
 
     const uniqueFile = {
       ...FILE_A,
@@ -728,7 +729,7 @@ const POSTGRES_BASE_CONFIG = {
   password: 'testpass',
 };
 
-function makeMockPool(queryImpl: vi.Mock) {
+function makeMockPool(queryImpl: Mock) {
   MockPool.mockImplementation(function (this: any) { this.query = queryImpl; this.end = vi.fn(); } as any);
 }
 

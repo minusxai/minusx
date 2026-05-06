@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Bulk Move UI tests
  *
@@ -163,7 +164,7 @@ describe('Bulk Move Files', () => {
   setupTestDb(getTestDbPath('bulk_move_ui'), { customInit: insertTestFiles });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();

@@ -94,19 +94,27 @@ vi.mock('@/lib/auth/auth-helpers', async () => {
   };
 });
 
-// JSDOM globals (Web Fetch API, etc.) — only meaningful under jsdom env, no-op otherwise.
-// We do this here so node tests that transitively import next/server work too.
+// JSDOM globals — Web Fetch API + Node Blob/File (PGLite needs Blob.arrayBuffer)
 if (typeof globalThis.window !== 'undefined') {
   if (typeof globalThis.Request === 'undefined') {
-    // @ts-expect-error - Node 18+ provides these
+    
     globalThis.Request = Request;
-    // @ts-expect-error
+    
     globalThis.Response = Response;
-    // @ts-expect-error
+    
     globalThis.Headers = Headers;
   }
   if (typeof globalThis.fetch === 'undefined') {
-    // @ts-expect-error
+    
     globalThis.fetch = fetch;
+  }
+  // JSDOM's Blob/File lack arrayBuffer() — override with Node's globals.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const nodeBuffer = require('node:buffer');
+  if (nodeBuffer.Blob && typeof nodeBuffer.Blob.prototype.arrayBuffer === 'function') {
+    globalThis.Blob = nodeBuffer.Blob;
+  }
+  if (nodeBuffer.File && typeof nodeBuffer.File.prototype.arrayBuffer === 'function') {
+    globalThis.File = nodeBuffer.File;
   }
 }

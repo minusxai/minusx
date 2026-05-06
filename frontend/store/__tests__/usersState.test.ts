@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Users State E2E Tests
  *
@@ -50,7 +51,7 @@ function makeTestStore() {
   return configureStore({ reducer: { users: usersReducer } });
 }
 
-function countGetUsersFetches(mockFetch: vi.Mock): number {
+function countGetUsersFetches(mockFetch: Mock): number {
   return mockFetch.mock.calls.filter(([url, init]) => {
     const method = init?.method ?? 'GET';
     return String(url).includes('/api/users') &&
@@ -128,12 +129,12 @@ describe('Users state', () => {
     await cleanupTestDatabase(dbPath);
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     testStore = makeTestStore();
     _resetForTesting();
 
     // Configure auth() to return an admin session for the users route handlers
-    const authMock = await vi.importMock('@/auth');
+    const authMock = await vi.importMock<any>('@/auth');
     authMock.auth.mockResolvedValue(ADMIN_SESSION);
   });
 

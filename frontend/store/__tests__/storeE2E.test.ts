@@ -13,7 +13,7 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-const mockRunQuery = vi.fn();
+const { mockRunQuery } = vi.hoisted(() => ({ mockRunQuery: vi.fn() }));
 vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
 }));

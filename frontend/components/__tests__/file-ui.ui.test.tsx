@@ -1,13 +1,16 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
-const mockReplaceFileState = vi.fn().mockResolvedValue({ success: true });
-vi.mock('@/lib/api/file-state', () => ({
-  ...vi.importActual('@/lib/api/file-state'),
+const { mockReplaceFileState, mockRouterPush } = vi.hoisted(() => ({
+  mockReplaceFileState: vi.fn().mockResolvedValue({ success: true }),
+  mockRouterPush: vi.fn(),
+}));
+vi.mock('@/lib/api/file-state', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api/file-state')>('@/lib/api/file-state')),
   replaceFileState: (...args: unknown[]) => mockReplaceFileState(...args),
 }));
 
 let mockPathname = '/f/1';
-const mockRouterPush = vi.fn();
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -151,7 +154,7 @@ function makeToolCallTuple(opts: { fileId: number; success: boolean; diff?: stri
 
 describe('EditFileDisplay restore buttons', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     mockPathname = '/f/1';
@@ -306,7 +309,7 @@ function makeContext(id: number, name: string) {
 
 describe('FilesList grouping', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
@@ -450,7 +453,7 @@ function makeConnectionFile(id: number, name: string, withSchema = true): DbFile
 
 describe('Explore page: database selector defaults to first connection', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: vi.SpyInstance;
+  let getStoreSpy: MockInstance;
 
   beforeEach(() => {
     mockPathname = '/explore';

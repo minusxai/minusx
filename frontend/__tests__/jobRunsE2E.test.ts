@@ -1,3 +1,4 @@
+import type { Mock } from 'vitest';
 /**
  * Job Runs E2E Tests
  *
@@ -221,7 +222,7 @@ describe('Job Runs E2E', () => {
       let capturedRunFileId: number | null = null;
 
       const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      pythonBackendFetch.mockImplementationOnce(async () => {
+      (pythonBackendFetch as unknown as Mock).mockImplementationOnce(async () => {
         // By the time the query runs, the job_run should already have output_file_id
         const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
         if (runs.length > 0) {
@@ -251,7 +252,7 @@ describe('Job Runs E2E', () => {
 
     it('captures query error as failed test result (run status stays SUCCESS)', async () => {
       const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      pythonBackendFetch.mockRejectedValueOnce(new Error('DB connection refused'));
+      (pythonBackendFetch as unknown as Mock).mockRejectedValueOnce(new Error('DB connection refused'));
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);
@@ -375,7 +376,7 @@ describe('Job Runs E2E', () => {
 
     it('records delivery failure in messages when webhook returns HTTP error', async () => {
       const { sendEmailViaWebhook } = await import('@/lib/messaging/webhook-executor');
-      sendEmailViaWebhook.mockResolvedValueOnce({ success: false, statusCode: 401, error: 'Unauthorized' });
+      (sendEmailViaWebhook as unknown as Mock).mockResolvedValueOnce({ success: false, statusCode: 401, error: 'Unauthorized' });
 
       const alertWithRecipients: AlertContent = {
         status: 'live',

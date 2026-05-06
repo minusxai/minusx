@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * E2E Tests for /api/infer-columns
  *
@@ -65,7 +66,7 @@ describe('Infer Columns - E2E Tests', () => {
 
   // Override global mock to include mode:'org' and home_folder:'/org'
   beforeAll(() => {
-    (getEffectiveUser as vi.Mock).mockResolvedValue({
+    (getEffectiveUser as Mock).mockResolvedValue({
       userId: 1,
       email: 'test@example.com',
       role: 'admin',

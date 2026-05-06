@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * E2E tests for parameterised query execution through POST /api/query.
  *
@@ -67,13 +68,13 @@ function makeQueryRequest(body: object): NextRequest {
 
 /** SQL string the mocked connector received. */
 function capturedSQL(): string {
-  const connector = (getNodeConnector as vi.Mock).mock.results[0]?.value;
+  const connector = (getNodeConnector as Mock).mock.results[0]?.value;
   return connector.query.mock.calls[0][0] as string;
 }
 
 /** Params dict the mocked connector received. */
 function capturedParams(): Record<string, unknown> {
-  const connector = (getNodeConnector as vi.Mock).mock.results[0]?.value;
+  const connector = (getNodeConnector as Mock).mock.results[0]?.value;
   return connector.query.mock.calls[0][1] as Record<string, unknown>;
 }
 
@@ -89,7 +90,7 @@ describe('Parameterised query execution E2E (local WASM)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    (getNodeConnector as vi.Mock).mockReturnValue({
+    (getNodeConnector as Mock).mockReturnValue({
       query: vi.fn().mockResolvedValue({ columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }),
     });
   });

@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * Tests for the Slack OAuth 2.0 flow.
  *
@@ -114,7 +115,7 @@ function makeCallbackRequest(params: Record<string, string>): NextRequest {
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
 
-let fetchMock: vi.Mock;
+let fetchMock: Mock;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -125,9 +126,9 @@ beforeEach(() => {
   });
   global.fetch = fetchMock;
 
-  (slackAuthTest as vi.Mock).mockResolvedValue(MOCK_AUTH_TEST);
-  (upsertSlackBotConfig as vi.Mock).mockResolvedValue(undefined);
-  (isSlackOAuthConfigured as vi.Mock).mockReturnValue(true);
+  (slackAuthTest as Mock).mockResolvedValue(MOCK_AUTH_TEST);
+  (upsertSlackBotConfig as Mock).mockResolvedValue(undefined);
+  (isSlackOAuthConfigured as Mock).mockReturnValue(true);
 });
 
 // ─── 1. buildState ────────────────────────────────────────────────────────────
@@ -224,7 +225,7 @@ describe('oauth-callback — happy path', () => {
       }),
     );
     // signing_secret must NOT be stored — shared env var is used instead
-    const [, bot] = (upsertSlackBotConfig as vi.Mock).mock.calls[0];
+    const [, bot] = (upsertSlackBotConfig as Mock).mock.calls[0];
     expect(bot.signing_secret).toBeUndefined();
   });
 
@@ -284,7 +285,7 @@ describe('oauth-callback — edge cases', () => {
   });
 
   it('returns 400 when OAuth is not configured', async () => {
-    (isSlackOAuthConfigured as vi.Mock).mockReturnValue(false);
+    (isSlackOAuthConfigured as Mock).mockReturnValue(false);
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'code', state }));
     expect(res.status).toBe(400);

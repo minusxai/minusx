@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
@@ -108,8 +109,8 @@ describe('ChatInput: image attachment upload', () => {
 
   beforeEach(() => {
     store = storeModule.makeStore();
-    (uploadFile as vi.Mock).mockResolvedValue({ publicUrl: '/uploads/1/abc123.png' });
-    (extractTextFromDocument as vi.Mock).mockResolvedValue({ text: 'doc text', wordCount: 2 });
+    (uploadFile as Mock).mockResolvedValue({ publicUrl: '/uploads/1/abc123.png' });
+    (extractTextFromDocument as Mock).mockResolvedValue({ text: 'doc text', wordCount: 2 });
     window.HTMLElement.prototype.scrollTo = vi.fn();
   });
 
@@ -183,7 +184,7 @@ describe('ChatInput: image attachment upload', () => {
   });
 
   it('shows an error toast when uploadFile fails', async () => {
-    (uploadFile as vi.Mock).mockRejectedValue(new Error('Network error'));
+    (uploadFile as Mock).mockRejectedValue(new Error('Network error'));
     renderChatInputImage(store);
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;

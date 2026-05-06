@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * notifyAppEvent enrichment tests
  *
@@ -8,7 +9,7 @@
 
 vi.mock('server-only', () => ({}));
 
-const mockGet = vi.fn();
+const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
 vi.mock('next/headers', () => ({
   headers: vi.fn().mockResolvedValue({ get: mockGet }),
 }));
@@ -30,7 +31,7 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
 global.fetch = mockFetch;
 
-const mockGetEffectiveUser = getEffectiveUser as vi.Mock;
+const mockGetEffectiveUser = getEffectiveUser as Mock;
 
 function sentBody(): Record<string, unknown> {
   const raw = mockFetch.mock.calls[0][1].body as string;

@@ -1,3 +1,4 @@
+import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
 /**
  * chart-attachments — S3 URL cache lifecycle tests
  *
@@ -31,12 +32,12 @@ const MOCK_PUBLIC_URL = 'https://s3.example.com/charts/xyz.jpg';
 const MOCK_S3_PUT_URL = 'https://s3.example.com/put-presigned';
 const UPLOAD_URL_PREFIX = '/api/object-store/upload-url';
 
-const mockRenderCharts = clientChartImageRenderer.renderCharts as vi.Mock;
+const mockRenderCharts = clientChartImageRenderer.renderCharts as Mock;
 
 /** Count how many times fetch was called to get a presigned upload URL. */
 function countUploadCalls(): number {
-  return (global.fetch as vi.Mock).mock.calls.filter(
-    ([url]: [string]) => typeof url === 'string' && url.startsWith(UPLOAD_URL_PREFIX)
+  return (global.fetch as Mock).mock.calls.filter(
+    (args: any) => typeof args[0] === 'string' && (args[0] as string).startsWith(UPLOAD_URL_PREFIX)
   ).length;
 }
 
