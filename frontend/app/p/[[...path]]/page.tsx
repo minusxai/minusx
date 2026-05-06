@@ -17,6 +17,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { resolvePath, resolveHomeFolderSync, SYSTEM_FOLDERS, isHiddenSystemPath, isUnderSystemFolder } from '@/lib/mode/path-resolver';
+import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 
 
@@ -56,6 +57,15 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Construct full path from segments
   const fullPath = '/' + pathSegments.map(decodeURIComponent).join('/');
+
+  // Onboarding redirect — only for top-level folder pages (/p, /p/org)
+  useEffect(() => {
+    if (config.setupWizard?.status !== 'complete') {
+      if (fullPath === '/' || fullPath === '/org') {
+        router.replace(preserveModeParam('/hello-world'));
+      }
+    }
+  }, [config, router, fullPath]);
 
   // Find the nearest context for this folder path and use as default
   const nearestContext = useAppSelector(state => selectContextFromPath(state, fullPath));

@@ -41,3 +41,13 @@ export function useAgentProgress(isRunning: boolean, isDone: boolean, tau: numbe
 
   return progress;
 }
+
+/** Returns a human-friendly status message based on progress percentage. */
+export function getProgressMessage(progress: number, messages: [number, string][]): string {
+  // messages is sorted by threshold ascending, e.g. [[0, "Starting..."], [25, "Exploring..."], ...]
+  let msg = messages[0]?.[1] ?? '';
+  for (const [threshold, text] of messages) {
+    if (progress >= threshold) msg = text;
+  }
+  return msg;
+}

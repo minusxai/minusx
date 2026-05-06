@@ -5,7 +5,7 @@ import { Box, VStack, HStack, Text, Heading, Button, Spinner, Collapsible, Icon,
 import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
 import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
-import { useConnections } from '@/lib/hooks/useConnections';
+import type { ConnectionWithSchema } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { editFile, publishFile } from '@/lib/api/file-state';
@@ -18,7 +18,8 @@ import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
 import type { ContextContent, Whitelist, WhitelistNode } from '@/lib/types';
-import { useAgentProgress } from '../useAgentProgress';
+import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
+import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35;
 
@@ -35,6 +36,12 @@ interface StepContextProps {
   greeting?: string;
   /** For static connections: schema names just uploaded. Auto-selects only these and skips to docs. */
   staticSchemas?: string[] | null;
+  /** Answers from the questionnaire step — used to enrich agent messages and auto-trigger agent. */
+  questionnaireAnswers?: QuestionnaireAnswers | null;
+  /** Connections map from parent (lifted useConnections). */
+  connections?: Record<string, ConnectionWithSchema>;
+  /** Whether connections are still loading. */
+  connectionsLoading?: boolean;
 }
 
 /** Collapsible agent trace — auto-opens when first rendered */
@@ -109,9 +116,48 @@ function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { conn
   );
 }
 
-export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting, staticSchemas }: StepContextProps) {
-  const { connections, loading: connectionsLoading } = useConnections({ skip: false });
-  console.log("connections", connections)
+const SAVE_TAU = 9; // ~80% at 15s
+
+function SaveProgressBar() {
+  const progress = useAgentProgress(true, false, SAVE_TAU);
+  return (
+    <VStack gap={2} align="stretch" pt={2}>
+      <style>{`@keyframes saveShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
+      <Text fontSize="xs" fontFamily="mono" color="accent.teal">
+        {getProgressMessage(progress, [
+          [0, 'Saving context...'],
+          [30, 'Building knowledge base...'],
+          [60, 'Syncing schema metadata...'],
+          [80, 'Almost there...'],
+        ])}
+      </Text>
+      <Progress.Root size="sm" value={progress} colorPalette="teal">
+        <Progress.Track borderRadius="full" overflow="hidden">
+          <Progress.Range
+            style={{ transition: 'width 0.4s ease-out' }}
+            css={{
+              position: 'relative',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                animation: 'saveShimmer 1.5s ease-in-out infinite',
+              },
+            }}
+          />
+        </Progress.Track>
+      </Progress.Root>
+    </VStack>
+  );
+}
+
+export default function StepContext({
+  connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting, staticSchemas,
+  questionnaireAnswers, connections: connectionsProp, connectionsLoading: connectionsLoadingProp,
+}: StepContextProps) {
+  const connections = connectionsProp ?? {};
+  const connectionsLoading = connectionsLoadingProp ?? false;
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
   const dispatch = useAppDispatch();
@@ -340,12 +386,18 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       tables: s.tables.map(t => t.table)
     }));
 
-    // Build agent message — include connection + schema context
+    // Build agent message — include connection + schema context + questionnaire answers
     const agentMessage = [
       AGENT_DESCRIBE_MESSAGE,
       `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
       staticSchemas?.length
         ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not document other existing data in the connection.`
+        : '',
+      questionnaireAnswers?.datasetDescription
+        ? `The user describes this dataset as: "${questionnaireAnswers.datasetDescription}"`
+        : '',
+      questionnaireAnswers?.keyMetrics
+        ? `Key metrics and KPIs the user tracks: "${questionnaireAnswers.keyMetrics}"`
         : '',
     ].filter(Boolean).join('\n\n');
 
@@ -371,7 +423,16 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       message: agentMessage,
     }));
     setShowAgentFeed(true);
-  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, newDocContent, contextPath, staticSchemas]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, newDocContent, contextPath, staticSchemas, questionnaireAnswers]);
+
+  // Auto-trigger context agent when entering docs sub-step with questionnaire answers
+  const hasAutoTriggeredAgent = useRef(false);
+  useEffect(() => {
+    if (subStep !== 'docs' || !questionnaireAnswers || hasAutoTriggeredAgent.current) return;
+    if (!realFileId || contextFile?.loading) return;
+    hasAutoTriggeredAgent.current = true;
+    handleAgentDescribe();
+  }, [subStep, questionnaireAnswers, realFileId, contextFile?.loading, handleAgentDescribe]);
 
   /** Skip: interrupt agent if running, save context without docs, advance */
   const handleSkip = useCallback(async () => {
@@ -425,7 +486,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   /* ─── Sub-step 1: Select Tables ─── */
   if (subStep === 'tables') {
     return (
-      <VStack gap={6} align="stretch">
+      <VStack gap={6} align="stretch" minH="400px">
         {greeting && <style>{cursorBlinkKeyframes}</style>}
 
         {/* Header */}
@@ -501,8 +562,11 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
           </Box>
         )}
 
+        {/* Spacer pushes button to bottom */}
+        <Box flex={1} />
+
         {/* Actions */}
-        <HStack justify="flex-end" gap={3} pt={2}>
+        <HStack justify="flex-end" gap={3}>
           <Button
             variant="outline"
             size="sm"
@@ -524,10 +588,10 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       {/* Header */}
       <Box>
         <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
-          Add data context
+          Data Documentation
         </Heading>
         <Text color="fg.muted" fontSize="sm">
-          Describe your data so the AI generates better queries. You can also let the agent figure it out.
+          This is where you can describe your dataset, key metrics, and any other info the agent should know when querying this data.
         </Text>
       </Box>
 
@@ -584,11 +648,11 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         </Collapsible.Root>
       )}
 
-      {/* New doc editor */}
-      <Box>
+      {/* New doc editor — hidden while agent is actively writing */}
+      {(!isAgentRunning || newDocContent.trim()) && <Box>
         <Text fontSize="sm" fontWeight="600" mb={2}>
-          {existingDocs.length > 0 ? 'Add more context' : 'Data context'}
-          <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>(optional, markdown)</Text>
+          {showAgentFeed ? 'Auto-generated context' : existingDocs.length > 0 ? 'Add more context' : 'Data context'}
+          <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>{showAgentFeed ? '(editable)' : '(optional, markdown)'}</Text>
         </Text>
         <Box
           border="1px solid"
@@ -635,7 +699,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
             </Box>
           </HStack>
         </Box>
-      </Box>
+      </Box>}
 
       {/* Error */}
       {error && (
@@ -646,6 +710,15 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
       {isAgentRunning && (
         <VStack gap={2} align="stretch" pt={2}>
+          <Text fontSize="xs" fontFamily="mono" color="accent.teal">
+            {getProgressMessage(agentProgress, [
+              [0, 'Exploring your tables...'],
+              [25, 'Reading column definitions...'],
+              [50, 'Writing data documentation...'],
+              [80, 'Finishing up...'],
+              [100, 'Done!'],
+            ])}
+          </Text>
           <Progress.Root size="sm" value={agentProgress} flex={1} colorPalette="teal">
             <Progress.Track borderRadius="full" overflow="hidden">
               <Progress.Range
@@ -679,8 +752,13 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         </VStack>
       )}
 
-      {/* Actions — hidden while agent is running */}
-      {!isAgentRunning && (
+      {/* Save progress bar */}
+      {saving && (
+        <SaveProgressBar />
+      )}
+
+      {/* Actions — hidden while agent is running or saving */}
+      {!isAgentRunning && !saving && (
         <HStack justify="space-between" gap={3} pt={2}>
           <Button
             variant="ghost"
@@ -715,7 +793,6 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? <Spinner size="xs" mr={2} /> : null}
               {showAgentFeed ? 'Save & Continue' : 'Skip & Continue'}
             </Button>
           </HStack>

@@ -17,7 +17,8 @@ import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
-import { useAgentProgress } from '../useAgentProgress';
+import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
+import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35;
 const GENERATING_TAU = 40; // ~90% at ~92s — feels like about a minute
@@ -49,9 +50,13 @@ interface StepGeneratingProps {
   onComplete?: () => Promise<void>;
   /** For static connections: only build dashboard for these schemas. */
   staticSchemas?: string[] | null;
+  /** Pre-filled dashboard preference from questionnaire — auto-starts generation if set. */
+  initialPreference?: string;
+  /** Full questionnaire answers for richer agent context. */
+  questionnaireAnswers?: QuestionnaireAnswers | null;
 }
 
-export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas, initialPreference, questionnaireAnswers }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
@@ -67,7 +72,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const [hasStarted, setHasStarted] = useState(false);
   const [virtualDashboardId, setVirtualDashboardId] = useState<number | null>(null);
   const [showTrace, setShowTrace] = useState(false);
-  const [userPreference, setUserPreference] = useState('');
+  // Track our own conversation ID to avoid picking up the stale context agent conversation
+  const [ownConvId, setOwnConvId] = useState<number | null>(null);
+  const [userPreference, setUserPreference] = useState(initialPreference ?? '');
 
   // Typewriter effect for greeting
   const [displayedText, setDisplayedText] = useState('');
@@ -109,10 +116,11 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   // Load the virtual file from Redux
   const { fileState: dashboardFile } = useFile(virtualDashboardId ?? undefined) ?? {};
 
-  // Watch active conversation for completion
+  // Watch our own conversation for completion (not the global active one,
+  // which may still point to the finished context agent conversation)
   const activeConvId = useAppSelector(selectActiveConversation);
   const conversation = useAppSelector(state =>
-    activeConvId ? selectConversation(state, activeConvId) : undefined
+    ownConvId ? selectConversation(state, ownConvId) : undefined
   );
 
   // Detect when the agent finishes
@@ -139,6 +147,8 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const handleGenerate = useCallback(async () => {
     if (hasStarted || !virtualDashboardId) return;
     setHasStarted(true);
+    setIsGenerating(true);
+    setShowTrace(true);
 
     // Build appState from the virtual dashboard file
     let appState = null;
@@ -163,7 +173,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
       `Give the dashboard a descriptive name and place it in the ${modeRoot}/ folder.`,
       staticSchemas?.length ? `Focus only on the dataset(s): ${staticSchemas.join(', ')}. Do not query other schemas in the connection.` : '',
-      userPreference.trim() ? `User preference: ${userPreference.trim()}` : '',
+      questionnaireAnswers?.datasetDescription ? `About the data: ${questionnaireAnswers.datasetDescription}` : '',
+      questionnaireAnswers?.keyMetrics ? `Key metrics to focus on: ${questionnaireAnswers.keyMetrics}` : '',
+      userPreference.trim() ? `What the user wants to see in the dashboard: ${userPreference.trim()}` : '',
     ].filter(Boolean).join('\n\n');
 
     const initRes = await fetch('/api/chat/init', {
@@ -172,6 +184,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       body: JSON.stringify({ firstMessage: message }),
     });
     const { conversationID: newConvId } = await initRes.json();
+    setOwnConvId(newConvId);
 
     dispatch(createConversation({
       conversationID: newConvId,
@@ -186,23 +199,29 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       },
       message,
     }));
+  }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs, userPreference, staticSchemas, modeRoot]);
 
-    setIsGenerating(true);
-    setShowTrace(true);
-  }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs]);
+  // Auto-start generation if initialPreference was provided (from questionnaire)
+  // Wait for databases to load so the agent has schema context
+  const hasAutoTriggered = useRef(false);
+  useEffect(() => {
+    if (hasAutoTriggered.current || !initialPreference?.trim() || !virtualDashboardId || hasStarted) return;
+    if (databases.length === 0) return; // schema not loaded yet
+    hasAutoTriggered.current = true;
+    handleGenerate();
+  }, [initialPreference, virtualDashboardId, hasStarted, handleGenerate, databases.length]);
 
-  // Publish all dirty files, mark wizard complete, and navigate to the dashboard
+  // Publish all dirty files, open dashboard in new tab, and advance to next wizard step
   const handleGoToDashboard = useCallback(async () => {
     if (!virtualDashboardId) return;
     try {
       await publishAll();
-      if (onComplete) await onComplete();
-      router.push(preserveModeParam(`/f/${virtualDashboardId}`));
+      window.open(preserveModeParam(`/f/${virtualDashboardId}`), '_blank');
+      onComplete?.();
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
-      router.push(preserveModeParam('/'));
     }
-  }, [virtualDashboardId, router, onComplete]);
+  }, [virtualDashboardId, onComplete]);
 
   /** Discard draft files created during this step — note: orphan cleanup is a future task */
   const discardDraftFiles = useCallback(() => {
@@ -217,23 +236,25 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
 
   /** Skip: interrupt agent, mark wizard complete, go home */
   const handleSkip = useCallback(async () => {
-    if (activeConvId) {
-      dispatch(interruptChat({ conversationID: activeConvId }));
+    const convToInterrupt = ownConvId ?? activeConvId;
+    if (convToInterrupt) {
+      dispatch(interruptChat({ conversationID: convToInterrupt }));
     }
     discardDraftFiles();
     if (onComplete) await onComplete();
     router.push(preserveModeParam('/p/org'));
-  }, [activeConvId, dispatch, router, onComplete, discardDraftFiles]);
+  }, [ownConvId, activeConvId, dispatch, router, onComplete, discardDraftFiles]);
 
   /** Skip everything and go home */
   const handleGoHome = useCallback(async () => {
-    if (activeConvId) {
-      dispatch(interruptChat({ conversationID: activeConvId }));
+    const convToInterrupt = ownConvId ?? activeConvId;
+    if (convToInterrupt) {
+      dispatch(interruptChat({ conversationID: convToInterrupt }));
     }
     discardDraftFiles();
     if (onComplete) await onComplete();
     router.push(preserveModeParam('/p/org'));
-  }, [activeConvId, dispatch, router, onComplete, discardDraftFiles]);
+  }, [ownConvId, activeConvId, dispatch, router, onComplete, discardDraftFiles]);
 
   return (
     <VStack gap={6} align="stretch" minH="400px">
@@ -332,6 +353,16 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         {/* Progress bar while generating */}
         {isGenerating && (
           <VStack gap={2} align="stretch">
+            <Text fontSize="xs" fontFamily="mono" color="accent.teal">
+              {getProgressMessage(agentProgress, [
+                [0, 'Analyzing your schema...'],
+                [15, 'Writing SQL queries...'],
+                [40, 'Building visualizations...'],
+                [65, 'Assembling dashboard layout...'],
+                [85, 'Final touches...'],
+                [100, 'Done!'],
+              ])}
+            </Text>
             <Progress.Root size="sm" value={agentProgress} colorPalette="teal">
               <Progress.Track borderRadius="full" overflow="hidden">
                 <Progress.Range

@@ -1,32 +1,43 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Box, Text } from '@chakra-ui/react';
+import { Box } from '@chakra-ui/react';
 
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import { useConnections } from '@/lib/hooks/useConnections';
 import { fadeInUpKeyframes } from '@/lib/ui/animations';
-import { type ConnectionWizardStep, type ConnectionWizardProps } from './ConnectionWizardTypes';
+import {
+  type ConnectionWizardStep,
+  type ConnectionWizardProps,
+  type QuestionnaireAnswers,
+} from './ConnectionWizardTypes';
 import StepIndicatorBar from './StepIndicatorBar';
 import StepConnection from './steps/StepConnection';
 import StepStaticUpload from './steps/StepStaticUpload';
+import StepQuestionnaire from './steps/StepQuestionnaire';
 import StepContext from './steps/StepContext';
 import StepGenerating from './steps/StepGenerating';
+import StepSlack from './steps/StepSlack';
 
 export default function ConnectionWizard({
   initialStep = 'connection',
   initialConnectionId = null,
   initialConnectionName = null,
   initialContextFileId = null,
+  initialQuestionnaireAnswers = null,
   onStepChange,
   onComplete,
   showGreetings = false,
-  showSkipConnection = false,
+  showSkipConnection: _showSkipConnection = false,
   greetings,
 }: ConnectionWizardProps) {
   const [step, setStep] = useState<ConnectionWizardStep>(initialStep);
   const [connectionId, setConnectionId] = useState<number | null>(initialConnectionId);
   const [connectionName, setConnectionName] = useState<string | null>(initialConnectionName);
   const [contextFileId, setContextFileId] = useState<number | null>(initialContextFileId);
+  const [questionnaireAnswers, setQuestionnaireAnswers] = useState<QuestionnaireAnswers | null>(
+    initialQuestionnaireAnswers,
+  );
   // Sub-state for static connection (CSV/Sheets) upload within the connection step
   const [staticTab, setStaticTab] = useState<'csv' | 'sheets' | null>(null);
   // Schema names from static upload — used to auto-select only relevant schemas in context step
@@ -34,13 +45,18 @@ export default function ConnectionWizard({
 
   const connectionCriteria = useMemo(() => ({ type: 'connection' as const }), []);
   const { files: connectionFiles } = useFilesByCriteria({ criteria: connectionCriteria, partial: true });
-  const hasConnections = connectionFiles.some(f => (f.id as number) > 0);
+  const _hasConnections = connectionFiles.some(f => (f.id as number) > 0);
+
+  // Start schema fetching only after questionnaire is done — avoids blocking the transition
+  // from connection step to questionnaire while the schema loader runs.
+  const pastQuestionnaire = step === 'context' || step === 'generating' || step === 'slack';
+  const { connections, loading: connectionsLoading } = useConnections({ skip: !connectionName || !pastQuestionnaire });
 
   const handleConnectionComplete = useCallback((id: number, name: string) => {
     setConnectionId(id);
     setConnectionName(name);
-    setStep('context');
-    onStepChange?.('context', { connectionId: id, connectionName: name });
+    setStep('questionnaire');
+    onStepChange?.('questionnaire', { connectionId: id, connectionName: name });
   }, [onStepChange]);
 
   const handleStaticSelect = useCallback((tab: 'csv' | 'sheets') => {
@@ -57,6 +73,16 @@ export default function ConnectionWizard({
     setStaticTab(null);
   }, []);
 
+  const handleQuestionnaireComplete = useCallback((answers: QuestionnaireAnswers) => {
+    setQuestionnaireAnswers(answers);
+    setStep('context');
+    onStepChange?.('context', {
+      connectionId: connectionId ?? undefined,
+      connectionName: connectionName ?? undefined,
+      questionnaireAnswers: answers,
+    });
+  }, [onStepChange, connectionId, connectionName]);
+
   const handleContextComplete = useCallback((fileId: number) => {
     setContextFileId(fileId);
     setStep('generating');
@@ -67,11 +93,24 @@ export default function ConnectionWizard({
     });
   }, [onStepChange, connectionId, connectionName]);
 
-  const handleSkipConnection = useCallback(() => {
+  const _handleSkipConnection = useCallback(() => {
     const first = connectionFiles[0];
     if (!first) return;
     handleConnectionComplete(first.id as number, first.name);
   }, [connectionFiles, handleConnectionComplete]);
+
+  const handleGeneratingComplete = useCallback(async () => {
+    setStep('slack');
+    onStepChange?.('slack', {
+      connectionId: connectionId ?? undefined,
+      connectionName: connectionName ?? undefined,
+      contextFileId: contextFileId ?? undefined,
+    });
+  }, [onStepChange, connectionId, connectionName, contextFileId]);
+
+  const handleSlackComplete = useCallback(() => {
+    onComplete?.();
+  }, [onComplete]);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
@@ -94,33 +133,23 @@ export default function ConnectionWizard({
         css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
       >
         {step === 'connection' && !staticTab && (
-          <>
             <StepConnection
               onComplete={handleConnectionComplete}
               onStaticSelect={handleStaticSelect}
               greeting={greeting('connection')}
             />
-            {showSkipConnection && hasConnections && (
-              <Text
-                mt={4}
-                fontSize="sm"
-                color="fg.muted"
-                fontFamily="mono"
-                cursor="pointer"
-                textDecoration="underline"
-                _hover={{ color: 'fg.default' }}
-                onClick={handleSkipConnection}
-              >
-                I&apos;ve already connected my data &rarr;
-              </Text>
-            )}
-          </>
         )}
         {step === 'connection' && staticTab && (
           <StepStaticUpload
             tab={staticTab}
             onComplete={handleStaticComplete}
             onBack={handleStaticBack}
+          />
+        )}
+        {step === 'questionnaire' && connectionName && (
+          <StepQuestionnaire
+            onComplete={handleQuestionnaireComplete}
+            greeting={greeting('questionnaire')}
           />
         )}
         {step === 'context' && connectionName && (
@@ -132,6 +161,9 @@ export default function ConnectionWizard({
             onContextCreated={handleRequestChat}
             greeting={greeting('context')}
             staticSchemas={staticSchemas}
+            questionnaireAnswers={questionnaireAnswers}
+            connections={connections}
+            connectionsLoading={connectionsLoading}
           />
         )}
         {step === 'generating' && connectionName && (
@@ -139,8 +171,16 @@ export default function ConnectionWizard({
             connectionName={connectionName}
             contextFileId={contextFileId!}
             greeting={greeting('generating')}
-            onComplete={onComplete}
+            onComplete={handleGeneratingComplete}
             staticSchemas={staticSchemas}
+            initialPreference={questionnaireAnswers?.dashboardPreference}
+            questionnaireAnswers={questionnaireAnswers}
+          />
+        )}
+        {step === 'slack' && (
+          <StepSlack
+            onComplete={handleSlackComplete}
+            greeting={greeting('slack')}
           />
         )}
       </Box>

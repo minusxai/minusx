@@ -115,11 +115,17 @@ export function createMiddleware() {
       return response;
     }
 
-    const response = NextResponse.next({ request: { headers: requestHeaders } });
-
     const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
-    // Home page (/) renders directly — no redirect needed
+    // Redirect bare /p to /p/{mode} server-side (avoids client-side redirect delay)
+    if (pathname === '/p' || pathname === '/p/') {
+      const target = new URL(`/p/${effectiveMode}`, req.url);
+      // Preserve query params (mode, as_user, etc.)
+      req.nextUrl.searchParams.forEach((value, key) => target.searchParams.set(key, value));
+      return NextResponse.redirect(target);
+    }
+
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
 
     if (isApiPath) {
       void logNetworkRequest(requestId, reqInfo, {

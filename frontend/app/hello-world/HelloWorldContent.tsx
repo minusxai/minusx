@@ -4,9 +4,8 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Box, Button, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react';
 import { LuPlay, LuDatabase, LuSparkles } from 'react-icons/lu';
 import { useAppDispatch } from '@/store/hooks';
-import { useRouter } from '@/lib/navigation/use-navigation';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
-import { switchMode, preserveModeParam } from '@/lib/mode/mode-utils';
+import { switchMode } from '@/lib/mode/mode-utils';
 import {
   pulseKeyframes,
   sparkleKeyframes,
@@ -20,13 +19,12 @@ import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
-import type { ConnectionWizardStep } from '@/components/connection-wizard/ConnectionWizardTypes';
+import type { ConnectionWizardStep, QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
 export function HelloWorldContent() {
   const dispatch = useAppDispatch();
-  const router = useRouter();
   const user = useAppSelector(state => state.auth.user);
 
   const { config } = useConfigs();
@@ -100,7 +98,7 @@ export function HelloWorldContent() {
   // Persist wizard step to config so it survives page refresh
   const persistStep = useCallback(async (
     nextStep: ConnectionWizardStep,
-    extras?: { connectionId?: number; connectionName?: string; contextFileId?: number }
+    extras?: { connectionId?: number; connectionName?: string; contextFileId?: number; questionnaireAnswers?: QuestionnaireAnswers }
   ) => {
     try {
       await updateConfig({
@@ -126,9 +124,12 @@ export function HelloWorldContent() {
   }, [persistStep]);
 
   const handleSkipToHome = useCallback(async () => {
-    await handleComplete();
-    router.replace(preserveModeParam('/'));
-  }, [handleComplete, router]);
+    try {
+      await handleComplete();
+    } catch (err) {
+      console.error('[HelloWorldContent] Skip setup failed to mark complete:', err);
+    }
+  }, [handleComplete]);
 
   // Skip Step 1 by reusing the first existing connection
   const handleSkipConnection = useCallback(() => {
@@ -244,21 +245,6 @@ export function HelloWorldContent() {
           </VStack>
 
           <Box minH="200px">
-            {cardsVisible && hasConnections && (
-              <Text
-                fontSize="sm"
-                color="fg.muted"
-                fontFamily="mono"
-                mb={4}
-                cursor="pointer"
-                textDecoration="underline"
-                _hover={{ color: 'fg.default' }}
-                onClick={handleSkipConnection}
-                css={{ animation: 'fadeInUp 0.5s ease-out forwards', opacity: 0 }}
-              >
-                I&apos;ve already connected my data &rarr;
-              </Text>
-            )}
             {cardsVisible && (
               <Flex
                 direction={{ base: 'column', md: 'row' }}
@@ -296,7 +282,7 @@ export function HelloWorldContent() {
                       Connect Your Data
                     </Heading>
                     <Text color="fg.muted" fontSize="sm">
-                      Wire up your database and dive in
+                      Wire up your data and dive straight in
                     </Text>
                   </Box>
                 </Box>
@@ -332,7 +318,7 @@ export function HelloWorldContent() {
                       Try Demo
                     </Heading>
                     <Text color="fg.muted" fontSize="sm">
-                      Explore with sample data — no setup needed
+                      Explore all features with included sample data
                     </Text>
                   </Box>
                 </Box>
@@ -366,14 +352,17 @@ export function HelloWorldContent() {
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}
+            initialQuestionnaireAnswers={savedWizard?.questionnaireAnswers}
             onStepChange={persistStep}
             onComplete={handleComplete}
             showGreetings
             showSkipConnection
             greetings={{
               connection: "Step 1: Let's connect your data.",
-              context: "Step 2: Let's add some context.",
+              questionnaire: "Tell us about your data.",
+              context: "Step 2: Let's create a Knowledge Base.",
               generating: "Step 3: Let's build your first dashboard.",
+              slack: "Step 4: Connect Slack.",
             }}
           />
         </Box>
