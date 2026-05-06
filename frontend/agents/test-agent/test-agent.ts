@@ -83,7 +83,9 @@ export class DeepAgent extends MXAgent<typeof DeepAgentParams> {
   static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema];
   static readonly model = FAUX_MODEL;
 
-  protected systemPrompt = 'You are the deepest test agent.';
+  protected getSystemPrompt(): string {
+    return 'You are the deepest test agent.';
+  }
 }
 
 const NestedAgentParams = Type.Object({
@@ -99,7 +101,9 @@ export class NestedAgent extends MXAgent<typeof NestedAgentParams> {
   static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema, DeepAgent.schema];
   static readonly model = FAUX_MODEL;
 
-  protected systemPrompt = 'You are a nested test agent.';
+  protected getSystemPrompt(): string {
+    return 'You are a nested test agent.';
+  }
 }
 
 const TestAgentParams = Type.Object({
@@ -120,5 +124,7 @@ export class TestAgent extends MXAgent<typeof TestAgentParams> {
   ];
   static readonly model = FAUX_MODEL;
 
-  protected systemPrompt = 'You are a test agent.';
+  protected getSystemPrompt(): string {
+    return 'You are a test agent.';
+  }
 }

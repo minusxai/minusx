@@ -21,6 +21,7 @@ export interface AgentContext {
   userId: string;
   connectionId?: string;
   mode: 'org' | 'tutorial';
+  appState?: unknown;
 }
 
 export interface ToolResponse<TDetails = Record<string, unknown>> {
@@ -121,7 +122,6 @@ export class MXAgent<
   static readonly model: Model<Api>;
   static readonly tools: Tool<TSchema>[] = [];
 
-  protected systemPrompt = '';
   threadHistory: Message[];
   toolThread: ToolMessage[];
 
@@ -142,10 +142,36 @@ export class MXAgent<
     return (this.parameters as { userMessage: string | (TextContent | ImageContent)[] }).userMessage;
   }
 
+  protected getSystemPrompt(): string {
+    return '';
+  }
+
+  protected buildUserContent(): (TextContent | ImageContent)[] {
+    const raw = this.userMessage;
+    const items: (TextContent | ImageContent)[] =
+      typeof raw === 'string' ? [{ type: 'text', text: raw }] : raw;
+
+    const images = items.filter((c): c is ImageContent => c.type === 'image');
+    const goal = items
+      .filter((c): c is TextContent => c.type === 'text')
+      .map((c) => c.text)
+      .join('\n');
+
+    const appStateJson =
+      this.context.appState !== undefined ? JSON.stringify(this.context.appState) : 'null';
+    const date = new Date().toISOString().slice(0, 10);
+
+    return [
+      { type: 'text', text: `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` },
+      ...images,
+      { type: 'text', text: `<Question>${goal}</Question>` },
+    ];
+  }
+
   buildMessages(): Message[] {
     return [
       ...this.threadHistory,
-      { role: 'user', content: this.userMessage, timestamp: Date.now() } as Message,
+      { role: 'user', content: this.buildUserContent(), timestamp: Date.now() } as Message,
       ...this.toolThread,
     ];
   }
@@ -153,7 +179,7 @@ export class MXAgent<
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
     const context: Context = {
-      systemPrompt: this.systemPrompt,
+      systemPrompt: this.getSystemPrompt(),
       messages: this.buildMessages(),
       tools: ctor.tools,
     };

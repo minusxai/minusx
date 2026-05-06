@@ -5,6 +5,7 @@ import {
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
+import { renderPrompt } from '@/orchestrator/prompts';
 import { ExecuteSQL, SearchDBSchema } from '@/agents/analyst/analyst-agent';
 
 export const fauxRegistration = registerFauxProvider({
@@ -30,10 +31,24 @@ export class SlackAgent extends MXAgent<typeof SlackAgentParams> {
   ];
   static model = FAUX_MODEL;
 
-  protected systemPrompt = [
-    'You are a data analyst replying in a Slack thread.',
-    'Use SearchDBSchema to find relevant tables and columns, then ExecuteSQL to answer the user.',
-    'Reply concisely using Slack mrkdwn: single asterisks for *bold*, backticks for `code`, no headers.',
-    'Your final stop turn\'s text is posted directly to the Slack thread. Do not call any tool to deliver the final answer.',
-  ].join('\n');
+  protected getPromptVariables(): Record<string, string> {
+    return {
+      agent_name: 'SlackAgent',
+      max_steps: '40',
+      allowed_viz_types: '',
+      role: '',
+      schema: '',
+      context: '',
+      skills_catalog: '',
+      connection_id: this.context.connectionId ?? '',
+      home_folder: '',
+      preloaded_skills: '',
+    };
+  }
+
+  protected getSystemPrompt(): string {
+    const base = renderPrompt('default.system', this.getPromptVariables());
+    const addendum = renderPrompt('slack_addendum', {});
+    return `${base}\n\n${addendum}`;
+  }
 }

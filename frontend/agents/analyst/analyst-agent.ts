@@ -9,6 +9,7 @@ import {
   MXTool,
   type ToolResponse,
 } from '@/orchestrator/types';
+import { renderPrompt } from '@/orchestrator/prompts';
 import { getSchemaSource, getSqlExecutor } from './sources';
 
 export const fauxRegistration = registerFauxProvider({
@@ -80,9 +81,22 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams> {
   ];
   static model = FAUX_MODEL;
 
-  protected systemPrompt = [
-    'You are a data analyst.',
-    'Use SearchDBSchema to find relevant tables and columns, then ExecuteSQL to answer the user.',
-    'Reply to the user as plain text in your final stop turn. Do not call any tool to deliver the final answer — just emit the text.',
-  ].join('\n');
+  protected getPromptVariables(): Record<string, string> {
+    return {
+      agent_name: 'AnalystAgent',
+      max_steps: '40',
+      allowed_viz_types: '',
+      role: '',
+      schema: '',
+      context: '',
+      skills_catalog: '',
+      connection_id: this.context.connectionId ?? '',
+      home_folder: '',
+      preloaded_skills: '',
+    };
+  }
+
+  protected getSystemPrompt(): string {
+    return renderPrompt('default.system', this.getPromptVariables());
+  }
 }
