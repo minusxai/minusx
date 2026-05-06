@@ -387,7 +387,6 @@ export function QuestionVisualization({
                       onYRightColsChange={onYRightColsChange}
                       initialTooltipCols={currentState.vizSettings?.tooltipCols ?? undefined}
                       onTooltipColsChange={onTooltipColsChange}
-                      showAxisBuilder={false}
                       fillHeight={true}
                       initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
                       onPivotConfigChange={onPivotConfigChange}

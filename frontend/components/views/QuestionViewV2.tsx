@@ -46,7 +46,7 @@ import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
 import { VizTypeSelector } from '../question/VizTypeSelector';
-import { ChartBuilder } from '../plotx/ChartBuilder';
+import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { FilesAPI } from '@/lib/data/files';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 
@@ -718,10 +718,9 @@ export default function QuestionViewV2({
                       orientation="grouped"
                     />
                     {content.vizSettings?.type && content.vizSettings.type !== 'table' && (
-                      <ChartBuilder
+                      <VizConfigPanel
                         columns={queryData.columns}
                         types={queryData.types}
-                        rows={queryData.rows}
                         chartType={content.vizSettings.type}
                         initialXCols={content.vizSettings?.xCols ?? undefined}
                         initialYCols={content.vizSettings?.yCols ?? undefined}
@@ -730,15 +729,10 @@ export default function QuestionViewV2({
                         onYRightColsChange={handleYRightColsChange}
                         initialTooltipCols={content.vizSettings?.tooltipCols ?? undefined}
                         onTooltipColsChange={handleTooltipColsChange}
-                        showAxisBuilder={true}
-                        settingsExpanded={true}
-                        fillHeight={false}
                         initialPivotConfig={content.vizSettings?.pivotConfig ?? undefined}
                         onPivotConfigChange={handlePivotConfigChange}
                         initialGeoConfig={content.vizSettings?.geoConfig ?? undefined}
                         onGeoConfigChange={handleGeoConfigChange}
-                        sql={content.query}
-                        databaseName={content.connection_name}
                         initialColumnFormats={content.vizSettings?.columnFormats ?? undefined}
                         onColumnFormatsChange={handleColumnFormatsChange}
                         styleConfig={{
@@ -752,7 +746,6 @@ export default function QuestionViewV2({
                         onAnnotationsChange={handleAnnotationsChange}
                         trendConfig={content.vizSettings?.trendConfig ?? undefined}
                         onTrendConfigChange={handleTrendConfigChange}
-                        configOnly
                       />
                     )}
                   </Box>
