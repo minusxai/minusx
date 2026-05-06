@@ -40,7 +40,8 @@ const TEST_USER: EffectiveUser = {
 };
 
 // Mock db-config to use test database
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -48,7 +49,7 @@ jest.mock('@/lib/database/db-config', () => ({
 
 // Mock the store import so file-state.ts uses the test store
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() {
     return testStore;
   },
@@ -56,8 +57,8 @@ jest.mock('@/store/store', () => ({
 }));
 
 // Mock python-backend-client to return realistic test data (no real Python backend in tests)
-jest.mock('@/lib/api/python-backend-client', () => ({
-  pythonBackendFetch: jest.fn(async (url: string, init?: any) => {
+vi.mock('@/lib/api/python-backend-client', () => ({
+  pythonBackendFetch: vi.fn(async (url: string, init?: any) => {
     // Mock query results with realistic test data
     if (url.includes('/api/execute-query')) {
       const body = init?.body ? JSON.parse(init.body) : {};
@@ -676,7 +677,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     it('error result has success:false and error message in both content and details', async () => {
       // Override the mock for this one call to simulate a backend error
-      const { pythonBackendFetch } = jest.requireMock('@/lib/api/python-backend-client');
+      const { pythonBackendFetch } = await vi.importMock('@/lib/api/python-backend-client');
       pythonBackendFetch.mockImplementationOnce(async () => ({
         ok: false,
         status: 400,
@@ -1559,7 +1560,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     it('uses parameterValues from content when no override is set', async () => {
       console.log('\n[TEST] EditFile tool handler: auto-execute uses parameterValues from content');
 
-      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
       const callsBefore = pythonBackendFetch.mock.calls.length;
 
       // Call the registered EditFile frontend tool handler
@@ -1600,7 +1601,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Edit parameterValues in content (user changed the filter to 99, marks file dirty)
       editFile({ fileId: paramQuestionId, changes: { content: { parameterValues: { limit: 99 } } } });
 
-      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
       const callsBefore = pythonBackendFetch.mock.calls.length;
 
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
@@ -1767,7 +1768,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     beforeAll(async () => {
       // Override auth mock to return the subfolder viewer
-      const authMock = jest.requireMock('@/lib/auth/auth-helpers');
+      const authMock = await vi.importMock('@/lib/auth/auth-helpers');
       authMock.getEffectiveUser.mockResolvedValue(subfolderViewerEffective);
 
       // Ancestor context at /org/context — outside the viewer's home /org/sales.
@@ -1798,7 +1799,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     afterAll(() => {
       // Restore admin mock
-      const authMock = jest.requireMock('@/lib/auth/auth-helpers');
+      const authMock = await vi.importMock('@/lib/auth/auth-helpers');
       authMock.getEffectiveUser.mockResolvedValue({
         userId: 1, email: 'test@example.com', name: 'Test User',
         role: 'admin', companyName: 'test-workspace',

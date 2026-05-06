@@ -17,15 +17,16 @@
 // Hoisted mocks — must come before any imports
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
-jest.mock('next/cache', () => ({
-  revalidateTag: jest.fn(),
-  unstable_cache: jest.fn((fn: unknown) => fn),
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+  unstable_cache: vi.fn((fn: unknown) => fn),
 }));
 
 // ---------------------------------------------------------------------------

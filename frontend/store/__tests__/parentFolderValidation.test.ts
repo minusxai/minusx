@@ -25,7 +25,8 @@ import { POST as folderPostHandler } from '@/app/api/folders/route';
 // Jest module mocks — hoisted to top by Jest
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,

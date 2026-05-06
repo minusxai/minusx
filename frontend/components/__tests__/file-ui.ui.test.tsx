@@ -1,72 +1,73 @@
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
-const mockReplaceFileState = jest.fn().mockResolvedValue({ success: true });
-jest.mock('@/lib/api/file-state', () => ({
-  ...jest.requireActual('@/lib/api/file-state'),
+const mockReplaceFileState = vi.fn().mockResolvedValue({ success: true });
+vi.mock('@/lib/api/file-state', () => ({
+  ...vi.importActual('@/lib/api/file-state'),
   replaceFileState: (...args: unknown[]) => mockReplaceFileState(...args),
 }));
 
 let mockPathname = '/f/1';
-const mockRouterPush = jest.fn();
+const mockRouterPush = vi.fn();
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), forward: jest.fn(), refresh: jest.fn(), prefetch: jest.fn() }),
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(),
 }));
 
-jest.mock('@/lib/navigation/use-navigation', () => ({
+vi.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({
     push: mockRouterPush,
-    replace: jest.fn(),
-    back: jest.fn(),
-    prefetch: jest.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
   }),
   usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(),
 }));
 
-jest.mock('@/components/Sidebar', () => ({
+vi.mock('@/components/Sidebar', () => ({
   __esModule: true,
   default: () => null,
 }));
 
-jest.mock('@/components/MobileBottomNav', () => ({
+vi.mock('@/components/MobileBottomNav', () => ({
   __esModule: true,
   default: () => null,
 }));
 
-jest.mock('@/lib/hooks/useRecordingContext', () => ({
+vi.mock('@/lib/hooks/useRecordingContext', () => ({
   RecordingProvider: ({ children }: { children: any }) => {
     const React = require('react');
     return React.createElement(React.Fragment, null, children);
   },
 }));
 
-jest.mock('@/lib/utils/attachment-extract', () => ({
-  extractTextFromDocument: jest.fn().mockResolvedValue(''),
+vi.mock('@/lib/utils/attachment-extract', () => ({
+  extractTextFromDocument: vi.fn().mockResolvedValue(''),
   SUPPORTED_DOC_EXTENSIONS: [],
 }));
 
-jest.mock('@/components/Markdown', () => {
+vi.mock('@/components/Markdown', () => {
   const React = require('react');
   const MarkdownMock = ({ children }: { children?: any }) =>
     React.createElement('span', { 'data-testid': 'markdown' }, children);
   return { __esModule: true, default: MarkdownMock };
 });
 
-jest.mock('@/lib/navigation/NavigationGuardProvider', () => ({
+vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
   useNavigationGuard: () => ({
-    navigate: jest.fn(),
+    navigate: vi.fn(),
     isBlocked: false,
-    confirmNavigation: jest.fn(),
-    cancelNavigation: jest.fn(),
+    confirmNavigation: vi.fn(),
+    cancelNavigation: vi.fn(),
   }),
   NavigationGuardProvider: ({ children }: { children: any }) => children,
 }));
@@ -150,12 +151,12 @@ function makeToolCallTuple(opts: { fileId: number; success: boolean; diff?: stri
 
 describe('EditFileDisplay restore buttons', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     mockPathname = '/f/1';
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     mockReplaceFileState.mockClear();
 
     testStore.dispatch(setFile({
@@ -305,16 +306,16 @@ function makeContext(id: number, name: string) {
 
 describe('FilesList grouping', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
   });
 
   afterEach(() => {
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('hides the section header when all visible files belong to a single group', () => {
@@ -347,12 +348,12 @@ describe('ViewStack navigation cleanup', () => {
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     mockPathname = '/f/2';
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('shows the question edit overlay when a view is pushed', async () => {
@@ -449,16 +450,16 @@ function makeConnectionFile(id: number, name: string, withSchema = true): DbFile
 
 describe('Explore page: database selector defaults to first connection', () => {
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     mockPathname = '/explore';
     mockRouterPush.mockClear();
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
-    window.HTMLElement.prototype.scrollTo = jest.fn();
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    window.HTMLElement.prototype.scrollTo = vi.fn();
 
-    jest.spyOn(global, 'fetch').mockImplementation(async (url) => {
+    vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
       const urlStr = url.toString();
       if (urlStr.includes('/api/')) {
         return {
@@ -474,7 +475,7 @@ describe('Explore page: database selector defaults to first connection', () => {
 
   afterEach(() => {
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('auto-selects first connection when connections are pre-loaded in Redux', async () => {

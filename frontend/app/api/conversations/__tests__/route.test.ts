@@ -7,7 +7,8 @@
  *    with their `source` metadata, which is the fix for Bug #3 (sidebar visibility)
  */
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,

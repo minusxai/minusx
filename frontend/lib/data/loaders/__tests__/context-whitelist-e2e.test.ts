@@ -28,11 +28,12 @@
 // Jest infrastructure mocks (must be at top due to hoisting)
 // ─────────────────────────────────────────────────────────────────────────────
 
-jest.mock('@/lib/connections', () => ({
+vi.mock('@/lib/connections', () => ({
   getNodeConnector: () => null,
 }));
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -336,10 +337,10 @@ describe('filterSchemaByWhitelistNode — single-connection filter', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Context loader — ContextVersion.whitelist (new schema)', () => {
-  const mockGetSchemaFromPython = jest.spyOn(pythonBackend, 'getSchemaFromPython');
+  const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await getModules().db.exec('DELETE FROM files', []);
 
     // Two connections — one DuckDB, one BigQuery
@@ -634,7 +635,7 @@ describe('Default context per folder', () => {
     // Simulate the DB having three levels of default contexts
     // (createPath would create all three in production)
 
-    const mockGetSchemaFromPython = jest.spyOn(pythonBackend, 'getSchemaFromPython');
+    const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
     mockGetSchemaFromPython.mockResolvedValue({
       schemas: [{
         schema: 'public',

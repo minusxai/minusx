@@ -264,7 +264,7 @@ export function setupTestDb(dbPath: string, options: TestDbOptions = {}): TestDb
       await customInit(dbPath);
     }
     store = setupTestStore();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {

@@ -16,7 +16,7 @@ describe('GenericSelector compact mode', () => {
     renderWithProviders(
       <GenericSelector
         value=""
-        onChange={jest.fn()}
+        onChange={vi.fn()}
         options={OPTIONS}
         compact
         compactLabel="Knowledge Base"
@@ -36,7 +36,7 @@ describe('GenericSelector compact mode', () => {
     renderWithProviders(
       <GenericSelector
         value="beta"
-        onChange={jest.fn()}
+        onChange={vi.fn()}
         options={OPTIONS}
         compact
         compactLabel="Knowledge Base"
@@ -50,7 +50,7 @@ describe('GenericSelector compact mode', () => {
   })
 
   it('opens dropdown and calls onChange when an option is clicked', async () => {
-    const onChange = jest.fn()
+    const onChange = vi.fn()
     const user = userEvent.setup()
 
     renderWithProviders(

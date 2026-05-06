@@ -34,7 +34,8 @@ import { parseLogToMessages } from '@/lib/conversations-utils';
 import type { ConversationFile } from '@/lib/conversations';
 
 // Unified test database mock (test name must match)
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -189,7 +190,7 @@ describe('Chat API Tests', () => {
     });
 
     it('should handle auth errors', async () => {
-      const { getEffectiveUser } = require('@/lib/auth/auth-helpers');
+      const { getEffectiveUser } = await import('@/lib/auth/auth-helpers');
       getEffectiveUser.mockResolvedValueOnce(null);
 
       const response = await chatPostHandler(createNextRequest({
@@ -1112,7 +1113,7 @@ describe('LLM-Mocked Agent Suites', () => {
   const { getStore: getQueueStore } = setupTestDb(QUEUE_TEST_DB_PATH);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     sharedLLMMockFetch.mockClear();
   });
 

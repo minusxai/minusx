@@ -39,8 +39,8 @@ import navigationReducer from '@/store/navigationSlice';
 import authReducer from '@/store/authSlice';
 
 // Tutorial files live under /tutorial/ — mode must match for permission checks
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
+vi.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: vi.fn().mockResolvedValue({
     userId: 1,
     email: 'test@example.com',
     name: 'Test User',
@@ -49,11 +49,12 @@ jest.mock('@/lib/auth/auth-helpers', () => ({
     home_folder: '',
     mode: 'tutorial'
   }),
-  isAdmin: jest.fn().mockReturnValue(true)
+  isAdmin: vi.fn().mockReturnValue(true)
 }));
 
 // Database-specific mock (test name must match)
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,

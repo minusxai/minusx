@@ -9,26 +9,27 @@
  *  - s3Key is a signed token that verifyStorageToken can decode back to the raw key
  */
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn(),
+vi.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: vi.fn(),
 }));
 
 // Mock the entire object-store module so the route never touches real S3
-jest.mock('@/lib/object-store', () => {
+vi.mock('@/lib/object-store', () => {
   const { randomUUID } = require('crypto');
   return {
-    createObjectStore: jest.fn(() => ({
-      getUploadUrl: jest.fn(async ({ key }: { key: string }) => ({
+    createObjectStore: vi.fn(() => ({
+      getUploadUrl: vi.fn(async ({ key }: { key: string }) => ({
         uploadUrl: `https://bucket.s3.amazonaws.com/${key}?X-Amz-Signature=mock`,
         publicUrl: `https://bucket.s3.amazonaws.com/${key}`,
       })),
-      delete: jest.fn(),
+      delete: vi.fn(),
     })),
     generateUploadKey: ({ ext }: { userId: number; mode: string; type: string; ext: string }) => {
       return `uploads/${randomUUID()}${ext}`;
@@ -57,7 +58,7 @@ function makeRequest(params: Record<string, string>): NextRequest {
 }
 
 beforeEach(() => {
-  (getEffectiveUser as jest.Mock).mockResolvedValue(mockUser);
+  (getEffectiveUser as vi.Mock).mockResolvedValue(mockUser);
 });
 
 describe('GET /api/object-store/upload-url', () => {
@@ -105,7 +106,7 @@ describe('GET /api/object-store/upload-url', () => {
   });
 
   it('returns 401 when not authenticated (null user)', async () => {
-    (getEffectiveUser as jest.Mock).mockResolvedValue(null);
+    (getEffectiveUser as vi.Mock).mockResolvedValue(null);
     const req = makeRequest({ filename: 'photo.png', contentType: 'image/png' });
     const res = await GET(req);
     expect(res.status).toBe(401);

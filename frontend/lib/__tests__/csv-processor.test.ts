@@ -5,22 +5,24 @@
  * S3 + DuckDB paths: covered via mocks — no real infrastructure needed.
  */
 
-jest.mock('server-only', () => ({}));
+vi.mock('server-only', () => ({}));
 // Mock fs so DuckDB's COPY TO (which is a no-op in tests) doesn't block readFileSync
-jest.mock('fs', () => ({
-  writeFileSync: jest.fn(),
-  readFileSync: jest.fn().mockReturnValue(Buffer.from('mock-parquet')),
-  unlinkSync: jest.fn(),
+vi.mock('fs', () => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn().mockReturnValue(Buffer.from('mock-parquet')),
+  unlinkSync: vi.fn(),
 }));
-jest.mock('@duckdb/node-api', () => ({ DuckDBInstance: { create: jest.fn() } }));
-jest.mock('@aws-sdk/client-s3', () => ({
-  S3Client: jest.fn(),
-  GetObjectCommand: jest.fn(),
-  PutObjectCommand: jest.fn(),
-  ListObjectsV2Command: jest.fn(),
-  DeleteObjectsCommand: jest.fn(),
+vi.mock('@duckdb/node-api', () => ({ DuckDBInstance: { create: vi.fn() } }));
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: vi.fn(),
+  GetObjectCommand: vi.fn(),
+  PutObjectCommand: vi.fn(),
+  ListObjectsV2Command: vi.fn(),
+  DeleteObjectsCommand: vi.fn(),
 }));
-jest.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', () => ({
+  OBJECT_STORE_PUBLIC_URL: undefined,
+  MX_NETWORK_LOG_EXCLUDE: '',
   OBJECT_STORE_BUCKET: 'test-bucket',
   OBJECT_STORE_REGION: 'us-east-1',
   OBJECT_STORE_ACCESS_KEY_ID: 'test-key',
@@ -57,20 +59,21 @@ async function* makeStream(buf: Buffer): AsyncIterable<Uint8Array> {
 
 // ─── Shared mock setup ────────────────────────────────────────────────────────
 
-let mockSend: jest.Mock;
-let mockConnRun: jest.Mock;
-let mockConnCloseSync: jest.Mock;
-let mockInstanceCloseSync: jest.Mock;
+let mockSend: vi.Mock;
+let mockConnRun: vi.Mock;
+let mockConnCloseSync: vi.Mock;
+let mockInstanceCloseSync: vi.Mock;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 
   // S3 mock — default: all sends succeed
-  mockSend = jest.fn().mockResolvedValue({});
-  (S3Client as jest.Mock).mockImplementation(() => ({ send: mockSend }));
+  mockSend = vi.fn().mockResolvedValue({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (S3Client as vi.Mock).mockImplementation(function (this: any) { this.send = mockSend; });
 
   // DuckDB mock — COUNT returns 5 rows, DESCRIBE returns two columns
-  mockConnRun = jest.fn().mockImplementation(async (sql: string) => {
+  mockConnRun = vi.fn().mockImplementation(async (sql: string) => {
     if (sql.includes('COUNT(*)')) return { getRowObjectsJS: async () => [{ cnt: BigInt(5) }] };
     if (sql.startsWith('DESCRIBE')) return {
       getRowObjectsJS: async () => [
@@ -80,10 +83,10 @@ beforeEach(() => {
     };
     return {};
   });
-  mockConnCloseSync = jest.fn();
-  mockInstanceCloseSync = jest.fn();
-  (DuckDBInstance.create as jest.Mock).mockResolvedValue({
-    connect: jest.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockConnCloseSync }),
+  mockConnCloseSync = vi.fn();
+  mockInstanceCloseSync = vi.fn();
+  (DuckDBInstance.create as vi.Mock).mockResolvedValue({
+    connect: vi.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockConnCloseSync }),
     closeSync: mockInstanceCloseSync,
   });
 });
@@ -407,14 +410,14 @@ describe('importGoogleSheetToS3', () => {
 
   beforeEach(() => {
     // Reset global fetch for each test
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('downloads the sheet, uploads CSVs and returns files + spreadsheetId', async () => {
     const xlsxBuf = makeXlsxBuffer({
       Orders: [['id', 'total'], ['1', '99']],
     });
-    (global.fetch as jest.Mock).mockResolvedValue({
+    (global.fetch as vi.Mock).mockResolvedValue({
       ok: true,
       status: 200,
       arrayBuffer: async () => xlsxBuf.buffer.slice(xlsxBuf.byteOffset, xlsxBuf.byteOffset + xlsxBuf.byteLength),
@@ -437,7 +440,7 @@ describe('importGoogleSheetToS3', () => {
       Orders: [['id'], ['1']],
       Users: [['name'], ['Alice']],
     });
-    (global.fetch as jest.Mock).mockResolvedValue({
+    (global.fetch as vi.Mock).mockResolvedValue({
       ok: true,
       status: 200,
       arrayBuffer: async () => xlsxBuf.buffer.slice(xlsxBuf.byteOffset, xlsxBuf.byteOffset + xlsxBuf.byteLength),
@@ -449,7 +452,7 @@ describe('importGoogleSheetToS3', () => {
   });
 
   it('throws when spreadsheet is not publicly accessible (403)', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+    (global.fetch as vi.Mock).mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
 
     await expect(
       importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
@@ -457,7 +460,7 @@ describe('importGoogleSheetToS3', () => {
   });
 
   it('throws when spreadsheet is not found (404)', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+    (global.fetch as vi.Mock).mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
 
     await expect(
       importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),
@@ -465,7 +468,7 @@ describe('importGoogleSheetToS3', () => {
   });
 
   it('throws on other HTTP errors', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500, statusText: 'Server Error' });
+    (global.fetch as vi.Mock).mockResolvedValue({ ok: false, status: 500, statusText: 'Server Error' });
 
     await expect(
       importGoogleSheetToS3(SHEET_URL, 'conn', 'org', 'public'),

@@ -24,7 +24,8 @@ const gunzipAsync = promisify(gunzip);
 const TEST_DB_PATH = path.join(process.cwd(), 'data', 'test_admin_api.db');
 
 // Mock database config
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const
@@ -43,8 +44,8 @@ import { POST as importHandler } from '@/app/api/admin/import-data/route';
 import { POST as resetTutorialHandler } from '@/app/api/admin/reset-tutorial/route';
 
 // Shared auth mock for all suites
-const mockGetEffectiveUser = jest.fn();
-jest.mock('@/lib/auth/auth-helpers', () => ({
+const mockGetEffectiveUser = vi.fn();
+vi.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: () => mockGetEffectiveUser()
 }));
 
@@ -120,7 +121,7 @@ describe('Import/Export API Endpoints', () => {
 
   afterEach(async () => {
     cleanupDbFiles();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('GET /api/admin/export-db', () => {
@@ -199,7 +200,7 @@ describe('Import/Export API Endpoints', () => {
 
       const formData = await createMockFormDataWithFile(importData, 'data.json');
       const request = createExportRequest('http://localhost:3000/api/admin/import-data');
-      jest.spyOn(request, 'formData').mockResolvedValue(formData);
+      vi.spyOn(request, 'formData').mockResolvedValue(formData);
 
       const response = await importHandler(request, {} as any);
 
@@ -221,7 +222,7 @@ describe('Import/Export API Endpoints', () => {
 
       const formData = await createMockFormDataWithFile(importData, 'old_version.json');
       const request = createExportRequest('http://localhost:3000/api/admin/import-data');
-      jest.spyOn(request, 'formData').mockResolvedValue(formData);
+      vi.spyOn(request, 'formData').mockResolvedValue(formData);
 
       const response = await importHandler(request, {} as any);
 
@@ -253,7 +254,7 @@ describe('Import/Export API Endpoints', () => {
       formData.append('file', file);
 
       const request = createExportRequest('http://localhost:3000/api/admin/import-data');
-      jest.spyOn(request, 'formData').mockResolvedValue(formData);
+      vi.spyOn(request, 'formData').mockResolvedValue(formData);
 
       const response = await importHandler(request, {} as any);
 
@@ -280,7 +281,7 @@ describe('Import/Export API Endpoints', () => {
 
       const formData = await createMockFormDataWithFile(importData, 'test.json');
       const request = createExportRequest('http://localhost:3000/api/admin/import-data');
-      jest.spyOn(request, 'formData').mockResolvedValue(formData);
+      vi.spyOn(request, 'formData').mockResolvedValue(formData);
 
       const response = await importHandler(request, {} as any);
 
@@ -352,7 +353,7 @@ describe('POST /api/admin/reset-tutorial', () => {
 
   afterEach(async () => {
     cleanupDbFiles();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should reset tutorial to exact template state', async () => {

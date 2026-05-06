@@ -1,13 +1,14 @@
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
-jest.mock('@/store/filesSlice', () => {
-  const actual = jest.requireActual('@/store/filesSlice');
+vi.mock('@/store/filesSlice', () => {
+  const actual = vi.importActual('@/store/filesSlice');
   return {
     __esModule: true,
     ...actual,
@@ -15,37 +16,37 @@ jest.mock('@/store/filesSlice', () => {
   };
 });
 
-const mockRouterPush = jest.fn();
-jest.mock('@/lib/navigation/use-navigation', () => ({
+const mockRouterPush = vi.fn();
+vi.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({
     push: mockRouterPush,
-    replace: jest.fn(),
-    back: jest.fn(),
-    prefetch: jest.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    prefetch: vi.fn(),
   }),
   usePathname: () => '/explore',
   useSearchParams: () => new URLSearchParams(),
-  getRouter: jest.fn(() => null),
+  getRouter: vi.fn(() => null),
 }));
 
-jest.mock('@/lib/utils/attachment-extract', () => ({
-  extractTextFromDocument: jest.fn().mockResolvedValue(''),
+vi.mock('@/lib/utils/attachment-extract', () => ({
+  extractTextFromDocument: vi.fn().mockResolvedValue(''),
   SUPPORTED_DOC_EXTENSIONS: [],
 }));
 
-jest.mock('@/components/Markdown', () => {
+vi.mock('@/components/Markdown', () => {
   const React = require('react');
   const MarkdownMock = ({ children }: { children?: any }) =>
     React.createElement('span', { 'data-testid': 'markdown' }, children);
   return { __esModule: true, default: MarkdownMock };
 });
 
-jest.mock('@/lib/navigation/NavigationGuardProvider', () => ({
+vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
   useNavigationGuard: () => ({
-    navigate: jest.fn(),
+    navigate: vi.fn(),
     isBlocked: false,
-    confirmNavigation: jest.fn(),
-    cancelNavigation: jest.fn(),
+    confirmNavigation: vi.fn(),
+    cancelNavigation: vi.fn(),
   }),
   NavigationGuardProvider: ({ children }: { children: any }) => children,
 }));
@@ -169,14 +170,14 @@ describe('Agent creates files via chat', () => {
   });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
-  let fetchSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
+  let fetchSpy: vi.SpyInstance;
 
   beforeEach(() => {
     // Re-install this describe's mock fetch so later setupMockFetch calls don't override it
-    fetchSpy = jest.spyOn(global as any, 'fetch').mockImplementation(mockFetch as any);
+    fetchSpy = vi.spyOn(global as any, 'fetch').mockImplementation(mockFetch as any);
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     mockFetch.mockClear();
   });
 
@@ -370,18 +371,18 @@ describe('Explore page: submit question → agent responds → see answer → to
   });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
-  let fetchSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
+  let fetchSpy: vi.SpyInstance;
 
   beforeEach(() => {
     // Re-install mock because the prior describe's setupMockFetch afterAll
     // does global.fetch = originalFetch, removing the spy from global scope.
-    fetchSpy = jest.spyOn(global as any, 'fetch').mockImplementation(exploreMockFetch as any);
+    fetchSpy = vi.spyOn(global as any, 'fetch').mockImplementation(exploreMockFetch as any);
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     exploreMockFetch.mockClear();
     mockRouterPush.mockClear();
-    window.HTMLElement.prototype.scrollTo = jest.fn();
+    window.HTMLElement.prototype.scrollTo = vi.fn();
   });
 
   afterEach(() => {
@@ -658,7 +659,7 @@ function makeRealApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) 
     return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
   };
 
-  return jest.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
+  return vi.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = url.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
 
@@ -713,11 +714,11 @@ describe('Add question to existing dashboard and save', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
     testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: true }));
@@ -727,7 +728,7 @@ describe('Add question to existing dashboard and save', () => {
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('manual: adds question to empty dashboard and saves via Publish button', async () => {
@@ -773,7 +774,7 @@ describe('Add question to existing dashboard and save', () => {
     expect(savedContent.assets![0]).toMatchObject({ type: 'question', id: QUESTION_ID });
 
     // Save now goes through publishAll → batch-save (not single-file PATCH)
-    const saveCalls = (global.fetch as jest.Mock).mock.calls.filter(
+    const saveCalls = (global.fetch as vi.Mock).mock.calls.filter(
       ([url, init]) =>
         typeof url === 'string' &&
         (url.includes('/api/files/batch-save') || url.includes(`/api/files/${DASHBOARD_ID}`)) &&
@@ -789,11 +790,11 @@ describe('Dashboard edit/cancel mode toggle', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
     global.fetch = makeRealApiFetch();
@@ -802,7 +803,7 @@ describe('Dashboard edit/cancel mode toggle', () => {
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('manual: enters and exits edit mode via the Edit / Cancel toggle', async () => {
@@ -835,11 +836,11 @@ describe('Dashboard agentic scenarios', () => {
 
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
     const pythonPort = sharedPythonPort();
     const llmPort = sharedLLMMockPort?.();
@@ -944,13 +945,13 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
   const Q_NAME = 'Revenue Query';
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
-    (useNavModule.getRouter as jest.Mock).mockReturnValue({
+    (useNavModule.getRouter as vi.Mock).mockReturnValue({
       push: (url: string) => {
         const u = new URL(url, 'http://localhost');
         const vid = u.searchParams.get('virtualId');
@@ -971,7 +972,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('manual: navigates to new dashboard, adds existing question via QuestionBrowserPanel, publishAll batch-creates the new dashboard', async () => {
@@ -1013,7 +1014,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
 
     await act(async () => { await publishAll(); });
 
-    const batchCreateCalls1 = (global.fetch as jest.Mock).mock.calls.filter(
+    const batchCreateCalls1 = (global.fetch as vi.Mock).mock.calls.filter(
       ([u]) => String(u).includes('/api/files/batch-create')
     );
     expect(batchCreateCalls1).toHaveLength(1);
@@ -1065,7 +1066,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
 
     await act(async () => { await publishAll(); });
 
-    const batchCreateCalls2 = (global.fetch as jest.Mock).mock.calls.filter(
+    const batchCreateCalls2 = (global.fetch as vi.Mock).mock.calls.filter(
       ([u]) => String(u).includes('/api/files/batch-create')
     );
     expect(batchCreateCalls2).toHaveLength(2);
@@ -1182,7 +1183,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
 
     expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
 
-    const batchCreateCalls3 = (global.fetch as jest.Mock).mock.calls.filter(
+    const batchCreateCalls3 = (global.fetch as vi.Mock).mock.calls.filter(
       ([u]) => String(u).includes('/api/files/batch-create')
     );
     expect(batchCreateCalls3).toHaveLength(2);
@@ -1201,24 +1202,24 @@ describe('publishAll error handling', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
   });
 
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('batch-save failure: throws and leaves real file dirty', async () => {
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(addQuestionToDashboard({ dashboardId: DASHBOARD_ID, questionId: QUESTION_ID }));
 
-    global.fetch = jest.fn(async (url: string | Request | URL) => {
+    global.fetch = vi.fn(async (url: string | Request | URL) => {
       if (String(url).includes('/api/files/batch-save'))
         return { ok: false, status: 500, json: async () => ({ error: { message: 'Save failed' } }) } as Response;
       throw new Error(`Unexpected fetch: ${String(url)}`);
@@ -1239,18 +1240,18 @@ describe('Multiple questions in dashboard', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndTwoQuestions });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     global.fetch = makeRealApiFetch();
   });
 
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('adds two questions and saves both in dashboard content', async () => {
@@ -1341,7 +1342,7 @@ describe('Dashboard parameter merging', () => {
   setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertQuestionsWithSharedParams });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   const paramDash = () => ({
     id: DASHBOARD_ID, name: 'Param Dashboard', type: 'dashboard' as const,
@@ -1384,7 +1385,7 @@ describe('Dashboard parameter merging', () => {
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     testStore.dispatch(setFile({ file: paramDash(), references: [] }));
     testStore.dispatch(setFile({ file: paramQ1(), references: [] }));
     testStore.dispatch(setFile({ file: paramQ2(), references: [] }));
@@ -1394,7 +1395,7 @@ describe('Dashboard parameter merging', () => {
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('two questions sharing :start_date render exactly one merged date parameter input', async () => {
@@ -1520,7 +1521,7 @@ function makeViewerApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}
     return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
   };
 
-  return jest.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
+  return vi.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = url.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
 
@@ -1565,14 +1566,14 @@ describe('Viewer role: dashboard header hides edit controls', () => {
   setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertViewerDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
-    jest.requireMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+    vi.importMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
     testStore = storeModule.makeStore();
     testStore.dispatch(setUser(VIEWER_AUTH_USER));
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
     testStore.dispatch(setFile({ file: makeViewerDashboardDbFile(), references: [] }));
     testStore.dispatch(setDashboardEditMode({ fileId: V_DASHBOARD_ID, editMode: false }));
@@ -1582,7 +1583,7 @@ describe('Viewer role: dashboard header hides edit controls', () => {
   afterEach(() => {
     global.fetch = realFetch;
     getStoreSpy.mockRestore();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('hides the Edit button for viewer on a dashboard', async () => {
@@ -1621,17 +1622,17 @@ describe('Viewer role: agent CreateFile is rejected', () => {
   setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertViewerDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
-    jest.requireMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+    vi.importMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
     const pythonPort = sharedPythonPort();
     const llmPort = sharedLLMMockPort?.();
 
     testStore = storeModule.makeStore();
     testStore.dispatch(setUser(VIEWER_AUTH_USER));
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
     global.fetch = makeViewerApiFetch({ pythonPort, llmPort });
   });
@@ -1719,17 +1720,17 @@ describe('Viewer role: agent EditFile on dashboard is rejected', () => {
   setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertViewerDashboardAndQuestion });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
-  let getStoreSpy: jest.SpyInstance;
+  let getStoreSpy: vi.SpyInstance;
 
   beforeEach(() => {
-    jest.requireMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+    vi.importMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
     const pythonPort = sharedPythonPort();
     const llmPort = sharedLLMMockPort?.();
 
     testStore = storeModule.makeStore();
     testStore.dispatch(setUser(VIEWER_AUTH_USER));
-    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
     testStore.dispatch(setFile({ file: makeViewerDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeViewerQuestionDbFile(), references: [] }));

@@ -4,20 +4,21 @@
  */
 
 // Database-specific mock (test name must match)
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
 // Mock Node.js connector so schema falls through to getSchemaFromPython mock below
-jest.mock('@/lib/connections', () => ({
+vi.mock('@/lib/connections', () => ({
   getNodeConnector: () => null,
 }));
 
 // Mock schema introspection to return test schema
-jest.mock('@/lib/backend/python-backend.server', () => ({
-  getSchemaFromPython: jest.fn().mockResolvedValue({
+vi.mock('@/lib/backend/python-backend.server', () => ({
+  getSchemaFromPython: vi.fn().mockResolvedValue({
     schemas: [
       {
         schema: 'main',

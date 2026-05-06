@@ -30,8 +30,8 @@ import type { DbFile, FileType } from '@/lib/types';
 import type { RootState } from '@/store/store';
 
 // Mock FilesAPI
-jest.mock('@/lib/data/files', () => {
-  const mockGetFilesFn = jest.fn();
+vi.mock('@/lib/data/files', () => {
+  const mockGetFilesFn = vi.fn();
   class ConflictError extends Error {
     currentFile: any;
     constructor(currentFile: any) {
@@ -42,11 +42,11 @@ jest.mock('@/lib/data/files', () => {
   }
   return {
     FilesAPI: {
-      loadFiles: jest.fn(),
-      loadFile: jest.fn(),
+      loadFiles: vi.fn(),
+      loadFile: vi.fn(),
       getFiles: mockGetFilesFn,
-      saveFile: jest.fn(),
-      createFile: jest.fn()
+      saveFile: vi.fn(),
+      createFile: vi.fn()
     },
     getFiles: mockGetFilesFn, // Also export getFiles directly for readFolder
     ConflictError
@@ -54,44 +54,44 @@ jest.mock('@/lib/data/files', () => {
 });
 
 // Mock access rules for readFolder
-jest.mock('@/lib/auth/access-rules.client', () => ({
-  canViewFileType: jest.fn().mockReturnValue(true)
+vi.mock('@/lib/auth/access-rules.client', () => ({
+  canViewFileType: vi.fn().mockReturnValue(true)
 }));
 
 // Mock path resolver for readFolder
-jest.mock('@/lib/mode/path-resolver', () => ({
-  isHiddenSystemPath: jest.fn().mockReturnValue(false),
-  resolveHomeFolderSync: jest.fn((mode: string, folder: string) => `/${mode}`),
-  isFileTypeAllowedInPath: jest.fn().mockReturnValue(true), // Allow all file types in all paths for tests
-  getModeRoot: jest.fn((mode: string) => `/${mode}`)
+vi.mock('@/lib/mode/path-resolver', () => ({
+  isHiddenSystemPath: vi.fn().mockReturnValue(false),
+  resolveHomeFolderSync: vi.fn((mode: string, folder: string) => `/${mode}`),
+  isFileTypeAllowedInPath: vi.fn().mockReturnValue(true), // Allow all file types in all paths for tests
+  getModeRoot: vi.fn((mode: string) => `/${mode}`)
 }));
 
 // Mock query hash for getQueryResult
-jest.mock('@/lib/utils/query-hash', () => ({
-  getQueryHash: jest.fn((query: string, params: Record<string, any>, database: string) => {
+vi.mock('@/lib/utils/query-hash', () => ({
+  getQueryHash: vi.fn((query: string, params: Record<string, any>, database: string) => {
     return `${query}::${JSON.stringify(params)}::${database}`;
   })
 }));
 
 // Mock fetch for publishFile
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 // Mock the store import
 let mockStore: ReturnType<typeof configureStore>;
 
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() {
     return mockStore;
   },
   getStore: () => mockStore
 }));
 
-const mockLoadFiles = FilesAPI.loadFiles as jest.MockedFunction<typeof FilesAPI.loadFiles>;
-const mockLoadFile = FilesAPI.loadFile as jest.MockedFunction<typeof FilesAPI.loadFile>;
-const mockGetFiles = FilesAPI.getFiles as jest.MockedFunction<typeof FilesAPI.getFiles>;
-const mockSaveFile = FilesAPI.saveFile as jest.MockedFunction<typeof FilesAPI.saveFile>;
-const mockCreateFile = FilesAPI.createFile as jest.MockedFunction<typeof FilesAPI.createFile>;
-const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+const mockLoadFiles = FilesAPI.loadFiles as vi.MockedFunction<typeof FilesAPI.loadFiles>;
+const mockLoadFile = FilesAPI.loadFile as vi.MockedFunction<typeof FilesAPI.loadFile>;
+const mockGetFiles = FilesAPI.getFiles as vi.MockedFunction<typeof FilesAPI.getFiles>;
+const mockSaveFile = FilesAPI.saveFile as vi.MockedFunction<typeof FilesAPI.saveFile>;
+const mockCreateFile = FilesAPI.createFile as vi.MockedFunction<typeof FilesAPI.createFile>;
+const mockFetch = global.fetch as vi.MockedFunction<typeof fetch>;
 
 // Base time for testing (Jan 1, 2024)
 const BASE_TIME = new Date('2024-01-01T00:00:00Z').getTime();
@@ -132,8 +132,8 @@ function createMockFile(id: number, type: FileType = 'question'): DbFile {
 describe('readFiles - File State Manager', () => {
   beforeEach(() => {
     // Use fake timers for time-based tests
-    jest.useFakeTimers();
-    jest.setSystemTime(BASE_TIME);
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
 
     // Create fresh Redux store for each test
     mockStore = configureStore({
@@ -171,7 +171,7 @@ describe('readFiles - File State Manager', () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('TTL-based caching', () => {
@@ -206,7 +206,7 @@ describe('readFiles - File State Manager', () => {
       }));
 
       // Advance time beyond default TTL (10 hours + 1 second)
-      jest.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
+      vi.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
 
       // Mock API to return fresh file
       mockLoadFiles.mockResolvedValue({
@@ -256,7 +256,7 @@ describe('readFiles - File State Manager', () => {
       }));
 
       // Advance time by 30 seconds
-      jest.setSystemTime(BASE_TIME + 30 * 1000);
+      vi.setSystemTime(BASE_TIME + 30 * 1000);
 
       // Mock API to return fresh file
       mockLoadFiles.mockResolvedValue({
@@ -286,7 +286,7 @@ describe('readFiles - File State Manager', () => {
       }));
 
       // Advance time beyond TTL
-      jest.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
+      vi.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
 
       // Call readFiles with skip=true
       const result = await readFiles([mockFile.id], { skip: true });
@@ -327,7 +327,7 @@ describe('readFiles - File State Manager', () => {
       const promise2 = readFiles([mockFile.id]);
 
       // Advance timers to complete the fetch
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       // Wait for both promises
       const [result1, result2] = await Promise.all([promise1, promise2]);
@@ -359,7 +359,7 @@ describe('readFiles - File State Manager', () => {
       expect(filePromises.size).toBe(1);
 
       // Advance timers to complete
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
       await promise;
 
       // Should be cleared after completion
@@ -758,7 +758,7 @@ describe('readFiles - File State Manager', () => {
     });
 
     it('should auto-retry once on 409 conflict, merging edits onto server version', async () => {
-      const { ConflictError } = jest.requireMock('@/lib/data/files');
+      const { ConflictError } = await vi.importMock('@/lib/data/files');
       const mockFile = createMockFile(1);
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
       mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));

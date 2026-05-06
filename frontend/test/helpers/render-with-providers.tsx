@@ -3,10 +3,10 @@
  *
  * Uses the SAME store instance for both the Redux Provider and for any
  * utility code (loadFiles, publishFile, etc.) that calls getStore().
- * Callers should mock getStore() to return the same store via jest.spyOn:
+ * Callers should mock getStore() to return the same store via vi.spyOn:
  *
  *   import * as storeModule from '@/store/store';
- *   jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+ *   vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
  */
 
 import React from 'react';

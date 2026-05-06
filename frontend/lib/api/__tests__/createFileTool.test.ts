@@ -29,14 +29,15 @@ import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__
 // Mocks
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore,
 }));

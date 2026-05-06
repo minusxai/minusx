@@ -1,36 +1,37 @@
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
-jest.mock('@/lib/navigation/use-navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), prefetch: jest.fn() }),
+vi.mock('@/lib/navigation/use-navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/explore',
   useSearchParams: () => new URLSearchParams(),
 }));
 
-jest.mock('@/lib/navigation/NavigationGuardProvider', () => ({
-  useNavigationGuard: () => ({ navigate: jest.fn(), isBlocked: false, confirmNavigation: jest.fn(), cancelNavigation: jest.fn() }),
+vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
+  useNavigationGuard: () => ({ navigate: vi.fn(), isBlocked: false, confirmNavigation: vi.fn(), cancelNavigation: vi.fn() }),
   NavigationGuardProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-jest.mock('@/lib/hooks/useConfigs', () => ({
+vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({
     config: { branding: { agentName: 'QueueBot' } },
   }),
 }));
 
-jest.mock('@/lib/utils/attachment-extract', () => ({
-  extractTextFromDocument: jest.fn().mockResolvedValue({ text: '', wordCount: 0 }),
+vi.mock('@/lib/utils/attachment-extract', () => ({
+  extractTextFromDocument: vi.fn().mockResolvedValue({ text: '', wordCount: 0 }),
   SUPPORTED_DOC_EXTENSIONS: '.pdf,.docx,.txt',
 }));
 
-jest.mock('@/lib/object-store/client', () => ({
-  uploadFile: jest.fn(),
+vi.mock('@/lib/object-store/client', () => ({
+  uploadFile: vi.fn(),
 }));
 
-jest.mock('@/components/Markdown', () => {
+vi.mock('@/components/Markdown', () => {
   const React = require('react');
   return {
     __esModule: true,
@@ -39,16 +40,16 @@ jest.mock('@/components/Markdown', () => {
   };
 });
 
-jest.mock('@/components/chat/LexicalMentionEditor', () => {
+vi.mock('@/components/chat/LexicalMentionEditor', () => {
   const React = require('react');
   return {
     __esModule: true,
     LexicalMentionEditor: React.forwardRef(function MockLexicalMentionEditor(props: any, ref: any) {
       const { placeholder, disabled, onSubmit, onChange } = props;
       React.useImperativeHandle(ref, () => ({
-        clear: jest.fn(),
-        setText: jest.fn(),
-        focus: jest.fn(),
+        clear: vi.fn(),
+        setText: vi.fn(),
+        focus: vi.fn(),
       }));
       return React.createElement('textarea', {
         'aria-label': 'Chat editor',
@@ -83,11 +84,11 @@ import ChatInput from '@/components/explore/ChatInput';
 function renderChatInputImage(store: ReturnType<typeof storeModule.makeStore>) {
   return renderWithProviders(
     <ChatInput
-      onSend={jest.fn()}
-      onStop={jest.fn()}
+      onSend={vi.fn()}
+      onStop={vi.fn()}
       isAgentRunning={false}
       databaseName="test_db"
-      onDatabaseChange={jest.fn()}
+      onDatabaseChange={vi.fn()}
       isCompact={true}
     />,
     { store }
@@ -107,13 +108,13 @@ describe('ChatInput: image attachment upload', () => {
 
   beforeEach(() => {
     store = storeModule.makeStore();
-    (uploadFile as jest.Mock).mockResolvedValue({ publicUrl: '/uploads/1/abc123.png' });
-    (extractTextFromDocument as jest.Mock).mockResolvedValue({ text: 'doc text', wordCount: 2 });
-    window.HTMLElement.prototype.scrollTo = jest.fn();
+    (uploadFile as vi.Mock).mockResolvedValue({ publicUrl: '/uploads/1/abc123.png' });
+    (extractTextFromDocument as vi.Mock).mockResolvedValue({ text: 'doc text', wordCount: 2 });
+    window.HTMLElement.prototype.scrollTo = vi.fn();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('calls uploadFile (not extractText) when an image file is selected', async () => {
@@ -182,7 +183,7 @@ describe('ChatInput: image attachment upload', () => {
   });
 
   it('shows an error toast when uploadFile fails', async () => {
-    (uploadFile as jest.Mock).mockRejectedValue(new Error('Network error'));
+    (uploadFile as vi.Mock).mockRejectedValue(new Error('Network error'));
     renderChatInputImage(store);
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -201,16 +202,16 @@ describe('ChatInput: image attachment upload', () => {
 
 function renderChatInputQueue(props?: Partial<React.ComponentProps<typeof ChatInput>>) {
   const store = storeModule.makeStore();
-  const onSend = jest.fn();
+  const onSend = vi.fn();
 
   renderWithProviders(
     <ChatInput
       onSend={onSend}
-      onStop={jest.fn()}
+      onStop={vi.fn()}
       isAgentRunning={true}
       allowChatQueue={false}
       databaseName="test_db"
-      onDatabaseChange={jest.fn()}
+      onDatabaseChange={vi.fn()}
       container="sidebar"
       isCompact={true}
       {...props}

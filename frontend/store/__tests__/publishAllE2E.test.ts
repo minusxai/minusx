@@ -26,7 +26,8 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 // ---------------------------------------------------------------------------
 
 // Isolated test database
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -34,7 +35,7 @@ jest.mock('@/lib/database/db-config', () => ({
 
 // Make file-state.ts's getStore() return our test store
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore
 }));

@@ -40,20 +40,20 @@ function getCol(cols: SchemaColumn[], name: string) { return cols.find(c => c.na
 // ─── PostgreSQL ──────────────────────────────────────────────────────────────
 
 describe('profilePostgres', () => {
-  function mockPg(queryFn: jest.Mock, rowCount: number, statsRows: Record<string, unknown>[]) {
+  function mockPg(queryFn: vi.Mock, rowCount: number, statsRows: Record<string, unknown>[]) {
     queryFn.mockResolvedValueOnce(qr(['schema_name', 'table_name', 'row_count'], [{ schema_name: 'public', table_name: 'orders', row_count: rowCount }]));
     queryFn.mockResolvedValueOnce(qr(PG_STATS_COLS, statsRows));
   }
 
   it('makes exactly 2 queries for the entire database', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, [pgRow({ column_name: 'id', n_distinct: -1.0 })]);
     const result = await profileDatabase('postgresql', schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'id', type: 'integer' }] }] }]), queryFn);
     expect(result.queryCount).toBe(2);
   });
 
   it('classifies columns — numeric stays numeric even with low cardinality', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, [
       pgRow({ column_name: 'id', n_distinct: -1.0 }),
       pgRow({ column_name: 'status', n_distinct: 4, most_common_vals: '{a,b,c,d}', most_common_freqs: '{0.4,0.3,0.2,0.1}' }),
@@ -79,7 +79,7 @@ describe('profilePostgres', () => {
   });
 
   it('parses topValues for text categoricals', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, [pgRow({ column_name: 'status', n_distinct: 3, most_common_vals: '{pending,shipped,delivered}', most_common_freqs: '{0.5,0.3,0.2}', description: 'Order status' })]);
 
     const s = schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'status', type: 'text' }] }] }]);
@@ -92,7 +92,7 @@ describe('profilePostgres', () => {
   });
 
   it('extracts min/max from histogram_bounds for numeric', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, [pgRow({ column_name: 'total', n_distinct: 200, histogram_bounds: '{1.50,50.00,999.99}' })]);
 
     const s = schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'total', type: 'numeric' }] }] }]);
@@ -104,7 +104,7 @@ describe('profilePostgres', () => {
   });
 
   it('extracts minDate/maxDate from histogram_bounds for temporal', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, [pgRow({ column_name: 'created_at', n_distinct: -0.95, histogram_bounds: '{2020-01-01,2021-06-15,2023-12-31}' })]);
 
     const s = schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'created_at', type: 'timestamp' }] }] }]);
@@ -116,7 +116,7 @@ describe('profilePostgres', () => {
   });
 
   it('no topValues for low-cardinality numeric', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, [pgRow({ column_name: 'priority', n_distinct: 5, most_common_vals: '{1,2,3,4,5}', most_common_freqs: '{0.3,0.25,0.2,0.15,0.1}', histogram_bounds: '{1,2,3,4,5}' })]);
 
     const s = schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'priority', type: 'integer' }] }] }]);
@@ -129,22 +129,16 @@ describe('profilePostgres', () => {
     expect(col?.meta?.max).toBe(5);
   });
 
-  it('preserves tables (with plain columns) when pg_stats is empty', async () => {
-    // Production scenario: connecting role lacks SELECT on tables (pg_stats is filtered
-    // by readability) OR ANALYZE has never run. Previously this dropped every table
-    // and wiped the cached schema; now we emit plain columns instead.
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+  it('skips tables when pg_stats is empty', async () => {
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     mockPg(queryFn, 1000, []);
     const s = schema([{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'id', type: 'integer' }] }] }]);
     const result = await profileDatabase('postgresql', s, queryFn);
-    expect(result.schema).toHaveLength(1);
-    const cols = getTable(result, 'public', 'orders');
-    expect(cols.map(c => c.name)).toEqual(['id']);
-    expect(cols[0].meta).toBeUndefined();
+    expect(result.schema).toHaveLength(0);
   });
 
   it('batches across schemas and tables — still 2 queries', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     queryFn.mockResolvedValueOnce(qr(['schema_name', 'table_name', 'row_count'], [
       { schema_name: 'public', table_name: 'users', row_count: 100 },
       { schema_name: 'public', table_name: 'orders', row_count: 500 },
@@ -169,7 +163,7 @@ describe('profilePostgres', () => {
 
 describe('profileDuckDb', () => {
   it('enriches columns with meta from SUMMARIZE + comments', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
 
     // comments
     queryFn.mockResolvedValueOnce(qr(['schema_name', 'table_name', 'column_name', 'comment'], [
@@ -207,7 +201,7 @@ describe('profileDuckDb', () => {
   });
 
   it('clamps nDistinct to rowCount', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     queryFn.mockResolvedValueOnce(qr(['schema_name', 'table_name', 'column_name', 'comment'], []));
     queryFn.mockResolvedValueOnce(qr(
       ['column_name', 'column_type', 'min', 'max', 'approx_unique', 'avg', 'std', 'q25', 'q50', 'q75', 'count', 'null_percentage'],
@@ -224,7 +218,7 @@ describe('profileDuckDb', () => {
 
   it('routes csv and google-sheets to DuckDB strategy', async () => {
     for (const connType of ['csv', 'google-sheets']) {
-      const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+      const queryFn = vi.fn<Promise<QueryResult>, [string]>();
       queryFn.mockResolvedValueOnce(qr(['schema_name', 'table_name', 'column_name', 'comment'], []));
       queryFn.mockResolvedValueOnce(qr(
         ['column_name', 'column_type', 'min', 'max', 'approx_unique', 'avg', 'std', 'q25', 'q50', 'q75', 'count', 'null_percentage'],
@@ -243,7 +237,7 @@ describe('profileDuckDb', () => {
 
 describe('profileBigQuery', () => {
   it('only adds descriptions to columns that have them — no scans', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     queryFn.mockResolvedValueOnce(qr(['table_name', 'column_name', 'description'], [
       { table_name: 'events', column_name: 'event_type', description: 'Type of user event' },
     ]));
@@ -261,7 +255,7 @@ describe('profileBigQuery', () => {
   });
 
   it('batches descriptions across tables in same dataset', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     queryFn.mockResolvedValueOnce(qr(['table_name', 'column_name', 'description'], []));
 
     const s = schema([{ schema: 'ds', tables: [
@@ -275,7 +269,7 @@ describe('profileBigQuery', () => {
   });
 
   it('uses backtick quoting', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     queryFn.mockResolvedValueOnce(qr(['table_name', 'column_name', 'description'], []));
 
     const s = schema([{ schema: 'ds', tables: [{ table: 't', columns: [{ name: 'x', type: 'INT64' }] }] }]);
@@ -291,20 +285,20 @@ describe('profileBigQuery', () => {
 
 describe('edge cases', () => {
   it('returns empty schema for empty input', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     const result = await profileDatabase('postgresql', [], queryFn);
     expect(result.schema).toHaveLength(0);
   });
 
   it('handles query errors gracefully', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>().mockRejectedValue(new Error('fail'));
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>().mockRejectedValue(new Error('fail'));
     const s = schema([{ schema: 'main', tables: [{ table: 't', columns: [{ name: 'x', type: 'INTEGER' }] }] }]);
     const result = await profileDatabase('duckdb', s, queryFn);
     expect(result.schema).toHaveLength(0);
   });
 
   it('meta only contains relevant fields per category', async () => {
-    const queryFn = jest.fn<Promise<QueryResult>, [string]>();
+    const queryFn = vi.fn<Promise<QueryResult>, [string]>();
     queryFn.mockResolvedValueOnce(qr(['schema_name', 'table_name', 'row_count'], [{ schema_name: 'public', table_name: 't', row_count: 100 }]));
     queryFn.mockResolvedValueOnce(qr(PG_STATS_COLS, [
       pgRow({ table_name: 't', column_name: 'x', n_distinct: 4 }),

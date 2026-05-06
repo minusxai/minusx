@@ -23,7 +23,8 @@ import { loadUsers, setUsersInStore, _resetForTesting } from '@/lib/hooks/useUse
 // Jest module mocks — hoisted to top by Jest
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -31,7 +32,7 @@ jest.mock('@/lib/database/db-config', () => ({
 
 // Make users-state.ts use our test store
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore,
 }));
@@ -49,7 +50,7 @@ function makeTestStore() {
   return configureStore({ reducer: { users: usersReducer } });
 }
 
-function countGetUsersFetches(mockFetch: jest.Mock): number {
+function countGetUsersFetches(mockFetch: vi.Mock): number {
   return mockFetch.mock.calls.filter(([url, init]) => {
     const method = init?.method ?? 'GET';
     return String(url).includes('/api/users') &&
@@ -132,7 +133,7 @@ describe('Users state', () => {
     _resetForTesting();
 
     // Configure auth() to return an admin session for the users route handlers
-    const authMock = jest.requireMock('@/auth');
+    const authMock = await vi.importMock('@/auth');
     authMock.auth.mockResolvedValue(ADMIN_SESSION);
   });
 

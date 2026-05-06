@@ -9,13 +9,13 @@
  *  5. Dashboard produces one attachment per renderable chart, skipping non-chart types
  */
 
-jest.mock('@/lib/chart/ChartImageRenderer.client', () => ({
+vi.mock('@/lib/chart/ChartImageRenderer.client', () => ({
   clientChartImageRenderer: {
-    renderCharts: jest.fn(),
+    renderCharts: vi.fn(),
   },
 }));
 
-jest.mock('@/lib/chart/render-chart-svg', () => ({
+vi.mock('@/lib/chart/render-chart-svg', () => ({
   RENDERABLE_CHART_TYPES: new Set(['bar', 'line', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar']),
 }));
 
@@ -31,11 +31,11 @@ const MOCK_PUBLIC_URL = 'https://s3.example.com/charts/xyz.jpg';
 const MOCK_S3_PUT_URL = 'https://s3.example.com/put-presigned';
 const UPLOAD_URL_PREFIX = '/api/object-store/upload-url';
 
-const mockRenderCharts = clientChartImageRenderer.renderCharts as jest.Mock;
+const mockRenderCharts = clientChartImageRenderer.renderCharts as vi.Mock;
 
 /** Count how many times fetch was called to get a presigned upload URL. */
 function countUploadCalls(): number {
-  return (global.fetch as jest.Mock).mock.calls.filter(
+  return (global.fetch as vi.Mock).mock.calls.filter(
     ([url]: [string]) => typeof url === 'string' && url.startsWith(UPLOAD_URL_PREFIX)
   ).length;
 }
@@ -43,7 +43,7 @@ function countUploadCalls(): number {
 /** Build a fetch mock that returns publicUrl for upload-URL requests, ok for PUT, blob for data-URL. */
 function makeFetchMock(publicUrlForCall: (n: number) => string = () => MOCK_PUBLIC_URL) {
   let uploadCallIndex = 0;
-  return jest.fn().mockImplementation((url: string, options?: any) => {
+  return vi.fn().mockImplementation((url: string, options?: any) => {
     if (typeof url === 'string' && url.startsWith(UPLOAD_URL_PREFIX)) {
       const publicUrl = publicUrlForCall(uploadCallIndex++);
       return Promise.resolve({
@@ -110,7 +110,7 @@ function makeQueryResultsMap(queryResultId = 'qr-hash-001', updatedAt = 1000): R
 
 beforeEach(() => {
   clearChartCaches();
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 
   mockRenderCharts.mockResolvedValue([{ label: 'Revenue Chart', dataUrl: MOCK_DATA_URL }]);
   global.fetch = makeFetchMock();

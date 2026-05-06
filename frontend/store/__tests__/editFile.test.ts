@@ -13,9 +13,11 @@ import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import uiReducer from '../uiSlice';
+import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 
 // Mock db-config to use test database
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -23,7 +25,7 @@ jest.mock('@/lib/database/db-config', () => ({
 
 // Mock the store import so file-state.ts uses the test store
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() {
     return testStore;
   },
@@ -36,8 +38,7 @@ describe('editFile - Question Editing Flow', () => {
   let questionId2: number;
   let questionId3: number;
 
-  // Import API handlers
-  const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
+  // Import API handlers (defined below at top-level static import)
 
   // Set up test store
   function setupStore() {
@@ -52,7 +53,7 @@ describe('editFile - Question Editing Flow', () => {
 
   // Mock fetch to call API handlers
   beforeAll(() => {
-    global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
 
       // Mock /api/files/batch (batch load)
@@ -81,7 +82,7 @@ describe('editFile - Question Editing Flow', () => {
   });
 
   afterAll(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {
@@ -102,7 +103,7 @@ describe('editFile - Question Editing Flow', () => {
     } as QuestionContent, []);
 
     testStore = setupStore();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -310,7 +311,7 @@ describe('editFile - Question content validation', () => {
   const dbPath = getTestDbPath('edit_file'); // same mock path as db-config module mock above
   let questionId: number;
 
-  const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
+
 
   function setupStore() {
     return configureStore({
@@ -323,7 +324,7 @@ describe('editFile - Question content validation', () => {
   }
 
   beforeAll(() => {
-    global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
@@ -341,7 +342,7 @@ describe('editFile - Question content validation', () => {
   });
 
   afterAll(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {
@@ -354,7 +355,7 @@ describe('editFile - Question content validation', () => {
     } as QuestionContent, []);
 
     testStore = setupStore();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -460,7 +461,7 @@ describe('editFile - Dashboard content validation', () => {
   const dbPath = getTestDbPath('edit_file'); // same db-config mock path
   let dashboardId: number;
 
-  const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
+
 
   // Initial dashboard content — serialises to a known JSON string for oldMatch
   const initialContent: DashboardContent = {
@@ -479,7 +480,7 @@ describe('editFile - Dashboard content validation', () => {
   }
 
   beforeAll(() => {
-    global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/files/batch')) {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
@@ -497,7 +498,7 @@ describe('editFile - Dashboard content validation', () => {
   });
 
   afterAll(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(async () => {
@@ -507,7 +508,7 @@ describe('editFile - Dashboard content validation', () => {
     dashboardId = await DocumentDB.create('test-dashboard', '/org/test-dashboard', 'dashboard', initialContent, []);
 
     testStore = setupStore();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -595,7 +596,7 @@ describe('CreateFile tool - auto-execute query results', () => {
   }
 
   beforeAll(() => {
-    global.fetch = jest.fn(async (url: string | URL | Request) => {
+    global.fetch = vi.fn(async (url: string | URL | Request) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/query')) {
         return {
@@ -616,14 +617,14 @@ describe('CreateFile tool - auto-execute query results', () => {
   });
 
   afterAll(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {
     testStore = configureStore({
       reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer },
     });
-    jest.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
+    vi.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
       if (type === 'question') return {
         fileName: 'Untitled Question',
         content: {
@@ -637,7 +638,7 @@ describe('CreateFile tool - auto-execute query results', () => {
       return { fileName: 'Untitled', content: {} };
     });
     let mockFileIdCounter = 9001;
-    jest.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
+    vi.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
       data: {
         id: mockFileIdCounter++,
         name: input.name,
@@ -656,7 +657,7 @@ describe('CreateFile tool - auto-execute query results', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     testStore = null;
   });
 
@@ -716,13 +717,13 @@ describe('CreateFile tool - content validation', () => {
     testStore = configureStore({
       reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer },
     });
-    jest.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
+    vi.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
       if (type === 'question') return questionTemplate;
       if (type === 'dashboard') return dashboardTemplate;
       return { fileName: 'Untitled', content: {} };
     });
     let mockFileIdCounter = 9001;
-    jest.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
+    vi.spyOn(FilesAPI, 'createFile').mockImplementation(async (input) => ({
       data: {
         id: mockFileIdCounter++,
         name: input.name,
@@ -741,7 +742,7 @@ describe('CreateFile tool - content validation', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
     testStore = null;
   });
 

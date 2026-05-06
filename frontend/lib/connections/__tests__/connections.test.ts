@@ -1,33 +1,35 @@
-jest.mock('@aws-sdk/client-athena', () => ({
-  AthenaClient: jest.fn(),
-  StartQueryExecutionCommand: jest.fn(args => ({ input: args })),
-  GetQueryExecutionCommand: jest.fn(args => ({ input: args })),
-  GetQueryResultsCommand: jest.fn(args => ({ input: args })),
+vi.mock('@aws-sdk/client-athena', () => ({
+  AthenaClient: vi.fn(),
+  StartQueryExecutionCommand: vi.fn(function (this: any, args: any) { this.input = args; }),
+  GetQueryExecutionCommand: vi.fn(function (this: any, args: any) { this.input = args; }),
+  GetQueryResultsCommand: vi.fn(function (this: any, args: any) { this.input = args; }),
 }));
 
-jest.mock('@aws-sdk/client-glue', () => ({
-  GlueClient: jest.fn(),
-  GetDatabasesCommand: jest.fn(args => ({ input: args })),
-  GetTablesCommand: jest.fn(args => ({ input: args })),
+vi.mock('@aws-sdk/client-glue', () => ({
+  GlueClient: vi.fn(),
+  GetDatabasesCommand: vi.fn(function (this: any, args: any) { this.input = args; }),
+  GetTablesCommand: vi.fn(function (this: any, args: any) { this.input = args; }),
 }));
 
-jest.mock('@google-cloud/bigquery', () => {
-  const MockBigQuery = jest.fn();
+vi.mock('@google-cloud/bigquery', () => {
+  const MockBigQuery = vi.fn();
   return { BigQuery: MockBigQuery };
 });
 
-jest.mock('pg', () => ({
-  Pool: jest.fn(),
+vi.mock('pg', () => ({
+  Pool: vi.fn(),
 }));
 
-jest.mock('@duckdb/node-api', () => ({
+vi.mock('@duckdb/node-api', () => ({
   DuckDBInstance: {
-    create: jest.fn(),
+    create: vi.fn(),
   },
-  DuckDBConnection: jest.fn(),
+  DuckDBConnection: vi.fn(),
 }));
 
-jest.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', () => ({
+  OBJECT_STORE_PUBLIC_URL: undefined,
+  MX_NETWORK_LOG_EXCLUDE: '',
   OBJECT_STORE_BUCKET: 'test-bucket',
   OBJECT_STORE_REGION: 'us-east-1',
   OBJECT_STORE_ACCESS_KEY_ID: 'test-key',
@@ -46,13 +48,13 @@ import { PostgresConnector } from '../postgres-connector';
 import { CsvConnector } from '../csv-connector';
 import { getNodeConnector } from '../index';
 
-const MockAthenaClient = AthenaClient as jest.MockedClass<typeof AthenaClient>;
-const MockGlueClient = GlueClient as jest.MockedClass<typeof GlueClient>;
-const MockBigQuery = BigQuery as jest.MockedClass<typeof BigQuery>;
-const MockPool = Pool as jest.MockedClass<typeof Pool>;
+const MockAthenaClient = AthenaClient as vi.MockedClass<typeof AthenaClient>;
+const MockGlueClient = GlueClient as vi.MockedClass<typeof GlueClient>;
+const MockBigQuery = BigQuery as vi.MockedClass<typeof BigQuery>;
+const MockPool = Pool as vi.MockedClass<typeof Pool>;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,23 +70,23 @@ const ATHENA_BASE_CONFIG = {
   aws_secret_access_key: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
 };
 
-function makeAthenaSend(impl: jest.Mock) {
-  MockAthenaClient.mockImplementation(() => ({ send: impl }) as any);
+function makeAthenaSend(impl: vi.Mock) {
+  MockAthenaClient.mockImplementation(function (this: any) { this.send = impl; } as any);
 }
 
-function makeGlueSend(impl: jest.Mock) {
-  MockGlueClient.mockImplementation(() => ({ send: impl }) as any);
+function makeGlueSend(impl: vi.Mock) {
+  MockGlueClient.mockImplementation(function (this: any) { this.send = impl; } as any);
 }
 
 describe('AthenaConnector.testConnection()', () => {
   it('returns success=true when query completes SUCCEEDED', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-1' })
       .mockResolvedValueOnce({
         QueryExecution: { Status: { State: 'SUCCEEDED' } },
       });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     const result = await new AthenaConnector('test', ATHENA_BASE_CONFIG).testConnection();
 
@@ -93,13 +95,13 @@ describe('AthenaConnector.testConnection()', () => {
   });
 
   it('returns success=false when query completes FAILED', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-2' })
       .mockResolvedValueOnce({
         QueryExecution: { Status: { State: 'FAILED', StateChangeReason: 'Syntax error' } },
       });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     const result = await new AthenaConnector('test', ATHENA_BASE_CONFIG).testConnection();
 
@@ -108,9 +110,9 @@ describe('AthenaConnector.testConnection()', () => {
   });
 
   it('returns success=false on send() exception', async () => {
-    const send = jest.fn().mockRejectedValue(new Error('Network error'));
+    const send = vi.fn().mockRejectedValue(new Error('Network error'));
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     const result = await new AthenaConnector('test', ATHENA_BASE_CONFIG).testConnection();
 
@@ -119,12 +121,12 @@ describe('AthenaConnector.testConnection()', () => {
   });
 
   it('includes schema when includeSchema=true', async () => {
-    const athenaSend = jest.fn()
+    const athenaSend = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-3' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } });
     makeAthenaSend(athenaSend);
 
-    const glueSend = jest.fn()
+    const glueSend = vi.fn()
       .mockResolvedValueOnce({ DatabaseList: [] })
       .mockResolvedValueOnce(undefined);
     makeGlueSend(glueSend);
@@ -138,7 +140,7 @@ describe('AthenaConnector.testConnection()', () => {
 
 describe('AthenaConnector.query()', () => {
   it('polls until SUCCEEDED then returns columns, types, and rows', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-4' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'RUNNING' } } })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } })
@@ -157,7 +159,7 @@ describe('AthenaConnector.query()', () => {
         },
       });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     const result = await new AthenaConnector('test', ATHENA_BASE_CONFIG).query('SELECT id, name FROM users');
 
@@ -167,12 +169,12 @@ describe('AthenaConnector.query()', () => {
   });
 
   it('submits query with correct WorkGroup and OutputLocation', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-5' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } })
       .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [] }], ResultSetMetadata: { ColumnInfo: [] } } });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     await new AthenaConnector('test', ATHENA_BASE_CONFIG).query('SELECT 1');
 
@@ -182,12 +184,12 @@ describe('AthenaConnector.query()', () => {
   });
 
   it('substitutes :paramName → ? (positional) in order of appearance', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-6' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } })
       .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [] }], ResultSetMetadata: { ColumnInfo: [] } } });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     await new AthenaConnector('test', ATHENA_BASE_CONFIG).query(
       'SELECT * FROM t WHERE id = :id AND role = :role',
@@ -200,12 +202,12 @@ describe('AthenaConnector.query()', () => {
   });
 
   it('substitutes NULL string for params absent from the params map', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-7' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } })
       .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [] }], ResultSetMetadata: { ColumnInfo: [] } } });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     await new AthenaConnector('test', ATHENA_BASE_CONFIG).query('SELECT * FROM t WHERE x = :missing');
 
@@ -214,13 +216,13 @@ describe('AthenaConnector.query()', () => {
   });
 
   it('throws when query ends in FAILED state', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'qid-8' })
       .mockResolvedValueOnce({
         QueryExecution: { Status: { State: 'FAILED', StateChangeReason: 'Table not found' } },
       });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     await expect(
       new AthenaConnector('test', ATHENA_BASE_CONFIG).query('SELECT * FROM missing_table')
@@ -230,8 +232,8 @@ describe('AthenaConnector.query()', () => {
 
 describe('AthenaConnector.getSchema()', () => {
   it('returns SchemaEntry[] from Glue catalog grouped by database then table', async () => {
-    makeAthenaSend(jest.fn());
-    const glueSend = jest.fn()
+    makeAthenaSend(vi.fn());
+    const glueSend = vi.fn()
       .mockResolvedValueOnce({
         DatabaseList: [{ Name: 'default' }, { Name: 'analytics' }],
         NextToken: undefined,
@@ -275,8 +277,8 @@ describe('AthenaConnector.getSchema()', () => {
   });
 
   it('skips information_schema database', async () => {
-    makeAthenaSend(jest.fn());
-    const glueSend = jest.fn()
+    makeAthenaSend(vi.fn());
+    const glueSend = vi.fn()
       .mockResolvedValueOnce({
         DatabaseList: [{ Name: 'information_schema' }, { Name: 'default' }],
         NextToken: undefined,
@@ -291,8 +293,8 @@ describe('AthenaConnector.getSchema()', () => {
   });
 
   it('returns empty array when Glue has no databases', async () => {
-    makeAthenaSend(jest.fn());
-    makeGlueSend(jest.fn().mockResolvedValueOnce({ DatabaseList: [], NextToken: undefined }));
+    makeAthenaSend(vi.fn());
+    makeGlueSend(vi.fn().mockResolvedValueOnce({ DatabaseList: [], NextToken: undefined }));
 
     const schema = await new AthenaConnector('test', ATHENA_BASE_CONFIG).getSchema();
 
@@ -302,12 +304,12 @@ describe('AthenaConnector.getSchema()', () => {
 
 describe('AthenaConnector client construction', () => {
   it('constructs AthenaClient and GlueClient with region and credentials', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'q' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } })
       .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [] }], ResultSetMetadata: { ColumnInfo: [] } } });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     await new AthenaConnector('test', ATHENA_BASE_CONFIG).query('SELECT 1');
 
@@ -323,12 +325,12 @@ describe('AthenaConnector client construction', () => {
   });
 
   it('omits credentials when aws_access_key_id is absent (IAM role fallback)', async () => {
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'q' })
       .mockResolvedValueOnce({ QueryExecution: { Status: { State: 'SUCCEEDED' } } })
       .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [] }], ResultSetMetadata: { ColumnInfo: [] } } });
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     await new AthenaConnector('test', { region_name: 'eu-west-1', s3_staging_dir: 's3://x/' }).query('SELECT 1');
 
@@ -339,13 +341,13 @@ describe('AthenaConnector client construction', () => {
 
   it('reuses the same AthenaClient across multiple calls', async () => {
     const succeededResponse = { QueryExecution: { Status: { State: 'SUCCEEDED' } } };
-    const send = jest.fn()
+    const send = vi.fn()
       .mockResolvedValueOnce({ QueryExecutionId: 'q1' })
       .mockResolvedValueOnce(succeededResponse)
       .mockResolvedValueOnce({ QueryExecutionId: 'q2' })
       .mockResolvedValueOnce(succeededResponse);
     makeAthenaSend(send);
-    makeGlueSend(jest.fn());
+    makeGlueSend(vi.fn());
 
     const connector = new AthenaConnector('test', ATHENA_BASE_CONFIG);
     await connector.testConnection();
@@ -376,7 +378,7 @@ const BIGQUERY_BASE_CONFIG = {
 };
 
 function makeJob(state: 'DONE' | 'RUNNING', errorResult?: { message: string }, queryResultRows: any[] = [], fields: any[] = []) {
-  const getMetadata = jest.fn()
+  const getMetadata = vi.fn()
     .mockResolvedValueOnce([{ status: { state: 'RUNNING' } }])
     .mockResolvedValue([{
       status: {
@@ -384,7 +386,7 @@ function makeJob(state: 'DONE' | 'RUNNING', errorResult?: { message: string }, q
         ...(errorResult ? { errorResult } : {}),
       },
     }]);
-  const getQueryResults = jest.fn().mockResolvedValue([
+  const getQueryResults = vi.fn().mockResolvedValue([
     queryResultRows,
     null,
     { schema: { fields } },
@@ -393,19 +395,19 @@ function makeJob(state: 'DONE' | 'RUNNING', errorResult?: { message: string }, q
 }
 
 function makeBigQueryClient(overrides: {
-  createQueryJob?: jest.Mock;
-  getDatasets?: jest.Mock;
+  createQueryJob?: vi.Mock;
+  getDatasets?: vi.Mock;
 } = {}) {
-  const createQueryJob = overrides.createQueryJob ?? jest.fn();
-  const getDatasets = overrides.getDatasets ?? jest.fn().mockResolvedValue([[]]);
-  MockBigQuery.mockImplementation(() => ({ createQueryJob, getDatasets }) as any);
+  const createQueryJob = overrides.createQueryJob ?? vi.fn();
+  const getDatasets = overrides.getDatasets ?? vi.fn().mockResolvedValue([[]]);
+  MockBigQuery.mockImplementation(function (this: any) { this.createQueryJob = createQueryJob; this.getDatasets = getDatasets; } as any);
   return { createQueryJob, getDatasets };
 }
 
 describe('BigQueryConnector.testConnection()', () => {
   it('returns success=true when query completes DONE with no error', async () => {
     const job = makeJob('DONE');
-    makeBigQueryClient({ createQueryJob: jest.fn().mockResolvedValue([job]) });
+    makeBigQueryClient({ createQueryJob: vi.fn().mockResolvedValue([job]) });
 
     const result = await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).testConnection();
 
@@ -415,7 +417,7 @@ describe('BigQueryConnector.testConnection()', () => {
 
   it('returns success=false when job has errorResult', async () => {
     const job = makeJob('DONE', { message: 'Permission denied' });
-    makeBigQueryClient({ createQueryJob: jest.fn().mockResolvedValue([job]) });
+    makeBigQueryClient({ createQueryJob: vi.fn().mockResolvedValue([job]) });
 
     const result = await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).testConnection();
 
@@ -424,7 +426,7 @@ describe('BigQueryConnector.testConnection()', () => {
   });
 
   it('returns success=false on createQueryJob() exception', async () => {
-    makeBigQueryClient({ createQueryJob: jest.fn().mockRejectedValue(new Error('Auth error')) });
+    makeBigQueryClient({ createQueryJob: vi.fn().mockRejectedValue(new Error('Auth error')) });
 
     const result = await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).testConnection();
 
@@ -437,10 +439,10 @@ describe('BigQueryConnector.testConnection()', () => {
     const schemaJob = makeJob('DONE', undefined, [], [
       { name: 'id', type: 'INTEGER' },
     ]);
-    const createQueryJob = jest.fn()
+    const createQueryJob = vi.fn()
       .mockResolvedValueOnce([job])
       .mockResolvedValueOnce([schemaJob]);
-    const getDatasets = jest.fn().mockResolvedValue([[{ id: 'public' }]]);
+    const getDatasets = vi.fn().mockResolvedValue([[{ id: 'public' }]]);
     makeBigQueryClient({ createQueryJob, getDatasets });
 
     const result = await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).testConnection(true);
@@ -458,7 +460,7 @@ describe('BigQueryConnector.query()', () => {
       { name: 'id', type: 'INTEGER' },
       { name: 'name', type: 'STRING' },
     ]);
-    makeBigQueryClient({ createQueryJob: jest.fn().mockResolvedValue([job]) });
+    makeBigQueryClient({ createQueryJob: vi.fn().mockResolvedValue([job]) });
 
     const result = await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).query('SELECT id, name FROM users');
 
@@ -469,7 +471,7 @@ describe('BigQueryConnector.query()', () => {
 
   it('substitutes :paramName → @paramName (BigQuery named params)', async () => {
     const job = makeJob('DONE');
-    const createQueryJob = jest.fn().mockResolvedValue([job]);
+    const createQueryJob = vi.fn().mockResolvedValue([job]);
     makeBigQueryClient({ createQueryJob });
 
     await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).query(
@@ -487,7 +489,7 @@ describe('BigQueryConnector.query()', () => {
 
   it('substitutes null for params absent from the params map', async () => {
     const job = makeJob('DONE');
-    const createQueryJob = jest.fn().mockResolvedValue([job]);
+    const createQueryJob = vi.fn().mockResolvedValue([job]);
     makeBigQueryClient({ createQueryJob });
 
     await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).query('SELECT * FROM t WHERE x = :missing');
@@ -507,10 +509,10 @@ describe('BigQueryConnector.getSchema()', () => {
     const analyticsJob = makeJob('DONE', undefined, [
       { table_name: 'events', column_name: 'ts', data_type: 'TIMESTAMP' },
     ]);
-    const createQueryJob = jest.fn()
+    const createQueryJob = vi.fn()
       .mockResolvedValueOnce([publicJob])
       .mockResolvedValueOnce([analyticsJob]);
-    const getDatasets = jest.fn().mockResolvedValue([
+    const getDatasets = vi.fn().mockResolvedValue([
       [{ id: 'public' }, { id: 'analytics' }],
     ]);
     makeBigQueryClient({ createQueryJob, getDatasets });
@@ -529,7 +531,7 @@ describe('BigQueryConnector.getSchema()', () => {
   });
 
   it('returns empty array when no datasets exist', async () => {
-    makeBigQueryClient({ getDatasets: jest.fn().mockResolvedValue([[]]) });
+    makeBigQueryClient({ getDatasets: vi.fn().mockResolvedValue([[]]) });
 
     const schema = await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).getSchema();
 
@@ -537,12 +539,12 @@ describe('BigQueryConnector.getSchema()', () => {
   });
 
   it('skips datasets that fail to query (graceful degradation)', async () => {
-    const createQueryJob = jest.fn()
+    const createQueryJob = vi.fn()
       .mockRejectedValueOnce(new Error('Access denied'))
       .mockResolvedValueOnce([makeJob('DONE', undefined, [
         { table_name: 'events', column_name: 'ts', data_type: 'TIMESTAMP' },
       ])]);
-    const getDatasets = jest.fn().mockResolvedValue([
+    const getDatasets = vi.fn().mockResolvedValue([
       [{ id: 'restricted' }, { id: 'public' }],
     ]);
     makeBigQueryClient({ createQueryJob, getDatasets });
@@ -557,7 +559,7 @@ describe('BigQueryConnector.getSchema()', () => {
 describe('BigQueryConnector client construction', () => {
   it('passes project_id and parsed credentials to BigQuery client', async () => {
     const job = makeJob('DONE');
-    makeBigQueryClient({ createQueryJob: jest.fn().mockResolvedValue([job]) });
+    makeBigQueryClient({ createQueryJob: vi.fn().mockResolvedValue([job]) });
 
     await new BigQueryConnector('test', BIGQUERY_BASE_CONFIG).testConnection();
 
@@ -568,7 +570,7 @@ describe('BigQueryConnector client construction', () => {
 
   it('supports wrapped credential format: {"projectId": ..., "credentials": {...}}', async () => {
     const job = makeJob('DONE');
-    makeBigQueryClient({ createQueryJob: jest.fn().mockResolvedValue([job]) });
+    makeBigQueryClient({ createQueryJob: vi.fn().mockResolvedValue([job]) });
 
     const wrappedConfig = {
       project_id: 'wrapped-project',
@@ -591,7 +593,7 @@ describe('BigQueryConnector client construction', () => {
   it('reuses the same BigQuery client instance across multiple calls', async () => {
     const job1 = makeJob('DONE');
     const job2 = makeJob('DONE');
-    const createQueryJob = jest.fn()
+    const createQueryJob = vi.fn()
       .mockResolvedValueOnce([job1])
       .mockResolvedValueOnce([job2]);
     makeBigQueryClient({ createQueryJob });
@@ -690,16 +692,16 @@ describe('CsvConnector.query()', () => {
     };
 
     const mockConn = {
-      run: jest.fn().mockResolvedValue(mockRunResult),
-      closeSync: jest.fn(),
+      run: vi.fn().mockResolvedValue(mockRunResult),
+      closeSync: vi.fn(),
     };
 
     const mockInstance = {
-      connect: jest.fn().mockResolvedValue(mockConn),
+      connect: vi.fn().mockResolvedValue(mockConn),
     };
 
-    const { DuckDBInstance } = jest.requireMock('@duckdb/node-api');
-    (DuckDBInstance.create as jest.Mock).mockResolvedValue(mockInstance);
+    const { DuckDBInstance } = await vi.importMock('@duckdb/node-api');
+    (DuckDBInstance.create as vi.Mock).mockResolvedValue(mockInstance);
 
     const uniqueFile = {
       ...FILE_A,
@@ -726,13 +728,13 @@ const POSTGRES_BASE_CONFIG = {
   password: 'testpass',
 };
 
-function makeMockPool(queryImpl: jest.Mock) {
-  MockPool.mockImplementation(() => ({ query: queryImpl, end: jest.fn() } as any));
+function makeMockPool(queryImpl: vi.Mock) {
+  MockPool.mockImplementation(function (this: any) { this.query = queryImpl; this.end = vi.fn(); } as any);
 }
 
 describe('PostgresConnector.testConnection()', () => {
   it('returns success=true when SELECT 1 succeeds', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     const result = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).testConnection();
@@ -743,7 +745,7 @@ describe('PostgresConnector.testConnection()', () => {
   });
 
   it('returns success=false with the error message on failure', async () => {
-    const mockQuery = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+    const mockQuery = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
     makeMockPool(mockQuery);
 
     const result = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).testConnection();
@@ -753,7 +755,7 @@ describe('PostgresConnector.testConnection()', () => {
   });
 
   it('includes schema when includeSchema=true', async () => {
-    const mockQuery = jest.fn()
+    const mockQuery = vi.fn()
       .mockResolvedValueOnce({ rows: [], fields: [] })
       .mockResolvedValueOnce({
         rows: [
@@ -773,7 +775,7 @@ describe('PostgresConnector.testConnection()', () => {
 
 describe('PostgresConnector.query()', () => {
   it('returns columns, types, and rows from query result', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({
+    const mockQuery = vi.fn().mockResolvedValue({
       rows: [{ id: 1, name: 'Alice' }],
       fields: [
         { name: 'id', dataTypeID: 23 },
@@ -790,7 +792,7 @@ describe('PostgresConnector.query()', () => {
   });
 
   it('substitutes :name params as $N positional params in order of appearance', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     await new PostgresConnector('test', POSTGRES_BASE_CONFIG).query(
@@ -805,7 +807,7 @@ describe('PostgresConnector.query()', () => {
   });
 
   it('reuses the same $N index for repeated param names', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     await new PostgresConnector('test', POSTGRES_BASE_CONFIG).query(
@@ -817,7 +819,7 @@ describe('PostgresConnector.query()', () => {
   });
 
   it('substitutes null for params absent from the params map', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     await new PostgresConnector('test', POSTGRES_BASE_CONFIG).query(
@@ -828,7 +830,7 @@ describe('PostgresConnector.query()', () => {
   });
 
   it('maps unknown OIDs to "text"', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({
+    const mockQuery = vi.fn().mockResolvedValue({
       rows: [],
       fields: [{ name: 'col', dataTypeID: 99999 }],
     });
@@ -856,21 +858,21 @@ describe('PostgresConnector.query()', () => {
       [3802, 'jsonb'],
     ];
     for (const [oid, expectedType] of cases) {
-      const mockQuery = jest.fn().mockResolvedValue({
+      const mockQuery = vi.fn().mockResolvedValue({
         rows: [],
         fields: [{ name: 'col', dataTypeID: oid }],
       });
       makeMockPool(mockQuery);
       const result = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).query('SELECT col');
       expect(result.types[0]).toBe(expectedType);
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     }
   });
 });
 
 describe('PostgresConnector.getSchema()', () => {
   it('returns SchemaEntry[] grouped by schema then table', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({
+    const mockQuery = vi.fn().mockResolvedValue({
       rows: [
         { table_schema: 'public', table_name: 'users', column_name: 'id', data_type: 'integer' },
         { table_schema: 'public', table_name: 'users', column_name: 'email', data_type: 'text' },
@@ -895,7 +897,7 @@ describe('PostgresConnector.getSchema()', () => {
   });
 
   it('queries information_schema.columns excluding pg_catalog and information_schema', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     await new PostgresConnector('test', POSTGRES_BASE_CONFIG).getSchema();
@@ -906,7 +908,7 @@ describe('PostgresConnector.getSchema()', () => {
   });
 
   it('returns empty array when no user tables exist', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     const schema = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).getSchema();
@@ -917,7 +919,7 @@ describe('PostgresConnector.getSchema()', () => {
 
 describe('PostgresConnector pool lifecycle', () => {
   it('constructs Pool with correct pg options mapping username → user', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     await new PostgresConnector('myconn', {
@@ -939,7 +941,7 @@ describe('PostgresConnector pool lifecycle', () => {
   });
 
   it('reuses the same Pool instance across multiple calls', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     const connector = new PostgresConnector('test', POSTGRES_BASE_CONFIG);
@@ -950,7 +952,7 @@ describe('PostgresConnector pool lifecycle', () => {
   });
 
   it('defaults port to 5432 and host to localhost when omitted', async () => {
-    const mockQuery = jest.fn().mockResolvedValue({ rows: [], fields: [] });
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
     makeMockPool(mockQuery);
 
     await new PostgresConnector('test', {
@@ -970,8 +972,8 @@ describe('getNodeConnector() factory', () => {
     expect(connector).toBeInstanceOf(PostgresConnector);
   });
 
-  it('still returns DuckDbConnector for type "duckdb"', () => {
-    const { DuckDbConnector } = require('../duckdb-connector');
+  it('still returns DuckDbConnector for type "duckdb"', async () => {
+    const { DuckDbConnector } = await import('../duckdb-connector');
     const connector = getNodeConnector('mydb', 'duckdb', { file_path: 'test.duckdb' });
     expect(connector).toBeInstanceOf(DuckDbConnector);
   });

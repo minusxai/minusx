@@ -8,23 +8,23 @@ import type { GeoConfig } from '@/lib/types'
 
 // ─── Shared mocks ────────────────────────────────────────────────────────────
 
-jest.mock('@/components/plotx/EChart', () => ({
+vi.mock('@/components/plotx/EChart', () => ({
   EChart: () => <div data-testid="mock-echart" />,
 }))
 
-jest.mock('@/lib/hooks/useConfigs', () => ({
+vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({
     config: { branding: { agentName: 'Agent' } },
     configs: [],
     loading: false,
     error: null,
-    reloadConfigs: jest.fn(),
+    reloadConfigs: vi.fn(),
   }),
 }))
 
 // ─── TableV2 mocks ───────────────────────────────────────────────────────────
 
-jest.mock('@tanstack/react-virtual', () => ({
+vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getVirtualItems: () =>
       Array.from({ length: count }, (_, i) => ({
@@ -37,74 +37,74 @@ jest.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 
-jest.mock('@/lib/database/duckdb', () => ({
-  calculateColumnStats: jest.fn().mockResolvedValue({}),
+vi.mock('@/lib/database/duckdb', () => ({
+  calculateColumnStats: vi.fn().mockResolvedValue({}),
   getColumnType: (t: string) => {
     if (['INTEGER', 'BIGINT', 'DOUBLE', 'FLOAT', 'DECIMAL'].some(n => t.toUpperCase().includes(n))) return 'number'
     if (['DATE', 'TIMESTAMP'].some(n => t.toUpperCase().includes(n))) return 'date'
     return 'text'
   },
-  loadDataIntoTable: jest.fn().mockResolvedValue(undefined),
+  loadDataIntoTable: vi.fn().mockResolvedValue(undefined),
   generateRandomTableName: () => 'test_table',
 }))
 
-jest.mock('@/lib/chart/histogram', () => ({
-  calculateHistogram: jest.fn().mockResolvedValue([]),
+vi.mock('@/lib/chart/histogram', () => ({
+  calculateHistogram: vi.fn().mockResolvedValue([]),
 }))
 
 // ─── Geo-plot mocks ──────────────────────────────────────────────────────────
 
-const mockSetView = jest.fn()
-const mockRemove = jest.fn()
-const mockFitBounds = jest.fn()
-const mockInvalidateSize = jest.fn()
-const mockAddLayer = jest.fn()
+const mockSetView = vi.fn()
+const mockRemove = vi.fn()
+const mockFitBounds = vi.fn()
+const mockInvalidateSize = vi.fn()
+const mockAddLayer = vi.fn()
 
 const mockLayerGroup = {
-  addTo: jest.fn().mockReturnThis(),
-  addLayer: jest.fn(),
-  clearLayers: jest.fn(),
+  addTo: vi.fn().mockReturnThis(),
+  addLayer: vi.fn(),
+  clearLayers: vi.fn(),
 }
 
 const mockGeoJsonLayer = {
-  addTo: jest.fn().mockReturnThis(),
-  getBounds: jest.fn().mockReturnValue({ isValid: () => true }),
-  eachLayer: jest.fn(),
+  addTo: vi.fn().mockReturnThis(),
+  getBounds: vi.fn().mockReturnValue({ isValid: () => true }),
+  eachLayer: vi.fn(),
 }
 
-jest.mock('leaflet', () => ({
-  map: jest.fn(() => ({
+vi.mock('leaflet', () => ({
+  map: vi.fn(() => ({
     setView: mockSetView,
     remove: mockRemove,
     fitBounds: mockFitBounds,
     invalidateSize: mockInvalidateSize,
     addLayer: mockAddLayer,
   })),
-  tileLayer: jest.fn(() => ({ addTo: jest.fn().mockReturnThis(), remove: jest.fn() })),
-  circleMarker: jest.fn(() => ({
-    addTo: jest.fn().mockReturnThis(),
-    getLatLng: jest.fn().mockReturnValue({ lat: 0, lng: 0 }),
-    bindTooltip: jest.fn().mockReturnThis(),
+  tileLayer: vi.fn(() => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn() })),
+  circleMarker: vi.fn(() => ({
+    addTo: vi.fn().mockReturnThis(),
+    getLatLng: vi.fn().mockReturnValue({ lat: 0, lng: 0 }),
+    bindTooltip: vi.fn().mockReturnThis(),
   })),
-  geoJSON: jest.fn(() => mockGeoJsonLayer),
-  polyline: jest.fn(() => ({
-    addTo: jest.fn().mockReturnThis(),
-    getLatLngs: jest.fn().mockReturnValue([{ lat: 0, lng: 0 }]),
-    bindTooltip: jest.fn().mockReturnThis(),
+  geoJSON: vi.fn(() => mockGeoJsonLayer),
+  polyline: vi.fn(() => ({
+    addTo: vi.fn().mockReturnThis(),
+    getLatLngs: vi.fn().mockReturnValue([{ lat: 0, lng: 0 }]),
+    bindTooltip: vi.fn().mockReturnThis(),
   })),
-  layerGroup: jest.fn(() => mockLayerGroup),
-  latLngBounds: jest.fn().mockReturnValue({
+  layerGroup: vi.fn(() => mockLayerGroup),
+  latLngBounds: vi.fn().mockReturnValue({
     isValid: () => true,
-    extend: jest.fn().mockReturnThis(),
+    extend: vi.fn().mockReturnThis(),
   }),
-  heatLayer: jest.fn(() => ({ addTo: jest.fn().mockReturnThis() })),
+  heatLayer: vi.fn(() => ({ addTo: vi.fn().mockReturnThis() })),
 }))
 
-jest.mock('leaflet.heat', () => {})
-jest.mock('leaflet/dist/leaflet.css', () => {})
+vi.mock('leaflet.heat', () => {})
+vi.mock('leaflet/dist/leaflet.css', () => {})
 
-jest.mock('@/lib/chart/geo-data', () => ({
-  loadGeoJSON: jest.fn().mockResolvedValue({
+vi.mock('@/lib/chart/geo-data', () => ({
+  loadGeoJSON: vi.fn().mockResolvedValue({
     type: 'FeatureCollection',
     features: [
       { type: 'Feature', properties: { name: 'Maharashtra' }, geometry: { type: 'Polygon', coordinates: [[[72, 19], [73, 19], [73, 20], [72, 19]]] } },
@@ -442,7 +442,7 @@ describe('ChartBuilder dual axis', () => {
         initialYCols={['revenue', 'orders']}
         showAxisBuilder
         axisConfig={{}}
-        onAxisConfigChange={jest.fn()}
+        onAxisConfigChange={vi.fn()}
       />
     )
 
@@ -463,7 +463,7 @@ describe('ChartBuilder dual axis', () => {
         initialYRightCols={['orders']}
         showAxisBuilder
         axisConfig={{ dualAxis: true }}
-        onAxisConfigChange={jest.fn()}
+        onAxisConfigChange={vi.fn()}
       />
     )
 
@@ -484,7 +484,7 @@ describe('ChartBuilder dual axis', () => {
         initialYCols={['revenue', 'orders']}
         showAxisBuilder
         axisConfig={{}}
-        onAxisConfigChange={jest.fn()}
+        onAxisConfigChange={vi.fn()}
         settingsExpanded
       />
     )
@@ -517,7 +517,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -538,7 +538,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -557,7 +557,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -576,7 +576,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -596,7 +596,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -617,7 +617,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -627,7 +627,7 @@ describe('ChartBuilder geo type', () => {
   })
 
   it('calls onGeoConfigChange when sub-type is switched', async () => {
-    const onGeoConfigChange = jest.fn()
+    const onGeoConfigChange = vi.fn()
     const user = userEvent.setup()
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
 
@@ -662,7 +662,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -683,7 +683,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -706,7 +706,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -728,7 +728,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -750,7 +750,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -770,7 +770,7 @@ describe('ChartBuilder geo type', () => {
         showAxisBuilder
         settingsExpanded
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -786,7 +786,7 @@ describe('ChartBuilder geo type', () => {
         rows={geoRows}
         chartType="geo"
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -802,7 +802,7 @@ describe('ChartBuilder geo type', () => {
         rows={geoRows}
         chartType="geo"
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -823,7 +823,7 @@ describe('ChartBuilder geo type', () => {
         rows={geoRows}
         chartType="geo"
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -846,7 +846,7 @@ describe('ChartBuilder geo type', () => {
         rows={geoRows}
         chartType="geo"
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 
@@ -867,7 +867,7 @@ describe('ChartBuilder geo type', () => {
         rows={geoRows}
         chartType="geo"
         initialGeoConfig={geoConfig}
-        onGeoConfigChange={jest.fn()}
+        onGeoConfigChange={vi.fn()}
       />
     )
 

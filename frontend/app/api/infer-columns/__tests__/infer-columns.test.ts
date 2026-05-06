@@ -6,7 +6,8 @@
  */
 
 // Must be hoisted before any imports that touch the DB — path must match getTestDbPath('infer_columns_e2e')
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -64,7 +65,7 @@ describe('Infer Columns - E2E Tests', () => {
 
   // Override global mock to include mode:'org' and home_folder:'/org'
   beforeAll(() => {
-    (getEffectiveUser as jest.Mock).mockResolvedValue({
+    (getEffectiveUser as vi.Mock).mockResolvedValue({
       userId: 1,
       email: 'test@example.com',
       role: 'admin',

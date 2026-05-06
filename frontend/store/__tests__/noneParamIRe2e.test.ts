@@ -15,27 +15,28 @@
 
 // ---- Jest module mocks (hoisted before imports) ----------------------------
 
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
 }));
 
 let testStore: any;
-jest.mock('@/store/store', () => ({
+vi.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore,
 }));
 
 // getNodeConnector IS mocked so we can intercept and assert on the final SQL.
-jest.mock('@/lib/connections', () => ({
-  getNodeConnector: jest.fn(),
+vi.mock('@/lib/connections', () => ({
+  getNodeConnector: vi.fn(),
 }));
 
 // Mock ConnectionsAPI.getRawByName so tests don't need a live DB for connection lookup.
-jest.mock('@/lib/data/connections.server', () => ({
+vi.mock('@/lib/data/connections.server', () => ({
   ConnectionsAPI: {
-    getRawByName: jest.fn().mockResolvedValue({ type: 'duckdb', config: { file_path: 'test.duckdb' } }),
+    getRawByName: vi.fn().mockResolvedValue({ type: 'duckdb', config: { file_path: 'test.duckdb' } }),
   },
 }));
 
@@ -66,13 +67,13 @@ function makeQueryRequest(body: object): NextRequest {
 
 /** SQL string the mocked connector received. */
 function capturedSQL(): string {
-  const connector = (getNodeConnector as jest.Mock).mock.results[0]?.value;
+  const connector = (getNodeConnector as vi.Mock).mock.results[0]?.value;
   return connector.query.mock.calls[0][0] as string;
 }
 
 /** Params dict the mocked connector received. */
 function capturedParams(): Record<string, unknown> {
-  const connector = (getNodeConnector as jest.Mock).mock.results[0]?.value;
+  const connector = (getNodeConnector as vi.Mock).mock.results[0]?.value;
   return connector.query.mock.calls[0][1] as Record<string, unknown>;
 }
 
@@ -86,10 +87,10 @@ describe('Parameterised query execution E2E (local WASM)', () => {
 
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    (getNodeConnector as jest.Mock).mockReturnValue({
-      query: jest.fn().mockResolvedValue({ columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }),
+    (getNodeConnector as vi.Mock).mockReturnValue({
+      query: vi.fn().mockResolvedValue({ columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }),
     });
   });
 

@@ -29,7 +29,8 @@ import type { AlertContent, AlertOutput, JobRun, RunFileContent, Test } from '@/
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
-jest.mock('@/lib/database/db-config', () => ({
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,
   DB_DIR: undefined,
   getDbType: () => 'pglite' as const,
@@ -40,15 +41,15 @@ const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
 // ─── Node connector mock ─────────────────────────────────────────────────────
 // Force getNodeConnector to return null so runQuery falls through to
 // pythonBackendFetch for all connection types including 'postgresql'.
-jest.mock('@/lib/connections', () => ({
-  ...jest.requireActual('@/lib/connections'),
-  getNodeConnector: jest.fn().mockReturnValue(null),
+vi.mock('@/lib/connections', () => ({
+  ...vi.importActual('@/lib/connections'),
+  getNodeConnector: vi.fn().mockReturnValue(null),
 }));
 
 // ─── Query execution mock (no Python backend needed) ─────────────────────────
 // Mocked pythonBackendFetch returns a single row with value=150 for any query.
-jest.mock('@/lib/api/python-backend-client', () => ({
-  pythonBackendFetch: jest.fn().mockResolvedValue({
+vi.mock('@/lib/api/python-backend-client', () => ({
+  pythonBackendFetch: vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
     json: async () => ({
@@ -60,19 +61,19 @@ jest.mock('@/lib/api/python-backend-client', () => ({
 }));
 
 // ─── Webhook executor mock ────────────────────────────────────────────────────
-jest.mock('@/lib/messaging/webhook-executor', () => ({
-  sendEmailViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
-  sendPhoneAlertViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+vi.mock('@/lib/messaging/webhook-executor', () => ({
+  sendEmailViaWebhook: vi.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+  sendPhoneAlertViaWebhook: vi.fn().mockResolvedValue({ success: true, statusCode: 200 }),
 }));
 
 // ─── User DB mock (no real users needed for channel-name based delivery) ──────
-jest.mock('@/lib/database/user-db', () => ({
-  UserDB: { listAll: jest.fn().mockResolvedValue([]) },
+vi.mock('@/lib/database/user-db', () => ({
+  UserDB: { listAll: vi.fn().mockResolvedValue([]) },
 }));
 
 // ─── Org config mock (provide email webhook + channels for delivery tests) ─
-jest.mock('@/lib/data/configs.server', () => ({
-  getConfigsForMode: jest.fn().mockResolvedValue({
+vi.mock('@/lib/data/configs.server', () => ({
+  getConfigsForMode: vi.fn().mockResolvedValue({
     config: {
       branding: {
         agentName: 'TestAgent',
@@ -219,7 +220,7 @@ describe('Job Runs E2E', () => {
       // Intercept handler execution to verify run file exists with status=running
       let capturedRunFileId: number | null = null;
 
-      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
       pythonBackendFetch.mockImplementationOnce(async () => {
         // By the time the query runs, the job_run should already have output_file_id
         const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
@@ -249,7 +250,7 @@ describe('Job Runs E2E', () => {
     });
 
     it('captures query error as failed test result (run status stays SUCCESS)', async () => {
-      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
       pythonBackendFetch.mockRejectedValueOnce(new Error('DB connection refused'));
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
@@ -334,7 +335,7 @@ describe('Job Runs E2E', () => {
     });
 
     it('sends email when alert is triggered and recipients are configured', async () => {
-      const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
+      const { sendEmailViaWebhook } = await import('@/lib/messaging/webhook-executor');
 
       const alertWithRecipients: AlertContent = {
         status: 'live',
@@ -373,7 +374,7 @@ describe('Job Runs E2E', () => {
     });
 
     it('records delivery failure in messages when webhook returns HTTP error', async () => {
-      const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
+      const { sendEmailViaWebhook } = await import('@/lib/messaging/webhook-executor');
       sendEmailViaWebhook.mockResolvedValueOnce({ success: false, statusCode: 401, error: 'Unauthorized' });
 
       const alertWithRecipients: AlertContent = {
@@ -398,7 +399,7 @@ describe('Job Runs E2E', () => {
     });
 
     it('does not send notifications when alert is not triggered', async () => {
-      const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
+      const { sendEmailViaWebhook } = await import('@/lib/messaging/webhook-executor');
 
       // Revenue 150 <= 200 = true → test passes → NOT triggered
       const alertWithRecipients: AlertContent = {
