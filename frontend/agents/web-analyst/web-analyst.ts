@@ -7,9 +7,9 @@ import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
 import { ReadFiles, SearchFiles } from '@/agents/analyst/file-tools';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import { EditFile, CreateFile, DeleteFile } from './web-tools';
+import { EditFile, CreateFile } from './web-tools';
 
-export { EditFile, CreateFile, DeleteFile } from './web-tools';
+export { EditFile, CreateFile } from './web-tools';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-web-analyst-api',
@@ -38,7 +38,6 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     SearchFiles.schema,
     EditFile.schema,
     CreateFile.schema,
-    DeleteFile.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 

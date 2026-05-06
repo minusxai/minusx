@@ -32,10 +32,13 @@ export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext
   }
 }
 
+// Schema MUST match `registerFrontendTool('CreateFile', ...)` in
+// `lib/api/tool-handlers.ts` — dual-update rule. Handler reads `file_type`
+// (NOT `type`), `name`, `path`, `content`.
 const CreateFileParams = Type.Object({
+  file_type: Type.String({ description: 'File type to create (question, dashboard, folder, etc.).' }),
   name: Type.String(),
   path: Type.String(),
-  type: Type.String({ description: 'File type (question, dashboard, etc.).' }),
   content: Type.Unknown({ description: 'Initial file content (typed by file type).' }),
 });
 
@@ -51,18 +54,9 @@ export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystCon
   }
 }
 
-const DeleteFileParams = Type.Object({
-  fileId: Type.Number(),
-});
-
-export class DeleteFile extends MXTool<typeof DeleteFileParams, RemoteAnalystContext> {
-  static readonly schema: Tool<typeof DeleteFileParams> = {
-    name: 'DeleteFile',
-    description: 'Delete a file from the user\'s workspace. Executes on the frontend with real Redux state.',
-    parameters: DeleteFileParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    throw new UserInputException(this.id);
-  }
-}
+// Note: DeleteFile is intentionally NOT exported. There is no
+// `registerFrontendTool('DeleteFile', ...)` runtime handler in
+// `lib/api/tool-handlers.ts`, so advertising the tool to the LLM would
+// produce "Unknown client-side tool" errors when the bridge tries to
+// resolve it. If/when a DeleteFile runtime handler is added, restore the
+// schema here and add it back to WebAnalystAgent.tools.

@@ -8,7 +8,7 @@ import type {
   RegistrableClass,
   StreamEvent,
 } from '@/orchestrator/types';
-import { WebAnalystAgent, EditFile, CreateFile, DeleteFile } from '@/agents/web-analyst/web-analyst';
+import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
 import { ReadFiles, SearchFiles } from '@/agents/analyst/file-tools';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
@@ -29,7 +29,6 @@ export const CHAT_V2_REGISTRABLES: RegistrableClass[] = [
   SearchFiles,
   EditFile,
   CreateFile,
-  DeleteFile,
   WebAnalystAgent,
 ];
 

@@ -10,7 +10,6 @@ import {
   WebAnalystAgent,
   EditFile,
   CreateFile,
-  DeleteFile,
   fauxRegistration,
 } from '../web-analyst';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
@@ -34,7 +33,7 @@ describe('WebAnalystAgent — UIE pause/resume bridge', () => {
       fauxAssistantMessage('Edited file 1.', { stopReason: 'stop' }),
     ]);
 
-    const registrables = [EditFile, CreateFile, DeleteFile, WebAnalystAgent];
+    const registrables = [EditFile, CreateFile, WebAnalystAgent];
 
     // 1. First run: faux returns EditFile call → tool throws UIE → orchestrator pauses.
     const orch = new Orchestrator(registrables);
