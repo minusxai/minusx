@@ -16,7 +16,8 @@ import {
   sendChatV2Message,
   setActiveChat,
 } from '@/store/chatV2Slice';
-import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
+import type { ConversationLog, ConversationLogEntry, AgentInvocation } from '@/orchestrator/types';
+import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall } from '@mariozechner/pi-ai';
 import type { FileComponentProps } from '@/lib/ui/fileComponents';
 import type { ToolCall, ToolMessage, CompletedToolCall, DisplayProps } from '@/lib/types';
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
@@ -32,6 +33,24 @@ interface ChatFileContent {
   agent: string;
   agent_args: Record<string, unknown>;
   forkedFrom?: number;
+}
+
+// Discriminators for ConversationLogEntry. The union is
+// `(AgentInvocation | AssistantMessage | ToolResultMessage) & { parent_id }` —
+// AgentInvocation has `type: 'toolCall'`, the other two have `role`.
+type LogEntryWithParent = ConversationLogEntry;
+type AgentInvocationEntry = AgentInvocation & { parent_id: string | null };
+type AssistantEntry = AssistantMessage & { parent_id: string | null };
+type ToolResultEntry = ToolResultMessage & { parent_id: string | null };
+
+function isAgentInvocation(e: LogEntryWithParent): e is AgentInvocationEntry {
+  return (e as { type?: string }).type === 'toolCall';
+}
+function isAssistant(e: LogEntryWithParent): e is AssistantEntry {
+  return 'role' in e && e.role === 'assistant';
+}
+function isToolResult(e: LogEntryWithParent): e is ToolResultEntry {
+  return 'role' in e && e.role === 'toolResult';
 }
 
 // Tool name → DisplayProps component. Names match the WebAnalystAgent /
@@ -81,14 +100,12 @@ export default function ChatV2Container({ fileId }: FileComponentProps) {
   const toolResultByCallId = useMemo(() => {
     const map = new Map<string, ToolMessage>();
     for (const entry of log) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const e = entry as any;
-      if (e.role === 'toolResult') {
-        map.set(e.toolCallId, {
+      if (isToolResult(entry)) {
+        map.set(entry.toolCallId, {
           role: 'tool',
-          tool_call_id: e.toolCallId,
-          content: pickText(e.content),
-          details: e.details,
+          tool_call_id: entry.toolCallId,
+          content: pickText(entry.content),
+          details: entry.details as ToolMessage['details'],
         });
       }
     }
@@ -154,12 +171,11 @@ interface ChatLogEntryProps {
 }
 
 function ChatLogEntry({ entry, toolResultByCallId }: ChatLogEntryProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const e = entry as any;
-
-  // Root user message — the first AgentInvocation log entry.
-  if (e.type === 'toolCall' && e.parent_id === null) {
-    const userText = String(e.arguments?.userMessage ?? '(no message)');
+  // Root user message — the first AgentInvocation log entry (parent_id === null).
+  if (isAgentInvocation(entry) && entry.parent_id === null) {
+    const args = entry.arguments as { userMessage?: unknown };
+    const userText =
+      typeof args.userMessage === 'string' ? args.userMessage : '(no message)';
     return (
       <Box aria-label="chat-message-user" borderRadius="md" p={2} bg="accent.primary/10">
         <Text fontSize="xs" color="fg.muted">User</Text>
@@ -168,11 +184,13 @@ function ChatLogEntry({ entry, toolResultByCallId }: ChatLogEntryProps) {
     );
   }
 
-  if (e.role === 'assistant') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const blocks = (e.content ?? []) as Array<any>;
-    const text = blocks.filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
-    const toolCalls = blocks.filter((c) => c?.type === 'toolCall');
+  if (isAssistant(entry)) {
+    const blocks = entry.content ?? [];
+    const text = blocks
+      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+      .map((c) => c.text)
+      .join('\n');
+    const toolCalls = blocks.filter((c): c is PiToolCall => c.type === 'toolCall');
     return (
       <Box aria-label="chat-message-assistant" borderRadius="md" p={2} bg="bg.muted">
         {text && (
@@ -202,7 +220,7 @@ function ChatLogEntry({ entry, toolResultByCallId }: ChatLogEntryProps) {
 }
 
 interface ToolCallEntryProps {
-  toolCall: { id: string; name: string; arguments: Record<string, unknown> };
+  toolCall: PiToolCall;
   toolResult: ToolMessage | undefined;
 }
 
@@ -221,7 +239,7 @@ function ToolCallEntry({ toolCall, toolResult }: ToolCallEntryProps) {
   const tc: ToolCall = {
     id: toolCall.id,
     type: 'function',
-    function: { name: toolCall.name, arguments: toolCall.arguments },
+    function: { name: toolCall.name, arguments: toolCall.arguments as Record<string, unknown> },
   };
   const tuple: CompletedToolCall = [tc, toolResult];
   return (
@@ -231,14 +249,10 @@ function ToolCallEntry({ toolCall, toolResult }: ToolCallEntryProps) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function pickText(content: any): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((c) => c?.type === 'text')
-      .map((c) => c.text)
-      .join('\n');
-  }
-  return JSON.stringify(content ?? '');
+function pickText(content: ToolResultMessage['content']): string {
+  if (!Array.isArray(content)) return JSON.stringify(content ?? '');
+  return content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
 }

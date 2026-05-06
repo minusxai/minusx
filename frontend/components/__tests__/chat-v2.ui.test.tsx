@@ -214,14 +214,22 @@ describe('Phase 3 UI — Streaming consumer (SSE)', () => {
     }) as any;
   });
 
-  it('listener consumes SSE, populates streamingEvents during the turn, and replaces with canonical log on done', async () => {
-    // Mock executeToolCall via the bridge — we don't need real edit logic;
-    // just need the bridge not to crash if it ever runs (it won't, because
-    // the test response doesn't loop us back via a second POST — done.done='pending'
-    // would normally trigger a second POST, but we let listener.signal abort
-    // eventually via test teardown).
+  it('listener consumes SSE incrementally — streamingEvents populates DURING the turn and is cleared by chatTurnCompleted', async () => {
     const store = makeStore();
     const chatId = 0;
+
+    // Subscribe before dispatching so we capture the per-action state at
+    // every step. We assert the listener actually pushed orchestrator events
+    // into `streamingEvents` mid-stream (i.e., before the `done` frame
+    // resets it), not just that the final state is consistent.
+    let maxStreamingEventsSeen = 0;
+    const unsubscribe = store.subscribe(() => {
+      const c = selectChatV2(store.getState(), chatId) ?? selectChatV2(store.getState(), 777);
+      if (c && c.streamingEvents.length > maxStreamingEventsSeen) {
+        maxStreamingEventsSeen = c.streamingEvents.length;
+      }
+    });
+
     await act(async () => {
       store.dispatch(sendChatV2Message({ chatId, message: 'hi' }));
     });
@@ -234,7 +242,14 @@ describe('Phase 3 UI — Streaming consumer (SSE)', () => {
       expect(c!.executionState).toBe('finished');
     }, { timeout: 5000 });
 
-    // streamingEvents was cleared by chatTurnCompleted (canonical log supersedes).
+    unsubscribe();
+
+    // The SSE body we mocked emits two `event: orchestrator` frames before
+    // the `done` frame. Verify the listener saw both before the canonical
+    // log replaced them.
+    expect(maxStreamingEventsSeen).toBeGreaterThanOrEqual(2);
+
+    // After done: canonical log supersedes the streaming buffer, no pending.
     const finalState = selectChatV2(store.getState(), 777);
     expect(finalState!.streamingEvents).toEqual([]);
     expect(finalState!.pendingToolCalls).toEqual([]);

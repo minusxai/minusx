@@ -45,10 +45,8 @@ interface ChatV2Response {
 // active connection here.
 const EMPTY_DB_STUB: DatabaseWithSchema = {
   databaseName: '',
-  dialect: 'duckdb',
   schemas: [],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any;
+};
 
 interface SsePostResult {
   response: ChatV2Response;
