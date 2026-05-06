@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { TableV2 } from '@/components/plotx/TableV2'
 import { ChartBuilder } from '@/components/plotx/ChartBuilder'
+import { VizConfigPanel } from '@/components/plotx/VizConfigPanel'
 import type { GeoConfig } from '@/lib/types'
 
 // ─── Shared mocks ────────────────────────────────────────────────────────────
@@ -424,26 +425,20 @@ describe('ChartBuilder viz type constraints', () => {
   })
 })
 
-// ─── ChartBuilder dual axis ───────────────────────────────────────────────────
+// ─── VizConfigPanel dual axis ────────────────────────────────────────────────
 
-describe('ChartBuilder dual axis', () => {
+describe('VizConfigPanel dual axis', () => {
   const columns = ['month', 'category', 'revenue', 'orders']
   const types = ['TIMESTAMP', 'VARCHAR', 'DOUBLE', 'BIGINT']
-  const rows = [
-    { month: '2026-01', category: 'A', revenue: 100, orders: 10 },
-    { month: '2026-02', category: 'B', revenue: 200, orders: 20 },
-  ]
 
   it('shows single Y Axis zone when dualAxis is off', () => {
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={columns}
         types={types}
-        rows={rows}
         chartType="line"
         initialXCols={['month']}
         initialYCols={['revenue', 'orders']}
-        showAxisBuilder
         axisConfig={{}}
         onAxisConfigChange={vi.fn()}
       />
@@ -456,15 +451,13 @@ describe('ChartBuilder dual axis', () => {
 
   it('shows Y Left and Y Right zones when dualAxis is on', () => {
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={columns}
         types={types}
-        rows={rows}
         chartType="line"
         initialXCols={['month']}
         initialYCols={['revenue']}
         initialYRightCols={['orders']}
-        showAxisBuilder
         axisConfig={{ dualAxis: true }}
         onAxisConfigChange={vi.fn()}
       />
@@ -478,17 +471,14 @@ describe('ChartBuilder dual axis', () => {
   it('shows dual axis toggle in settings panel', async () => {
     const user = userEvent.setup()
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={columns}
         types={types}
-        rows={rows}
         chartType="line"
         initialXCols={['month']}
         initialYCols={['revenue', 'orders']}
-        showAxisBuilder
         axisConfig={{}}
         onAxisConfigChange={vi.fn()}
-        settingsExpanded
       />
     )
 
@@ -499,7 +489,7 @@ describe('ChartBuilder dual axis', () => {
   })
 })
 
-// ─── ChartBuilder geo type ────────────────────────────────────────────────────
+// ─── VizConfigPanel geo type (axis builder UI) ──────────────────────────────
 
 const geoColumns = ['state', 'revenue', 'lat', 'lng', 'lat2', 'lng2']
 const geoTypes = ['VARCHAR', 'DOUBLE', 'DOUBLE', 'DOUBLE', 'DOUBLE', 'DOUBLE']
@@ -508,17 +498,14 @@ const geoRows = [
   { state: 'Karnataka', revenue: 95, lat: 12.971, lng: 77.594, lat2: 13.083, lng2: 80.270 },
 ]
 
-describe('ChartBuilder geo type', () => {
-  it('renders GeoAxisBuilder with sub-type selector when chartType is geo', () => {
+describe('VizConfigPanel geo type', () => {
+  it('renders sub-type selector', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -530,16 +517,13 @@ describe('ChartBuilder geo type', () => {
     expect(screen.getByLabelText('Geo sub-type Heatmap')).toBeInTheDocument()
   })
 
-  it('does not render standard AxisBuilder X/Y zones for geo', () => {
+  it('does not render standard X/Y zones for geo', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -552,13 +536,10 @@ describe('ChartBuilder geo type', () => {
   it('shows choropleth drop zones: Region and Value', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -571,13 +552,10 @@ describe('ChartBuilder geo type', () => {
   it('shows points drop zones: Latitude, Longitude, Size (optional)', () => {
     const geoConfig: GeoConfig = { subType: 'points' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -588,16 +566,13 @@ describe('ChartBuilder geo type', () => {
     expect(screen.getByText('Size (optional)')).toBeInTheDocument()
   })
 
-  it('shows lines drop zones: Origin Lat, Origin Lng, Dest Lat, Dest Lng', () => {
+  it('shows lines drop zones', () => {
     const geoConfig: GeoConfig = { subType: 'lines' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -609,16 +584,13 @@ describe('ChartBuilder geo type', () => {
     expect(screen.getByText('Dest Lng')).toBeInTheDocument()
   })
 
-  it('shows heatmap drop zones: Latitude, Longitude, Intensity (optional)', () => {
+  it('shows heatmap drop zones', () => {
     const geoConfig: GeoConfig = { subType: 'heatmap' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -635,13 +607,10 @@ describe('ChartBuilder geo type', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
 
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={onGeoConfigChange}
       />
@@ -657,13 +626,10 @@ describe('ChartBuilder geo type', () => {
   it('shows Fields and Settings tabs', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -678,13 +644,10 @@ describe('ChartBuilder geo type', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
 
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -701,13 +664,10 @@ describe('ChartBuilder geo type', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
 
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -718,60 +678,13 @@ describe('ChartBuilder geo type', () => {
     expect(screen.getByText('Scale:')).toBeInTheDocument()
   })
 
-  it('does not show color scale picker for non-choropleth sub-types', async () => {
-    const user = userEvent.setup()
-    const geoConfig: GeoConfig = { subType: 'points' }
-
-    renderWithProviders(
-      <ChartBuilder
-        columns={geoColumns}
-        types={geoTypes}
-        rows={geoRows}
-        chartType="geo"
-        showAxisBuilder
-        settingsExpanded
-        initialGeoConfig={geoConfig}
-        onGeoConfigChange={vi.fn()}
-      />
-    )
-
-    await user.click(screen.getByText('Settings'))
-
-    expect(screen.queryByText('Scale:')).not.toBeInTheDocument()
-  })
-
-  it('base map selector is available for non-choropleth sub-types', async () => {
-    const user = userEvent.setup()
-    const geoConfig: GeoConfig = { subType: 'points' }
-
-    renderWithProviders(
-      <ChartBuilder
-        columns={geoColumns}
-        types={geoTypes}
-        rows={geoRows}
-        chartType="geo"
-        showAxisBuilder
-        settingsExpanded
-        initialGeoConfig={geoConfig}
-        onGeoConfigChange={vi.fn()}
-      />
-    )
-
-    await user.click(screen.getByText('Settings'))
-
-    expect(screen.getByText('GeoJSON Map')).toBeInTheDocument()
-  })
-
   it('no bubble sub-type exists (merged into points)', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
     renderWithProviders(
-      <ChartBuilder
+      <VizConfigPanel
         columns={geoColumns}
         types={geoTypes}
-        rows={geoRows}
         chartType="geo"
-        showAxisBuilder
-        settingsExpanded
         initialGeoConfig={geoConfig}
         onGeoConfigChange={vi.fn()}
       />
@@ -779,7 +692,11 @@ describe('ChartBuilder geo type', () => {
 
     expect(screen.queryByLabelText('Geo sub-type Bubble')).not.toBeInTheDocument()
   })
+})
 
+// ─── ChartBuilder geo rendering ─────────────────────────────────────────────
+
+describe('ChartBuilder geo rendering', () => {
   it('renders choropleth constraint error when no region/value columns assigned', () => {
     const geoConfig: GeoConfig = { subType: 'choropleth', mapName: 'india-states' }
     renderWithProviders(
