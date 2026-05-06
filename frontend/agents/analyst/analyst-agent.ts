@@ -65,7 +65,9 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       allowed_viz_types: '',
       role: '',
       schema: '',
-      context: '',
+      // Markdown context docs from the chat's bound `type: 'context'` file
+      // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
+      context: this.context.contextDocs ?? '',
       skills_catalog: '',
       connection_id: this.context.connectionId ?? '',
       home_folder: '',

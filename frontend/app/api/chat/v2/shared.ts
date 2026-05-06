@@ -18,6 +18,7 @@ import {
   loadChatLog,
   type ChatContent,
 } from '@/lib/chat-v2/chat-file';
+import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 export const CHAT_V2_REGISTRABLES: RegistrableClass[] = [
@@ -86,10 +87,31 @@ async function setupOrchestration(
   // RemoteAnalystContext narrows to 'org' | 'tutorial' — anything else
   // collapses to 'org'.
   const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
+
+  // Reuse the shared server agent-args builder (same code path Slack /
+  // reports / evals use) to derive whitelisted schema + documentation. When
+  // `agentArgs.contextFileId` is set, that specific context drives the run;
+  // otherwise the user's nearest ancestor context is used.
+  const contextFileId =
+    typeof agentArgs.contextFileId === 'number' ? agentArgs.contextFileId : undefined;
+  const serverArgs = await buildServerAgentArgs(
+    user,
+    contextFileId != null ? { contextFileId } : undefined,
+  );
+  const whitelistedTables: string[] = [];
+  for (const s of serverArgs.schema) {
+    for (const t of s.tables) {
+      whitelistedTables.push(t);
+      whitelistedTables.push(`${s.schema}.${t}`);
+    }
+  }
   const ctx: RemoteAnalystContext = {
     userId: String(user.userId ?? user.email),
     mode: narrowedMode,
     effectiveUser: user,
+    connectionId: serverArgs.connection_id,
+    whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
+    contextDocs: serverArgs.context || undefined,
   };
 
   const orch = new Orchestrator(CHAT_V2_REGISTRABLES, [...savedLog]);

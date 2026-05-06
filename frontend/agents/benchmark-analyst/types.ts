@@ -15,4 +15,17 @@ export interface ConnectionInfo {
  */
 export interface BenchmarkAnalystContext extends AgentContext {
   connections?: ConnectionInfo[];
+  /**
+   * Per-run whitelist enforced inside `SearchDBSchema` after the global
+   * schema source returns hits. Each entry is either a bare table name
+   * (e.g. `'users'`) or a qualified `schema.table` form. `undefined` means
+   * no restriction (admin / no-context flow). Array (not Set) so the agent
+   * invocation log entry serialises cleanly across orch.resume turns.
+   */
+  whitelistedTables?: readonly string[];
+  /**
+   * Markdown context documentation injected into the agent's system prompt
+   * so the LLM knows what the data means without re-deriving it.
+   */
+  contextDocs?: string;
 }

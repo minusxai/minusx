@@ -34,8 +34,24 @@ export class SearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benchmar
 
   async run(): Promise<ToolResponse> {
     const hits = await getSchemaSource().search(this.parameters.query, this.parameters.connection);
+    // Per-run whitelist (set by chat-v2 from a context file) filters hits
+    // before they reach the LLM. Match either bare table name or a qualified
+    // `schema.table` form so context whitelists in either shape work.
+    const whitelist = this.context.whitelistedTables;
+    const filtered = whitelist
+      ? hits.filter((h) => {
+          const bare = h.table;
+          // Some schema sources return `{schema, table}`; others just `{table}`.
+          // Try both forms against the whitelist.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const schema = (h as any).schema as string | undefined;
+          if (whitelist.includes(bare)) return true;
+          if (schema && whitelist.includes(`${schema}.${bare}`)) return true;
+          return false;
+        })
+      : hits;
     return {
-      content: [{ type: 'text', text: JSON.stringify(hits) }],
+      content: [{ type: 'text', text: JSON.stringify(filtered) }],
       isError: false,
     };
   }
