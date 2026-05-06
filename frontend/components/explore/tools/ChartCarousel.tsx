@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from 'react';
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
-import { LuChevronLeft, LuChevronRight, LuChevronDown, LuChevronUp, LuDatabase, LuX, LuCode, LuCheck } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuChevronDown, LuChevronUp, LuDatabase, LuX, LuCheck, LuSettings } from 'react-icons/lu';
 import type { MessageWithFlags } from '../message/messageHelpers';
 import type { QuestionContent, QueryResult, ExecuteQueryDetails } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
@@ -10,6 +10,8 @@ import { QuestionVisualization } from '@/components/question/QuestionVisualizati
 import SqlEditor from '@/components/SqlEditor';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
+import { VizTypeSelector } from '@/components/question/VizTypeSelector';
+import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 
 /** A generic chart item that can come from ExecuteQuery or CreateFile */
 export interface ChartItem {
@@ -128,9 +130,8 @@ export default function ChartCarousel({
   const failedCount = allItems.length - successful.length;
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [showQuery, setShowQuery] = useState(false);
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
-  const [showVizControls, setShowVizControls] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const count = successful.length;
   const safeIndex = Math.min(activeIndex, Math.max(0, count - 1));
@@ -187,14 +188,35 @@ export default function ChartCarousel({
 
   return (
     <VStack gap={0} align="stretch">
-      {/* Top bar — label + nav + query toggle */}
+      {/* Top bar — label + settings (left) | nav (right) */}
       <HStack justify="space-between" px={3} pt={2} pb={1}>
-        <HStack gap={1.5}>
-          <Icon as={headerIcon || LuDatabase} boxSize={3} color="fg.muted" />
-          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-            {totalCount} {displayLabel}
-            {failedCount > 0 && ` (${failedCount} failed)`}
-          </Text>
+        <HStack gap={3}>
+          <HStack gap={1.5}>
+            <Icon as={headerIcon || LuDatabase} boxSize={3} color="fg.muted" />
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
+              {totalCount} {displayLabel}
+              {failedCount > 0 && ` (${failedCount} failed)`}
+            </Text>
+          </HStack>
+
+          <Box w="1px" h="14px" bg="border.muted" />
+
+          <HStack
+            as="button"
+            aria-label="Toggle settings"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+            gap={1}
+            cursor="pointer"
+            color={settingsOpen ? 'accent.teal' : 'fg.subtle'}
+            _hover={{ color: settingsOpen ? 'accent.teal' : 'fg.default' }}
+            transition="color 0.15s"
+          >
+            <Icon as={LuSettings} boxSize={3} />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+              Settings
+            </Text>
+            <Icon as={settingsOpen ? LuChevronUp : LuChevronDown} boxSize={3} />
+          </HStack>
         </HStack>
 
         {count > 1 && (
@@ -234,7 +256,6 @@ export default function ChartCarousel({
             ><LuChevronRight size={14} /></Box>
           </HStack>
         )}
-
       </HStack>
 
       {/* Content area */}
@@ -249,57 +270,27 @@ export default function ChartCarousel({
           </HStack>
         )}
 
-        {/* Viz + Query toggles */}
-        <HStack justify="space-between" px={3} pb={1}>
-          <HStack
-            gap={1}
-            cursor="pointer"
-            onClick={() => setShowVizControls(!showVizControls)}
-            color="fg.subtle"
-            _hover={{ color: 'fg.default' }}
-            transition="color 0.1s"
-          >
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-              Viz Options
-            </Text>
-            <Icon as={showVizControls ? LuChevronUp : LuChevronDown} boxSize={3} />
-          </HStack>
-          <HStack
-            gap={1}
-            cursor="pointer"
-            onClick={() => setShowQuery(!showQuery)}
-            color="fg.subtle"
-            _hover={{ color: 'fg.default' }}
-            transition="color 0.1s"
-          >
-            <Icon as={LuCode} boxSize={3} />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-              Query
-            </Text>
-            <Icon as={showQuery ? LuChevronUp : LuChevronDown} boxSize={3} />
-          </HStack>
-        </HStack>
-
-        {/* Expandable query editor */}
-        {showQuery && current?.question?.query && (
-          <Box mx={2} mb={1}>
+        {/* Settings panel (SQL / GUI / Viz tabs) */}
+        {settingsOpen && (
+          <Box mx={2} mb={2}>
             <HStack mb={1}>
               <QueryModeSelector
                 mode={queryMode}
                 onModeChange={setQueryMode}
                 canUseGUI
-                showVizTab={false}
+                showVizTab={!!current?.queryResult}
               />
             </HStack>
             <Box borderRadius="md" overflow="hidden">
-              {queryMode === 'sql' ? (
+              {queryMode === 'sql' && current?.question?.query && (
                 <SqlEditor
                   value={current.question.query}
                   readOnly
                   showRunButton={false}
                   showFormatButton={false}
                 />
-              ) : (
+              )}
+              {queryMode === 'gui' && current?.question?.query && (
                 <QueryBuilderRoot
                   databaseName={databaseName}
                   dialect={connectionTypeToDialect('')}
@@ -307,12 +298,49 @@ export default function ChartCarousel({
                   onSqlChange={() => {}}
                 />
               )}
+              {queryMode === 'viz' && localContent && current?.queryResult && (
+                <Box px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                  <VizTypeSelector
+                    value={localContent.vizSettings?.type || 'table'}
+                    onChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
+                    orientation="grouped"
+                  />
+                  {localContent.vizSettings?.type && localContent.vizSettings.type !== 'table' && (
+                    <VizConfigPanel
+                      columns={current.queryResult.columns}
+                      types={current.queryResult.types}
+                      chartType={localContent.vizSettings.type}
+                      initialXCols={localContent.vizSettings?.xCols ?? undefined}
+                      initialYCols={localContent.vizSettings?.yCols ?? undefined}
+                      initialYRightCols={localContent.vizSettings?.yRightCols ?? undefined}
+                      onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
+                      onYRightColsChange={(yRightCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, yRightCols } })}
+                      initialTooltipCols={localContent.vizSettings?.tooltipCols ?? undefined}
+                      onTooltipColsChange={(tooltipCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, tooltipCols } })}
+                      initialPivotConfig={localContent.vizSettings?.pivotConfig ?? undefined}
+                      onPivotConfigChange={(pivotConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, pivotConfig } })}
+                      initialGeoConfig={localContent.vizSettings?.geoConfig ?? undefined}
+                      onGeoConfigChange={(geoConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, geoConfig } })}
+                      initialColumnFormats={localContent.vizSettings?.columnFormats ?? undefined}
+                      onColumnFormatsChange={(columnFormats) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, columnFormats } })}
+                      styleConfig={localContent.vizSettings?.styleConfig ?? undefined}
+                      onStyleConfigChange={(styleConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, styleConfig } })}
+                      axisConfig={localContent.vizSettings?.axisConfig ?? undefined}
+                      onAxisConfigChange={(axisConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, axisConfig } })}
+                      annotations={localContent.vizSettings?.annotations ?? undefined}
+                      onAnnotationsChange={(annotations) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, annotations } })}
+                      trendConfig={localContent.vizSettings?.trendConfig ?? undefined}
+                      onTrendConfigChange={(trendConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, trendConfig } })}
+                    />
+                  )}
+                </Box>
+              )}
             </Box>
           </Box>
         )}
 
         {/* Chart */}
-        <Box px={1} pb={count > 1 ? 1 : 2} minH="200px">
+        <Box px={1} pb={count > 1 ? 1 : 2} minH="300px">
           <Box borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
           {localContent && current?.queryResult ? (
             <QuestionVisualization
@@ -322,8 +350,8 @@ export default function ChartCarousel({
                 showJsonToggle: false,
                 editable: false,
                 viz: {
-                  showTypeButtons: showVizControls,
-                  showChartBuilder: showVizControls,
+                  showTypeButtons: false,
+                  showChartBuilder: false,
                   typesButtonsOrientation: 'horizontal',
                   showTitle: true,
                 },

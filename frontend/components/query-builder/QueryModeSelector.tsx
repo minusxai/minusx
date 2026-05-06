@@ -51,6 +51,7 @@ export function QueryModeSelector({
             flex={1}
             justify="center"
             gap={1.5}
+            px={3}
             py={1.5}
             borderRadius="sm"
             bg={isActive ? 'accent.teal/90' : 'transparent'}
