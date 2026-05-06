@@ -11,10 +11,11 @@ describe('orchestrator e2e', () => {
     ]);
 
     const ctx: AgentContext = { userId: 'u', mode: 'org' };
-    const orch = new Orchestrator([EchoTool, PendingTool, TestAgent]);
-    const agent = new TestAgent(orch, { userMessage: 'hi' }, ctx);
+    const registrables = [EchoTool, PendingTool, TestAgent];
+    const orchA = new Orchestrator(registrables);
+    const agent = new TestAgent(orchA, { userMessage: 'hi' }, ctx);
 
-    const phase1 = orch.run(agent);
+    const phase1 = orchA.run(agent);
     const events1: StreamEvent[] = [];
     for await (const ev of phase1) events1.push(ev);
     const result1 = await phase1.result();
@@ -23,12 +24,13 @@ describe('orchestrator e2e', () => {
     expect(events1.at(-1)).toMatchObject({ type: 'pending' });
     expect(result1).toBeNull();
 
-    const pendingCall = orch.log
+    const pendingCall = orchA.log
       .flatMap((e) => ('role' in e && e.role === 'assistant' ? e.content.filter((c) => c.type === 'toolCall') : []))
       .find((tc): tc is ToolCall => tc.name === 'PendingTool');
     expect(pendingCall).toBeDefined();
 
-    const phase2 = orch.resume([
+    const orchB = new Orchestrator(registrables, orchA.log);
+    const phase2 = orchB.resume([
       {
         toolCallId: pendingCall!.id,
         response: {

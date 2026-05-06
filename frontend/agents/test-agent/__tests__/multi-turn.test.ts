@@ -4,24 +4,26 @@ import type { AgentContext } from '@/orchestrator/types';
 import { EchoTool, PendingTool, NestedAgent, TestAgent, fauxRegistration } from '../test-agent';
 
 describe('multi-turn root conversation', () => {
-  it('second TestAgent on the same Orchestrator inherits the first turn via threadHistory', async () => {
+  it('second turn on a fresh orchestrator inherits the first turn via threadHistory', async () => {
     fauxRegistration.setResponses([
       fauxAssistantMessage('Reply to first.', { stopReason: 'stop' }),
       fauxAssistantMessage('Reply to second.', { stopReason: 'stop' }),
     ]);
 
     const ctx: AgentContext = { userId: 'u', mode: 'org' };
-    const orch = new Orchestrator([EchoTool, PendingTool, NestedAgent, TestAgent]);
+    const registrables = [EchoTool, PendingTool, NestedAgent, TestAgent];
 
-    const a1 = new TestAgent(orch, { userMessage: 'first' }, ctx);
-    const stream1 = orch.run(a1);
+    const orchA = new Orchestrator(registrables);
+    const a1 = new TestAgent(orchA, { userMessage: 'first' }, ctx);
+    const stream1 = orchA.run(a1);
     for await (const _ of stream1) {/* drain events */}
     const result1 = await stream1.result();
     expect(result1).not.toBeNull();
     expect((result1!.content[0] as TextContent).text).toBe('Reply to first.');
 
-    const a2 = new TestAgent(orch, { userMessage: 'second' }, ctx);
-    const stream2 = orch.run(a2);
+    const orchB = new Orchestrator(registrables, orchA.log);
+    const a2 = new TestAgent(orchB, { userMessage: 'second' }, ctx);
+    const stream2 = orchB.run(a2);
     for await (const _ of stream2) {/* drain events */}
     const result2 = await stream2.result();
     expect(result2).not.toBeNull();

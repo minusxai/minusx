@@ -32,6 +32,7 @@ export class Orchestrator {
   protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
   protected controller: AbortController | null = null;
   protected readonly registrables: RegistrableClass[];
+  protected used = false;
 
   constructor(registrables: RegistrableClass[], log?: ConversationLog) {
     this.registrables = registrables;
@@ -42,19 +43,21 @@ export class Orchestrator {
     return this.controller?.signal;
   }
 
+  cancel(): void {
+    this.controller?.abort();
+  }
+
   async callLLM(
     model: Model<Api>,
     context: Context,
     agentId: string,
   ): Promise<AssistantMessage> {
-    const targetStream = this.stream;
-    const controller = this.controller;
-    const piStream = streamSimple(model, context, { signal: controller?.signal });
+    const piStream = streamSimple(model, context, { signal: this.controller?.signal });
 
     let result: AssistantMessage | null = null;
     let errored = false;
     for await (const ev of piStream) {
-      targetStream?.push({ ...ev, parent_id: agentId });
+      this.stream?.push({ ...ev, parent_id: agentId });
       if (ev.type === 'done') result = ev.message;
       else if (ev.type === 'error') {
         result = ev.error;
@@ -73,7 +76,10 @@ export class Orchestrator {
   }
 
   run(root: MXAgent): EventStream<StreamEvent, AssistantMessage | null> {
-    this.controller?.abort();
+    if (this.used) {
+      throw new Error('Orchestrator is single-use: this instance already executed run() or resume(). Construct a fresh Orchestrator with the saved log.');
+    }
+    this.used = true;
     this.appendInterruptResultsForDanglers();
     this.controller = new AbortController();
     root.threadHistory = this.projectRootThreadHistory();
@@ -112,6 +118,10 @@ export class Orchestrator {
   }
 
   resume(completed: { toolCallId: string; response: ToolResponse }[]): EventStream<StreamEvent, AssistantMessage | null> {
+    if (this.used) {
+      throw new Error('Orchestrator is single-use: this instance already executed run() or resume(). Construct a fresh Orchestrator with the saved log.');
+    }
+    this.used = true;
     this.controller = new AbortController();
 
     const byPausedAgent = new Map<string, ToolResultMessage[]>();

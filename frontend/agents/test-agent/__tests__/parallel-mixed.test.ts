@@ -17,10 +17,11 @@ describe('parallel mixed-state dispatch', () => {
     ]);
 
     const ctx: AgentContext = { userId: 'u', mode: 'org' };
-    const orch = new Orchestrator([EchoTool, PendingTool, NestedAgent, TestAgent]);
-    const agent = new TestAgent(orch, { userMessage: 'parallel test' }, ctx);
+    const registrables = [EchoTool, PendingTool, NestedAgent, TestAgent];
+    const orchA = new Orchestrator(registrables);
+    const agent = new TestAgent(orchA, { userMessage: 'parallel test' }, ctx);
 
-    const phase1 = orch.run(agent);
+    const phase1 = orchA.run(agent);
     const events1: StreamEvent[] = [];
     for await (const ev of phase1) events1.push(ev);
     const result1 = await phase1.result();
@@ -29,21 +30,22 @@ describe('parallel mixed-state dispatch', () => {
     const pendingEvent = events1.find((e) => e.type === 'pending');
     expect(pendingEvent).toBeDefined();
 
-    const echoResult = orch.log.find(
+    const echoResult = orchA.log.find(
       (e) => 'role' in e && e.role === 'toolResult' && e.toolName === 'EchoTool',
     );
-    const pendingResult = orch.log.find(
+    const pendingResult = orchA.log.find(
       (e) => 'role' in e && e.role === 'toolResult' && e.toolName === 'PendingTool',
     );
     expect(echoResult).toBeDefined();
     expect(pendingResult).toBeUndefined();
 
-    const pendingCall = orch.log
+    const pendingCall = orchA.log
       .flatMap((e) => ('role' in e && e.role === 'assistant' ? e.content.filter((c) => c.type === 'toolCall') : []))
       .find((tc): tc is ToolCall => tc.name === 'PendingTool');
     expect(pendingCall).toBeDefined();
 
-    const phase2 = orch.resume([
+    const orchB = new Orchestrator(registrables, orchA.log);
+    const phase2 = orchB.resume([
       {
         toolCallId: pendingCall!.id,
         response: { content: [{ type: 'text', text: 'frontend done' }], isError: false },

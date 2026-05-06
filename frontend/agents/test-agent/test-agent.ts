@@ -70,6 +70,22 @@ export class ErrorTool extends MXTool<typeof ErrorToolParams> {
   }
 }
 
+const DeepAgentParams = Type.Object({
+  userMessage: Type.String(),
+});
+
+export class DeepAgent extends MXAgent<typeof DeepAgentParams> {
+  static readonly schema: Tool<typeof DeepAgentParams> = {
+    name: 'DeepAgent',
+    description: 'A doubly-nested test agent.',
+    parameters: DeepAgentParams,
+  };
+  static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema];
+  static readonly model = FAUX_MODEL;
+
+  protected systemPrompt = 'You are the deepest test agent.';
+}
+
 const NestedAgentParams = Type.Object({
   userMessage: Type.String(),
 });
@@ -80,7 +96,7 @@ export class NestedAgent extends MXAgent<typeof NestedAgentParams> {
     description: 'A nested test agent that finishes after one LLM turn.',
     parameters: NestedAgentParams,
   };
-  static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema];
+  static readonly tools: Tool<TSchema>[] = [EchoTool.schema, PendingTool.schema, DeepAgent.schema];
   static readonly model = FAUX_MODEL;
 
   protected systemPrompt = 'You are a nested test agent.';

@@ -19,10 +19,11 @@ describe('deep resume (paused sub-agent bubbles up)', () => {
     ]);
 
     const ctx: AgentContext = { userId: 'u', mode: 'org' };
-    const orch = new Orchestrator([EchoTool, PendingTool, ErrorTool, NestedAgent, TestAgent]);
-    const root = new TestAgent(orch, { userMessage: 'root input' }, ctx);
+    const registrables = [EchoTool, PendingTool, ErrorTool, NestedAgent, TestAgent];
+    const orchA = new Orchestrator(registrables);
+    const root = new TestAgent(orchA, { userMessage: 'root input' }, ctx);
 
-    const phase1 = orch.run(root);
+    const phase1 = orchA.run(root);
     const events1 = [];
     for await (const ev of phase1) events1.push(ev);
     const result1 = await phase1.result();
@@ -30,12 +31,13 @@ describe('deep resume (paused sub-agent bubbles up)', () => {
     expect(result1).toBeNull();
     expect(events1.at(-1)).toMatchObject({ type: 'pending' });
 
-    const pendingCall = orch.log
+    const pendingCall = orchA.log
       .flatMap((e) => ('role' in e && e.role === 'assistant' ? e.content.filter((c) => c.type === 'toolCall') : []))
       .find((tc): tc is ToolCall => tc.name === 'PendingTool');
     expect(pendingCall).toBeDefined();
 
-    const phase2 = orch.resume([
+    const orchB = new Orchestrator(registrables, orchA.log);
+    const phase2 = orchB.resume([
       {
         toolCallId: pendingCall!.id,
         response: { content: [{ type: 'text', text: 'frontend completed it' }], isError: false },
@@ -49,7 +51,7 @@ describe('deep resume (paused sub-agent bubbles up)', () => {
     expect(result2!.stopReason).toBe('stop');
     expect((result2!.content[0] as TextContent).text).toContain('Root done.');
 
-    const log: ConversationLogEntry[] = orch.log;
+    const log: ConversationLogEntry[] = orchB.log;
 
     const nestedToolCallInRoot = log
       .flatMap((e) => ('role' in e && e.role === 'assistant' && e.parent_id === root.id ? e.content : []))
