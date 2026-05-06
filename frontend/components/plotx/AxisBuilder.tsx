@@ -55,6 +55,8 @@ interface AxisBuilderProps {
   axisConfig?: AxisConfig
   onAxisConfigChange?: (config: AxisConfig) => void
   chartType?: string
+  /** When true, removes card styling (border, bg, padding) for inline embedding */
+  borderless?: boolean
 }
 
 const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
@@ -187,7 +189,7 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   )
 }
 
-export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
+export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType, borderless = false }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [dragSourceZone, setDragSourceZone] = useState<AxisZone | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
@@ -331,29 +333,36 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" border="1px solid" borderColor="border.muted" borderRadius="md">
-      {/* Tab bar + column chips on same row */}
+    <Box display="flex" flexDirection="column" gap={0} width="100%" p={borderless ? 0 : 3} bg={borderless ? 'transparent' : 'bg.canvas'} border={borderless ? 'none' : '1px solid'} borderColor={borderless ? undefined : 'border.muted'} borderRadius={borderless ? undefined : 'md'}>
+      {/* Full-width 50/50 tab bar */}
       {hasSettingsTab && (
-        <HStack gap={2} justify="flex-start">
+        <HStack
+          gap={0}
+          bg="bg.muted"
+          borderRadius="md"
+          p={0.5}
+          mb={3}
+          maxW="240px"
+        >
           {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
             <HStack
               key={key}
               as="button"
-              gap={1}
-              px={2}
-              py={1}
+              flex={1}
+              gap={1.5}
+              justify="center"
+              py={1.5}
               cursor="pointer"
-              bg="transparent"
-              color={activeTab === key ? 'accent.teal' : 'fg.subtle'}
-              borderBottom="2px solid"
-              borderColor={activeTab === key ? 'accent.teal' : 'transparent'}
-              _hover={{ color: 'accent.teal' }}
+              bg={activeTab === key ? 'bg.canvas' : 'transparent'}
+              color={activeTab === key ? 'fg.default' : 'fg.subtle'}
+              borderRadius="sm"
+              boxShadow={activeTab === key ? 'xs' : undefined}
+              _hover={{ color: activeTab === key ? 'fg.default' : 'fg.muted' }}
               transition="all 0.15s"
               onClick={() => setActiveTab(key)}
-              borderRadius={0}
             >
-              <Box as={Icon} fontSize="xs" />
-              <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+              <Box as={Icon} fontSize="sm" />
+              <Text fontSize="xs" fontFamily="mono" fontWeight="600">
                 {label}
               </Text>
             </HStack>
@@ -362,7 +371,11 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
       )}
 
       {(!hasSettingsTab || activeTab === 'fields') && (
-        <>
+        <VStack gap={3} align="stretch">
+        <Box bg="bg.muted" borderRadius="md" p={2.5}>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+            Columns
+          </Text>
         <HStack gap={2} flexWrap="wrap">
           {columns.map(col => (
             <ColumnChip
@@ -380,6 +393,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
           ))}
           {children}
         </HStack>
+        </Box>
 
         {isTouchDevice && selectedColumnForMobile && (
           <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
@@ -389,11 +403,14 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
           </Box>
         )}
 
-        <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
-          {zones.map(zone => {
-            const zoneFlex = zone.label === 'Y Axis' ? 2 : 1
-            return (
-              <Box key={zone.label} minW={0} flex={zoneFlex} display="flex" alignItems="stretch">
+        <Box
+          display="grid"
+          gridTemplateColumns="repeat(2, 1fr)"
+          gap={2}
+          minWidth={0}
+        >
+          {zones.map(zone => (
+              <Box key={zone.label} minW={0} display="flex" alignItems="stretch">
                 <DropZone
                   label={zone.label}
                   onDrop={() => handleZoneDrop(zone)}
@@ -429,31 +446,28 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
                   )}
                 </DropZone>
               </Box>
-            )
-          })}
+          ))}
         </Box>
-        </>
+        </VStack>
       )}
 
       {hasSettingsTab && activeTab === 'settings' && (
         <VStack align="stretch" gap={3} minW={0}>
-          <Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(240px, 1fr))" gap={3} minWidth={0} alignItems="start">
-            {showXAxisSettings && onAxisConfigChange && (
-              renderSettingsCard('X Axis', 'xAxis',
-                <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-              )
-            )}
-            {showYAxisSettings && onAxisConfigChange && (
-              renderSettingsCard('Y Axis', 'yAxis',
-                <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-              )
-            )}
-            {showStylePanel && stylePanel ? (
-              renderSettingsCard('Style', 'style',
-                stylePanel
-              )
-            ) : null}
-          </Box>
+          {showXAxisSettings && onAxisConfigChange && (
+            renderSettingsCard('X Axis', 'xAxis',
+              <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+            )
+          )}
+          {showYAxisSettings && onAxisConfigChange && (
+            renderSettingsCard('Y Axis', 'yAxis',
+              <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+            )
+          )}
+          {showStylePanel && stylePanel ? (
+            renderSettingsCard('Style', 'style',
+              stylePanel
+            )
+          ) : null}
           {showAnnotationPanel && annotationPanel ? (
             renderSettingsCard('Annotations', 'annotations',
               annotationPanel

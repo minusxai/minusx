@@ -1,72 +1,72 @@
 /**
- * QueryModeSelector - Compact pill toggle between SQL and GUI modes
+ * QueryModeSelector - Segmented control for SQL, GUI, and Viz modes
  */
 
 'use client';
 
 import { HStack, Box, Text } from '@chakra-ui/react';
-import { LuCode, LuMousePointerClick } from 'react-icons/lu';
+import { LuCode, LuMousePointerClick, LuChartColumn } from 'react-icons/lu';
+
+export type QueryTab = 'sql' | 'gui' | 'viz';
 
 interface QueryModeSelectorProps {
-  mode: 'sql' | 'gui';
-  onModeChange: (mode: 'sql' | 'gui') => void;
+  mode: QueryTab;
+  onModeChange: (mode: QueryTab) => void;
   canUseGUI: boolean;
   guiError?: string;
+  showVizTab?: boolean;
 }
+
+const TAB_ITEMS: Array<{ key: QueryTab; label: string; icon: React.ReactNode; disabledKey?: 'gui' }> = [
+  { key: 'sql', label: 'SQL', icon: <LuCode size={13} /> },
+  { key: 'gui', label: 'GUI', icon: <LuMousePointerClick size={13} />, disabledKey: 'gui' },
+  { key: 'viz', label: 'Viz', icon: <LuChartColumn size={13} /> },
+];
 
 export function QueryModeSelector({
   mode,
   onModeChange,
   canUseGUI,
   guiError,
+  showVizTab = true,
 }: QueryModeSelectorProps) {
+  const tabs = showVizTab ? TAB_ITEMS : TAB_ITEMS.filter(t => t.key !== 'viz');
+
   return (
     <HStack
       gap={0}
-      bg="bg.subtle"
+      bg="bg.muted"
       borderRadius="md"
       p={0.5}
-      border="1px solid"
-      borderColor="border.muted"
+      maxW="280px"
     >
-      <Box
-        as="button"
-        px={2.5}
-        py={1}
-        borderRadius="sm"
-        bg={mode === 'sql' ? 'accent.danger' : 'transparent'}
-        color={mode === 'sql' ? 'white' : 'fg.muted'}
-        cursor="pointer"
-        transition="all 0.15s ease"
-        _hover={{ color: mode === 'sql' ? 'white' : 'fg.default' }}
-        onClick={() => onModeChange('sql')}
-        display="flex"
-        alignItems="center"
-        gap={1.5}
-      >
-        <LuCode size={14} />
-        <Text fontSize="xs" fontWeight="600">SQL</Text>
-      </Box>
-      <Box
-        as="button"
-        px={2.5}
-        py={1}
-        borderRadius="sm"
-        bg={mode === 'gui' ? 'accent.danger' : 'transparent'}
-        color={mode === 'gui' ? 'white' : 'fg.muted'}
-        cursor={canUseGUI ? 'pointer' : 'not-allowed'}
-        opacity={canUseGUI ? 1 : 0.5}
-        transition="all 0.15s ease"
-        _hover={{ color: canUseGUI ? (mode === 'gui' ? 'white' : 'fg.default') : undefined }}
-        onClick={() => canUseGUI && onModeChange('gui')}
-        title={guiError || 'Visual query builder'}
-        display="flex"
-        alignItems="center"
-        gap={1.5}
-      >
-        <LuMousePointerClick size={14} />
-        <Text fontSize="xs" fontWeight="600">GUI</Text>
-      </Box>
+      {tabs.map(({ key, label, icon, disabledKey }) => {
+        const isActive = mode === key;
+        const isDisabled = disabledKey === 'gui' && !canUseGUI;
+
+        return (
+          <HStack
+            key={key}
+            as="button"
+            flex={1}
+            justify="center"
+            gap={1.5}
+            py={1}
+            borderRadius="sm"
+            bg={isActive ? 'accent.teal' : 'transparent'}
+            color={isActive ? 'white' : 'fg.muted'}
+            cursor={isDisabled ? 'not-allowed' : 'pointer'}
+            opacity={isDisabled ? 0.5 : 1}
+            transition="all 0.15s ease"
+            _hover={{ color: isDisabled ? undefined : (isActive ? 'white' : 'fg.default') }}
+            onClick={() => !isDisabled && onModeChange(key)}
+            title={disabledKey === 'gui' ? (guiError || 'Visual query builder') : undefined}
+          >
+            {icon}
+            <Text fontSize="xs" fontFamily="mono" fontWeight="600">{label}</Text>
+          </HStack>
+        );
+      })}
     </HStack>
   );
 }

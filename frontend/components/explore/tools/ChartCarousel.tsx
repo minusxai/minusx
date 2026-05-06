@@ -8,7 +8,7 @@ import type { QuestionContent, QueryResult, ExecuteQueryDetails } from '@/lib/ty
 import { contentToDetails } from '@/lib/types';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import SqlEditor from '@/components/SqlEditor';
-import { QueryBuilderRoot, QueryModeSelector } from '@/components/query-builder';
+import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 
 /** A generic chart item that can come from ExecuteQuery or CreateFile */
@@ -129,7 +129,7 @@ export default function ChartCarousel({
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showQuery, setShowQuery] = useState(false);
-  const [queryMode, setQueryMode] = useState<'sql' | 'gui'>('sql');
+  const [queryMode, setQueryMode] = useState<QueryTab>('sql');
   const [showVizControls, setShowVizControls] = useState(false);
 
   const count = successful.length;
@@ -288,6 +288,7 @@ export default function ChartCarousel({
                 mode={queryMode}
                 onModeChange={setQueryMode}
                 canUseGUI
+                showVizTab={false}
               />
             </HStack>
             <Box borderRadius="md" overflow="hidden">

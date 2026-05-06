@@ -79,6 +79,8 @@ interface ChartBuilderProps {
   trendConfig?: TrendConfig
   onTrendConfigChange?: (config: TrendConfig) => void
   exportBranding?: Partial<OrgBranding>
+  /** When true, render only the axis/config UI — no chart. Used in the Viz tab of the left panel. */
+  configOnly?: boolean
 }
 
 interface GroupedColumns {
@@ -87,7 +89,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding, configOnly = false }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const configPalette = config.chartColorPalette
@@ -544,6 +546,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             onTrendConfigChange={onTrendConfigChange}
           />
         )}
+        {!configOnly && (
         <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
           {constraintError ? (
             <ChartError message={constraintError} variant={constraint.variant} />
@@ -560,6 +563,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             <ChartError variant="info" title="No data to display" message="Drag metric columns to see trend values" />
           )}
         </Box>
+        )}
       </Box>
     )
   }
@@ -584,8 +588,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             columnFormats={columnFormats}
             onColumnFormatChange={handleColumnFormatChange}
             chartType={chartType}
+            borderless={configOnly}
           />
         )}
+        {!configOnly && (
         <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
           {hasData ? (
             <SingleValue values={yAxisColumns.map(col => ({
@@ -596,6 +602,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             <ChartError variant="info" title="No data to display" message="Drag metric columns to see values" />
           )}
         </Box>
+        )}
       </Box>
     )
   }
@@ -623,6 +630,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             getMapView={() => getMapViewRef.current?.() ?? null}
           />
         )}
+        {!configOnly && (
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
           <GeoPlot
             rows={rows}
@@ -634,6 +642,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             onMapReady={(getView) => { getMapViewRef.current = getView }}
           />
         </Box>
+        )}
       </Box>
     )
   }
@@ -662,6 +671,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           />
         )}
 
+        {!configOnly && (
+        <>
         {/* Pivot Table */}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
           {pivotHasData ? (
@@ -689,6 +700,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         </Box>
 
         <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
+        </>
+        )}
       </Box>
     )
   }
@@ -706,6 +719,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           axisConfig={axisConfig}
           onAxisConfigChange={onAxisConfigChange}
           chartType={chartType}
+          borderless={configOnly}
           stylePanel={onStyleConfigChange ? (
             <StyleConfigPopover
               chartType={chartType}
@@ -728,6 +742,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       )}
 
       {/* Chart Area */}
+      {!configOnly && (
       <VStack flex="1" align="stretch" gap={0} minWidth={0} overflow="hidden" minHeight="0" height={useCompactView ? "auto" : undefined}>
         {/* Column Conflict Warning */}
         {columnConflicts.length > 0 && (
@@ -798,8 +813,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           )}
         </Box>
       </VStack>
+      )}
 
-      <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
+      {!configOnly && <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />}
     </Box>
   )
 }

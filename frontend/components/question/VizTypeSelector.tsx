@@ -1,9 +1,9 @@
 /**
  * Visualization Type Selector
- * Reusable component for selecting visualization types (table, line, bar, area, scatter)
+ * Grouped chart type selector with category labels
  */
 
-import { VStack, HStack, IconButton } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import {
   LuTable2,
@@ -31,28 +31,51 @@ interface VizTypeOption {
   label: string;
 }
 
-const ALL_VIZ_TYPES: VizTypeOption[] = [
-  { type: 'table', icon: <LuGrid3X3 size={18} />, label: 'Table view' },
-  { type: 'line', icon: <LuChartLine size={18} />, label: 'Line chart' },
-  { type: 'bar', icon: <LuChartColumn size={18} />, label: 'Bar chart' },
-  { type: 'row', icon: <LuChartBar size={18} />, label: 'Row chart' },
-  { type: 'combo', icon: <LuChartNoAxesCombined size={18} />, label: 'Combo chart' },
-  { type: 'area', icon: <LuChartArea size={18} />, label: 'Area chart' },
-  { type: 'scatter', icon: <LuChartScatter size={18} />, label: 'Scatter plot' },
-  { type: 'funnel', icon: <LuFilter size={18} />, label: 'Funnel chart' },
-  { type: 'pie', icon: <LuChartPie size={18} />, label: 'Pie chart' },
-  { type: 'pivot', icon: <LuTable2 size={18} />, label: 'Pivot table' },
-  { type: 'trend', icon: <LuTrendingUp size={18} />, label: 'Trend' },
-  { type: 'waterfall', icon: <LuChartNoAxesColumn size={18} />, label: 'Waterfall chart' },
-  { type: 'radar', icon: <LuRadar size={18} />, label: 'Radar chart' },
-  { type: 'geo', icon: <LuMapPinned size={18} />, label: 'Geo map' },
-  { type: 'single_value', icon: <LuHash size={18} />, label: 'Single value' },
+interface VizTypeGroup {
+  label: string;
+  types: VizTypeOption[];
+}
+
+const ALL_VIZ_GROUPS: VizTypeGroup[] = [
+  {
+    label: 'Basic',
+    types: [
+      { type: 'table', icon: <LuGrid3X3 size={16} />, label: 'Table' },
+      { type: 'bar', icon: <LuChartColumn size={16} />, label: 'Bar' },
+      { type: 'line', icon: <LuChartLine size={16} />, label: 'Line' },
+      { type: 'area', icon: <LuChartArea size={16} />, label: 'Area' },
+      { type: 'pie', icon: <LuChartPie size={16} />, label: 'Pie' },
+    ],
+  },
+  {
+    label: 'Advanced',
+    types: [
+      { type: 'row', icon: <LuChartBar size={16} />, label: 'Row' },
+      { type: 'combo', icon: <LuChartNoAxesCombined size={16} />, label: 'Combo' },
+      { type: 'scatter', icon: <LuChartScatter size={16} />, label: 'Scatter' },
+      { type: 'funnel', icon: <LuFilter size={16} />, label: 'Funnel' },
+      { type: 'waterfall', icon: <LuChartNoAxesColumn size={16} />, label: 'Waterfall' },
+      { type: 'radar', icon: <LuRadar size={16} />, label: 'Radar' },
+    ],
+  },
+  {
+    label: 'Analytic',
+    types: [
+      { type: 'pivot', icon: <LuTable2 size={16} />, label: 'Pivot' },
+      { type: 'trend', icon: <LuTrendingUp size={16} />, label: 'Trend' },
+      { type: 'single_value', icon: <LuHash size={16} />, label: 'Number' },
+      { type: 'geo', icon: <LuMapPinned size={16} />, label: 'Geo' },
+    ],
+  },
 ];
+
+// Flat list for legacy horizontal/vertical orientations
+const ALL_VIZ_TYPES: VizTypeOption[] = ALL_VIZ_GROUPS.flatMap(g => g.types);
 
 interface VizTypeSelectorProps {
   value: VizSettings['type'];
   onChange: (type: VizSettings['type']) => void;
-  orientation?: 'vertical' | 'horizontal';
+  orientation?: 'vertical' | 'horizontal' | 'grouped';
 }
 
 export function VizTypeSelector({
@@ -62,6 +85,68 @@ export function VizTypeSelector({
 }: VizTypeSelectorProps) {
   const { config } = useConfigs();
   const allowedVizTypes = config.allowedVizTypes;
+
+  if (orientation === 'grouped') {
+    const groups = ALL_VIZ_GROUPS
+      .map(group => ({
+        ...group,
+        types: allowedVizTypes
+          ? group.types.filter(v => allowedVizTypes.includes(v.type))
+          : group.types,
+      }))
+      .filter(group => group.types.length > 0);
+
+    const allTypes = groups.flatMap(g => g.types);
+
+    return (
+      <Box
+        display="grid"
+        gridTemplateColumns="repeat(5, 1fr)"
+        gap={1}
+        width="100%"
+        bg={"bg.subtle"}
+        borderRadius={"md"}
+        p={2}
+        mb={2}
+      >
+        {allTypes.map(({ type, icon, label }) => {
+          const isActive = value === type;
+          return (
+            <Box
+              key={type}
+              as="button"
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              gap={0.5}
+              py={1.5}
+              borderRadius="sm"
+              border="1px solid"
+              borderColor={isActive ? 'accent.teal' : 'transparent'}
+              bg={isActive ? 'accent.teal/10' : 'transparent'}
+              color={isActive ? 'accent.teal' : 'fg.muted'}
+              cursor="pointer"
+              transition="all 0.12s ease"
+              _hover={{
+                bg: isActive ? 'accent.teal/15' : 'bg.muted',
+                color: isActive ? 'accent.teal' : 'fg.default',
+              }}
+              onClick={() => onChange(type)}
+              aria-label={label}
+            >
+              {icon}
+              <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '600' : '500'} lineHeight="1">
+                {label}
+              </Text>
+            </Box>
+          );
+        })}
+      </Box>
+    );
+  }
+
+  // Legacy flat layout (horizontal / vertical)
   const vizTypes = allowedVizTypes
     ? ALL_VIZ_TYPES.filter(v => allowedVizTypes.includes(v.type))
     : ALL_VIZ_TYPES;
