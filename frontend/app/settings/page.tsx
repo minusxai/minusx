@@ -810,9 +810,9 @@ function SettingsContent() {
           colorPalette="teal"
           unmountOnExit
         >
-          <Tabs.List mb={6}>
+          <Tabs.List mb={6} overflowX="auto" flexWrap="nowrap" css={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
             {visibleTabs.map((tab) => (
-              <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm" aria-label={`Settings tab: ${tab.label}`}>
+              <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm" flexShrink={0} aria-label={`Settings tab: ${tab.label}`}>
                 {tab.label}
               </Tabs.Trigger>
             ))}
