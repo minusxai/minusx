@@ -168,6 +168,7 @@ templates:
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Chart images (vizSettings) are full-fidelity; text table data is truncated at maxChars chars (default 10k, max 100k). If `truncated: true`, `shownRows < totalRows` — narrow the query with WHERE/LIMIT, increase maxChars for more text rows, or use SQL OFFSET to page through results.
+    - Note: For visualizations, xCols (first is x-axis, rest are grouping cols) and yCols (values) are supported. For more complex vizSettings, use the `LoadSkill("visualizations")` to get detailed config instructions.
 
     ### Navigation & Interaction
     - **Navigate(file_id?: int, path?: string, newFileType?: string)**: Navigate the user to a file, folder, or new file page.
@@ -809,6 +810,12 @@ prompts:
 
       ## Task
       Look at the schema below, then write concise markdown documentation for this knowledge base. Use EditFile to write into the context file shown in AppState.
+      A new empty doc entry has been added at the end of the docs array — write your documentation into that entry using EditFile.
+      
+      ## Important Meta Instructions:
+      - DO NOT mix your new content with existing docs — write only into the new empty entry. If there is no empty entry, create one and write into it.
+      - Do not document other existing data in the connection. Focus only on the dbs / schemas mentioned.
+      - If the user has provided descriptions or key metrics, focus on documenting those.
 
       ## Schema
       {schema}
@@ -843,6 +850,12 @@ prompts:
     system: |
       You are {agent_name}, a data analyst. Your job is to build a starter dashboard with 3-4 interesting questions.
 
+      ## Important Meta Instructions:
+      - Focus on creating interesting questions that showcase different aspects of the data, using varied visualization types
+      - Do not query other schemas in the connection. Focus only on the schema mentioned in the context and the questions you create.
+      - Do not create questions that are too similar to each other — aim for diversity in analysis, and nice visual hierarchy
+      - Give the dashboard a descriptive name and place it in the directory mentioned.
+
       ## Schema
       {schema}
 
@@ -858,7 +871,7 @@ prompts:
       - **CreateFile(file_type, name?, path?, content?)**: Create a new question as a draft. Returns a draft file with a real positive ID.
         - Question content: {{"query": "SELECT ...", "connection_name": "{connection_id}", "vizSettings": {{"type": "line", "xCols": ["col"], "yCols": ["col"]}}, "description": "..."}}
         - VizSettings types: `table`, `line`, `bar`, `area`, `scatter`, `pie`, `funnel`, `pivot`, `geo`
-        - For line/bar/area/scatter: set `xCols` (grouping) and `yCols` (values)
+        - For line/bar/area/scatter: set `xCols` (first one is x axis, rest are used for grouping) and `yCols` (values)
         - For pie/funnel: set `xCols` (categories) and `yCols` (values)
         - For table: no axis config needed
       - **EditFile(fileId, changes)**: Edit a file's JSON via find-and-replace. Use this to update the dashboard's `assets` and `layout`.
