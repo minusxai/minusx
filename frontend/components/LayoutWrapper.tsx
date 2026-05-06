@@ -9,7 +9,6 @@ import MobileBottomNav from './MobileBottomNav';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { clearViewStack } from '@/store/uiSlice';
-import UpdateBanner from './UpdateBanner';
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -49,7 +48,6 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         transition="margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
         minH="100vh"
       >
-        <UpdateBanner />
         {children}
       </Box>
     </RecordingProvider>

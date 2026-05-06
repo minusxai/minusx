@@ -18,6 +18,7 @@ import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import { LuFolder, LuHistory, LuBookOpen, LuArrowRight, LuPlay } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
+import UpdateBanner from '@/components/UpdateBanner';
 
 function QuickLink({ href, icon, label, color }: { href: string; icon: React.ElementType; label: string; color: string }) {
   return (
@@ -227,6 +228,8 @@ export default function Home() {
             <QuickLink href={`/p/${mode}`} icon={LuFolder} label="Files" color="accent.primary" />
             <QuickLink href="/conversations" icon={LuHistory} label="Conversations" color="accent.secondary" />
           </HStack>
+
+          <UpdateBanner />
 
           {/* Two-column layout — switches at 700px container width */}
           <Flex gap={2} css={{ flexDirection: 'column', '@container (min-width: 700px)': { flexDirection: 'row' } }}>

@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { Flex, Text, Icon, IconButton, Code } from '@chakra-ui/react';
-import { LuRefreshCw, LuX } from 'react-icons/lu';
+import { LuRefreshCw, LuX, LuCopy, LuCheck } from 'react-icons/lu';
 import { GIT_COMMIT_SHA, BUILD_TIME, DISABLE_UPDATE_BANNER } from '@/lib/constants';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 
-const INSTALL_CMD = 'curl -fsSL https://raw.githubusercontent.com/minusxai/minusx/main/install.sh | bash';
+const INSTALL_CMD = 'curl -fsSL https://minusx.ai/install.sh | bash';
 const CACHE_KEY = 'minusx-update-check';
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MIN_AGE_MS = 10 * 24 * 60 * 60 * 1000;
@@ -40,6 +40,7 @@ function writeCache(patch: Partial<UpdateCache>) {
 export default function UpdateBanner() {
   const user = useAppSelector(selectEffectiveUser);
   const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'admin') return;
@@ -48,7 +49,6 @@ export default function UpdateBanner() {
     let cancelled = false;
 
     (async () => {
-      // Defer out of the synchronous effect body
       await Promise.resolve();
 
       const cache = readCache();
@@ -60,7 +60,6 @@ export default function UpdateBanner() {
         return;
       }
 
-      // Skip API call if the build is too fresh
       if (BUILD_TIME && now - new Date(BUILD_TIME).getTime() < MIN_AGE_MS) {
         writeCache({ checkedAt: now, shouldShow: false });
         return;
@@ -68,7 +67,7 @@ export default function UpdateBanner() {
 
       try {
         const r = await fetch(
-          `https://api.github.com/repos/minusxai/minusx/compare/25bd27d...main`,
+          `https://api.github.com/repos/minusxai/minusx/compare/${GIT_COMMIT_SHA}...main`,
           { headers: { Accept: 'application/vnd.github+json' } },
         );
         if (!r.ok) throw new Error(`status ${r.status}`);
@@ -92,7 +91,10 @@ export default function UpdateBanner() {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(INSTALL_CMD).catch(() => {});
+    navigator.clipboard.writeText(INSTALL_CMD).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
   };
 
   return (
@@ -100,10 +102,13 @@ export default function UpdateBanner() {
       bg="accent.primary"
       color="white"
       px={4}
-      py={2}
+      py={2.5}
       align="center"
+      justify="center"
+      position="relative"
       gap={3}
-      flexWrap="wrap"
+      borderRadius="lg"
+      mb={4}
       role="status"
       aria-label="Update available"
     >
@@ -111,27 +116,46 @@ export default function UpdateBanner() {
       <Text fontSize="sm" fontWeight="500" flexShrink={0}>
         A new version of MinusX is available.
       </Text>
-      <Flex align="center" gap={2} flex={1} flexWrap="wrap">
-        <Text fontSize="xs" opacity={0.9} flexShrink={0}>To update, in the same directory re-run:</Text>
+      <Text fontSize="xs" opacity={0.85} flexShrink={0}>Update by re-running (in the same directory):</Text>
+      <Flex
+        align="center"
+        gap={2}
+        bg="whiteAlpha.200"
+        borderRadius="md"
+        px={3}
+        py={1.5}
+        cursor="pointer"
+        onClick={handleCopy}
+        _hover={{ bg: 'whiteAlpha.300' }}
+        transition="background 0.15s"
+        title="Click to copy"
+        maxW="500px"
+      >
         <Code
           fontSize="xs"
-          bg="whiteAlpha.200"
+          bg="transparent"
           color="white"
-          px={2}
-          py={0.5}
-          borderRadius="sm"
-          cursor="pointer"
-          onClick={handleCopy}
-          title="Click to copy"
-          flexShrink={1}
           overflow="hidden"
           textOverflow="ellipsis"
           whiteSpace="nowrap"
+          flex={1}
         >
           {INSTALL_CMD}
         </Code>
+        <Icon
+          as={copied ? LuCheck : LuCopy}
+          boxSize={3.5}
+          color={copied ? 'green.200' : 'whiteAlpha.700'}
+          flexShrink={0}
+          transition="color 0.15s"
+        />
       </Flex>
-      <Flex gap={2} align="center" flexShrink={0}>
+      {copied && (
+        <Text fontSize="xs" color="green.200" fontWeight="500" flexShrink={0}>
+          Copied!
+        </Text>
+      )}
+      <Flex position="absolute" right={4}>
         <IconButton
           aria-label="Dismiss update banner"
           size="xs"
