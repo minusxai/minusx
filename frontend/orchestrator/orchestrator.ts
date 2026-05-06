@@ -26,7 +26,7 @@ import {
   type ToolMessage,
   type ToolResponse,
 } from './types';
-import { normalizeParameters, synthErrorAssistantMessage } from './utils';
+import { normalizeParameters, synthErrorAssistantMessage, validateParameters } from './utils';
 
 export class Orchestrator {
   log: ConversationLog;
@@ -262,7 +262,26 @@ export class Orchestrator {
           parent.toolThread.push(trm);
           return;
         }
-        const instance = this.instantiate(Cls, tc.arguments, parent.context, tc.id);
+
+        const validation = validateParameters(Cls.schema.parameters, tc.arguments);
+        if (!validation.ok) {
+          const trm: ToolResultMessage = {
+            role: 'toolResult',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: [{
+              type: 'text',
+              text: `Invalid parameters for '${tc.name}': ${validation.errors.join('; ')}`,
+            }],
+            isError: true,
+            timestamp: Date.now(),
+          };
+          this.log.push({ ...trm, parent_id: parent.id });
+          parent.toolThread.push(trm);
+          return;
+        }
+
+        const instance = this.instantiate(Cls, validation.value as Record<string, unknown>, parent.context, tc.id);
 
         if (instance instanceof MXAgent) {
           // Sub-agent: any UIE inside it has already emitted its own per-tool
