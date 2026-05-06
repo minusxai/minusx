@@ -8,13 +8,13 @@
       {
         "type": "toolUse",
         "toolCalls": [
-          { "name": "SearchDBSchema", "args": { "query": "users signups" } }
+          { "name": "SearchDBSchema", "args": { "connection": "main", "query": "users signups" } }
         ]
       },
       {
         "type": "toolUse",
         "toolCalls": [
-          { "name": "ExecuteSQL", "args": { "sql": "SELECT count(*) FROM users WHERE created_at > now() - interval '7 days'" } }
+          { "name": "ExecuteSQL", "args": { "connection": "main", "sql": "SELECT count(*) FROM users WHERE created_at > now() - interval '7 days'" } }
         ]
       },
       { "type": "stop", "text": "*42* signups last week." }
@@ -34,7 +34,7 @@
       {
         "type": "toolUse",
         "toolCalls": [
-          { "name": "SearchDBSchema", "args": { "query": "foobars" } }
+          { "name": "SearchDBSchema", "args": { "connection": "main", "query": "foobars" } }
         ]
       },
       { "type": "stop", "text": "Couldn't find a `foobars` table." }

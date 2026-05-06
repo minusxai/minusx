@@ -5,11 +5,11 @@ export interface SchemaHit {
 }
 
 export interface SchemaSource {
-  search(query: string): Promise<SchemaHit[]>;
+  search(query: string, connection: string): Promise<SchemaHit[]>;
 }
 
 export interface SqlExecutor {
-  execute(sql: string): Promise<{ rows: Record<string, unknown>[]; error?: string }>;
+  execute(sql: string, connection: string): Promise<{ rows: Record<string, unknown>[]; error?: string }>;
 }
 
 let _schemaSource: SchemaSource | null = null;

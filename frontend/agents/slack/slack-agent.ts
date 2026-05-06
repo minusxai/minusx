@@ -6,7 +6,8 @@ import {
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
 import { renderPrompt } from '@/orchestrator/prompts';
-import { ExecuteSQL, SearchDBSchema } from '@/agents/analyst/analyst-agent';
+import { ExecuteSQL, ListDBConnections, SearchDBSchema } from '@/agents/analyst/analyst-agent';
+import { getAnalystModel } from '@/agents/analyst/model-config';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-slack-api',
@@ -26,10 +27,11 @@ export class SlackAgent extends MXAgent<typeof SlackAgentParams> {
     parameters: SlackAgentParams,
   };
   static readonly tools: Tool<TSchema>[] = [
+    ListDBConnections.schema,
     SearchDBSchema.schema,
     ExecuteSQL.schema,
   ];
-  static model = FAUX_MODEL;
+  static model = getAnalystModel() ?? FAUX_MODEL;
 
   protected getSystemPrompt(): string {
     const base = renderPrompt('default.system', {

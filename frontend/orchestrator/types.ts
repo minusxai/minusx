@@ -17,11 +17,18 @@ import {
 import type { Orchestrator } from './orchestrator';
 import { gen_id } from './utils';
 
+export interface ConnectionInfo {
+  name: string;
+  dialect: string;
+  description?: string;
+}
+
 export interface AgentContext {
   userId: string;
   connectionId?: string;
   mode: 'org' | 'tutorial';
   appState?: unknown;
+  connections?: ConnectionInfo[];
 }
 
 export interface ToolResponse<TDetails = Record<string, unknown>> {

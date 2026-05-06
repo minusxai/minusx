@@ -1,5 +1,6 @@
 // Real-LLM AnalystAgent specs. Gated behind RUN_REAL_LLM=1 to keep CI free of
-// API calls. Requires ANTHROPIC_API_KEY in frontend/.env when enabled.
+// API calls. Requires ANALYST_AGENT_MODEL_CONFIG (and a provider-specific API key
+// like ANTHROPIC_API_KEY) in frontend/.env when enabled.
 //
 // Run with:
 //   cd frontend && RUN_REAL_LLM=1 npm run test:orchestrator -- real-llm
@@ -7,11 +8,11 @@
 // Wire-up uses STUB sources for now — replace with real adapters when available.
 
 import 'dotenv/config';
-import { getModel } from '@mariozechner/pi-ai';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import {
   AnalystAgent,
   ExecuteSQL,
+  ListDBConnections,
   SearchDBSchema,
 } from '../analyst-agent';
 import { setSchemaSource, setSqlExecutor } from '../sources';
@@ -20,13 +21,13 @@ import specs from './specs/analyst.real.json';
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
 
-const registrables = [SearchDBSchema, ExecuteSQL, AnalystAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, AnalystAgent];
 
 beforeAll(() => {
   if (!RUN_REAL) return;
 
   setSchemaSource({
-    async search(query: string) {
+    async search(query: string, _connection: string) {
       const hits = [];
       if (/user/i.test(query)) {
         hits.push({
@@ -56,14 +57,13 @@ beforeAll(() => {
   });
 
   setSqlExecutor({
-    async execute(sql: string) {
+    async execute(sql: string, _connection: string) {
       if (/count\s*\(/i.test(sql)) return { rows: [{ count: 42 }] };
       return { rows: [{ note: 'stub executor — wire a real DB to get real rows' }] };
     },
   });
 
-  // Replace 'claude-sonnet-4-5' with whatever pi-ai exposes for your provider/model.
-  AnalystAgent.model = getModel('anthropic', 'claude-sonnet-4-5');
+  // Model is read from ANALYST_AGENT_MODEL_CONFIG at module load (see model-config.ts).
 });
 
 describe.each(specs as TestSpec[])('real-llm spec: $name', (spec) => {

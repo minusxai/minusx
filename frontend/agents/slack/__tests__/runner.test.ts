@@ -1,5 +1,5 @@
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
-import { ExecuteSQL, SearchDBSchema } from '@/agents/analyst/analyst-agent';
+import { ExecuteSQL, ListDBConnections, SearchDBSchema } from '@/agents/analyst/analyst-agent';
 import { SlackAgent, fauxRegistration } from '../slack-agent';
 import {
   resetSources,
@@ -8,7 +8,7 @@ import {
 } from '@/agents/analyst/sources';
 import specs from './specs/slack.faux.json';
 
-const registrables = [SearchDBSchema, ExecuteSQL, SlackAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, SlackAgent];
 
 describe.each(specs as TestSpec[])('faux spec: $name', (spec) => {
   beforeEach(() => {
