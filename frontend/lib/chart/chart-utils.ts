@@ -2028,6 +2028,23 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     series: chartSeries,
   }
 
+  // Round the outermost segment's corners for bar/row charts
+  if (chartType === 'bar' || chartType === 'combo') {
+    const radius = isRowChart ? [0, 3, 3, 0] : [3, 3, 0, 0]
+    const seriesArr = baseOption.series as any[]
+    const lastInStack: Record<string, number> = {}
+    for (let i = 0; i < seriesArr.length; i++) {
+      const stack = seriesArr[i].stack ?? i
+      lastInStack[stack] = i
+    }
+    const lastIndices = new Set(Object.values(lastInStack))
+    for (let i = 0; i < seriesArr.length; i++) {
+      if (lastIndices.has(i)) {
+        seriesArr[i].itemStyle = { ...seriesArr[i].itemStyle, borderRadius: radius }
+      }
+    }
+  }
+
   // Row chart: swap axes to render horizontal bars
   if (isRowChart) {
     const categoryAxis = baseOption.xAxis as any
