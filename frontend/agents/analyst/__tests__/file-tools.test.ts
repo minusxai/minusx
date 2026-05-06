@@ -9,7 +9,7 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import type { AgentContext } from '@/orchestrator/types';
+import type { AnalystAgentContext } from '../types';
 import { ReadFiles, SearchFiles } from '../analyst-agent';
 import {
   AnalystAgent,
@@ -93,7 +93,7 @@ describe('ReadFiles', () => {
       userId: '1',
       mode: 'org',
       effectiveUser: ADMIN,
-    } as AgentContext);
+    } as AnalystAgentContext);
 
     const res = await tool.run();
     expect(res.isError).toBe(false);
@@ -116,7 +116,7 @@ describe('ReadFiles', () => {
       userId: '2',
       mode: 'org',
       effectiveUser: RESTRICTED_VIEWER,
-    } as AgentContext);
+    } as AnalystAgentContext);
 
     // FilesAPI.loadFiles silently filters out inaccessible files (no throw).
     // ACL enforcement: the restricted user gets back an empty array.
@@ -131,7 +131,7 @@ describe('ReadFiles', () => {
     const tool = new ReadFiles(orch, { fileIds: [1] }, {
       userId: '1',
       mode: 'org',
-    } as AgentContext);
+    } as AnalystAgentContext);
 
     const res = await tool.run();
     expect(res.isError).toBe(true);
@@ -174,7 +174,7 @@ describe('SearchFiles', () => {
       userId: '1',
       mode: 'org',
       effectiveUser: ADMIN,
-    } as AgentContext);
+    } as AnalystAgentContext);
 
     const res = await tool.run();
     expect(res.isError).toBe(false);
@@ -190,7 +190,7 @@ describe('SearchFiles', () => {
       userId: '1',
       mode: 'org',
       effectiveUser: ADMIN,
-    } as AgentContext);
+    } as AnalystAgentContext);
 
     const res = await tool.run();
     expect(res.isError).toBe(false);

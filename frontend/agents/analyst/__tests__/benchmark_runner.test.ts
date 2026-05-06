@@ -19,7 +19,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Tool, TSchema } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import type { AgentContext, ConnectionInfo, ToolResponse } from '@/orchestrator/types';
+import type { ToolResponse } from '@/orchestrator/types';
+import type { AnalystAgentContext, ConnectionInfo } from '@/agents/analyst/types';
 import { getNodeConnector } from '@/lib/connections';
 import { NodeConnector } from '@/lib/connections/base';
 import {
@@ -213,7 +214,7 @@ if (inputRows.length === 0) {
         it(
           'runs against the LLM and appends to output.jsonl',
           async () => {
-            const ctx: AgentContext = {
+            const ctx: AnalystAgentContext = {
               userId: 'benchmark',
               mode: 'org',
               connections: row.allowed_connections

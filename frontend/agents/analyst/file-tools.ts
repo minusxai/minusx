@@ -4,13 +4,14 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { FileType } from '@/lib/types';
+import type { AnalystAgentContext } from './types';
 
 /**
  * Discriminated return: either the resolved EffectiveUser, or an error
  * ToolResponse the caller should bubble straight up.
  */
 function requireUser(
-  ctx: { effectiveUser?: EffectiveUser },
+  ctx: AnalystAgentContext,
   toolName: string,
 ): EffectiveUser | ToolResponse {
   if (!ctx.effectiveUser) {
@@ -39,7 +40,7 @@ const ReadFilesParams = Type.Object({
   fileIds: Type.Array(Type.Number()),
 });
 
-export class ReadFiles extends MXTool<typeof ReadFilesParams> {
+export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContext> {
   static readonly schema: Tool<typeof ReadFilesParams> = {
     name: 'ReadFiles',
     description: 'Load one or more files by integer ID. Returns full file objects with content.',
@@ -65,7 +66,7 @@ const SearchFilesParams = Type.Object({
   limit: Type.Optional(Type.Number()),
 });
 
-export class SearchFiles extends MXTool<typeof SearchFilesParams> {
+export class SearchFiles extends MXTool<typeof SearchFilesParams, AnalystAgentContext> {
   static readonly schema: Tool<typeof SearchFilesParams> = {
     name: 'SearchFiles',
     description: 'Search files by name/content with ranking and snippets. Returns matching file metadata.',
