@@ -74,6 +74,16 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
       }
     }
 
+    // Defense-in-depth: if the fetch returned no schemas but we have a non-empty
+    // cached schema, keep the cache. An empty result here usually means the
+    // remote query partially failed (e.g. permission-restricted role + missing
+    // pg_stats), and clobbering a known-good schema with [] is far more harmful
+    // than serving slightly stale enrichment data.
+    if (enrichedSchemas.length === 0 && hasSchema && (content.schema!.schemas?.length ?? 0) > 0) {
+      console.warn(`[connectionLoader] Refresh returned 0 schemas for ${file.name}; keeping cached schema (was ${content.schema!.schemas.length} schemas)`);
+      return file;
+    }
+
     freshSchema = {
       schemas: enrichedSchemas,
       updated_at: new Date().toISOString()
