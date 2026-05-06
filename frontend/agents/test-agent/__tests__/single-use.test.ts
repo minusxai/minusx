@@ -34,7 +34,16 @@ describe('Orchestrator single-use guard', () => {
     await stream.result();
 
     expect(() =>
-      orch.resume([{ toolCallId: 'whatever', response: { content: [{ type: 'text', text: '' }], isError: false } }]),
+      orch.resume([
+        {
+          role: 'toolResult',
+          toolCallId: 'whatever',
+          toolName: 'whatever',
+          content: [{ type: 'text', text: '' }],
+          isError: false,
+          timestamp: Date.now(),
+        },
+      ]),
     ).toThrow(/single-use/);
   });
 
@@ -55,13 +64,29 @@ describe('Orchestrator single-use guard', () => {
 
     const orchB = new Orchestrator(registrables, orchA.log);
     const sb = orchB.resume([
-      { toolCallId: pendingId, response: { content: [{ type: 'text', text: 'k' }], isError: false } },
+      {
+        role: 'toolResult',
+        toolCallId: pendingId,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'k' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
     ]);
     for await (const _ of sb) {/* drain */}
     await sb.result();
 
     expect(() =>
-      orchB.resume([{ toolCallId: pendingId, response: { content: [{ type: 'text', text: 'k' }], isError: false } }]),
+      orchB.resume([
+        {
+          role: 'toolResult',
+          toolCallId: pendingId,
+          toolName: 'PendingTool',
+          content: [{ type: 'text', text: 'k' }],
+          isError: false,
+          timestamp: Date.now(),
+        },
+      ]),
     ).toThrow(/single-use/);
   });
 });

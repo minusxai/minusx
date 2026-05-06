@@ -159,7 +159,7 @@ export class Orchestrator {
     return stream;
   }
 
-  resume(completed: { toolCallId: string; response: ToolResponse }[]): EventStream<StreamEvent, AssistantMessage | null> {
+  resume(completed: ToolResultMessage[]): EventStream<StreamEvent, AssistantMessage | null> {
     if (this.used) {
       throw new Error('Orchestrator is single-use: this instance already executed run() or resume(). Construct a fresh Orchestrator with the saved log.');
     }
@@ -167,32 +167,21 @@ export class Orchestrator {
     this.controller = new AbortController();
 
     const byPausedAgent = new Map<string, ToolResultMessage[]>();
-    for (const c of completed) {
+    for (const trm of completed) {
       let parent_id: string | null = null;
-      let toolName: string | null = null;
       for (const e of this.log) {
         if (!('role' in e) || e.role !== 'assistant') continue;
         for (const block of e.content) {
-          if (block.type === 'toolCall' && block.id === c.toolCallId) {
+          if (block.type === 'toolCall' && block.id === trm.toolCallId) {
             parent_id = e.parent_id;
-            toolName = block.name;
             break;
           }
         }
         if (parent_id) break;
       }
       if (parent_id == null) {
-        throw new Error(`resume: no parent_id found for toolCallId ${c.toolCallId}`);
+        throw new Error(`resume: no parent_id found for toolCallId ${trm.toolCallId}`);
       }
-      const trm: ToolResultMessage = {
-        role: 'toolResult',
-        toolCallId: c.toolCallId,
-        toolName: toolName ?? 'unknown',
-        content: c.response.content,
-        isError: c.response.isError,
-        details: c.response.details,
-        timestamp: Date.now(),
-      };
       this.log.push({ ...trm, parent_id });
       if (!byPausedAgent.has(parent_id)) byPausedAgent.set(parent_id, []);
       byPausedAgent.get(parent_id)!.push(trm);

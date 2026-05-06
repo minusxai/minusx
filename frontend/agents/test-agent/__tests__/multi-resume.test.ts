@@ -32,7 +32,14 @@ describe('multi-resume (pause → resume → pause again → resume again)', () 
 
     const orchB = new Orchestrator(registrables, orchA.log);
     const phaseB = orchB.resume([
-      { toolCallId: firstPendingId, response: { content: [{ type: 'text', text: 'first done' }], isError: false } },
+      {
+        role: 'toolResult',
+        toolCallId: firstPendingId,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'first done' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
     ]);
     for await (const _ of phaseB) {/* drain */}
     expect(await phaseB.result()).toBeNull();
@@ -45,7 +52,14 @@ describe('multi-resume (pause → resume → pause again → resume again)', () 
 
     const orchC = new Orchestrator(registrables, orchB.log);
     const phaseC = orchC.resume([
-      { toolCallId: secondPendingId, response: { content: [{ type: 'text', text: 'second done' }], isError: false } },
+      {
+        role: 'toolResult',
+        toolCallId: secondPendingId,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'second done' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
     ]);
     for await (const _ of phaseC) {/* drain */}
     const final = await phaseC.result();

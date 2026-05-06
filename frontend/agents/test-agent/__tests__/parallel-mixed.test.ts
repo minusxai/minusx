@@ -47,8 +47,12 @@ describe('parallel mixed-state dispatch', () => {
     const orchB = new Orchestrator(registrables, orchA.log);
     const phase2 = orchB.resume([
       {
+        role: 'toolResult',
         toolCallId: pendingCall!.id,
-        response: { content: [{ type: 'text', text: 'frontend done' }], isError: false },
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'frontend done' }],
+        isError: false,
+        timestamp: Date.now(),
       },
     ]);
     const events2: StreamEvent[] = [];

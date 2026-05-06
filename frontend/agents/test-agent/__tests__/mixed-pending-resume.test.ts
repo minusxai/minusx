@@ -37,8 +37,22 @@ describe('mixed-pending resume (partial completion across resume calls)', () => 
 
     const orchB = new Orchestrator(registrables, orchA.log);
     const phaseB = orchB.resume([
-      { toolCallId: pendingCalls[0].id, response: { content: [{ type: 'text', text: 'one' }], isError: false } },
-      { toolCallId: pendingCalls[1].id, response: { content: [{ type: 'text', text: 'two' }], isError: false } },
+      {
+        role: 'toolResult',
+        toolCallId: pendingCalls[0].id,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'one' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
+      {
+        role: 'toolResult',
+        toolCallId: pendingCalls[1].id,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'two' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
     ]);
     for await (const _ of phaseB) {/* drain */}
     expect(await phaseB.result()).toBeNull();
@@ -55,7 +69,14 @@ describe('mixed-pending resume (partial completion across resume calls)', () => 
 
     const orchC = new Orchestrator(registrables, orchB.log);
     const phaseC = orchC.resume([
-      { toolCallId: pendingCalls[2].id, response: { content: [{ type: 'text', text: 'three' }], isError: false } },
+      {
+        role: 'toolResult',
+        toolCallId: pendingCalls[2].id,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'three' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
     ]);
     for await (const _ of phaseC) {/* drain */}
     const final = await phaseC.result();

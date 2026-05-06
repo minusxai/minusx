@@ -31,7 +31,14 @@ describe('resume after JSON round-trip (rehydrate mid-pause)', () => {
 
     const orchB = new Orchestrator(registrables, rehydratedLog);
     const stream = orchB.resume([
-      { toolCallId: pendingId, response: { content: [{ type: 'text', text: 'host completed it' }], isError: false } },
+      {
+        role: 'toolResult',
+        toolCallId: pendingId,
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'host completed it' }],
+        isError: false,
+        timestamp: Date.now(),
+      },
     ]);
     for await (const _ of stream) {/* drain */}
     const result = await stream.result();

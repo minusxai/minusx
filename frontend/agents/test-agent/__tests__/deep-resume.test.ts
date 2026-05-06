@@ -39,8 +39,12 @@ describe('deep resume (paused sub-agent bubbles up)', () => {
     const orchB = new Orchestrator(registrables, orchA.log);
     const phase2 = orchB.resume([
       {
+        role: 'toolResult',
         toolCallId: pendingCall!.id,
-        response: { content: [{ type: 'text', text: 'frontend completed it' }], isError: false },
+        toolName: 'PendingTool',
+        content: [{ type: 'text', text: 'frontend completed it' }],
+        isError: false,
+        timestamp: Date.now(),
       },
     ]);
     for await (const _ of phase2) {/* drain */}
