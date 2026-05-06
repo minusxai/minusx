@@ -59,9 +59,26 @@ export type ConversationLogEntry =
 
 export type ConversationLog = ConversationLogEntry[];
 
+export interface PendingToolEvent {
+  type: 'pending';
+  toolCallId: string;
+  toolName: string;
+  parameters: Record<string, unknown>;
+  context: AgentContext;
+  parent_id: string;
+}
+
 export type StreamEvent =
   | (AssistantMessageEvent & { parent_id: string })
-  | { type: 'pending'; toolCallIds: string[] };
+  | PendingToolEvent;
+
+export interface PendingToolCall {
+  id: string;
+  name: string;
+  parameters: Record<string, unknown>;
+  context: AgentContext;
+  parent_id: string;
+}
 
 export class UserInputException extends Error {
   readonly toolCallIds: string[];

@@ -20,12 +20,13 @@ import {
   type ConversationLog,
   type ConversationLogEntry,
   type MXAgentDetails,
+  type PendingToolCall,
   type RegistrableClass,
   type StreamEvent,
   type ToolMessage,
   type ToolResponse,
 } from './types';
-import { normalizeArgs, synthErrorAssistantMessage } from './utils';
+import { normalizeParameters, synthErrorAssistantMessage } from './utils';
 
 export class Orchestrator {
   log: ConversationLog;
@@ -45,6 +46,46 @@ export class Orchestrator {
 
   cancel(): void {
     this.controller?.abort();
+  }
+
+  getPendingToolCalls(): PendingToolCall[] {
+    const allCalls = new Map<string, { name: string; parameters: Record<string, unknown>; parent_id: string }>();
+    const resolved = new Set<string>();
+    for (const e of this.log) {
+      if ('role' in e && e.role === 'assistant') {
+        if (e.parent_id == null) continue;
+        for (const c of e.content) {
+          if (c.type === 'toolCall') {
+            allCalls.set(c.id, { name: c.name, parameters: c.arguments, parent_id: e.parent_id });
+          }
+        }
+      } else if ('role' in e && e.role === 'toolResult') {
+        resolved.add(e.toolCallId);
+      }
+    }
+    const out: PendingToolCall[] = [];
+    for (const [id, info] of allCalls) {
+      if (resolved.has(id)) continue;
+      out.push({
+        id,
+        name: info.name,
+        parameters: info.parameters,
+        context: this.contextForAgent(info.parent_id),
+        parent_id: info.parent_id,
+      });
+    }
+    return out;
+  }
+
+  protected contextForAgent(agentId: string): AgentContext {
+    let current = agentId;
+    while (true) {
+      const root = this.findRootInvocation(current);
+      if (root) return root.context;
+      const sub = this.findSubAgentToolCall(current);
+      if (!sub) throw new Error(`contextForAgent: no invocation for ${current}`);
+      current = sub.assistantParentId;
+    }
   }
 
   async callLLM(
@@ -105,7 +146,8 @@ export class Orchestrator {
         result = finalMsg;
       } catch (err) {
         if (err instanceof UserInputException) {
-          stream.push({ type: 'pending', toolCallIds: err.toolCallIds });
+          // No-op: per-tool pending events were already emitted at the source
+          // (in dispatch). UIE just signals "the run paused".
         } else {
           stream.push(this.synthErrorEvent(root.id, err));
         }
@@ -184,19 +226,15 @@ export class Orchestrator {
         ids.map((id) => resumeChain(id, this.findCallingAgent(id))),
       );
 
-      const pendingIds: string[] = [];
       for (let i = 0; i < settled.length; i++) {
         const r = settled[i];
         if (r.status === 'fulfilled') {
           if (r.value !== null) rootResult = r.value;
         } else if (r.reason instanceof UserInputException) {
-          pendingIds.push(...r.reason.toolCallIds);
+          // No-op: per-tool pending events already emitted at the source.
         } else {
           stream.push(this.synthErrorEvent(ids[i], r.reason));
         }
-      }
-      if (pendingIds.length > 0) {
-        stream.push({ type: 'pending', toolCallIds: pendingIds });
       }
       stream.end(rootResult);
     })();
@@ -217,22 +255,40 @@ export class Orchestrator {
         const instance = this.instantiate(Cls, tc.arguments, parent.context, tc.id);
 
         if (instance instanceof MXAgent) {
+          // Sub-agent: any UIE inside it has already emitted its own per-tool
+          // pending events at the deepest level (this same code path, leaf
+          // branch). The bubble-up shouldn't re-emit.
           const subFinal = await instance.run();
           this.appendAgentResult(subFinal, instance, parent);
           return;
         }
-        const response = (await instance.run()) as ToolResponse;
-        const trm: ToolResultMessage = {
-          role: 'toolResult',
-          toolCallId: tc.id,
-          toolName: tc.name,
-          content: response.content,
-          isError: response.isError,
-          details: response.details,
-          timestamp: Date.now(),
-        };
-        this.log.push({ ...trm, parent_id: parent.id });
-        parent.toolThread.push(trm);
+
+        try {
+          const response = (await instance.run()) as ToolResponse;
+          const trm: ToolResultMessage = {
+            role: 'toolResult',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: response.content,
+            isError: response.isError,
+            details: response.details,
+            timestamp: Date.now(),
+          };
+          this.log.push({ ...trm, parent_id: parent.id });
+          parent.toolThread.push(trm);
+        } catch (err) {
+          if (err instanceof UserInputException) {
+            this.stream?.push({
+              type: 'pending',
+              toolCallId: tc.id,
+              toolName: tc.name,
+              parameters: instance.parameters as Record<string, unknown>,
+              context: parent.context,
+              parent_id: parent.id,
+            });
+          }
+          throw err;
+        }
       }),
     );
 
@@ -329,13 +385,13 @@ export class Orchestrator {
 
   protected instantiate(
     Cls: RegistrableClass,
-    args: Record<string, unknown>,
+    parameters: Record<string, unknown>,
     ctx: AgentContext,
     id: string,
     threadHistory?: Message[],
     toolThread?: ToolMessage[],
   ): MXTool {
-    return new Cls(this, normalizeArgs(Cls.schema.parameters, args), ctx, id, threadHistory, toolThread);
+    return new Cls(this, normalizeParameters(Cls.schema.parameters, parameters), ctx, id, threadHistory, toolThread);
   }
 
   protected projectRootThreadHistory(): Message[] {

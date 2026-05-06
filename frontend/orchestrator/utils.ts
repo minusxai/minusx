@@ -16,11 +16,11 @@ export const EMPTY_USAGE: Usage = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-export function normalizeArgs<T extends TSchema>(
+export function normalizeParameters<T extends TSchema>(
   schema: T,
-  args: Record<string, unknown>,
+  parameters: Record<string, unknown>,
 ): Static<T> {
-  return Default(schema, { ...args }) as Static<T>;
+  return Default(schema, { ...parameters }) as Static<T>;
 }
 
 export function synthErrorAssistantMessage(
