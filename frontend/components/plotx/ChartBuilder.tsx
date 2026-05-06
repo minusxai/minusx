@@ -25,6 +25,7 @@ import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp, buildCompactYLabel } from '@/lib/chart/chart-utils'
 import { getVizConstraintError } from '@/lib/chart/viz-constraints'
+import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
@@ -436,6 +437,14 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const isGeo = chartType === 'geo'
 
   if (isGeo) {
+    const geoConstraint = getGeoConstraintError(initialGeoConfig ?? null, columns)
+    if (geoConstraint.error) {
+      return (
+        <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
+          <ChartError variant="info" message={geoConstraint.error} />
+        </Box>
+      )
+    }
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
