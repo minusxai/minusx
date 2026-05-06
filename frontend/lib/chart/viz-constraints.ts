@@ -30,6 +30,7 @@ export function getVizConstraintError(
   switch (chartType) {
     case 'line':
     case 'bar':
+    case 'row':
     case 'area':
     case 'scatter':
       if (xColCount < 1) return { error: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} charts require at least 1 X-axis column.` }

@@ -5,10 +5,10 @@ import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPalette } from 'react-icons/lu'
 import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { useConfigs } from '@/lib/hooks/useConfigs'
-import type { VisualizationStyleConfig } from '@/lib/types'
+import type { VisualizationStyleConfig, VisualizationType } from '@/lib/types'
 
 interface StyleConfigPopoverProps {
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar'
+  chartType: Exclude<VisualizationType, 'table' | 'geo' | 'single_value'>
   styleConfig?: VisualizationStyleConfig
   numSeries: number
   onChange: (config: VisualizationStyleConfig) => void
@@ -85,7 +85,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   }, [config.chartColorPalette])
 
   const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
-  const supportsStacking = chartType === 'bar' || chartType === 'area' || chartType === 'combo'
+  const supportsStacking = chartType === 'bar' || chartType === 'row' || chartType === 'area' || chartType === 'combo'
   const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), palette.length), [numSeries, palette.length])
   const selectedOpacity = styleConfig?.opacity == null ? 1 : styleConfig.opacity
   const isStacked = styleConfig?.stacked ?? true

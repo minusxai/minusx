@@ -383,7 +383,8 @@ export function QuestionVisualization({
                   currentState?.vizSettings?.type === 'combo' ||
                   currentState?.vizSettings?.type === 'radar' ||
                   currentState?.vizSettings?.type === 'geo' ||
-                  currentState?.vizSettings?.type === 'single_value') && (
+                  currentState?.vizSettings?.type === 'single_value' ||
+                  currentState?.vizSettings?.type === 'row') && (
                   <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
                     <ChartBuilder
                       columns={data.columns}

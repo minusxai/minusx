@@ -9,7 +9,7 @@
  */
 import * as echarts from 'echarts';
 import { aggregateData } from './aggregate-data';
-import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption, buildCompactYLabel } from './chart-utils';
+import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption, buildCompactYLabel, type StandardChartType } from './chart-utils';
 import { COLOR_PALETTE } from './echarts-theme';
 import { buildColumnTypesMap } from '@/lib/database/column-types';
 import type { QueryResult } from '@/lib/types';
@@ -29,7 +29,7 @@ try {
 }
 
 // eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
-export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar', 'combo']);
+export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'row', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar', 'combo']);
 
 /** Height-to-width ratio per chart type. Used by image renderers to pick a
  *  sensible canvas size. Charts with outside labels (pie, radar) need more
@@ -37,6 +37,7 @@ export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter',
 export const CHART_ASPECT_RATIO: Record<string, number> = {
   line:      0.5625,  // 16:9
   bar:       0.5625,
+  row:       0.75,    // 4:3 — horizontal bars need more vertical room
   area:      0.5625,
   scatter:   0.5625,
   pie:       1,       // 1:1 — outside labels need vertical room
@@ -187,7 +188,7 @@ export function renderChartToSvg(
     option = buildChartOption({
       xAxisData: aggregated.xAxisData,
       series: aggregated.series,
-      chartType: chartType as 'line' | 'bar' | 'area' | 'scatter' | 'combo',
+      chartType: chartType as StandardChartType,
       colorMode,
       colorPalette: COLOR_PALETTE,
       containerWidth: width,

@@ -1,4 +1,5 @@
 import type { ColumnType } from '@/lib/database/column-types'
+import type { VisualizationType } from '@/lib/types'
 
 export interface AggregatedData {
   xAxisData: string[]
@@ -14,7 +15,7 @@ export const aggregateData = (
   rows: Record<string, any>[],
   xAxisColumns: string[],
   yAxisColumns: string[],
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value',
+  chartType: Exclude<VisualizationType, 'table'>,
   tooltipColumns: string[] = [],
   columnTypes?: Record<string, ColumnType>,
 ): AggregatedData => {

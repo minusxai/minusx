@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, useRef } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
+import { RowPlot } from './RowPlot'
 import { AreaPlot } from './AreaPlot'
 import { ScatterPlot } from './ScatterPlot'
 import { FunnelPlot } from './FunnelPlot'
@@ -23,7 +24,7 @@ import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
-import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig, VisualizationType } from '@/lib/types'
 import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp, buildCompactYLabel } from '@/lib/chart/chart-utils'
@@ -48,7 +49,7 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value'
+  chartType: Exclude<VisualizationType, 'table'>
   initialXCols?: string[]
   initialYCols?: string[]
   initialYRightCols?: string[]
@@ -171,7 +172,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
     return []
   }, [initialTooltipCols, columns])
-  const supportsAnnotations = ['line', 'bar', 'area', 'scatter'].includes(chartType) && xAxisColumns.length === 1
+  const supportsAnnotations = ['line', 'bar', 'row', 'area', 'scatter'].includes(chartType) && xAxisColumns.length === 1
 
   const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
     const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat && !config.prefix && !config.suffix
@@ -782,7 +783,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   exportBranding,
                   onDownloadImage,
                 }
-                const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
+                const plotMap = { line: LinePlot, bar: BarPlot, row: RowPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
                 const Plot = plotMap[chartType as keyof typeof plotMap]
                 if (Plot) return <Plot {...sharedProps} />
                 return null

@@ -18,6 +18,7 @@ import {
   buildRadarChartOption,
   buildWaterfallChartOption,
   buildCompactYLabel,
+  type StandardChartType,
 } from '@/lib/chart/chart-utils'
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
@@ -77,7 +78,7 @@ function buildEChartsOption(
 
   return buildChartOption({
     ...sharedArgs,
-    chartType: chartType as 'line' | 'bar' | 'area' | 'scatter' | 'combo',
+    chartType: chartType as StandardChartType,
     containerWidth: width,
     containerHeight: height,
     xAxisLabel,

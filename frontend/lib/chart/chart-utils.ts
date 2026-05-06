@@ -5,6 +5,9 @@ import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
 
+/** Chart types handled by buildChartOption / BaseChart (ECharts-based standard charts). */
+export type StandardChartType = 'line' | 'bar' | 'row' | 'area' | 'scatter' | 'combo'
+
 // Chart props interface
 export interface ChartProps {
   xAxisData: string[]
@@ -195,7 +198,7 @@ export const resolveXAxisTypes = (
 
   // Bar/waterfall charts always use category — bars are discrete, labels must match data points.
   let axisType: EChartsXAxisType = columnKind
-  if (chartType === 'bar' || chartType === 'waterfall' || chartType === 'combo') axisType = 'category'
+  if (chartType === 'bar' || chartType === 'row' || chartType === 'waterfall' || chartType === 'combo') axisType = 'category'
   else if (columnKind === 'value' && xScaleType === 'log') axisType = 'log'
 
   return { columnKind, axisType }
@@ -1077,7 +1080,7 @@ export const buildAnnotationGraphics = ({
   colorPalette,
 }: AnnotationGraphicsConfig): EChartsOption['graphic'] => {
   if (!annotations || annotations.length === 0) return []
-  if (!['line', 'bar', 'area', 'scatter'].includes(chartType)) return []
+  if (!['line', 'bar', 'row', 'area', 'scatter'].includes(chartType)) return []
   if ((xAxisColumns?.length ?? 0) !== 1) return []
 
   const ecModel = (chart as any).getModel?.()
@@ -1093,7 +1096,7 @@ export const buildAnnotationGraphics = ({
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
   const { axisType: echartsXAxisType } = resolveXAxisTypes(xAxisColumns, columnTypes, chartType)
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
-  const isStacked = (styleConfig?.stacked ?? true) && ['bar', 'area'].includes(chartType)
+  const isStacked = (styleConfig?.stacked ?? true) && ['bar', 'row', 'area'].includes(chartType)
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
   const getSeriesDisplayName = (seriesName: string): string => {
     const axisMatch = seriesName.match(/^(.*) \(([LR])\)$/)
@@ -1429,7 +1432,7 @@ interface BaseChartConfig {
   xAxisColumns?: string[]
   pointMeta?: Record<string, any>[]
   tooltipColumns?: string[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
+  chartType: StandardChartType
   additionalOptions?: Partial<EChartsOption>
   colorMode?: 'light' | 'dark'
   containerWidth?: number
@@ -1447,7 +1450,9 @@ interface BaseChartConfig {
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType: rawChartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
+  const isRowChart = rawChartType === 'row'
+  const chartType = isRowChart ? 'bar' as const : rawChartType
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -2021,6 +2026,21 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         },
     yAxis: yAxisConfig,
     series: chartSeries,
+  }
+
+  // Row chart: swap axes to render horizontal bars
+  if (isRowChart) {
+    const categoryAxis = baseOption.xAxis as any
+    const valueAxis = baseOption.yAxis as any
+    // Hide the axis name on the category side — labels are self-explanatory
+    if (categoryAxis) categoryAxis.name = undefined
+    // Truncate long category labels
+    if (categoryAxis?.axisLabel) {
+      categoryAxis.axisLabel.overflow = 'truncate'
+      categoryAxis.axisLabel.width = 100
+    }
+    baseOption.xAxis = valueAxis as any
+    baseOption.yAxis = categoryAxis as any
   }
 
   return withMinusXTheme({ ...baseOption, ...additionalOptions, color: palette }, colorMode, palette)

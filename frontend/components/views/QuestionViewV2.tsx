@@ -28,7 +28,7 @@ import {
   LuX,
   LuGripVertical,
 } from 'react-icons/lu';
-import { QuestionContent, QuestionParameter, connectionTypeToDialect } from '@/lib/types';
+import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType } from '@/lib/types';
 import SqlEditor from '../SqlEditor';
 import ParameterRow from '../ParameterRow';
 import DatabaseSelector from '../DatabaseSelector';
@@ -342,7 +342,7 @@ export default function QuestionViewV2({
   };
 
   // Handle viz type change
-  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value') => {
+  const handleVizTypeChange = (type: VisualizationType) => {
     onChange({ vizSettings: { ...content.vizSettings, type } });
   };
 
