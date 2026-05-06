@@ -15,6 +15,7 @@ import {
   type Api,
 } from '@mariozechner/pi-ai';
 import type { Orchestrator } from './orchestrator';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { gen_id } from './utils';
 
 export interface ConnectionInfo {
@@ -29,6 +30,7 @@ export interface AgentContext {
   mode: 'org' | 'tutorial';
   appState?: unknown;
   connections?: ConnectionInfo[];
+  effectiveUser?: EffectiveUser;
 }
 
 export interface ToolResponse<TDetails = Record<string, unknown>> {

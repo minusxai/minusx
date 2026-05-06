@@ -12,6 +12,8 @@ import {
 import { renderPrompt } from '@/orchestrator/prompts';
 import { getSchemaSource, getSqlExecutor } from './sources';
 import { getAnalystModel } from './model-config';
+import { ReadFiles, SearchFiles } from './file-tools';
+export { ReadFiles, SearchFiles } from './file-tools';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-analyst-api',
@@ -99,6 +101,8 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams> {
     ListDBConnections.schema,
     SearchDBSchema.schema,
     ExecuteSQL.schema,
+    ReadFiles.schema,
+    SearchFiles.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 

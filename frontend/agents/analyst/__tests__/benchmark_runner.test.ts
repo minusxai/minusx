@@ -14,12 +14,6 @@
 //   cd frontend && npm test -- benchmark_runner
 
 import 'dotenv/config';
-import { vi } from 'vitest';
-
-// `lib/connections` transitively imports `server-only`. The orchestrator project
-// doesn't have it mocked at setup level (node/ui projects do), so mock here.
-vi.mock('server-only', () => ({}));
-
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,8 +26,11 @@ import {
   AnalystAgent,
   ExecuteSQL,
   ListDBConnections,
+  ReadFiles,
   SearchDBSchema,
+  SearchFiles,
 } from '../analyst-agent';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -143,9 +140,21 @@ class BMAnalystAgent extends AnalystAgent {
     BMListDBConnections.schema,
     BMSearchDBSchema.schema,
     BMExecuteSQL.schema,
+    ReadFiles.schema,
+    SearchFiles.schema,
   ];
   // `static model` inherits from AnalystAgent (which reads ANALYST_AGENT_MODEL_CONFIG).
 }
+
+// Synthesized benchmark user — full ACL via admin role + /org home folder.
+const BENCHMARK_USER: EffectiveUser = {
+  userId: 1,
+  email: 'benchmark@example.com',
+  name: 'Benchmark Runner',
+  role: 'admin',
+  home_folder: '/org',
+  mode: 'org',
+};
 
 // ── Runner ─────────────────────────────────────────────────────────────────
 
@@ -189,7 +198,14 @@ if (inputRows.length === 0) {
     // Truncate output.jsonl at run start — each run is fresh.
     writeFileSync(OUTPUT_PATH, '');
 
-    const registrables = [BMListDBConnections, BMSearchDBSchema, BMExecuteSQL, BMAnalystAgent];
+    const registrables = [
+      BMListDBConnections,
+      BMSearchDBSchema,
+      BMExecuteSQL,
+      ReadFiles,
+      SearchFiles,
+      BMAnalystAgent,
+    ];
 
     describe.each(inputRows.map((row, i) => ({ row, i })))(
       'benchmark row $i',
@@ -203,6 +219,7 @@ if (inputRows.length === 0) {
               connections: row.allowed_connections
                 .map((name) => CONNECTION_INFOS.get(name))
                 .filter((c): c is ConnectionInfo => !!c),
+              effectiveUser: BENCHMARK_USER,
             };
             const orch = new Orchestrator(registrables);
             const agent = new BMAnalystAgent(orch, { userMessage: row.user_message }, ctx);
