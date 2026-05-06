@@ -31,8 +31,8 @@ export class SlackAgent extends MXAgent<typeof SlackAgentParams> {
   ];
   static model = FAUX_MODEL;
 
-  protected getPromptVariables(): Record<string, string> {
-    return {
+  protected getSystemPrompt(): string {
+    const base = renderPrompt('default.system', {
       agent_name: 'SlackAgent',
       max_steps: '40',
       allowed_viz_types: '',
@@ -43,11 +43,7 @@ export class SlackAgent extends MXAgent<typeof SlackAgentParams> {
       connection_id: this.context.connectionId ?? '',
       home_folder: '',
       preloaded_skills: '',
-    };
-  }
-
-  protected getSystemPrompt(): string {
-    const base = renderPrompt('default.system', this.getPromptVariables());
+    });
     const addendum = renderPrompt('slack_addendum', {});
     return `${base}\n\n${addendum}`;
   }
