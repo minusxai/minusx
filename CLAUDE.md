@@ -22,6 +22,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## ⚠️ DO NOT TOUCH: `frontend/orchestrator/` and `frontend/agents/`
+
+These directories contain an in-progress headless TypeScript orchestrator that is **not yet wired into production**. No production code path imports from them; they are exercised only by their own tests under `frontend/orchestrator/__tests__/` and `frontend/agents/**/__tests__/`.
+
+**Rules:**
+- Do **not** edit files inside `frontend/orchestrator/` or `frontend/agents/` unless the user has explicitly asked you to work on the orchestrator/agents migration.
+- Do **not** import from these directories anywhere in `frontend/app/`, `frontend/lib/`, `frontend/store/`, or `frontend/components/` — that would break the "production is unaffected" invariant.
+- When refactoring shared code (e.g. `frontend/lib/`), don't drag the orchestrator/agents tree along — leave it stable until the migration plan resumes.
+
+If a user request seems to require changes here (e.g. "wire up the new agent on the explore page"), pause and confirm with the user before proceeding — the migration is staged intentionally.
+
+---
+
 ## Project Overview
 
 MinusX is an agentic, file-system based BI Tool that combines:
