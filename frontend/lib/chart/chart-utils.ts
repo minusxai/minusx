@@ -2055,7 +2055,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       categoryAxis.axisLabel.width = 75
     }
     // Push axis name further left so it doesn't overlap truncated labels
-    if (categoryAxis) categoryAxis.nameGap = 70
+    if (categoryAxis) categoryAxis.nameGap = 90
     baseOption.xAxis = valueAxis as any
     baseOption.yAxis = categoryAxis as any
   }
