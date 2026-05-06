@@ -10,7 +10,7 @@
 //        Turn 1 — backend `SearchDBSchema(connection='test-conn', query='users')`
 //                 → assert only `users` returned (whitelist enforced) AND
 //                 → faux saw the context docs in the system prompt.
-//        Turn 2 — frontend `EditFile(fileId, oldStr, newStr)` → bridge
+//        Turn 2 — frontend `EditFile(fileId, changes)` → bridge
 //                 invokes the registered handler against real Redux → resume.
 //   5. Final assertions on Redux state and the chat log.
 
@@ -65,28 +65,20 @@ import {
 import { POST as chatV2StreamHandler } from '@/app/api/chat/v2/stream/route';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { setSchemaSource, resetSources } from '@/agents/benchmark-analyst/sources';
-import {
-  registerFrontendTool,
-  type FrontendToolHandler,
-} from '@/lib/api/tool-handlers';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { makeStore } from '@/store/store';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
-import { setShowAdvanced } from '@/store/uiSlice';
+import { setFile, selectFile, selectMergedContent } from '@/store/filesSlice';
+import { setUser } from '@/store/authSlice';
 import ChatV2Container from '@/components/containers/ChatV2Container';
 import { selectChatV2 } from '@/store/chatV2Slice';
-import type { ContextContent, ConnectionContent } from '@/lib/types';
+import type { ContextContent, ConnectionContent, DbFile, QuestionContent } from '@/lib/types';
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 
 const TEST_DB_PATH = getTestDbPath('chat_v2_true_e2e');
-
-// Save EditFile handler so we can restore after the test (registry is global).
-const ORIGINAL_EDIT_FILE_HANDLER: FrontendToolHandler | undefined =
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- internal registry probe
-  (globalThis as any).__originalEditFile;
 
 describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → real Redux)', () => {
   setupTestDb(TEST_DB_PATH, { withTestConnection: false });
@@ -97,19 +89,24 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
   let originalFetch: typeof fetch;
   beforeAll(() => {
     originalFetch = global.fetch;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    global.fetch = (async (input: any, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input?.url ?? input?.toString?.() ?? '';
+    const patchedFetch: typeof fetch = async (input, init) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
       if (url.includes('/api/chat/v2/stream')) {
-        const req = new (await import('next/server')).NextRequest(
+        const { NextRequest } = await import('next/server');
+        const req = new NextRequest(
           url.startsWith('http') ? url : `http://localhost:3000${url}`,
-          { method: init?.method ?? 'POST', body: init?.body as BodyInit | undefined, headers: init?.headers as HeadersInit | undefined },
+          { method: init?.method ?? 'POST', body: init?.body as BodyInit | undefined, headers: init?.headers },
         );
         return chatV2StreamHandler(req);
       }
       return originalFetch(input, init);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }) as any;
+    };
+    global.fetch = patchedFetch;
   });
   afterAll(() => { global.fetch = originalFetch; });
 
@@ -117,12 +114,11 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
   let contextId: number;
   let chatId: number;
   let editTargetId: number;
+  let editTargetContent: QuestionContent;
   let lastSystemPromptSeen: string;
-  let editHandlerInvocations: Array<{ args: Record<string, unknown> }>;
 
   beforeEach(async () => {
     lastSystemPromptSeen = '';
-    editHandlerInvocations = [];
 
     // ── DB fixtures ──────────────────────────────────────────────────────────
     const connectionContent: ConnectionContent = {
@@ -140,8 +136,7 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
           },
         ],
         updated_at: new Date().toISOString(),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ConnectionContent.schema shape is loose
-      } as any,
+      },
     };
     // Note: DocumentDB.create defaults to draft=true; getFiles filters drafts
     // out so the contextLoader wouldn't see this connection. Publish via the
@@ -188,14 +183,19 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
       contextId = await DocumentDB.create('context', '/org/context', 'context', contextContent, []);
     }
 
-    // The file the agent will "edit" via the frontend bridge.
-    editTargetId = await DocumentDB.create(
-      'edit-target',
-      '/org/edit-target',
-      'question',
-      { description: '', query: 'SELECT 1', vizSettings: { type: 'table', xCols: [], yCols: [] }, parameters: [], connection_name: 'test-conn' },
-      [],
-    );
+    // The file the agent will edit via the frontend bridge — published so
+    // permission checks pass; full content kept in `editTargetContent` so the
+    // test can pre-populate Redux state (the real EditFile handler operates
+    // off Redux, not a fresh DB read).
+    editTargetContent = {
+      description: '',
+      query: 'SELECT 1',
+      vizSettings: { type: 'table', xCols: [], yCols: [] },
+      parameters: [],
+      connection_name: 'test-conn',
+    };
+    editTargetId = await DocumentDB.create('edit-target', '/org/edit-target', 'question', editTargetContent, []);
+    await DocumentDB.update(editTargetId, 'edit-target', '/org/edit-target', editTargetContent, [], 'e2e-edit-target-publish');
 
     // The chat itself (draft) — agentArgs carries the contextFileId so chat-v2's
     // shared.ts loader pulls the right whitelist/docs.
@@ -224,24 +224,6 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
       },
     });
 
-    // ── Override EditFile frontend handler with a verifiable test stub ──
-    // The real handler depends on heavy file-state plumbing; we just need to
-    // prove the bridge calls the registered handler with real Redux dispatch.
-    registerFrontendTool('EditFile', async (args, ctx) => {
-      editHandlerInvocations.push({ args });
-      // Verifiable Redux mutation — proves dispatch is plumbed through.
-      ctx.dispatch?.(setShowAdvanced(true));
-      return {
-        content: `edited fileId=${args.fileId} (${args.oldStr} → ${args.newStr})`,
-        details: { success: true },
-      };
-    });
-  });
-
-  afterEach(() => {
-    if (ORIGINAL_EDIT_FILE_HANDLER) {
-      registerFrontendTool('EditFile', ORIGINAL_EDIT_FILE_HANDLER);
-    }
   });
 
   it('Turn 1: SearchDBSchema enforces whitelist; context docs reach the system prompt. Turn 2: EditFile via bridge mutates real Redux', async () => {
@@ -262,11 +244,16 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
       },
       // Turn 1, call 2: stop turn after seeing the SearchDBSchema result.
       fauxAssistantMessage('Found the users table.', { stopReason: 'stop' }),
-      // Turn 2, call 1: emit EditFile (frontend tool — bridge resolves it).
+      // Turn 2, call 1: emit EditFile (frontend tool — bridge resolves it
+      // against the REAL registered handler in lib/api/tool-handlers.ts).
+      // Args use the real handler's shape: `changes: [{oldMatch, newMatch}]`.
       fauxAssistantMessage(
         [fauxToolCall(
           'EditFile',
-          { fileId: editTargetId, oldStr: 'SELECT 1', newStr: 'SELECT 2' },
+          {
+            fileId: editTargetId,
+            changes: [{ oldMatch: '"query":"SELECT 1"', newMatch: '"query":"SELECT 2"' }],
+          },
           { id: 'ef_1' },
         )],
         { stopReason: 'toolUse' },
@@ -276,10 +263,38 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
     ]);
 
     // Use a full app-store (all slices + listeners) so useFile/filesSlice
-    // works AND the chatV2Listener fires. Share with getStore() so tool
-    // handlers (which call getStore()) see the same Redux instance.
+    // works AND the chatV2Listener fires. Share with getStore() so the real
+    // EditFile handler (which calls getStore()) hits the same Redux instance.
     const store = makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+
+    // Pre-load the edit target into Redux as a published file with its full
+    // content. The real EditFile handler reads from Redux to build its
+    // string representation; `loadFiles` will see this as already-cached
+    // (updatedAt > 0) and skip the network fetch.
+    const editTargetDbFile: DbFile = {
+      id: editTargetId,
+      name: 'edit-target',
+      path: '/org/edit-target',
+      type: 'question',
+      content: editTargetContent,
+      references: [],
+      version: 1,
+      last_edit_id: 'e2e-init',
+      draft: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    store.dispatch(setFile({ file: editTargetDbFile, references: [] }));
+    // Auth user (EditFile permission check reads from auth slice).
+    store.dispatch(setUser({
+      id: 1,
+      email: 'test@example.com',
+      name: 'Test User',
+      role: 'admin',
+      home_folder: '/org',
+      mode: 'org',
+    }));
 
     renderWithProviders(<ChatV2Container fileId={chatId} />, { store });
 
@@ -310,8 +325,11 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
     expect(tablesReturned).not.toContain('orders');
     expect(tablesReturned).not.toContain('products');
 
-    // ── Turn 2 — frontend EditFile via bridge ──
-    expect(store.getState().ui.showAdvanced).toBe(false);
+    // ── Turn 2 — frontend EditFile via bridge → REAL Redux mutation ──
+    // Sanity: file Redux state starts with query='SELECT 1'.
+    expect((selectMergedContent(store.getState(), editTargetId) as QuestionContent).query)
+      .toBe('SELECT 1');
+
     await act(async () => { await userEvent.type(textarea, 'now edit the file'); });
     await act(async () => { await userEvent.click(sendBtn); });
 
@@ -326,24 +344,31 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
 
     const c2 = selectChatV2(store.getState(), chatId)!;
 
-    // The bridge invoked the registered EditFile handler with the right args.
-    expect(editHandlerInvocations).toHaveLength(1);
-    expect(editHandlerInvocations[0].args).toMatchObject({
-      fileId: editTargetId,
-      oldStr: 'SELECT 1',
-      newStr: 'SELECT 2',
-    });
+    // The REAL EditFile handler ran against real Redux: file content changed
+    // from 'SELECT 1' to 'SELECT 2' via the bridge's executeToolCall →
+    // editFileStr → Redux dispatch chain.
+    const mergedAfter = selectMergedContent(store.getState(), editTargetId) as QuestionContent;
+    expect(mergedAfter.query).toBe('SELECT 2');
+    // Other content fields untouched.
+    expect(mergedAfter.connection_name).toBe('test-conn');
+    expect(mergedAfter.vizSettings.type).toBe('table');
 
-    // Real Redux mutation landed (proves dispatch was wired through).
-    expect(store.getState().ui.showAdvanced).toBe(true);
+    // The file's persistableChanges in Redux now reflects the edit
+    // (editFileStr dispatches via filesSlice.editFile, which records dirty
+    // overrides on FileState.persistableChanges before save).
+    const fileStateAfter = selectFile(store.getState(), editTargetId);
+    expect(fileStateAfter).toBeDefined();
+    expect(
+      (fileStateAfter!.persistableChanges as { query?: string } | undefined)?.query,
+    ).toBe('SELECT 2');
 
-    // EditFile tool result is present and includes the handler's content.
+    // EditFile tool result is in the log and indicates success.
     const efResult = findToolResult(c2.log, 'ef_1');
-    expect(efResult).toContain(`edited fileId=${editTargetId}`);
-    expect(efResult).toContain('SELECT 1 → SELECT 2');
+    expect(efResult).toBeDefined();
+    expect(efResult).toContain('"success":true');
 
     // Final stop turn from the LLM after the EditFile result.
-    const finalStop = c2.log.findLast?.(
+    const finalStop = [...c2.log].reverse().find(
       (e: ConversationLogEntry) =>
         'role' in e && e.role === 'assistant' &&
         (e as { stopReason?: string }).stopReason === 'stop',
@@ -356,15 +381,12 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
 
 function findToolResult(log: ConversationLog, toolCallId: string): string | undefined {
   for (const entry of log) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- log entries are a discriminated union
-    const e = entry as any;
-    if (e?.role === 'toolResult' && e.toolCallId === toolCallId) {
-      const text = (e.content ?? [])
-        .filter((c: { type?: string }) => c?.type === 'text')
-        .map((c: { text: string }) => c.text)
-        .join('\n');
-      return text;
-    }
+    if (!('role' in entry) || entry.role !== 'toolResult') continue;
+    if (entry.toolCallId !== toolCallId) continue;
+    return entry.content
+      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+      .map((c) => c.text)
+      .join('\n');
   }
   return undefined;
 }

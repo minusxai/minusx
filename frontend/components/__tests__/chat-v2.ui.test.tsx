@@ -129,7 +129,7 @@ describe('Phase 3 UI — Chat detail rendering', () => {
             type: 'toolCall',
             id: 'edit_ui',
             name: 'EditFile',
-            arguments: { fileId: 1, oldStr: 'foo', newStr: 'bar' },
+            arguments: { fileId: 1, changes: [{ oldMatch: 'foo', newMatch: 'bar' }] },
           },
         ],
         stopReason: 'toolUse',

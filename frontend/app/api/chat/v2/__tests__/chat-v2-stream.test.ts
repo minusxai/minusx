@@ -68,7 +68,7 @@ describe('Chat V2 stream — incremental SSE emission', () => {
   it('emits orchestrator events incrementally and a final done event', async () => {
     webAnalystFaux.setResponses([
       fauxAssistantMessage(
-        [fauxToolCall('EditFile', { fileId: 1, oldStr: 'a', newStr: 'b' }, { id: 'sse_edit_1' })],
+        [fauxToolCall('EditFile', { fileId: 1, changes: [{ oldMatch: 'a', newMatch: 'b' }] }, { id: 'sse_edit_1' })],
         { stopReason: 'toolUse' },
       ),
     ]);

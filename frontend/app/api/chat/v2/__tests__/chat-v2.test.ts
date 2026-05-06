@@ -116,7 +116,7 @@ describe('Chat V2 — Test 2: pause-resume across UIE bridge', () => {
 
     webAnalystFaux.setResponses([
       fauxAssistantMessage(
-        [fauxToolCall('EditFile', { fileId: 99, oldStr: 'foo', newStr: 'bar' }, { id: editCallId })],
+        [fauxToolCall('EditFile', { fileId: 99, changes: [{ oldMatch: 'foo', newMatch: 'bar' }] }, { id: editCallId })],
         { stopReason: 'toolUse' },
       ),
       fauxAssistantMessage('Edit applied.', { stopReason: 'stop' }),

@@ -8,16 +8,22 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // listener middleware) calls `executeToolCall(...)` for real and resumes the
 // orchestrator with the resulting ToolResultMessage.
 
+// Schema MUST match the runtime handler in `lib/api/tool-handlers.ts`
+// (`registerFrontendTool('EditFile', ...)`) — the dual-update rule. The
+// handler expects `changes: [{oldMatch, newMatch, replaceAll?}]`.
 const EditFileParams = Type.Object({
   fileId: Type.Number(),
-  oldStr: Type.String({ description: 'Existing substring to replace.' }),
-  newStr: Type.String({ description: 'Replacement text.' }),
+  changes: Type.Array(Type.Object({
+    oldMatch: Type.String({ description: 'Existing substring to replace.' }),
+    newMatch: Type.String({ description: 'Replacement text.' }),
+    replaceAll: Type.Optional(Type.Boolean({ description: 'Replace every occurrence (default true).' })),
+  })),
 });
 
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
     name: 'EditFile',
-    description: 'Edit an existing file by replacing one substring with another. Executes on the frontend with real Redux state.',
+    description: 'Edit an existing file by applying one or more string replacements. Executes on the frontend with real Redux state.',
     parameters: EditFileParams,
   };
 

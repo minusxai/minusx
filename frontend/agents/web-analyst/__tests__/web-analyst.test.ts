@@ -28,7 +28,7 @@ describe('WebAnalystAgent — UIE pause/resume bridge', () => {
 
     fauxRegistration.setResponses([
       fauxAssistantMessage(
-        [fauxToolCall('EditFile', { fileId: 1, oldStr: 'foo', newStr: 'bar' }, { id: editFileCallId })],
+        [fauxToolCall('EditFile', { fileId: 1, changes: [{ oldMatch: 'foo', newMatch: 'bar' }] }, { id: editFileCallId })],
         { stopReason: 'toolUse' },
       ),
       fauxAssistantMessage('Edited file 1.', { stopReason: 'stop' }),
