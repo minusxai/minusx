@@ -298,11 +298,10 @@ export const PivotAxisBuilder = ({
             justify="center"
             py={1.5}
             cursor="pointer"
-            bg={activeTab === key ? 'bg.canvas' : 'transparent'}
-            color={activeTab === key ? 'fg.default' : 'fg.subtle'}
+            bg={activeTab === key ? 'accent.teal/90' : 'transparent'}
+            color={activeTab === key ? 'white' : 'fg.subtle'}
             borderRadius="sm"
-            boxShadow={activeTab === key ? 'xs' : undefined}
-            _hover={{ color: activeTab === key ? 'fg.default' : 'fg.muted' }}
+            _hover={{ color: activeTab === key ? 'white' : 'fg.muted' }}
             transition="all 0.15s"
             onClick={() => setActiveTab(key)}
           >

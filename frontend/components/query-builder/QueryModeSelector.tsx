@@ -38,7 +38,7 @@ export function QueryModeSelector({
       bg="bg.muted"
       borderRadius="md"
       p={0.5}
-      maxW="280px"
+      maxW="240px"
     >
       {tabs.map(({ key, label, icon, disabledKey }) => {
         const isActive = mode === key;
@@ -51,14 +51,14 @@ export function QueryModeSelector({
             flex={1}
             justify="center"
             gap={1.5}
-            py={1}
+            py={1.5}
             borderRadius="sm"
-            bg={isActive ? 'accent.teal' : 'transparent'}
-            color={isActive ? 'white' : 'fg.muted'}
+            bg={isActive ? 'accent.teal/90' : 'transparent'}
+            color={isActive ? 'white' : 'fg.subtle'}
             cursor={isDisabled ? 'not-allowed' : 'pointer'}
             opacity={isDisabled ? 0.5 : 1}
             transition="all 0.15s ease"
-            _hover={{ color: isDisabled ? undefined : (isActive ? 'white' : 'fg.default') }}
+            _hover={{ color: isDisabled ? undefined : (isActive ? 'white' : 'fg.muted') }}
             onClick={() => !isDisabled && onModeChange(key)}
             title={disabledKey === 'gui' ? (guiError || 'Visual query builder') : undefined}
           >
