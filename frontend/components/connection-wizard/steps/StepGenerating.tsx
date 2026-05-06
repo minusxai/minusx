@@ -17,7 +17,7 @@ import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
-import { useAgentProgress } from '../useAgentProgress';
+import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 
 const TYPEWRITER_SPEED = 35;
 const GENERATING_TAU = 40; // ~90% at ~92s — feels like about a minute
@@ -49,9 +49,11 @@ interface StepGeneratingProps {
   onComplete?: () => Promise<void>;
   /** For static connections: only build dashboard for these schemas. */
   staticSchemas?: string[] | null;
+  /** Pre-filled dashboard preference from questionnaire — auto-starts generation if set. */
+  initialPreference?: string;
 }
 
-export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete, staticSchemas, initialPreference }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
@@ -67,7 +69,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const [hasStarted, setHasStarted] = useState(false);
   const [virtualDashboardId, setVirtualDashboardId] = useState<number | null>(null);
   const [showTrace, setShowTrace] = useState(false);
-  const [userPreference, setUserPreference] = useState('');
+  const [userPreference, setUserPreference] = useState(initialPreference ?? '');
 
   // Typewriter effect for greeting
   const [displayedText, setDisplayedText] = useState('');
@@ -191,18 +193,26 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     setShowTrace(true);
   }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs]);
 
+  // Auto-start generation if initialPreference was provided (from questionnaire)
+  const hasAutoTriggered = useRef(false);
+  useEffect(() => {
+    if (hasAutoTriggered.current || !initialPreference?.trim() || !virtualDashboardId || hasStarted) return;
+    hasAutoTriggered.current = true;
+    handleGenerate();
+  }, [initialPreference, virtualDashboardId, hasStarted, handleGenerate]);
+
   // Publish all dirty files, mark wizard complete, and navigate to the dashboard
   const handleGoToDashboard = useCallback(async () => {
     if (!virtualDashboardId) return;
     try {
       await publishAll();
       if (onComplete) await onComplete();
-      router.push(preserveModeParam(`/f/${virtualDashboardId}`));
+      window.open(preserveModeParam(`/f/${virtualDashboardId}`), '_blank');
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
-      router.push(preserveModeParam('/'));
+      window.open(preserveModeParam('/'), '_blank');
     }
-  }, [virtualDashboardId, router, onComplete]);
+  }, [virtualDashboardId, onComplete]);
 
   /** Discard draft files created during this step — note: orphan cleanup is a future task */
   const discardDraftFiles = useCallback(() => {
@@ -332,6 +342,16 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         {/* Progress bar while generating */}
         {isGenerating && (
           <VStack gap={2} align="stretch">
+            <Text fontSize="xs" fontFamily="mono" color="accent.teal">
+              {getProgressMessage(agentProgress, [
+                [0, 'Analyzing your schema...'],
+                [15, 'Writing SQL queries...'],
+                [40, 'Building visualizations...'],
+                [65, 'Assembling dashboard layout...'],
+                [85, 'Final touches...'],
+                [100, 'Done!'],
+              ])}
+            </Text>
             <Progress.Root size="sm" value={agentProgress} colorPalette="teal">
               <Progress.Track borderRadius="full" overflow="hidden">
                 <Progress.Range

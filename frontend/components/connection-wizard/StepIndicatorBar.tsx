@@ -12,6 +12,8 @@ interface StepIndicatorBarProps {
 }
 
 export default function StepIndicatorBar({ currentStep }: StepIndicatorBarProps) {
+  // Questionnaire is visually part of the "Add Context" step
+  const displayStep = currentStep === 'questionnaire' ? 'context' : currentStep;
   return (
     <>
       <style>{fadeInUpKeyframes}</style>
@@ -30,8 +32,8 @@ export default function StepIndicatorBar({ currentStep }: StepIndicatorBarProps)
         <HStack gap={3}>
           {STEPS.map((s) => {
             const info = WIZARD_STEP_LABELS[s];
-            const currentInfo = WIZARD_STEP_LABELS[currentStep];
-            const isActive = s === currentStep;
+            const currentInfo = WIZARD_STEP_LABELS[displayStep];
+            const isActive = s === displayStep;
             const isPast = info.number < currentInfo.number;
             return (
               <HStack key={s} gap={1.5}>

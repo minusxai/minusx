@@ -8,10 +8,15 @@ import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigB
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
-  step?: 'welcome' | 'connection' | 'context' | 'generating';
+  step?: 'welcome' | 'connection' | 'questionnaire' | 'context' | 'generating';
   connectionId?: number;
   connectionName?: string;
   contextFileId?: number;
+  questionnaireAnswers?: {
+    datasetDescription: string;
+    keyMetrics: string;
+    dashboardPreference: string;
+  };
 }
 
 /**

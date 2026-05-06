@@ -743,10 +743,12 @@ export default function StaticConnectionConfig({
               <VStack align="stretch" gap={3}>
                 {/* Dataset name — shared across all files in this upload */}
                 <Box>
-                  <Text fontSize="xs" fontWeight="600" mb={1}>Dataset Name</Text>
+                  <Text fontSize="xs" fontWeight="600" mb={1}>Dataset Name {!pendingFiles[0]?.schemaName && <Text as="span" color="accent.danger">*</Text>}</Text>
                   <Input
                     size="sm"
                     fontFamily="mono"
+                    borderColor={!pendingFiles[0]?.schemaName ? 'accent.danger' : undefined}
+                    _focus={!pendingFiles[0]?.schemaName ? { borderColor: 'accent.danger', boxShadow: '0 0 0 1px var(--chakra-colors-accent-danger)' } : undefined}
                     value={pendingFiles[0]?.schemaName ?? ''}
                     onChange={(e) => {
                       const v = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_');

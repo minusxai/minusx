@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { Box, VStack, HStack, Heading, Text, Button, Spinner } from '@chakra-ui/react';
+import { Box, VStack, HStack, Heading, Text, Button, Spinner, Progress } from '@chakra-ui/react';
 import { LuArrowLeft } from 'react-icons/lu';
+import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFileByPath, useFile } from '@/lib/hooks/file-state-hooks';
@@ -19,6 +20,40 @@ interface StepStaticUploadProps {
 function getSchemaNames(config: Record<string, unknown>): string[] {
   const files = (config?.files ?? []) as CsvFileInfo[];
   return [...new Set(files.map(f => f.schema_name))];
+}
+
+function SaveConnectionProgress() {
+  const progress = useAgentProgress(true, false, 9);
+  return (
+    <VStack gap={2} align="stretch" pt={2}>
+      <style>{`@keyframes saveShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
+      <Text fontSize="xs" fontFamily="mono" color="accent.teal">
+        {getProgressMessage(progress, [
+          [0, 'Saving connection...'],
+          [25, 'Registering tables...'],
+          [50, 'Fetching metadata...'],
+          [80, 'Almost there...'],
+        ])}
+      </Text>
+      <Progress.Root size="sm" value={progress} colorPalette="teal">
+        <Progress.Track borderRadius="full" overflow="hidden">
+          <Progress.Range
+            style={{ transition: 'width 0.4s ease-out' }}
+            css={{
+              position: 'relative',
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                animation: 'saveShimmer 1.5s ease-in-out infinite',
+              },
+            }}
+          />
+        </Progress.Track>
+      </Progress.Root>
+    </VStack>
+  );
 }
 
 export default function StepStaticUpload({ tab, onComplete, onBack }: StepStaticUploadProps) {
@@ -133,20 +168,23 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
         <Text color="accent.danger" fontSize="sm">{saveError}</Text>
       )}
 
-      <HStack justify="flex-end" pt={2}>
-        <Button
-          bg="accent.teal"
-          color="white"
-          _hover={{ opacity: 0.9 }}
-          size="sm"
-          fontFamily="mono"
-          onClick={handleContinue}
-          disabled={!hasFiles || saving || hasPendingFiles}
-          loading={saving}
-        >
-          Save & Continue &rarr;
-        </Button>
-      </HStack>
+      {saving ? (
+        <SaveConnectionProgress />
+      ) : (
+        <HStack justify="flex-end" pt={2}>
+          <Button
+            bg="accent.teal"
+            color="white"
+            _hover={{ opacity: 0.9 }}
+            size="sm"
+            fontFamily="mono"
+            onClick={handleContinue}
+            disabled={!hasFiles || hasPendingFiles}
+          >
+            Save & Continue &rarr;
+          </Button>
+        </HStack>
+      )}
     </VStack>
   );
 }

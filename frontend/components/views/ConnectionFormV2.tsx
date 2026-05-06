@@ -1360,13 +1360,14 @@ export default function ConnectionFormV2({
           <Button
             onClick={handleSaveClick}
             loading={isSaving}
+            loadingText="Saving connection..."
             disabled={!isDirty || !isFormValidForTest()}
             size="sm"
             bg="accent.teal"
             color="white"
           >
             <LuSave />
-            Save Connection
+            {wizardMode ? 'Save & Continue' : 'Save Connection'}
           </Button>
         </HStack>
 

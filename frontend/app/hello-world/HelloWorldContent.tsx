@@ -20,7 +20,7 @@ import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
-import type { ConnectionWizardStep } from '@/components/connection-wizard/ConnectionWizardTypes';
+import type { ConnectionWizardStep, QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
@@ -100,7 +100,7 @@ export function HelloWorldContent() {
   // Persist wizard step to config so it survives page refresh
   const persistStep = useCallback(async (
     nextStep: ConnectionWizardStep,
-    extras?: { connectionId?: number; connectionName?: string; contextFileId?: number }
+    extras?: { connectionId?: number; connectionName?: string; contextFileId?: number; questionnaireAnswers?: QuestionnaireAnswers }
   ) => {
     try {
       await updateConfig({
@@ -351,13 +351,15 @@ export function HelloWorldContent() {
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}
+            initialQuestionnaireAnswers={savedWizard?.questionnaireAnswers}
             onStepChange={persistStep}
             onComplete={handleComplete}
             showGreetings
             showSkipConnection
             greetings={{
               connection: "Step 1: Let's connect your data.",
-              context: "Step 2: Let's add some context.",
+              questionnaire: "Tell us about your data.",
+              context: "Step 2: Let's create a Knowledge Base.",
               generating: "Step 3: Let's build your first dashboard.",
             }}
           />
