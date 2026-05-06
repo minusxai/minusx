@@ -303,9 +303,14 @@ WITH scored AS (
     fi.name AS "fileName",
     fi.path AS "filePath",
     MAX(fe.created_at) AS "lastVisited",
-    COUNT(*) FILTER (WHERE fe.event_type IN (0, 3)) * 10
+    -- Scoring: create/edit = 10pts/day, direct view = 3pts/day, indirect view (via dashboard) = 1pt/day
+    COUNT(DISTINCT fe.created_at::date) FILTER (WHERE fe.event_type IN (0, 3)) * 10
       + COUNT(DISTINCT fe.created_at::date) FILTER (
           WHERE fe.event_type = 1
+          AND fe.created_at >= NOW() - ($1 * INTERVAL '1 day')
+        ) * 3
+      + COUNT(DISTINCT fe.created_at::date) FILTER (
+          WHERE fe.event_type = 2
           AND fe.created_at >= NOW() - ($1 * INTERVAL '1 day')
         )
       AS "score"
