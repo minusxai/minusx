@@ -972,6 +972,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async updateNamePath(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
     return DocumentDB.updateNamePath(id, name, path);
   }
+
+  async renameAndMove(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
+    return DocumentDB.renameAndMove(id, name, path);
+  }
 }
 
 // Export singleton instance - PREFER using this

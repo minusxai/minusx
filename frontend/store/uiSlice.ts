@@ -34,6 +34,13 @@ interface UIState {
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
   showExpandedMessages: boolean;
+  /**
+   * Phase-3 toggle: when true, the sidebar shows "Chats" (type:'chat' files)
+   * driven by /api/chat/v2; otherwise it shows the legacy "Conversations"
+   * (Python orchestrator). Override at runtime with `?v=2` URL param —
+   * see lib/chat-v2/use-chat-v2.ts.
+   */
+  useChatV2: boolean;
   homePage: {
     showFeedSummary: boolean;
     showRecentQuestions: boolean;
@@ -72,6 +79,7 @@ const initialState: UIState = {
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
   showExpandedMessages: false,
+  useChatV2: false,
   homePage: {
     showFeedSummary: true,
     showRecentQuestions: true,
@@ -256,6 +264,12 @@ const uiSlice = createSlice({
         try { localStorage.setItem('showExpandedMessages', String(action.payload)); } catch { /* ignore */ }
       }
     },
+    setUseChatV2: (state, action: PayloadAction<boolean>) => {
+      state.useChatV2 = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('useChatV2', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
     setHomePageConfig: (state, action: PayloadAction<Partial<UIState['homePage']>>) => {
       Object.assign(state.homePage, action.payload);
       if (typeof window !== 'undefined') {
@@ -323,7 +337,10 @@ export const {
   clearViewStack,
   setShowSuggestedQuestions,
   setShowTrustScore,
+  setUseChatV2,
 } = uiSlice.actions;
+
+export const selectUseChatV2 = (state: RootState | { ui: UIState }) => state.ui.useChatV2;
 
 export default uiSlice.reducer;
 

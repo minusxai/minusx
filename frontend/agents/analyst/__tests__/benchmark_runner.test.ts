@@ -1,9 +1,9 @@
-// Benchmark harness for AnalystAgent.
+// Benchmark harness for BenchmarkAnalystAgent.
 //
 // Reads `input.jsonl` (sibling file, gitignored) and writes one line per row
 // to `output.jsonl` containing the full conversation log. Connections come
-// from a JSON file (--connections path) or `BENCHMARK_CONNECTIONS_CONFIG` env var.
-// Model comes from `ANALYST_AGENT_MODEL_CONFIG` (handled by AnalystAgent itself).
+// from `BENCHMARK_CONNECTIONS_CONFIG` (JSON env var). Model comes from
+// `ANALYST_AGENT_MODEL_CONFIG` (handled by BenchmarkAnalystAgent itself).
 //
 // Behavior:
 //   - input.jsonl missing/empty       → describe.skip (no-op, CI-safe)
@@ -18,22 +18,21 @@ import 'dotenv/config';
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Tool, TSchema } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import type { ToolResponse } from '@/orchestrator/types';
-import type { AnalystAgentContext, ConnectionInfo, BenchmarkConnectionEntry } from '@/agents/analyst/types';
-import { getNodeConnector } from '@/lib/connections';
-import { NodeConnector } from '@/lib/connections/base';
-import { compressQueryResult } from '@/lib/api/compress-augmented';
 import {
-  AnalystAgent,
-  ExecuteSQL,
+  BenchmarkAnalystAgent,
   ListDBConnections,
-  ReadFiles,
   SearchDBSchema,
-  SearchFiles,
-} from '../analyst-agent';
-import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+  ExecuteSQL,
+} from '@/agents/benchmark-analyst/benchmark-analyst';
+import {
+  loadBenchmarkConnectionsFromEnv,
+  setupBenchmarkSources,
+} from '@/agents/benchmark-analyst/connection-source';
+import type {
+  BenchmarkAnalystContext,
+  ConnectionInfo,
+} from '@/agents/benchmark-analyst/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,157 +46,6 @@ const OUTPUT_PATH = path.join(
   path.dirname(INPUT_PATH),
   path.basename(INPUT_PATH).replace('input', 'output'),
 );
-
-// ── Connection map (built once at module load when input is populated) ─────
-
-const CONNECTIONS = new Map<string, NodeConnector>();
-const CONNECTION_INFOS = new Map<string, ConnectionInfo>();
-
-/**
- * Resolve connections config: --connections <file> arg takes priority,
- * then BENCHMARK_CONNECTIONS_CONFIG env var, then undefined (not present).
- */
-function resolveConnectionsJson(): string | undefined {
-  // eslint-disable-next-line no-restricted-syntax -- benchmark module reads its own scoped env vars directly
-  const connFile = process.env.BENCHMARK_CONNECTIONS;
-  if (connFile) return readFileSync(path.resolve(connFile), 'utf-8');
-  // eslint-disable-next-line no-restricted-syntax -- benchmark module reads its own scoped env vars directly
-  return process.env.BENCHMARK_CONNECTIONS_CONFIG;
-}
-
-function loadConnections(): void {
-  const raw = resolveConnectionsJson();
-  if (!raw) return;
-  const entries = JSON.parse(raw) as BenchmarkConnectionEntry[];
-  for (const { name, dialect, config, description } of entries) {
-    const c = getNodeConnector(name, dialect, config);
-    if (!c) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
-    CONNECTIONS.set(name, c);
-    CONNECTION_INFOS.set(name, { name, dialect, description });
-  }
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function errorResponse(text: string): ToolResponse {
-  return { content: [{ type: 'text', text }], isError: true };
-}
-
-/**
- * Look up a connector by name, enforcing the per-row allowlist in
- * `ctx.connections`. Returns the `NodeConnector` on success, or an error
- * `ToolResponse` ready to return from a tool's `run()`.
- */
-function resolveConnector(
-  name: string,
-  ctx: { connections?: ConnectionInfo[] },
-): NodeConnector | ToolResponse {
-  if (!ctx.connections?.some((c) => c.name === name)) {
-    return errorResponse(`'${name}' is not in this agent's connections`);
-  }
-  const conn = CONNECTIONS.get(name);
-  if (!conn) return errorResponse(`connector '${name}' not loaded`);
-  return conn;
-}
-
-/** Wrap a thrown error into an isError ToolResponse. */
-async function tryRun(fn: () => Promise<ToolResponse>): Promise<ToolResponse> {
-  try {
-    return await fn();
-  } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : String(err));
-  }
-}
-
-// ── Benchmark tool subclasses ──────────────────────────────────────────────
-
-// Inherits run() from production: returns this.context.connections ?? [].
-class BMListDBConnections extends ListDBConnections {}
-
-class BMSearchDBSchema extends SearchDBSchema {
-  async run(): Promise<ToolResponse> {
-    const { connection, query } = this.parameters;
-    const conn = resolveConnector(connection, this.context);
-    if (!(conn instanceof NodeConnector)) return conn;
-
-    return tryRun(async () => {
-      const schema = await conn.getSchema();
-      const q = query.toLowerCase();
-      const hits = schema.flatMap((s) =>
-        s.tables
-          .filter(
-            (t) =>
-              t.table.toLowerCase().includes(q) ||
-              t.columns.some((col) => col.name.toLowerCase().includes(q)),
-          )
-          .map((t) => ({ schema: s.schema, table: t.table, columns: t.columns })),
-      );
-      // Match production SearchDBSchema output format: {success, results, queryType, tableCount}
-      const totalTables = schema.reduce((n, s) => n + s.tables.length, 0);
-      const result = {
-        success: true,
-        results: hits.map((h) => ({
-          schema: h,
-          score: 1,
-          matchCount: 1,
-          relevantResults: h.columns.map((col) => ({
-            field: col.name,
-            location: `${h.schema}.${h.table}`,
-            snippet: col.name,
-            matchType: 'column',
-          })),
-        })),
-        queryType: 'string',
-        tableCount: totalTables,
-      };
-      return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
-    });
-  }
-}
-
-class BMExecuteSQL extends ExecuteSQL {
-  async run(): Promise<ToolResponse> {
-    const { connection, sql } = this.parameters;
-    const conn = resolveConnector(connection, this.context);
-    if (!(conn instanceof NodeConnector)) return conn;
-
-    return tryRun(async () => {
-      const result = await conn.query(sql);
-      const compressed = compressQueryResult(result);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(compressed) }],
-        // details.queryResult carries raw rows for UI rendering (not sent to LLM)
-        details: { success: true, queryResult: result },
-        isError: false,
-      };
-    });
-  }
-}
-
-// ── Benchmark agent ────────────────────────────────────────────────────────
-
-class BMAnalystAgent extends AnalystAgent {
-  static readonly tools: Tool<TSchema>[] = [
-    BMListDBConnections.schema,
-    BMSearchDBSchema.schema,
-    BMExecuteSQL.schema,
-    ReadFiles.schema,
-    SearchFiles.schema,
-  ];
-  // `static model` inherits from AnalystAgent (which reads ANALYST_AGENT_MODEL_CONFIG).
-}
-
-// Synthesized benchmark user — full ACL via admin role + /org home folder.
-const BENCHMARK_USER: EffectiveUser = {
-  userId: 1,
-  email: 'benchmark@example.com',
-  name: 'Benchmark Runner',
-  role: 'admin',
-  home_folder: '/org',
-  mode: 'org',
-};
-
-// ── Runner ─────────────────────────────────────────────────────────────────
 
 interface InputRow {
   user_message: string;
@@ -218,9 +66,9 @@ if (inputRows.length === 0) {
     });
   });
 } else {
-  loadConnections();
+  const { connectorsByName, connectionInfos } = loadBenchmarkConnectionsFromEnv();
 
-  if (CONNECTIONS.size === 0) {
+  if (connectorsByName.size === 0) {
     describe('benchmark', () => {
       it('fails: BENCHMARK_CONNECTIONS_CONFIG required when input.jsonl is populated', () => {
         throw new Error(
@@ -240,12 +88,10 @@ if (inputRows.length === 0) {
     writeFileSync(OUTPUT_PATH, '');
 
     const registrables = [
-      BMListDBConnections,
-      BMSearchDBSchema,
-      BMExecuteSQL,
-      ReadFiles,
-      SearchFiles,
-      BMAnalystAgent,
+      ListDBConnections,
+      SearchDBSchema,
+      ExecuteSQL,
+      BenchmarkAnalystAgent,
     ];
 
     describe.each(inputRows.map((row, i) => ({ row, i })))(
@@ -254,16 +100,17 @@ if (inputRows.length === 0) {
         it(
           'runs against the LLM and appends to output.jsonl',
           async () => {
-            const ctx: AnalystAgentContext = {
-              userId: 'benchmark',
-              mode: 'org',
+            // Per-row source wiring: only the row's allowed connections are
+            // resolvable. Schema/SQL routes through `connectorsByName`.
+            setupBenchmarkSources(connectorsByName, new Set(row.allowed_connections));
+
+            const ctx: BenchmarkAnalystContext = {
               connections: row.allowed_connections
-                .map((name) => CONNECTION_INFOS.get(name))
+                .map((name) => connectionInfos.get(name))
                 .filter((c): c is ConnectionInfo => !!c),
-              effectiveUser: BENCHMARK_USER,
             };
             const orch = new Orchestrator(registrables);
-            const agent = new BMAnalystAgent(orch, { userMessage: row.user_message }, ctx);
+            const agent = new BenchmarkAnalystAgent(orch, { userMessage: row.user_message }, ctx);
 
             const startedAt = Date.now();
             let error: string | undefined;

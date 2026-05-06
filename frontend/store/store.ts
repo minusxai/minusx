@@ -5,11 +5,13 @@ import filesReducer from './filesSlice';
 import queryResultsReducer from './queryResultsSlice';
 import configsReducer from './configsSlice';
 import chatReducer from './chatSlice';
+import chatV2Reducer from './chatV2Slice';
 import recordingsReducer from './recordingsSlice';
 import jobRunsReducer from './jobRunsSlice';
 import navigationReducer from './navigationSlice';
 import usersReducer from './usersSlice';
 import { chatListenerMiddleware } from './chatListener';
+import { chatV2ListenerMiddleware } from './chatV2Listener';
 import { navigationListenerMiddleware } from './navigationListener';
 import { analyticsMiddleware } from '@/lib/analytics/middleware';
 
@@ -21,6 +23,7 @@ function getAllReducers() {
     queryResults: queryResultsReducer,
     configs: configsReducer,
     chat: chatReducer,  // Orchestration API with automatic tool execution
+    chatV2: chatV2Reducer,  // TS-orchestrator-driven chat (type:'chat' files)
     recordings: recordingsReducer,  // Session recording state
     jobRuns: jobRunsReducer,        // Job run state (job_runs table records, all job types)
     navigation: navigationReducer,  // Navigation state (pathname, searchParams)
@@ -42,6 +45,7 @@ export function makeStore(preloadedState?: PreloadedState) {
       getDefaultMiddleware()
         .prepend(navigationListenerMiddleware.middleware)
         .prepend(chatListenerMiddleware.middleware)
+        .prepend(chatV2ListenerMiddleware.middleware)
         .concat(analyticsMiddleware),
     ...(preloadedState && { preloadedState }),
   });

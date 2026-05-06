@@ -14,6 +14,7 @@ import PresentationContainerV2 from '@/components/containers/PresentationContain
 import ContextContainerV2 from '@/components/containers/ContextContainerV2';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
 import ConversationContainerV2 from '@/components/containers/ConversationContainerV2';
+import ChatV2Container from '@/components/containers/ChatV2Container';
 import SessionContainerV2 from '@/components/containers/SessionContainerV2';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -50,6 +51,7 @@ export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileCompone
   context: ContextContainerV2,
   connection: ConnectionContainerV2,
   conversation: ConversationContainerV2,
+  chat: ChatV2Container,
   session: SessionContainerV2,
   config: ConfigContainerV2,
   styles: StylesContainerV2,

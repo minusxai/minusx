@@ -392,4 +392,18 @@ export class DocumentDB {
       [id, name, path, DEFAULT_CONVERSATION_NAME]
     );
   }
+
+  /**
+   * Rename + move a file row without touching content. Unconditional —
+   * caller is responsible for any preconditions.
+   */
+  static async renameAndMove(id: number, name: string, path: string): Promise<void> {
+    const db = getModules().db;
+    await db.exec(
+      `UPDATE files
+       SET name = $2, path = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [id, name, path],
+    );
+  }
 }

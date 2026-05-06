@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, 
 import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage, setUseChatV2, selectUseChatV2 } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -363,6 +363,7 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
+  const useChatV2 = useAppSelector(selectUseChatV2);
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -512,6 +513,18 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Experimental Flags',
+      title: 'Use new chat interface (beta)',
+      description: 'Switch from the legacy Conversations to the new Chats surface (TS-orchestrator, /api/chat/v2). Override at runtime with `?v=2` in the URL.',
+      control: (
+        <SwitchControl
+          checked={useChatV2}
+          onChange={(checked) => dispatch(setUseChatV2(checked))}
+        />
+      ),
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
       title: 'Background Agent Mode',
       description: 'Allow the agent to work unrestricted — create and edit files without needing to navigate to the target page first.',
       control: (
@@ -639,7 +652,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, useChatV2, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

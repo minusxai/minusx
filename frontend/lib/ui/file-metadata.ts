@@ -169,6 +169,15 @@ export const FILE_TYPE_METADATA = {
     h: 'none',
     systemCreatedOnly: true,
   },
+  chat: {
+    label: 'Chat',
+    icon: LuFileText,
+    color: 'accent.primary',
+    category: 'engineering',
+    supported: true,
+    h: 'none',
+    systemCreatedOnly: true,
+  },
   session: {
     label: 'Recordings',
     icon: LuPlay,
