@@ -35,13 +35,6 @@ export default function PathPage({ params }: PathPageProps) {
   // Get org configs
   const { config } = useConfigs();
 
-  // Onboarding redirect
-  useEffect(() => {
-    if (config.setupWizard?.status !== 'complete') {
-      router.replace(preserveModeParam('/hello-world'));
-    }
-  }, [config, router]);
-
   // Determine if we're on mobile or desktop (true = mobile, false = desktop).
   // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
   // The lazy useState initializer safely returns undefined on the server (window is absent)
@@ -64,6 +57,15 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Construct full path from segments
   const fullPath = '/' + pathSegments.map(decodeURIComponent).join('/');
+
+  // Onboarding redirect — only for top-level folder pages (/p, /p/org)
+  useEffect(() => {
+    if (config.setupWizard?.status !== 'complete') {
+      if (fullPath === '/' || fullPath === '/org') {
+        router.replace(preserveModeParam('/hello-world'));
+      }
+    }
+  }, [config, router, fullPath]);
 
   // Find the nearest context for this folder path and use as default
   const nearestContext = useAppSelector(state => selectContextFromPath(state, fullPath));

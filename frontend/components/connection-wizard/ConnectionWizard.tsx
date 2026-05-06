@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Box, Text } from '@chakra-ui/react';
+import { Box } from '@chakra-ui/react';
 
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
@@ -17,6 +17,7 @@ import StepStaticUpload from './steps/StepStaticUpload';
 import StepQuestionnaire from './steps/StepQuestionnaire';
 import StepContext from './steps/StepContext';
 import StepGenerating from './steps/StepGenerating';
+import StepSlack from './steps/StepSlack';
 
 export default function ConnectionWizard({
   initialStep = 'connection',
@@ -27,7 +28,7 @@ export default function ConnectionWizard({
   onStepChange,
   onComplete,
   showGreetings = false,
-  showSkipConnection = false,
+  showSkipConnection: _showSkipConnection = false,
   greetings,
 }: ConnectionWizardProps) {
   const [step, setStep] = useState<ConnectionWizardStep>(initialStep);
@@ -44,11 +45,11 @@ export default function ConnectionWizard({
 
   const connectionCriteria = useMemo(() => ({ type: 'connection' as const }), []);
   const { files: connectionFiles } = useFilesByCriteria({ criteria: connectionCriteria, partial: true });
-  const hasConnections = connectionFiles.some(f => (f.id as number) > 0);
+  const _hasConnections = connectionFiles.some(f => (f.id as number) > 0);
 
   // Start schema fetching only after questionnaire is done — avoids blocking the transition
   // from connection step to questionnaire while the schema loader runs.
-  const pastQuestionnaire = step === 'context' || step === 'generating';
+  const pastQuestionnaire = step === 'context' || step === 'generating' || step === 'slack';
   const { connections, loading: connectionsLoading } = useConnections({ skip: !connectionName || !pastQuestionnaire });
 
   const handleConnectionComplete = useCallback((id: number, name: string) => {
@@ -92,11 +93,24 @@ export default function ConnectionWizard({
     });
   }, [onStepChange, connectionId, connectionName]);
 
-  const handleSkipConnection = useCallback(() => {
+  const _handleSkipConnection = useCallback(() => {
     const first = connectionFiles[0];
     if (!first) return;
     handleConnectionComplete(first.id as number, first.name);
   }, [connectionFiles, handleConnectionComplete]);
+
+  const handleGeneratingComplete = useCallback(async () => {
+    setStep('slack');
+    onStepChange?.('slack', {
+      connectionId: connectionId ?? undefined,
+      connectionName: connectionName ?? undefined,
+      contextFileId: contextFileId ?? undefined,
+    });
+  }, [onStepChange, connectionId, connectionName, contextFileId]);
+
+  const handleSlackComplete = useCallback(() => {
+    onComplete?.();
+  }, [onComplete]);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
@@ -157,9 +171,16 @@ export default function ConnectionWizard({
             connectionName={connectionName}
             contextFileId={contextFileId!}
             greeting={greeting('generating')}
-            onComplete={onComplete}
+            onComplete={handleGeneratingComplete}
             staticSchemas={staticSchemas}
             initialPreference={questionnaireAnswers?.dashboardPreference}
+            questionnaireAnswers={questionnaireAnswers}
+          />
+        )}
+        {step === 'slack' && (
+          <StepSlack
+            onComplete={handleSlackComplete}
+            greeting={greeting('slack')}
           />
         )}
       </Box>

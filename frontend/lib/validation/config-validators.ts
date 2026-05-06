@@ -117,12 +117,13 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
     const sw = config.setupWizard as any;
     if (typeof sw !== 'object' || sw === null) return false;
     if (!['pending', 'complete'].includes(sw.status)) return false;
-    const VALID_STEPS = ['welcome', 'connection', 'context', 'generating'];
+    const VALID_STEPS = ['welcome', 'connection', 'questionnaire', 'context', 'generating', 'slack'];
     if (sw.step !== undefined && !VALID_STEPS.includes(sw.step)) return false;
     if (sw.connectionId !== undefined && typeof sw.connectionId !== 'number') return false;
     if (sw.connectionName !== undefined && typeof sw.connectionName !== 'string') return false;
     if (sw.contextFileId !== undefined && typeof sw.contextFileId !== 'number') return false;
-    const VALID_FIELDS = new Set(['status', 'step', 'connectionId', 'connectionName', 'contextFileId']);
+    if (sw.questionnaireAnswers !== undefined && typeof sw.questionnaireAnswers !== 'object') return false;
+    const VALID_FIELDS = new Set(['status', 'step', 'connectionId', 'connectionName', 'contextFileId', 'questionnaireAnswers']);
     for (const field of Object.keys(sw)) {
       if (!VALID_FIELDS.has(field)) return false;
     }

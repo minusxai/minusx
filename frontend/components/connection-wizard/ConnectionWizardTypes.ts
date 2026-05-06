@@ -1,10 +1,11 @@
-export type ConnectionWizardStep = 'connection' | 'questionnaire' | 'context' | 'generating';
+export type ConnectionWizardStep = 'connection' | 'questionnaire' | 'context' | 'generating' | 'slack';
 
 export const WIZARD_STEP_LABELS: Record<ConnectionWizardStep, { number: number; label: string }> = {
   connection: { number: 1, label: 'Connect Data' },
   questionnaire: { number: 2, label: 'Add Context' },
   context: { number: 2, label: 'Add Context' },
   generating: { number: 3, label: 'Build' },
+  slack: { number: 4, label: 'Slack' },
 };
 
 export interface QuestionnaireAnswers {

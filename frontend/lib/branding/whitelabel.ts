@@ -8,7 +8,7 @@ import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigB
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
-  step?: 'welcome' | 'connection' | 'questionnaire' | 'context' | 'generating';
+  step?: 'welcome' | 'connection' | 'questionnaire' | 'context' | 'generating' | 'slack';
   connectionId?: number;
   connectionName?: string;
   contextFileId?: number;
