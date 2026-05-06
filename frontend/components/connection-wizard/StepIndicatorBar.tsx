@@ -5,7 +5,8 @@ import { LuCheck } from 'react-icons/lu';
 import { type ConnectionWizardStep, WIZARD_STEP_LABELS } from './ConnectionWizardTypes';
 import { fadeInUpKeyframes } from '@/lib/ui/animations';
 
-const STEPS: ConnectionWizardStep[] = ['connection', 'context', 'generating', 'slack'];
+const ALL_STEPS: ConnectionWizardStep[] = ['connection', 'context', 'generating', 'slack'];
+const STEPS_WITHOUT_SLACK: ConnectionWizardStep[] = ['connection', 'context', 'generating'];
 
 const stepperKeyframes = `
   @keyframes stepPulse {
@@ -20,9 +21,11 @@ const stepperKeyframes = `
 
 interface StepIndicatorBarProps {
   currentStep: ConnectionWizardStep;
+  showSlackStep?: boolean;
 }
 
-export default function StepIndicatorBar({ currentStep }: StepIndicatorBarProps) {
+export default function StepIndicatorBar({ currentStep, showSlackStep = false }: StepIndicatorBarProps) {
+  const STEPS = showSlackStep ? ALL_STEPS : STEPS_WITHOUT_SLACK;
   const displayStep = currentStep === 'questionnaire' ? 'context' : currentStep;
 
   return (

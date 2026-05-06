@@ -41,4 +41,6 @@ export interface ConnectionWizardProps {
   showSkipConnection?: boolean;
   /** Custom greeting strings per step. */
   greetings?: Partial<Record<ConnectionWizardStep, string>>;
+  /** Whether to show the Slack integration step after generating. Default: false. */
+  showSlackStep?: boolean;
 }

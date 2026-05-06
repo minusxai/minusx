@@ -30,6 +30,7 @@ export default function ConnectionWizard({
   showGreetings = false,
   showSkipConnection: _showSkipConnection = false,
   greetings,
+  showSlackStep = false,
 }: ConnectionWizardProps) {
   const [step, setStep] = useState<ConnectionWizardStep>(initialStep);
   const [connectionId, setConnectionId] = useState<number | null>(initialConnectionId);
@@ -100,13 +101,17 @@ export default function ConnectionWizard({
   }, [connectionFiles, handleConnectionComplete]);
 
   const handleGeneratingComplete = useCallback(async () => {
-    setStep('slack');
-    onStepChange?.('slack', {
-      connectionId: connectionId ?? undefined,
-      connectionName: connectionName ?? undefined,
-      contextFileId: contextFileId ?? undefined,
-    });
-  }, [onStepChange, connectionId, connectionName, contextFileId]);
+    if (showSlackStep) {
+      setStep('slack');
+      onStepChange?.('slack', {
+        connectionId: connectionId ?? undefined,
+        connectionName: connectionName ?? undefined,
+        contextFileId: contextFileId ?? undefined,
+      });
+    } else {
+      onComplete?.();
+    }
+  }, [showSlackStep, onStepChange, onComplete, connectionId, connectionName, contextFileId]);
 
   const handleSlackComplete = useCallback(() => {
     onComplete?.();
@@ -121,7 +126,7 @@ export default function ConnectionWizard({
   return (
     <>
       <style>{fadeInUpKeyframes}</style>
-      <StepIndicatorBar currentStep={step} />
+      <StepIndicatorBar currentStep={step} showSlackStep={showSlackStep} />
 
       <Box
         bg="bg.surface"

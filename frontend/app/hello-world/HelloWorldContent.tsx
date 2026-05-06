@@ -357,6 +357,7 @@ export function HelloWorldContent() {
             onComplete={handleComplete}
             showGreetings
             showSkipConnection
+            showSlackStep
             greetings={{
               connection: "Step 1: Let's connect your data.",
               questionnaire: "Tell us about your data.",
