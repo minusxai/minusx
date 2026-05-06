@@ -40,14 +40,12 @@ export class SearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benchmar
     const whitelist = this.context.whitelistedTables;
     const filtered = whitelist
       ? hits.filter((h) => {
-          const bare = h.table;
+          if (whitelist.includes(h.table)) return true;
           // Some schema sources return `{schema, table}`; others just `{table}`.
-          // Try both forms against the whitelist.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const schema = (h as any).schema as string | undefined;
-          if (whitelist.includes(bare)) return true;
-          if (schema && whitelist.includes(`${schema}.${bare}`)) return true;
-          return false;
+          // The qualified `schema.table` form is checked when the source
+          // exposes a schema field on the hit.
+          const schema = (h as { schema?: unknown }).schema;
+          return typeof schema === 'string' && whitelist.includes(`${schema}.${h.table}`);
         })
       : hits;
     return {
