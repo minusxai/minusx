@@ -195,54 +195,35 @@ function UploadScreen({ onDrop, onInputChange }: {
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <Flex
-      align="center"
-      justify="center"
-      minH="calc(100vh - 120px)"
-    >
-      <VStack gap={6} maxW="480px" textAlign="center">
-        <Box
-          p={4}
-          borderRadius="full"
-          bg="bg.subtle"
-        >
-          <Icon as={LuUpload} boxSize="8" color="fg.muted" />
-        </Box>
-        <VStack gap={1}>
-          <Text fontSize="lg" fontWeight="semibold">Benchmark Log Viewer</Text>
-          <Text fontSize="sm" color="fg.muted">
-            Upload a conversation JSON or benchmark output.jsonl to inspect agent runs
-          </Text>
+    <Flex align="center" justify="center" minH="calc(100vh - 120px)">
+      <Box
+        maxW="400px"
+        w="100%"
+        border="2px dashed"
+        borderColor="border.muted"
+        borderRadius="xl"
+        p={12}
+        cursor="pointer"
+        transition="all 0.15s"
+        textAlign="center"
+        onDrop={onDrop}
+        onDragOver={e => e.preventDefault()}
+        onClick={() => document.getElementById('benchmark-file-input')?.click()}
+        _hover={{ borderColor: 'accent.teal', bg: 'bg.subtle' }}
+      >
+        <input
+          id="benchmark-file-input"
+          type="file"
+          accept=".json,.jsonl"
+          onChange={onInputChange}
+          style={{ display: 'none' }}
+        />
+        <VStack gap={3}>
+          <Icon as={LuUpload} boxSize="6" color="fg.muted" />
+          <Text fontSize="sm" fontWeight="medium">Drop a log file or click to browse</Text>
+          <Text fontSize="2xs" color="fg.subtle">.json or .jsonl</Text>
         </VStack>
-        <Box
-          border="2px dashed"
-          borderColor="border.muted"
-          borderRadius="lg"
-          p={10}
-          w="100%"
-          cursor="pointer"
-          transition="all 0.15s"
-          onDrop={onDrop}
-          onDragOver={e => e.preventDefault()}
-          onClick={() => document.getElementById('benchmark-file-input')?.click()}
-          _hover={{ borderColor: 'fg.subtle', bg: 'bg.subtle' }}
-        >
-          <input
-            id="benchmark-file-input"
-            type="file"
-            accept=".json,.jsonl"
-            onChange={onInputChange}
-            style={{ display: 'none' }}
-          />
-          <VStack gap={2}>
-            <Icon as={LuFileText} boxSize="6" color="fg.subtle" />
-            <Text fontSize="sm" color="fg.muted">
-              Drop file here or click to browse
-            </Text>
-            <Text fontSize="2xs" color="fg.subtle">.json or .jsonl</Text>
-          </VStack>
-        </Box>
-      </VStack>
+      </Box>
     </Flex>
   );
 }
@@ -328,19 +309,16 @@ export default function BenchmarkPage() {
             justify="space-between"
             bg="bg.subtle"
           >
-            <HStack gap={2}>
-              <Icon as={LuFileText} boxSize="4" color="fg.muted" />
-              <Text fontSize="sm" fontWeight="medium">{fileName}</Text>
-            </HStack>
-            <Text
-              fontSize="xs"
-              color="accent.primary"
-              cursor="pointer"
-              _hover={{ textDecoration: 'underline' }}
+            <Text fontSize="sm" fontWeight="medium" truncate>{fileName}</Text>
+            <Button
+              size="xs"
+              variant="outline"
+              borderColor="border.muted"
               onClick={resetFile}
+              flexShrink={0}
             >
-              Upload new file
-            </Text>
+              <LuUpload />
+            </Button>
           </HStack>
         )}
 
@@ -363,24 +341,16 @@ export default function BenchmarkPage() {
           {/* Sidebar header */}
           <Box px={4} py={3} borderBottom="1px solid" borderColor="border.muted">
             <HStack justify="space-between" align="center">
-              <HStack gap={2}>
-                <Box w="2px" h="14px" bg="accent.primary" borderRadius="full" />
-                <Text fontSize="sm" fontWeight="semibold">Benchmark</Text>
-              </HStack>
-              <Text
-                fontSize="xs"
-                color="accent.primary"
-                cursor="pointer"
-                fontWeight="medium"
-                _hover={{ textDecoration: 'underline' }}
+              <Text fontSize="sm" fontWeight="semibold" truncate>{fileName}</Text>
+              <Button
+                size="xs"
+                variant="outline"
+                borderColor="border.muted"
                 onClick={resetFile}
+                flexShrink={0}
               >
-                New file
-              </Text>
-            </HStack>
-            <HStack gap={1.5} mt={1.5} ml={3}>
-              <Icon as={LuFileText} boxSize="3" color="fg.subtle" />
-              <Text fontSize="2xs" color="fg.subtle" truncate>{fileName}</Text>
+                <LuUpload />
+              </Button>
             </HStack>
           </Box>
 
