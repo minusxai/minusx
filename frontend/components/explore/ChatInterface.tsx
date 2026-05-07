@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
@@ -33,7 +33,7 @@ import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectDevMode } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import ToolCallListModal from './ToolCallListModal';
+import ToolDebugBar from './ToolDebugBar';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
 // next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
@@ -205,7 +205,6 @@ export default function ChatInterface({
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const showExpandedMessages = useAppSelector(selectShowExpandedMessages);
   const viewMode = showExpandedMessages ? 'detailed' : 'compact';
-  const [showToolInspector, setShowToolInspector] = useState(false)
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
 
@@ -793,20 +792,6 @@ export default function ChatInterface({
                 </Button>
               </Tooltip>
             )}
-            {userIsAdmin && devMode && allMessages.length > 0 && (
-              <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
-                <Button
-                  onClick={() => setShowToolInspector(true)}
-                  size="xs"
-                  variant="outline"
-                  borderColor="border.muted"
-                  color="fg.subtle"
-                  _hover={{ color: 'accent.teal', borderColor: 'accent.teal' }}
-                >
-                  <LuTerminal />
-                </Button>
-              </Tooltip>
-            )}
             {/* ViewModeToggle removed — always use compact */}
             </HStack>
             <HStack gap={2}>
@@ -834,6 +819,8 @@ export default function ChatInterface({
           </Box>
         </Box>
       )}
+
+      {userIsAdmin && devMode && <ToolDebugBar messages={allMessages} />}
 
       <Box position="relative" flex="1" overflow="hidden">
         <Box
@@ -1001,14 +988,6 @@ export default function ChatInterface({
         )}
       </Box>
 
-      {/* Admin tool call inspector */}
-      {userIsAdmin && showToolInspector && (
-        <ToolCallListModal
-          messages={allMessages}
-          isOpen={showToolInspector}
-          onClose={() => setShowToolInspector(false)}
-        />
-      )}
 
       {/* Continue chat confirmation banner for conversations from other pages */}
       {needsContinueConfirmation && parentPageInfo && (

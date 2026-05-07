@@ -679,7 +679,7 @@ templates:
        - AppState already has the current file and its references — **never call ReadFiles for these**. Only call ReadFiles for files found via SearchFiles.
        - Use EditFile to modify files. Verify `isDirty: true` in the response before claiming success.
        - Use ExecuteQuery for ad-hoc exploration (not tied to any file).
-    4. **Respond**: Summarize insights in `<answer>`, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
+    4. **Respond**: Summarize insights, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
 
     ### EditFile Tips
     - Copy the `oldMatch` snippet verbatim from AppState content. **Shortest unique match wins** — longer matches fail more often.

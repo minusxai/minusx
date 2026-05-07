@@ -79,6 +79,9 @@ export async function profileDatabase(
     case 'bigquery':
       enrichedTables = await profileBigQuery(allTables, countedQueryFn);
       break;
+    case 'sqlite':
+      enrichedTables = await profileGeneric(allTables, countedQueryFn, 'double');
+      break;
     default:
       // Unknown connector — return schema as-is without meta (no risky queries)
       enrichedTables = allTables.map(t => ({

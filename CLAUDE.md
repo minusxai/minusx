@@ -212,6 +212,20 @@ The configs system provides per-company configuration stored as database documen
 6. Return QueryResult (columns, types, rows)
 7. Visualization updates with data
 
+**Schema Profiling & Statistics Enrichment**
+
+Connection schemas are enriched with column-level metadata (category classification, null counts, top values, min/max ranges) via `lib/connections/statistics-engine.ts`. The `profileDatabase(connectorType, schema, queryFn)` function dispatches to connector-specific strategies:
+
+| Connector | Strategy | Method |
+|-----------|----------|--------|
+| PostgreSQL | `pg_stats` + `pg_class` (2 queries total) | Batch row counts + stats from catalog tables |
+| DuckDB/CSV/Google Sheets | `SUMMARIZE` per table + top-value queries | DuckDB's built-in table summary |
+| BigQuery | `INFORMATION_SCHEMA.COLUMN_FIELD_PATHS` | Descriptions only (no table scans) |
+| SQLite | Generic SQL (`COUNT(DISTINCT ...)` per table) | Standard SQL aggregations |
+| Unknown | Pass-through | Schema returned without meta |
+
+Profiling runs during connection schema refresh in `lib/data/loaders/connection-loader.ts`. The enriched schema is cached in the connection document's content. The `ColumnMeta` interface (defined in `lib/connections/base.ts`) carries `category`, `nullCount`, `nDistinct`, `topValues`, `min/max/avg`, and `minDate/maxDate`.
+
 **State Management**
 - Redux for page-level state (questions, dashboards)
 - Dual-state pattern: `originalState` (from DB) vs `currentState` (edited)

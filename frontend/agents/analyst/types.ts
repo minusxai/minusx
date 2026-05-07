@@ -1,5 +1,6 @@
 import type { AgentContext } from '@/orchestrator/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { ConnectorConfigMap, ConnectorDialect } from '@/lib/connections/base';
 
 /** Metadata about a database connection visible to the agent. */
 export interface ConnectionInfo {
@@ -7,6 +8,16 @@ export interface ConnectionInfo {
   dialect: string;
   description?: string;
 }
+
+/** Full connection entry used in benchmark config (JSON file or env var). */
+export type BenchmarkConnectionEntry = {
+  [D in ConnectorDialect]: {
+    name: string;
+    dialect: D;
+    config: ConnectorConfigMap[D];
+    description?: string;
+  };
+}[ConnectorDialect];
 
 /**
  * Context shape for AnalystAgent (and its descendants like SlackAgent and the

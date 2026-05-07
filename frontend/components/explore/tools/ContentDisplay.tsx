@@ -61,8 +61,24 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
     citations = [];
   }
 
+  // Extract <suggested_questions> and <trust_info> blocks from content before
+  // parseThinkingAnswer runs, so they don't end up in `unparsed` (which renders
+  // above the answer). They'll be re-appended to the last answer block later.
+  let trailingXml = '';
+  let contentForParsing = content;
+  if (content) {
+    const xmlBlocks: string[] = [];
+    const strippedContent = content
+      .replace(/<suggested_questions>[\s\S]*?<\/suggested_questions>/g, (m: string) => { xmlBlocks.push(m); return ''; })
+      .replace(/<trust_info[\s\S]*?<\/trust_info>/g, (m: string) => { xmlBlocks.push(m); return ''; });
+    if (xmlBlocks.length > 0) {
+      trailingXml = xmlBlocks.join('\n\n');
+      contentForParsing = strippedContent;
+    }
+  }
+
   // Backward compat: old messages used <thinking>/<answer> XML tags in the text content
-  const legacyParsed = nativeThinkingBlocks.length === 0 ? parseThinkingAnswer(content) : null;
+  const legacyParsed = nativeThinkingBlocks.length === 0 ? parseThinkingAnswer(contentForParsing) : null;
 
   const hasNativeThinking = nativeThinkingBlocks.length > 0;
   const hasLegacyThinking = !!legacyParsed?.thinking?.length;
@@ -158,8 +174,11 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
   // Determine what thinking blocks to show
   const thinkingToRender = hasNativeThinking ? nativeThinkingBlocks : (legacyParsed?.thinking ?? []);
 
-  // Determine what answer content to render
-  const answerBlocks = legacyParsed ? legacyParsed.answer : (content ? [content] : []);
+  // Determine what answer content to render, appending extracted XML to the last block
+  const rawAnswerBlocks = legacyParsed ? legacyParsed.answer : (contentForParsing ? [contentForParsing] : []);
+  const answerBlocks = trailingXml && rawAnswerBlocks.length > 0
+    ? [...rawAnswerBlocks.slice(0, -1), rawAnswerBlocks[rawAnswerBlocks.length - 1] + '\n\n' + trailingXml]
+    : rawAnswerBlocks;
 
   useEffect(() => {
     if (answerBlocks.length > 0) {

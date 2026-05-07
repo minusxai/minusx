@@ -2,16 +2,17 @@
 //
 // Reads `input.jsonl` (sibling file, gitignored) and writes one line per row
 // to `output.jsonl` containing the full conversation log. Connections come
-// from `BENCHMARK_CONNECTIONS_CONFIG` (JSON env var). Model comes from
-// `ANALYST_AGENT_MODEL_CONFIG` (handled by AnalystAgent itself).
+// from a JSON file (--connections path) or `BENCHMARK_CONNECTIONS_CONFIG` env var.
+// Model comes from `ANALYST_AGENT_MODEL_CONFIG` (handled by AnalystAgent itself).
 //
 // Behavior:
 //   - input.jsonl missing/empty       → describe.skip (no-op, CI-safe)
-//   - BENCHMARK_CONNECTIONS_CONFIG    → required when input populated
+//   - connections config               → required when input populated
 //   - ANALYST_AGENT_MODEL_CONFIG       → required when input populated
 //
 // Run with:
-//   cd frontend && npm test -- benchmark_runner
+//   cd frontend && BENCHMARK_INPUT=path/to/input.jsonl BENCHMARK_CONNECTIONS=path/to/connections.json npm test -- benchmark_runner
+//   cd frontend && BENCHMARK_CONNECTIONS_CONFIG='[...]' npm test -- benchmark_runner
 
 import 'dotenv/config';
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
@@ -20,9 +21,10 @@ import { fileURLToPath } from 'node:url';
 import type { Tool, TSchema } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ToolResponse } from '@/orchestrator/types';
-import type { AnalystAgentContext, ConnectionInfo } from '@/agents/analyst/types';
+import type { AnalystAgentContext, ConnectionInfo, BenchmarkConnectionEntry } from '@/agents/analyst/types';
 import { getNodeConnector } from '@/lib/connections';
 import { NodeConnector } from '@/lib/connections/base';
+import { compressQueryResult } from '@/lib/api/compress-augmented';
 import {
   AnalystAgent,
   ExecuteSQL,
@@ -35,24 +37,38 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const INPUT_PATH = path.join(__dirname, 'input.jsonl');
-const OUTPUT_PATH = path.join(__dirname, 'output.jsonl');
+
+// eslint-disable-next-line no-restricted-syntax -- benchmark reads its own scoped env vars directly
+// eslint-disable-next-line no-restricted-syntax -- benchmark reads its own scoped env vars directly
+const INPUT_PATH = process.env.BENCHMARK_INPUT
+  ? path.resolve(process.env.BENCHMARK_INPUT)
+  : path.join(__dirname, 'input.jsonl');
+const OUTPUT_PATH = path.join(
+  path.dirname(INPUT_PATH),
+  path.basename(INPUT_PATH).replace('input', 'output'),
+);
 
 // ── Connection map (built once at module load when input is populated) ─────
 
 const CONNECTIONS = new Map<string, NodeConnector>();
 const CONNECTION_INFOS = new Map<string, ConnectionInfo>();
 
+/**
+ * Resolve connections config: --connections <file> arg takes priority,
+ * then BENCHMARK_CONNECTIONS_CONFIG env var, then undefined (not present).
+ */
+function resolveConnectionsJson(): string | undefined {
+  // eslint-disable-next-line no-restricted-syntax -- benchmark module reads its own scoped env vars directly
+  const connFile = process.env.BENCHMARK_CONNECTIONS;
+  if (connFile) return readFileSync(path.resolve(connFile), 'utf-8');
+  // eslint-disable-next-line no-restricted-syntax -- benchmark module reads its own scoped env vars directly
+  return process.env.BENCHMARK_CONNECTIONS_CONFIG;
+}
+
 function loadConnections(): void {
-  // eslint-disable-next-line no-restricted-syntax -- benchmark module reads its own scoped env var directly
-  const raw = process.env.BENCHMARK_CONNECTIONS_CONFIG;
+  const raw = resolveConnectionsJson();
   if (!raw) return;
-  const entries = JSON.parse(raw) as Array<{
-    name: string;
-    dialect: string;
-    config: Record<string, unknown>;
-    description?: string;
-  }>;
+  const entries = JSON.parse(raw) as BenchmarkConnectionEntry[];
   for (const { name, dialect, config, description } of entries) {
     const c = getNodeConnector(name, dialect, config);
     if (!c) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
@@ -116,7 +132,25 @@ class BMSearchDBSchema extends SearchDBSchema {
           )
           .map((t) => ({ schema: s.schema, table: t.table, columns: t.columns })),
       );
-      return { content: [{ type: 'text', text: JSON.stringify(hits) }], isError: false };
+      // Match production SearchDBSchema output format: {success, results, queryType, tableCount}
+      const totalTables = schema.reduce((n, s) => n + s.tables.length, 0);
+      const result = {
+        success: true,
+        results: hits.map((h) => ({
+          schema: h,
+          score: 1,
+          matchCount: 1,
+          relevantResults: h.columns.map((col) => ({
+            field: col.name,
+            location: `${h.schema}.${h.table}`,
+            snippet: col.name,
+            matchType: 'column',
+          })),
+        })),
+        queryType: 'string',
+        tableCount: totalTables,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
     });
   }
 }
@@ -129,7 +163,13 @@ class BMExecuteSQL extends ExecuteSQL {
 
     return tryRun(async () => {
       const result = await conn.query(sql);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows) }], isError: false };
+      const compressed = compressQueryResult(result);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(compressed) }],
+        // details.queryResult carries raw rows for UI rendering (not sent to LLM)
+        details: { success: true, queryResult: result },
+        isError: false,
+      };
     });
   }
 }
@@ -184,7 +224,7 @@ if (inputRows.length === 0) {
     describe('benchmark', () => {
       it('fails: BENCHMARK_CONNECTIONS_CONFIG required when input.jsonl is populated', () => {
         throw new Error(
-          'Set BENCHMARK_CONNECTIONS_CONFIG to a JSON array of {name, dialect, config}.',
+          'Pass --connections <file.json> or set BENCHMARK_CONNECTIONS_CONFIG env var.',
         );
       });
     });

@@ -44,6 +44,54 @@ export interface TestConnectionResult {
   schema?: { schemas: SchemaEntry[] } | null;
 }
 
+// ─── Per-dialect config shapes ──────────────────────────────────────────────
+
+export interface DuckDbConfig { file_path: string }
+export interface SqliteConfig { file_path: string }
+export interface PostgresConfig {
+  host?: string;
+  port?: number;
+  database: string;
+  username: string;
+  password?: string;
+  ssl?: Record<string, unknown>;
+}
+export interface BigQueryConfig {
+  project_id: string;
+  service_account_json: string;
+}
+export interface AthenaConfig {
+  region_name?: string;
+  s3_staging_dir: string;
+  aws_access_key_id?: string;
+  aws_secret_access_key?: string;
+  work_group?: string;
+}
+export interface CsvConfig {
+  files: Array<{
+    table_name: string;
+    schema_name: string;
+    s3_key: string;
+    file_format: 'csv' | 'parquet';
+    row_count: number;
+    columns: Array<{ name: string; type: string }>;
+  }>;
+}
+
+/** Maps dialect string → config shape. */
+export interface ConnectorConfigMap {
+  duckdb: DuckDbConfig;
+  sqlite: SqliteConfig;
+  postgresql: PostgresConfig;
+  bigquery: BigQueryConfig;
+  athena: AthenaConfig;
+  csv: CsvConfig;
+  'google-sheets': CsvConfig;
+  internal_db: Record<string, unknown>;
+}
+
+export type ConnectorDialect = keyof ConnectorConfigMap;
+
 /**
  * Abstract base class for Node.js database connectors.
  * Mirrors Python's AsyncDatabaseConnector interface.
