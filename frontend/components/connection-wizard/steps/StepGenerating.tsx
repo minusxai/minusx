@@ -17,6 +17,7 @@ import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
+import { useLegacyChatData } from '@/lib/chat-data-source';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
@@ -460,16 +461,24 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
               h="400px"
               mt={2}
             >
-              <ChatInterface
-                contextPath="/org/context"
-                databaseName={connectionName}
-                container="sidebar"
-                readOnly
-              />
+              <WizardGeneratingChat connectionName={connectionName} />
             </Box>
           </Collapsible.Content>
         </Collapsible.Root>
       )}
     </VStack>
+  );
+}
+
+function WizardGeneratingChat({ connectionName }: { connectionName: string }) {
+  const dataSource = useLegacyChatData(undefined);
+  return (
+    <ChatInterface
+      dataSource={dataSource}
+      contextPath="/org/context"
+      databaseName={connectionName}
+      container="sidebar"
+      readOnly
+    />
   );
 }

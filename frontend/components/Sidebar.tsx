@@ -325,12 +325,10 @@ export default function Sidebar() {
           ))}
         </VStack>
 
-        {/* Recent Conversations — legacy 'conversation' files. Hidden when
-            ?v=2 is on so the user never accidentally navigates into the
-            legacy ExploreInterface (which posts to /api/chat/stream). The
-            chat-v2 list lives at /chats and is reached via the "Chats" nav
-            link above. */}
-        {!isCollapsed && !useChatV2 ? (
+        {/* Recent Conversations — surfaces the chat history list. The list
+            shows legacy 'conversation' files in default mode and 'chat'
+            files in v=2 mode (ConversationList branches internally). */}
+        {!isCollapsed ? (
           <Box>
             <HStack
               px={3}

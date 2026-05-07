@@ -26,8 +26,26 @@ import type { ConversationLog, PendingToolCall, StreamEvent } from '@/orchestrat
 import { bridgePendingTools } from '@/lib/api/chat-v2/bridge';
 import type { ToolResultMessage } from '@mariozechner/pi-ai';
 import type { DatabaseWithSchema } from '@/lib/types';
+import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
+import { getCurrentMode } from '@/lib/mode/mode-utils';
+import { IS_TEST } from '@/lib/constants';
 
 const API_BASE_URL = typeof window === 'undefined' ? 'http://localhost:3000' : '';
+
+// Mirror lib/api/fetch-patch.ts. XHR doesn't go through patched window.fetch,
+// so we have to thread as_user / mode / v onto the URL ourselves.
+function patchApiUrl(path: string): string {
+  if (typeof window === 'undefined') return path;
+  const asUser = getCurrentAsUser();
+  const mode = getCurrentMode();
+  const v = getCurrentV();
+  if (!asUser && mode === 'org' && !v) return path;
+  const url = new URL(path, window.location.origin);
+  if (asUser) url.searchParams.set('as_user', asUser);
+  if (mode !== 'org') url.searchParams.set('mode', mode);
+  if (v) url.searchParams.set('v', v);
+  return url.pathname + url.search;
+}
 
 interface ChatV2Response {
   chatId: number;
@@ -54,15 +72,17 @@ interface SsePostResult {
 }
 
 /**
- * Streaming POST. Yields each orchestrator event to `onOrchestratorEvent`
- * as it arrives. Resolves when the `done` SSE frame is received.
+ * Fetch-based SSE for tests (Node env). Tests mock global.fetch and return a
+ * Response with a string body — the real ReadableStream-on-Response path
+ * streams those bytes correctly. Browser uses postChatV2StreamXHR instead
+ * (see `postChatV2Stream` dispatcher below).
  */
-async function postChatV2Stream(
+async function postChatV2StreamFetch(
   body: Record<string, unknown>,
-  onOrchestratorEvent: (ev: StreamEvent) => void,
+  onOrchestratorEvent: (ev: StreamEvent) => Promise<void> | void,
   signal?: AbortSignal,
 ): Promise<SsePostResult> {
-  const res = await fetch(`${API_BASE_URL}/api/chat/v2/stream`, {
+  const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/chat/v2/stream`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify(body),
@@ -88,14 +108,11 @@ async function postChatV2Stream(
     while ((idx = buffer.indexOf('\n\n')) !== -1) {
       const chunk = buffer.slice(0, idx);
       buffer = buffer.slice(idx + 2);
-      const lines = chunk.split('\n');
-      const eventLine = lines.find((l) => l.startsWith('event: '));
-      const dataLine = lines.find((l) => l.startsWith('data: '));
-      if (!eventLine || !dataLine) continue;
-      const event = eventLine.slice('event: '.length);
-      const data = JSON.parse(dataLine.slice('data: '.length));
+      const parsed = parseSSEChunk(chunk);
+      if (!parsed) continue;
+      const { event, data } = parsed;
       if (event === 'orchestrator') {
-        onOrchestratorEvent(data as StreamEvent);
+        await onOrchestratorEvent(data as StreamEvent);
       } else if (event === 'done') {
         finalResponse = data as ChatV2Response;
       } else if (event === 'error') {
@@ -110,6 +127,140 @@ async function postChatV2Stream(
   return { response: finalResponse, error: errorPayload };
 }
 
+function parseSSEChunk(chunk: string): { event: string; data: unknown } | null {
+  const lines = chunk.trim().split('\n');
+  let event = '';
+  let data = '';
+  for (const line of lines) {
+    if (line.startsWith('event:')) event = line.substring(6).trim();
+    else if (line.startsWith('data:')) data = line.substring(5).trim();
+  }
+  if (!event || !data) return null;
+  try {
+    return { event, data: JSON.parse(data) };
+  } catch (e) {
+    console.error('[chat/v2/stream] failed to parse SSE data:', e);
+    return null;
+  }
+}
+
+/**
+ * Streaming POST via XMLHttpRequest. Yields each orchestrator event to
+ * `onOrchestratorEvent` as it arrives. Resolves when the `done` SSE frame
+ * is received.
+ *
+ * Uses XHR instead of fetch() because Next.js/React patches the global
+ * fetch() to buffer entire responses before resolving, which breaks SSE —
+ * the browser receives all bytes at once only after the stream closes. XHR's
+ * onprogress fires incrementally as each chunk arrives. (Mirrors the legacy
+ * streamChatSSE pattern in chatListener.ts.)
+ *
+ * Streaming events are serialised through `processingChain` so React renders
+ * each chunk in order — the setTimeout(0) yield inside the dispatch call
+ * needs to complete before the next dispatch.
+ */
+function postChatV2StreamXHR(
+  body: Record<string, unknown>,
+  onOrchestratorEvent: (ev: StreamEvent) => Promise<void> | void,
+  signal?: AbortSignal,
+): Promise<SsePostResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', patchApiUrl(`${API_BASE_URL}/api/chat/v2/stream`));
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Accept', 'text/event-stream');
+
+    let offset = 0;
+    let buffer = '';
+    let finalResponse: ChatV2Response | null = null;
+    let errorPayload: string | undefined;
+    let processingChain: Promise<void> = Promise.resolve();
+
+    const onAbort = () => xhr.abort();
+    if (signal) {
+      if (signal.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    xhr.onprogress = () => {
+      const newText = xhr.responseText.slice(offset);
+      offset = xhr.responseText.length;
+
+      buffer += newText;
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop() || '';
+
+      for (const chunk of chunks) {
+        if (!chunk.trim()) continue;
+        const parsed = parseSSEChunk(chunk);
+        if (!parsed) continue;
+        const { event, data } = parsed;
+
+        if (event === 'orchestrator') {
+          const captured = data as StreamEvent;
+          processingChain = processingChain.then(() =>
+            Promise.resolve(onOrchestratorEvent(captured)),
+          );
+        } else if (event === 'done') {
+          finalResponse = data as ChatV2Response;
+        } else if (event === 'error') {
+          errorPayload = (data as { error?: string })?.error ?? 'stream error';
+        }
+      }
+    };
+
+    xhr.onload = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`/api/chat/v2/stream ${xhr.status}: ${xhr.responseText.slice(0, 500)}`));
+        return;
+      }
+      // Drain queued event handlers before resolving.
+      processingChain.then(() => {
+        if (!finalResponse) {
+          reject(
+            new Error(
+              errorPayload ?? '/api/chat/v2/stream: stream ended without a `done` frame',
+            ),
+          );
+          return;
+        }
+        resolve({ response: finalResponse, error: errorPayload });
+      });
+    };
+
+    xhr.onerror = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      reject(new Error('Network error'));
+    };
+
+    xhr.onabort = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      const err = new Error('The operation was aborted.');
+      err.name = 'AbortError';
+      reject(err);
+    };
+
+    xhr.send(JSON.stringify(body));
+  });
+}
+
+/**
+ * Streaming POST. In the browser, uses XHR (Next.js patches global fetch
+ * to buffer the entire response, breaking SSE — XHR onprogress fires per
+ * chunk). In Node tests, fetch streams correctly so we use fetch directly.
+ */
+function postChatV2Stream(
+  body: Record<string, unknown>,
+  onOrchestratorEvent: (ev: StreamEvent) => Promise<void> | void,
+  signal?: AbortSignal,
+): Promise<SsePostResult> {
+  if (IS_TEST || typeof XMLHttpRequest === 'undefined') {
+    return postChatV2StreamFetch(body, onOrchestratorEvent, signal);
+  }
+  return postChatV2StreamXHR(body, onOrchestratorEvent, signal);
+}
+
 export const chatV2ListenerMiddleware = createListenerMiddleware();
 
 chatV2ListenerMiddleware.startListening({
@@ -118,7 +269,7 @@ chatV2ListenerMiddleware.startListening({
     const dispatch = listenerApi.dispatch as AppDispatch;
     const initialChatId = action.payload.chatId ?? 0;
 
-    dispatch(chatTurnStarted({ chatId: initialChatId }));
+    dispatch(chatTurnStarted({ chatId: initialChatId, userMessage: action.payload.message }));
 
     let resolvedChatId = initialChatId;
     const onEvent = (ev: StreamEvent) => {

@@ -94,6 +94,12 @@ import FilesList from '@/components/FilesList';
 import ViewStackOverlay from '@/components/ViewStack';
 import LayoutWrapper from '@/components/LayoutWrapper';
 import ChatInterface from '@/components/explore/ChatInterface';
+import { useLegacyChatData } from '@/lib/chat-data-source';
+
+function ChatInterfaceWithLegacy({ conversationId, ...rest }: { conversationId: number | undefined; contextPath: string; container?: 'page' | 'sidebar' }) {
+  const dataSource = useLegacyChatData(conversationId);
+  return <ChatInterface dataSource={dataSource} {...rest} contextPath={rest.contextPath} />;
+}
 
 // ─── EditFileDisplay restore buttons ─────────────────────────────────────────
 
@@ -492,7 +498,7 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     renderWithProviders(
-      <ChatInterface
+      <ChatInterfaceWithLegacy
         conversationId={undefined}
         contextPath="/org"
         container="page"
@@ -517,7 +523,7 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     renderWithProviders(
-      <ChatInterface
+      <ChatInterfaceWithLegacy
         conversationId={undefined}
         contextPath="/org"
         container="page"
@@ -534,7 +540,7 @@ describe('Explore page: database selector defaults to first connection', () => {
 
   it('auto-selects first connection when connections arrive after render (SSR timeout scenario)', async () => {
     renderWithProviders(
-      <ChatInterface
+      <ChatInterfaceWithLegacy
         conversationId={undefined}
         contextPath="/org"
         container="page"

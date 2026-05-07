@@ -9,6 +9,7 @@ import { AppState } from '@/lib/appState';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
+import { useChatData } from '@/lib/chat-data-source';
 import AppStateViewer from './AppStateViewer';
 import { ReactNode } from 'react';
 import { useContext } from '@/lib/hooks/useContext';
@@ -303,13 +304,11 @@ export default function MobileRightSidebar({
 
               {activeSection === 'chat' && (
                 <Box height="calc(75vh - 60px)" overflow="hidden">
-                  <ChatInterface
-                    conversationId={conversationID}
+                  <MobileSidebarChat
+                    conversationID={conversationID}
                     contextPath={selectedContextPath || filePath}
                     contextVersion={contextVersion}
-                    databaseName={null}  // Auto-select from context
                     appState={appState || null}
-                    container="sidebar"
                     onContextChange={onContextChange}
                   />
                 </Box>
@@ -333,5 +332,32 @@ export default function MobileRightSidebar({
       </Dialog.Root>
       </Box>
     </>
+  );
+}
+
+function MobileSidebarChat({
+  conversationID,
+  contextPath,
+  contextVersion,
+  appState,
+  onContextChange,
+}: {
+  conversationID: number | undefined;
+  contextPath: string;
+  contextVersion: number | undefined;
+  appState: import('@/lib/appState').AppState | null;
+  onContextChange: ((path: string | null, version?: number) => void) | undefined;
+}) {
+  const dataSource = useChatData(conversationID);
+  return (
+    <ChatInterface
+      dataSource={dataSource}
+      contextPath={contextPath}
+      contextVersion={contextVersion}
+      databaseName={null}
+      appState={appState}
+      container="sidebar"
+      onContextChange={onContextChange}
+    />
   );
 }

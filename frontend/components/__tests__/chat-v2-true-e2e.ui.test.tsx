@@ -55,8 +55,7 @@ vi.mock('@/components/Markdown', () => {
 });
 
 import React from 'react';
-import { screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { waitFor, act } from '@testing-library/react';
 import {
   fauxAssistantMessage,
   fauxToolCall,
@@ -74,7 +73,7 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import { setFile, selectFile, selectMergedContent } from '@/store/filesSlice';
 import { setUser } from '@/store/authSlice';
 import ChatV2Container from '@/components/containers/ChatV2Container';
-import { selectChatV2 } from '@/store/chatV2Slice';
+import { selectChatV2, sendChatV2Message } from '@/store/chatV2Slice';
 import type { ContextContent, ConnectionContent, DbFile, QuestionContent } from '@/lib/types';
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 
@@ -307,10 +306,11 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
     renderWithProviders(<ChatV2Container fileId={chatId} />, { store });
 
     // ── Turn 1 — backend SearchDBSchema with whitelist + context docs ──
-    const textarea = await screen.findByLabelText('chat-input');
-    await act(async () => { await userEvent.type(textarea, 'what tables are there?'); });
-    const sendBtn = await screen.findByLabelText('chat-send');
-    await act(async () => { await userEvent.click(sendBtn); });
+    // Dispatch directly: this test exercises the listener → SSE pipe →
+    // bridge round trip, not contenteditable typing.
+    await act(async () => {
+      store.dispatch(sendChatV2Message({ chatId, message: 'what tables are there?' }));
+    });
 
     await waitFor(() => {
       const c = selectChatV2(store.getState(), chatId);
@@ -338,8 +338,9 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
     expect((selectMergedContent(store.getState(), editTargetId) as QuestionContent).query)
       .toBe('SELECT 1');
 
-    await act(async () => { await userEvent.type(textarea, 'now edit the file'); });
-    await act(async () => { await userEvent.click(sendBtn); });
+    await act(async () => {
+      store.dispatch(sendChatV2Message({ chatId, message: 'now edit the file' }));
+    });
 
     await waitFor(() => {
       const c = selectChatV2(store.getState(), chatId);

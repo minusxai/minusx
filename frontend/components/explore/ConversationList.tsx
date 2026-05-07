@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Box, VStack, Text, Spinner, HStack, Icon } from '@chakra-ui/react';
 import { LuSlack } from 'react-icons/lu';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
+import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 
 interface ConversationListProps {
   onSelectConversation: (id?: number) => void;
@@ -17,10 +19,40 @@ export function ConversationList({
   onSelectConversation,
   currentConversationId
 }: ConversationListProps) {
-  // Use centralized fetch with automatic caching and deduplication
-  const { data, loading: isLoading, error } = useFetch(API.conversations.list);
+  const useV2 = useUseChatV2();
 
-  const conversations: ConversationSummary[] = (data as any)?.conversations || [];
+  // Legacy 'conversation' files via the existing API.
+  const legacyResult = useFetch(API.conversations.list);
+  const legacyConvs: ConversationSummary[] = (legacyResult.data as { conversations?: ConversationSummary[] } | undefined)?.conversations || [];
+
+  // v=2 'chat' files — read directly from the file index. `meta.logLength`
+  // is exposed on partial reads (set by `appendChatLog` atomically) so we
+  // can render counts without round-tripping content.
+  const v2Criteria = useMemo(() => ({ type: 'chat' as const, depth: -1 }), []);
+  const v2Result = useFilesByCriteria({ criteria: v2Criteria, partial: true, skip: !useV2 });
+  const v2Convs: ConversationSummary[] = useMemo(() => {
+    if (!useV2) return [];
+    return (v2Result.files ?? [])
+      .slice()
+      .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
+      .map((f): ConversationSummary => {
+        const meta = (f.meta ?? {}) as { logLength?: number; forkedFrom?: number };
+        const ts = f.updated_at ?? f.created_at ?? new Date(0).toISOString();
+        return {
+          id: f.id,
+          name: f.name || 'Untitled chat',
+          createdAt: ts,
+          updatedAt: ts,
+          messageCount: meta.logLength ?? 0,
+          ...(meta.forkedFrom !== undefined ? { forkedFrom: meta.forkedFrom } : {}),
+          parentPageType: 'explore',
+        };
+      });
+  }, [useV2, v2Result.files]);
+
+  const conversations = useV2 ? v2Convs : legacyConvs;
+  const isLoading = useV2 ? v2Result.loading : legacyResult.loading;
+  const error = useV2 ? (v2Result.error ? new Error(String(v2Result.error)) : null) : legacyResult.error;
 
   return (
     <VStack

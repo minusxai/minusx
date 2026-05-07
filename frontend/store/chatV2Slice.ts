@@ -73,12 +73,35 @@ const chatV2Slice = createSlice({
       void state;
     },
 
-    chatTurnStarted(state, action: PayloadAction<{ chatId: number }>) {
-      const { chatId } = action.payload;
+    /**
+     * Begin a turn. Optimistically appends a synthetic root AgentInvocation
+     * carrying the user's message so the renderer shows the user bubble
+     * immediately — same way legacy `createConversation` adds the user
+     * message synchronously. When `chatTurnCompleted` arrives with the
+     * canonical log from the server, it replaces this optimistic entry.
+     */
+    chatTurnStarted(
+      state,
+      action: PayloadAction<{ chatId: number; userMessage?: string }>,
+    ) {
+      const { chatId, userMessage } = action.payload;
       if (!state.chats[chatId]) state.chats[chatId] = { ...initialChatState, streamingEvents: [] };
       state.chats[chatId].executionState = 'running';
       state.chats[chatId].error = undefined;
       state.chats[chatId].streamingEvents = [];
+      if (userMessage && userMessage.trim().length > 0) {
+        // Synthetic root invocation. The orchestrator builds an identical
+        // entry server-side; we just front-run it for UI responsiveness.
+        const optimistic = {
+          type: 'toolCall' as const,
+          id: `optimistic-${Date.now()}`,
+          name: 'WebAnalystAgent',
+          arguments: { userMessage },
+          context: {},
+          parent_id: null,
+        };
+        state.chats[chatId].log.push(optimistic as unknown as ConversationLog[number]);
+      }
     },
 
     /**
