@@ -276,8 +276,8 @@ const uiSlice = createSlice({
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; useChatV2?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, useChatV2, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -287,6 +287,7 @@ const uiSlice = createSlice({
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
       if (showExpandedMessages !== undefined) state.showExpandedMessages = showExpandedMessages;
+      if (useChatV2 !== undefined) state.useChatV2 = useChatV2;
       if (homePage !== undefined) Object.assign(state.homePage, homePage);
     },
   },

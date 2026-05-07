@@ -116,9 +116,15 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
   let editTargetId: number;
   let editTargetContent: QuestionContent;
   let lastSystemPromptSeen: string;
+  // Captures the system prompt seen on the resume turn (Turn 2, after the
+  // bridge sends back the EditFile result). The orchestrator reconstructs
+  // the agent from the saved AgentInvocation context — this assertion proves
+  // the whitelist + docs flow through resume, not just the first call.
+  let resumeSystemPromptSeen: string;
 
   beforeEach(async () => {
     lastSystemPromptSeen = '';
+    resumeSystemPromptSeen = '';
 
     // ── DB fixtures ──────────────────────────────────────────────────────────
     const connectionContent: ConnectionContent = {
@@ -258,8 +264,13 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
         )],
         { stopReason: 'toolUse' },
       ),
-      // Turn 2, call 2: stop turn after the bridge resolves EditFile.
-      fauxAssistantMessage('Edit applied.', { stopReason: 'stop' }),
+      // Turn 2, call 2: factory captures the resume-turn system prompt (so
+      // we can assert context docs survive across orchestrator resume), then
+      // emits a stop turn.
+      (context: PiContext) => {
+        resumeSystemPromptSeen = context.systemPrompt ?? '';
+        return fauxAssistantMessage('Edit applied.', { stopReason: 'stop' });
+      },
     ]);
 
     // Use a full app-store (all slices + listeners) so useFile/filesSlice
@@ -374,6 +385,11 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
         (e as { stopReason?: string }).stopReason === 'stop',
     );
     expect(finalStop).toBeDefined();
+
+    // The resume-turn system prompt also carried the context docs — proves
+    // the orchestrator preserved the agent context (whitelistedTables +
+    // contextDocs) across the UIE pause / bridge / resume cycle.
+    expect(resumeSystemPromptSeen).toContain('AGENT_DOCS_MARKER');
   });
 });
 

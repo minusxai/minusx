@@ -11,6 +11,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import uiReducer, {
   setUseChatV2,
   selectUseChatV2,
+  setBulkUiFlags,
 } from '../uiSlice';
 import { resolveUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
 
@@ -27,6 +28,19 @@ describe('useChatV2 — uiSlice toggle', () => {
   it('flips to true when setUseChatV2(true) is dispatched', () => {
     const store = makeUiStore();
     store.dispatch(setUseChatV2(true));
+    expect(selectUseChatV2(store.getState())).toBe(true);
+  });
+});
+
+describe('useChatV2 — persistence', () => {
+  it('hydrates via setBulkUiFlags so DataLoader can restore the persisted value', () => {
+    // This regression test exists specifically because the previous version
+    // shipped a bug: setUseChatV2 wrote `useChatV2` to localStorage, but the
+    // bulk-restore payload type that DataLoader uses on mount didn't include
+    // the field, so the persisted value was silently dropped on refresh.
+    const store = makeUiStore();
+    expect(selectUseChatV2(store.getState())).toBe(false);
+    store.dispatch(setBulkUiFlags({ useChatV2: true }));
     expect(selectUseChatV2(store.getState())).toBe(true);
   });
 });
