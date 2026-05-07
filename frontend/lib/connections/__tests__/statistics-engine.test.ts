@@ -288,6 +288,53 @@ describe('profileBigQuery', () => {
   });
 });
 
+// ─── SQLite ────────────────────────────────────────────────────────────────
+
+describe('profileSqlite', () => {
+  it('uses generic SQL strategy with double-quote identifiers', async () => {
+    const queryFn = vi.fn<(arg: string) => Promise<QueryResult>>();
+    // Aggregation query
+    queryFn.mockResolvedValueOnce(qr(
+      ['_row_count', 'dist_id', 'null_id', 'dist_status', 'null_status', 'dist_price', 'null_price'],
+      [{ _row_count: 1000, dist_id: 1000, null_id: 0, dist_status: 4, null_status: 10, dist_price: 200, null_price: 0 }],
+    ));
+    // Top values for status (categorical)
+    queryFn.mockResolvedValueOnce(qr(['val', 'cnt'], [
+      { val: 'active', cnt: 500 }, { val: 'inactive', cnt: 300 },
+    ]));
+
+    const s = schema([{ schema: 'main', tables: [{ table: 'products', columns: [
+      { name: 'id', type: 'INTEGER' }, { name: 'status', type: 'TEXT' }, { name: 'price', type: 'REAL' },
+    ] }] }]);
+
+    const result = await profileDatabase('sqlite', s, queryFn);
+
+    // Should use generic strategy (COUNT(DISTINCT ...) + top values)
+    expect(result.connectorType).toBe('sqlite');
+    expect(result.queryCount).toBe(2); // 1 agg + 1 top values
+
+    const cols = getTable(result, 'main', 'products');
+    expect(getCol(cols, 'id')?.meta?.category).toBe('other'); // id_unique
+    expect(getCol(cols, 'status')?.meta?.category).toBe('categorical');
+    expect(getCol(cols, 'status')?.meta?.topValues).toHaveLength(2);
+    expect(getCol(cols, 'status')?.meta?.topValues![0]).toEqual({ value: 'active', count: 500, fraction: 0.5 });
+    expect(getCol(cols, 'price')?.meta?.category).toBe('numeric');
+  });
+
+  it('uses double-quote quoting (not backtick)', async () => {
+    const queryFn = vi.fn<(arg: string) => Promise<QueryResult>>();
+    queryFn.mockResolvedValueOnce(qr(['_row_count', 'dist_x', 'null_x'], [{ _row_count: 10, dist_x: 10, null_x: 0 }]));
+
+    const s = schema([{ schema: 'main', tables: [{ table: 't', columns: [{ name: 'x', type: 'INTEGER' }] }] }]);
+    await profileDatabase('sqlite', s, queryFn);
+
+    for (const [sql] of queryFn.mock.calls) {
+      expect(sql).toContain('"');
+      expect(sql).not.toContain('`');
+    }
+  });
+});
+
 // ─── Edge Cases ──────────────────────────────────────────────────────────────
 
 describe('edge cases', () => {
