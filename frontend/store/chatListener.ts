@@ -268,6 +268,13 @@ function handleStreamError(
   stableId: string,
   dispatch: AppDispatch,
 ): boolean {
+  if (!error || typeof error !== 'object') {
+    void captureError(captureLabel, new Error(String(error)), { conversationID: String(conversationID) });
+    dispatch(setError({ conversationID, error: String(error) }));
+    dispatch(clearStreamingContent({ conversationID }));
+    abortControllers.delete(stableId);
+    return false;
+  }
   if (error.name === 'AbortError') return true;
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
@@ -524,7 +531,7 @@ chatListenerMiddleware.startListening({
 
     const runOne = async (pendingTool: (typeof realConversation.pending_tool_calls)[number]) => {
       try {
-        console.log(`[chatListener] Executing tool: ${pendingTool.toolCall.function.name}`);
+        console.log(`[chatListener] Executing tool: ${pendingTool.toolCall.function?.name}`);
 
         // Dynamic import to avoid circular dependencies:
         // tool-handlers → store → chatListener → tool-handlers (circular)
@@ -595,7 +602,7 @@ chatListenerMiddleware.startListening({
     // Group by fileId: same fileId → serial; different fileId → parallel
     const groups = new Map<string, typeof eligible>();
     for (const tool of eligible) {
-      const toolArgs = tool.toolCall.function.arguments || {};
+      const toolArgs = tool.toolCall.function?.arguments || {};
       const key = toolArgs.fileId != null ? String(toolArgs.fileId) : `_${tool.toolCall.id}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(tool);

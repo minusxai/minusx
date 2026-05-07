@@ -159,16 +159,19 @@ async function setupOrchestration(
 
   const orch = new Orchestrator(V2_REGISTRABLES, [...savedLog]);
 
-  // Resume path: frontend sends back legacy CompletedToolCallFromPython[]
-  // (in body.completed_tool_calls — note: ChatRequest types this as a tuple
-  // `[ToolCall, ToolMessage][]`, but the second element is the result with
-  // tool_call_id + content + run_id, which is exactly the shape we need to
-  // translate per-entry). Translate each entry through `legacyToolResultToPi`
-  // and feed to orchestrator.resume().
+  // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
+  // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
+  // tuple[0] (the original ToolCall) so legacyToolResultToPi can read .function.name.
   if (body.completed_tool_calls && body.completed_tool_calls.length > 0) {
     const piResults = body.completed_tool_calls.map((tuple) => {
+      const toolCall = tuple[0];
       const result = tuple[1] as unknown as CompletedToolCallFromPython;
-      return legacyToolResultToPi(result);
+      const patched: CompletedToolCallFromPython = {
+        ...result as unknown as CompletedToolCallFromPython,
+        run_id: (result as unknown as { run_id?: string }).run_id ?? '',
+        function: toolCall.function,
+      };
+      return legacyToolResultToPi(patched);
     });
     return {
       conversationId,
