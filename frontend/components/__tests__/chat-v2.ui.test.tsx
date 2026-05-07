@@ -60,7 +60,7 @@ import userEvent from '@testing-library/user-event';
 import { useFilesByCriteria, useFile } from '@/lib/hooks/file-state-hooks';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
-import ChatsPage from '@/app/chats/page';
+import ChatV2ListView from '@/components/containers/ChatV2ListView';
 import ChatV2Container from '@/components/containers/ChatV2Container';
 import {
   loadChatV2,
@@ -90,7 +90,7 @@ describe('Phase 3 UI — Chats list view', () => {
       error: null,
     });
 
-    renderWithProviders(<ChatsPage />);
+    renderWithProviders(<ChatV2ListView />);
 
     expect(await screen.findByLabelText('chats-page-title')).toBeDefined();
     expect(await screen.findByLabelText('new-chat')).toBeDefined();
@@ -102,7 +102,7 @@ describe('Phase 3 UI — Chats list view', () => {
 
   it('shows empty state when there are no chats', async () => {
     mockedUseFilesByCriteria.mockReturnValue({ files: [], loading: false, error: null });
-    renderWithProviders(<ChatsPage />);
+    renderWithProviders(<ChatV2ListView />);
     expect(await screen.findByLabelText('chats-empty-state')).toBeDefined();
   });
 
@@ -124,7 +124,7 @@ describe('Phase 3 UI — Chats list view', () => {
       error: null,
     });
 
-    renderWithProviders(<ChatsPage />);
+    renderWithProviders(<ChatV2ListView />);
 
     // Plain chat: count appears, NO forked indicator.
     const plainCount = await screen.findByLabelText('chat-row-201-message-count');
@@ -317,7 +317,7 @@ describe('Phase 3 UI — end-to-end user journey', () => {
     expect(resolveUseChatV2('?v=1')).toBe(false);
   });
 
-  it('Step C — clicking "New Chat" hits /api/chat/v2/new and routes to /f/<chatId>', async () => {
+  it('Step C — clicking "New Chat" hits /api/chat/v2/new and routes to /explore/<chatId>', async () => {
     const originalFetch = global.fetch;
     const fetchSpy = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const u = url.toString();
@@ -333,7 +333,7 @@ describe('Phase 3 UI — end-to-end user journey', () => {
     global.fetch = fetchSpy;
 
     try {
-      renderWithProviders(<ChatsPage />);
+      renderWithProviders(<ChatV2ListView />);
       const newChatBtn = await screen.findByLabelText('new-chat');
       await act(async () => {
         await userEvent.click(newChatBtn);
@@ -347,7 +347,10 @@ describe('Phase 3 UI — end-to-end user journey', () => {
         expect(calledNew).toBe(true);
       });
       await waitFor(() => {
-        expect(mockRouterPush).toHaveBeenCalledWith('/f/4242');
+        // Routed to /explore/<chatId> — /explore is the unified entry point.
+        // preserveParams may have appended ?v=2 if the test stubs window.location.search;
+        // in this jsdom environment no v=2 is set, so the path is bare.
+        expect(mockRouterPush).toHaveBeenCalledWith('/explore/4242');
       });
     } finally {
       global.fetch = originalFetch;

@@ -136,8 +136,11 @@ export default function Sidebar() {
   // Build and filter nav sections inside useMemo so JSX icon expressions are only evaluated
   // when mode/showDebug/userIsAdmin actually change (not on every streaming render)
   const navSections = useMemo(() => {
+    // /explore is the unified entry when ?v=2 is on — the chat-v2 list view
+    // renders inline there. Legacy 'Conversations' link still goes to its
+    // own list page. preserveParams keeps ?v=2 on the navigation.
     const conversationsItem: NavItem = useChatV2
-      ? { href: '/chats', icon: <LuHistory />, label: 'Chats' }
+      ? { href: '/explore', icon: <LuHistory />, label: 'Chats' }
       : { href: '/conversations', icon: <LuHistory />, label: 'Conversations' };
     const raw: NavSection[] = [
       {

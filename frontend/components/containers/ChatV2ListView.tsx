@@ -1,9 +1,9 @@
 'use client';
 
-// Phase-3 Chats list page. Mirrors /conversations but for `type: 'chat'`
-// (TS-orchestrator-driven). Reachable when `useChatV2` is on (Sidebar swaps
-// the link). The page itself is also reachable directly without the toggle —
-// it just shows the user's chat files.
+// Chat-v2 list view. Rendered inside `/explore` when `?v=2` is on and there
+// is no file id in the path — i.e. /explore?v=2 is the chat-v2 home (the
+// previous `/chats` page is gone). Each row links to /explore/<id>?v=2 so
+// /explore stays the unified entry point for both legacy and chat-v2.
 
 import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Button, Icon, Badge } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
@@ -11,9 +11,9 @@ import React, { useState, useCallback } from 'react';
 import { LuMessageSquare, LuPlus, LuGitBranch } from 'react-icons/lu';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import Breadcrumb from '@/components/Breadcrumb';
+import { preserveParams } from '@/lib/navigation/url-utils';
 
-export default function ChatsPage() {
+export default function ChatV2ListView() {
   const router = useRouter();
   const { files, loading } = useFilesByCriteria({
     criteria: { type: 'chat', depth: -1 },
@@ -31,16 +31,18 @@ export default function ChatsPage() {
         body: JSON.stringify({}),
       });
       if (!res.ok) {
-        // Fall back to legacy explore so the user isn't stranded.
-        router.push('/explore');
+        // Fall back to /explore (legacy) so the user isn't stranded.
+        router.push(preserveParams('/explore'));
         return;
       }
       const data = (await res.json()) as { chatId: number; error?: string };
       if (!data.chatId) {
-        router.push('/explore');
+        router.push(preserveParams('/explore'));
         return;
       }
-      router.push(`/f/${data.chatId}`);
+      // Route to /explore/<chatId>?v=2 — /explore is the unified entry; its
+      // page handles file-type routing and renders ChatV2Container for chats.
+      router.push(preserveParams(`/explore/${data.chatId}`));
     } finally {
       setCreating(false);
     }
@@ -50,7 +52,6 @@ export default function ChatsPage() {
 
   return (
     <Box p={6}>
-      <Breadcrumb items={[{ label: 'Chats' }]} />
       <Flex align="center" justify="space-between" mt={4} mb={6}>
         <Heading size="lg" aria-label="chats-page-title">Chats</Heading>
         <Button
@@ -93,7 +94,8 @@ export default function ChatsPage() {
                 p={3}
                 cursor="pointer"
                 _hover={{ bg: 'bg.muted' }}
-                onClick={() => router.push(`/f/${file.id}`)}
+                // Route to /explore/<id>?v=2 — /explore is the unified entry.
+                onClick={() => router.push(preserveParams(`/explore/${file.id}`))}
               >
                 <HStack>
                   <Icon as={FILE_TYPE_METADATA.chat.icon} color={FILE_TYPE_METADATA.chat.color} />
