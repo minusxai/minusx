@@ -4,10 +4,6 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { createDraftChat } from '@/lib/chat-v2/chat-file';
 
-interface NewChatBody {
-  agentArgs?: Record<string, unknown>;
-}
-
 interface NewChatResponse {
   chatId: number;
   error?: string;
@@ -18,9 +14,8 @@ interface NewChatResponse {
  * affordance — clients then route to /f/<chatId> to land in the chat
  * detail surface (ChatV2Container).
  */
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => ({}))) as NewChatBody;
     const user = await getEffectiveUser();
     if (!user) {
       return NextResponse.json<NewChatResponse>(
@@ -28,7 +23,7 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
-    const { chatId } = await createDraftChat(user, 'WebAnalystAgent', body.agentArgs ?? {});
+    const { chatId } = await createDraftChat(user);
     return NextResponse.json<NewChatResponse>({ chatId });
   } catch (error) {
     return handleApiError(error);

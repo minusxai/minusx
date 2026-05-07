@@ -5,10 +5,10 @@
 // the link). The page itself is also reachable directly without the toggle —
 // it just shows the user's chat files.
 
-import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Button, Icon } from '@chakra-ui/react';
+import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Button, Icon, Badge } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
 import React, { useState, useCallback } from 'react';
-import { LuMessageSquare, LuPlus } from 'react-icons/lu';
+import { LuMessageSquare, LuPlus, LuGitBranch } from 'react-icons/lu';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Breadcrumb from '@/components/Breadcrumb';
@@ -78,28 +78,55 @@ export default function ChatsPage() {
 
       {!loading && sortedFiles.length > 0 && (
         <VStack align="stretch" gap={2} aria-label="chats-list">
-          {sortedFiles.map((file) => (
-            <Box
-              key={file.id}
-              aria-label={`chat-row-${file.id}`}
-              borderWidth="1px"
-              borderRadius="md"
-              p={3}
-              cursor="pointer"
-              _hover={{ bg: 'bg.muted' }}
-              onClick={() => router.push(`/f/${file.id}`)}
-            >
-              <HStack>
-                <Icon as={FILE_TYPE_METADATA.chat.icon} color={FILE_TYPE_METADATA.chat.color} />
-                <VStack align="stretch" gap={0} flex="1">
-                  <Text fontSize="sm" fontWeight="medium">{file.name}</Text>
-                  <Text fontSize="xs" color="fg.muted">
-                    {file.updatedAt ? new Date(file.updatedAt).toLocaleString() : ''}
-                  </Text>
-                </VStack>
-              </HStack>
-            </Box>
-          ))}
+          {sortedFiles.map((file) => {
+            // `file.meta` is read-cheap because useFilesByCriteria(partial: true)
+            // skips the `content` column in its SELECT — see DocumentDB.listAll.
+            const meta = (file.meta as { logLength?: number; forkedFrom?: number; forkedAt?: string } | null) ?? null;
+            const messageCount = meta?.logLength ?? 0;
+            const isFork = meta?.forkedFrom != null;
+            return (
+              <Box
+                key={file.id}
+                aria-label={`chat-row-${file.id}`}
+                borderWidth="1px"
+                borderRadius="md"
+                p={3}
+                cursor="pointer"
+                _hover={{ bg: 'bg.muted' }}
+                onClick={() => router.push(`/f/${file.id}`)}
+              >
+                <HStack>
+                  <Icon as={FILE_TYPE_METADATA.chat.icon} color={FILE_TYPE_METADATA.chat.color} />
+                  <VStack align="stretch" gap={0} flex="1">
+                    <HStack gap={2}>
+                      <Text fontSize="sm" fontWeight="medium">{file.name}</Text>
+                      {isFork && (
+                        <Badge
+                          aria-label={`chat-row-${file.id}-forked`}
+                          colorPalette="purple"
+                          variant="subtle"
+                          size="sm"
+                        >
+                          <Icon as={LuGitBranch} boxSize={3} mr={1} />
+                          forked
+                        </Badge>
+                      )}
+                    </HStack>
+                    <Text fontSize="xs" color="fg.muted">
+                      {file.updatedAt ? new Date(file.updatedAt).toLocaleString() : ''}
+                    </Text>
+                  </VStack>
+                  <Badge
+                    aria-label={`chat-row-${file.id}-message-count`}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {messageCount} {messageCount === 1 ? 'message' : 'messages'}
+                  </Badge>
+                </HStack>
+              </Box>
+            );
+          })}
         </VStack>
       )}
     </Box>

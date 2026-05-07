@@ -203,18 +203,15 @@ describe('Chat V2 — TRUE end-to-end (whitelist + context docs + bridge → rea
     editTargetId = await DocumentDB.create('edit-target', '/org/edit-target', 'question', editTargetContent, []);
     await DocumentDB.update(editTargetId, 'edit-target', '/org/edit-target', editTargetContent, [], 'e2e-edit-target-publish');
 
-    // The chat itself (draft) — agentArgs carries the contextFileId so chat-v2's
-    // shared.ts loader pulls the right whitelist/docs.
+    // The chat itself (draft) — post-cleanup shape: content = { log: [] };
+    // contextFileId is no longer stored on the chat. setupOrchestration's
+    // buildServerAgentArgs falls back to the user's nearest-ancestor context
+    // (which is /org/context, set above with the whitelist + AGENT_DOCS_MARKER).
     chatId = await DocumentDB.create(
       'New Chat',
       `/org/chats/draft-e2e-${Date.now()}.chat.json`,
       'chat',
-      {
-        log: [],
-        agent: 'WebAnalystAgent',
-        agent_args: { contextFileId: contextId },
-        metadata: { updatedAt: new Date().toISOString() },
-      },
+      { log: [] },
       [],
     );
 

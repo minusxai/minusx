@@ -28,7 +28,7 @@ import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-ana
 import { FilesAPI } from '@/lib/data/files.server';
 import {
   appendChatLog,
-  loadChatLog,
+  createDraftChat,
   type ChatContent,
 } from '@/lib/chat-v2/chat-file';
 import {
@@ -98,15 +98,21 @@ describe('Chat V2 — Test 1: send-message lifecycle', () => {
     expect(rootEntry.type).toBe('toolCall');
     expect(rootEntry.parent_id).toBeNull();
 
-    // DB-side: file is published, named after the user message, has no metadata.name.
+    // DB-side: file is published, named after the user message.
+    // Post-cleanup shape: content === { log: [...] }; metadata in `files.meta`.
     const file = await FilesAPI.loadFile(body.chatId, ADMIN);
     expect(file.data.draft).toBe(false);
     expect(file.data.name).toBe(userMessage);
     expect(file.data.path).toContain('/chats/');
     const content = file.data.content as unknown as ChatContent;
-    expect(content.agent).toBe('WebAnalystAgent');
     expect(content.log.length).toBeGreaterThanOrEqual(2);
-    expect((content as unknown as { metadata?: { name?: string } }).metadata?.name).toBeUndefined();
+    // Vestigial fields are gone.
+    expect((content as unknown as Record<string, unknown>).agent).toBeUndefined();
+    expect((content as unknown as Record<string, unknown>).agent_args).toBeUndefined();
+    expect((content as unknown as Record<string, unknown>).metadata).toBeUndefined();
+    // logLength lives in files.meta now and is sidebar-cheap.
+    const meta = file.data.meta as { logLength?: number } | null;
+    expect(meta?.logLength).toBe(content.log.length);
   });
 });
 
@@ -193,18 +199,9 @@ describe('Chat V2 — Test 3: fork on log-index mismatch', () => {
       } as ConversationLogEntry,
     ];
 
-    // Bootstrap: create a draft chat and atomically append the first entry.
-    const drafted = await FilesAPI.createFile(
-      {
-        name: 'New Chat',
-        path: '/org/chats/test3-bootstrap.chat.json',
-        type: 'chat',
-        content: { log: [], agent: 'WebAnalystAgent', agent_args: {}, metadata: { updatedAt: new Date().toISOString() } },
-        options: { createPath: true, returnExisting: false },
-      },
-      ADMIN,
-    );
-    const chatId = drafted.data.id;
+    // Bootstrap via createDraftChat (no longer takes agent/agent_args params).
+    const drafted = await createDraftChat(ADMIN);
+    const chatId = drafted.chatId;
     const r0 = await appendChatLog(chatId, initialEntries, 0, ADMIN);
     expect(r0.forked).toBe(false);
     expect(r0.chatId).toBe(chatId);
@@ -224,11 +221,15 @@ describe('Chat V2 — Test 3: fork on log-index mismatch', () => {
     expect(r1.forked).toBe(true);
     expect(r1.chatId).not.toBe(chatId);
 
-    // Forked content should have the prefix (zero entries from .slice(0,0))
-    // plus the new diff. Forked file metadata should reference the original.
-    const forkedContent = await loadChatLog(r1.chatId, ADMIN);
-    expect(forkedContent.forkedFrom).toBe(chatId);
+    // Forked file's content has the prefix (zero entries from .slice(0,0))
+    // plus the new diff. Fork pointers (forkedFrom + forkedAt) live in `files.meta`.
+    const forkedFile = await FilesAPI.loadFile(r1.chatId, ADMIN);
+    const forkedContent = forkedFile.data.content as unknown as ChatContent;
     expect(forkedContent.log).toHaveLength(1);
     expect((forkedContent.log[0] as { id: string }).id).toBe('root_t3_concurrent');
+    const forkedMeta = forkedFile.data.meta as { logLength?: number; forkedFrom?: number; forkedAt?: string } | null;
+    expect(forkedMeta?.forkedFrom).toBe(chatId);
+    expect(forkedMeta?.forkedAt).toBeDefined();
+    expect(forkedMeta?.logLength).toBe(1);
   });
 });

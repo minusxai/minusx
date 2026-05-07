@@ -44,7 +44,16 @@ function rowToDbFile(row: DbRow, includeContent: boolean = true): DbFile {
 }
 
 export class DocumentDB {
-  static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], editId?: string, draft: boolean = true): Promise<number> {
+  static async create(
+    name: string,
+    path: string,
+    type: string,
+    content: BaseFileContent,
+    references: number[],
+    editId?: string,
+    draft: boolean = true,
+    meta?: Record<string, unknown> | null,
+  ): Promise<number> {
     if (references.some(ref => ref < 0)) {
       throw new Error(
         `Cannot store negative reference IDs in the database: [${references.filter(r => r < 0).join(', ')}]. ` +
@@ -62,12 +71,49 @@ export class DocumentDB {
         SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) AS next_id FROM files
       )
       INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at)
-      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, null, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, content, references, editId ?? null, draft]);
+    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]);
 
     return result.rows[0].id;
+  }
+
+  /**
+   * Atomic append for chat-v2 files. Single-statement UPDATE that:
+   *   - Appends `logDiff` to `content -> 'log'`.
+   *   - Sets `meta.logLength` to `expectedLogIndex + logDiff.length`.
+   *   - Bumps `version`, clears `draft`, refreshes `updated_at`.
+   *   - Conditional on `meta.logLength = expectedLogIndex` (cached counter,
+   *     kept consistent because it's bumped in the same statement).
+   *
+   * Returns true on append-in-place, false on length mismatch (caller forks).
+   * Distinct from the legacy generic `appendJsonArray` so the chat surface
+   * doesn't pay for the conversation-format `metadata.updatedAt` plumbing.
+   */
+  static async appendChatLog(
+    chatId: number,
+    logDiff: unknown[],
+    expectedLogIndex: number,
+  ): Promise<boolean> {
+    const db = getModules().db;
+    const newLength = expectedLogIndex + logDiff.length;
+
+    const result = await db.exec(
+      `UPDATE files
+       SET
+         content = jsonb_set(content, '{log}', (content -> 'log') || $2::jsonb),
+         meta    = coalesce(meta, '{}'::jsonb)
+                   || jsonb_build_object('logLength', $3::int),
+         version = version + 1,
+         draft   = false,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+         AND type = 'chat'
+         AND coalesce((meta ->> 'logLength')::int, 0) = $4`,
+      [chatId, JSON.stringify(logDiff), newLength, expectedLogIndex],
+    );
+    return result.rowCount > 0;
   }
 
   static async getById(id: number, includeContent: boolean = true): Promise<DbFile | null> {

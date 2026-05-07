@@ -28,11 +28,11 @@ import SearchDBSchemaDisplay from '@/components/explore/tools/SearchDBSchemaDisp
 import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
 import DefaultToolDisplay from '@/components/explore/tools/DefaultToolDisplay';
 
+// Mirrors `lib/chat-v2/chat-file.ts:ChatContent` (server-only). The component
+// only ever reads `content.log` — fork pointers + counters live on `files.meta`
+// now, exposed via the `FileState.meta` field.
 interface ChatFileContent {
   log: ConversationLog;
-  agent: string;
-  agent_args: Record<string, unknown>;
-  forkedFrom?: number;
 }
 
 // Discriminators for ConversationLogEntry. The union is

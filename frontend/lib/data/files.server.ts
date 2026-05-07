@@ -441,7 +441,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId, startAsDraft);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId, startAsDraft, input.meta ?? null);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -802,17 +802,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
 
       case 'chat': {
-        // ChatContent template — empty log, WebAnalystAgent, blank metadata.
-        // Lives in lib/chat-v2/chat-file.ts as the canonical shape; mirrored
-        // here so /new/chat (or any other createDraftFile entry point) yields
-        // a valid empty chat. The standard `/api/chat/v2/new` endpoint goes
-        // through createDraftChat directly with the same shape.
-        const content = {
-          log: [],
-          agent: 'WebAnalystAgent',
-          agent_args: {},
-          metadata: { updatedAt: new Date().toISOString() },
-        };
+        // ChatContent template — minimal: just an empty log. Lives in
+        // lib/chat-v2/chat-file.ts as the canonical shape; mirrored here so
+        // /new/chat (or any other createDraftFile entry point) yields a valid
+        // empty chat. Per-chat counters/fork pointers live in `files.meta`,
+        // not in `content` — the standard `/api/chat/v2/new` endpoint goes
+        // through `createDraftChat` directly which populates both.
+        const content = { log: [] };
         return {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ChatContent isn't in the BaseFileContent template union; intentional
           content: content as any,
@@ -994,6 +990,20 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async renameAndMove(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
     return DocumentDB.renameAndMove(id, name, path);
+  }
+
+  /**
+   * Atomic append for chat-v2 files. See `DocumentDB.appendChatLog`.
+   * Distinct from the legacy generic `appendJsonArray` so the chat surface
+   * doesn't pay for `'conversation'` format quirks.
+   */
+  async appendChatLog(
+    id: number,
+    logDiff: unknown[],
+    expectedLogIndex: number,
+    _user: EffectiveUser,
+  ): Promise<boolean> {
+    return DocumentDB.appendChatLog(id, logDiff, expectedLogIndex);
   }
 }
 

@@ -84,8 +84,8 @@ describe('Phase 3 UI — Chats list view', () => {
   it('renders chat rows from useFilesByCriteria and a "new chat" affordance', async () => {
     mockedUseFilesByCriteria.mockReturnValue({
       files: [
-        { id: 101, name: 'Show top customers', path: '/org/chats/show-top.chat.json', type: 'chat', updatedAt: 1700000000 },
-        { id: 102, name: 'Q3 revenue analysis', path: '/org/chats/q3-rev.chat.json', type: 'chat', updatedAt: 1700001000 },
+        { id: 101, name: 'Show top customers', path: '/org/chats/show-top.chat.json', type: 'chat', updatedAt: 1700000000, meta: { logLength: 7 } },
+        { id: 102, name: 'Q3 revenue analysis', path: '/org/chats/q3-rev.chat.json', type: 'chat', updatedAt: 1700001000, meta: { logLength: 12, forkedFrom: 101, forkedAt: '2024-01-01T00:00:00Z' } },
       ],
       loading: false,
       error: null,
@@ -105,6 +105,42 @@ describe('Phase 3 UI — Chats list view', () => {
     mockedUseFilesByCriteria.mockReturnValue({ files: [], loading: false, error: null });
     renderWithProviders(<ChatsPage />);
     expect(await screen.findByLabelText('chats-empty-state')).toBeDefined();
+  });
+
+  // Sidebar must show meta.logLength as a message-count badge AND surface
+  // forks via meta.forkedFrom — both are read-cheap from `files.meta`
+  // (no `content` round-trip). This test asserts the row renders the
+  // count and a fork indicator only when forkedFrom is present.
+  it('renders meta.logLength as message-count and meta.forkedFrom as a forked indicator', async () => {
+    mockedUseFilesByCriteria.mockReturnValue({
+      files: [
+        // Plain chat — count only.
+        { id: 201, name: 'Plain chat', path: '/org/chats/plain.chat.json', type: 'chat', updatedAt: 1700000000, meta: { logLength: 7 } },
+        // Forked chat — count + forked indicator.
+        { id: 202, name: 'Forked chat', path: '/org/chats/forked.chat.json', type: 'chat', updatedAt: 1700001000, meta: { logLength: 12, forkedFrom: 201, forkedAt: '2024-01-01T00:00:00Z' } },
+        // No meta (legacy / freshly created) — should not crash; defaults to 0/no badge.
+        { id: 203, name: 'No meta chat', path: '/org/chats/empty.chat.json', type: 'chat', updatedAt: 1700002000 },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    renderWithProviders(<ChatsPage />);
+
+    // Plain chat: count appears, NO forked indicator.
+    const plainCount = await screen.findByLabelText('chat-row-201-message-count');
+    expect(plainCount.textContent).toContain('7');
+    expect(screen.queryByLabelText('chat-row-201-forked')).toBeNull();
+
+    // Forked chat: count appears + forked indicator.
+    const forkedCount = await screen.findByLabelText('chat-row-202-message-count');
+    expect(forkedCount.textContent).toContain('12');
+    expect(await screen.findByLabelText('chat-row-202-forked')).toBeDefined();
+
+    // No-meta chat: row still renders; count badge falls back to 0 and no forked badge.
+    const noMetaCount = await screen.findByLabelText('chat-row-203-message-count');
+    expect(noMetaCount.textContent).toContain('0');
+    expect(screen.queryByLabelText('chat-row-203-forked')).toBeNull();
   });
 });
 

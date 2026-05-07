@@ -69,12 +69,15 @@ async function setupOrchestration(
   body: ChatV2RequestBody,
   user: EffectiveUser,
 ): Promise<OrchestrationSetup> {
-  const agentName = 'WebAnalystAgent';
+  // The agent class for new turns comes from the request (or defaults).
+  // Per the new chat-file shape, agent identity is NOT stored on the chat
+  // file — each root AgentInvocation log entry already carries `name`, so a
+  // chat could in principle host multiple agent types across turns.
   const agentArgs = body.agentArgs ?? {};
 
   let chatId = body.chatId;
   if (chatId == null) {
-    const created = await createDraftChat(user, agentName, agentArgs);
+    const created = await createDraftChat(user);
     chatId = created.chatId;
   }
 

@@ -53,5 +53,10 @@ describe('POST /api/chat/v2/new', () => {
     expect(file.data.draft).toBe(true);
     expect(file.data.path).toContain('/chats/');
     expect(file.data.path).toContain('draft-');
+
+    // Post-cleanup shape: content === { log: [] } (no agent / agent_args /
+    // metadata). meta.logLength === 0 (sidebar-cheap).
+    expect(file.data.content).toEqual({ log: [] });
+    expect(file.data.meta).toEqual({ logLength: 0 });
   });
 });

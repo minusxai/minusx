@@ -7,27 +7,24 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, ConversationLogEntry } from '@/orchestrator/types';
 
 /**
- * `chat` file content shape — cleaner than the legacy `conversation` format.
+ * `chat` file content — minimal: just the conversation log.
  *
- *   - `log` is the TS-orchestrator's ConversationLog (AgentInvocation /
- *     AssistantMessage / ToolResultMessage entries).
- *   - `agent` and `agent_args` are pinned at chat-creation time so subsequent
- *     turns can reconstruct the orchestrator with the same root agent.
- *   - `forkedFrom`, when set, is the chat ID we forked from.
- *
- * Notably absent: any `metadata.name`. The display name lives only on the
- * `files.name` column so sidebar list queries don't need to read content.
+ * Per-chat metadata (counts, fork pointers) lives on `files.meta` (the
+ * existing JSONB column on the files table, OUTSIDE `content`). That column
+ * is returned by `DocumentDB.listAll(includeContent: false)`, so the sidebar
+ * can render per-row info without ever loading `content`.
  */
 export interface ChatContent {
   log: ConversationLog;
-  agent: string;
-  agent_args: Record<string, unknown>;
+}
+
+export interface ChatMeta {
+  /** Cached counter, updated atomically with each `appendChatLog`. */
+  logLength: number;
+  /** When set, this chat was created by forking from `forkedFrom`. */
   forkedFrom?: number;
-  // Auto-bumped on every appendChatLog. Lives here (not just on the file row)
-  // because `appendJsonArray` requires a JSONB metadata path to update in the
-  // same atomic statement. NOT a display name — the user-facing name lives
-  // on the `files.name` column.
-  metadata: { updatedAt: string };
+  /** ISO timestamp of the fork. */
+  forkedAt?: string;
 }
 
 const DEFAULT_CHAT_NAME = 'New Chat';
@@ -50,27 +47,23 @@ function buildDraftChatPath(user: EffectiveUser): string {
 }
 
 /**
- * Create a new draft chat file. Chat starts in draft state with empty log;
- * the first appendChatLog call publishes it (draft → live) and updates the
- * file name + path to reflect the first user message.
+ * Create a new draft chat file. Chat starts in draft state with empty log
+ * and `meta.logLength: 0`. The first `appendChatLog` call publishes it
+ * (draft → live) and updates the file name + path to reflect the first
+ * user message.
  */
 export async function createDraftChat(
   user: EffectiveUser,
-  agent: string,
-  agentArgs: Record<string, unknown>,
 ): Promise<{ chatId: number }> {
-  const initial: ChatContent = {
-    log: [],
-    agent,
-    agent_args: agentArgs,
-    metadata: { updatedAt: new Date().toISOString() },
-  };
+  const initial: ChatContent = { log: [] };
+  const initialMeta: ChatMeta = { logLength: 0 };
   const result = await FilesAPI.createFile(
     {
       name: DEFAULT_CHAT_NAME,
       path: buildDraftChatPath(user),
       type: 'chat',
       content: initial as unknown as Record<string, unknown>,
+      meta: initialMeta as unknown as Record<string, unknown>,
       options: { createPath: true, returnExisting: false },
     },
     user,
@@ -86,16 +79,15 @@ interface AppendChatLogResult {
 /**
  * Append `logDiff` entries to a chat's log atomically.
  *
- * Optimistic-or-fork semantics:
- *   1. If the chat's stored log length === `expectedLogIndex`, append in place
- *      (single-statement JSONB array concat). Sets `draft = false` in the same
- *      operation. Returns `{ chatId, forked: false }`.
- *   2. Otherwise (length mismatch) — read full content, fork to a new chat
- *      file with the prefix + diff, return `{ chatId: <newId>, forked: true }`.
+ * Optimistic-or-fork:
+ *   1. Single-statement UPDATE: append + bump `meta.logLength`, conditional
+ *      on `meta.logLength = expectedLogIndex`. Returns true on success.
+ *   2. Otherwise — read source content, build `forkedLog = source.slice(0,
+ *      expectedLogIndex) ++ logDiff`, INSERT a fresh chat with
+ *      `meta = { logLength, forkedFrom, forkedAt }`. Publish.
  *
- * On a successful first append (expectedLogIndex === 0), the chat name and
- * path are updated to reflect the first user message — name lives on the
- * file row only, never in content.
+ * On the first successful append (`expectedLogIndex === 0`), the chat is
+ * renamed + repathed to reflect the first user message.
  */
 export async function appendChatLog(
   chatId: number,
@@ -103,15 +95,7 @@ export async function appendChatLog(
   expectedLogIndex: number,
   user: EffectiveUser,
 ): Promise<AppendChatLogResult> {
-  // Atomic append + bump metadata.updatedAt in the same statement.
-  const updated = await FilesAPI.appendJsonArray(
-    chatId,
-    logDiff,
-    expectedLogIndex,
-    user,
-    'log',
-    'metadata.updatedAt',
-  );
+  const updated = await FilesAPI.appendChatLog(chatId, logDiff, expectedLogIndex, user);
 
   if (updated) {
     if (expectedLogIndex === 0) {
@@ -127,22 +111,21 @@ export async function appendChatLog(
 
   // Length mismatch — fork.
   const existing = await FilesAPI.loadFile(chatId, user);
-  const content = existing.data.content as unknown as ChatContent;
+  const sourceLog = (existing.data.content as unknown as ChatContent).log;
 
   const forkedLog: ConversationLog = [
-    ...content.log.slice(0, expectedLogIndex),
+    ...sourceLog.slice(0, expectedLogIndex),
     ...logDiff,
   ];
 
   const baseName = existing.data.name || DEFAULT_CHAT_NAME;
   const forkedName = `${baseName} (forked)`;
   const forkedSlug = slugify(forkedName);
-  const forkedContent: ChatContent = {
-    log: forkedLog,
-    agent: content.agent,
-    agent_args: content.agent_args,
+  const forkedContent: ChatContent = { log: forkedLog };
+  const forkedMeta: ChatMeta = {
+    logLength: forkedLog.length,
     forkedFrom: chatId,
-    metadata: { updatedAt: new Date().toISOString() },
+    forkedAt: new Date().toISOString(),
   };
 
   const created = await FilesAPI.createFile(
@@ -151,14 +134,13 @@ export async function appendChatLog(
       path: buildChatPath(user, forkedSlug),
       type: 'chat',
       content: forkedContent as unknown as Record<string, unknown>,
+      meta: forkedMeta as unknown as Record<string, unknown>,
       options: { createPath: true, returnExisting: false },
     },
     user,
   );
 
-  // The fork is no longer a draft — it has real log content. Publish.
-  // (createFile creates a draft by default; appendJsonArray with empty diff
-  // is a no-op, so we use a single saveFile to publish.)
+  // Fork is no longer a draft. Publish.
   await FilesAPI.saveFile(
     created.data.id,
     forkedName,

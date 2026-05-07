@@ -77,6 +77,7 @@ export interface CreateFileInput {
   references?: number[];  // Phase 6: Client sends pre-extracted references
   options?: CreateFileOptions;  // Optional create options
   editId?: string;  // Idempotency key for create operations
+  meta?: Record<string, unknown> | null;  // Initial value for the `meta` JSONB column (sidebar-cheap fields)
 }
 
 /**
