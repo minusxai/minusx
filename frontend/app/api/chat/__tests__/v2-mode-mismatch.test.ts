@@ -115,50 +115,55 @@ describe('/api/chat — strict mode-match rejection', () => {
 describe('/api/chat/stream — strict mode-match rejection', () => {
   setupTestDb(TEST_DB_PATH, { customInit: seed });
 
-  async function readSSEEvent(res: Response): Promise<{ event: string; data: unknown } | null> {
+  async function readAllSSEEvents(res: Response): Promise<Array<{ event: string; data: unknown }>> {
     const reader = res.body?.getReader();
-    if (!reader) return null;
+    if (!reader) return [];
     const decoder = new TextDecoder();
     let buf = '';
-    // Read up to ~5 chunks; mode-mismatch fires immediately as the first
-    // non-ping event.
-    for (let i = 0; i < 5; i++) {
+    const events: Array<{ event: string; data: unknown }> = [];
+    // eslint-disable-next-line no-constant-condition, no-restricted-syntax -- draining SSE
+    while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
-      // SSE event boundary is double-newline. Skip the leading `: ping\n\n`.
-      const idx = buf.indexOf('\n\nevent:');
-      if (idx >= 0) {
-        const eventBlock = buf.slice(idx + 2).split('\n\n')[0];
-        const lines = eventBlock.split('\n');
+      let idx: number;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        if (!chunk.trim() || chunk.startsWith(':')) continue;
+        const lines = chunk.split('\n');
         const event = lines.find((l) => l.startsWith('event: '))?.slice(7).trim() ?? '';
         const dataStr = lines.find((l) => l.startsWith('data: '))?.slice(6).trim() ?? '';
         try {
-          return { event, data: dataStr ? JSON.parse(dataStr) : null };
+          events.push({ event, data: dataStr ? JSON.parse(dataStr) : null });
         } catch {
-          return { event, data: dataStr };
+          events.push({ event, data: dataStr });
         }
       }
     }
-    await reader.cancel();
-    return null;
+    return events;
   }
 
-  it('?v=2 against a v=1 conversation file → SSE error frame', async () => {
+  it('?v=2 against a v=1 conversation file → emits error frame AND done frame (legacy listener checks doneData first)', async () => {
     const res = await chatStreamPostHandler(
       makeChatRequest('http://localhost/api/chat/stream?v=2', {
         conversationID: v1FileId,
         user_message: 'hi',
       }),
     );
-    expect(res.status).toBe(200); // stream opens
-    const frame = await readSSEEvent(res);
-    expect(frame?.event).toBe('error');
-    const data = frame?.data as { error?: string } | null;
-    expect(data?.error).toContain('cannot continue v=1 conversation in v=2 mode');
+    expect(res.status).toBe(200);
+    const frames = await readAllSSEEvents(res);
+    const error = frames.find((f) => f.event === 'error');
+    expect(error).toBeDefined();
+    expect((error!.data as { error?: string }).error).toContain('cannot continue v=1 conversation in v=2 mode');
+    // Without a done frame, legacy chatListener throws "Stream ended without
+    // done event" instead of surfacing the actual error.
+    const done = frames.find((f) => f.event === 'done');
+    expect(done).toBeDefined();
+    expect((done!.data as { error?: string }).error).toContain('cannot continue v=1 conversation in v=2 mode');
   });
 
-  it('default URL against a v=2 conversation file → SSE error frame', async () => {
+  it('default URL against a v=2 conversation file → emits error frame AND done frame', async () => {
     const res = await chatStreamPostHandler(
       makeChatRequest('http://localhost/api/chat/stream', {
         conversationID: v2FileId,
@@ -166,9 +171,12 @@ describe('/api/chat/stream — strict mode-match rejection', () => {
       }),
     );
     expect(res.status).toBe(200);
-    const frame = await readSSEEvent(res);
-    expect(frame?.event).toBe('error');
-    const data = frame?.data as { error?: string } | null;
-    expect(data?.error).toContain('cannot continue v=2 conversation in v=1 mode');
+    const frames = await readAllSSEEvents(res);
+    const error = frames.find((f) => f.event === 'error');
+    expect(error).toBeDefined();
+    expect((error!.data as { error?: string }).error).toContain('cannot continue v=2 conversation in v=1 mode');
+    const done = frames.find((f) => f.event === 'done');
+    expect(done).toBeDefined();
+    expect((done!.data as { error?: string }).error).toContain('cannot continue v=2 conversation in v=1 mode');
   });
 });

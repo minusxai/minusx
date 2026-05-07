@@ -469,15 +469,28 @@ export async function POST(request: NextRequest) {
   const isV2 = request.nextUrl.searchParams.get('v') === '2';
 
   // Mode-mismatch guard for v=1: refuse to drive a v=2 conversation through
-  // the Python backend.
+  // the Python backend. Emit BOTH an error frame and a done frame — the
+  // legacy chatListener checks doneData before errorData, so an error frame
+  // alone surfaces as "Stream ended without done event" instead of the real
+  // error.
   if (!isV2 && body.conversationID) {
     const file = await FilesAPI.loadFile(body.conversationID, user).catch(() => null);
     if (file && isV2ConversationFile(file.data)) {
+      const errMsg = 'cannot continue v=2 conversation in v=1 mode';
+      const ts = new Date().toISOString();
       writer.write(encoder.encode(
-        formatSSE('error', {
-          type: 'error',
-          error: 'cannot continue v=2 conversation in v=1 mode',
-          timestamp: new Date().toISOString(),
+        formatSSE('error', { type: 'error', error: errMsg, timestamp: ts }),
+      )).catch(() => {});
+      writer.write(encoder.encode(
+        formatSSE('done', {
+          type: 'done',
+          conversationID: body.conversationID,
+          log_index: 0,
+          pending_tool_calls: [],
+          completed_tool_calls: [],
+          debug: [],
+          error: errMsg,
+          timestamp: ts,
         }),
       )).catch(() => {});
       writer.close().catch(() => {});
@@ -528,10 +541,11 @@ async function processStreamV2(
     if (body.conversationID) {
       const check = await validateV2Mode(body.conversationID, user, true);
       if (!check.ok) {
-        await writer.write(
-          encoder.encode(formatSSE('error', { type: 'error', error: check.error, timestamp: new Date().toISOString() })),
-        );
-        return;
+        // Throw so the outer catch block emits BOTH an error frame and a
+        // done frame. Returning here would leave the legacy chatListener
+        // throwing "Stream ended without done event" because it checks
+        // doneData before errorData.
+        throw new Error(check.error);
       }
       conversationId = body.conversationID;
     } else {
@@ -555,10 +569,28 @@ async function processStreamV2(
       }
     }
   } catch (err) {
+    // Legacy chatListener expects a `done` frame even on error — without
+    // one it throws "Stream ended without done event" instead of surfacing
+    // the actual error. Emit BOTH an `error` frame (for clarity in logs)
+    // and a `done` frame carrying the error in the legacy ChatResponse
+    // shape, so the frontend's existing error-handling path fires.
     const message = err instanceof Error ? err.message : String(err);
+    const ts = new Date().toISOString();
+    await writer.write(
+      encoder.encode(formatSSE('error', { type: 'error', error: message, timestamp: ts })),
+    );
     await writer.write(
       encoder.encode(
-        formatSSE('error', { type: 'error', error: message, timestamp: new Date().toISOString() }),
+        formatSSE('done', {
+          type: 'done',
+          conversationID: body.conversationID ?? 0,
+          log_index: 0,
+          pending_tool_calls: [],
+          completed_tool_calls: [],
+          debug: [],
+          error: message,
+          timestamp: ts,
+        }),
       ),
     );
   } finally {
