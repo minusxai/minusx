@@ -5,7 +5,7 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
 
 const VALID_VIZ_TYPES: readonly VisualizationType[] = [
-  'table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
+  'table', 'bar', 'row', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
 ];
 
 function validateAllowedVizTypes(value: unknown): value is VisualizationType[] {

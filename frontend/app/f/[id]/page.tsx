@@ -1,17 +1,16 @@
 'use client';
 
-import { use, useState, useMemo, useEffect, useRef } from 'react';
+import { use, useState, useMemo } from 'react';
 import { Box, Spinner, Center, Text } from '@chakra-ui/react';
 import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { parseFileId } from '@/lib/slug-utils';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useAppSelector } from '@/store/hooks';
 import FileNotFound from '@/components/FileNotFound';
 import { ContextContent } from '@/lib/types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { useSearchParams } from 'next/navigation';
-import { setEphemeral } from '@/store/filesSlice';
 
 interface FilePageProps {
   params: Promise<{ id: string }>;
@@ -28,46 +27,8 @@ export default function FilePage({ params }: FilePageProps) {
   const searchParams = useSearchParams();
   const sourceDashboardId = searchParams.get('dashboard') ? Number(searchParams.get('dashboard')) : undefined;
 
-  // Extract dashboard param values from URL (p.start_date=2025-01-01 → { start_date: '2025-01-01' })
-  const dashboardParamValues = useMemo(() => {
-    const values: Record<string, string> = {};
-    let hasAny = false;
-    searchParams.forEach((value, key) => {
-      if (key.startsWith('p.')) {
-        values[key.slice(2)] = value;
-        hasAny = true;
-      }
-    });
-    return hasAny ? values : undefined;
-  }, [searchParams]);
-
   // Load file using client-side hook
   const { fileState: file } = useFile(intId) ?? {};
-
-  const dispatch = useAppDispatch();
-
-  // Apply dashboard param values to the question's ephemeral state (once on load)
-  const dashboardParamsAppliedRef = useRef(false);
-  useEffect(() => {
-    if (!file || file.loading || !dashboardParamValues || dashboardParamsAppliedRef.current) return;
-    if (file.type !== 'question') return;
-
-    const baseParams = (file.content as any)?.parameterValues || {};
-    const mergedParams = { ...baseParams, ...dashboardParamValues };
-
-    dispatch(setEphemeral({
-      fileId: intId,
-      changes: {
-        parameterValues: mergedParams,
-        lastExecuted: {
-          query: (file.content as any)?.query || '',
-          params: mergedParams,
-          database: (file.content as any)?.connection_name,
-        }
-      } as any
-    }));
-    dashboardParamsAppliedRef.current = true;
-  }, [file, dashboardParamValues, intId, dispatch]);
 
   // Context version selection (admin only)
   const user = useAppSelector(state => state.auth.user);

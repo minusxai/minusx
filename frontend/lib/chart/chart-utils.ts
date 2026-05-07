@@ -5,6 +5,9 @@ import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
 
+/** Chart types handled by buildChartOption / BaseChart (ECharts-based standard charts). */
+export type StandardChartType = 'line' | 'bar' | 'row' | 'area' | 'scatter' | 'combo'
+
 // Chart props interface
 export interface ChartProps {
   xAxisData: string[]
@@ -195,7 +198,7 @@ export const resolveXAxisTypes = (
 
   // Bar/waterfall charts always use category — bars are discrete, labels must match data points.
   let axisType: EChartsXAxisType = columnKind
-  if (chartType === 'bar' || chartType === 'waterfall' || chartType === 'combo') axisType = 'category'
+  if (chartType === 'bar' || chartType === 'row' || chartType === 'waterfall' || chartType === 'combo') axisType = 'category'
   else if (columnKind === 'value' && xScaleType === 'log') axisType = 'log'
 
   return { columnKind, axisType }
@@ -1077,7 +1080,7 @@ export const buildAnnotationGraphics = ({
   colorPalette,
 }: AnnotationGraphicsConfig): EChartsOption['graphic'] => {
   if (!annotations || annotations.length === 0) return []
-  if (!['line', 'bar', 'area', 'scatter'].includes(chartType)) return []
+  if (!['line', 'bar', 'row', 'area', 'scatter'].includes(chartType)) return []
   if ((xAxisColumns?.length ?? 0) !== 1) return []
 
   const ecModel = (chart as any).getModel?.()
@@ -1093,7 +1096,7 @@ export const buildAnnotationGraphics = ({
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
   const { axisType: echartsXAxisType } = resolveXAxisTypes(xAxisColumns, columnTypes, chartType)
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
-  const isStacked = (styleConfig?.stacked ?? true) && ['bar', 'area'].includes(chartType)
+  const isStacked = (styleConfig?.stacked ?? true) && ['bar', 'row', 'area'].includes(chartType)
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
   const getSeriesDisplayName = (seriesName: string): string => {
     const axisMatch = seriesName.match(/^(.*) \(([LR])\)$/)
@@ -1429,7 +1432,7 @@ interface BaseChartConfig {
   xAxisColumns?: string[]
   pointMeta?: Record<string, any>[]
   tooltipColumns?: string[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
+  chartType: StandardChartType
   additionalOptions?: Partial<EChartsOption>
   colorMode?: 'light' | 'dark'
   containerWidth?: number
@@ -1447,7 +1450,9 @@ interface BaseChartConfig {
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType: rawChartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
+  const isRowChart = rawChartType === 'row'
+  const chartType = isRowChart ? 'bar' as const : rawChartType
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1917,7 +1922,16 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
               const yValue = getCartesianYValue(p.value)
               return yValue === undefined ? true : yValue !== 0
             })
-            const rows = nonZeroItems.map((p: any) => {
+            // Sort by value descending (largest first)
+            nonZeroItems.sort((a: any, b: any) => {
+              const aVal = getCartesianYValue(a.value) ?? 0
+              const bVal = getCartesianYValue(b.value) ?? 0
+              return bVal - aVal
+            })
+            const MAX_TOOLTIP_ITEMS = 15
+            const truncated = nonZeroItems.length > MAX_TOOLTIP_ITEMS
+            const visibleItems = truncated ? nonZeroItems.slice(0, MAX_TOOLTIP_ITEMS) : nonZeroItems
+            const rows = visibleItems.map((p: any) => {
               // Resolve per-series format config: use column name stripped of axis indicator
               const baseSeriesName = p.seriesName?.replace(/ \([LR]\)$/, '') ?? ''
               const colCfg = columnFormats?.[baseSeriesName] ?? columnFormats?.[p.seriesName]
@@ -1936,7 +1950,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
               }
               return `<tr><td>${p.marker} ${p.seriesName}</td><td style="text-align:right;padding-left:12px;font-weight:600">${val}</td></tr>`
             })
-            return `${header}<table style="width:100%">${rows.join('')}</table>`
+            const moreLabel = truncated ? `<tr><td colspan="2" style="color:#888;padding-top:4px">+ ${nonZeroItems.length - MAX_TOOLTIP_ITEMS} more</td></tr>` : ''
+            return `${header}<table style="width:100%">${rows.join('')}${moreLabel}</table>`
           },
         },
     legend: {
@@ -2011,6 +2026,38 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         },
     yAxis: yAxisConfig,
     series: chartSeries,
+  }
+
+  // Round the outermost segment's corners for bar/row charts
+  if (chartType === 'bar' || chartType === 'combo') {
+    const radius = isRowChart ? [0, 3, 3, 0] : [3, 3, 0, 0]
+    const seriesArr = baseOption.series as any[]
+    const lastInStack: Record<string, number> = {}
+    for (let i = 0; i < seriesArr.length; i++) {
+      const stack = seriesArr[i].stack ?? i
+      lastInStack[stack] = i
+    }
+    const lastIndices = new Set(Object.values(lastInStack))
+    for (let i = 0; i < seriesArr.length; i++) {
+      if (lastIndices.has(i)) {
+        seriesArr[i].itemStyle = { ...seriesArr[i].itemStyle, borderRadius: radius }
+      }
+    }
+  }
+
+  // Row chart: swap axes to render horizontal bars
+  if (isRowChart) {
+    const categoryAxis = baseOption.xAxis as any
+    const valueAxis = baseOption.yAxis as any
+    // Truncate long category labels — containLabel auto-expands the grid to fit
+    if (categoryAxis?.axisLabel) {
+      categoryAxis.axisLabel.overflow = 'truncate'
+      categoryAxis.axisLabel.width = 75
+    }
+    // Push axis name further left so it doesn't overlap truncated labels
+    if (categoryAxis) categoryAxis.nameGap = 90
+    baseOption.xAxis = valueAxis as any
+    baseOption.yAxis = categoryAxis as any
   }
 
   return withMinusXTheme({ ...baseOption, ...additionalOptions, color: palette }, colorMode, palette)

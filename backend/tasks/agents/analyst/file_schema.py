@@ -29,6 +29,7 @@ class VisualizationType(str, Enum):
     RADAR = "radar"
     GEO = "geo"
     SINGLE_VALUE = "single_value"
+    ROW = "row"
 
 class GeoSubType(str, Enum):
     CHOROPLETH = "choropleth"

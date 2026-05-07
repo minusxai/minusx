@@ -6,13 +6,12 @@
  */
 
 import { Box, HStack, VStack, Text, Spinner, Button, IconButton } from '@chakra-ui/react';
-import { LuRocket, LuWrench, LuSettings, LuChevronDown, LuChevronUp, LuCode } from 'react-icons/lu';
+import { LuRocket, LuWrench, LuSettings, LuCode } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Table } from '@/components/plotx/Table';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
-import { VizTypeSelector } from './VizTypeSelector';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import { useState, useEffect, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -50,6 +49,12 @@ interface QuestionVisualizationProps {
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void;
   onTrendConfigChange?: (config: import('@/lib/types').TrendConfig) => void;
+  /** Called when user clicks "Show Viz Config" to open/switch left panel to Viz tab */
+  onOpenVizTab?: () => void;
+  /** Called when user clicks "Hide Viz Config" to collapse the left panel */
+  onHideVizTab?: () => void;
+  /** Whether the Viz tab is currently open in the left panel */
+  vizTabOpen?: boolean;
 }
 
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
@@ -139,6 +144,9 @@ export function QuestionVisualization({
   onAxisConfigChange,
   onAnnotationsChange,
   onTrendConfigChange,
+  onOpenVizTab,
+  onHideVizTab,
+  vizTabOpen,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
@@ -151,20 +159,10 @@ export function QuestionVisualization({
     dispatch(setRightSidebarCollapsed(false));
   };
 
-  const [vizSettingsExpanded, setVizSettingsExpanded] = useState(false);
-
-  const handleVizTypeChangeWithAutoExpand = (type: VizSettings['type']) => {
-    if (type !== 'table') {
-      setVizSettingsExpanded(true);
-    }
-    onVizTypeChange(type);
-  };
-
   if (!currentState) {
     return null;
   }
 
-  const useCompactLayout = config.viz.typesButtonsOrientation === 'horizontal';
   const isChartType = currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
 
   const showChartTitle = config.viz.showTitle;
@@ -172,31 +170,22 @@ export function QuestionVisualization({
     <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
     // borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}
     >
-      {useCompactLayout && config.viz.showTypeButtons && data && !error && (
-        <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" bg="bg.muted" shadow="sm" px={2} py={1} gap={0.5}>
-          <Box flexShrink={1} minWidth={0}>
-            <VizTypeSelector
-              value={currentState?.vizSettings?.type || 'table'}
-              onChange={handleVizTypeChangeWithAutoExpand}
-              orientation={config.viz.typesButtonsOrientation}
-            />
-          </Box>
-          {isChartType && config.viz.showChartBuilder && (
-            <Button
-              aria-label="Toggle viz settings"
-              size="xs"
-              variant="ghost"
-              onClick={() => setVizSettingsExpanded(!vizSettingsExpanded)}
-              color="fg.muted"
-              fontWeight="600"
-              fontSize="xs"
-              flexShrink={0}
-            >
-              <LuSettings size={14} />
-              {vizSettingsExpanded ? 'Hide Viz Config' : 'Show Viz Config'}
-              {vizSettingsExpanded ? <LuChevronUp size={14} /> : <LuChevronDown size={14} />}
-            </Button>
-          )}
+      {/* Viz Config toggle button — show/hide viz tab in the left panel */}
+      {(onOpenVizTab || onHideVizTab) && isChartType && config.viz.showChartBuilder && data && !error && (
+        <Box display="flex" alignItems="center" justifyContent="flex-end" bg="bg.muted" shadow="sm" px={2} py={1}>
+          <Button
+            aria-label={vizTabOpen ? "Hide viz settings" : "Show viz settings"}
+            size="xs"
+            variant="ghost"
+            onClick={vizTabOpen ? onHideVizTab : onOpenVizTab}
+            color="fg.muted"
+            fontWeight="600"
+            fontSize="xs"
+            flexShrink={0}
+          >
+            <LuSettings size={14} />
+            {vizTabOpen ? 'Hide Viz Config' : 'Show Viz Config'}
+          </Button>
         </Box>
       )}
 
@@ -383,7 +372,8 @@ export function QuestionVisualization({
                   currentState?.vizSettings?.type === 'combo' ||
                   currentState?.vizSettings?.type === 'radar' ||
                   currentState?.vizSettings?.type === 'geo' ||
-                  currentState?.vizSettings?.type === 'single_value') && (
+                  currentState?.vizSettings?.type === 'single_value' ||
+                  currentState?.vizSettings?.type === 'row') && (
                   <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
                     <ChartBuilder
                       columns={data.columns}
@@ -397,8 +387,6 @@ export function QuestionVisualization({
                       onYRightColsChange={onYRightColsChange}
                       initialTooltipCols={currentState.vizSettings?.tooltipCols ?? undefined}
                       onTooltipColsChange={onTooltipColsChange}
-                      showAxisBuilder={config.viz.showChartBuilder}
-                      useCompactView={useCompactLayout}
                       fillHeight={true}
                       initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
                       onPivotConfigChange={onPivotConfigChange}
@@ -408,7 +396,6 @@ export function QuestionVisualization({
                       databaseName={currentState?.connection_name}
                       initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
                       onColumnFormatsChange={onColumnFormatsChange}
-                      settingsExpanded={useCompactLayout ? vizSettingsExpanded : undefined}
                       showChartTitle={showChartTitle}
                       styleConfig={{
                         ...(currentState.vizSettings?.styleConfig ?? {}),
@@ -431,14 +418,6 @@ export function QuestionVisualization({
         )}
       </Box>
 
-      {/* Viz Type Selector - Side in vertical layout */}
-      {!useCompactLayout && config.viz.showTypeButtons && data && !error && (
-        <VizTypeSelector
-          value={currentState?.vizSettings?.type || 'table'}
-          onChange={onVizTypeChange}
-          orientation={config.viz.typesButtonsOrientation}
-        />
-      )}
       </HStack>
     </VStack>
   );

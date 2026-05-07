@@ -31,7 +31,8 @@ export type VisualizationType =
   | "combo"
   | "radar"
   | "geo"
-  | "single_value";
+  | "single_value"
+  | "row";
 /**
  * list of column names in the x axis (for non-pivot chart types)
  */

@@ -281,59 +281,81 @@ export function GeoAxisBuilder({
   )
 
   return (
-    <VStack align="stretch" gap={0}>
-      {/* Map sub-type selector */}
-      <Box px={3} pt={3} pb={1} bg="bg.canvas">
+    <VStack align="stretch" gap={3}>
+      {/* Map sub-type selector — grid matching viz type selector */}
+      <Box>
         <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle" mb={1.5}>
-          Map Subtypes
+          Geo Subtypes
         </Text>
-        <HStack gap={1} flexWrap="wrap">
-          {SUB_TYPES.map(({ value, icon: Icon, label }) => {
-            const isActive = config.subType === value
-            return (
-              <HStack
-                key={value}
-                aria-label={`Geo sub-type ${label}`}
-                gap={1}
-                px={2}
-                py={1}
-                borderRadius="md"
-                cursor="pointer"
-                bg={isActive ? 'accent.teal/15' : 'transparent'}
-                color={isActive ? 'accent.teal' : 'fg.muted'}
-                _hover={{ bg: isActive ? 'accent.teal/20' : 'bg.subtle' }}
-                transition="all 0.15s"
-                onClick={() => handleSubTypeChange(value)}
-              >
-                <Icon size={14} />
-                <Text fontSize="xs" fontWeight={isActive ? '700' : '500'}>{label}</Text>
-              </HStack>
-            )
-          })}
-        </HStack>
+      <Box
+        display="grid"
+        gridTemplateColumns={`repeat(${SUB_TYPES.length}, 1fr)`}
+        gap={1}
+        width="100%"
+        bg="bg.subtle"
+        borderRadius="md"
+        p={2}
+      >
+        {SUB_TYPES.map(({ value, icon: Icon, label }) => {
+          const isActive = config.subType === value
+          return (
+            <Box
+              key={value}
+              as="button"
+              aria-label={`Geo sub-type ${label}`}
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              gap={0.5}
+              py={1.5}
+              borderRadius="md"
+              bg={isActive ? 'accent.teal/15' : 'transparent'}
+              color={isActive ? 'accent.teal' : 'fg.muted'}
+              cursor="pointer"
+              transition="all 0.12s ease"
+              _hover={{
+                bg: isActive ? 'accent.teal/20' : 'bg.muted',
+                color: isActive ? 'accent.teal' : 'fg.default',
+              }}
+              onClick={() => handleSubTypeChange(value)}
+            >
+              <Icon size={16} />
+              <Text fontSize="2xs" fontFamily="mono" fontWeight={isActive ? '700' : '500'} lineHeight="1">
+                {label}
+              </Text>
+            </Box>
+          )
+        })}
+      </Box>
       </Box>
 
-      {/* Tab bar */}
-      <HStack gap={2} justify="flex-start" px={3} pt={3} pb={1} bg="bg.canvas">
+      {/* Tab bar — segmented control */}
+      <HStack
+        gap={0}
+        bg="bg.muted"
+        borderRadius="md"
+        p={0.5}
+        maxW="240px"
+      >
         {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
           <HStack
             key={key}
             as="button"
-            gap={1}
-            px={2}
-            py={1}
+            flex={1}
+            gap={1.5}
+            justify="center"
+            py={1.5}
             cursor="pointer"
-            bg="transparent"
-            color={activeTab === key ? 'accent.teal' : 'fg.subtle'}
-            borderBottom="2px solid"
-            borderColor={activeTab === key ? 'accent.teal' : 'transparent'}
-            _hover={{ color: 'accent.teal' }}
+            bg={activeTab === key ? 'accent.teal/90' : 'transparent'}
+            color={activeTab === key ? 'white' : 'fg.subtle'}
+            borderRadius="sm"
+            _hover={{ color: activeTab === key ? 'white' : 'fg.muted' }}
             transition="all 0.15s"
             onClick={() => setActiveTab(key)}
-            borderRadius={0}
           >
-            <Box as={Icon} fontSize="xs" />
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+            <Box as={Icon} fontSize="sm" />
+            <Text fontSize="xs" fontFamily="mono" fontWeight="600">
               {label}
             </Text>
           </HStack>
@@ -342,12 +364,12 @@ export function GeoAxisBuilder({
 
       {/* Fields tab — column drop zones */}
       {activeTab === 'fields' && (
-        <AxisBuilder columns={columns} types={types} zones={zones} />
+        <AxisBuilder columns={columns} types={types} zones={zones} borderless />
       )}
 
       {/* Settings tab — base map, tiles, color scale */}
       {activeTab === 'settings' && (
-        <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3} position="relative" zIndex={500}>
+        <Box display="flex" flexDirection="column" gap={3} position="relative" zIndex={500}>
           {renderSettingsCard('Geo Settings', 'geo',
             <VStack align="stretch" gap={3}>
               <HStack gap={4} flexWrap="wrap" align="center">

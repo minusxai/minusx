@@ -10,7 +10,7 @@ import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/DatabaseSelector';
-import { QueryModeSelector, QueryBuilderRoot } from '@/components/query-builder';
+import { QueryModeSelector, QueryBuilderRoot, type QueryTab } from '@/components/query-builder';
 import SqlEditor from '@/components/SqlEditor';
 import SimpleSelect from './SimpleSelect';
 
@@ -118,7 +118,7 @@ function InlineSubjectEditor({
   onChange: (subject: TestSubject) => void;
   disabled?: boolean;
 }) {
-  const [queryMode, setQueryMode] = useState<'gui' | 'sql'>('gui');
+  const [queryMode, setQueryMode] = useState<QueryTab>('gui');
   const { connections } = useConnections({ skip: true });
   const dialect = connectionTypeToDialect(connections[subject.connection_name]?.metadata?.type ?? '');
 
@@ -148,6 +148,7 @@ function InlineSubjectEditor({
               mode={queryMode}
               onModeChange={setQueryMode}
               canUseGUI
+              showVizTab={false}
             />
           )}
         </HStack>

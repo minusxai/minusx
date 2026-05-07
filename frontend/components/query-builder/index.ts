@@ -5,7 +5,7 @@
 export { QueryBuilder } from './QueryBuilder';
 export { QueryBuilderRoot } from './QueryBuilderRoot';
 export { CompoundQueryBuilder } from './CompoundQueryBuilder';
-export { QueryModeSelector } from './QueryModeSelector';
+export { QueryModeSelector, type QueryTab } from './QueryModeSelector';
 export { TableSelector } from './TableSelector';
 export { ColumnSelector } from './ColumnSelector';
 export { JoinBuilder } from './JoinBuilder';

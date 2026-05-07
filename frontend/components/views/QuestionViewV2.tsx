@@ -28,7 +28,7 @@ import {
   LuX,
   LuGripVertical,
 } from 'react-icons/lu';
-import { QuestionContent, QuestionParameter, connectionTypeToDialect } from '@/lib/types';
+import { QuestionContent, QuestionParameter, connectionTypeToDialect, type VisualizationType } from '@/lib/types';
 import SqlEditor from '../SqlEditor';
 import ParameterRow from '../ParameterRow';
 import DatabaseSelector from '../DatabaseSelector';
@@ -44,7 +44,9 @@ import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
-import { QueryBuilderRoot, QueryModeSelector } from '../query-builder';
+import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
+import { VizTypeSelector } from '../question/VizTypeSelector';
+import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { FilesAPI } from '@/lib/data/files';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 
@@ -163,8 +165,8 @@ export default function QuestionViewV2({
     }
   }, [dispatch, questionId, sqlEditorCollapsed]);
 
-  // Query mode state (SQL or GUI)
-  const [queryMode, setQueryMode] = useState<'sql' | 'gui'>('sql');
+  // Query mode state (SQL, GUI, or Viz)
+  const [queryMode, setQueryMode] = useState<QueryTab>('sql');
   const [guiError, setGuiError] = useState<string | null>(null);
   const [canUseGUI, setCanUseGUI] = useState(true);
 
@@ -342,7 +344,7 @@ export default function QuestionViewV2({
   };
 
   // Handle viz type change
-  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value') => {
+  const handleVizTypeChange = (type: VisualizationType) => {
     onChange({ vizSettings: { ...content.vizSettings, type } });
   };
 
@@ -581,58 +583,45 @@ export default function QuestionViewV2({
             minWidth={!useCompactLayout && collapsedPanel === 'none' ? '300px' : undefined}
             position="relative"
             borderRadius={!useCompactLayout ? 'lg' : undefined}
+            border={!useCompactLayout ? '1px solid' : undefined}
+            borderColor={!useCompactLayout ? 'border.muted' : undefined}
+            bg={!useCompactLayout ? 'bg.canvas' : undefined}
             overflow="hidden"
             my={!useCompactLayout ? 2 : 0}
             ml={!useCompactLayout ? 2 : 0}
           >
             {/* SQL Editor Section */}
             <Box
-              borderBottomWidth={sqlEditorCollapsed && useCompactLayout ? "1px" : "0"}
               borderColor="border.muted"
-              flex={!useCompactLayout && !sqlEditorCollapsed ? 1 : undefined}
-              flexShrink={sqlEditorCollapsed ? 0 : undefined}
+              flex={!useCompactLayout ? 1 : undefined}
               display="flex"
               flexDirection="column"
               minHeight={0}
               overflow="hidden"
             >
-            {<HStack
-              px={4}
-              py={2}
-              _hover={{ bg: 'bg.muted' }}
-              flexWrap="wrap"
-              gap={2}
-              flexShrink={0}
-            >
-              {/* Left side: Collapse toggle + Query label + Mode selector */}
-              <HStack gap={3} align="center">
-                <HStack
-                  gap={2}
-                  cursor="pointer"
-                  align="center"
-                  onClick={handleSqlEditorToggle}
-                >
-                  <Box color="fg.muted" fontSize="sm">
-                    {sqlEditorCollapsed ? <LuChevronRight /> : <LuChevronDown />}
-                  </Box>
-                  <Text fontSize="sm" fontWeight="700">
-                    Query
-                  </Text>
-                </HStack>
-                {/* Query Mode Selector: SQL vs GUI - show when expanded */}
-                {!sqlEditorCollapsed && (
+            {<Box flexShrink={0}>
+              {/* Tab selector + DB selector row */}
+              <HStack px={3} py={2} gap={2} align="center">
+                <Box flex={1} minWidth={0}>
                   <QueryModeSelector
                     mode={queryMode}
                     onModeChange={setQueryMode}
                     canUseGUI={canUseGUI}
                     guiError={guiError ?? undefined}
+                    showVizTab={showVizControls && !!queryData}
                   />
-                )}
+                </Box>
+                <Box flexShrink={0}>
+                  <DatabaseSelector
+                    value={content.connection_name || ''}
+                    onChange={handleDatabaseChange}
+                  />
+                </Box>
               </HStack>
 
-              {/* Right side: Reference chips + Database selector */}
-              <HStack gap={2} ml="auto" flexWrap="wrap" onClick={(e) => e.stopPropagation()}>
-                {/* Reference chips (visible in both edit and view mode) */}
+              {/* Reference chips row (hide on Viz tab) */}
+              {queryMode !== 'viz' && referencedQuestions.length > 0 && (
+              <HStack px={4} py={1} gap={2} flexWrap="wrap" onClick={(e) => e.stopPropagation()}>
                 {referencedQuestions.map(ref => {
                   const isSelected = sqlPreviewId === ref.id;
                   return (
@@ -652,7 +641,6 @@ export default function QuestionViewV2({
                       <Code fontSize="xs" color="accent.secondary" bg="transparent" fontWeight="600">
                         @{ref.alias}
                       </Code>
-                      {/* Remove button only in edit mode */}
                       {editMode && (
                         <IconButton
                           aria-label="Remove reference"
@@ -671,17 +659,10 @@ export default function QuestionViewV2({
                     </HStack>
                   );
                 })}
-
-                {/* Database selector */}
-                <DatabaseSelector
-                  value={content.connection_name || ''}
-                  onChange={handleDatabaseChange}
-                />
               </HStack>
-            </HStack>
-            }
+              )}
+            </Box>}
 
-            {!sqlEditorCollapsed && (
               <Box flex={1} minHeight={0} display="flex" flexDirection="column" overflow="hidden">
                 {/* SQL Mode: Monaco Editor */}
                 {queryMode === 'sql' && (
@@ -727,8 +708,49 @@ export default function QuestionViewV2({
                     />
                   </Box>
                 )}
+
+                {/* Viz Mode: Chart type selector + axis config */}
+                {queryMode === 'viz' && queryData && (
+                  <Box flex={1} overflow="auto" px={3} py={2} display="flex" flexDirection="column" gap={0}>
+                    <VizTypeSelector
+                      value={content.vizSettings?.type || 'table'}
+                      onChange={handleVizTypeChange}
+                      orientation="grouped"
+                    />
+                    {content.vizSettings?.type && content.vizSettings.type !== 'table' && (
+                      <VizConfigPanel
+                        columns={queryData.columns}
+                        types={queryData.types}
+                        chartType={content.vizSettings.type}
+                        initialXCols={content.vizSettings?.xCols ?? undefined}
+                        initialYCols={content.vizSettings?.yCols ?? undefined}
+                        initialYRightCols={content.vizSettings?.yRightCols ?? undefined}
+                        onAxisChange={handleAxisChange}
+                        onYRightColsChange={handleYRightColsChange}
+                        initialTooltipCols={content.vizSettings?.tooltipCols ?? undefined}
+                        onTooltipColsChange={handleTooltipColsChange}
+                        initialPivotConfig={content.vizSettings?.pivotConfig ?? undefined}
+                        onPivotConfigChange={handlePivotConfigChange}
+                        initialGeoConfig={content.vizSettings?.geoConfig ?? undefined}
+                        onGeoConfigChange={handleGeoConfigChange}
+                        initialColumnFormats={content.vizSettings?.columnFormats ?? undefined}
+                        onColumnFormatsChange={handleColumnFormatsChange}
+                        styleConfig={{
+                          ...(content.vizSettings?.styleConfig ?? {}),
+                          ...(content.vizSettings?.colors ? { colors: content.vizSettings.colors } : {}),
+                        }}
+                        onStyleConfigChange={handleStyleConfigChange}
+                        axisConfig={content.vizSettings?.axisConfig ?? undefined}
+                        onAxisConfigChange={handleAxisConfigChange}
+                        annotations={content.vizSettings?.annotations ?? undefined}
+                        onAnnotationsChange={handleAnnotationsChange}
+                        trendConfig={content.vizSettings?.trendConfig ?? undefined}
+                        onTrendConfigChange={handleTrendConfigChange}
+                      />
+                    )}
+                  </Box>
+                )}
               </Box>
-            )}
           </Box>
           </Box>
           {/* End Left Panel */}
@@ -945,7 +967,6 @@ export default function QuestionViewV2({
                   viz: {
                     showTypeButtons: showVizControls,
                     showChartBuilder: showVizControls,
-                    // Always use horizontal (compact) to hide column sidebar - cleaner in side-by-side
                     typesButtonsOrientation: 'horizontal',
                     showTitle: viewMode === 'toolcall'
                   },
@@ -966,6 +987,14 @@ export default function QuestionViewV2({
                 onAxisConfigChange={handleAxisConfigChange}
                 onAnnotationsChange={handleAnnotationsChange}
                 onTrendConfigChange={handleTrendConfigChange}
+                onOpenVizTab={() => {
+                  if (collapsedPanel === 'left') toggleCollapsedPanel('none');
+                  setQueryMode('viz');
+                }}
+                onHideVizTab={() => {
+                  toggleCollapsedPanel('left');
+                }}
+                vizTabOpen={queryMode === 'viz' && collapsedPanel !== 'left'}
               />
             )}
           </Box>

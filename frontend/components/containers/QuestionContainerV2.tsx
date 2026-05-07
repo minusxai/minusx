@@ -23,6 +23,7 @@ import { QuestionContent } from '@/lib/types';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
+import { useSearchParams } from 'next/navigation';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
@@ -37,6 +38,20 @@ interface QuestionContainerV2Props {
  */
 export default function QuestionContainerV2({ fileId, mode: containerMode }: QuestionContainerV2Props) {
   const dispatch = useAppDispatch();
+
+  // Read URL param overrides (p.start_date=... → { start_date: ... })
+  const searchParams = useSearchParams();
+  const urlParamOverrides = useMemo(() => {
+    const values: Record<string, string> = {};
+    let hasAny = false;
+    searchParams.forEach((value, key) => {
+      if (key.startsWith('p.')) {
+        values[key.slice(2)] = value;
+        hasAny = true;
+      }
+    });
+    return hasAny ? values : undefined;
+  }, [searchParams]);
 
   // Phase 3: Use useFile hook for file state management (purely reactive)
   const { fileState: file } = useFile(fileId) ?? {};
@@ -112,7 +127,10 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   const handleExecute = useCallback((overrideParamValues?: Record<string, any>) => {
     if (!mergedContent) return;
 
-    const effectiveValues = overrideParamValues ?? mergedContent.parameterValues ?? {};
+    // Priority: explicit override > URL params merged with content > content params
+    const baseValues = mergedContent.parameterValues ?? {};
+    const effectiveValues = overrideParamValues
+      ?? (urlParamOverrides ? { ...baseValues, ...urlParamOverrides } : baseValues);
 
     const newQuery = {
       query: mergedContent.query,
@@ -126,7 +144,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       fileId,
       changes: { lastExecuted: newQuery }
     }));
-  }, [mergedContent, fileId, dispatch]);
+  }, [mergedContent, fileId, dispatch, urlParamOverrides]);
 
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
@@ -145,18 +163,20 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   // doesn't become reactive to mergedContent, which would auto-execute on every edit.
   useEffect(() => {
     if (!mergedContent || !hasAutoExecutedRef.current || lastExecuted) return;
+    const baseValues = mergedContent.parameterValues || {};
+    const restoredParams = urlParamOverrides ? { ...baseValues, ...urlParamOverrides } : baseValues;
     dispatch(setEphemeral({
       fileId,
       changes: {
         lastExecuted: {
           query: mergedContent.query,
-          params: mergedContent.parameterValues || {},
+          params: restoredParams,
           database: mergedContent.connection_name,
           references: mergedContent.references || []
         }
       }
     }));
-  }, [lastExecuted, mergedContent, fileId, dispatch]);
+  }, [lastExecuted, mergedContent, fileId, dispatch, urlParamOverrides]);
 
   // Handle parameter value change — persisted into file content (marks file dirty)
   const handleParameterValueChange = useCallback((paramName: string, value: string | number | null) => {

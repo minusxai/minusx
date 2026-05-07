@@ -4,33 +4,29 @@ import { useState, useCallback, useMemo, useRef } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
+import { RowPlot } from './RowPlot'
 import { AreaPlot } from './AreaPlot'
 import { ScatterPlot } from './ScatterPlot'
 import { FunnelPlot } from './FunnelPlot'
 import { PiePlot } from './PiePlot'
 import { PivotTable } from './PivotTable'
-import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
 import { RadarPlot } from './RadarPlot'
 import { ComboPlot } from './ComboPlot'
-import { GeoAxisBuilder } from './GeoAxisBuilder'
-import { TrendAxisBuilder } from './TrendAxisBuilder'
 import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
-import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
-import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig, VisualizationType } from '@/lib/types'
 import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp, buildCompactYLabel } from '@/lib/chart/chart-utils'
 import { getVizConstraintError } from '@/lib/chart/viz-constraints'
+import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
-import { StyleConfigPopover } from './StyleConfigPopover'
-import { AnnotationEditor } from './AnnotationEditor'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
@@ -48,14 +44,12 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo' | 'single_value'
+  chartType: Exclude<VisualizationType, 'table'>
   initialXCols?: string[]
   initialYCols?: string[]
   initialYRightCols?: string[]
   onAxisChange?: (xCols: string[], yCols: string[]) => void
   onYRightColsChange?: (yRightCols: string[]) => void
-  showAxisBuilder?: boolean
-  useCompactView?: boolean
   fillHeight?: boolean
   initialPivotConfig?: PivotConfig
   onPivotConfigChange?: (config: PivotConfig) => void
@@ -67,7 +61,6 @@ interface ChartBuilderProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   initialTooltipCols?: string[]
   onTooltipColsChange?: (cols: string[]) => void
-  settingsExpanded?: boolean
   showChartTitle?: boolean
   styleConfig?: VisualizationStyleConfig
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void
@@ -86,7 +79,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const configPalette = config.chartColorPalette
@@ -171,18 +164,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
     return []
   }, [initialTooltipCols, columns])
-  const supportsAnnotations = ['line', 'bar', 'area', 'scatter'].includes(chartType) && xAxisColumns.length === 1
-
-  const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
-    const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat && !config.prefix && !config.suffix
-    const next = { ...(initialColumnFormats ?? {}) }
-    if (isEmpty) {
-      delete next[column]
-    } else {
-      next[column] = config
-    }
-    onColumnFormatsChange?.(next)
-  }, [initialColumnFormats, onColumnFormatsChange])
 
   // Helper: resolve display name using alias
   const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
@@ -200,121 +181,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return parts || undefined
   }, [axisConfig?.yTitle, xAxisColumns, yAxisColumns, getDisplayName])
 
-
-  // Handle drop on X Axis (primary): demotes current primary to Split By
-  const handleDropXPrimary = useCallback((col: string) => {
-    if (xAxisColumns[0] === col) return
-    const remaining = xAxisColumns.filter(c => c !== col)
-    onAxisChange?.([col, ...remaining], yAxisColumns)
-  }, [xAxisColumns, yAxisColumns, onAxisChange])
-
-  // Handle drop on Split By: appends to grouping columns
-  const handleDropSplitBy = useCallback((col: string) => {
-    if (xAxisColumns.includes(col)) return
-    onAxisChange?.([...xAxisColumns, col], yAxisColumns)
-  }, [xAxisColumns, yAxisColumns, onAxisChange])
-
-  // Handle drop on Y axis
-  const handleDropY = useCallback((col: string) => {
-    if (!yAxisColumns.includes(col)) {
-      onAxisChange?.(xAxisColumns, [...yAxisColumns, col])
-    }
-  }, [yAxisColumns, xAxisColumns, onAxisChange])
-
-  // Remove from X Axis (primary): rest shift up
-  const removeFromXPrimary = useCallback((column: string) => {
-    onAxisChange?.(xAxisColumns.filter(c => c !== column), yAxisColumns)
-  }, [xAxisColumns, yAxisColumns, onAxisChange])
-
-  // Remove from Split By
-  const removeFromSplitBy = useCallback((column: string) => {
-    onAxisChange?.(xAxisColumns.filter(c => c !== column), yAxisColumns)
-  }, [xAxisColumns, yAxisColumns, onAxisChange])
-
-  const removeFromY = useCallback((column: string) => {
-    onAxisChange?.(xAxisColumns, yAxisColumns.filter(c => c !== column))
-  }, [yAxisColumns, xAxisColumns, onAxisChange])
-
-  // Handle drop/remove on Y Right axis
-  const handleDropYRight = useCallback((col: string) => {
-    if (!yRightColumns.includes(col)) {
-      onYRightColsChange?.([...yRightColumns, col])
-    }
-  }, [yRightColumns, onYRightColsChange])
-
-  const removeFromYRight = useCallback((column: string) => {
-    onYRightColsChange?.(yRightColumns.filter(c => c !== column))
-  }, [yRightColumns, onYRightColsChange])
-
-  const handleDropTooltip = useCallback((col: string) => {
-    if (!tooltipColumns.includes(col)) {
-      onTooltipColsChange?.([...tooltipColumns, col])
-    }
-  }, [tooltipColumns, onTooltipColsChange])
-
-  const removeFromTooltip = useCallback((column: string) => {
-    onTooltipColsChange?.(tooltipColumns.filter(c => c !== column))
-  }, [tooltipColumns, onTooltipColsChange])
-
-  // Build axis zones for AxisBuilder
-  const chartZones: AxisZone[] = useMemo(() => {
-    const xAxisZone: AxisZone = {
-      label: 'X Axis',
-      items: xAxisColumns.length > 0 ? [{ column: xAxisColumns[0] }] : [],
-      emptyText: 'Drop a column here',
-      onDrop: handleDropXPrimary,
-      onRemove: removeFromXPrimary,
-    }
-    const splitByZone: AxisZone = {
-      label: 'Split By',
-      items: xAxisColumns.slice(1).map(col => ({ column: col })),
-      emptyText: 'Group into series',
-      onDrop: handleDropSplitBy,
-      onRemove: removeFromSplitBy,
-    }
-    const tooltipZone: AxisZone = {
-      label: 'Tooltip',
-      items: tooltipColumns.map(col => ({ column: col })),
-      emptyText: 'Extra fields for hover details',
-      onDrop: handleDropTooltip,
-      onRemove: removeFromTooltip,
-    }
-
-    if (isDualAxis) {
-      return [
-        xAxisZone,
-        splitByZone,
-        {
-          label: 'Y Left',
-          items: yAxisColumns.map(col => ({ column: col })),
-          emptyText: 'Drop columns here',
-          onDrop: handleDropY,
-          onRemove: removeFromY,
-        },
-        {
-          label: 'Y Right',
-          items: yRightColumns.map(col => ({ column: col })),
-          emptyText: 'Drop columns here',
-          onDrop: handleDropYRight,
-          onRemove: removeFromYRight,
-        },
-        tooltipZone,
-      ]
-    }
-
-    return [
-      xAxisZone,
-      splitByZone,
-      {
-        label: 'Y Axis',
-        items: yAxisColumns.map(col => ({ column: col })),
-        emptyText: 'Drop columns here',
-        onDrop: handleDropY,
-        onRemove: removeFromY,
-      },
-      tooltipZone,
-    ]
-  }, [xAxisColumns, yAxisColumns, yRightColumns, isDualAxis, tooltipColumns, handleDropXPrimary, handleDropSplitBy, handleDropY, handleDropYRight, handleDropTooltip, removeFromXPrimary, removeFromSplitBy, removeFromY, removeFromYRight, removeFromTooltip])
 
   // Aggregate data — combine left + right Y columns so all series are produced
   const allYColumns = useMemo(() => {
@@ -473,8 +339,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   const hasData = allYColumns.length > 0
 
-  // Use the compact view flag passed from parent
-  const useCompactView = useCompactViewProp
 
   // Pivot config — always derived from props so agent edits immediately take effect
   const pivotConfig = initialPivotConfig
@@ -530,19 +394,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     const hasData = allYColumns.length > 0
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
-        {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-          <TrendAxisBuilder
-            columns={columns}
-            types={types}
-            xAxisColumns={xAxisColumns}
-            yAxisColumns={yAxisColumns}
-            onAxisChange={(x, y) => onAxisChange?.(x, y)}
-            columnFormats={columnFormats}
-            onColumnFormatChange={handleColumnFormatChange}
-            trendConfig={trendConfig}
-            onTrendConfigChange={onTrendConfigChange}
-          />
-        )}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
           {constraintError ? (
             <ChartError message={constraintError} variant={constraint.variant} />
@@ -566,25 +417,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Single value mode: big number display, only Y-axis (metrics) needed
   if (chartType === 'single_value') {
     const hasData = allYColumns.length > 0
-    const singleValueZones: AxisZone[] = [{
-      label: 'Metrics',
-      items: yAxisColumns.map(col => ({ column: col })),
-      emptyText: 'Drop column to display',
-      onDrop: (col) => { if (!yAxisColumns.includes(col)) onAxisChange?.([], [...yAxisColumns, col]) },
-      onRemove: (col) => onAxisChange?.([], yAxisColumns.filter(c => c !== col)),
-    }]
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
-        {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-          <AxisBuilder
-            columns={columns}
-            types={types}
-            zones={singleValueZones}
-            columnFormats={columnFormats}
-            onColumnFormatChange={handleColumnFormatChange}
-            chartType={chartType}
-          />
-        )}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
           {hasData ? (
             <SingleValue values={yAxisColumns.map(col => ({
@@ -603,25 +437,16 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const isGeo = chartType === 'geo'
 
   if (isGeo) {
-    const handleGeoConfigChangeInternal = (config: GeoConfig) => {
-      onGeoConfigChange?.(config)
+    const geoConstraint = getGeoConstraintError(initialGeoConfig ?? null, columns)
+    if (geoConstraint.error) {
+      return (
+        <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
+          <ChartError variant="info" message={geoConstraint.error} />
+        </Box>
+      )
     }
-
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
-        {showAxisBuilder && settingsExpandedProp && (
-          <GeoAxisBuilder
-            columns={columns}
-            types={types}
-            geoConfig={initialGeoConfig}
-            onGeoConfigChange={handleGeoConfigChangeInternal}
-            tooltipCols={tooltipColumns}
-            onTooltipColsChange={onTooltipColsChange}
-            colorOverrides={styleConfig?.colors ?? {}}
-            onColorOverridesChange={(colors) => onStyleConfigChange?.({ ...styleConfig, colors })}
-            getMapView={() => getMapViewRef.current?.() ?? null}
-          />
-        )}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
           <GeoPlot
             rows={rows}
@@ -645,22 +470,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   if (isPivot) {
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
-        {showAxisBuilder && settingsExpandedProp && (
-          <PivotAxisBuilder
-            columns={columns}
-            types={types}
-            pivotConfig={pivotConfig}
-            onPivotConfigChange={handlePivotConfigChange}
-            useCompactView={useCompactView}
-            availableRowValues={availableRowValues}
-            availableColumnValues={availableColumnValues}
-            columnFormats={columnFormats}
-            onColumnFormatChange={handleColumnFormatChange}
-            rowDimensions={rowDimensions}
-            getRowValuesAtLevel={getRowValuesAtLevel}
-          />
-        )}
-
         {/* Pivot Table */}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
           {pivotHasData ? (
@@ -694,40 +503,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   return (
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
-      {/* Axis Builder (column palette + drop zones) */}
-      {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-        <AxisBuilder
-          columns={columns}
-          types={types}
-          zones={chartZones}
-          columnFormats={columnFormats}
-          onColumnFormatChange={handleColumnFormatChange}
-          axisConfig={axisConfig}
-          onAxisConfigChange={onAxisConfigChange}
-          chartType={chartType}
-          stylePanel={onStyleConfigChange ? (
-            <StyleConfigPopover
-              chartType={chartType}
-              styleConfig={styleConfig}
-              numSeries={aggregatedData.series.length}
-              onChange={onStyleConfigChange}
-              displayMode="inline"
-            />
-          ) : undefined}
-          annotationPanel={onAnnotationsChange ? (
-            <AnnotationEditor
-              annotations={annotations}
-              onChange={onAnnotationsChange}
-              enabled={supportsAnnotations}
-              xOptions={aggregatedData.xAxisData}
-              seriesOptions={aggregatedData.series.map(item => item.name)}
-            />
-          ) : undefined}
-        />
-      )}
-
       {/* Chart Area */}
-      <VStack flex="1" align="stretch" gap={0} minWidth={0} overflow="hidden" minHeight="0" height={useCompactView ? "auto" : undefined}>
+      <VStack flex="1" align="stretch" gap={0} minWidth={0} overflow="hidden" minHeight="0">
         {/* Column Conflict Warning */}
         {columnConflicts.length > 0 && (
           <Box
@@ -770,7 +547,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   columnFormats,
                   yAxisColumns,
                   yRightCols: yRightColumns,
-                  height: useCompactView && !fillHeight ? 300 : undefined,
+                  height: undefined,
                   onChartClick: handleChartClick,
                   chartTitle,
                   showChartTitle,
@@ -782,7 +559,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   exportBranding,
                   onDownloadImage,
                 }
-                const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
+                const plotMap = { line: LinePlot, bar: BarPlot, row: RowPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
                 const Plot = plotMap[chartType as keyof typeof plotMap]
                 if (Plot) return <Plot {...sharedProps} />
                 return null

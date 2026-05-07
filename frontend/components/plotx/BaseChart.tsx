@@ -3,12 +3,12 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { useChartContainer } from './useChartContainer'
 import { ChartHost } from './ChartHost'
-import { buildAnnotationGraphics, buildChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { buildAnnotationGraphics, buildChartOption, isValidChartData, type ChartProps, type StandardChartType } from '@/lib/chart/chart-utils'
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
 
 interface BaseChartProps extends ChartProps {
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
+  chartType: StandardChartType
   emptyMessage?: string
   additionalOptions?: Partial<EChartsOption>
   height?: string | number
