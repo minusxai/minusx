@@ -6,7 +6,7 @@ import {
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
 import { ReadFiles, SearchFiles } from '@/agents/analyst/file-tools';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import { EditFile, CreateFile } from './web-tools';
 
 export { EditFile, CreateFile } from './web-tools';
@@ -40,6 +40,10 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     CreateFile.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
+  // Call-time pi-ai options (spread blindly into `streamSimple`). Default
+  // `reasoning: 'low'` so adaptive thinking is on out of the box;
+  // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
+  static readonly callOptions = { reasoning: 'low', ...(getAnalystModelOptions() ?? {}) };
 
   protected getSystemPrompt(): string {
     // Re-uses the RemoteAnalystAgent prompt (production prompts.yaml) under

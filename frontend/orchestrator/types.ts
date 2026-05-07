@@ -129,6 +129,11 @@ export class MXAgent<
   static readonly type: string = 'Agent';
   static readonly model: Model<Api>;
   static readonly tools: Tool<TSchema>[] = [];
+  /** Call-time options spread blindly into pi-ai's `streamSimple` (matches
+   *  `SimpleStreamOptions`: `reasoning`, `thinkingBudgets`, `metadata`,
+   *  `maxRetryDelayMs`, …). Subclasses set this from env config; the
+   *  orchestrator never inspects individual keys. */
+  static readonly callOptions: Record<string, unknown> | undefined = undefined;
 
   threadHistory: Message[];
   toolThread: ToolMessage[];
@@ -179,7 +184,7 @@ export class MXAgent<
       messages: this.buildMessages(),
       tools: ctor.tools,
     };
-    return this.orchestrator.callLLM(ctor.model, context, this.id);
+    return this.orchestrator.callLLM(ctor.model, context, this.id, ctor.callOptions);
   }
 
   async run(): Promise<AssistantMessage> {

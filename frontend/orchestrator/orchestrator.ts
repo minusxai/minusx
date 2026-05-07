@@ -92,8 +92,15 @@ export class Orchestrator {
     model: Model<Api>,
     context: Context,
     agentId: string,
+    callOptions?: Record<string, unknown>,
   ): Promise<AssistantMessage> {
-    const piStream = streamSimple(model, context, { signal: this.controller?.signal });
+    // Spread `callOptions` blindly into pi-ai's stream options. We treat it
+    // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new pi-ai
+    // options (`thinkingBudgets`, `metadata`, …) never touches this code.
+    const piStream = streamSimple(model, context, {
+      ...(callOptions ?? {}),
+      signal: this.controller?.signal,
+    });
 
     let result: AssistantMessage | null = null;
     let errored = false;
@@ -307,6 +314,8 @@ export class Orchestrator {
           parent.toolThread.push(trm);
         } catch (err) {
           if (err instanceof UserInputException) {
+            // Frontend-bridge tool: emit a `pending` event and re-throw so
+            // the orchestrator pauses for the bridge to fulfil this tool.
             this.stream?.push({
               type: 'pending',
               id: tc.id,
@@ -315,8 +324,26 @@ export class Orchestrator {
               context: parent.context,
               parent_id: parent.id,
             });
+            throw err;
           }
-          throw err;
+          // Server-side tool that threw a real error (e.g. SQL connection
+          // missing, network failure, etc.). Emit an `isError: true`
+          // toolResult so the agent sees the error and can recover, AND so
+          // the tool isn't misreported as "pending" — without this, the
+          // unmatched toolCall makes `getPendingToolCalls()` return the
+          // failing tool, and the frontend then tries to bridge a
+          // server-side tool ("Unknown client-side tool: ExecuteSQL").
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          const errTrm: ToolResultMessage = {
+            role: 'toolResult',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: [{ type: 'text', text: `Tool execution error: ${errorMsg}` }],
+            isError: true,
+            timestamp: Date.now(),
+          };
+          this.log.push({ ...errTrm, parent_id: parent.id });
+          parent.toolThread.push(errTrm);
         }
       }),
     );

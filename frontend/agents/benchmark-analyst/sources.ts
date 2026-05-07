@@ -1,3 +1,5 @@
+import type { AgentContext } from '@/orchestrator/types';
+
 export interface SchemaHit {
   table: string;
   columns: { name: string; type: string }[];
@@ -5,11 +7,27 @@ export interface SchemaHit {
 }
 
 export interface SchemaSource {
-  search(query: string, connection: string): Promise<SchemaHit[]>;
+  search(query: string, connection: string, ctx?: AgentContext): Promise<SchemaHit[]>;
+}
+
+/**
+ * Result shape returned by SQL execution. Production fills `columns`/`types`/
+ * `finalQuery`/`executionMs` so the legacy ExecuteSQLDisplay can render
+ * structured tables; benchmark/test stubs may return only `rows`/`error`.
+ */
+export interface SqlExecutorResult {
+  rows: Record<string, unknown>[];
+  error?: string;
+  columns?: string[];
+  types?: string[];
+  finalQuery?: string;
+  executionMs?: number;
 }
 
 export interface SqlExecutor {
-  execute(sql: string, connection: string): Promise<{ rows: Record<string, unknown>[]; error?: string }>;
+  /** `ctx` is the tool's `AgentContext` — production casts to read
+   *  `effectiveUser` for routing; benchmark/test stubs ignore it. */
+  execute(sql: string, connection: string, ctx?: AgentContext): Promise<SqlExecutorResult>;
 }
 
 let _schemaSource: SchemaSource | null = null;

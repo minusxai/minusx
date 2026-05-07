@@ -9,6 +9,7 @@
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import { setupV2ServerSources } from '@/lib/v2-server-sources';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
@@ -42,6 +43,11 @@ import type {
   ConversationFileContent,
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
+
+// Wire the production `SqlExecutor` (and future `SchemaSource`) on first
+// import. Idempotent — safe even when this module is loaded by both
+// `/api/chat` and `/api/chat/stream` handlers.
+setupV2ServerSources();
 
 export const V2_REGISTRABLES: RegistrableClass[] = [
   ListDBConnections,

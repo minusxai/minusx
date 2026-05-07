@@ -60,24 +60,53 @@ const ExecuteSQLParams = Type.Object({
   sql: Type.String(),
 });
 
-export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams, BenchmarkAnalystContext> {
+/**
+ * Shape emitted in `details` so the legacy `ExecuteSQLDisplay` (compact +
+ * detail card) can render a proper data table. Mirrors `ExecuteQueryDetails`
+ * in `frontend/lib/types.ts` — kept loose-typed here because this module is
+ * deliberately standalone and must not import from `lib/types`.
+ */
+interface ExecuteSqlDetails extends Record<string, unknown> {
+  success: boolean;
+  queryResult?: { columns: string[]; types: string[]; rows: Record<string, unknown>[] };
+  error?: string;
+  executionMs?: number;
+  finalQuery?: string;
+}
+
+export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams, BenchmarkAnalystContext, ExecuteSqlDetails> {
   static readonly schema: Tool<typeof ExecuteSQLParams> = {
     name: 'ExecuteSQL',
     description: 'Execute a SQL query against a named connection. Returns rows or an error. Use ListDBConnections first to see available connection names.',
     parameters: ExecuteSQLParams,
   };
 
-  async run(): Promise<ToolResponse> {
-    const result = await getSqlExecutor().execute(this.parameters.sql, this.parameters.connection);
+  async run(): Promise<ToolResponse<ExecuteSqlDetails>> {
+    const result = await getSqlExecutor().execute(
+      this.parameters.sql,
+      this.parameters.connection,
+      this.context,
+    );
     if (result.error) {
       return {
         content: [{ type: 'text', text: result.error }],
         isError: true,
+        details: { success: false, error: result.error, executionMs: result.executionMs },
       };
     }
+    // Derive columns/types from rows when the executor didn't supply them
+    // (benchmark stubs return rows only). Empty result → empty arrays.
+    const columns = result.columns ?? (result.rows[0] ? Object.keys(result.rows[0]) : []);
+    const types = result.types ?? columns.map(() => 'unknown');
     return {
       content: [{ type: 'text', text: JSON.stringify(result.rows) }],
       isError: false,
+      details: {
+        success: true,
+        queryResult: { columns, types, rows: result.rows },
+        finalQuery: result.finalQuery,
+        executionMs: result.executionMs,
+      },
     };
   }
 }
