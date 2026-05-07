@@ -6,6 +6,7 @@ import { PostgresConnector } from './postgres-connector';
 import { BigQueryConnector } from './bigquery-connector';
 import { AthenaConnector } from './athena-connector';
 import { InternalDbConnector } from './internal-db-connector';
+import { SqliteConnector } from './sqlite-connector';
 
 export type {
   SchemaEntry,
@@ -22,6 +23,7 @@ export { PostgresConnector } from './postgres-connector';
 export { BigQueryConnector } from './bigquery-connector';
 export { AthenaConnector } from './athena-connector';
 export { InternalDbConnector } from './internal-db-connector';
+export { SqliteConnector } from './sqlite-connector';
 
 /**
  * Factory: return a NodeConnector for the given type, or null if the type is unknown.
@@ -52,6 +54,10 @@ export function getNodeConnector(
 
   if (type === 'duckdb') {
     return new DuckDbConnector(name, config);
+  }
+
+  if (type === 'sqlite') {
+    return new SqliteConnector(name, config);
   }
 
   if (type === 'csv') {
