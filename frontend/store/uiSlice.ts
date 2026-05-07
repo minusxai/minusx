@@ -34,13 +34,6 @@ interface UIState {
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
   showExpandedMessages: boolean;
-  /**
-   * Phase-3 toggle: when true, the sidebar shows "Chats" (type:'chat' files)
-   * driven by /api/chat/v2; otherwise it shows the legacy "Conversations"
-   * (Python orchestrator). Override at runtime with `?v=2` URL param —
-   * see lib/chat-v2/use-chat-v2.ts.
-   */
-  useChatV2: boolean;
   homePage: {
     showFeedSummary: boolean;
     showRecentQuestions: boolean;
@@ -79,7 +72,6 @@ const initialState: UIState = {
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
   showExpandedMessages: false,
-  useChatV2: false,
   homePage: {
     showFeedSummary: true,
     showRecentQuestions: true,
@@ -264,20 +256,14 @@ const uiSlice = createSlice({
         try { localStorage.setItem('showExpandedMessages', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setUseChatV2: (state, action: PayloadAction<boolean>) => {
-      state.useChatV2 = action.payload;
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem('useChatV2', String(action.payload)); } catch { /* ignore */ }
-      }
-    },
     setHomePageConfig: (state, action: PayloadAction<Partial<UIState['homePage']>>) => {
       Object.assign(state.homePage, action.payload);
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; useChatV2?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, useChatV2, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -287,7 +273,6 @@ const uiSlice = createSlice({
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
       if (showExpandedMessages !== undefined) state.showExpandedMessages = showExpandedMessages;
-      if (useChatV2 !== undefined) state.useChatV2 = useChatV2;
       if (homePage !== undefined) Object.assign(state.homePage, homePage);
     },
   },
@@ -338,10 +323,7 @@ export const {
   clearViewStack,
   setShowSuggestedQuestions,
   setShowTrustScore,
-  setUseChatV2,
 } = uiSlice.actions;
-
-export const selectUseChatV2 = (state: RootState | { ui: UIState }) => state.ui.useChatV2;
 
 export default uiSlice.reducer;
 

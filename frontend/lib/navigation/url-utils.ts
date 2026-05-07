@@ -16,9 +16,11 @@ export function getAsUserFromUrl(url: URL): string | null {
 }
 
 /**
- * Preserve both `as_user` and `mode` parameters from current URL to target URL (client-side)
+ * Preserve `as_user`, `mode`, and `v` parameters from current URL to target URL (client-side).
+ * The `v` parameter gates chat-v2 surfaces (`v=2` switches the sidebar from
+ * Conversations to Chats; same machinery as as_user / mode).
  * @param targetUrl - The URL to navigate to
- * @returns URL with both parameters preserved if they exist
+ * @returns URL with parameters preserved if they exist
  */
 export function preserveParams(targetUrl: string): string {
   // Server-side: return as-is
@@ -30,9 +32,10 @@ export function preserveParams(targetUrl: string): string {
   const currentParams = new URLSearchParams(window.location.search);
   const asUser = currentParams.get('as_user');
   const mode = currentParams.get('mode');
+  const v = currentParams.get('v');
 
   // If no parameters to preserve, return as-is
-  if (!asUser && !mode) {
+  if (!asUser && !mode && !v) {
     return targetUrl;
   }
 
@@ -46,6 +49,10 @@ export function preserveParams(targetUrl: string): string {
   // Don't add default mode to avoid cluttering URLs
   if (mode && mode !== 'org') {
     targetURL.searchParams.set('mode', mode);
+  }
+
+  if (v) {
+    targetURL.searchParams.set('v', v);
   }
 
   return targetURL.pathname + targetURL.search;
@@ -90,4 +97,39 @@ export function getCurrentAsUser(): string | null {
   }
   const params = new URLSearchParams(window.location.search);
   return params.get('as_user');
+}
+
+/**
+ * Get current `v` parameter value (client-side). Mirrors `getCurrentAsUser`
+ * for the chat-v2 toggle (`v=2` enables the new chat surface).
+ * @returns The `v` value if set, null otherwise
+ */
+export function getCurrentV(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const params = new URLSearchParams(window.location.search);
+  return params.get('v');
+}
+
+/**
+ * Compute a `pathname + search` for the current location with `v=2` either
+ * set (when `enabled` is true) or removed (when false), preserving every
+ * other query parameter and the pathname. Used by the settings toggle to
+ * trigger a full reload that flips chat-v2 on or off.
+ *
+ * @param enabled - true to set `v=2`, false to remove `v`
+ * @returns The new `pathname + search` string. Server-side: returns '/'.
+ */
+export function setVInUrl(enabled: boolean): string {
+  if (typeof window === 'undefined') {
+    return '/';
+  }
+  const url = new URL(window.location.href);
+  if (enabled) {
+    url.searchParams.set('v', '2');
+  } else {
+    url.searchParams.delete('v');
+  }
+  return url.pathname + (url.search ? url.search : '');
 }

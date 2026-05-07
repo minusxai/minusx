@@ -5,7 +5,9 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, 
 import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage, setUseChatV2, selectUseChatV2 } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
+import { setVInUrl } from '@/lib/navigation/url-utils';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -363,7 +365,9 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
-  const useChatV2 = useAppSelector(selectUseChatV2);
+  // Chat-v2 toggle is URL-only (`?v=2`). The settings switch reads from URL
+  // and writes by reloading the page with `v=2` set or removed.
+  const useChatV2 = useUseChatV2();
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -514,11 +518,15 @@ function SettingsContent() {
       tab: 'general',
       section: 'Experimental Flags',
       title: 'Use new chat interface (beta)',
-      description: 'Switch from the legacy Conversations to the new Chats surface (TS-orchestrator, /api/chat/v2). Override at runtime with `?v=2` in the URL.',
+      description: 'Switch from the legacy Conversations to the new Chats surface (TS-orchestrator, /api/chat/v2). Toggling reloads the page with `?v=2` added or removed — the URL is the only source of truth.',
       control: (
         <SwitchControl
           checked={useChatV2}
-          onChange={(checked) => dispatch(setUseChatV2(checked))}
+          onChange={(checked) => {
+            // Single source of truth: the URL. Full reload guarantees every
+            // component sees the new state on next render.
+            window.location.href = setVInUrl(checked);
+          }}
         />
       ),
     },

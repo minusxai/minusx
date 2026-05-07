@@ -67,7 +67,6 @@ import {
   sendChatV2Message,
   selectChatV2,
 } from '@/store/chatV2Slice';
-import { setUseChatV2 } from '@/store/uiSlice';
 import { resolveUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
 import type { ConversationLog } from '@/orchestrator/types';
 
@@ -296,11 +295,10 @@ describe('Phase 3 UI — Streaming consumer (SSE)', () => {
 
 describe('Phase 3 UI — end-to-end user journey', () => {
   // Walks the entire path the user actually takes:
-  //   1. Toggle is off → resolveUseChatV2 says "Conversations" surface.
-  //   2. Toggle is on → resolveUseChatV2 says "Chats" surface.
-  //   3. Click "New Chat" on /chats → fetch /api/chat/v2/new → router pushed
+  //   1. `?v=2` in URL → "Chats" surface; without it → "Conversations".
+  //   2. Click "New Chat" on /chats → fetch /api/chat/v2/new → router pushed
   //      to /f/<newId>.
-  //   4. ChatV2Container loads the new draft → user types → /api/chat/v2/stream
+  //   3. ChatV2Container loads the new draft → user types → /api/chat/v2/stream
   //      drives a faux turn → executionState reaches 'finished' with log filled.
 
   beforeEach(() => {
@@ -310,20 +308,13 @@ describe('Phase 3 UI — end-to-end user journey', () => {
     mockedUseFilesByCriteria.mockReturnValue({ files: [], loading: false, error: null });
   });
 
-  it('Step A — toggle gates which sidebar link shows', () => {
-    // Off → Conversations.
-    expect(resolveUseChatV2(false, '')).toBe(false);
-    // On (pref) → Chats.
-    expect(resolveUseChatV2(true, '')).toBe(true);
-    // URL override forces Chats even when pref is off.
-    expect(resolveUseChatV2(false, '?v=2')).toBe(true);
-  });
-
-  it('Step B — flipping setUseChatV2 updates the live store value', () => {
-    const store = makeStore();
-    expect(store.getState().ui.useChatV2).toBe(false);
-    act(() => { store.dispatch(setUseChatV2(true)); });
-    expect(store.getState().ui.useChatV2).toBe(true);
+  it('Step A — URL gates which sidebar link shows (no Redux pref involved)', () => {
+    // The chat-v2 toggle is now purely URL-driven. resolveUseChatV2 takes one
+    // argument — the search string — and returns true only when ?v=2 is set.
+    expect(resolveUseChatV2('?v=2')).toBe(true);
+    expect(resolveUseChatV2('')).toBe(false);
+    expect(resolveUseChatV2('?other=foo')).toBe(false);
+    expect(resolveUseChatV2('?v=1')).toBe(false);
   });
 
   it('Step C — clicking "New Chat" hits /api/chat/v2/new and routes to /f/<chatId>', async () => {
