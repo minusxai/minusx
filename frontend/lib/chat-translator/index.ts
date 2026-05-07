@@ -217,10 +217,15 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
       // Per-turn task_debug entry from usage. Attach to the primary task of
       // the turn (TalkToUser if present, else first toolCall).
       if (entry.usage && turnPrimaryTaskId.id) {
+        // _duration and _lllmCallId are attached by callLLM to the first
+        // ToolCall in content (or to the AssistantMessage itself for text-only stops).
+        const debugSrc = (toolCalls[0] as unknown as Record<string, unknown>) ?? (entry as unknown as Record<string, unknown>);
+        const duration = (debugSrc['_duration'] as number | undefined) ?? 0;
+        const lllmCallId = debugSrc['_lllmCallId'] as string | undefined;
         const debug: TaskDebugEntry = {
           _type: 'task_debug',
           _task_unique_id: turnPrimaryTaskId.id,
-          duration: 0,
+          duration,
           llmDebug: [
             {
               total_tokens: entry.usage.totalTokens,
@@ -230,6 +235,8 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
               cache_write_tokens: entry.usage.cacheWrite,
               cost: entry.usage.cost?.total ?? 0,
               model: entry.model,
+              duration,
+              ...(lllmCallId ? { lllm_call_id: lllmCallId } : {}),
             },
           ],
           created_at: createdAt,

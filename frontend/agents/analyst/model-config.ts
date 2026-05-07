@@ -1,4 +1,5 @@
 import { getModel, type Api, type Model } from '@mariozechner/pi-ai';
+import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
 
 /**
  * Shape of `ANALYST_AGENT_MODEL_CONFIG` env JSON.
@@ -38,7 +39,20 @@ export function getAnalystModelConfig(): AnalystModelConfig | null {
 export function getAnalystModel(): Model<Api> | null {
   const cfg = getAnalystModelConfig();
   if (!cfg) return null;
-  return getModel(cfg.provider as never, cfg.model as never);
+  const base = getModel(cfg.provider as never, cfg.model as never);
+  if (!MX_API_BASE_URL) return base;
+  // Route through mx-llm-provider's /proxy/* endpoint — it accepts
+  // direct Anthropic-style paths and handles logging + auth injection,
+  // matching Python's MxProxyTransport behaviour.
+  // Shallow-copy so the shared model object is never mutated across requests.
+  return {
+    ...base,
+    baseUrl: `${MX_API_BASE_URL}/proxy`,
+    headers: {
+      ...((base as unknown as { headers?: Record<string, string> }).headers ?? {}),
+      'mx-api-key': MX_API_KEY,
+    },
+  } as typeof base;
 }
 
 /**

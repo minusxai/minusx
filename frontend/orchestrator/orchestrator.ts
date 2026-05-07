@@ -1,4 +1,5 @@
 
+import { randomUUID } from 'crypto';
 import {
   EventStream,
   streamSimple,
@@ -94,22 +95,39 @@ export class Orchestrator {
     agentId: string,
     callOptions?: Record<string, unknown>,
   ): Promise<AssistantMessage> {
+    const callId = randomUUID();
+    const t0 = Date.now();
+
     // Spread `callOptions` blindly into pi-ai's stream options. We treat it
     // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new pi-ai
     // options (`thinkingBudgets`, `metadata`, …) never touches this code.
     const piStream = streamSimple(model, context, {
       ...(callOptions ?? {}),
+      headers: {
+        ...((callOptions?.headers as Record<string, string> | undefined) ?? {}),
+        'X-MX-Request-Call-ID': callId,
+      },
       signal: this.controller?.signal,
     });
 
     let result: AssistantMessage | null = null;
     let errored = false;
-    for await (const ev of piStream) {
-      this.stream?.push({ ...ev, parent_id: agentId });
-      if (ev.type === 'done') result = ev.message;
-      else if (ev.type === 'error') {
-        result = ev.error;
-        errored = true;
+    try {
+      for await (const ev of piStream) {
+        this.stream?.push({ ...ev, parent_id: agentId });
+        if (ev.type === 'done') result = ev.message;
+        else if (ev.type === 'error') {
+          result = ev.error;
+          errored = true;
+        }
+      }
+    } finally {
+      if (result) {
+        const durationSec = (Date.now() - t0) / 1000;
+        const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+        const target = firstTool ?? (result as unknown as Record<string, unknown>);
+        target['_duration'] = durationSec;
+        target['_lllmCallId'] = callId;
       }
     }
     if (!result) {
