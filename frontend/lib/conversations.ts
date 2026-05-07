@@ -178,6 +178,11 @@ export async function appendLogToConversation(
 
   const fileResult = await FilesAPI.loadFile(fileId, user);
   const conversation = fileResult.data.content as unknown as ConversationFile;
+  // Preserve top-level file `meta` across the fork — most importantly
+  // `meta.version` for v=2 conversations. Without this, a forked v=2
+  // conversation would become v=1 and the chat routes would mode-mismatch
+  // it on the next turn.
+  const sourceMeta = (fileResult.data as { meta?: Record<string, unknown> | null }).meta ?? null;
 
   const forkedName = `${conversation.metadata.name} (forked)`;
   const { userId, fileName, path } = buildConversationPath(user, forkedName);
@@ -205,6 +210,7 @@ export async function appendLogToConversation(
       path,
       type: 'conversation',
       content: forkedConversation as any,
+      ...(sourceMeta ? { meta: sourceMeta } : {}),
       options: { createPath: true, returnExisting: false }
     },
     user

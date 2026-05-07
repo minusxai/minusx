@@ -29,7 +29,8 @@ import {
   legacyToolResultToPi,
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
-import { appendLogToConversation } from '@/lib/conversations';
+import { appendLogToConversation, truncateMessageForName, slugify } from '@/lib/conversations';
+import { resolvePath } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import type {
   ChatRequest,
@@ -177,6 +178,21 @@ async function setupOrchestration(
   };
 }
 
+/**
+ * Pull the first user message from a pi-ai log diff. Used to rename a
+ * fresh v=2 conversation file from "New Conversation" → first message
+ * preview. Returns null if no root invocation present.
+ */
+function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
+  for (const entry of piDiff) {
+    const e = entry as { type?: string; parent_id?: string | null; arguments?: { userMessage?: unknown } };
+    if (e.type === 'toolCall' && e.parent_id === null && typeof e.arguments?.userMessage === 'string') {
+      return e.arguments.userMessage;
+    }
+  }
+  return null;
+}
+
 /** Persist the new entries and build the legacy ChatResponse. */
 async function persistAndBuildLegacyResponse(
   conversationId: number,
@@ -190,13 +206,10 @@ async function persistAndBuildLegacyResponse(
 
   // Persist pi-ai entries via the legacy append (it works for any JSON-array
   // log; the pi-ai entries are valid JSON). Forks if the log length doesn't
-  // match expected, mirroring legacy semantics.
+  // match expected, mirroring legacy semantics — and `meta.version` is
+  // preserved across the fork (see `appendLogToConversation`).
   let finalConversationId = conversationId;
   if (piDiff.length > 0) {
-    // The legacy appendLogToConversation has a v=1-specific rename branch
-    // that introspects `_type === 'task'` to find the user message. For v=2
-    // entries that branch silently no-ops (no _type field), so the rename
-    // is skipped — fine for the cleanup pass.
     const appendResult = await appendLogToConversation(
       conversationId,
       piDiff as unknown as LegacyLogEntry[],
@@ -204,6 +217,23 @@ async function persistAndBuildLegacyResponse(
       user,
     );
     finalConversationId = appendResult.conversationID;
+
+    // V=2-specific rename on the first turn — the legacy rename inside
+    // `appendLogToConversation` looks for `_type:'task'` entries and won't
+    // find any in pi-ai diffs. Pull the user message off the root
+    // `AgentInvocation` and update name + path explicitly.
+    if (expectedLogIndex === 0) {
+      const firstMsg = firstUserMessageFromPiDiff(piDiff);
+      if (firstMsg) {
+        const displayName = truncateMessageForName(firstMsg);
+        const userId = user.userId?.toString() || user.email;
+        const newPath = resolvePath(
+          user.mode,
+          `/logs/conversations/${userId}/${Date.now()}-${slugify(firstMsg)}.chat.json`,
+        );
+        await FilesAPI.updateNamePath(finalConversationId, displayName, newPath, user);
+      }
+    }
   }
 
   // Translate the FULL log to legacy shape so completed_tool_calls / debug
