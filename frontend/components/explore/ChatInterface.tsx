@@ -12,6 +12,8 @@ import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, type DebugMessage } from '@/store/chatSlice';
+import { sendChatV2Message } from '@/store/chatV2Slice';
+import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -274,8 +276,14 @@ export default function ChatInterface({
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
 
-  // Pre-create a conversation on explore page mount so sends go directly to the existing path
+  // ?v=2 routes the create + send flow through chat-v2 (see handleSendMessage).
+  // Read once at the top of the component so all downstream branches agree.
+  const useChatV2 = useUseChatV2();
+
+  // Pre-create a conversation on explore page mount so sends go directly to the existing path.
+  // SKIPPED when ?v=2 is on — chat-v2 creates its own file via /api/chat/v2/new on first send.
   useEffect(() => {
+    if (useChatV2) return;
     if (!isNewConversation) return;
     if (activeConversationId) return; // already have one
     let cancelled = false;
@@ -292,7 +300,7 @@ export default function ChatInterface({
       .catch(err => console.error('[ChatInterface] Failed to pre-create conversation:', err));
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNewConversation, activeConversationId]);
+  }, [useChatV2, isNewConversation, activeConversationId]);
 
   // Determine if this conversation originated from a file page or Slack
   const parentPageInfo = useMemo(() => {
@@ -540,6 +548,50 @@ export default function ChatInterface({
 
     // Safety net: intercept slash commands typed directly without dropdown
     if (tryExecuteSlashCommand(userInput, availableCommands, handleCommandExecute)) return;
+
+    // ?v=2 — chat-v2 path. Bypass the entire legacy createConversation +
+    // sendMessage chain (which posts to /api/chat/init + /api/chat/stream).
+    // Instead: POST /api/chat/v2/new to create a draft chat (server returns
+    // chatId), dispatch sendChatV2Message (chatV2Listener streams the user
+    // message via /api/chat/v2/stream), and navigate to /explore/<chatId>
+    // — file-type routing on that page picks ChatV2Container, which
+    // subscribes to the same chatV2 Redux slot and renders the live stream.
+    // setupOrchestration on the server populates whitelist + context docs
+    // via buildServerAgentArgs(user) so we don't need to send agent_args.
+    if (useChatV2 && !conversationID) {
+      try {
+        const newRes = await fetch('/api/chat/v2/new', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!newRes.ok) {
+          setLocalError({ message: 'Failed to create chat', code: 'UNKNOWN' });
+          return;
+        }
+        const data = (await newRes.json()) as { chatId: number; error?: string };
+        if (!data.chatId) {
+          setLocalError({ message: 'Failed to create chat', code: 'UNKNOWN' });
+          return;
+        }
+        dispatch(sendChatV2Message({ chatId: data.chatId, message: userInput }));
+        router.push(preserveParams(`/explore/${data.chatId}`));
+      } catch (err) {
+        setLocalError({
+          message: err instanceof Error ? err.message : 'Failed to send message',
+          code: 'UNKNOWN',
+        });
+      }
+      return;
+    }
+
+    // ?v=2 + existing chat — when ChatInterface ever renders for a `'chat'`
+    // file (it shouldn't, since /explore/<id> routes chats to ChatV2Container,
+    // but guard regardless), dispatch via the chat-v2 listener.
+    if (useChatV2 && conversationID) {
+      dispatch(sendChatV2Message({ chatId: conversationID, message: userInput }));
+      return;
+    }
 
     const selectedSkillMentions = getSkillsFromMessage(userInput);
 
