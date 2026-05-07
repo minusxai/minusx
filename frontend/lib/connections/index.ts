@@ -14,6 +14,14 @@ export type {
   SchemaColumn,
   QueryResult,
   TestConnectionResult,
+  ConnectorConfigMap,
+  ConnectorDialect,
+  DuckDbConfig,
+  SqliteConfig,
+  PostgresConfig,
+  BigQueryConfig,
+  AthenaConfig,
+  CsvConfig,
 } from './base';
 export { NodeConnector } from './base';
 export { getOrCreateDuckDbInstance } from './duckdb-registry';
