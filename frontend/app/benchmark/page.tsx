@@ -4,23 +4,28 @@ import { useState, useCallback, useMemo } from 'react';
 import { Box, Text, VStack, HStack, Flex, Grid, Icon } from '@chakra-ui/react';
 import { createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuTerminal, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX } from 'react-icons/lu';
 import { Button } from '@chakra-ui/react';
-import { Tooltip } from '@/components/ui/tooltip';
 import { parseLogToMessages } from '@/lib/conversations-utils';
 import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
-import ToolCallListModal from '@/components/explore/ToolCallListModal';
+import ToolDebugBar from '@/components/explore/ToolDebugBar';
 import type { ConversationLogEntry } from '@/lib/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
+
+interface EvalResult {
+  pass: boolean;
+  reason: string;
+}
 
 interface BenchmarkRow {
   input: { user_message: string; allowed_connections: string[] };
   log: unknown[];
   duration_ms: number;
   error?: string;
+  eval?: EvalResult;
 }
 
 type ParsedFile =
@@ -153,7 +158,6 @@ function StatsPanel({ stats, label }: { stats: RunStats; label?: string }) {
 
 function LogViewer({ log }: { log: ConversationLogEntry[] }) {
   const [showThinking, setShowThinking] = useState(false);
-  const [showToolInspector, setShowToolInspector] = useState(false);
   const messages = parseLogToMessages(log);
   const turns = groupIntoTurns(messages);
 
@@ -167,18 +171,7 @@ function LogViewer({ log }: { log: ConversationLogEntry[] }) {
 
   return (
     <VStack gap={0} align="stretch" width="100%">
-      <HStack justify="flex-end" px={2} py={1}>
-        <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
-          <Button
-            onClick={() => setShowToolInspector(true)}
-            size="xs"
-            variant="outline"
-            borderColor="border.muted"
-          >
-            <LuTerminal />
-          </Button>
-        </Tooltip>
-      </HStack>
+      <ToolDebugBar messages={messages} />
       {turns.map((turn, i) => (
         <AgentTurnContainer
           key={i}
@@ -191,11 +184,6 @@ function LogViewer({ log }: { log: ConversationLogEntry[] }) {
           readOnly={true}
         />
       ))}
-      <ToolCallListModal
-        messages={messages}
-        isOpen={showToolInspector}
-        onClose={() => setShowToolInspector(false)}
-      />
     </VStack>
   );
 }
@@ -397,6 +385,29 @@ export default function BenchmarkPage() {
           </Box>
 
           <VStack gap={0} align="stretch">
+            {/* Aggregate eval score */}
+            {parsed.rows.some(r => r.eval) && (() => {
+              const evaled = parsed.rows.filter(r => r.eval);
+              const passed = evaled.filter(r => r.eval!.pass).length;
+              const total = evaled.length;
+              const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+              return (
+                <Box px={4} py={3} borderBottom="1px solid" borderColor="border.muted">
+                  <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" mb={2}>
+                    Eval Score
+                  </Text>
+                  <HStack gap={3} align="baseline">
+                    <Text fontSize="2xl" fontWeight="bold" fontFamily="mono" color={pct >= 70 ? 'accent.success' : pct >= 40 ? 'accent.warning' : 'accent.danger'}>
+                      {pct}%
+                    </Text>
+                    <Text fontSize="sm" color="fg.muted" fontFamily="mono">
+                      {passed}/{total} passed
+                    </Text>
+                  </HStack>
+                </Box>
+              );
+            })()}
+
             {/* Aggregate stats */}
             <Box px={4} py={4}>
               <StatsPanel stats={stats.total} label={`Run total — ${parsed.rows.length} rows`} />
@@ -460,6 +471,38 @@ export default function BenchmarkPage() {
             {stats.perRow[selectedRow] && (
               <Box px={4} py={4} borderTop="1px solid" borderColor="border.muted">
                 <StatsPanel stats={stats.perRow[selectedRow]} label="Selected row" />
+              </Box>
+            )}
+
+            {/* Per-row eval */}
+            {parsed.rows[selectedRow]?.eval && (
+              <Box px={4} py={3} borderTop="1px solid" borderColor="border.muted">
+                <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" mb={2}>
+                  Eval
+                </Text>
+                <HStack gap={2} mb={2}>
+                  <Box
+                    px={2} py={0.5} borderRadius="full"
+                    bg={parsed.rows[selectedRow].eval!.pass ? 'accent.success/15' : 'accent.danger/15'}
+                  >
+                    <HStack gap={1}>
+                      <Icon
+                        as={parsed.rows[selectedRow].eval!.pass ? LuCheck : LuX}
+                        boxSize="3"
+                        color={parsed.rows[selectedRow].eval!.pass ? 'accent.success' : 'accent.danger'}
+                      />
+                      <Text
+                        fontSize="xs" fontWeight="bold" fontFamily="mono"
+                        color={parsed.rows[selectedRow].eval!.pass ? 'accent.success' : 'accent.danger'}
+                      >
+                        {parsed.rows[selectedRow].eval!.pass ? 'PASS' : 'FAIL'}
+                      </Text>
+                    </HStack>
+                  </Box>
+                </HStack>
+                <Text fontSize="xs" color="fg.muted" lineClamp={4}>
+                  {parsed.rows[selectedRow].eval!.reason}
+                </Text>
               </Box>
             )}
           </VStack>
