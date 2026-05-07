@@ -87,7 +87,14 @@ describe('POST /api/chat?v=2 — happy path (orchestrator runs, response is lega
     expect(body.completed_tool_calls.length).toBeGreaterThan(0);
     const ttu = body.completed_tool_calls.find((c) => c.function.name === 'TalkToUser');
     expect(ttu).toBeDefined();
-    expect(ttu!.content).toBe('Sure, here is what you asked.');
+    // v=1-compatible format: result is a JSON-stringified `{ success,
+    // content_blocks }` object so the frontend's ContentDisplay parses it
+    // and routes thinking/text blocks correctly.
+    const parsed = JSON.parse(String(ttu!.content));
+    expect(parsed).toMatchObject({
+      success: true,
+      content_blocks: [{ type: 'text', text: 'Sure, here is what you asked.' }],
+    });
 
     // No pending frontend tools (this turn was a stop).
     expect(body.pending_tool_calls).toEqual([]);

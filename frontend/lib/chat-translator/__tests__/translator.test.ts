@@ -195,10 +195,12 @@ describe('piLogToLegacy — forward translation', () => {
     expect(ttu._parent_unique_id).toBe('r1');
     const result = resultByTaskId(out, ttu.unique_id)!;
     expect(result).toBeDefined();
-    expect(result.result).toBe('Hi! How can I help?');
+    // v=1-compatible: result is a JSON string with content_blocks (not raw text).
+    const parsed = JSON.parse(String(result.result));
+    expect(parsed.content_blocks).toEqual([{ type: 'text', text: 'Hi! How can I help?' }]);
   });
 
-  it('assistant text-only → task_result.details preserves usage, stopReason, model', () => {
+  it('assistant text-only → usage flows to task_debug (NOT task_result.details, which v=1 keeps null)', () => {
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'hi' }),
       assistantMessage({
@@ -211,12 +213,14 @@ describe('piLogToLegacy — forward translation', () => {
     ];
     const out = piLogToLegacy(log);
     const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    // task_result.details is null (matches v=1 — no usage on result).
     const result = resultByTaskId(out, ttu.unique_id)!;
-    const details = result.details as Record<string, unknown> | undefined;
-    expect(details).toBeDefined();
-    expect((details!.usage as { totalTokens?: number }).totalTokens).toBe(42);
-    expect(details!.stopReason).toBe('stop');
-    expect(details!.model).toBe('claude-test-model');
+    expect(result.details).toBeNull();
+    // task_debug carries the usage on the same task_unique_id.
+    const debugs = findDebug(out).filter((d) => d._task_unique_id === ttu.unique_id);
+    expect(debugs).toHaveLength(1);
+    expect(debugs[0].llmDebug[0].total_tokens).toBe(42);
+    expect(debugs[0].llmDebug[0].model).toBe('claude-test-model');
   });
 
   it('assistant with tool_calls only → per-block task entries, NO task_result yet (pending)', () => {
@@ -362,7 +366,7 @@ describe('piLogToLegacy — forward translation', () => {
     expect((result.details as { assistantMessage?: { usage?: { totalTokens?: number } } }).assistantMessage?.usage?.totalTokens).toBe(10);
   });
 
-  it('thinking blocks fold into TalkToUser task_result.details.thinking', () => {
+  it('thinking + text → task_result.result content_blocks contains BOTH (thinking first, text second) — v=1 compat', () => {
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'hmm' }),
       assistantMessage({
@@ -375,7 +379,14 @@ describe('piLogToLegacy — forward translation', () => {
     const out = piLogToLegacy(log);
     const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
     const result = resultByTaskId(out, ttu.unique_id)!;
-    expect((result.details as { thinking?: string }).thinking).toBe('pondering');
+    const parsed = JSON.parse(String(result.result));
+    expect(parsed.content_blocks).toEqual([
+      { type: 'thinking', thinking: 'pondering' },
+      { type: 'text', text: 'final answer' },
+    ]);
+    // result.details is null per v=1 convention — frontend's ContentDisplay
+    // walks `content_blocks` for thinking/text, not `details.thinking`.
+    expect(result.details).toBeNull();
   });
 
   it('AssistantMessage usage emits a task_debug entry with llmDebug populated', () => {
@@ -644,5 +655,351 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
     };
     const out = legacyToolResultToPi(legacy);
     expect(out.toolName).toBe('WeirdName');
+  });
+});
+
+// ─── piLogToLegacy: format compatibility with v=1 task-log ──────────
+//
+// These tests assert the EXACT shape v=1 conversation logs use, so the
+// frontend's `parseLogToMessages` + `ContentDisplay` + `addStreamingMessage`
+// reducers see the same data shape from v=2 conversations.
+//
+// Key v=1 conventions (derived from real /api/files/<id> responses on a
+// v=1 conversation):
+//
+//   • Assistant text/thinking turns are emitted as `task` entries with
+//     `agent: 'TalkToUser'` and `args.content_blocks: [...]` — NOT a flat
+//     `args.content` string.
+//   • The matching `task_result.result` is a JSON-stringified `{ success,
+//     content_blocks: [...] }` object — frontend's `ContentDisplay` JSON
+//     parses this and walks `content_blocks` for `type:'text'` and
+//     `type:'thinking'` entries.
+//   • `task_result.details` for assistant text/thinking turns is `null` —
+//     usage/stopReason live on the matching `task_debug` entry.
+//   • Each `content_blocks` entry preserves its `signature` field when
+//     present (used for opaque thinking continuations).
+
+describe('piLogToLegacy — v=1 format compatibility', () => {
+  it('assistant text-only → TalkToUser task with args.content_blocks=[{type:text,text}]', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hi' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        text: 'Hi! How can I help?',
+        stopReason: 'stop',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    expect(ttu).toBeDefined();
+    expect(ttu.args).toEqual({
+      content_blocks: [{ type: 'text', text: 'Hi! How can I help?' }],
+    });
+  });
+
+  it('assistant thinking-only → TalkToUser task with args.content_blocks=[{type:thinking,thinking}]', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hi' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        thinking: 'pondering deeply',
+        // no text — the agent emits ONLY a thinking message before tool calls
+        stopReason: 'toolUse',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    expect(ttu).toBeDefined();
+    expect(ttu.args).toMatchObject({
+      content_blocks: [{ type: 'thinking', thinking: 'pondering deeply' }],
+    });
+  });
+
+  it('assistant thinking + text → ONE TalkToUser task with both blocks (thinking first)', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hmm' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        thinking: 'let me think',
+        text: 'Done.',
+        stopReason: 'stop',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    expect(ttu).toBeDefined();
+    expect(ttu.args).toMatchObject({
+      content_blocks: [
+        { type: 'thinking', thinking: 'let me think' },
+        { type: 'text', text: 'Done.' },
+      ],
+    });
+  });
+
+  it('assistant text → task_result.result is JSON-stringified {success, content_blocks}', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hi' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        text: 'Hi there.',
+        stopReason: 'stop',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    const result = resultByTaskId(out, ttu.unique_id)!;
+    expect(typeof result.result).toBe('string');
+    const parsed = JSON.parse(String(result.result));
+    expect(parsed).toMatchObject({
+      success: true,
+      content_blocks: [{ type: 'text', text: 'Hi there.' }],
+    });
+  });
+
+  it('assistant thinking → task_result.result is JSON-stringified with thinking content_block', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hi' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        thinking: 'pondering',
+        stopReason: 'toolUse',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    const result = resultByTaskId(out, ttu.unique_id)!;
+    const parsed = JSON.parse(String(result.result));
+    expect(parsed).toMatchObject({
+      success: true,
+      content_blocks: [{ type: 'thinking', thinking: 'pondering' }],
+    });
+  });
+
+  it('TalkToUser task_result.details is null (matching v=1; usage lives on task_debug)', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hi' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        text: 'Hi.',
+        stopReason: 'stop',
+        usage: { ...EMPTY_USAGE, totalTokens: 42, input: 30, output: 12 },
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    const result = resultByTaskId(out, ttu.unique_id)!;
+    expect(result.details).toBeNull();
+    // task_debug for the same task carries the usage.
+    const debugs = findDebug(out).filter((d) => d._task_unique_id === ttu.unique_id);
+    expect(debugs).toHaveLength(1);
+    expect(debugs[0].llmDebug[0].total_tokens).toBe(42);
+  });
+
+  it('thinking content preserves signature when pi-ai provides one', () => {
+    const sig = 'opaque-signature-blob';
+    const partial: AssistantMessage & { parent_id: string } = {
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'hmm', thinkingSignature: sig }],
+      api: 'anthropic-messages',
+      provider: 'anthropic',
+      model: 'claude-test',
+      usage: EMPTY_USAGE,
+      stopReason: 'toolUse',
+      timestamp: 1000,
+      parent_id: 'r1',
+    };
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'hi' }),
+      partial,
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    const blocks = (ttu.args as { content_blocks: Array<Record<string, unknown>> }).content_blocks;
+    expect(blocks[0]).toMatchObject({ type: 'thinking', thinking: 'hmm', signature: sig });
+  });
+
+  it('multi-block ordering matches pi-ai content order (thinking, text, toolCall)', () => {
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'do thing' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        thinking: 'plan',
+        text: 'Editing now',
+        toolCalls: [
+          { type: 'toolCall', id: 'tc1', name: 'EditFile', arguments: { path: '/x' } },
+        ],
+        stopReason: 'toolUse',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const tasks = findTasks(out);
+    // Order: user → TalkToUser (thinking + text) → EditFile
+    expect(tasks.map((t) => t.agent)).toEqual(['AnalystAgent', 'TalkToUser', 'EditFile']);
+    const ttu = tasks[1];
+    const blocks = (ttu.args as { content_blocks: Array<{ type: string }> }).content_blocks;
+    // thinking block first (pi-ai content order), then text — toolCall is its
+    // own task entry, not part of content_blocks.
+    expect(blocks.map((b) => b.type)).toEqual(['thinking', 'text']);
+  });
+});
+
+// ─── piStreamEventToLegacy: streaming wire-format ──────────────────
+//
+// The frontend's `addStreamingMessage` reducer consumes each frame and
+// updates Redux state mid-turn. These tests pin the exact shape it expects:
+//
+//   • text_delta → StreamedContent — accreted into a synthetic TalkToUser
+//     CompletedToolCall in `streamedCompletedToolCalls`.
+//   • thinking_delta → StreamedThinking — accumulated into
+//     `conv.streamedThinking` (string), surfaced in StreamingInfoBlock.
+//   • toolcall_end → ToolCreated — currently ignored by the reducer but
+//     wire-format must still match the legacy ToolCall shape.
+//   • Pure-text events (text_start/end, thinking_start/end, etc.) → null.
+//
+// Format mismatches between v=1 and v=2 here would manifest as thinking
+// rendering inline in the answer instead of in the "Show Thinking" panel,
+// or tool calls not appearing in the streaming progress badge — exactly
+// the rendering issues the user observed.
+
+describe('piStreamEventToLegacy — wire format and frontend compatibility', () => {
+  const CID = 555;
+
+  function partial(): AssistantMessage {
+    return {
+      role: 'assistant',
+      content: [],
+      api: 'anthropic-messages',
+      provider: 'anthropic',
+      model: 'claude-test',
+      usage: EMPTY_USAGE,
+      stopReason: 'stop',
+      timestamp: 0,
+    };
+  }
+
+  it('thinking delta → StreamedThinking; text delta → StreamedContent (separated, NOT merged)', () => {
+    // Most important property: thinking and text deltas use DIFFERENT legacy
+    // event types, so the frontend's reducer routes thinking into
+    // streamedThinking (Show-Thinking panel) and text into the answer body.
+    const tdelta: StreamEvent = {
+      type: 'text_delta',
+      contentIndex: 1,
+      delta: 'Hello',
+      partial: partial(),
+      parent_id: 'p',
+    } as StreamEvent;
+    const thdelta: StreamEvent = {
+      type: 'thinking_delta',
+      contentIndex: 0,
+      delta: 'pondering',
+      partial: partial(),
+      parent_id: 'p',
+    } as StreamEvent;
+
+    const t = piStreamEventToLegacy(tdelta, CID);
+    const th = piStreamEventToLegacy(thdelta, CID);
+    expect(t?.type).toBe('StreamedContent');
+    expect(th?.type).toBe('StreamedThinking');
+    expect(t?.type).not.toBe(th?.type);
+  });
+
+  it('text_delta payload is exactly { chunk: delta } (no extra fields)', () => {
+    const ev: StreamEvent = {
+      type: 'text_delta',
+      contentIndex: 0,
+      delta: 'world',
+      partial: partial(),
+      parent_id: 'p',
+    } as StreamEvent;
+    const out = piStreamEventToLegacy(ev, CID);
+    expect(out?.payload).toEqual({ chunk: 'world' });
+  });
+
+  it('thinking_delta payload is exactly { chunk: delta } (no extra fields)', () => {
+    const ev: StreamEvent = {
+      type: 'thinking_delta',
+      contentIndex: 0,
+      delta: 'still pondering',
+      partial: partial(),
+      parent_id: 'p',
+    } as StreamEvent;
+    const out = piStreamEventToLegacy(ev, CID);
+    expect(out?.payload).toEqual({ chunk: 'still pondering' });
+  });
+
+  it('toolcall_end emits ToolCreated with legacy ToolCall shape (id, type:function, function:{name,arguments})', () => {
+    const ev: StreamEvent = {
+      type: 'toolcall_end',
+      contentIndex: 1,
+      toolCall: {
+        type: 'toolCall',
+        id: 'tc-stream-1',
+        name: 'EditFile',
+        arguments: { path: '/x', diff: 'y' },
+      },
+      partial: partial(),
+      parent_id: 'p',
+    } as StreamEvent;
+    const out = piStreamEventToLegacy(ev, CID);
+    expect(out?.type).toBe('ToolCreated');
+    expect(out?.payload).toEqual({
+      id: 'tc-stream-1',
+      type: 'function',
+      function: {
+        name: 'EditFile',
+        arguments: { path: '/x', diff: 'y' },
+      },
+    });
+  });
+
+  it('every legacy frame carries conversationID', () => {
+    const ev: StreamEvent = {
+      type: 'text_delta',
+      contentIndex: 0,
+      delta: 'x',
+      partial: partial(),
+      parent_id: 'p',
+    } as StreamEvent;
+    const out = piStreamEventToLegacy(ev, CID);
+    expect(out?.conversationID).toBe(CID);
+  });
+
+  it('text_start/end + thinking_start/end + toolcall_start/delta → null (no legacy counterpart, caller skips)', () => {
+    const types = ['text_start', 'text_end', 'thinking_start', 'thinking_end', 'toolcall_start', 'toolcall_delta'];
+    for (const type of types) {
+      const ev = {
+        type,
+        contentIndex: 0,
+        partial: partial(),
+        parent_id: 'p',
+        delta: '',
+      } as unknown as StreamEvent;
+      expect(piStreamEventToLegacy(ev, CID)).toBeNull();
+    }
+  });
+
+  it('stream of [thinking_delta, thinking_delta, text_delta, text_delta] produces 4 frames in order', () => {
+    // Simulates a real turn where the model thinks first, then answers.
+    const events: StreamEvent[] = [
+      { type: 'thinking_delta', contentIndex: 0, delta: 'pon', partial: partial(), parent_id: 'p' } as StreamEvent,
+      { type: 'thinking_delta', contentIndex: 0, delta: 'dering', partial: partial(), parent_id: 'p' } as StreamEvent,
+      { type: 'text_delta', contentIndex: 1, delta: 'Done', partial: partial(), parent_id: 'p' } as StreamEvent,
+      { type: 'text_delta', contentIndex: 1, delta: '!', partial: partial(), parent_id: 'p' } as StreamEvent,
+    ];
+    const frames = events
+      .map((e) => piStreamEventToLegacy(e, CID))
+      .filter((f): f is NonNullable<typeof f> => f !== null);
+    expect(frames.map((f) => f.type)).toEqual([
+      'StreamedThinking',
+      'StreamedThinking',
+      'StreamedContent',
+      'StreamedContent',
+    ]);
+    expect(frames.map((f) => (f.payload as { chunk: string }).chunk)).toEqual([
+      'pon',
+      'dering',
+      'Done',
+      '!',
+    ]);
   });
 });

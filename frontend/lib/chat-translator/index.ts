@@ -138,40 +138,64 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
       const createdAt = tsFromTimestamp(entry.timestamp);
       const turnPrimaryTaskId: { id: string } = { id: '' };
 
+      // Build content_blocks in pi-ai content order (thinking first if
+      // present, then text). Frontend's `ContentDisplay` walks this array
+      // and routes `type:'thinking'` blocks into the "Show Thinking" panel
+      // and `type:'text'` blocks into the answer body — same behavior v=1
+      // gets natively. Preserves `signature` on thinking blocks so the
+      // signature is available for opaque continuations.
+      const contentBlocks: Array<Record<string, unknown>> = [];
+      const blocks = Array.isArray(entry.content) ? entry.content : [];
+      for (const block of blocks) {
+        const t = (block as { type?: string }).type;
+        if (t === 'thinking') {
+          const tb = block as { thinking?: string; thinkingSignature?: string };
+          const out: Record<string, unknown> = { type: 'thinking', thinking: tb.thinking ?? '' };
+          if (tb.thinkingSignature) out.signature = tb.thinkingSignature;
+          contentBlocks.push(out);
+        } else if (t === 'text') {
+          const tb = block as { text?: string };
+          contentBlocks.push({ type: 'text', text: tb.text ?? '' });
+        }
+        // toolCall blocks become their own task entries below — not in
+        // content_blocks (matches v=1 convention).
+      }
+
       // Synthetic TalkToUser pair when the assistant emitted text or thinking.
-      if (text || thinking) {
+      if (contentBlocks.length > 0) {
         const ttuId = `asst-text-${i}`;
         const ttuTask: TaskLogEntry = {
           _type: 'task',
           _run_id: deriveRunId(ttuId),
           _parent_unique_id: entry.parent_id ?? undefined,
           agent: 'TalkToUser',
-          args: { content: text },
+          args: { content_blocks: contentBlocks },
           unique_id: ttuId,
           created_at: createdAt,
         };
         taskById.set(ttuId, out.length);
         out.push(ttuTask);
 
-        const details: Record<string, unknown> = {
-          usage: entry.usage,
-          stopReason: entry.stopReason,
-          model: entry.model,
-        };
-        if (entry.responseId) details.responseId = entry.responseId;
-        if (entry.diagnostics) details.diagnostics = entry.diagnostics;
-        if (entry.errorMessage) details.errorMessage = entry.errorMessage;
-        if (thinking) details.thinking = thinking;
+        // v=1-compatible result shape: JSON-stringified `{ success,
+        // content_blocks }`. Frontend's ContentDisplay parses this string
+        // and walks content_blocks for thinking + text rendering. Usage
+        // lives on the matching task_debug entry, NOT here — `details` is
+        // null to match v=1.
         const ttuResult: TaskResultEntry = {
           _type: 'task_result',
           _task_unique_id: ttuId,
-          result: text,
-          details: { success: entry.stopReason !== 'error', ...details } as unknown as ToolCallDetails,
+          result: JSON.stringify({
+            success: entry.stopReason !== 'error',
+            content_blocks: contentBlocks,
+          }),
+          details: null as unknown as ToolCallDetails,
           created_at: createdAt,
         };
         out.push(ttuResult);
         turnPrimaryTaskId.id = ttuId;
       }
+      void text;
+      void thinking;
 
       // Per-tool-call tasks (no result yet — pending until a ToolResultMessage lands).
       for (const tc of toolCalls) {
