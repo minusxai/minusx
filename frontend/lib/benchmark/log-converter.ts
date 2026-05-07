@@ -27,6 +27,7 @@ interface OrchestratorEntry {
   toolCallId?: string;
   toolName?: string;
   isError?: boolean;
+  details?: Record<string, unknown>;
   // Shared
   parent_id?: string | null;
 }
@@ -51,6 +52,14 @@ const TOOL_NAME_MAP: Record<string, string> = {
   ExecuteSQL: 'ExecuteQuery',
   ListDBConnections: 'ReadFiles',
 };
+
+/** Map benchmark tool args to production arg shape so display components render correctly. */
+function mapToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (name === 'ExecuteSQL') {
+    return { query: args.sql, connectionId: args.connection };
+  }
+  return args;
+}
 
 function mapToolName(name: string): string {
   return TOOL_NAME_MAP[name] ?? name;
@@ -97,7 +106,7 @@ export function convertOrchestratorLog(orchLog: OrchestratorEntry[]): Conversati
           _previous_unique_id: null,
           _run_id: entryRunId,
           agent: mapToolName(tc.name ?? 'UnknownTool'),
-          args: tc.arguments ?? {},
+          args: mapToolArgs(tc.name ?? '', tc.arguments ?? {}),
           unique_id: tc.id ?? genRunId(),
           created_at: toISO(entry.timestamp),
         };
@@ -157,6 +166,7 @@ export function convertOrchestratorLog(orchLog: OrchestratorEntry[]): Conversati
         _task_unique_id: entry.toolCallId,
         result: entry.content?.map(c => c.text ?? '').join('\n') ?? null,
         created_at: toISO(entry.timestamp),
+        ...(entry.details ? { details: entry.details as any } : {}),
       };
       out.push(result);
       continue;

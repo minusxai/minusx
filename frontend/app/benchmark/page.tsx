@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { notFound } from 'next/navigation';
 import { Box, Text, VStack, HStack, Flex, Grid, Icon } from '@chakra-ui/react';
 import { createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuTerminal, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { Button } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
-import { IS_DEV } from '@/lib/constants';
 import { parseLogToMessages } from '@/lib/conversations-utils';
 import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
@@ -290,8 +288,6 @@ export default function BenchmarkPage() {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
   }, [handleFile]);
-
-  if (!IS_DEV) notFound();
 
   const stats = useMemo(() => {
     if (parsed?.kind !== 'benchmark') return null;

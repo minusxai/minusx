@@ -149,7 +149,12 @@ class BMExecuteSQL extends ExecuteSQL {
     return tryRun(async () => {
       const result = await conn.query(sql);
       const compressed = compressQueryResult(result);
-      return { content: [{ type: 'text', text: JSON.stringify(compressed) }], isError: false };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(compressed) }],
+        // details.queryResult carries raw rows for UI rendering (not sent to LLM)
+        details: { success: true, queryResult: result },
+        isError: false,
+      };
     });
   }
 }
