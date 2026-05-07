@@ -23,6 +23,7 @@ import type { ToolResponse } from '@/orchestrator/types';
 import type { AnalystAgentContext, ConnectionInfo } from '@/agents/analyst/types';
 import { getNodeConnector } from '@/lib/connections';
 import { NodeConnector } from '@/lib/connections/base';
+import { compressQueryResult } from '@/lib/api/compress-augmented';
 import {
   AnalystAgent,
   ExecuteSQL,
@@ -116,7 +117,25 @@ class BMSearchDBSchema extends SearchDBSchema {
           )
           .map((t) => ({ schema: s.schema, table: t.table, columns: t.columns })),
       );
-      return { content: [{ type: 'text', text: JSON.stringify(hits) }], isError: false };
+      // Match production SearchDBSchema output format: {success, results, queryType, tableCount}
+      const totalTables = schema.reduce((n, s) => n + s.tables.length, 0);
+      const result = {
+        success: true,
+        results: hits.map((h) => ({
+          schema: h,
+          score: 1,
+          matchCount: 1,
+          relevantResults: h.columns.map((col) => ({
+            field: col.name,
+            location: `${h.schema}.${h.table}`,
+            snippet: col.name,
+            matchType: 'column',
+          })),
+        })),
+        queryType: 'string',
+        tableCount: totalTables,
+      };
+      return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
     });
   }
 }
@@ -129,7 +148,8 @@ class BMExecuteSQL extends ExecuteSQL {
 
     return tryRun(async () => {
       const result = await conn.query(sql);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows) }], isError: false };
+      const compressed = compressQueryResult(result);
+      return { content: [{ type: 'text', text: JSON.stringify(compressed) }], isError: false };
     });
   }
 }
