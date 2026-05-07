@@ -113,18 +113,18 @@ function formatDuration(ms: number): string {
 function StatCard({ icon, label, value, accent }: { icon: React.ElementType; label: string; value: string; accent?: string }) {
   return (
     <Box
-      px={3}
-      py={2.5}
-      borderRadius="lg"
+      px={2}
+      py={1.5}
+      borderRadius="md"
       bg="bg.canvas"
       border="1px solid"
       borderColor="border.muted"
     >
-      <HStack gap={2} mb={1}>
-        <Icon as={icon} boxSize="3.5" color={accent ?? 'fg.subtle'} />
+      <HStack gap={1.5} mb={0.5}>
+        <Icon as={icon} boxSize="3" color={accent ?? 'fg.subtle'} />
         <Text fontSize="2xs" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" fontWeight="medium">{label}</Text>
       </HStack>
-      <Text fontSize="md" fontWeight="bold" fontFamily="mono" letterSpacing="-0.02em">{value}</Text>
+      <Text fontSize="sm" fontWeight="bold" fontFamily="mono" letterSpacing="-0.02em">{value}</Text>
     </Box>
   );
 }
