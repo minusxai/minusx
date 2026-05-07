@@ -5,11 +5,27 @@ import {
 } from '@mariozechner/pi-ai';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
-import { ReadFiles, SearchFiles } from '@/agents/analyst/file-tools';
+import { SearchFiles } from '@/agents/analyst/file-tools';
 import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
-import { EditFile, CreateFile } from './web-tools';
+import {
+  EditFile,
+  CreateFile,
+  ReadFiles,
+  Navigate,
+  ClarifyFrontend,
+  PublishAll,
+  LoadSkillFrontend,
+} from './web-tools';
 
-export { EditFile, CreateFile } from './web-tools';
+export {
+  EditFile,
+  CreateFile,
+  ReadFiles,
+  Navigate,
+  ClarifyFrontend,
+  PublishAll,
+  LoadSkillFrontend,
+} from './web-tools';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-web-analyst-api',
@@ -38,6 +54,10 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     SearchFiles.schema,
     EditFile.schema,
     CreateFile.schema,
+    Navigate.schema,
+    ClarifyFrontend.schema,
+    PublishAll.schema,
+    LoadSkillFrontend.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
   // Call-time pi-ai options (spread blindly into `streamSimple`). Default

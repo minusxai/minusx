@@ -16,7 +16,7 @@ const ctx: AnalystAgentContext = { userId: 'u', mode: 'org' };
 describe('SearchDBSchema', () => {
   beforeEach(() => resetSources());
 
-  it('returns JSON-stringified hits from the schema source', async () => {
+  it('returns structured {success, queryType, tableCount, results} on keyword match', async () => {
     const hits: SchemaHit[] = [
       { table: 'users', columns: [{ name: 'id', type: 'int' }, { name: 'created_at', type: 'timestamp' }] },
     ];
@@ -28,10 +28,16 @@ describe('SearchDBSchema', () => {
 
     expect(res.isError).toBe(false);
     expect(res.content[0]).toMatchObject({ type: 'text' });
-    expect(JSON.parse((res.content[0] as { text: string }).text)).toEqual(hits);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed).toMatchObject({
+      success: true,
+      queryType: 'string',
+      tableCount: hits.length,
+      results: hits,
+    });
   });
 
-  it('returns an empty array when the source has no matches', async () => {
+  it('returns empty results array when the source has no matches', async () => {
     setSchemaSource({ search: async () => [] });
 
     const orch = new Orchestrator([]);
@@ -39,14 +45,15 @@ describe('SearchDBSchema', () => {
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
-    expect(JSON.parse((res.content[0] as { text: string }).text)).toEqual([]);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
   });
 });
 
 describe('ExecuteSQL', () => {
   beforeEach(() => resetSources());
 
-  it('returns JSON-stringified rows on success', async () => {
+  it('returns compressed markdown + metadata on success', async () => {
     const rows = [{ count: 42 }];
     setSqlExecutor({ execute: async () => ({ rows }) });
 
@@ -55,7 +62,21 @@ describe('ExecuteSQL', () => {
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
-    expect(JSON.parse((res.content[0] as { text: string }).text)).toEqual(rows);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    // LLM-visible content: markdown table + truncation metadata
+    expect(parsed).toMatchObject({
+      success: true,
+      totalRows: 1,
+      shownRows: 1,
+      truncated: false,
+    });
+    expect(typeof parsed.data).toBe('string');
+    expect(parsed.data).toContain('count');
+    // Full rows available in details for UI display
+    expect(res.details).toMatchObject({
+      success: true,
+      queryResult: { rows },
+    });
   });
 
   it('returns isError=true with the error message when the executor fails', async () => {

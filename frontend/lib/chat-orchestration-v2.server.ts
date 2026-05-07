@@ -17,8 +17,17 @@ import type {
   RegistrableClass,
   StreamEvent,
 } from '@/orchestrator/types';
-import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
-import { ReadFiles, SearchFiles } from '@/agents/analyst/file-tools';
+import {
+  WebAnalystAgent,
+  EditFile,
+  CreateFile,
+  ReadFiles,
+  Navigate,
+  ClarifyFrontend,
+  PublishAll,
+  LoadSkillFrontend,
+} from '@/agents/web-analyst/web-analyst';
+import { SearchFiles } from '@/agents/analyst/file-tools';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -57,6 +66,10 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   SearchFiles,
   EditFile,
   CreateFile,
+  Navigate,
+  ClarifyFrontend,
+  PublishAll,
+  LoadSkillFrontend,
   WebAnalystAgent,
 ];
 

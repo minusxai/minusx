@@ -97,7 +97,7 @@ function FileTabContent({ path, Container, createFolder, createType }: {
   createFolder: string;
   createType: string;
 }) {
-  const { file, loading } = useFileByPath(path);
+  const { file, loading, error } = useFileByPath(path);
   const { navigate } = useNavigationGuard();
 
   if (loading) {
@@ -108,7 +108,7 @@ function FileTabContent({ path, Container, createFolder, createType }: {
     );
   }
 
-  if (!file) {
+  if (!file || error || file.fileState.id < 0) {
     return (
       <Box p={8} textAlign="center">
         <Text color="fg.muted" mb={4}>No file found at {path}.</Text>
