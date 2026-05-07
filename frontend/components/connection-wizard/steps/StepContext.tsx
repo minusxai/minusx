@@ -17,7 +17,6 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
-import { useLegacyChatData } from '@/lib/chat-data-source';
 import type { ContextContent, Whitelist, WhitelistNode } from '@/lib/types';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
@@ -105,9 +104,11 @@ function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { conn
           h="350px"
           mt={2}
         >
-          <WizardChatPreview
+          <ChatInterface
             contextPath={contextPath}
-            connectionName={connectionName}
+            databaseName={connectionName}
+            container="sidebar"
+            readOnly
           />
         </Box>
       </Collapsible.Content>
@@ -828,18 +829,5 @@ export default function StepContext({
         </Collapsible.Root>
       )}
     </VStack>
-  );
-}
-
-function WizardChatPreview({ contextPath, connectionName }: { contextPath: string; connectionName: string }) {
-  const dataSource = useLegacyChatData(undefined);
-  return (
-    <ChatInterface
-      dataSource={dataSource}
-      contextPath={contextPath}
-      databaseName={connectionName}
-      container="sidebar"
-      readOnly
-    />
   );
 }

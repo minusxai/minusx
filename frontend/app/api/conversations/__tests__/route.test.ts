@@ -141,4 +141,102 @@ describe('GET /api/conversations', () => {
     expect(names).toContain('My first question');
     expect(names).toContain('slack-C_TEST-2024-01-15');
   });
+
+  it('default URL (no ?v=2) returns only v=1 conversations (no meta.version)', async () => {
+    const { conversations } = await callGet();
+    // The seeded files have no meta.version → all classified as v=1.
+    expect(conversations.length).toBe(2);
+  });
+
+  it('?v=2 returns only v=2 conversations (none seeded → empty)', async () => {
+    const res = await GET(new Request('http://localhost/api/conversations?v=2'));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.conversations).toEqual([]);
+  });
+});
+
+describe('GET /api/conversations — v=2 strict filter', () => {
+  const TEST_DB_PATH_V2 = getTestDbPath('conversations_route_v2');
+
+  async function seedV2(_dbPath: string): Promise<void> {
+    const { getModules } = await import('@/lib/modules/registry');
+    const db = getModules().db;
+    const now = new Date().toISOString();
+
+    const { rows: [{ next_id }] } = await db.exec<{ next_id: number }>(
+      'SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files',
+      [],
+    );
+
+    // V=1 conversation (no meta.version)
+    const v1Content: ConversationFileContent = {
+      metadata: { userId: '1', name: 'legacy chat', createdAt: now, updatedAt: now, logLength: 0 },
+      log: [],
+    };
+    await db.exec(
+      `INSERT INTO files (id, name, path, type, content, file_references, version, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [next_id, 'legacy', '/org/logs/conversations/1/legacy', 'conversation', JSON.stringify(v1Content), '[]', 1, now, now],
+    );
+
+    // V=2 conversation (meta.version=2; content.log is pi-ai shape)
+    const v2Content = {
+      metadata: { userId: '1', name: 'pi-ai chat', createdAt: now, updatedAt: now, logLength: 1 },
+      log: [
+        {
+          type: 'toolCall',
+          id: 'root1',
+          name: 'WebAnalystAgent',
+          arguments: { userMessage: 'What is revenue?' },
+          context: {},
+          parent_id: null,
+        },
+      ],
+    };
+    await db.exec(
+      `INSERT INTO files (id, name, path, type, content, meta, file_references, version, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        next_id + 1,
+        'v2 chat',
+        '/org/logs/conversations/1/v2',
+        'conversation',
+        JSON.stringify(v2Content),
+        JSON.stringify({ version: 2 }),
+        '[]',
+        1,
+        now,
+        now,
+      ],
+    );
+  }
+
+  setupTestDb(TEST_DB_PATH_V2, { customInit: seedV2 });
+
+  it('default URL returns only v=1 conversations', async () => {
+    const res = await GET(new Request('http://localhost/api/conversations'));
+    const body = await res.json();
+    const names = body.conversations.map((c: ConversationSummary) => c.name);
+    expect(names).toContain('legacy chat');
+    expect(names).not.toContain('pi-ai chat');
+  });
+
+  it('?v=2 returns only v=2 conversations', async () => {
+    const res = await GET(new Request('http://localhost/api/conversations?v=2'));
+    const body = await res.json();
+    const names = body.conversations.map((c: ConversationSummary) => c.name);
+    expect(names).toContain('pi-ai chat');
+    expect(names).not.toContain('legacy chat');
+  });
+
+  it('?v=2 derives messageCount from pi-ai log via translator', async () => {
+    const res = await GET(new Request('http://localhost/api/conversations?v=2'));
+    const body = await res.json();
+    const v2Conv = body.conversations.find((c: ConversationSummary) => c.name === 'pi-ai chat');
+    expect(v2Conv).toBeDefined();
+    // Root invocation → 1 user message after translation.
+    expect(v2Conv!.messageCount).toBe(1);
+    expect(v2Conv!.lastMessage).toBe('What is revenue?');
+  });
 });

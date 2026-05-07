@@ -19,7 +19,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { firstMessage } = body;
 
-    const { fileId, name } = await createNewConversation(user, firstMessage);
+    // ?v=2 marks the conversation as v=2 (orchestrator-driven). Both modes
+    // create the same `type:'conversation'` file shape; only `meta.version`
+    // differs. The chat routes branch on `meta.version` to decide which
+    // engine handles the turn.
+    const isV2 = request.nextUrl.searchParams.get('v') === '2';
+    const { fileId, name } = await createNewConversation(
+      user,
+      firstMessage,
+      isV2 ? { version: 2 } : undefined,
+    );
 
     return NextResponse.json({ conversationID: fileId, name });
   } catch (error) {

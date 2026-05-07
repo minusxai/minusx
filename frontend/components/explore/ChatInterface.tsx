@@ -6,12 +6,13 @@ import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from
 import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
-import { useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
+import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
-import ChatInputBar from './ChatInputBar';
-import { useAppSelector } from '@/store/hooks';
-import { type DebugMessage } from '@/store/chatSlice';
-import type { ChatDataSource } from '@/lib/chat-data-source/types';
+import dynamic from 'next/dynamic';
+import ThinkingIndicator from './ThinkingIndicator';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, type DebugMessage } from '@/store/chatSlice';
+import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -35,9 +36,14 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolDebugBar from './ToolDebugBar';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
+// next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
+// from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
+// circular dependency workaround.
+// eslint-disable-next-line no-restricted-syntax
+const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
+
 interface ChatInterfaceProps {
-  /** Data source — legacy or v=2. Caller constructs via useLegacyChatData / useV2ChatData. */
-  dataSource: ChatDataSource;
+  conversationId?: number;  // Optional file ID: if provided, load existing conversation
   contextPath: string;  // Context path (required) - load context
   contextVersion?: number;  // Optional version number (defaults to user's published)
   databaseName?: string | null;  // Optional - pre-select database
@@ -122,7 +128,7 @@ function StreamingInfoBlock({ streamingInfo, viewMode, showThinking, toggleShowT
 }
 
 export default function ChatInterface({
-  dataSource,
+  conversationId: providedConversationId,
   contextPath,
   contextVersion,
   databaseName: initialDatabaseName,
@@ -133,16 +139,8 @@ export default function ChatInterface({
   readOnly = false,
 }: ChatInterfaceProps) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const isExplorePage = !appState || (appState.type !== 'file' && appState.type !== 'folder');
-
-  // Conversation state comes from the data source. Adapter handles fork-follow,
-  // active-conversation fallback, /api/chat/init pre-create (legacy), or
-  // /api/chat/v2/new (v=2). ChatInterface is purely a renderer over this state.
-  const { conversation, conversationID, isLoading, loadError, isNewConversation } = dataSource;
-  // Used in a few storedConnectionId / storedContextPath selectors and the
-  // navigation effect — it represents the live id, not the originally-passed
-  // one (the data source handles fork-follow internally).
-  const providedConversationId = conversationID;
 
   // Load context using useContext hook (reuse existing hook)
   const contextInfo = useContext(contextPath, contextVersion, true);
@@ -201,6 +199,9 @@ export default function ChatInterface({
   const connectionsLoading = contextLoading;
   const contextsLoading = contextLoading;
 
+  // Load conversation from database if existing conversation (from URL)
+  const { conversation: loadedConversation, isLoading, error: loadError } = useConversation(providedConversationId);
+
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const showExpandedMessages = useAppSelector(selectShowExpandedMessages);
   const viewMode = showExpandedMessages ? 'detailed' : 'compact';
@@ -246,9 +247,52 @@ export default function ChatInterface({
     return uniqueSkills(refs);
   }, [chatSkills, uniqueSkills]);
 
-  // `conversation`, `conversationID`, `isNewConversation`, and bootstrap
-  // effects all live in the data source now (legacy or v=2). ChatInterface
-  // is purely a renderer over this state.
+  // Case 1: existing conversation — follow fork chain from loaded conversation
+  const conversations = useAppSelector(state => state.chat.conversations);
+  const forkFollowedConversation = useMemo(() => {
+    if (!providedConversationId || !loadedConversation) return null;
+    let conv = loadedConversation;
+    while (conv?.forkedConversationID) {
+      conv = conversations[conv.forkedConversationID] || conv;
+    }
+    return conv;
+  }, [providedConversationId, loadedConversation, conversations]);
+
+  // Case 2: new conversation — find the active conversation (real positive ID from /api/chat/init)
+  const activeConversationId = useAppSelector(selectActiveConversation);
+  const activeConversation = useAppSelector(state =>
+    activeConversationId ? state.chat.conversations[activeConversationId] : undefined
+  );
+
+  // When loading an existing conversation (providedConversationId set), don't fall back to
+  // activeConversation — doing so causes the fork-follow useEffect to redirect back to
+  // the most recent conversation before the target conversation finishes loading.
+  const conversation = providedConversationId
+    ? forkFollowedConversation
+    : (forkFollowedConversation ?? activeConversation);
+
+  const isNewConversation = !providedConversationId;
+  const conversationID = conversation?.conversationID;
+
+  // Pre-create a conversation on explore page mount so sends go directly to the existing path
+  useEffect(() => {
+    if (!isNewConversation) return;
+    if (activeConversationId) return; // already have one
+    let cancelled = false;
+    fetch('/api/chat/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled || !data.conversationID) return;
+        dispatch(createConversation({ conversationID: data.conversationID, agent: 'AnalystAgent' }));
+      })
+      .catch(err => console.error('[ChatInterface] Failed to pre-create conversation:', err));
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNewConversation, activeConversationId]);
 
   // Determine if this conversation originated from a file page or Slack
   const parentPageInfo = useMemo(() => {
@@ -283,8 +327,18 @@ export default function ChatInterface({
   // Single unified source for all messages (completed, streaming, pending)
   const allMessages = useMemo(() => {
     if (!conversation) return [];
-    return deduplicateMessages(conversation);
+    const msgs = deduplicateMessages(conversation);
+    const ttu = msgs.find(m => (m as any).function?.name === 'TalkToUser');
+    if (ttu) console.log('[ChatInterface] allMessages has TalkToUser, content length:', String((ttu as any).content || '').length, 'at', Date.now());
+    return msgs;
   }, [conversation?.messages, conversation?.streamedCompletedToolCalls, conversation?.pending_tool_calls]);
+
+  // Track when ChatInterface itself re-renders during streaming
+  const streamedLen = conversation?.streamedCompletedToolCalls?.length ?? 0;
+  const streamedTTUContent = (conversation?.streamedCompletedToolCalls ?? []).find((m: any) => m.function?.name === 'TalkToUser')?.content;
+  if (conversation?.executionState === 'STREAMING') {
+    console.log('[ChatInterface] RENDER during STREAMING, streamedLen:', streamedLen, 'TTU content len:', typeof streamedTTUContent === 'string' ? streamedTTUContent.length : 0, 'at', Date.now());
+  }
 
   // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
   const streamingInfo = useMemo(() => {
@@ -419,12 +473,11 @@ export default function ChatInterface({
 
   // Scroll to bottom smoothly
   const scrollToBottom = () => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    // JSDOM in tests doesn't implement scrollTo — guard so the test env
-    // doesn't throw.
-    if (typeof el.scrollTo !== 'function') return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    if (!scrollContainerRef.current) return;
+    scrollContainerRef.current.scrollTo({
+      top: scrollContainerRef.current.scrollHeight,
+      behavior: 'smooth'
+    });
   };
 
   // Track last user message count to detect new messages
@@ -468,13 +521,16 @@ export default function ChatInterface({
     prevStreamingAnswerLength.current = streamingAnswerLength;
   }, [streamingAnswerLength]);
 
+  const clearChat = useClearChat(container);
   const handleNewChat = () => {
     setLocalError(null);
-    dataSource.newChat();
+    clearChat();
   };
 
   const handleStopAgent = () => {
-    dataSource.stop?.();
+    if (conversationID) {
+      dispatch(interruptChat({ conversationID }));
+    }
   };
 
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container });
@@ -482,27 +538,13 @@ export default function ChatInterface({
   const handleSendMessage = async (userInput: string, attachments: Attachment[] = []) => {
     if (!userInput.trim()) return;
 
-    // Safety net: intercept slash commands typed directly without dropdown.
-    // Skip when the data source doesn't support slash commands (e.g. v=2).
-    if (
-      dataSource.capabilities.slashCommands &&
-      tryExecuteSlashCommand(userInput, availableCommands, handleCommandExecute)
-    ) {
-      return;
-    }
+    // Safety net: intercept slash commands typed directly without dropdown
+    if (tryExecuteSlashCommand(userInput, availableCommands, handleCommandExecute)) return;
 
-    // Skill mention extraction — only meaningful for sources that support it.
-    const selectedSkillMentions = dataSource.capabilities.skillMentions
-      ? getSkillsFromMessage(userInput)
-      : [];
+    const selectedSkillMentions = getSkillsFromMessage(userInput);
 
-    // Block sending if connections or contexts are still loading. Only
-    // applies when the source uses the context selector (legacy) — v=2
-    // bootstraps its own context server-side.
-    if (
-      dataSource.capabilities.contextSelector &&
-      (connectionsLoading || contextsLoading)
-    ) {
+    // Block sending if connections or contexts are still loading
+    if (connectionsLoading || contextsLoading) {
       setLocalError({
         message: 'Still loading connections and context...',
         code: 'UNKNOWN'
@@ -510,92 +552,119 @@ export default function ChatInterface({
       return;
     }
 
+    // REMOVED: No longer block chat without database
+    // Users can now chat even without database connections
+    // if (!database) {
+    //   setLocalError({
+    //     message: 'No database connection available',
+    //     code: 'UNKNOWN'
+    //   });
+    //   return;
+    // }
+
     setLocalError(null);
 
-    // If agent is busy, queue immediately without async work. Skipped when
-    // queueing isn't supported by the source.
-    if (dataSource.capabilities.queueMessages && conversationID && conversation) {
+    // If agent is busy, queue immediately without async work
+    if (conversationID && conversation) {
       const agentBusy = conversation.executionState === 'WAITING'
         || conversation.executionState === 'EXECUTING'
         || conversation.executionState === 'STREAMING';
 
       if (agentBusy) {
-        if (!allowChatQueue) return;
-        dataSource.queue?.({
+        if (!allowChatQueue) {
+          return;
+        }
+        dispatch(queueMessage({
+          conversationID,
           message: userInput,
           attachments: attachments.length > 0 ? attachments : undefined,
-        });
+        }));
         return;
       }
     }
 
-    // Build agent_args (legacy only — carries app_state, schema, skills,
-    // attachments, etc.). v=2 builds equivalent context server-side via
-    // setupOrchestration so we skip the whole block.
-    let agentArgs: Record<string, unknown> | undefined;
-    let allAttachments: Attachment[] = attachments;
+    // Simplify schema for agent.
+    // null  = no active context → no restriction (agent can search full schema)
+    // []    = context with empty whitelist → restrict to nothing
+    // [...] = context with whitelisted tables → filter to those
+    const simplifiedSchema = database?.schemas?.map(s => ({
+      schema: s.schema,
+      tables: s.tables.map(t => t.table)
+    })) ?? null;
 
-    if (dataSource.capabilities.agentArgs) {
-      // Render chart images for the current file and upload to S3.
-      // Show preparing indicator so user knows something is happening after pressing send.
-      setIsPreparing(true);
-      try {
-        const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
-        allAttachments = [...attachments, ...fileAttachments];
-      } catch {
-        setLocalError({ message: 'Failed to prepare message', code: 'UNKNOWN' });
-        setIsPreparing(false);
-        return;
+    // Render chart images for the current file and upload to S3.
+    // Question: 1 image. Dashboard: one image per chart with data.
+    // Show preparing indicator so user knows something is happening after pressing send.
+    setIsPreparing(true);
+    let allAttachments: Attachment[];
+    let convId = conversationID;
+    try {
+      const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
+      allAttachments = [...attachments, ...fileAttachments];
+
+      // Resolve conversation — normally pre-created on mount, but fall back to inline creation
+      // if the user sends before the pre-creation fetch completes (rare race condition).
+      if (!convId) {
+        const initRes = await fetch('/api/chat/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firstMessage: userInput }),
+        });
+        const { conversationID: newId } = await initRes.json();
+        if (!newId) throw new Error('Failed to get conversation ID from server');
+        convId = newId as number;
+        dispatch(createConversation({ conversationID: convId, agent: 'AnalystAgent' }));
       }
+    } catch {
+      setLocalError({ message: 'Failed to prepare message', code: 'UNKNOWN' });
       setIsPreparing(false);
+      return;
+    }
+    setIsPreparing(false);
 
-      // Clear any leftover queued messages (e.g., after interrupt) before send.
-      if (conversation?.queuedMessages?.length) {
-        dataSource.clearQueue?.();
-      }
+    if (!convId) return; // should not happen — caught above or pre-created
 
-      // Simplify schema for agent.
-      // null  = no active context → no restriction
-      // []    = context with empty whitelist → restrict to nothing
-      // [...] = context with whitelisted tables → filter to those
-      const simplifiedSchema = database?.schemas?.map(s => ({
-        schema: s.schema,
-        tables: s.tables.map(t => t.table)
-      })) ?? null;
+    // Clear any leftover queued messages (e.g., after interrupt)
+    if (conversation?.queuedMessages?.length) {
+      dispatch(clearQueuedMessages({ conversationID: convId }));
+    }
 
-      const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
-      const selectedUserNames = new Set(
-        uniqueSelectedSkills
-          .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
-          .map(skill => skill.name)
-      );
-      const agentSelectedSkills: AgentSkillSelection[] = uniqueSelectedSkills.map(skill => {
-        if (skill.source === 'system') {
-          return { type: 'system', name: skill.name };
-        }
-        return {
-          type: 'user',
-          name: skill.name,
-          description: skill.description || '',
-          content: skill.content || '',
-        };
-      });
-      // Auto-inject large_file skill when app state is very large
-      const LARGE_APP_STATE_THRESHOLD = 200_000; // characters
-      const appStateSize = appState ? JSON.stringify(appState).length : 0;
-      if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
-        agentSelectedSkills.push({ type: 'system', name: 'large_file' });
-      }
-
-      const uniqueUserCatalog: AgentUserSkillCatalogItem[] = uniqueSkills(chatSkills)
+    const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
+    const selectedUserNames = new Set(
+      uniqueSelectedSkills
         .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
-        .filter(skill => !selectedUserNames.has(skill.name))
-        .map(skill => ({
-          name: skill.name,
-          description: skill.description || '',
-        }));
+        .map(skill => skill.name)
+    );
+    const agentSelectedSkills: AgentSkillSelection[] = uniqueSelectedSkills.map(skill => {
+      if (skill.source === 'system') {
+        return { type: 'system', name: skill.name };
+      }
+      return {
+        type: 'user',
+        name: skill.name,
+        description: skill.description || '',
+        content: skill.content || '',
+      };
+    });
+    // Auto-inject large_file skill when app state is very large
+    const LARGE_APP_STATE_THRESHOLD = 200_000; // characters
+    const appStateSize = appState ? JSON.stringify(appState).length : 0;
+    if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
+      agentSelectedSkills.push({ type: 'system', name: 'large_file' });
+    }
 
-      agentArgs = {
+    const uniqueUserCatalog: AgentUserSkillCatalogItem[] = uniqueSkills(chatSkills)
+      .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
+      .filter(skill => !selectedUserNames.has(skill.name))
+      .map(skill => ({
+        name: skill.name,
+        description: skill.description || '',
+      }));
+
+    // Update agent_args with fresh appState before sending message
+    dispatch(updateAgentArgs({
+      conversationID: convId,
+      agent_args: {
         connection_id: database?.databaseName || selectedDatabase || null,
         context_path: contextPath || null,
         context_version: contextVersion ?? null,
@@ -611,24 +680,15 @@ export default function ChatInterface({
         },
         ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
         ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-      };
-    }
+      }
+    }));
 
-    // Send via the data source. The adapter handles bootstrap (legacy:
-    // /api/chat/init pre-create; v=2: /api/chat/v2/new), updates agent_args
-    // if applicable, and dispatches the appropriate listener-driven action.
-    try {
-      await dataSource.send({
-        message: userInput,
-        attachments: allAttachments.length > 0 ? allAttachments : undefined,
-        agentArgs,
-      });
-    } catch (err) {
-      setLocalError({
-        message: err instanceof Error ? err.message : 'Failed to send message',
-        code: 'UNKNOWN',
-      });
-    }
+    // Send message
+    dispatch(sendMessage({
+      conversationID: convId,
+      message: userInput,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    }));
   };
 
   // Navigate when conversation forks (new conversation gets real ID, or conflict resolution)
@@ -653,16 +713,18 @@ export default function ChatInterface({
   }, [conversationID, isNewConversation, providedConversationId, container, router, conversation, allMessages.length]);
 
 
-  // Handler for setting conversation as active (legacy only)
+  // Handler for setting conversation as active
   const handleSetAsActive = () => {
-    dataSource.setActive?.();
+    if (conversationID) {
+      dispatch(setActiveConversation(conversationID));
+    }
   };
 
   // Determine if current conversation is active
   const isConversationActive = conversation?.active === true;
 
-  // "Set as Active" button (only shown for non-active conversations, legacy only)
-  const setAsActiveButton = dataSource.capabilities.setActive && providedConversationId && !isConversationActive && conversation && (
+  // "Set as Active" button (only shown for non-active conversations)
+  const setAsActiveButton = providedConversationId && !isConversationActive && conversation && (
     <Tooltip content="Make this conversation active in sidechat" positioning={{ placement: 'bottom' }}>
       <Button
         onClick={handleSetAsActive}
@@ -855,7 +917,7 @@ export default function ChatInterface({
                     </Text>
                     {conversationID && (
                       <Button mt={2} size="xs" variant="outline" colorPalette="red" aria-label="Try again"
-                        onClick={() => dataSource.send({ message: 'Continue' })}>
+                        onClick={() => dispatch(sendMessage({ conversationID, message: 'Continue' }))}>
                         Try again
                       </Button>
                     )}
@@ -880,7 +942,7 @@ export default function ChatInterface({
                     <Text color="accent.warning" fontSize="sm" fontFamily="mono">{cfg.msg}</Text>
                     {conversationID && (
                       <Button mt={2} size="xs" variant="outline" colorPalette="yellow" aria-label={cfg.label}
-                        onClick={() => dataSource.send({ message: cfg.cta })}>
+                        onClick={() => dispatch(sendMessage({ conversationID, message: cfg.cta }))}>
                         {cfg.label}
                       </Button>
                     )}
@@ -1008,35 +1070,93 @@ export default function ChatInterface({
 
       {/* Input - Sticky at bottom (hidden in readOnly mode) */}
       {!readOnly && !loadError && !needsContinueConfirmation && (
-        <ChatInputBar
-          onSend={handleSendMessage}
-          onStop={handleStopAgent}
-          onNewChat={handleNewChat}
-          isAgentRunning={isAgentRunning}
-          isStreaming={isStreaming}
-          isWaitingForUserInput={isWaitingForUserInput}
-          isPreparing={isPreparing}
-          isLoading={isLoading}
-          tokenLimitExceeded={tokenLimitExceeded}
-          queuedMessages={conversation?.queuedMessages || []}
-          wasInterrupted={!!conversation?.wasInterrupted}
-          allowChatQueue={allowChatQueue}
-          selectedDatabase={selectedDatabase}
-          onDatabaseChange={handleDatabaseChange}
-          container={container}
-          isCompact={isCompact}
-          colSpan={colSpan}
-          colStart={colStart}
-          connectionsLoading={connectionsLoading}
-          contextsLoading={contextsLoading}
-          selectedContextPath={contextPath}
-          selectedVersion={contextVersion}
-          onContextChange={onContextChange}
-          whitelistedSchemas={databases}
-          availableSkills={chatSkills}
-          availableCommands={availableCommands}
-          onCommandExecute={handleCommandExecute}
-        />
+        <Box
+          position="sticky"
+          bottom={0}
+          bg="bg.canvas"
+          pt={3}
+          pb={{ base: 1, md: 3 }}
+          px={4}
+          zIndex={10}
+        >
+          {/* Loading Status Banner */}
+          {(connectionsLoading || contextsLoading) && (
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
+                gap={2}
+                w="100%"
+            >
+            <GridItem colSpan={colSpan} colStart={colStart}>
+            <Box
+              bg="bg.muted"
+              borderColor="border.default"
+              borderWidth="1px"
+              borderRadius="md"
+              px={3}
+              py={2}
+              mb={3}
+            >
+              <HStack gap={2}>
+                <Spinner size="sm" colorPalette="gray" />
+                <Text fontSize="sm" color="fg.muted">
+                  Loading {
+                    connectionsLoading && contextsLoading ? 'connections and context' :
+                    connectionsLoading ? 'connections' :
+                    'context'
+                  }...
+                </Text>
+              </HStack>
+            </Box>
+            </GridItem>
+            </Grid>
+          )}
+
+          {(isAgentRunning || isStreaming) && (
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
+                gap={2}
+                w="100%"
+            >
+              <GridItem colSpan={colSpan} colStart={colStart}>
+                <ThinkingIndicator waitingForInput={isWaitingForUserInput} onStop={handleStopAgent} queuedMessages={conversation?.queuedMessages || []} />
+              </GridItem>
+            </Grid>
+          )}
+
+{tokenLimitExceeded && !isAgentRunning && !isStreaming ? (
+            <HStack justify="center" py={2} px={4} gap={3} borderTop="1px solid" borderColor="border.muted" fontFamily="mono">
+              <Text fontSize="xs"><Text as="span" fontWeight="semibold">Conversation too long.</Text>{' '}<Text as="span" color="fg.muted">Long conversations degrade agent performance. Please start a new chat.</Text></Text>
+              <Button size="xs" bg="accent.teal" color="white" fontFamily="mono" _hover={{ bg: 'accent.teal', opacity: 0.9 }} onClick={handleNewChat} flexShrink={0}><Icon as={LuPlus} boxSize={4} mr={1} />New Chat</Button>
+            </HStack>
+          ) : (
+<Box width="100%">
+            <ChatInput
+              onSend={handleSendMessage}
+              onStop={handleStopAgent}
+              isAgentRunning={isAgentRunning || isStreaming}
+              allowChatQueue={allowChatQueue}
+              isPreparing={isPreparing}
+              disabled={isLoading}
+              databaseName={selectedDatabase || ''}
+              onDatabaseChange={handleDatabaseChange}
+              container={container}
+              isCompact={isCompact}
+              colSpan={colSpan}
+              colStart={colStart}
+              connectionsLoading={connectionsLoading}
+              contextsLoading={contextsLoading}
+              selectedContextPath={contextPath}
+              selectedVersion={contextVersion}
+              onContextChange={onContextChange}
+              whitelistedSchemas={databases}
+              availableSkills={chatSkills}
+              availableCommands={availableCommands}
+              onCommandExecute={handleCommandExecute}
+              prefillText={!isAgentRunning && !isStreaming && conversation?.wasInterrupted && conversation?.queuedMessages?.length
+                ? conversation.queuedMessages.map(qm => qm.message).join('\n')
+                : undefined}
+            />
+          </Box>
+          )}
+        </Box>
       )}
     </VStack>
   );

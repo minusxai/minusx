@@ -14,7 +14,6 @@ import CreateMenu from './CreateMenu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { toggleLeftSidebar, selectDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
-import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -131,23 +130,16 @@ export default function Sidebar() {
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
   const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
-  const useChatV2 = useUseChatV2();
 
   // Build and filter nav sections inside useMemo so JSX icon expressions are only evaluated
   // when mode/showDebug/userIsAdmin actually change (not on every streaming render)
   const navSections = useMemo(() => {
-    // /explore is the unified entry when ?v=2 is on — the chat-v2 list view
-    // renders inline there. Legacy 'Conversations' link still goes to its
-    // own list page. preserveParams keeps ?v=2 on the navigation.
-    const conversationsItem: NavItem = useChatV2
-      ? { href: '/explore', icon: <LuHistory />, label: 'Chats' }
-      : { href: '/conversations', icon: <LuHistory />, label: 'Conversations' };
     const raw: NavSection[] = [
       {
         category: 'Analytics',
         items: [
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
-          conversationsItem,
+          { href: '/conversations', icon: <LuHistory />, label: 'Conversations' },
           { href: `/p/${mode}`, icon: <LuFolder />, label: 'Files' },
         ],
       },
@@ -173,7 +165,7 @@ export default function Sidebar() {
         items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
       }))
       .filter(section => section.items.length > 0);
-  }, [showDebug, userIsAdmin, mode, useChatV2]);
+  }, [showDebug, userIsAdmin, mode]);
 
   return (
     <Box
@@ -325,9 +317,7 @@ export default function Sidebar() {
           ))}
         </VStack>
 
-        {/* Recent Conversations — surfaces the chat history list. The list
-            shows legacy 'conversation' files in default mode and 'chat'
-            files in v=2 mode (ConversationList branches internally). */}
+        {/* Recent Chats Section */}
         {!isCollapsed ? (
           <Box>
             <HStack

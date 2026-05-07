@@ -82,12 +82,6 @@ import { waitForReduxState, waitForConversationFinished } from '@/test/helpers/r
 import FileHeader from '@/components/FileHeader';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import ChatInterface from '@/components/explore/ChatInterface';
-import { useLegacyChatData } from '@/lib/chat-data-source';
-
-function ChatInterfaceWithLegacy({ conversationId, ...rest }: { conversationId: number | undefined; contextPath: string; container?: 'page' | 'sidebar' }) {
-  const dataSource = useLegacyChatData(conversationId);
-  return <ChatInterface dataSource={dataSource} {...rest} contextPath={rest.contextPath} />;
-}
 
 import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
@@ -417,7 +411,7 @@ describe('Explore page: submit question → agent responds → see answer → to
       });
 
       renderWithProviders(
-        <ChatInterfaceWithLegacy
+        <ChatInterface
           conversationId={undefined}
           contextPath="/org"
           container="page"

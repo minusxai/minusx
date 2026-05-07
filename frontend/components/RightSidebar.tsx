@@ -13,7 +13,6 @@ import { FileType, DatabaseWithSchema } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
-import { useChatData } from '@/lib/chat-data-source';
 import DevToolsPanel from './DevToolsPanel';
 
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
@@ -151,11 +150,13 @@ function SectionContent({
     case 'chat':
       return (
         <Box height="100%" overflow="hidden">
-          <SidebarChat
-            conversationID={conversationID}
+          <ChatInterface
+            conversationId={conversationID}
             contextPath={selectedContextPath || filePath}
             contextVersion={contextVersion}
+            databaseName={null}
             appState={appState}
+            container="sidebar"
             onContextChange={onContextChange}
           />
         </Box>
@@ -653,34 +654,5 @@ export default function RightSidebar({
       </Box>
     </HStack>
     </>
-  );
-}
-
-// Tiny shell so the chat data source hook can run inside the conditional
-// switch case without violating rules-of-hooks at the parent.
-function SidebarChat({
-  conversationID,
-  contextPath,
-  contextVersion,
-  appState,
-  onContextChange,
-}: {
-  conversationID: number | undefined;
-  contextPath: string;
-  contextVersion: number | undefined;
-  appState: import('@/lib/appState').AppState | null;
-  onContextChange: ((path: string | null, version?: number) => void) | undefined;
-}) {
-  const dataSource = useChatData(conversationID);
-  return (
-    <ChatInterface
-      dataSource={dataSource}
-      contextPath={contextPath}
-      contextVersion={contextVersion}
-      databaseName={null}
-      appState={appState}
-      container="sidebar"
-      onContextChange={onContextChange}
-    />
   );
 }

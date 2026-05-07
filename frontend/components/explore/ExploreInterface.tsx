@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
-import { useChatData } from '@/lib/chat-data-source';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import Breadcrumb from '@/components/Breadcrumb';
@@ -150,10 +149,12 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
           </Box>
           {/* Chat Interface */}
           <Box flex="1" overflow="hidden">
-            <ChatInterfaceShell
+            <ChatInterface
               conversationId={conversationId}
               contextPath={contextPath}
-              selectedVersion={selectedVersion}
+              contextVersion={selectedVersion}
+              appState={undefined}
+              container="page"
               onContextChange={(path, version) => {
                 setSelectedContextPath(path);
                 setSelectedVersion(version);
@@ -189,31 +190,5 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
         />
       )}
     </HStack>
-  );
-}
-
-// Tiny shell so the hook (`useChatData`) can be conditional on the parent's
-// state without violating rules-of-hooks at the page level.
-function ChatInterfaceShell({
-  conversationId,
-  contextPath,
-  selectedVersion,
-  onContextChange,
-}: {
-  conversationId: number | undefined;
-  contextPath: string;
-  selectedVersion: number | undefined;
-  onContextChange: (path: string | null, version?: number) => void;
-}) {
-  const dataSource = useChatData(conversationId);
-  return (
-    <ChatInterface
-      dataSource={dataSource}
-      contextPath={contextPath}
-      contextVersion={selectedVersion}
-      appState={undefined}
-      container="page"
-      onContextChange={onContextChange}
-    />
   );
 }

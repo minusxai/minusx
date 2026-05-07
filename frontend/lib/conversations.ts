@@ -54,10 +54,15 @@ function buildConversationPath(user: EffectiveUser, name: string): { userId: str
  * Create a new conversation file and return its real positive ID.
  * Called by /api/chat/init before any streaming starts so the frontend
  * can navigate to the real URL immediately.
+ *
+ * Pass `version: 2` to mark the file as a v=2 conversation (orchestrator-
+ * driven). The conversation log shape is the same on disk in both modes
+ * — translation happens at the API boundary in the v=2 chat routes.
  */
 export async function createNewConversation(
   user: EffectiveUser,
-  firstUserMessage?: string
+  firstUserMessage?: string,
+  options?: { version?: number },
 ): Promise<{ fileId: number; name: string }> {
   const name = truncateMessageForName(firstUserMessage || DEFAULT_CONVERSATION_NAME);
   const { userId, fileName, path } = buildConversationPath(user, firstUserMessage || 'conversation');
@@ -80,6 +85,7 @@ export async function createNewConversation(
       path,
       type: 'conversation',
       content: initialConversation as any,
+      ...(options?.version !== undefined ? { meta: { version: options.version } } : {}),
       options: {
         createPath: true,
         returnExisting: false

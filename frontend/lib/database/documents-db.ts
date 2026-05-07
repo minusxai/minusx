@@ -14,7 +14,7 @@ export interface DbRow {
   id: number;
   name: string;
   path: string;
-  type: 'question' | 'folder' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'chat' | 'session' | 'config';
+  type: 'question' | 'folder' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'session' | 'config';
   content: any;           // JSONB — driver returns parsed JS object
   file_references: any[]; // JSONB — driver returns parsed JS array
   created_at: string;
@@ -77,43 +77,6 @@ export class DocumentDB {
     `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]);
 
     return result.rows[0].id;
-  }
-
-  /**
-   * Atomic append for chat-v2 files. Single-statement UPDATE that:
-   *   - Appends `logDiff` to `content -> 'log'`.
-   *   - Sets `meta.logLength` to `expectedLogIndex + logDiff.length`.
-   *   - Bumps `version`, clears `draft`, refreshes `updated_at`.
-   *   - Conditional on `meta.logLength = expectedLogIndex` (cached counter,
-   *     kept consistent because it's bumped in the same statement).
-   *
-   * Returns true on append-in-place, false on length mismatch (caller forks).
-   * Distinct from the legacy generic `appendJsonArray` so the chat surface
-   * doesn't pay for the conversation-format `metadata.updatedAt` plumbing.
-   */
-  static async appendChatLog(
-    chatId: number,
-    logDiff: unknown[],
-    expectedLogIndex: number,
-  ): Promise<boolean> {
-    const db = getModules().db;
-    const newLength = expectedLogIndex + logDiff.length;
-
-    const result = await db.exec(
-      `UPDATE files
-       SET
-         content = jsonb_set(content, '{log}', (content -> 'log') || $2::jsonb),
-         meta    = coalesce(meta, '{}'::jsonb)
-                   || jsonb_build_object('logLength', $3::int),
-         version = version + 1,
-         draft   = false,
-         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1
-         AND type = 'chat'
-         AND coalesce((meta ->> 'logLength')::int, 0) = $4`,
-      [chatId, JSON.stringify(logDiff), newLength, expectedLogIndex],
-    );
-    return result.rowCount > 0;
   }
 
   static async getById(id: number, includeContent: boolean = true): Promise<DbFile | null> {

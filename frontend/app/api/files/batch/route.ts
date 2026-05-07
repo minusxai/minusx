@@ -4,6 +4,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFiles } from '@/lib/data/files.server';
 import { validateFileIds } from '@/lib/data/helpers/validation';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { translateConversationForFrontend } from '@/lib/chat-translator';
 
 /**
  * POST /api/files/batch
@@ -38,11 +39,15 @@ export const POST = withAuth(async (
       });
     }
 
+    // v=2 conversations: translate pi-ai content.log → legacy task-log so
+    // the frontend never sees pi-ai shape. v=1 files pass through unchanged.
+    const translatedData = result.data.map(translateConversationForFrontend);
+
     if (include !== 'references') {
-      return successResponse(result.data);
+      return successResponse(translatedData);
     }
 
-    return successResponse(result);
+    return successResponse({ ...result, data: translatedData });
   } catch (error) {
     return handleApiError(error);
   }

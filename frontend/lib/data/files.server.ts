@@ -801,21 +801,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
         };
       }
 
-      case 'chat': {
-        // ChatContent template — minimal: just an empty log. Lives in
-        // lib/chat-v2/chat-file.ts as the canonical shape; mirrored here so
-        // /new/chat (or any other createDraftFile entry point) yields a valid
-        // empty chat. Per-chat counters/fork pointers live in `files.meta`,
-        // not in `content` — the standard `/api/chat/v2/new` endpoint goes
-        // through `createDraftChat` directly which populates both.
-        const content = { log: [] };
-        return {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ChatContent isn't in the BaseFileContent template union; intentional
-          content: content as any,
-          fileName: '',
-        };
-      }
-
       default:
         throw new Error(`Unsupported template type: ${type}`);
     }
@@ -990,20 +975,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async renameAndMove(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
     return DocumentDB.renameAndMove(id, name, path);
-  }
-
-  /**
-   * Atomic append for chat-v2 files. See `DocumentDB.appendChatLog`.
-   * Distinct from the legacy generic `appendJsonArray` so the chat surface
-   * doesn't pay for `'conversation'` format quirks.
-   */
-  async appendChatLog(
-    id: number,
-    logDiff: unknown[],
-    expectedLogIndex: number,
-    _user: EffectiveUser,
-  ): Promise<boolean> {
-    return DocumentDB.appendChatLog(id, logDiff, expectedLogIndex);
   }
 }
 
