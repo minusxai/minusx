@@ -4,14 +4,6 @@
 // Each benchmark file (e.g. dataanalystbench.ts) defines config + agent,
 // then calls runBenchmark() — this module does the rest.
 
-// Suppress Node's TLS warning emitted when NODE_TLS_REJECT_UNAUTHORIZED=0
-// is set in .env (loaded before us via --env-file).
-const _origEmitWarning = process.emitWarning;
-process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
-  if (typeof warning === 'string' && warning.includes('NODE_TLS_REJECT_UNAUTHORIZED')) return;
-  return (_origEmitWarning as Function).call(process, warning, ...args);
-}) as typeof process.emitWarning;
-
 import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
@@ -24,6 +16,15 @@ import { getNodeConnector } from '@/lib/connections';
 import type { NodeConnector } from '@/lib/connections/base';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
+
+// Suppress Node's TLS warning emitted when NODE_TLS_REJECT_UNAUTHORIZED=0
+// is set in .env (loaded before us via --env-file).
+const _origEmitWarning = process.emitWarning;
+process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
+  if (typeof warning === 'string' && warning.includes('NODE_TLS_REJECT_UNAUTHORIZED')) return;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  return (_origEmitWarning as Function).call(process, warning, ...args);
+}) as typeof process.emitWarning;
 
 // ── Public types ──────────────────────────────────────────────────────────
 
