@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { Box, Text, VStack, HStack, Flex, Grid, Icon } from '@chakra-ui/react';
 import { createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX } from 'react-icons/lu';
+import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch } from 'react-icons/lu';
 import { Button } from '@chakra-ui/react';
 import { parseLogToMessages } from '@/lib/conversations-utils';
 import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
@@ -190,58 +190,159 @@ function LogViewer({ log }: { log: ConversationLogEntry[] }) {
 
 // ── Upload screen ─────────────────────────────────────────────────────────
 
+function FeatureChip({ icon, label }: { icon: React.ElementType; label: string }) {
+  return (
+    <HStack
+      gap={1.5}
+      px={3}
+      py={1.5}
+      borderRadius="full"
+      bg="bg.surface"
+      border="1px solid"
+      borderColor="border.muted"
+      transition="all 0.2s"
+      _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
+    >
+      <Icon as={icon} boxSize="3" color="accent.cyan" />
+      <Text fontSize="2xs" fontWeight="medium" color="fg.muted" fontFamily="mono">{label}</Text>
+    </HStack>
+  );
+}
+
 function UploadScreen({ onDrop, onInputChange }: {
   onDrop: (e: React.DragEvent) => void;
   onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
+
   return (
     <Flex
       align="center"
       justify="center"
       minH="calc(100vh - 120px)"
+      className="bm-upload-grid-bg"
+      position="relative"
     >
-      <VStack gap={6} maxW="480px" textAlign="center">
-        <Box
-          p={4}
-          borderRadius="full"
-          bg="bg.subtle"
-        >
-          <Icon as={LuUpload} boxSize="8" color="fg.muted" />
-        </Box>
-        <VStack gap={1}>
-          <Text fontSize="lg" fontWeight="semibold">Benchmark Log Viewer</Text>
-          <Text fontSize="sm" color="fg.muted">
-            Upload a conversation JSON or benchmark output.jsonl to inspect agent runs
+      {/* Ambient glow */}
+      <Box
+        position="absolute"
+        top="20%"
+        left="50%"
+        transform="translateX(-50%)"
+        w="500px"
+        h="300px"
+        bg="radial-gradient(ellipse, rgba(22, 160, 133, 0.06) 0%, transparent 70%)"
+        pointerEvents="none"
+        animation="bm-pulse-glow 6s ease-in-out infinite"
+      />
+
+      <VStack gap={8} maxW="520px" textAlign="center" position="relative">
+        {/* Title block */}
+        <VStack gap={3} className="bm-stagger-1">
+          <HStack gap={2} align="center">
+            <Box w="8px" h="1.5px" bg="accent.teal" borderRadius="full" />
+            <Text
+              fontSize="2xs"
+              fontWeight="semibold"
+              fontFamily="mono"
+              color="accent.teal"
+              textTransform="uppercase"
+              letterSpacing="0.15em"
+            >
+              benchmark inspector
+            </Text>
+            <Box w="8px" h="1.5px" bg="accent.teal" borderRadius="full" />
+          </HStack>
+          <Text
+            fontSize="2xl"
+            fontWeight="bold"
+            letterSpacing="-0.03em"
+            lineHeight="1.2"
+          >
+            Log Viewer
+          </Text>
+          <Text fontSize="sm" color="fg.muted" maxW="380px" lineHeight="1.6">
+            Inspect agent runs, trace tool calls, and analyze benchmark results
           </Text>
         </VStack>
+
+        {/* Drop zone with animated border */}
         <Box
-          border="2px dashed"
-          borderColor="border.muted"
-          borderRadius="lg"
-          p={10}
+          className={`bm-drop-zone bm-stagger-2`}
           w="100%"
           cursor="pointer"
-          transition="all 0.15s"
-          onDrop={onDrop}
-          onDragOver={e => e.preventDefault()}
+          transition="all 0.25s ease"
+          onDrop={(e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); onDrop(e); }}
+          onDragOver={(e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
           onClick={() => document.getElementById('benchmark-file-input')?.click()}
-          _hover={{ borderColor: 'fg.subtle', bg: 'bg.subtle' }}
+          transform={isDragging ? 'scale(1.02)' : 'scale(1)'}
         >
-          <input
-            id="benchmark-file-input"
-            type="file"
-            accept=".json,.jsonl"
-            onChange={onInputChange}
-            style={{ display: 'none' }}
-          />
-          <VStack gap={2}>
-            <Icon as={LuFileText} boxSize="6" color="fg.subtle" />
-            <Text fontSize="sm" color="fg.muted">
-              Drop file here or click to browse
-            </Text>
-            <Text fontSize="2xs" color="fg.subtle">.json or .jsonl</Text>
-          </VStack>
+          <Box
+            position="relative"
+            zIndex={1}
+            bg={isDragging ? 'accent.teal/5' : 'bg.surface'}
+            borderRadius="16px"
+            px={8}
+            py={10}
+            transition="all 0.25s ease"
+          >
+            <input
+              id="benchmark-file-input"
+              type="file"
+              accept=".json,.jsonl"
+              onChange={onInputChange}
+              style={{ display: 'none' }}
+            />
+            <VStack gap={4}>
+              <Box
+                p={3}
+                borderRadius="xl"
+                bg="accent.teal/8"
+                transition="all 0.25s"
+              >
+                <Icon
+                  as={LuUpload}
+                  boxSize="6"
+                  color="accent.teal"
+                  transition="transform 0.25s"
+                  transform={isDragging ? 'translateY(-2px)' : 'translateY(0)'}
+                />
+              </Box>
+              <VStack gap={1}>
+                <Text fontSize="sm" fontWeight="semibold" color="fg.default">
+                  {isDragging ? 'Drop to inspect' : 'Drop file or click to browse'}
+                </Text>
+                <HStack gap={1.5} justify="center">
+                  <Box px={2} py={0.5} borderRadius="md" bg="bg.muted">
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">.json</Text>
+                  </Box>
+                  <Box px={2} py={0.5} borderRadius="md" bg="bg.muted">
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">.jsonl</Text>
+                  </Box>
+                </HStack>
+              </VStack>
+            </VStack>
+          </Box>
         </Box>
+
+        {/* Feature chips */}
+        <HStack gap={2} flexWrap="wrap" justify="center" className="bm-stagger-3">
+          <FeatureChip icon={LuMessageSquare} label="conversations" />
+          <FeatureChip icon={LuWrench} label="tool traces" />
+          <FeatureChip icon={LuActivity} label="cost & tokens" />
+          <FeatureChip icon={LuSearch} label="eval results" />
+        </HStack>
+
+        {/* Keyboard hint */}
+        <HStack gap={1.5} className="bm-stagger-4" opacity={0.5}>
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
+            benchmark output from
+          </Text>
+          <Box px={1.5} py={0.5} borderRadius="sm" bg="bg.muted" border="1px solid" borderColor="border.muted">
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">npm run benchmark:analyst</Text>
+          </Box>
+        </HStack>
       </VStack>
     </Flex>
   );

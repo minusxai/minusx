@@ -23,6 +23,7 @@ import {
 import { getNodeConnector } from '@/lib/connections';
 import type { NodeConnector } from '@/lib/connections/base';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
+import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
 
 // ── Public types ──────────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ export interface BenchmarkRunConfig {
   registrables: RegistrableClass[];
   /** Max concurrent rows (default: 1 = sequential) */
   concurrency?: number;
+  /** Dataset label for display (derived from input path if omitted) */
+  label?: string;
 }
 
 export interface BenchmarkResult {
@@ -51,33 +54,80 @@ export interface BenchmarkResult {
   error?: string;
 }
 
-// ── Progress display ──────────────────────────────────────────────────────
+// ── ANSI helpers ──────────────────────────────────────────────────────────
 
-const BAR_WIDTH = 25;
 const isTTY = process.stderr.isTTY ?? false;
 
-function progressBar(done: number, total: number, running: number, errors: number, elapsedMs: number): string {
+const c = {
+  reset:   isTTY ? '\x1b[0m'  : '',
+  dim:     isTTY ? '\x1b[2m'  : '',
+  bold:    isTTY ? '\x1b[1m'  : '',
+  green:   isTTY ? '\x1b[32m' : '',
+  red:     isTTY ? '\x1b[31m' : '',
+  yellow:  isTTY ? '\x1b[33m' : '',
+  cyan:    isTTY ? '\x1b[36m' : '',
+  magenta: isTTY ? '\x1b[35m' : '',
+  gray:    isTTY ? '\x1b[90m' : '',
+};
+
+// ── Progress display ──────────────────────────────────────────────────────
+
+const BAR_WIDTH = 30;
+// Braille patterns for smooth sub-character progress (each = 1/8th of a cell)
+const BRAILLE_FILLS = [' ', '⡀', '⡄', '⡆', '⡇', '⣇', '⣧', '⣷', '⣿'];
+
+function progressLine(done: number, total: number, running: number, errors: number, elapsedMs: number): string {
   const pct = total > 0 ? done / total : 0;
-  const filled = Math.round(pct * BAR_WIDTH);
-  const bar = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
-  const elapsed = (elapsedMs / 1000).toFixed(1);
-  const errStr = errors > 0 ? ` | ${errors} failed` : '';
-  return `  [${bar}] ${done}/${total} done | ${running} running${errStr} | ${elapsed}s elapsed`;
+  const exact = pct * BAR_WIDTH;
+  const full = Math.floor(exact);
+  const partialIdx = Math.round((exact - full) * 8);
+  const partial = full < BAR_WIDTH ? BRAILLE_FILLS[partialIdx] : '';
+  const empty = BAR_WIDTH - full - (partial ? 1 : 0);
+  const bar = `${c.cyan}${'⣿'.repeat(full)}${partial}${c.gray}${'⣀'.repeat(Math.max(0, empty))}${c.reset}`;
+  const pctStr = `${c.bold}${Math.round(pct * 100)}%${c.reset}`;
+  const elapsed = formatDuration(elapsedMs);
+  const errStr = errors > 0 ? `  ${c.red}${errors} err${c.reset}` : '';
+  const runStr = running > 0 ? `  ${c.yellow}⟳ ${running}${c.reset}` : '';
+  return `  ${bar} ${pctStr} ${c.dim}${done}/${total}${c.reset}${runStr}${errStr}  ${c.dim}${elapsed}${c.reset}`;
 }
 
 function renderProgress(done: number, total: number, running: number, errors: number, elapsedMs: number): void {
   if (!isTTY) return;
-  process.stderr.write(`\r\x1b[K${progressBar(done, total, running, errors, elapsedMs)}`);
+  process.stderr.write(`\r\x1b[K${progressLine(done, total, running, errors, elapsedMs)}`);
 }
 
-function clearProgress(): void {
-  if (!isTTY) process.stderr.write('\n');
-  else process.stderr.write('\r\x1b[K');
+function clearLine(): void {
+  if (isTTY) process.stderr.write('\r\x1b[K');
+}
+
+function formatDuration(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${(s % 60).toFixed(0)}s`;
+}
+
+// ── Logging ───────────────────────────────────────────────────────────────
+
+export function logHeader(text: string): void {
+  console.log(`\n${c.bold}${c.magenta}▸ ${text}${c.reset}`);
+}
+
+export function logSummary(datasets: number, totalRows: number, totalErrors: number, totalMs: number): void {
+  const dur = formatDuration(totalMs);
+  const errStr = totalErrors > 0 ? `  ${c.red}${totalErrors} errors${c.reset}` : '';
+  console.log(`\n${c.bold}${c.magenta}▸ Done${c.reset}  ${datasets} datasets, ${totalRows} rows${errStr}  ${c.dim}${dur}${c.reset}\n`);
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────
 
-export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
+export interface DatasetResult {
+  rows: number;
+  errors: number;
+  durationMs: number;
+}
+
+export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetResult> {
   const inputPath = path.resolve(config.input);
   const connectionsPath = path.resolve(config.connections);
   const outputPath = path.join(
@@ -85,14 +135,16 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
     path.basename(inputPath).replace('input', 'output'),
   );
 
+  const label = config.label ?? path.basename(inputPath).replace(/_input\.jsonl$/, '');
+
   // Load connections
   const connectorsByName = new Map<string, NodeConnector>();
   const connectionInfos = new Map<string, ConnectionInfo>();
   const entries = JSON.parse(readFileSync(connectionsPath, 'utf-8')) as BenchmarkConnectionEntry[];
   for (const { name, dialect, config: connConfig, description } of entries) {
-    const c = getNodeConnector(name, dialect, connConfig as Record<string, unknown>);
-    if (!c) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
-    connectorsByName.set(name, c);
+    const conn = getNodeConnector(name, dialect, connConfig as Record<string, unknown>);
+    if (!conn) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
+    connectorsByName.set(name, conn);
     connectionInfos.set(name, { name, dialect, description });
   }
 
@@ -106,7 +158,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
     .map((line) => JSON.parse(line) as InputRow);
 
   if (inputRows.length === 0) {
-    console.error(`No rows in ${inputPath}`);
+    console.error(`  ${c.red}No rows in ${inputPath}${c.reset}`);
     process.exit(1);
   }
 
@@ -114,7 +166,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
   writeFileSync(outputPath, '');
   const concurrency = config.concurrency ?? 1;
   const total = inputRows.length;
-  console.log(`  ${total} rows, concurrency=${concurrency}, output → ${outputPath}\n`);
+
+  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows, concurrency=${concurrency}${c.reset}`);
+  console.log(`  ${c.dim}${outputPath}${c.reset}\n`);
 
   // Tracking
   let completed = 0;
@@ -122,9 +176,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
   let errors = 0;
   const startedAt = Date.now();
 
-  // Tick the progress bar every 500ms while running
+  // Tick the progress bar every 300ms while running
   const tick = isTTY
-    ? setInterval(() => renderProgress(completed, total, running, errors, Date.now() - startedAt), 500)
+    ? setInterval(() => renderProgress(completed, total, running, errors, Date.now() - startedAt), 300)
     : null;
 
   async function runRow(row: InputRow, index: number): Promise<void> {
@@ -134,7 +188,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
     const ctx = {
       connections: row.allowed_connections
         .map((name) => connectionInfos.get(name))
-        .filter((c): c is ConnectionInfo => !!c),
+        .filter((ci): ci is ConnectionInfo => !!ci),
     };
     const orch = new Orchestrator(config.registrables);
     const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
@@ -156,15 +210,17 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
     completed++;
     if (error) errors++;
 
-    const result: BenchmarkResult = { input: row, log: orch.log, duration_ms: durationMs, error };
+    const result: BenchmarkResult = { input: row, log: convertOrchestratorLog(orch.log as any), duration_ms: durationMs, error };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
     // Log completion above the progress bar
-    clearProgress();
-    const status = error ? `  ✗ [${index + 1}]` : `  ✓ [${index + 1}]`;
-    const msg = row.user_message.slice(0, 70) + (row.user_message.length > 70 ? '…' : '');
-    const dur = `${(durationMs / 1000).toFixed(1)}s`;
-    console.log(`${status} ${msg} (${dur})${error ? ` — ${error.slice(0, 80)}` : ''}`);
+    clearLine();
+    const icon = error ? `${c.red}✗${c.reset}` : `${c.green}✓${c.reset}`;
+    const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
+    const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
+    const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
+    const errMsg = error ? `  ${c.red}${error.slice(0, 60)}${c.reset}` : '';
+    console.log(`  ${icon} ${idx}  ${msg}  ${dur}${errMsg}`);
     renderProgress(completed, total, running, errors, Date.now() - startedAt);
   }
 
@@ -179,10 +235,12 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<void> {
   await Promise.all(workers);
 
   if (tick) clearInterval(tick);
-  clearProgress();
+  // Render final progress bar (stays visible)
+  clearLine();
+  const totalMs = Date.now() - startedAt;
+  console.log(progressLine(completed, total, 0, errors, totalMs));
 
-  const totalTime = ((Date.now() - startedAt) / 1000).toFixed(1);
-  console.log(`  Done: ${completed} rows in ${totalTime}s (${errors} failed). Output: ${outputPath}`);
+  return { rows: completed, errors, durationMs: totalMs };
 }
 
 export { type ConnectionInfo };

@@ -9,12 +9,12 @@ import {
   SearchDBSchema,
   ExecuteSQL,
 } from '@/agents/benchmark-analyst/benchmark-analyst';
-import { runBenchmark } from './runner';
+import { runBenchmark, logHeader, logSummary } from './runner';
 
 // ── Config (edit here) ────────────────────────────────────────────────────
 
 const CONFIG = {
-  model: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  model: { provider: 'anthropic', model: 'claude-haiku-4-5' },
   concurrency: 10,
   maxSteps: 40,
   promptId: 'default.system',
@@ -27,9 +27,8 @@ const CONFIG = {
 const BASE = '/Users/nuwandavek/Documents/minusx/dataagentbench_ucb/mxdatasets';
 
 const DATASETS = [
+//   { input: `${BASE}/test_input.jsonl`, connections: `${BASE}/test_connections.json` },
   { input: `${BASE}/stockindex_input.jsonl`, connections: `${BASE}/stockindex_connections.json` },
-  // { input: `${BASE}/revenue_input.jsonl`, connections: `${BASE}/revenue_connections.json` },
-  // add more datasets here...
 ];
 
 // ── Agent (customize tools / prompt here) ─────────────────────────────────
@@ -70,22 +69,26 @@ class Agent extends BenchmarkAnalystAgent {
 
 const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, Agent];
 
-console.log(`Model: ${CONFIG.model.provider}/${CONFIG.model.model}`);
-console.log(`Datasets: ${DATASETS.length}\n`);
+logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);
 
 async function main() {
-  for (let i = 0; i < DATASETS.length; i++) {
-    const ds = DATASETS[i];
-    console.log(`\n═══ Dataset ${i + 1}/${DATASETS.length}: ${ds.input} ═══\n`);
-    await runBenchmark({
+  const globalStart = Date.now();
+  let totalRows = 0;
+  let totalErrors = 0;
+
+  for (const ds of DATASETS) {
+    const result = await runBenchmark({
       input: ds.input,
       connections: ds.connections,
       agentClass: Agent,
       registrables,
       concurrency: CONFIG.concurrency,
     });
+    totalRows += result.rows;
+    totalErrors += result.errors;
   }
-  console.log(`\n═══ All ${DATASETS.length} datasets complete ═══`);
+
+  logSummary(DATASETS.length, totalRows, totalErrors, Date.now() - globalStart);
 }
 
 main();
