@@ -53,3 +53,5 @@ next-env.d.ts
 # benchmark data (sibling files of agents/analyst/__tests__/benchmark_runner.test.ts)
 /agents/analyst/__tests__/input.jsonl
 /agents/analyst/__tests__/output.jsonl
+
+/benchmarks/*.md

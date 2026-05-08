@@ -53,6 +53,11 @@ const TOOL_NAME_MAP: Record<string, string> = {
   ListDBConnections: 'ReadFiles',
 };
 
+/** Map benchmark agent names to production equivalents so parseLogToMessages recognises the root task. */
+const AGENT_NAME_MAP: Record<string, string> = {
+  BenchmarkAnalystAgent: 'AnalystAgent',
+};
+
 /** Map benchmark tool args to production arg shape so display components render correctly. */
 function mapToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
   if (name === 'ExecuteSQL') {
@@ -78,10 +83,11 @@ export function convertOrchestratorLog(orchLog: OrchestratorEntry[]): Conversati
         _parent_unique_id: null,
         _previous_unique_id: null,
         _run_id: runId,
-        agent: entry.name ?? 'UnknownAgent',
+        agent: AGENT_NAME_MAP[entry.name ?? ''] ?? entry.name ?? 'UnknownAgent',
         args: {
           ...entry.arguments,
-          // Map userMessage → goal so parseLogToMessages picks it up
+          // Map userMessage → user_message + goal so parseLogToMessages picks it up
+          user_message: (entry.arguments as Record<string, unknown>)?.userMessage,
           goal: (entry.arguments as Record<string, unknown>)?.userMessage,
         },
         unique_id: entry.id ?? genRunId(),
