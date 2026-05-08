@@ -1,4 +1,5 @@
 import type { AgentContext } from '@/orchestrator/types';
+import type { SchemaSource, SqlExecutor } from './sources';
 
 /** Metadata about a database connection visible to the agent. */
 export interface ConnectionInfo {
@@ -28,4 +29,11 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * so the LLM knows what the data means without re-deriving it.
    */
   contextDocs?: string;
+  /**
+   * Per-row executor overrides for benchmark/test parallelism. When set,
+   * tools use these instead of the global singletons so N rows can run
+   * concurrently without shared-state races.
+   */
+  schemaSource?: SchemaSource;
+  sqlExecutor?: SqlExecutor;
 }

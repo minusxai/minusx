@@ -45,7 +45,7 @@ export class SearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benchmar
 
   async run(): Promise<ToolResponse<SearchDBSchemaDetails>> {
     const query = this.parameters.query ?? '';
-    const hits = await getSchemaSource().search(query, this.parameters.connection, this.context);
+    const hits = await (this.context.schemaSource ?? getSchemaSource()).search(query, this.parameters.connection, this.context);
     // Per-run whitelist (set by chat-v2 from a context file) filters hits
     // before they reach the LLM. Match either bare table name or a qualified
     // `schema.table` form so context whitelists in either shape work.
@@ -101,7 +101,7 @@ export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams, BenchmarkAnalyst
   };
 
   async run(): Promise<ToolResponse<ExecuteSqlDetails>> {
-    const result = await getSqlExecutor().execute(
+    const result = await (this.context.sqlExecutor ?? getSqlExecutor()).execute(
       this.parameters.sql,
       this.parameters.connection,
       this.context,
