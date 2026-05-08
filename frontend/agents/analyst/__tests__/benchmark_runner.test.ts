@@ -3,22 +3,31 @@
 // Reads `input.jsonl` (sibling file, gitignored) and writes one line per row
 // to `output.jsonl` containing the full conversation log. Connections come
 // from a JSON file (--connections path) or `BENCHMARK_CONNECTIONS_CONFIG` env var.
-// Model comes from `ANALYST_AGENT_MODEL_CONFIG` (handled by AnalystAgent itself).
 //
 // Behavior:
 //   - input.jsonl missing/empty       → describe.skip (no-op, CI-safe)
 //   - connections config               → required when input populated
-//   - ANALYST_AGENT_MODEL_CONFIG       → required when input populated
+//   - BENCHMARK_AGENT_CONFIG.model     → required when input populated
 //
 // Run with:
-//   cd frontend && BENCHMARK_INPUT=path/to/input.jsonl BENCHMARK_CONNECTIONS=path/to/connections.json npm test -- benchmark_runner
-//   cd frontend && BENCHMARK_CONNECTIONS_CONFIG='[...]' npm test -- benchmark_runner
+//   cd frontend && \
+//     BENCHMARK_INPUT=path/to/input.jsonl \
+//     BENCHMARK_CONNECTIONS=path/to/connections.json \
+//     BENCHMARK_AGENT_CONFIG_FILE=path/to/agent_config.json \
+//     npm test -- benchmark_runner
+//
+// BENCHMARK_AGENT_CONFIG (JSON):
+//   - model:              {provider, model} — required, LLM to use
+//   - promptId:           prompt template to render (default: 'default.system')
+//   - promptVars:         overrides merged into template variables (e.g. role, context, schema)
+//   - maxSteps:           override max_steps (default: 40)
+//   - systemPromptAppend: free-text appended to the end of the system prompt
 
 import 'dotenv/config';
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Tool, TSchema } from '@mariozechner/pi-ai';
+import { getModel, type Tool, type TSchema } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ToolResponse } from '@/orchestrator/types';
 import type { AnalystAgentContext, ConnectionInfo, BenchmarkConnectionEntry } from '@/agents/analyst/types';
@@ -33,6 +42,7 @@ import {
   SearchDBSchema,
   SearchFiles,
 } from '../analyst-agent';
+import { renderPrompt } from '@/orchestrator/prompts';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -174,6 +184,33 @@ class BMExecuteSQL extends ExecuteSQL {
   }
 }
 
+// ── Benchmark-level agent config ──────────────────────────────────────────
+//
+// `BENCHMARK_AGENT_CONFIG` (JSON env var) controls the model, prompt, and
+// agent behavior for the entire benchmark run.
+//
+// Example:
+//   BENCHMARK_AGENT_CONFIG='{"model":{"provider":"anthropic","model":"claude-sonnet-4-6"},"promptVars":{"role":"You are a junior analyst"},"maxSteps":10}'
+
+interface BenchmarkAgentConfig {
+  model?: { provider: string; model: string };
+  promptId?: string;
+  promptVars?: Record<string, string>;
+  maxSteps?: number;
+  systemPromptAppend?: string;
+}
+
+function resolveAgentConfig(): BenchmarkAgentConfig {
+  // eslint-disable-next-line no-restricted-syntax -- benchmark reads its own scoped env vars directly
+  const configFile = process.env.BENCHMARK_AGENT_CONFIG_FILE;
+  // eslint-disable-next-line no-restricted-syntax -- benchmark reads its own scoped env vars directly
+  const configInline = process.env.BENCHMARK_AGENT_CONFIG;
+  const raw = configFile ? readFileSync(path.resolve(configFile), 'utf-8') : configInline;
+  return raw ? JSON.parse(raw) as BenchmarkAgentConfig : {};
+}
+
+const BENCHMARK_AGENT_CONFIG = resolveAgentConfig();
+
 // ── Benchmark agent ────────────────────────────────────────────────────────
 
 class BMAnalystAgent extends AnalystAgent {
@@ -184,7 +221,30 @@ class BMAnalystAgent extends AnalystAgent {
     ReadFiles.schema,
     SearchFiles.schema,
   ];
-  // `static model` inherits from AnalystAgent (which reads ANALYST_AGENT_MODEL_CONFIG).
+  static model = BENCHMARK_AGENT_CONFIG.model
+    ? getModel(BENCHMARK_AGENT_CONFIG.model.provider as never, BENCHMARK_AGENT_CONFIG.model.model as never)
+    : AnalystAgent.model;
+
+  protected getSystemPrompt(): string {
+    const cfg = BENCHMARK_AGENT_CONFIG;
+    const defaultVars: Record<string, string> = {
+      agent_name: 'AnalystAgent',
+      max_steps: String(cfg.maxSteps ?? 40),
+      allowed_viz_types: '',
+      role: '',
+      schema: '',
+      context: '',
+      skills_catalog: '',
+      connection_id: this.context.connectionId ?? '',
+      home_folder: '',
+      preloaded_skills: '',
+    };
+    const rendered = renderPrompt(cfg.promptId ?? 'default.system', {
+      ...defaultVars,
+      ...cfg.promptVars,
+    });
+    return cfg.systemPromptAppend ? `${rendered}\n\n${cfg.systemPromptAppend}` : rendered;
+  }
 }
 
 // Synthesized benchmark user — full ACL via admin role + /org home folder.
@@ -228,11 +288,12 @@ if (inputRows.length === 0) {
         );
       });
     });
-    // eslint-disable-next-line no-restricted-syntax -- benchmark gate check, scoped to this file
-  } else if (!process.env.ANALYST_AGENT_MODEL_CONFIG) {
+  } else if (!BENCHMARK_AGENT_CONFIG.model) {
     describe('benchmark', () => {
-      it('fails: ANALYST_AGENT_MODEL_CONFIG required when input.jsonl is populated', () => {
-        throw new Error('Set ANALYST_AGENT_MODEL_CONFIG to {"provider":"...","model":"..."}.');
+      it('fails: BENCHMARK_AGENT_CONFIG.model required when input.jsonl is populated', () => {
+        throw new Error(
+          'Set BENCHMARK_AGENT_CONFIG to \'{"model":{"provider":"...","model":"..."}}\'.',
+        );
       });
     });
   } else {
