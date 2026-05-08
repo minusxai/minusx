@@ -489,8 +489,8 @@ const chatSlice = createSlice({
           content: '<Interrupted />',
           run_id: '',
           function: {
-            name: p.toolCall.function.name,
-            arguments: JSON.stringify(p.toolCall.function.arguments)
+            name: p.toolCall.function?.name ?? '',
+            arguments: JSON.stringify(p.toolCall.function?.arguments ?? {})
           },
           created_at: new Date().toISOString()
         }));

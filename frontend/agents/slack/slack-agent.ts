@@ -2,13 +2,10 @@ import {
   Type,
   registerFauxProvider,
   type Tool,
-  type TSchema,
 } from '@mariozechner/pi-ai';
-import { MXAgent } from '@/orchestrator/types';
 import { renderPrompt } from '@/orchestrator/prompts';
-import { ExecuteSQL, ListDBConnections, SearchDBSchema } from '@/agents/analyst/analyst-agent';
+import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import type { AnalystAgentContext } from '@/agents/analyst/types';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-slack-api',
@@ -21,17 +18,13 @@ const SlackAgentParams = Type.Object({
   userMessage: Type.String(),
 });
 
-export class SlackAgent extends MXAgent<typeof SlackAgentParams, AnalystAgentContext> {
+export class SlackAgent extends RemoteAnalystAgent {
   static readonly schema: Tool<typeof SlackAgentParams> = {
     name: 'SlackAgent',
     description: 'Answers data questions in Slack threads.',
     parameters: SlackAgentParams,
   };
-  static readonly tools: Tool<TSchema>[] = [
-    ListDBConnections.schema,
-    SearchDBSchema.schema,
-    ExecuteSQL.schema,
-  ];
+  // Inherits tool set (DB tools + file tools) from RemoteAnalystAgent.
   static model = getAnalystModel() ?? FAUX_MODEL;
 
   protected getSystemPrompt(): string {

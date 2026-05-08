@@ -19,6 +19,13 @@ import '../tool-handlers.server';
 import { orchestratePendingTools, ToolExecutionResult } from '../orchestrator';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
+import {
+  runChatTurnStreamV2,
+  validateV2Mode,
+} from '@/lib/chat-orchestration-v2.server';
+import { isV2ConversationFile } from '@/lib/chat-translator';
+import { FilesAPI } from '@/lib/data/files.server';
+import { createNewConversation } from '@/lib/conversations';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -456,7 +463,53 @@ export async function POST(request: NextRequest) {
   // Ping flushes response headers to the client immediately.
   writer.write(encoder.encode(': ping\n\n'));
 
-  processStream(writer, encoder, body, user, request.signal).catch(err => {
+  // V=2 branch: orchestrator + translator. Same SSE wire shape as legacy
+  // (`event: streaming_event` + `event: done`), so the frontend listener
+  // doesn't need to change.
+  const isV2 = request.nextUrl.searchParams.get('v') === '2';
+
+  // Mode-mismatch guard for v=1: refuse to drive a v=2 conversation through
+  // the Python backend. Emit BOTH an error frame and a done frame — the
+  // legacy chatListener checks doneData before errorData, so an error frame
+  // alone surfaces as "Stream ended without done event" instead of the real
+  // error.
+  if (!isV2 && body.conversationID) {
+    const file = await FilesAPI.loadFile(body.conversationID, user).catch(() => null);
+    if (file && isV2ConversationFile(file.data)) {
+      const errMsg = 'cannot continue v=2 conversation in v=1 mode';
+      const ts = new Date().toISOString();
+      writer.write(encoder.encode(
+        formatSSE('error', { type: 'error', error: errMsg, timestamp: ts }),
+      )).catch(() => {});
+      writer.write(encoder.encode(
+        formatSSE('done', {
+          type: 'done',
+          conversationID: body.conversationID,
+          log_index: 0,
+          pending_tool_calls: [],
+          completed_tool_calls: [],
+          debug: [],
+          error: errMsg,
+          timestamp: ts,
+        }),
+      )).catch(() => {});
+      writer.close().catch(() => {});
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'Content-Encoding': 'identity',
+        }
+      });
+    }
+  }
+
+  const streamProcessor = isV2
+    ? processStreamV2(writer, encoder, body, user)
+    : processStream(writer, encoder, body, user, request.signal);
+  streamProcessor.catch((err) => {
     console.error('[chat/stream] Unhandled processStream error:', err);
     void writer.close().catch(() => {});
   });
@@ -470,4 +523,77 @@ export async function POST(request: NextRequest) {
       'Content-Encoding': 'identity',
     }
   });
+}
+
+/**
+ * V=2 stream processor — runs the orchestrator and translates each event
+ * to the legacy SSE wire shape so the frontend listener parses it the same
+ * way it parses v=1 streams.
+ */
+async function processStreamV2(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+  body: ChatRequest,
+  user: NonNullable<Awaited<ReturnType<typeof getEffectiveUser>>>,
+): Promise<void> {
+  try {
+    let conversationId: number;
+    if (body.conversationID) {
+      const check = await validateV2Mode(body.conversationID, user, true);
+      if (!check.ok) {
+        // Throw so the outer catch block emits BOTH an error frame and a
+        // done frame. Returning here would leave the legacy chatListener
+        // throwing "Stream ended without done event" because it checks
+        // doneData before errorData.
+        throw new Error(check.error);
+      }
+      conversationId = body.conversationID;
+    } else {
+      const created = await createNewConversation(
+        user,
+        body.user_message ?? undefined,
+        { version: 2 },
+      );
+      conversationId = created.fileId;
+    }
+
+    for await (const frame of runChatTurnStreamV2(body, user, conversationId)) {
+      if (frame.wire === 'streaming_event') {
+        if (frame.data) {
+          await writer.write(encoder.encode(formatSSE('streaming_event', frame.data)));
+        }
+      } else if (frame.wire === 'done') {
+        await writer.write(encoder.encode(formatSSE('done', frame.data)));
+      } else if (frame.wire === 'error') {
+        await writer.write(encoder.encode(formatSSE('error', frame.data)));
+      }
+    }
+  } catch (err) {
+    // Legacy chatListener expects a `done` frame even on error — without
+    // one it throws "Stream ended without done event" instead of surfacing
+    // the actual error. Emit BOTH an `error` frame (for clarity in logs)
+    // and a `done` frame carrying the error in the legacy ChatResponse
+    // shape, so the frontend's existing error-handling path fires.
+    const message = err instanceof Error ? err.message : String(err);
+    const ts = new Date().toISOString();
+    await writer.write(
+      encoder.encode(formatSSE('error', { type: 'error', error: message, timestamp: ts })),
+    );
+    await writer.write(
+      encoder.encode(
+        formatSSE('done', {
+          type: 'done',
+          conversationID: body.conversationID ?? 0,
+          log_index: 0,
+          pending_tool_calls: [],
+          completed_tool_calls: [],
+          debug: [],
+          error: message,
+          timestamp: ts,
+        }),
+      ),
+    );
+  } finally {
+    await writer.close();
+  }
 }

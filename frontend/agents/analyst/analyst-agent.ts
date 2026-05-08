@@ -6,18 +6,25 @@ import {
   type Tool,
   type TSchema,
 } from '@mariozechner/pi-ai';
-import {
-  MXAgent,
-  MXTool,
-  type ToolResponse,
-} from '@/orchestrator/types';
 import { renderPrompt } from '@/orchestrator/prompts';
-import { getSchemaSource, getSqlExecutor } from './sources';
 import { getAnalystModel } from './model-config';
 import { ReadFiles, SearchFiles } from './file-tools';
-import type { AnalystAgentContext } from './types';
+import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
+import {
+  ListDBConnections,
+  SearchDBSchema,
+  ExecuteSQL,
+} from '@/agents/benchmark-analyst/db-tools';
+import type { RemoteAnalystContext } from './types';
+
+// Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
-export type { AnalystAgentContext, ConnectionInfo } from './types';
+export {
+  ListDBConnections,
+  SearchDBSchema,
+  ExecuteSQL,
+} from '@/agents/benchmark-analyst/db-tools';
+export type { AnalystAgentContext, ConnectionInfo, RemoteAnalystContext } from './types';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-analyst-api',
@@ -26,80 +33,21 @@ export const fauxRegistration = registerFauxProvider({
 });
 const FAUX_MODEL = fauxRegistration.getModel();
 
-const ListDBConnectionsParams = Type.Object({});
-
-export class ListDBConnections extends MXTool<typeof ListDBConnectionsParams, AnalystAgentContext> {
-  static readonly schema: Tool<typeof ListDBConnectionsParams> = {
-    name: 'ListDBConnections',
-    description: 'List database connections available to this agent. Returns an array of {name, dialect, description?}.',
-    parameters: ListDBConnectionsParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    return {
-      content: [{ type: 'text', text: JSON.stringify(this.context.connections ?? []) }],
-      isError: false,
-    };
-  }
-}
-
-const SearchDBSchemaParams = Type.Object({
-  connection: Type.String(),
-  query: Type.String(),
-});
-
-export class SearchDBSchema extends MXTool<typeof SearchDBSchemaParams, AnalystAgentContext> {
-  static readonly schema: Tool<typeof SearchDBSchemaParams> = {
-    name: 'SearchDBSchema',
-    description: 'Search a connection\'s schema by keyword. Returns matching tables and their columns. Use ListDBConnections first to see available connection names.',
-    parameters: SearchDBSchemaParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    const hits = await getSchemaSource().search(this.parameters.query, this.parameters.connection);
-    return {
-      content: [{ type: 'text', text: JSON.stringify(hits) }],
-      isError: false,
-    };
-  }
-}
-
-const ExecuteSQLParams = Type.Object({
-  connection: Type.String(),
-  sql: Type.String(),
-});
-
-export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams, AnalystAgentContext> {
-  static readonly schema: Tool<typeof ExecuteSQLParams> = {
-    name: 'ExecuteSQL',
-    description: 'Execute a SQL query against a named connection. Returns rows or an error. Use ListDBConnections first to see available connection names.',
-    parameters: ExecuteSQLParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    const result = await getSqlExecutor().execute(this.parameters.sql, this.parameters.connection);
-    if (result.error) {
-      return {
-        content: [{ type: 'text', text: result.error }],
-        isError: true,
-      };
-    }
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result.rows) }],
-      isError: false,
-    };
-  }
-}
-
-const AnalystAgentParams = Type.Object({
+const RemoteAnalystAgentParams = Type.Object({
   userMessage: Type.String(),
 });
 
-export class AnalystAgent extends MXAgent<typeof AnalystAgentParams, AnalystAgentContext> {
-  static readonly schema: Tool<typeof AnalystAgentParams> = {
+/**
+ * Production analyst agent. Extends BenchmarkAnalystAgent (DB tools) with file
+ * tools (ReadFiles, SearchFiles), the production system-prompt rendering with
+ * connectionId/home_folder, and the `<AppState>` / `<CurrentDate>` /
+ * `<Question>` user-content wrap that the production prompts.yaml expects.
+ */
+export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystContext> {
+  static readonly schema: Tool<typeof RemoteAnalystAgentParams> = {
     name: 'AnalystAgent',
     description: 'Answers data questions by searching the schema and running SQL.',
-    parameters: AnalystAgentParams,
+    parameters: RemoteAnalystAgentParams,
   };
   static readonly tools: Tool<TSchema>[] = [
     ListDBConnections.schema,
@@ -117,7 +65,9 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams, AnalystAgen
       allowed_viz_types: '',
       role: '',
       schema: '',
-      context: '',
+      // Markdown context docs from the chat's bound `type: 'context'` file
+      // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
+      context: this.context.contextDocs ?? '',
       skills_catalog: '',
       connection_id: this.context.connectionId ?? '',
       home_folder: '',
@@ -153,3 +103,7 @@ export class AnalystAgent extends MXAgent<typeof AnalystAgentParams, AnalystAgen
     ];
   }
 }
+
+// Backward-compat alias. Pre-existing call sites (faux specs with
+// `agent: 'AnalystAgent'`, slack tests, file-tools tests, etc.) keep working.
+export const AnalystAgent = RemoteAnalystAgent;

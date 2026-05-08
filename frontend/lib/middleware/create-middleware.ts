@@ -9,6 +9,17 @@ import { getModules } from '@/lib/modules/registry';
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
+/**
+ * Pull the chat-v2 `v` param off a request's search params and shape it as
+ * a forwarded-header tuple. Returns null when `v` is absent or empty.
+ * Mirrors how `as_user` and `mode` are stamped onto request headers below.
+ */
+export function extractVHeader(searchParams: URLSearchParams): { key: 'x-v'; value: string } | null {
+  const v = searchParams.get('v');
+  if (!v) return null;
+  return { key: 'x-v', value: v };
+}
+
 
 export function createMiddleware() {
   return auth(async (req) => {
@@ -99,6 +110,12 @@ export function createMiddleware() {
       requestHeaders.set('x-mode', isInternalsAllowed ? mode : 'org');
     } else {
       requestHeaders.set('x-mode', 'org');
+    }
+
+    // Forward `v` (chat-v2 toggle) the same way as_user / mode are forwarded.
+    const vHeader = extractVHeader(req.nextUrl.searchParams);
+    if (vHeader) {
+      requestHeaders.set(vHeader.key, vHeader.value);
     }
 
     const hasContext = await getModules().auth.addHeaders(req as AuthReq, requestHeaders);

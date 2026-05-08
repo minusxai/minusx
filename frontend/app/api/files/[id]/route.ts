@@ -5,6 +5,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFile, saveFile, moveFile, deleteFile, ConflictError } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { translateConversationForFrontend } from '@/lib/chat-translator';
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,9 @@ export const GET = withAuth(async (
 
         mode: user.mode,
       });
-      return successResponse(result.data);
+      // v=2 conversations: translate pi-ai content.log → legacy task-log so
+      // the frontend never sees pi-ai shape. v=1 files pass through.
+      return successResponse(translateConversationForFrontend(result.data));
     }
 
     const loadStart = Date.now();
@@ -69,7 +72,10 @@ export const GET = withAuth(async (
 
       mode: user.mode,
     });
-    return successResponse(result);
+    return successResponse({
+      ...result,
+      data: translateConversationForFrontend(result.data),
+    });
   } catch (error) {
     console.log(`[FILES API] Error after ${Date.now() - startTime}ms`);
     return handleApiError(error);

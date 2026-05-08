@@ -8,27 +8,31 @@ import {
 } from '@/agents/test-agent/test-agent';
 
 describe('test-spec-runner error surfacing', () => {
-  it('surfaces orchestrator stream errors in failures', async () => {
+  it('does NOT surface orchestrator errors when a server tool throws — agent recovers via isError toolResult', async () => {
+    // After the orchestrator-level fix, server-side tool failures append an
+    // isError toolResult to the log instead of killing the turn. The agent
+    // sees the error and the next response (stop here) ends cleanly. No
+    // "Orchestrator error" surfaces.
     const spec: TestSpec = {
-      name: 'tool_throws',
+      name: 'tool_throws_recovers',
       agent: 'TestAgent',
       parameters: { userMessage: 'go' },
       context: { userId: 'u', mode: 'org' },
       fauxResponses: [
         { type: 'toolUse', toolCalls: [{ name: 'ErrorTool', args: { reason: 'boom' } }] },
-        { type: 'stop', text: 'unreachable' },
+        { type: 'stop', text: 'recovered after tool error' },
       ],
       assertions: [{ kind: 'stopReached' }],
     };
 
-    const { failures } = await runAgentTestSpec(
+    const { failures, pass } = await runAgentTestSpec(
       spec,
       [EchoTool, PendingTool, ErrorTool, TestAgent],
       (steps) => fauxRegistration.setResponses(steps),
     );
 
-    expect(failures.some((f) => f.startsWith('Orchestrator error:'))).toBe(true);
-    expect(failures.some((f) => f.includes('ErrorTool exploded'))).toBe(true);
+    expect(pass).toBe(true);
+    expect(failures).toEqual([]);
   });
 
   it('does NOT add an Orchestrator error for unknown tools (those are recoverable now)', async () => {

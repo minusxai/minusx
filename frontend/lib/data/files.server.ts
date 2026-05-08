@@ -441,7 +441,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId, startAsDraft);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId, startAsDraft, input.meta ?? null);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -971,6 +971,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async updateNamePath(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
     return DocumentDB.updateNamePath(id, name, path);
+  }
+
+  async renameAndMove(id: number, name: string, path: string, _user: EffectiveUser): Promise<void> {
+    return DocumentDB.renameAndMove(id, name, path);
   }
 }
 

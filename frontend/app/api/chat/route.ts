@@ -22,6 +22,10 @@ import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
+import { runChatTurnV2, validateV2Mode } from '@/lib/chat-orchestration-v2.server';
+import { isV2ConversationFile } from '@/lib/chat-translator';
+import { FilesAPI } from '@/lib/data/files.server';
+import { createNewConversation } from '@/lib/conversations';
 
 /**
  * Chat response to frontend
@@ -95,6 +99,42 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
       );
     }
 
+    // V=2 branch — entered when ?v=2 is on the URL. Strict mode-match: if
+    // a conversationID is supplied, the file's meta.version must be 2;
+    // otherwise we create a fresh v=2 conversation file. The orchestrator
+    // runs internally and the response is translated back to legacy
+    // `ChatResponse` shape so the frontend stays unchanged.
+    const isV2 = request.nextUrl.searchParams.get('v') === '2';
+    if (isV2) {
+      let v2ConversationId: number;
+      if (body.conversationID) {
+        const check = await validateV2Mode(body.conversationID, user, true);
+        if (!check.ok) {
+          return NextResponse.json(
+            {
+              conversationID: body.conversationID,
+              log_index: 0,
+              pending_tool_calls: [],
+              completed_tool_calls: [],
+              debug: [],
+              error: check.error,
+            } as ChatResponse,
+            { status: 400 },
+          );
+        }
+        v2ConversationId = body.conversationID;
+      } else {
+        const created = await createNewConversation(
+          user,
+          body.user_message ?? undefined,
+          { version: 2 },
+        );
+        v2ConversationId = created.fileId;
+      }
+      const v2Result = await runChatTurnV2(body, user, v2ConversationId);
+      return NextResponse.json(v2Result as ChatResponse);
+    }
+
     // Step 1: Get or create conversation file (pass first message for naming)
     const { fileId: convFileId, content: conversation } = await getOrCreateConversation(
       body.conversationID ?? null,  // null to create new
@@ -102,6 +142,27 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
       body.user_message ?? undefined  // Pass first message for naming
     );
     fileId = convFileId;
+
+    // Mode-mismatch guard: if URL is NOT v=2 but the conversation file IS
+    // v=2, refuse — same strict-mode rule the v=2 branch enforces. (If no
+    // conversationID was supplied, getOrCreateConversation just created a
+    // legacy v=1 file, so this only fires for resume on a v=2 file.)
+    if (body.conversationID) {
+      const file = await FilesAPI.loadFile(body.conversationID, user);
+      if (isV2ConversationFile(file.data)) {
+        return NextResponse.json(
+          {
+            conversationID: body.conversationID,
+            log_index: 0,
+            pending_tool_calls: [],
+            completed_tool_calls: [],
+            debug: [],
+            error: 'cannot continue v=2 conversation in v=1 mode',
+          } as ChatResponse,
+          { status: 400 },
+        );
+      }
+    }
 
     // Step 2: Load conversation log up to log_index (default to full log)
     const initial_log_index = body.log_index ?? conversation.log.length;

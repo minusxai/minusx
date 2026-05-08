@@ -218,9 +218,11 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
   }
 
   if (isTool) {
-    const toolName = (message as any).function?.name;
+    const toolMsg = message as any;
+    if (!toolMsg.function) return null;
+    const toolName = toolMsg.function.name as string;
     if (toolName === 'TalkToUser') {
-      console.log('[SimpleChatMessage] Rendering TalkToUser, content length:', ((message as any).content || '').length, 'first 100:', String((message as any).content || '').slice(0, 100));
+      console.log('[SimpleChatMessage] Rendering TalkToUser, content length:', (toolMsg.content || '').length, 'first 100:', String(toolMsg.content || '').slice(0, 100));
     }
     // Parse arguments field if it's a string
     let functionArgs: Record<string, any>;

@@ -5,6 +5,8 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { ConversationFileContent, ConversationLogEntry, FileType, ConversationSource } from '@/lib/types';
 import { truncateMessageForName } from '@/lib/conversations';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { isV2ConversationFile, piLogToLegacy } from '@/lib/chat-translator';
+import type { ConversationLog } from '@/orchestrator/types';
 
 /**
  * Conversation summary for listing
@@ -85,6 +87,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get('limit');
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    // Strict mode separation:
+    //   ?v=2 → return ONLY v=2 conversations (meta.version === 2).
+    //   else → return ONLY v=1 conversations (meta.version !== 2).
+    const isV2 = searchParams.get('v') === '2';
 
     // Get effective user
     const user = await getEffectiveUser();
@@ -118,22 +124,34 @@ export async function GET(request: Request) {
       try {
         // Load file content
         const fileResult = await FilesAPI.loadFile(fileInfo.id, user);
-        const content = fileResult.data.content as unknown as ConversationFileContent;
+        const fileIsV2 = isV2ConversationFile(fileResult.data);
 
-        // Extract summary info
-        const parentFileInfo = getParentFileInfo(content.log);
+        // Strict mode filter — skip files that don't match the requested mode.
+        if (isV2 !== fileIsV2) continue;
+
+        const rawContent = fileResult.data.content as unknown as ConversationFileContent | undefined;
+        if (!rawContent) continue;
+
+        // For v=2 files, translate the pi-ai log to legacy task-log shape so
+        // the summary helpers (countUserMessages, getParentPageType, etc.)
+        // work unchanged.
+        const log: ConversationLogEntry[] = fileIsV2
+          ? piLogToLegacy((rawContent.log as unknown) as ConversationLog)
+          : rawContent.log;
+
+        const parentFileInfo = getParentFileInfo(log);
         const summary: ConversationSummary = {
           id: fileInfo.id,
-          name: content.metadata.name || fileResult.data.name,
-          createdAt: content.metadata.createdAt,
-          updatedAt: content.metadata.updatedAt,
-          forkedFrom: content.metadata.forkedFrom,
-          messageCount: countUserMessages(content.log),
-          lastMessage: getLastUserMessage(content.log),
-          parentPageType: getParentPageType(content.log),
+          name: rawContent.metadata.name || fileResult.data.name,
+          createdAt: rawContent.metadata.createdAt,
+          updatedAt: rawContent.metadata.updatedAt,
+          forkedFrom: rawContent.metadata.forkedFrom,
+          messageCount: countUserMessages(log),
+          lastMessage: getLastUserMessage(log),
+          parentPageType: getParentPageType(log),
           parentFileId: parentFileInfo.id,
           parentFileName: parentFileInfo.name,
-          source: content.metadata.source,
+          source: rawContent.metadata.source,
         };
 
         conversations.push(summary);

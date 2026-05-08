@@ -44,7 +44,16 @@ function rowToDbFile(row: DbRow, includeContent: boolean = true): DbFile {
 }
 
 export class DocumentDB {
-  static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], editId?: string, draft: boolean = true): Promise<number> {
+  static async create(
+    name: string,
+    path: string,
+    type: string,
+    content: BaseFileContent,
+    references: number[],
+    editId?: string,
+    draft: boolean = true,
+    meta?: Record<string, unknown> | null,
+  ): Promise<number> {
     if (references.some(ref => ref < 0)) {
       throw new Error(
         `Cannot store negative reference IDs in the database: [${references.filter(r => r < 0).join(', ')}]. ` +
@@ -62,10 +71,10 @@ export class DocumentDB {
         SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) AS next_id FROM files
       )
       INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at)
-      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, null, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, content, references, editId ?? null, draft]);
+    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]);
 
     return result.rows[0].id;
   }
@@ -390,6 +399,20 @@ export class DocumentDB {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND (content->'metadata'->>'name' = $4 OR name = $4)`,
       [id, name, path, DEFAULT_CONVERSATION_NAME]
+    );
+  }
+
+  /**
+   * Rename + move a file row without touching content. Unconditional —
+   * caller is responsible for any preconditions.
+   */
+  static async renameAndMove(id: number, name: string, path: string): Promise<void> {
+    const db = getModules().db;
+    await db.exec(
+      `UPDATE files
+       SET name = $2, path = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [id, name, path],
     );
   }
 }

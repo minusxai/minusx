@@ -141,10 +141,11 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
   // Calculate totals
   const totalTokens = debugInfo.llmDebug.reduce((sum, llm) => sum + llm.total_tokens, 0);
   const totalCost = debugInfo.llmDebug.reduce((sum, llm) => sum + llm.cost, 0);
-  const totalLLMDuration = debugInfo.llmDebug.reduce((sum, llm) => sum + llm.duration, 0);
+  const totalLLMDuration = debugInfo.llmDebug.reduce((sum, llm) => sum + (llm.duration ?? 0), 0);
 
-  // Format duration (ms vs seconds)
-  const formatDuration = (seconds: number) => {
+  // Format duration (ms vs seconds). duration is optional — v=2 translator omits it.
+  const formatDuration = (seconds: number | undefined) => {
+    if (seconds == null || !Number.isFinite(seconds)) return '—';
     if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
     return `${seconds.toFixed(2)}s`;
   };

@@ -24,7 +24,7 @@ import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
-import { getCurrentAsUser } from '@/lib/navigation/url-utils';
+import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
 import { getCurrentMode } from '@/lib/mode/mode-utils';
 import type { AgentSkillSelection } from '@/lib/types';
 
@@ -72,15 +72,24 @@ export const chatListenerMiddleware = createListenerMiddleware();
 // URL helpers
 // ---------------------------------------------------------------------------
 
-/** Mirror the fetch-patch: append as_user and mode params to /api/ URLs. */
+/** Mirror the fetch-patch: append as_user, mode, and v params to /api/ URLs.
+ *
+ * The XHR-based SSE driver bypasses `window.fetch`, so it doesn't pick up
+ * the global fetch-patch automatically. We replicate the same param-
+ * forwarding here. `v` is critical for v=2 conversations — without it the
+ * backend treats every stream request as v=1 and rejects v=2 conversations
+ * with mode-mismatch.
+ */
 function patchApiUrl(path: string): string {
   if (typeof window === 'undefined') return path;
   const asUser = getCurrentAsUser();
   const mode = getCurrentMode();
-  if (!asUser && mode === 'org') return path;
+  const v = getCurrentV();
+  if (!asUser && mode === 'org' && !v) return path;
   const url = new URL(path, window.location.origin);
   if (asUser) url.searchParams.set('as_user', asUser);
   if (mode !== 'org') url.searchParams.set('mode', mode);
+  if (v) url.searchParams.set('v', v);
   return url.pathname + url.search;
 }
 
@@ -259,6 +268,13 @@ function handleStreamError(
   stableId: string,
   dispatch: AppDispatch,
 ): boolean {
+  if (!error || typeof error !== 'object') {
+    void captureError(captureLabel, new Error(String(error)), { conversationID: String(conversationID) });
+    dispatch(setError({ conversationID, error: String(error) }));
+    dispatch(clearStreamingContent({ conversationID }));
+    abortControllers.delete(stableId);
+    return false;
+  }
   if (error.name === 'AbortError') return true;
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
@@ -515,7 +531,7 @@ chatListenerMiddleware.startListening({
 
     const runOne = async (pendingTool: (typeof realConversation.pending_tool_calls)[number]) => {
       try {
-        console.log(`[chatListener] Executing tool: ${pendingTool.toolCall.function.name}`);
+        console.log(`[chatListener] Executing tool: ${pendingTool.toolCall.function?.name}`);
 
         // Dynamic import to avoid circular dependencies:
         // tool-handlers → store → chatListener → tool-handlers (circular)
@@ -586,7 +602,7 @@ chatListenerMiddleware.startListening({
     // Group by fileId: same fileId → serial; different fileId → parallel
     const groups = new Map<string, typeof eligible>();
     for (const tool of eligible) {
-      const toolArgs = tool.toolCall.function.arguments || {};
+      const toolArgs = tool.toolCall.function?.arguments || {};
       const key = toolArgs.fileId != null ? String(toolArgs.fileId) : `_${tool.toolCall.id}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(tool);

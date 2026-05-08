@@ -6,6 +6,8 @@ import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
+import { setVInUrl } from '@/lib/navigation/url-utils';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
@@ -95,7 +97,7 @@ function FileTabContent({ path, Container, createFolder, createType }: {
   createFolder: string;
   createType: string;
 }) {
-  const { file, loading } = useFileByPath(path);
+  const { file, loading, error } = useFileByPath(path);
   const { navigate } = useNavigationGuard();
 
   if (loading) {
@@ -106,7 +108,7 @@ function FileTabContent({ path, Container, createFolder, createType }: {
     );
   }
 
-  if (!file) {
+  if (!file || error || file.fileState.id < 0) {
     return (
       <Box p={8} textAlign="center">
         <Text color="fg.muted" mb={4}>No file found at {path}.</Text>
@@ -363,6 +365,9 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
+  // Chat-v2 toggle is URL-only (`?v=2`). The settings switch reads from URL
+  // and writes by reloading the page with `v=2` set or removed.
+  const useChatV2 = useUseChatV2();
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -512,6 +517,22 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Experimental Flags',
+      title: 'Use new chat interface (beta)',
+      description: 'Switch from the legacy Conversations to the new Chats surface (TS-orchestrator, /api/chat/v2). Toggling reloads the page with `?v=2` added or removed — the URL is the only source of truth.',
+      control: (
+        <SwitchControl
+          checked={useChatV2}
+          onChange={(checked) => {
+            // Single source of truth: the URL. Full reload guarantees every
+            // component sees the new state on next render.
+            window.location.href = setVInUrl(checked);
+          }}
+        />
+      ),
+    },
+    {
+      tab: 'general',
+      section: 'Experimental Flags',
       title: 'Background Agent Mode',
       description: 'Allow the agent to work unrestricted — create and edit files without needing to navigate to the target page first.',
       control: (
@@ -639,7 +660,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, useChatV2, devMode, showExpandedMessages, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

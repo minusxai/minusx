@@ -1,13 +1,9 @@
-import type { AgentContext } from '@/orchestrator/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConnectorConfigMap, ConnectorDialect } from '@/lib/connections/base';
+import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 
-/** Metadata about a database connection visible to the agent. */
-export interface ConnectionInfo {
-  name: string;
-  dialect: string;
-  description?: string;
-}
+// Re-export so existing imports keep working.
+export type { ConnectionInfo };
 
 /** Full connection entry used in benchmark config (JSON file or env var). */
 export type BenchmarkConnectionEntry = {
@@ -20,19 +16,18 @@ export type BenchmarkConnectionEntry = {
 }[ConnectorDialect];
 
 /**
- * Context shape for AnalystAgent (and its descendants like SlackAgent and the
- * benchmark variant). Carries everything analyst tools / system-prompt rendering
- * need: the calling user, the workspace mode, the active app state, the
- * available DB connections, and the resolved EffectiveUser for FilesAPI calls.
- *
- * This lives in `agents/analyst/` (not `orchestrator/types.ts`) so the
- * orchestrator stays free of MinusX-specific app types.
+ * Context shape for RemoteAnalystAgent (and SlackAgent / WebAnalystAgent).
+ * Extends BenchmarkAnalystContext (DB tools + connections) with the
+ * MinusX-app-specific fields the file tools, system prompt, and AppState
+ * wrap need.
  */
-export interface AnalystAgentContext extends AgentContext {
+export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   userId: string;
   mode: 'org' | 'tutorial';
   connectionId?: string;
   appState?: unknown;
-  connections?: ConnectionInfo[];
   effectiveUser?: EffectiveUser;
 }
+
+// Backward-compat alias — pre-existing import sites use this name.
+export type AnalystAgentContext = RemoteAnalystContext;
