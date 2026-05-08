@@ -1,28 +1,49 @@
 // Data analyst benchmark — edit config and datasets below, then run:
 //   cd frontend && npm run benchmark:analyst
 
+// import { writeFileSync } from 'node:fs';
+// import path from 'node:path';
+// import { fileURLToPath } from 'node:url';
 import { getModel, type Tool, type TSchema } from '@mariozechner/pi-ai';
 import { renderPrompt } from '@/orchestrator/prompts';
 import {
   BenchmarkAnalystAgent,
-  ListDBConnections,
   SearchDBSchema,
   ExecuteSQL,
 } from '@/agents/benchmark-analyst/benchmark-analyst';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
-// ── Config (edit here) ────────────────────────────────────────────────────
+const tools = [
+    SearchDBSchema.schema,
+    ExecuteSQL.schema,
+  ];
+
+// ── Config ────────────────────────────────────────────────────
 
 const CONFIG = {
   model: { provider: 'anthropic', model: 'claude-haiku-4-5' },
   concurrency: 10,
-  maxSteps: 40,
   promptId: 'default.system',
-  promptVars: {} as Record<string, string>,
-  systemPromptAppend: '',
+  promptVars: {
+    agent_name: 'MinusX Benchmark Agent',
+    max_steps: '40',
+    allowed_viz_types: 'table',
+    role: 'admin',
+    schema: '',
+    context: '',
+    skills_catalog: '',
+    home_folder: '',
+    preloaded_skills: '',
+  } as Record<string, string>,
+  systemPromptAppend: `## Benchmark Specific Instructions and Customization
+  - You are solving a benchmark task. Your goal is to analyze the questions, and give very specific answers.
+  - Only tools you have access to: ${tools.map((t) => `\`${t.name}\``).join(', ')}. Don't hallucinate any other tools.
+  - You DO NOT have any other existing files with questions.
+  - The answer needs to be in under 200 words. This is a benchmark, a user is not reading the answer and the evaluation might be error-prone on long winded answers. Be concise and specific. Don't add any unnecessary information. Just answer the question as directly as possible.
+  `
 };
 
-// ── Datasets (edit here) ─────────────────────────────────────────────────
+// ── Datasets─────────────────────────────────────────────────
 
 const BASE = '/Users/nuwandavek/Documents/minusx/dataagentbench_ucb/mxdatasets';
 
@@ -34,11 +55,7 @@ const DATASETS = [
 // ── Agent (customize tools / prompt here) ─────────────────────────────────
 
 class Agent extends BenchmarkAnalystAgent {
-  static readonly tools: Tool<TSchema>[] = [
-    ListDBConnections.schema,
-    SearchDBSchema.schema,
-    ExecuteSQL.schema,
-  ];
+  static readonly tools: Tool<TSchema>[] = tools;
   static model = getModel(
     CONFIG.model.provider as never,
     CONFIG.model.model as never,
@@ -46,28 +63,24 @@ class Agent extends BenchmarkAnalystAgent {
 
   protected getSystemPrompt(): string {
     const vars: Record<string, string> = {
-      agent_name: 'BenchmarkAnalystAgent',
-      max_steps: String(CONFIG.maxSteps),
-      allowed_viz_types: '',
-      role: '',
-      schema: '',
-      context: '',
-      skills_catalog: '',
-      connection_id: '',
-      home_folder: '',
-      preloaded_skills: '',
+      connection_id: `Available connections: \n${JSON.stringify(this.context.connections ?? [])}`,
       ...CONFIG.promptVars,
     };
     const rendered = renderPrompt(CONFIG.promptId, vars);
-    return CONFIG.systemPromptAppend
+    const prompt = CONFIG.systemPromptAppend
       ? `${rendered}\n\n${CONFIG.systemPromptAppend}`
       : rendered;
+    // Dump to file for live inspection
+    // const outPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rendered_system_prompt.md');
+    // writeFileSync(outPath, prompt);
+    return prompt;
   }
 }
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, Agent];
+const registrables = [SearchDBSchema, ExecuteSQL, Agent];
+
 
 logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);
 
