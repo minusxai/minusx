@@ -16,7 +16,8 @@
     "test:ui": "vitest run --project=ui",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",
     "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | tee lib/validation/atlas-schema.gen.json | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts",
-    "postinstall": "node scripts/copy-duckdb-wasm.mjs"
+    "postinstall": "node scripts/copy-duckdb-wasm.mjs",
+    "benchmark:dab": "node --env-file=.env node_modules/.bin/tsx --conditions react-server benchmarks/dataanalystbench.ts"
   },
   "dependencies": {
     "@aws-sdk/client-athena": "^3.1032.0",
