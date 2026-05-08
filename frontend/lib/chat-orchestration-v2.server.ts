@@ -329,9 +329,15 @@ export async function runChatTurnV2(
   let runError: string | undefined;
   try {
     if (setup.rawStream) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- drain
-      for await (const _ev of setup.rawStream) {
-        /* drain */
+      for await (const ev of setup.rawStream) {
+        const evType = (ev as { type?: string }).type;
+        if (evType === 'error') {
+          const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
+          if (errMsg && !runError) {
+            runError = errMsg;
+            console.error('[v2/chat] orchestrator error event:', errMsg);
+          }
+        }
       }
       await setup.rawStream.result();
     }
@@ -381,6 +387,19 @@ export async function* runChatTurnStreamV2(
   try {
     if (setup.rawStream) {
       for await (const ev of setup.rawStream) {
+        // Capture orchestrator error events (e.g. LLM auth failures, network
+        // errors). EventStream.result() never throws — errors surface only as
+        // stream events — so we must intercept them here or they are silently
+        // dropped by piStreamEventToLegacy returning null.
+        const evType = (ev as { type?: string }).type;
+        if (evType === 'error') {
+          const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
+          if (errMsg && !runError) {
+            runError = errMsg;
+            console.error('[v2/stream] orchestrator error event:', errMsg);
+          }
+          continue;
+        }
         const translated = piStreamEventToLegacy(ev as StreamEvent, setup.conversationId);
         if (translated) {
           yield { wire: 'streaming_event', data: translated };
@@ -392,13 +411,26 @@ export async function* runChatTurnStreamV2(
     runError = err instanceof Error ? err.message : String(err);
   }
 
-  const response = await persistAndBuildLegacyResponse(
-    setup.conversationId,
-    setup.expectedLogIndex,
-    setup.orchestrator,
-    user,
-    runError,
-  );
+  let response: V2LegacyChatResponse;
+  try {
+    response = await persistAndBuildLegacyResponse(
+      setup.conversationId,
+      setup.expectedLogIndex,
+      setup.orchestrator,
+      user,
+      runError,
+    );
+  } catch (persistErr) {
+    const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
+    response = {
+      conversationID: setup.conversationId,
+      log_index: setup.expectedLogIndex,
+      pending_tool_calls: [],
+      completed_tool_calls: [],
+      debug: [],
+      error: runError ?? persistError,
+    };
+  }
   yield {
     wire: 'done',
     data: { ...response, type: 'done', timestamp: new Date().toISOString() },
