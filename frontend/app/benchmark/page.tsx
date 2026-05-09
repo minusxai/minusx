@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Box, Text, VStack, HStack, Flex, Grid, Icon } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Flex, Grid, Icon, Spinner } from '@chakra-ui/react';
 import { createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch } from 'react-icons/lu';
+import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch, LuMessageCircle } from 'react-icons/lu';
 import { Button } from '@chakra-ui/react';
 import { parseLogToMessages } from '@/lib/conversations-utils';
-import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
+import { piLogToLegacy } from '@/lib/chat-translator';
+import { importBenchmarkConversation } from '@/lib/benchmark/import-conversation';
+import type { ConversationLog } from '@/orchestrator/types';
+import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
 import ToolDebugBar from '@/components/explore/ToolDebugBar';
@@ -47,6 +50,29 @@ function isProductionLog(log: unknown[]): log is ConversationLogEntry[] {
   return log.length > 0 && typeof (log[0] as any)?._type === 'string';
 }
 
+/**
+ * Detect a benchmark `<dataset>_connections.json` file: a JSON array whose
+ * entries match the BenchmarkConnectionEntry shape ({name, dialect, config}).
+ * Returned separately so the user can drop it alongside the JSONL without
+ * clobbering their parsed conversation/benchmark view.
+ */
+function tryParseConnections(text: string): BenchmarkConnectionEntry[] | null {
+  try {
+    const obj = JSON.parse(text);
+    if (!Array.isArray(obj) || obj.length === 0) return null;
+    const looksLikeEntry = obj.every((e: unknown) => {
+      const r = e as { name?: unknown; dialect?: unknown; config?: unknown };
+      return typeof r.name === 'string'
+        && typeof r.dialect === 'string'
+        && typeof r.config === 'object'
+        && r.config !== null;
+    });
+    return looksLikeEntry ? (obj as BenchmarkConnectionEntry[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseUploadedFile(text: string): ParsedFile {
   try {
     const obj = JSON.parse(text);
@@ -54,7 +80,7 @@ function parseUploadedFile(text: string): ParsedFile {
       if (isProductionLog(obj.log)) {
         return { kind: 'conversation', log: obj.log };
       }
-      return { kind: 'conversation', log: convertOrchestratorLog(obj.log) };
+      return { kind: 'conversation', log: piLogToLegacy(obj.log as ConversationLog) };
     }
   } catch {
     // Not a single JSON object — try JSONL
@@ -354,10 +380,22 @@ export default function BenchmarkPage() {
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [selectedRow, setSelectedRow] = useState(0);
   const [fileName, setFileName] = useState<string>('');
+  const [isContinuing, setIsContinuing] = useState(false);
+  const [connectionsConfig, setConnectionsConfig] = useState<BenchmarkConnectionEntry[] | null>(null);
+  const [connectionsFileName, setConnectionsFileName] = useState<string>('');
 
   const handleFile = useCallback((file: File) => {
-    setFileName(file.name);
     file.text().then(text => {
+      // Connection configs (the dataset's connections.json) are detected
+      // by shape and stored separately so the user can drop them after
+      // the JSONL without resetting the conversation view.
+      const conns = tryParseConnections(text);
+      if (conns) {
+        setConnectionsConfig(conns);
+        setConnectionsFileName(file.name);
+        return;
+      }
+      setFileName(file.name);
       try {
         setParsed(parseUploadedFile(text));
         setSelectedRow(0);
@@ -367,16 +405,18 @@ export default function BenchmarkPage() {
     });
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+  const handleFiles = useCallback((files: FileList | File[]) => {
+    Array.from(files).forEach((f) => handleFile(f));
   }, [handleFile]);
 
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
+  }, [handleFiles]);
 
   const stats = useMemo(() => {
     if (parsed?.kind !== 'benchmark') return null;
@@ -407,13 +447,54 @@ export default function BenchmarkPage() {
     if (row) {
       currentLog = isProductionLog(row.log as unknown[])
         ? (row.log as unknown as ConversationLogEntry[])
-        : convertOrchestratorLog(row.log as any[]);
+        : piLogToLegacy(row.log as ConversationLog);
     }
   }
 
   const isBenchmark = parsed.kind === 'benchmark';
 
   const resetFile = () => { setParsed(null); setFileName(''); setSelectedRow(0); };
+
+  // Pi-ai log for whatever the user is currently viewing — a single
+  // dropped conversation file or the selected row of a benchmark JSONL.
+  // null when the log is in legacy task-log shape (older outputs that
+  // pre-date the runner's pi-ai change), since the orchestrator needs
+  // pi-ai shape to resume the conversation.
+  const continuablePiLog: ConversationLog | null = (() => {
+    if (parsed.kind === 'conversation') {
+      // The /benchmark uploader only routes through `convertOrchestratorLog`
+      // when the file is non-production (pi-ai) shape — but it converts
+      // for display. We don't have the raw pi-ai log on the parsed object,
+      // so single-conversation continuation is currently unsupported.
+      // (Benchmark JSONL → row-by-row continuation works.)
+      return null;
+    }
+    const row = parsed.rows[selectedRow];
+    if (!row) return null;
+    const log = row.log as unknown[];
+    if (!Array.isArray(log) || isProductionLog(log)) return null;
+    return log as unknown as ConversationLog;
+  })();
+
+  const continueLabel: string | undefined = (() => {
+    if (parsed.kind !== 'benchmark') return undefined;
+    return parsed.rows[selectedRow]?.input?.user_message;
+  })();
+
+  const handleContinueConversation = async () => {
+    if (!continuablePiLog || isContinuing || !connectionsConfig) return;
+    setIsContinuing(true);
+    try {
+      const fileId = await importBenchmarkConversation(continuablePiLog, {
+        label: continueLabel,
+        connections: connectionsConfig,
+      });
+      window.location.href = `/explore/${fileId}?v=2`;
+    } catch (err) {
+      console.error('Failed to import benchmark conversation:', err);
+      setIsContinuing(false);
+    }
+  };
 
   return (
     <Flex h="calc(100vh - 48px)">
@@ -448,6 +529,57 @@ export default function BenchmarkPage() {
         {/* Conversation */}
         <Box maxW="960px" mx="auto" px={4} py={4}>
           {currentLog && <LogViewer log={currentLog} />}
+
+          {/* Continue this benchmark conversation in the v=2 chat UI.
+              Imports the row's pi-ai log + the dataset's connections.json
+              as a v=2 conversation file then navigates to
+              /explore/<fileId>?v=2. Connections are required because the
+              orchestrator needs NodeConnector configs to actually run SQL
+              against the benchmark's databases. */}
+          {continuablePiLog && (
+            <VStack gap={2} pt={6} pb={2}>
+              <Button
+                size="md"
+                bg={connectionsConfig ? 'accent.success' : 'bg.muted'}
+                color={connectionsConfig ? 'white' : 'fg.subtle'}
+                _hover={connectionsConfig ? { bg: 'accent.success', opacity: 0.9 } : {}}
+                disabled={isContinuing || !connectionsConfig}
+                onClick={handleContinueConversation}
+                aria-label="Continue conversation in chat"
+              >
+                {isContinuing ? <Spinner size="sm" /> : <LuMessageCircle />}
+                {isContinuing ? 'Importing…' : 'Continue conversation'}
+              </Button>
+              {connectionsConfig ? (
+                <Text fontSize="2xs" color="fg.subtle">
+                  Connections loaded: {connectionsFileName} ({connectionsConfig.length} entries)
+                </Text>
+              ) : (
+                <Box
+                  px={4}
+                  py={2}
+                  border="1px dashed"
+                  borderColor="accent.warning"
+                  borderRadius="md"
+                  cursor="pointer"
+                  onClick={() => document.getElementById('benchmark-connections-input')?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  <Text fontSize="2xs" color="accent.warning" textAlign="center">
+                    Drop or click to attach the dataset&apos;s connections.json (e.g. stockindex_connections.json)
+                  </Text>
+                  <input
+                    id="benchmark-connections-input"
+                    type="file"
+                    accept=".json"
+                    onChange={handleInputChange}
+                    style={{ display: 'none' }}
+                  />
+                </Box>
+              )}
+            </VStack>
+          )}
         </Box>
       </Box>
 

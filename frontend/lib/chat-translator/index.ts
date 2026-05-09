@@ -78,6 +78,35 @@ function deriveRunId(seed: string): string {
   return `run-${seed}`;
 }
 
+// ─── v2 → v1 tool alias table ────────────────────────────────────────
+//
+// The frontend UI speaks the legacy v1 task-log contract: tool names like
+// `ExecuteQuery` with args `{query, connectionId}`. The v2 orchestrator
+// uses pi-ai-native names (`ExecuteSQL` with `{sql, connection}`). This
+// table renames + reshapes during the v2→legacy translation so the UI
+// dispatch and display components keep working unchanged.
+//
+// Constraint: only server-side tools belong here. Frontend tools (Clarify,
+// Navigate, etc.) bridge through the UI and round-trip back via
+// `legacyToolResultToPi` — renaming them outbound would create a
+// `toolName` mismatch in the pi-ai log on the next turn. Server-side
+// tools (extend `MXTool` and run in the orchestrator) never round-trip.
+const V2_TO_V1_TOOL_NAME: Record<string, string> = {
+  ExecuteSQL: 'ExecuteQuery',
+  ListDBConnections: 'ReadFiles',
+};
+
+function v2ToV1ToolName(name: string): string {
+  return V2_TO_V1_TOOL_NAME[name] ?? name;
+}
+
+function v2ToV1ToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (name === 'ExecuteSQL') {
+    return { query: args.sql, connectionId: args.connection };
+  }
+  return args;
+}
+
 // ─── piLogToLegacy: forward ─────────────────────────────────────────
 
 /**
@@ -204,8 +233,8 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           _type: 'task',
           _run_id: deriveRunId(tc.id),
           _parent_unique_id: entry.parent_id ?? undefined,
-          agent: tc.name,
-          args: (tc.arguments ?? {}) as Record<string, unknown>,
+          agent: v2ToV1ToolName(tc.name),
+          args: v2ToV1ToolArgs(tc.name, (tc.arguments ?? {}) as Record<string, unknown>),
           unique_id: tc.id,
           created_at: createdAt,
         };
@@ -310,8 +339,11 @@ export function piStreamEventToLegacy(
         id: ev.toolCall.id,
         type: 'function',
         function: {
-          name: ev.toolCall.name,
-          arguments: (ev.toolCall.arguments ?? {}) as Record<string, unknown>,
+          name: v2ToV1ToolName(ev.toolCall.name),
+          arguments: v2ToV1ToolArgs(
+            ev.toolCall.name,
+            (ev.toolCall.arguments ?? {}) as Record<string, unknown>,
+          ),
         },
       },
       conversationID,

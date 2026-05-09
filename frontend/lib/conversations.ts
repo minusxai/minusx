@@ -62,7 +62,7 @@ function buildConversationPath(user: EffectiveUser, name: string): { userId: str
 export async function createNewConversation(
   user: EffectiveUser,
   firstUserMessage?: string,
-  options?: { version?: number },
+  options?: { version?: number; extraMeta?: Record<string, unknown> },
 ): Promise<{ fileId: number; name: string }> {
   const name = truncateMessageForName(firstUserMessage || DEFAULT_CONVERSATION_NAME);
   const { userId, fileName, path } = buildConversationPath(user, firstUserMessage || 'conversation');
@@ -79,13 +79,18 @@ export async function createNewConversation(
     log: []
   };
 
+  const meta: Record<string, unknown> = {
+    ...(options?.version !== undefined ? { version: options.version } : {}),
+    ...(options?.extraMeta ?? {}),
+  };
+
   const createResult = await FilesAPI.createFile(
     {
       name: fileName,
       path,
       type: 'conversation',
       content: initialConversation as any,
-      ...(options?.version !== undefined ? { meta: { version: options.version } } : {}),
+      ...(Object.keys(meta).length > 0 ? { meta } : {}),
       options: {
         createPath: true,
         returnExisting: false

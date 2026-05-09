@@ -4,7 +4,9 @@
 // import { writeFileSync } from 'node:fs';
 // import path from 'node:path';
 // import { fileURLToPath } from 'node:url';
-import { getModel, type Tool, type TSchema } from '@mariozechner/pi-ai';
+import { type Tool, type TSchema } from '@mariozechner/pi-ai';
+import { getModel } from '@/lib/llm/get-model';
+import { DAB_BENCH_BASE_DIR } from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
 import {
   BenchmarkAnalystAgent,
@@ -45,7 +47,7 @@ const CONFIG = {
 
 // ── Datasets─────────────────────────────────────────────────
 
-const BASE = process.env.DAB_BENCH_BASE_DIR;
+const BASE = DAB_BENCH_BASE_DIR;
 if (!BASE) {
   throw new Error('DAB_BENCH_BASE_DIR env variable is required (path to mxdatasets directory)');
 }

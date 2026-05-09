@@ -29,6 +29,14 @@ import {
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
+import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
+import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
+import {
+  buildBenchmarkSources,
+  buildConnectorsFromEntries,
+  loadBenchmarkConnectionsFromEnv,
+  type BenchmarkConnectionEntry,
+} from '@/agents/benchmark-analyst/connection-source';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
@@ -71,6 +79,9 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   PublishAll,
   LoadSkillFrontend,
   WebAnalystAgent,
+  // Lets the orchestrator resume benchmark conversations (root invocation
+  // name is 'BenchmarkAnalystAgent') in v=2 chat.
+  BenchmarkAnalystAgent,
 ];
 
 /** Subset of legacy ChatResponse the v=2 path produces. */
@@ -118,6 +129,47 @@ export async function validateV2Mode(
   };
 }
 
+/**
+ * Return the root invocation's agent name from a saved pi-ai conversation
+ * log, or undefined if the log has no root. The root is the first
+ * AgentInvocation entry with `parent_id === null`. setupOrchestration uses
+ * this to pick which agent class to instantiate for a new user-message
+ * turn — `BenchmarkAnalystAgent` for benchmark conversations,
+ * `WebAnalystAgent` for production conversations.
+ */
+export function getRootAgentName(log: ConversationLog): string | undefined {
+  for (const entry of log) {
+    const e = entry as { type?: string; parent_id?: string | null; name?: string };
+    if (e.type === 'toolCall' && e.parent_id === null) return e.name;
+  }
+  return undefined;
+}
+
+/**
+ * Reconstruct a BenchmarkAnalystContext from a saved benchmark conversation
+ * log. The runner stored connections + whitelist on the root invocation's
+ * `context`, but `schemaSource`/`sqlExecutor` (functions) serialised as
+ * `{}`. We deliberately leave those undefined so the DB tools fall back to
+ * the production server-side singletons wired by `setupV2ServerSources`.
+ */
+export function buildBenchmarkContextFromSavedLog(log: ConversationLog): BenchmarkAnalystContext {
+  for (const entry of log) {
+    const e = entry as {
+      type?: string;
+      parent_id?: string | null;
+      context?: Record<string, unknown>;
+    };
+    if (e.type !== 'toolCall' || e.parent_id !== null) continue;
+    const ctx = (e.context ?? {}) as Partial<BenchmarkAnalystContext>;
+    return {
+      connections: ctx.connections,
+      whitelistedTables: ctx.whitelistedTables,
+      contextDocs: ctx.contextDocs,
+    };
+  }
+  return {};
+}
+
 async function setupOrchestration(
   body: ChatRequest,
   user: EffectiveUser,
@@ -148,14 +200,12 @@ async function setupOrchestration(
       whitelistedTables.push(`${s.schema}.${t}`);
     }
   }
-  const ctx: RemoteAnalystContext = {
-    userId: String(user.userId ?? user.email),
-    mode: narrowedMode,
-    effectiveUser: user,
-    connectionId: serverArgs.connection_id,
-    whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
-    contextDocs: serverArgs.context || undefined,
-  };
+  // Branch on the saved log's root agent. Benchmark conversations
+  // (imported from `npm run benchmark:dab` output) continue with
+  // BenchmarkAnalystAgent + a minimal BenchmarkAnalystContext seeded from
+  // the saved root entry's connections. All other conversations use the
+  // production WebAnalystAgent path.
+  const isBenchmarkRoot = getRootAgentName(savedLog) === 'BenchmarkAnalystAgent';
 
   const orch = new Orchestrator(V2_REGISTRABLES, [...savedLog]);
 
@@ -182,6 +232,44 @@ async function setupOrchestration(
   }
 
   if (body.user_message) {
+    if (isBenchmarkRoot) {
+      // Wire NodeConnector-backed executors per-conversation. Connection
+      // configs come from the conversation file's `meta.benchmark_connections`
+      // (set at import time when the user dropped a connections.json
+      // alongside the JSONL); falling back to BENCHMARK_CONNECTIONS_CONFIG
+      // env so dev workflows that pre-set the env still work. Per-context
+      // executors override the production singletons via db-tools.ts:
+      // `this.context.sqlExecutor ?? getSqlExecutor()`.
+      const baseBenchCtx = buildBenchmarkContextFromSavedLog(savedLog);
+      const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
+      const fileMeta = (file.data as { meta?: Record<string, unknown> | null }).meta ?? null;
+      const persistedConnections = fileMeta?.benchmark_connections;
+      const connectorsByName = Array.isArray(persistedConnections)
+        ? buildConnectorsFromEntries(persistedConnections as BenchmarkConnectionEntry[])
+        : loadBenchmarkConnectionsFromEnv().connectorsByName;
+      const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, allowedNames);
+      const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
+        ...baseBenchCtx,
+        schemaSource,
+        sqlExecutor,
+        effectiveUser: user,
+      };
+      const agent = new BenchmarkAnalystAgent(orch, { userMessage: body.user_message }, benchCtx);
+      return {
+        conversationId,
+        expectedLogIndex,
+        orchestrator: orch,
+        rawStream: orch.run(agent),
+      };
+    }
+    const ctx: RemoteAnalystContext = {
+      userId: String(user.userId ?? user.email),
+      mode: narrowedMode,
+      effectiveUser: user,
+      connectionId: serverArgs.connection_id,
+      whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
+      contextDocs: serverArgs.context || undefined,
+    };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {
       conversationId,
