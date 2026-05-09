@@ -4,10 +4,11 @@ import { useState, useCallback, useMemo } from 'react';
 import { Box, Text, VStack, HStack, Flex, Grid, Icon } from '@chakra-ui/react';
 import { createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch } from 'react-icons/lu';
+import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch, LuMessageCircle } from 'react-icons/lu';
 import { Button } from '@chakra-ui/react';
 import { parseLogToMessages } from '@/lib/conversations-utils';
 import { piLogToLegacy } from '@/lib/chat-translator';
+import { importBenchmarkConversation } from '@/lib/benchmark/import-conversation';
 import type { ConversationLog } from '@/orchestrator/types';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
@@ -416,6 +417,29 @@ export default function BenchmarkPage() {
 
   const resetFile = () => { setParsed(null); setFileName(''); setSelectedRow(0); };
 
+  // Selected benchmark row's raw pi-ai log — only present when (a) the file
+  // is a benchmark JSONL and (b) the row's `log` is in pi-ai shape (the
+  // npm run benchmark:dab runner saves pi-ai; older legacy-shape outputs
+  // can't be continued because the orchestrator needs the pi-ai log).
+  const selectedRowPiLog: ConversationLog | null = (() => {
+    if (parsed.kind !== 'benchmark') return null;
+    const row = parsed.rows[selectedRow];
+    if (!row) return null;
+    const log = row.log as unknown[];
+    if (!Array.isArray(log) || isProductionLog(log)) return null;
+    return log as unknown as ConversationLog;
+  })();
+
+  const handleContinueConversation = async () => {
+    if (!selectedRowPiLog || parsed.kind !== 'benchmark') return;
+    const row = parsed.rows[selectedRow];
+    const fileId = await importBenchmarkConversation(
+      selectedRowPiLog,
+      row?.input?.user_message,
+    );
+    window.location.href = `/explore/${fileId}?v=2`;
+  };
+
   return (
     <Flex h="calc(100vh - 48px)">
       {/* ── Main content: conversation ── */}
@@ -566,6 +590,21 @@ export default function BenchmarkPage() {
                     </SelectContent>
                   </SelectRoot>
                 )}
+                {/* Continue this benchmark conversation in the v=2 chat UI.
+                    Only enabled when the row's log is in pi-ai shape; older
+                    legacy-shape outputs can't be resumed because the
+                    orchestrator needs pi-ai. */}
+                <Button
+                  size="xs"
+                  variant="outline"
+                  borderColor="border.muted"
+                  disabled={!selectedRowPiLog}
+                  onClick={handleContinueConversation}
+                  aria-label="Continue conversation in chat"
+                >
+                  <LuMessageCircle />
+                  Continue conversation
+                </Button>
               </VStack>
             </Box>
 

@@ -15,7 +15,6 @@ import {
 import { getNodeConnector } from '@/lib/connections';
 import type { NodeConnector } from '@/lib/connections/base';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
-import { piLogToLegacy } from '@/lib/chat-translator';
 import type { ConversationLog } from '@/orchestrator/types';
 
 // Suppress Node's TLS warning emitted when NODE_TLS_REJECT_UNAUTHORIZED=0
@@ -51,7 +50,11 @@ export interface BenchmarkRunConfig {
 
 export interface BenchmarkResult {
   input: InputRow;
-  log: unknown;
+  /** Raw pi-ai conversation log. Saved as-is so the output file can be
+   * imported as a v2 conversation (`meta.version: 2`, `content.log: <this>`)
+   * and continued in the chat UI. Display-time legacy conversion happens in
+   * the /benchmark viewer via `piLogToLegacy`. */
+  log: ConversationLog;
   duration_ms: number;
   error?: string;
 }
@@ -212,7 +215,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     completed++;
     if (error) errors++;
 
-    const result: BenchmarkResult = { input: row, log: piLogToLegacy(orch.log as ConversationLog), duration_ms: durationMs, error };
+    const result: BenchmarkResult = { input: row, log: orch.log as ConversationLog, duration_ms: durationMs, error };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
     // Log completion above the progress bar
