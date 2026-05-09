@@ -89,4 +89,38 @@ describe('POST /api/benchmark/import', () => {
     const res = await POST(makeRequest({ log: [] }));
     expect(res.status).toBe(401);
   });
+
+  it('persists the dataset connections on meta.benchmark_connections', async () => {
+    // The conversation file's meta carries the connection configs so that
+    // v=2 chat continuation can wire NodeConnector-backed executors per
+    // conversation. Without this, ExecuteSQL can't talk to the benchmark's
+    // databases ("connector 'X' not loaded").
+    const log = [
+      {
+        type: 'toolCall',
+        id: 'r1',
+        name: 'BenchmarkAnalystAgent',
+        arguments: { userMessage: 'q' },
+        context: { connections: [{ name: 'default_duckdb', dialect: 'duckdb' }] },
+        parent_id: null,
+      },
+    ];
+    const connections = [
+      { name: 'default_duckdb', dialect: 'duckdb', config: { file_path: 'data/foo.duckdb' } },
+    ];
+
+    const res = await POST(makeRequest({ log, connections }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { fileId: number };
+
+    const file = await FilesAPI.loadFile(body.fileId, ADMIN);
+    const meta = file.data.meta as { version?: number; benchmark_connections?: unknown } | null | undefined;
+    expect(meta?.version).toBe(2);
+    expect(meta?.benchmark_connections).toEqual(connections);
+  });
+
+  it('rejects connections that are not an array', async () => {
+    const res = await POST(makeRequest({ log: [], connections: { not: 'array' } }));
+    expect(res.status).toBe(400);
+  });
 });

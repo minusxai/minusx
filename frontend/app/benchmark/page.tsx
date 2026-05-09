@@ -10,6 +10,7 @@ import { parseLogToMessages } from '@/lib/conversations-utils';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import { importBenchmarkConversation } from '@/lib/benchmark/import-conversation';
 import type { ConversationLog } from '@/orchestrator/types';
+import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
 import ToolDebugBar from '@/components/explore/ToolDebugBar';
@@ -47,6 +48,29 @@ interface RunStats {
 
 function isProductionLog(log: unknown[]): log is ConversationLogEntry[] {
   return log.length > 0 && typeof (log[0] as any)?._type === 'string';
+}
+
+/**
+ * Detect a benchmark `<dataset>_connections.json` file: a JSON array whose
+ * entries match the BenchmarkConnectionEntry shape ({name, dialect, config}).
+ * Returned separately so the user can drop it alongside the JSONL without
+ * clobbering their parsed conversation/benchmark view.
+ */
+function tryParseConnections(text: string): BenchmarkConnectionEntry[] | null {
+  try {
+    const obj = JSON.parse(text);
+    if (!Array.isArray(obj) || obj.length === 0) return null;
+    const looksLikeEntry = obj.every((e: unknown) => {
+      const r = e as { name?: unknown; dialect?: unknown; config?: unknown };
+      return typeof r.name === 'string'
+        && typeof r.dialect === 'string'
+        && typeof r.config === 'object'
+        && r.config !== null;
+    });
+    return looksLikeEntry ? (obj as BenchmarkConnectionEntry[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseUploadedFile(text: string): ParsedFile {
@@ -357,10 +381,21 @@ export default function BenchmarkPage() {
   const [selectedRow, setSelectedRow] = useState(0);
   const [fileName, setFileName] = useState<string>('');
   const [isContinuing, setIsContinuing] = useState(false);
+  const [connectionsConfig, setConnectionsConfig] = useState<BenchmarkConnectionEntry[] | null>(null);
+  const [connectionsFileName, setConnectionsFileName] = useState<string>('');
 
   const handleFile = useCallback((file: File) => {
-    setFileName(file.name);
     file.text().then(text => {
+      // Connection configs (the dataset's connections.json) are detected
+      // by shape and stored separately so the user can drop them after
+      // the JSONL without resetting the conversation view.
+      const conns = tryParseConnections(text);
+      if (conns) {
+        setConnectionsConfig(conns);
+        setConnectionsFileName(file.name);
+        return;
+      }
+      setFileName(file.name);
       try {
         setParsed(parseUploadedFile(text));
         setSelectedRow(0);
@@ -370,16 +405,18 @@ export default function BenchmarkPage() {
     });
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+  const handleFiles = useCallback((files: FileList | File[]) => {
+    Array.from(files).forEach((f) => handleFile(f));
   }, [handleFile]);
 
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
+  }, [handleFiles]);
 
   const stats = useMemo(() => {
     if (parsed?.kind !== 'benchmark') return null;
@@ -445,10 +482,13 @@ export default function BenchmarkPage() {
   })();
 
   const handleContinueConversation = async () => {
-    if (!continuablePiLog || isContinuing) return;
+    if (!continuablePiLog || isContinuing || !connectionsConfig) return;
     setIsContinuing(true);
     try {
-      const fileId = await importBenchmarkConversation(continuablePiLog, continueLabel);
+      const fileId = await importBenchmarkConversation(continuablePiLog, {
+        label: continueLabel,
+        connections: connectionsConfig,
+      });
       window.location.href = `/explore/${fileId}?v=2`;
     } catch (err) {
       console.error('Failed to import benchmark conversation:', err);
@@ -491,24 +531,54 @@ export default function BenchmarkPage() {
           {currentLog && <LogViewer log={currentLog} />}
 
           {/* Continue this benchmark conversation in the v=2 chat UI.
-              Imports the row's pi-ai log as a v=2 conversation file then
-              navigates to /explore/<fileId>?v=2. Disabled until a row with
-              a pi-ai-shape log is selected. */}
+              Imports the row's pi-ai log + the dataset's connections.json
+              as a v=2 conversation file then navigates to
+              /explore/<fileId>?v=2. Connections are required because the
+              orchestrator needs NodeConnector configs to actually run SQL
+              against the benchmark's databases. */}
           {continuablePiLog && (
-            <HStack justify="center" pt={6} pb={2}>
+            <VStack gap={2} pt={6} pb={2}>
               <Button
                 size="md"
-                bg="accent.success"
-                color="white"
-                _hover={{ bg: 'accent.success', opacity: 0.9 }}
-                disabled={isContinuing}
+                bg={connectionsConfig ? 'accent.success' : 'bg.muted'}
+                color={connectionsConfig ? 'white' : 'fg.subtle'}
+                _hover={connectionsConfig ? { bg: 'accent.success', opacity: 0.9 } : {}}
+                disabled={isContinuing || !connectionsConfig}
                 onClick={handleContinueConversation}
                 aria-label="Continue conversation in chat"
               >
                 {isContinuing ? <Spinner size="sm" /> : <LuMessageCircle />}
                 {isContinuing ? 'Importing…' : 'Continue conversation'}
               </Button>
-            </HStack>
+              {connectionsConfig ? (
+                <Text fontSize="2xs" color="fg.subtle">
+                  Connections loaded: {connectionsFileName} ({connectionsConfig.length} entries)
+                </Text>
+              ) : (
+                <Box
+                  px={4}
+                  py={2}
+                  border="1px dashed"
+                  borderColor="accent.warning"
+                  borderRadius="md"
+                  cursor="pointer"
+                  onClick={() => document.getElementById('benchmark-connections-input')?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  <Text fontSize="2xs" color="accent.warning" textAlign="center">
+                    Drop or click to attach the dataset&apos;s connections.json (e.g. stockindex_connections.json)
+                  </Text>
+                  <input
+                    id="benchmark-connections-input"
+                    type="file"
+                    accept=".json"
+                    onChange={handleInputChange}
+                    style={{ display: 'none' }}
+                  />
+                </Box>
+              )}
+            </VStack>
           )}
         </Box>
       </Box>

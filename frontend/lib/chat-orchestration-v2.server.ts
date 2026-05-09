@@ -33,7 +33,9 @@ import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-anal
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
 import {
   buildBenchmarkSources,
+  buildConnectorsFromEntries,
   loadBenchmarkConnectionsFromEnv,
+  type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -231,18 +233,20 @@ async function setupOrchestration(
 
   if (body.user_message) {
     if (isBenchmarkRoot) {
-      // Wire NodeConnector-backed executors per-conversation from
-      // BENCHMARK_CONNECTIONS_CONFIG env (the same env var the runner
-      // uses) so SQL and schema lookups go to the benchmark's own
-      // connections, NOT production's runQuery + FilesAPI. Per-context
-      // executors override the production singletons (see db-tools.ts:
-      // `this.context.sqlExecutor ?? getSqlExecutor()`). When the env is
-      // unset, allowed connectors are missing → executor returns a clear
-      // "connector 'X' not loaded" error rather than a confusing
-      // "missing effectiveUser" one.
+      // Wire NodeConnector-backed executors per-conversation. Connection
+      // configs come from the conversation file's `meta.benchmark_connections`
+      // (set at import time when the user dropped a connections.json
+      // alongside the JSONL); falling back to BENCHMARK_CONNECTIONS_CONFIG
+      // env so dev workflows that pre-set the env still work. Per-context
+      // executors override the production singletons via db-tools.ts:
+      // `this.context.sqlExecutor ?? getSqlExecutor()`.
       const baseBenchCtx = buildBenchmarkContextFromSavedLog(savedLog);
       const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
-      const { connectorsByName } = loadBenchmarkConnectionsFromEnv();
+      const fileMeta = (file.data as { meta?: Record<string, unknown> | null }).meta ?? null;
+      const persistedConnections = fileMeta?.benchmark_connections;
+      const connectorsByName = Array.isArray(persistedConnections)
+        ? buildConnectorsFromEntries(persistedConnections as BenchmarkConnectionEntry[])
+        : loadBenchmarkConnectionsFromEnv().connectorsByName;
       const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, allowedNames);
       const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
         ...baseBenchCtx,

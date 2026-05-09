@@ -28,6 +28,25 @@ export interface BenchmarkConnections {
 }
 
 /**
+ * Build a NodeConnector map from BenchmarkConnectionEntry[] (the shape of
+ * `<dataset>_connections.json` and `BENCHMARK_CONNECTIONS_CONFIG`). Used
+ * both at runner startup and at v=2 chat continuation time when the
+ * conversation file's `meta.benchmark_connections` carries the configs.
+ * Throws if any entry references an unknown dialect.
+ */
+export function buildConnectorsFromEntries(
+  entries: BenchmarkConnectionEntry[],
+): Map<string, NodeConnector> {
+  const connectorsByName = new Map<string, NodeConnector>();
+  for (const { name, dialect, config } of entries) {
+    const c = getNodeConnector(name, dialect, config as Record<string, unknown>);
+    if (!c) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
+    connectorsByName.set(name, c);
+  }
+  return connectorsByName;
+}
+
+/**
  * Parse `BENCHMARK_CONNECTIONS_CONFIG` (a JSON array of {name, dialect, config,
  * description?}) into a NodeConnector map plus the public ConnectionInfo
  * metadata exposed to the LLM via ListDBConnections. Returns empty maps when
@@ -38,12 +57,9 @@ export function loadBenchmarkConnectionsFromEnv(): BenchmarkConnections {
   const raw = process.env.BENCHMARK_CONNECTIONS_CONFIG;
   if (!raw) return { connectorsByName: new Map(), connectionInfos: new Map() };
   const entries = JSON.parse(raw) as BenchmarkConnectionEntry[];
-  const connectorsByName = new Map<string, NodeConnector>();
+  const connectorsByName = buildConnectorsFromEntries(entries);
   const connectionInfos = new Map<string, ConnectionInfo>();
-  for (const { name, dialect, config, description } of entries) {
-    const c = getNodeConnector(name, dialect, config as Record<string, unknown>);
-    if (!c) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
-    connectorsByName.set(name, c);
+  for (const { name, dialect, description } of entries) {
     connectionInfos.set(name, { name, dialect, description });
   }
   return { connectorsByName, connectionInfos };

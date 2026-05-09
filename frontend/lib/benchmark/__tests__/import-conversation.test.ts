@@ -42,6 +42,21 @@ describe('importBenchmarkConversation', () => {
     expect(JSON.parse(init.body as string)).toEqual({ log: sampleLog });
   });
 
+  it('forwards the connections array so the server can wire executors on continuation', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ fileId: 9, name: 'q' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const connections = [
+      { name: 'default_duckdb', dialect: 'duckdb', config: { file_path: 'data/foo.duckdb' } },
+    ];
+    await importBenchmarkConversation(sampleLog, { connections });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ log: sampleLog, connections });
+  });
+
   it('forwards the optional label so the imported conversation is named meaningfully', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ fileId: 7, name: 'my label' }), {
       status: 200,
@@ -49,7 +64,7 @@ describe('importBenchmarkConversation', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await importBenchmarkConversation(sampleLog, 'my label');
+    await importBenchmarkConversation(sampleLog, { label: 'my label' });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ log: sampleLog, label: 'my label' });
   });
