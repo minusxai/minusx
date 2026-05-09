@@ -21,6 +21,15 @@ const RESTRICT_ADAPTER_FACTORY = {
     "Allowed only in lib/modules/db/** and lib/database/**.",
 };
 
+const RESTRICT_PI_AI_GET_MODEL = {
+  name: "@mariozechner/pi-ai",
+  importNames: ["getModel"],
+  message:
+    "Do not import getModel from @mariozechner/pi-ai directly. Use getModel from @/lib/llm/get-model instead — " +
+    "it routes all LLM calls through mx-llm-provider's /proxy endpoint for logging + auth injection. " +
+    "Bypassing it talks straight to the provider and skips mxllm.",
+};
+
 // Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
 // so that per-file configs can extend rather than replace the base rules.
 const BASE_RESTRICTED_SYNTAX = [
@@ -118,6 +127,7 @@ const eslintConfig = defineConfig([
           paths: [
             RESTRICT_DOCUMENTS_DB,
             RESTRICT_ADAPTER_FACTORY,
+            RESTRICT_PI_AI_GET_MODEL,
           ],
         },
       ],
@@ -194,7 +204,15 @@ const eslintConfig = defineConfig([
   {
     files: ["scripts/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI_GET_MODEL] }],
+    },
+  },
+  // lib/llm/get-model.ts — the one place that legitimately wraps pi-ai's getModel.
+  // It re-exports a proxy-aware getModel that everything else in the project must use.
+  {
+    files: ["lib/llm/get-model.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY] }],
     },
   },
 
