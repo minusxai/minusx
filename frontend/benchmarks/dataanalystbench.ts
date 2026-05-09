@@ -45,7 +45,10 @@ const CONFIG = {
 
 // ── Datasets─────────────────────────────────────────────────
 
-const BASE = '/Users/nuwandavek/Documents/minusx/dataagentbench_ucb/mxdatasets';
+const BASE = process.env.DAB_BENCH_BASE_DIR;
+if (!BASE) {
+  throw new Error('DAB_BENCH_BASE_DIR env variable is required (path to mxdatasets directory)');
+}
 
 const DATASETS = [
   // { input: `${BASE}/test_input.jsonl`, connections: `${BASE}/test_connections.json` },
