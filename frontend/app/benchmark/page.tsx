@@ -105,7 +105,7 @@ function extractStats(row: BenchmarkRow): RunStats {
       for (const call of entry.llmDebug) {
         llmCalls++;
         totalTokens += (call.total_tokens ?? call.totalTokens ?? 0);
-        totalCost += (call.cost ?? 0);
+        totalCost += (call.cost?.total ?? 0);
       }
     }
     if (entry._type === 'task_result') toolCalls++;
