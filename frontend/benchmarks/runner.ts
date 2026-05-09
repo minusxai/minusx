@@ -15,7 +15,8 @@ import {
 import { getNodeConnector } from '@/lib/connections';
 import type { NodeConnector } from '@/lib/connections/base';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
-import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
+import { piLogToLegacy } from '@/lib/chat-translator';
+import type { ConversationLog } from '@/orchestrator/types';
 
 // Suppress Node's TLS warning emitted when NODE_TLS_REJECT_UNAUTHORIZED=0
 // is set in .env (loaded before us via --env-file).
@@ -211,7 +212,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     completed++;
     if (error) errors++;
 
-    const result: BenchmarkResult = { input: row, log: convertOrchestratorLog(orch.log as any), duration_ms: durationMs, error };
+    const result: BenchmarkResult = { input: row, log: piLogToLegacy(orch.log as ConversationLog), duration_ms: durationMs, error };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
     // Log completion above the progress bar

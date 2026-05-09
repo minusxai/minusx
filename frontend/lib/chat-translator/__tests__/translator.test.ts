@@ -246,6 +246,35 @@ describe('piLogToLegacy — forward translation', () => {
     expect(resultByTaskId(out, 'tc2')).toBeUndefined();
   });
 
+  it('v2-native server tool names are renamed + reshaped to v1 contract for the UI', () => {
+    // The frontend UI speaks the legacy v1 task-log contract (ExecuteQuery
+    // with {query, connectionId}). v2 orchestrator emits ExecuteSQL with
+    // {sql, connection}. The translator bridges the two so production v2
+    // chat and benchmarks both feed the UI the shape it expects.
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'q' }),
+      assistantMessage({
+        parentAgentId: 'r1',
+        toolCalls: [
+          {
+            type: 'toolCall',
+            id: 'tcSQL',
+            name: 'ExecuteSQL',
+            arguments: { sql: 'select 1', connection: 'default_duckdb' },
+          },
+          { type: 'toolCall', id: 'tcList', name: 'ListDBConnections', arguments: {} },
+        ],
+        stopReason: 'toolUse',
+      }),
+    ];
+    const out = piLogToLegacy(log);
+    const sqlTask = taskById(out, 'tcSQL')!;
+    expect(sqlTask.agent).toBe('ExecuteQuery');
+    expect(sqlTask.args).toEqual({ query: 'select 1', connectionId: 'default_duckdb' });
+    const listTask = taskById(out, 'tcList')!;
+    expect(listTask.agent).toBe('ReadFiles');
+  });
+
   it('assistant with text + tool_calls → TalkToUser task FIRST, then per-tool tasks (preserves order)', () => {
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'foo' }),

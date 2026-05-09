@@ -7,7 +7,8 @@ import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText }
 import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch } from 'react-icons/lu';
 import { Button } from '@chakra-ui/react';
 import { parseLogToMessages } from '@/lib/conversations-utils';
-import { convertOrchestratorLog } from '@/lib/benchmark/log-converter';
+import { piLogToLegacy } from '@/lib/chat-translator';
+import type { ConversationLog } from '@/orchestrator/types';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
 import ToolDebugBar from '@/components/explore/ToolDebugBar';
@@ -54,7 +55,7 @@ function parseUploadedFile(text: string): ParsedFile {
       if (isProductionLog(obj.log)) {
         return { kind: 'conversation', log: obj.log };
       }
-      return { kind: 'conversation', log: convertOrchestratorLog(obj.log) };
+      return { kind: 'conversation', log: piLogToLegacy(obj.log as ConversationLog) };
     }
   } catch {
     // Not a single JSON object — try JSONL
@@ -407,7 +408,7 @@ export default function BenchmarkPage() {
     if (row) {
       currentLog = isProductionLog(row.log as unknown[])
         ? (row.log as unknown as ConversationLogEntry[])
-        : convertOrchestratorLog(row.log as any[]);
+        : piLogToLegacy(row.log as ConversationLog);
     }
   }
 
