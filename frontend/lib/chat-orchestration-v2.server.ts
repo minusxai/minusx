@@ -227,7 +227,13 @@ async function setupOrchestration(
 
   if (body.user_message) {
     if (isBenchmarkRoot) {
-      const benchCtx = buildBenchmarkContextFromSavedLog(savedLog);
+      // Production's wired SqlExecutor (v2-server-sources.ts) reads
+      // `ctx.effectiveUser` to authenticate connection lookups via
+      // runQuery. Pass the request user through so DB tool calls succeed.
+      const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
+        ...buildBenchmarkContextFromSavedLog(savedLog),
+        effectiveUser: user,
+      };
       const agent = new BenchmarkAnalystAgent(orch, { userMessage: body.user_message }, benchCtx);
       return {
         conversationId,
