@@ -7,7 +7,12 @@
 import 'server-only';
 import { getNodeConnector } from '@/lib/connections';
 import { NodeConnector } from '@/lib/connections/base';
-import { setSchemaSource, setSqlExecutor } from './sources';
+import {
+  setSchemaSource,
+  setSqlExecutor,
+  type SchemaSource,
+  type SqlExecutor,
+} from './sources';
 import type { ConnectionInfo } from './types';
 
 export interface BenchmarkConnectionEntry {
@@ -45,18 +50,17 @@ export function loadBenchmarkConnectionsFromEnv(): BenchmarkConnections {
 }
 
 /**
- * Wire the global SchemaSource/SqlExecutor singletons to the benchmark's
- * NodeConnector map. `allowedNames` restricts which connections this run is
- * allowed to touch — requests for any other connection return an error
- * response (search throws; execute returns isError=true).
- *
- * Call this once per benchmark row so the allowlist stays scoped.
+ * Build NodeConnector-backed SchemaSource + SqlExecutor for a benchmark
+ * run, scoped to a per-run allowlist of connection names. Pure — does not
+ * touch the global singletons; the caller decides whether to register
+ * globally (`setupBenchmarkSources`) or inject per-conversation via the
+ * agent context (v=2 chat continuation).
  */
-export function setupBenchmarkSources(
+export function buildBenchmarkSources(
   connectorsByName: Map<string, NodeConnector>,
   allowedNames: ReadonlySet<string>,
-): void {
-  setSchemaSource({
+): { schemaSource: SchemaSource; sqlExecutor: SqlExecutor } {
+  const schemaSource: SchemaSource = {
     async search(query, connection) {
       if (!allowedNames.has(connection)) {
         throw new Error(`'${connection}' is not in this agent's connections`);
@@ -75,8 +79,8 @@ export function setupBenchmarkSources(
           .map((t) => ({ table: t.table, columns: t.columns })),
       );
     },
-  });
-  setSqlExecutor({
+  };
+  const sqlExecutor: SqlExecutor = {
     async execute(sql, connection) {
       if (!allowedNames.has(connection)) {
         return { rows: [], error: `'${connection}' is not in this agent's connections` };
@@ -90,5 +94,20 @@ export function setupBenchmarkSources(
         return { rows: [], error: err instanceof Error ? err.message : String(err) };
       }
     },
-  });
+  };
+  return { schemaSource, sqlExecutor };
+}
+
+/**
+ * Wire the global SchemaSource/SqlExecutor singletons to the benchmark's
+ * NodeConnector map. Thin wrapper over `buildBenchmarkSources` — kept for
+ * the existing benchmark-runner call site that expects globals.
+ */
+export function setupBenchmarkSources(
+  connectorsByName: Map<string, NodeConnector>,
+  allowedNames: ReadonlySet<string>,
+): void {
+  const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, allowedNames);
+  setSchemaSource(schemaSource);
+  setSqlExecutor(sqlExecutor);
 }

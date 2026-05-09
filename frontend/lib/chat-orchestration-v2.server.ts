@@ -31,6 +31,10 @@ import { SearchFiles } from '@/agents/analyst/file-tools';
 import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
+import {
+  buildBenchmarkSources,
+  loadBenchmarkConnectionsFromEnv,
+} from '@/agents/benchmark-analyst/connection-source';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
@@ -227,11 +231,23 @@ async function setupOrchestration(
 
   if (body.user_message) {
     if (isBenchmarkRoot) {
-      // Production's wired SqlExecutor (v2-server-sources.ts) reads
-      // `ctx.effectiveUser` to authenticate connection lookups via
-      // runQuery. Pass the request user through so DB tool calls succeed.
+      // Wire NodeConnector-backed executors per-conversation from
+      // BENCHMARK_CONNECTIONS_CONFIG env (the same env var the runner
+      // uses) so SQL and schema lookups go to the benchmark's own
+      // connections, NOT production's runQuery + FilesAPI. Per-context
+      // executors override the production singletons (see db-tools.ts:
+      // `this.context.sqlExecutor ?? getSqlExecutor()`). When the env is
+      // unset, allowed connectors are missing → executor returns a clear
+      // "connector 'X' not loaded" error rather than a confusing
+      // "missing effectiveUser" one.
+      const baseBenchCtx = buildBenchmarkContextFromSavedLog(savedLog);
+      const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
+      const { connectorsByName } = loadBenchmarkConnectionsFromEnv();
+      const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, allowedNames);
       const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
-        ...buildBenchmarkContextFromSavedLog(savedLog),
+        ...baseBenchCtx,
+        schemaSource,
+        sqlExecutor,
         effectiveUser: user,
       };
       const agent = new BenchmarkAnalystAgent(orch, { userMessage: body.user_message }, benchCtx);
