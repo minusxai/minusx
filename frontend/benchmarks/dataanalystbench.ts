@@ -48,7 +48,7 @@ const CONFIG = {
 const BASE = '/Users/nuwandavek/Documents/minusx/dataagentbench_ucb/mxdatasets';
 
 const DATASETS = [
-//   { input: `${BASE}/test_input.jsonl`, connections: `${BASE}/test_connections.json` },
+  // { input: `${BASE}/test_input.jsonl`, connections: `${BASE}/test_connections.json` },
   { input: `${BASE}/stockindex_input.jsonl`, connections: `${BASE}/stockindex_connections.json` },
 ];
 

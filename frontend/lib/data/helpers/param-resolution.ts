@@ -120,7 +120,11 @@ export function augmentWithParams(
 
   // Cascade the same inherited params to all references.
   // Covers: dashboard → questions, question → referenced questions, etc.
-  for (const refId of fileState.references || []) {
+  // Use Array.isArray so a malformed (truthy, non-iterable) `references` value
+  // — which can leak in from FileInfo metadata updates — doesn't crash the
+  // selector on every render with "object is not iterable".
+  const refs = Array.isArray(fileState.references) ? fileState.references : [];
+  for (const refId of refs) {
     const refFile = selectFile(state, refId);
     if (refFile) {
       for (const [key, qr] of augmentWithParams(state, refFile, inheritedParams)) {

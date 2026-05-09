@@ -47,7 +47,7 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
         if (id < 0) console.error(`[selectAugmentedFiles] Virtual file ${id} not found in Redux`);
         return undefined;
       }
-      const references = (fileState.references || [])
+      const references = (Array.isArray(fileState.references) ? fileState.references : [])
         .map(refId => selectFile(state, refId))
         .filter((f): f is FileState => f !== undefined);
 
@@ -95,7 +95,7 @@ export function selectAugmentedFolder(state: RootState, path: string): Augmented
   const mode = user?.mode || 'org';
   const role = user?.role || 'viewer';
 
-  const files = (folder.references || [])
+  const files = (Array.isArray(folder.references) ? folder.references : [])
     .map(id => selectFile(state, id))
     .filter((f): f is FileState => {
       if (!f) return false;

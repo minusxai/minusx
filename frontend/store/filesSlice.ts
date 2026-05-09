@@ -201,14 +201,19 @@ const filesSlice = createSlice({
       action.payload.forEach(fileInfo => {
         // If file already exists, update metadata only
         if (state.files[fileInfo.id]) {
+          // Folders preserve their resolved children; everything else takes the
+          // metadata payload's references. Wrap in Array.isArray so a malformed
+          // (non-array) value never lands in Redux — selectors iterate this and
+          // crash with "object is not iterable" if it's a truthy non-array.
+          const candidate = fileInfo.type === 'folder'
+            ? (state.files[fileInfo.id]?.references ?? fileInfo.references)
+            : fileInfo.references;
           state.files[fileInfo.id] = {
             ...state.files[fileInfo.id],
             name: fileInfo.name,
             path: fileInfo.path,
             type: fileInfo.type,
-            references: fileInfo.type === 'folder'
-              ? (state.files[fileInfo.id]?.references ?? fileInfo.references)
-              : fileInfo.references,
+            references: Array.isArray(candidate) ? candidate : [],
             created_at: fileInfo.created_at,
             updated_at: fileInfo.updated_at,
             updatedAt: Date.now()
@@ -540,7 +545,7 @@ const filesSlice = createSlice({
             name: fileInfo.name,
             path: fileInfo.path,
             type: fileInfo.type,
-            references: fileInfo.references,
+            references: Array.isArray(fileInfo.references) ? fileInfo.references : [],
             created_at: fileInfo.created_at,
             updated_at: fileInfo.updated_at,
             updatedAt: Date.now()
