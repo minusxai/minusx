@@ -9,7 +9,7 @@ import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
 import {
-  setupBenchmarkSources,
+  buildBenchmarkSources,
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
 import { getNodeConnector } from '@/lib/connections';
@@ -46,6 +46,11 @@ export interface BenchmarkRunConfig {
   concurrency?: number;
   /** Dataset label for display (derived from input path if omitted) */
   label?: string;
+  /** Suppress the interval-driven progress bar. Per-row completion logs
+   *  still print (with the dataset label prefix). Use this when running
+   *  multiple datasets in parallel — concurrent progress bars step on
+   *  each other. */
+  quiet?: boolean;
 }
 
 export interface BenchmarkResult {
@@ -153,8 +158,13 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     connectionInfos.set(name, { name, dialect, description });
   }
 
-  // Wire sources once with all connections (per-row scoping via ctx.connections)
-  setupBenchmarkSources(connectorsByName, new Set(connectorsByName.keys()));
+  // Build per-dataset executors. We pass them through agent context (not
+  // global singletons) so multiple datasets can run in parallel without
+  // clobbering each other's wiring.
+  const { schemaSource, sqlExecutor } = buildBenchmarkSources(
+    connectorsByName,
+    new Set(connectorsByName.keys()),
+  );
 
   // Load input rows
   const inputRows: InputRow[] = readFileSync(inputPath, 'utf-8')
@@ -181,19 +191,23 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   let errors = 0;
   const startedAt = Date.now();
 
-  // Tick the progress bar every 300ms while running
-  const tick = isTTY
+  // Tick the progress bar every 300ms while running. Disabled in quiet
+  // mode (multi-dataset parallel runs interleave too many concurrent
+  // progress bars to be readable).
+  const tick = (isTTY && !config.quiet)
     ? setInterval(() => renderProgress(completed, total, running, errors, Date.now() - startedAt), 300)
     : null;
 
   async function runRow(row: InputRow, index: number): Promise<void> {
     running++;
-    renderProgress(completed, total, running, errors, Date.now() - startedAt);
+    if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
 
     const ctx = {
       connections: row.allowed_connections
         .map((name) => connectionInfos.get(name))
         .filter((ci): ci is ConnectionInfo => !!ci),
+      schemaSource,
+      sqlExecutor,
     };
     const orch = new Orchestrator(config.registrables);
     const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
@@ -219,14 +233,17 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
     // Log completion above the progress bar
-    clearLine();
+    if (!config.quiet) clearLine();
     const icon = error ? `${c.red}✗${c.reset}` : `${c.green}✓${c.reset}`;
     const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
+    // In quiet (parallel) mode the dataset label prefixes the row line so
+    // interleaved completions from different datasets are distinguishable.
+    const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
     const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
     const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
     const errMsg = error ? `  ${c.red}${error.slice(0, 60)}${c.reset}` : '';
-    console.log(`  ${icon} ${idx}  ${msg}  ${dur}${errMsg}`);
-    renderProgress(completed, total, running, errors, Date.now() - startedAt);
+    console.log(`  ${icon} ${labelPrefix}${idx}  ${msg}  ${dur}${errMsg}`);
+    if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
   }
 
   // Simple concurrency pool
@@ -240,10 +257,15 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   await Promise.all(workers);
 
   if (tick) clearInterval(tick);
-  // Render final progress bar (stays visible)
-  clearLine();
   const totalMs = Date.now() - startedAt;
-  console.log(progressLine(completed, total, 0, errors, totalMs));
+  if (!config.quiet) {
+    // Render final progress bar (stays visible)
+    clearLine();
+    console.log(progressLine(completed, total, 0, errors, totalMs));
+  } else {
+    const errStr = errors > 0 ? `  ${c.red}${errors} err${c.reset}` : '';
+    console.log(`  ${c.bold}${c.cyan}${label}${c.reset}  done  ${c.dim}${completed}/${total}${c.reset}${errStr}  ${c.dim}${formatDuration(totalMs)}${c.reset}`);
+  }
 
   return { rows: completed, errors, durationMs: totalMs };
 }

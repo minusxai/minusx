@@ -123,20 +123,27 @@ logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  $
 
 async function main() {
   const globalStart = Date.now();
-  let totalRows = 0;
-  let totalErrors = 0;
 
-  for (const ds of DATASETS) {
-    const result = await runBenchmark({
-      input: ds.input,
-      connections: ds.connections,
-      agentClass: Agent,
-      registrables,
-      concurrency: CONFIG.concurrency,
-    });
-    totalRows += result.rows;
-    totalErrors += result.errors;
-  }
+  // Run all datasets in parallel. Each dataset's executors are scoped to
+  // its agent context (no global wiring), so concurrent datasets don't
+  // clobber each other. `quiet: true` disables per-dataset progress bars
+  // since they'd interleave unreadably across N parallel runs.
+  const parallel = DATASETS.length > 1;
+  const results = await Promise.all(
+    DATASETS.map((ds) =>
+      runBenchmark({
+        input: ds.input,
+        connections: ds.connections,
+        agentClass: Agent,
+        registrables,
+        concurrency: CONFIG.concurrency,
+        quiet: parallel,
+      }),
+    ),
+  );
+
+  const totalRows = results.reduce((s, r) => s + r.rows, 0);
+  const totalErrors = results.reduce((s, r) => s + r.errors, 0);
 
   logSummary(DATASETS.length, totalRows, totalErrors, Date.now() - globalStart);
 }
