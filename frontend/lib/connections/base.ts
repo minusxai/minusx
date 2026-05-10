@@ -77,6 +77,13 @@ export interface CsvConfig {
     columns: Array<{ name: string; type: string }>;
   }>;
 }
+export interface MongoConfig {
+  host: string;
+  port: number;
+  database: string;
+  username?: string;
+  password?: string;
+}
 
 /** Maps dialect string → config shape. */
 export interface ConnectorConfigMap {
@@ -88,6 +95,7 @@ export interface ConnectorConfigMap {
   csv: CsvConfig;
   'google-sheets': CsvConfig;
   internal_db: Record<string, unknown>;
+  mongo: MongoConfig;
 }
 
 export type ConnectorDialect = keyof ConnectorConfigMap;

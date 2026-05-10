@@ -7,6 +7,7 @@ import { BigQueryConnector } from './bigquery-connector';
 import { AthenaConnector } from './athena-connector';
 import { InternalDbConnector } from './internal-db-connector';
 import { SqliteConnector } from './sqlite-connector';
+import { MongoConnector } from './mongo-connector';
 
 export type {
   SchemaEntry,
@@ -22,6 +23,7 @@ export type {
   BigQueryConfig,
   AthenaConfig,
   CsvConfig,
+  MongoConfig,
 } from './base';
 export { NodeConnector } from './base';
 export { getOrCreateDuckDbInstance } from './duckdb-registry';
@@ -80,6 +82,10 @@ export function getNodeConnector(
 
   if (type === 'internal_db') {
     return new InternalDbConnector(name, config);
+  }
+
+  if (type === 'mongo') {
+    return new MongoConnector(name, config);
   }
 
   return null;
