@@ -1,12 +1,15 @@
 // Data analyst benchmark — edit config and datasets below, then run:
-//   cd frontend && npm run benchmark:analyst
+//   cd frontend && npm run benchmark:dab
+//
+// Datasets are auto-discovered: every `<name>_input.jsonl` in
+// DAB_BENCH_BASE_DIR is paired with `<name>_connections.json`. To run a
+// subset, set DAB_BENCH_DATASETS to a comma-separated list of names,
+// e.g. `DAB_BENCH_DATASETS=agnews,yelp npm run benchmark:dab`.
 
-// import { writeFileSync } from 'node:fs';
-// import path from 'node:path';
-// import { fileURLToPath } from 'node:url';
+import { readdirSync, existsSync } from 'node:fs';
 import { type Tool, type TSchema } from '@mariozechner/pi-ai';
 import { getModel } from '@/lib/llm/get-model';
-import { DAB_BENCH_BASE_DIR } from '@/lib/config';
+import { DAB_BENCH_BASE_DIR, DAB_BENCH_DATASETS } from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
 import {
   BenchmarkAnalystAgent,
@@ -52,10 +55,39 @@ if (!BASE) {
   throw new Error('DAB_BENCH_BASE_DIR env variable is required (path to mxdatasets directory)');
 }
 
-const DATASETS = [
-  // { input: `${BASE}/test_input.jsonl`, connections: `${BASE}/test_connections.json` },
-  { input: `${BASE}/stockindex_input.jsonl`, connections: `${BASE}/stockindex_connections.json` },
-];
+// Auto-discover datasets: every `<name>_input.jsonl` in BASE is paired
+// with `<name>_connections.json`. Skips inputs without a matching
+// connections file. Optional DAB_BENCH_DATASETS env (comma-separated
+// names) filters to a subset; useful when iterating on a single dataset.
+function discoverDatasets(baseDir: string): { input: string; connections: string }[] {
+  const inputSuffix = '_input.jsonl';
+  const allInputs = readdirSync(baseDir).filter((f) => f.endsWith(inputSuffix));
+  const filter = DAB_BENCH_DATASETS
+    ? new Set(DAB_BENCH_DATASETS.split(',').map((s) => s.trim()).filter(Boolean))
+    : null;
+  const datasets: { input: string; connections: string }[] = [];
+  for (const fileName of allInputs.sort()) {
+    const name = fileName.slice(0, -inputSuffix.length);
+    if (filter && !filter.has(name)) continue;
+    const connectionsPath = `${baseDir}/${name}_connections.json`;
+    if (!existsSync(connectionsPath)) {
+      console.warn(`Skipping ${name}: no matching connections file at ${connectionsPath}`);
+      continue;
+    }
+    datasets.push({ input: `${baseDir}/${fileName}`, connections: connectionsPath });
+  }
+  if (filter) {
+    const matched = new Set(datasets.map((d) => d.input.slice(d.input.lastIndexOf('/') + 1, -inputSuffix.length)));
+    for (const requested of filter) {
+      if (!matched.has(requested)) {
+        console.warn(`DAB_BENCH_DATASETS: dataset '${requested}' not found in ${baseDir}`);
+      }
+    }
+  }
+  return datasets;
+}
+
+const DATASETS = discoverDatasets(BASE);
 
 // ── Agent (customize tools / prompt here) ─────────────────────────────────
 

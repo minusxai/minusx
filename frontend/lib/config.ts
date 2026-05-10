@@ -52,6 +52,7 @@ interface EnvironmentConfig {
   ANALYTICS_CONFIG: string | undefined;
   NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG: string | undefined;
   DAB_BENCH_BASE_DIR: string | undefined;
+  DAB_BENCH_DATASETS: string | undefined;
 }
 
 const errors: string[] = [];
@@ -127,6 +128,7 @@ const config: EnvironmentConfig = {
   ANALYTICS_CONFIG: process.env.ANALYTICS_CONFIG,
   NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG: process.env.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG,
   DAB_BENCH_BASE_DIR: process.env.DAB_BENCH_BASE_DIR,
+  DAB_BENCH_DATASETS: process.env.DAB_BENCH_DATASETS,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -190,3 +192,4 @@ export const LANDING_HTML = config.LANDING_HTML;
 export const ENABLE_ORG_CREATION = config.ENABLE_ORG_CREATION;
 export const ANALYTICS_CONFIG = config.ANALYTICS_CONFIG ?? config.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG;
 export const DAB_BENCH_BASE_DIR = config.DAB_BENCH_BASE_DIR;
+export const DAB_BENCH_DATASETS = config.DAB_BENCH_DATASETS;
