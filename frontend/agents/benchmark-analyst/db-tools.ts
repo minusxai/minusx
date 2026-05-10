@@ -70,22 +70,21 @@ export class SearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benchmar
   }
 }
 
-const ExecuteSQLParams = Type.Object({
-  connection: Type.String(),
-  sql: Type.String(),
+const ExecuteQueryParams = Type.Object({
+  connectionId: Type.String(),
+  query: Type.String(),
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of the markdown table returned to the LLM (default 10,000, max 100,000). Increase only if you need to see more rows in text form. Use OFFSET in SQL to page through large results instead.',
   })),
 });
 
 /**
- * Shape emitted in `details` so the legacy `ExecuteSQLDisplay` (compact +
- * detail card) can render a proper data table with full untruncated rows.
- * Mirrors `ExecuteQueryDetails` in `frontend/lib/types.ts` — kept loose-typed
- * here because this module is deliberately standalone and must not import
- * from `lib/types`.
+ * Shape emitted in `details` so the chat UI display can render a proper
+ * data table with full untruncated rows. Mirrors `ExecuteQueryDetails` in
+ * `frontend/lib/types.ts` — kept loose-typed here because this module is
+ * deliberately standalone and must not import from `lib/types`.
  */
-interface ExecuteSqlDetails extends Record<string, unknown> {
+interface ExecuteQueryDetails extends Record<string, unknown> {
   success: boolean;
   queryResult?: { columns: string[]; types: string[]; rows: Record<string, unknown>[] };
   error?: string;
@@ -93,17 +92,17 @@ interface ExecuteSqlDetails extends Record<string, unknown> {
   finalQuery?: string;
 }
 
-export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams, BenchmarkAnalystContext, ExecuteSqlDetails> {
-  static readonly schema: Tool<typeof ExecuteSQLParams> = {
-    name: 'ExecuteSQL',
-    description: 'Execute a SQL query against a named connection. Returns a JSON object with: data (GFM markdown of the first shownRows), totalRows (full row count), shownRows (rows in data), truncated (true when shownRows < totalRows), columns, types. Increase maxChars (up to 100,000) or OFFSET in SQL to page through large results.',
-    parameters: ExecuteSQLParams,
+export class ExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAnalystContext, ExecuteQueryDetails> {
+  static readonly schema: Tool<typeof ExecuteQueryParams> = {
+    name: 'ExecuteQuery',
+    description: 'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types. Increase maxChars (up to 100,000) or OFFSET in SQL to page large results.',
+    parameters: ExecuteQueryParams,
   };
 
-  async run(): Promise<ToolResponse<ExecuteSqlDetails>> {
+  async run(): Promise<ToolResponse<ExecuteQueryDetails>> {
     const result = await (this.context.sqlExecutor ?? getSqlExecutor()).execute(
-      this.parameters.sql,
-      this.parameters.connection,
+      this.parameters.query,
+      this.parameters.connectionId,
       this.context,
     );
     if (result.error) {
@@ -119,8 +118,8 @@ export class ExecuteSQL extends MXTool<typeof ExecuteSQLParams, BenchmarkAnalyst
     const types = result.types ?? columns.map(() => 'unknown');
 
     // Compress for LLM-visible content: markdown table + truncation metadata.
-    // Reuses the same helper that `/api/chat`'s ExecuteQuery handler uses, so
-    // v=2 ExecuteSQL emits the same wire shape as v=1 ExecuteQuery.
+    // Same helper as the legacy /api/chat ExecuteQuery path, so the wire
+    // shape on the LLM side matches.
     const maxChars = Math.min(
       this.parameters.maxChars ?? TOOL_DEFAULT_LIMIT_CHARS,
       TOOL_MAX_LIMIT_CHARS,

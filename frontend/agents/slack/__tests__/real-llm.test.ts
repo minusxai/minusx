@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
-import { ExecuteSQL, ListDBConnections, SearchDBSchema } from '@/agents/analyst/analyst-agent';
+import { ExecuteQuery, ListDBConnections, SearchDBSchema } from '@/agents/analyst/analyst-agent';
 import { SlackAgent } from '../slack-agent';
 import { setSchemaSource, setSqlExecutor } from '@/agents/analyst/sources';
 import specs from './specs/slack.real.json';
@@ -8,7 +8,7 @@ import specs from './specs/slack.real.json';
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
 
-const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, SlackAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, SlackAgent];
 
 beforeAll(() => {
   if (!RUN_REAL) return;

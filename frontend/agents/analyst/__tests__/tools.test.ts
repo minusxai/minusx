@@ -1,7 +1,7 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AnalystAgentContext } from '../types';
 import {
-  ExecuteSQL,
+  ExecuteQuery,
   SearchDBSchema,
 } from '../analyst-agent';
 import {
@@ -50,7 +50,7 @@ describe('SearchDBSchema', () => {
   });
 });
 
-describe('ExecuteSQL', () => {
+describe('ExecuteQuery', () => {
   beforeEach(() => resetSources());
 
   it('returns compressed markdown + metadata on success', async () => {
@@ -58,7 +58,7 @@ describe('ExecuteSQL', () => {
     setSqlExecutor({ execute: async () => ({ rows }) });
 
     const orch = new Orchestrator([]);
-    const tool = new ExecuteSQL(orch, { connection: 'main', sql: 'SELECT count(*) FROM users' }, ctx);
+    const tool = new ExecuteQuery(orch, { connectionId: 'main', query: 'SELECT count(*) FROM users' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
@@ -83,7 +83,7 @@ describe('ExecuteSQL', () => {
     setSqlExecutor({ execute: async () => ({ rows: [], error: 'syntax error near "FRM"' }) });
 
     const orch = new Orchestrator([]);
-    const tool = new ExecuteSQL(orch, { connection: 'main', sql: 'SELECT * FRM bad' }, ctx);
+    const tool = new ExecuteQuery(orch, { connectionId: 'main', query: 'SELECT * FRM bad' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(true);

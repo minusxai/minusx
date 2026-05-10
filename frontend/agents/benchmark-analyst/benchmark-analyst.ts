@@ -7,7 +7,7 @@ import {
 import { MXAgent } from '@/orchestrator/types';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import { ListDBConnections, SearchDBSchema, ExecuteSQL } from './db-tools';
+import { ListDBConnections, SearchDBSchema, ExecuteQuery } from './db-tools';
 import type { BenchmarkAnalystContext } from './types';
 
 export const fauxRegistration = registerFauxProvider({
@@ -37,7 +37,7 @@ export class BenchmarkAnalystAgent<
   static readonly tools: Tool<TSchema>[] = [
     ListDBConnections.schema,
     SearchDBSchema.schema,
-    ExecuteSQL.schema,
+    ExecuteQuery.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
@@ -57,4 +57,4 @@ export class BenchmarkAnalystAgent<
   }
 }
 
-export { ListDBConnections, SearchDBSchema, ExecuteSQL };
+export { ListDBConnections, SearchDBSchema, ExecuteQuery };

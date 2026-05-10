@@ -11,7 +11,7 @@ import 'dotenv/config';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import {
   AnalystAgent,
-  ExecuteSQL,
+  ExecuteQuery,
   ListDBConnections,
   SearchDBSchema,
 } from '../analyst-agent';
@@ -21,7 +21,7 @@ import specs from './specs/analyst.real.json';
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
 
-const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, AnalystAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, AnalystAgent];
 
 beforeAll(() => {
   if (!RUN_REAL) return;

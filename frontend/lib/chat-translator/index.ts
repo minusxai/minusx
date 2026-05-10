@@ -80,31 +80,22 @@ function deriveRunId(seed: string): string {
 
 // ─── v2 → v1 tool alias table ────────────────────────────────────────
 //
-// The frontend UI speaks the legacy v1 task-log contract: tool names like
-// `ExecuteQuery` with args `{query, connectionId}`. The v2 orchestrator
-// uses pi-ai-native names (`ExecuteSQL` with `{sql, connection}`). This
-// table renames + reshapes during the v2→legacy translation so the UI
-// dispatch and display components keep working unchanged.
+// Empty today: every v2 orchestrator tool now uses its v1 / UI-native
+// name natively (ExecuteQuery, ListDBConnections, SearchDBSchema, etc.
+// all have first-class display components). Kept as an extension point
+// so a future v2-only tool that doesn't have a UI mapping can be aliased
+// here without touching the translator's hot path again.
 //
-// Constraint: only server-side tools belong here. Frontend tools (Clarify,
-// Navigate, etc.) bridge through the UI and round-trip back via
-// `legacyToolResultToPi` — renaming them outbound would create a
-// `toolName` mismatch in the pi-ai log on the next turn. Server-side
-// tools (extend `MXTool` and run in the orchestrator) never round-trip.
-const V2_TO_V1_TOOL_NAME: Record<string, string> = {
-  ExecuteSQL: 'ExecuteQuery',
-  ListDBConnections: 'ReadFiles',
-};
+// Constraint when adding entries: only server-side tools belong here.
+// Frontend tools (Clarify, Navigate, etc.) bridge through the UI and
+// round-trip back via `legacyToolResultToPi` — renaming them outbound
+// would create a `toolName` mismatch in the pi-ai log on the next turn.
+// Server-side tools (extend `MXTool`, run in the orchestrator) never
+// round-trip.
+const V2_TO_V1_TOOL_NAME: Record<string, string> = {};
 
 function v2ToV1ToolName(name: string): string {
   return V2_TO_V1_TOOL_NAME[name] ?? name;
-}
-
-function v2ToV1ToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
-  if (name === 'ExecuteSQL') {
-    return { query: args.sql, connectionId: args.connection };
-  }
-  return args;
 }
 
 // ─── piLogToLegacy: forward ─────────────────────────────────────────
@@ -234,7 +225,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           _run_id: deriveRunId(tc.id),
           _parent_unique_id: entry.parent_id ?? undefined,
           agent: v2ToV1ToolName(tc.name),
-          args: v2ToV1ToolArgs(tc.name, (tc.arguments ?? {}) as Record<string, unknown>),
+          args: (tc.arguments ?? {}) as Record<string, unknown>,
           unique_id: tc.id,
           created_at: createdAt,
         };
@@ -340,10 +331,7 @@ export function piStreamEventToLegacy(
         type: 'function',
         function: {
           name: v2ToV1ToolName(ev.toolCall.name),
-          arguments: v2ToV1ToolArgs(
-            ev.toolCall.name,
-            (ev.toolCall.arguments ?? {}) as Record<string, unknown>,
-          ),
+          arguments: (ev.toolCall.arguments ?? {}) as Record<string, unknown>,
         },
       },
       conversationID,

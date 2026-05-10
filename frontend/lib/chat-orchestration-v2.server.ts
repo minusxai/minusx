@@ -28,7 +28,7 @@ import {
   LoadSkillFrontend,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
-import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
+import { ListDBConnections, SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
 import {
@@ -69,7 +69,7 @@ setupV2ServerSources();
 export const V2_REGISTRABLES: RegistrableClass[] = [
   ListDBConnections,
   SearchDBSchema,
-  ExecuteSQL,
+  ExecuteQuery,
   ReadFiles,
   SearchFiles,
   EditFile,

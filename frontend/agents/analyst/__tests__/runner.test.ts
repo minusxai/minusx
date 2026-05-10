@@ -1,7 +1,7 @@
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import {
   AnalystAgent,
-  ExecuteSQL,
+  ExecuteQuery,
   ListDBConnections,
   SearchDBSchema,
   fauxRegistration,
@@ -9,7 +9,7 @@ import {
 import { resetSources, setSchemaSource, setSqlExecutor } from '../sources';
 import specs from './specs/analyst.faux.json';
 
-const registrables = [ListDBConnections, SearchDBSchema, ExecuteSQL, AnalystAgent];
+const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, AnalystAgent];
 
 describe.each(specs as TestSpec[])('faux spec: $name', (spec) => {
   beforeEach(() => {

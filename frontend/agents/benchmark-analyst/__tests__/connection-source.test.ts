@@ -4,7 +4,11 @@
 // SchemaSource/SqlExecutor singletons.
 
 import { describe, it, expect } from 'vitest';
-import { buildBenchmarkSources } from '@/agents/benchmark-analyst/connection-source';
+import {
+  appendLimitIfMissing,
+  buildBenchmarkSources,
+  BENCHMARK_MAX_ROWS,
+} from '@/agents/benchmark-analyst/connection-source';
 import type { NodeConnector } from '@/lib/connections/base';
 
 function fakeConnector(): NodeConnector {
@@ -33,7 +37,8 @@ describe('buildBenchmarkSources', () => {
 
     const result = await sqlExecutor.execute('select 1', 'default_duckdb');
     expect(result.error).toBeUndefined();
-    expect(result.rows).toEqual([{ sql: 'select 1', ok: true }]);
+    // The executor appends `LIMIT 100` (BENCHMARK_MAX_ROWS) to bound results.
+    expect(result.rows).toEqual([{ sql: 'select 1 LIMIT 100', ok: true }]);
   });
 
   it('returns an error from SqlExecutor when the connection is not in the allowlist', async () => {
@@ -59,5 +64,33 @@ describe('buildBenchmarkSources', () => {
     const hits = await schemaSource.search('order', 'default_duckdb');
     expect(hits).toHaveLength(1);
     expect(hits[0].table).toBe('orders');
+  });
+});
+
+describe('appendLimitIfMissing', () => {
+  it('appends LIMIT when the SQL has no LIMIT clause', () => {
+    expect(appendLimitIfMissing('select * from t', 100)).toBe('select * from t LIMIT 100');
+  });
+
+  it('strips a single trailing semicolon before appending', () => {
+    expect(appendLimitIfMissing('select * from t;', 100)).toBe('select * from t LIMIT 100');
+  });
+
+  it('leaves the SQL alone when LIMIT is already present (case-insensitive)', () => {
+    expect(appendLimitIfMissing('SELECT * FROM t LIMIT 5', 100)).toBe('SELECT * FROM t LIMIT 5');
+    expect(appendLimitIfMissing('select * from t limit 200', 100)).toBe('select * from t limit 200');
+  });
+
+  it('caps SqlExecutor results to BENCHMARK_MAX_ROWS even when the connector returns more', async () => {
+    const tooManyRows = Array.from({ length: BENCHMARK_MAX_ROWS + 50 }, (_, i) => ({ i }));
+    const conn: NodeConnector = {
+      async getSchema() { return []; },
+      async query() { return { rows: tooManyRows }; },
+    } as unknown as NodeConnector;
+    const connectors = new Map<string, NodeConnector>([['db', conn]]);
+    const { sqlExecutor } = buildBenchmarkSources(connectors, new Set(['db']));
+    const result = await sqlExecutor.execute('select * from t', 'db');
+    expect(result.rows).toHaveLength(BENCHMARK_MAX_ROWS);
+    expect(result.error).toBeUndefined();
   });
 });
