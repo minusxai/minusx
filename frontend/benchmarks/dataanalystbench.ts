@@ -221,6 +221,15 @@ async function main() {
     totalTimeouts,
     datasetTimeouts,
   );
+
+  // Force-exit. The MongoConnector keeps its mongo client open by
+  // design (closing per-call races the driver's session lifecycle —
+  // see lib/connections/mongo-connector.ts comment). At benchmark CLI
+  // exit time those background heartbeats / pool timers keep the event
+  // loop alive, so we explicitly hard-exit. Process exit reclaims
+  // sockets cleanly. Exit code 0 — partial timeouts/errors are
+  // reported in the summary but don't fail the run.
+  process.exit(0);
 }
 
 main();
