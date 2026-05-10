@@ -11,13 +11,13 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import {
   BenchmarkAnalystAgent,
   SearchDBSchema,
-  ExecuteSQL,
+  ExecuteQuery,
 } from '@/agents/benchmark-analyst/benchmark-analyst';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
 const tools = [
     SearchDBSchema.schema,
-    ExecuteSQL.schema,
+    ExecuteQuery.schema,
   ];
 
 // ── Config ────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ class Agent extends BenchmarkAnalystAgent {
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-const registrables = [SearchDBSchema, ExecuteSQL, Agent];
+const registrables = [SearchDBSchema, ExecuteQuery, Agent];
 
 
 logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);

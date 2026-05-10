@@ -11,7 +11,7 @@ export const EXECUTE_SQL_MAX_COLS = 12;
 const EXECUTE_SQL_COLLAPSED_COLS = 12; // Narrower when collapsed
 const EXECUTE_SQL_COLLAPSED_COLS_COMPACT = 12; // Compact: 4 tools per row
 
-export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompact, showThinking }: DisplayProps) {
+export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCompact, showThinking }: DisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
   const [isThinkingSQL, setIsThinkingSQL] = useState(true); // Collapsed by default
   const [toolCall, toolMessage] = toolCallTuple;

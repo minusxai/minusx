@@ -1,5 +1,5 @@
 import { ToolNames } from '@/lib/types';
-import ExecuteSQLDisplay from '@/components/explore/tools/ExecuteSQLDisplay';
+import ExecuteQueryDisplay from '@/components/explore/tools/ExecuteQueryDisplay';
 import DefaultToolDisplay from '@/components/explore/tools/DefaultToolDisplay';
 import ContentDisplay from '@/components/explore/tools/ContentDisplay';
 import ClarifyDisplay from '@/components/explore/tools/ClarifyDisplay';
@@ -31,7 +31,7 @@ export interface ToolConfig {
 // Centralized tool configurations
 export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   [ToolNames.EXECUTE_QUERY]: {
-    displayComponent: ExecuteSQLDisplay,
+    displayComponent: ExecuteQueryDisplay,
 
     chipLabel: 'query',
     chipLabelPlural: 'queries',

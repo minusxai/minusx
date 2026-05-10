@@ -49,7 +49,7 @@ export function setupV2ServerSources(): void {
       if (!user) {
         return {
           rows: [],
-          error: 'ExecuteSQL: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
+          error: 'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
         };
       }
       const start = Date.now();

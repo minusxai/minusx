@@ -80,11 +80,11 @@ function deriveRunId(seed: string): string {
 
 // ─── v2 → v1 tool alias table ────────────────────────────────────────
 //
-// The frontend UI speaks the legacy v1 task-log contract: tool names like
-// `ExecuteQuery` with args `{query, connectionId}`. The v2 orchestrator
-// uses pi-ai-native names (`ExecuteSQL` with `{sql, connection}`). This
-// table renames + reshapes during the v2→legacy translation so the UI
-// dispatch and display components keep working unchanged.
+// The frontend UI dispatches on legacy v1 tool names (e.g. `ReadFiles`).
+// Most v2 orchestrator tools already use the v1 names natively (after
+// the ExecuteSQL→ExecuteQuery rename), so this table is small. It still
+// covers the cases where a v2 tool's pi-ai name differs from what the UI
+// expects.
 //
 // Constraint: only server-side tools belong here. Frontend tools (Clarify,
 // Navigate, etc.) bridge through the UI and round-trip back via
@@ -92,7 +92,6 @@ function deriveRunId(seed: string): string {
 // `toolName` mismatch in the pi-ai log on the next turn. Server-side
 // tools (extend `MXTool` and run in the orchestrator) never round-trip.
 const V2_TO_V1_TOOL_NAME: Record<string, string> = {
-  ExecuteSQL: 'ExecuteQuery',
   ListDBConnections: 'ReadFiles',
 };
 
@@ -100,10 +99,7 @@ function v2ToV1ToolName(name: string): string {
   return V2_TO_V1_TOOL_NAME[name] ?? name;
 }
 
-function v2ToV1ToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
-  if (name === 'ExecuteSQL') {
-    return { query: args.sql, connectionId: args.connection };
-  }
+function v2ToV1ToolArgs(_name: string, args: Record<string, unknown>): Record<string, unknown> {
   return args;
 }
 

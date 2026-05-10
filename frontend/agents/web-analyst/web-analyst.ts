@@ -4,7 +4,7 @@ import {
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { ListDBConnections, SearchDBSchema, ExecuteSQL } from '@/agents/benchmark-analyst/db-tools';
+import { ListDBConnections, SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
@@ -49,7 +49,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   static readonly tools: Tool<TSchema>[] = [
     ListDBConnections.schema,
     SearchDBSchema.schema,
-    ExecuteSQL.schema,
+    ExecuteQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
     EditFile.schema,

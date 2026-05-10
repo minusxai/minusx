@@ -230,7 +230,7 @@ describe('piLogToLegacy — forward translation', () => {
         parentAgentId: 'r1',
         toolCalls: [
           { type: 'toolCall', id: 'tc1', name: 'EditFile', arguments: { path: '/foo' } },
-          { type: 'toolCall', id: 'tc2', name: 'ExecuteSQL', arguments: { sql: 'select 1' } },
+          { type: 'toolCall', id: 'tc2', name: 'ExecuteQuery', arguments: { query: 'select 1' } },
         ],
         stopReason: 'toolUse',
       }),
@@ -246,11 +246,11 @@ describe('piLogToLegacy — forward translation', () => {
     expect(resultByTaskId(out, 'tc2')).toBeUndefined();
   });
 
-  it('v2-native server tool names are renamed + reshaped to v1 contract for the UI', () => {
-    // The frontend UI speaks the legacy v1 task-log contract (ExecuteQuery
-    // with {query, connectionId}). v2 orchestrator emits ExecuteSQL with
-    // {sql, connection}. The translator bridges the two so production v2
-    // chat and benchmarks both feed the UI the shape it expects.
+  it('v2-native server tool names are renamed to v1 contract for the UI', () => {
+    // The frontend UI dispatches on legacy v1 tool names (e.g. ReadFiles).
+    // After the ExecuteSQL→ExecuteQuery rename the v2 orchestrator emits
+    // ExecuteQuery natively with {query, connectionId}, so only
+    // ListDBConnections still needs renaming for the UI.
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'q' }),
       assistantMessage({
@@ -258,9 +258,9 @@ describe('piLogToLegacy — forward translation', () => {
         toolCalls: [
           {
             type: 'toolCall',
-            id: 'tcSQL',
-            name: 'ExecuteSQL',
-            arguments: { sql: 'select 1', connection: 'default_duckdb' },
+            id: 'tcQ',
+            name: 'ExecuteQuery',
+            arguments: { query: 'select 1', connectionId: 'default_duckdb' },
           },
           { type: 'toolCall', id: 'tcList', name: 'ListDBConnections', arguments: {} },
         ],
@@ -268,9 +268,10 @@ describe('piLogToLegacy — forward translation', () => {
       }),
     ];
     const out = piLogToLegacy(log);
-    const sqlTask = taskById(out, 'tcSQL')!;
-    expect(sqlTask.agent).toBe('ExecuteQuery');
-    expect(sqlTask.args).toEqual({ query: 'select 1', connectionId: 'default_duckdb' });
+    const qTask = taskById(out, 'tcQ')!;
+    // ExecuteQuery passes through unchanged — already the v1 contract.
+    expect(qTask.agent).toBe('ExecuteQuery');
+    expect(qTask.args).toEqual({ query: 'select 1', connectionId: 'default_duckdb' });
     const listTask = taskById(out, 'tcList')!;
     expect(listTask.agent).toBe('ReadFiles');
   });
@@ -633,7 +634,7 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
       tool_call_id: 'tc1',
       content: { rows: [{ id: 1 }], columns: ['id'] },
       run_id: 'run-1',
-      function: { name: 'ExecuteSQL', arguments: {} },
+      function: { name: 'ExecuteQuery', arguments: {} },
       created_at: '2025-01-01T00:00:00Z',
     };
     const out = legacyToolResultToPi(legacy);

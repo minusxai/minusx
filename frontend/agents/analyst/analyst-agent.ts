@@ -13,7 +13,7 @@ import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-anal
 import {
   ListDBConnections,
   SearchDBSchema,
-  ExecuteSQL,
+  ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools';
 import type { RemoteAnalystContext } from './types';
 
@@ -22,7 +22,7 @@ export { ReadFiles, SearchFiles } from './file-tools';
 export {
   ListDBConnections,
   SearchDBSchema,
-  ExecuteSQL,
+  ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools';
 export type { AnalystAgentContext, ConnectionInfo, RemoteAnalystContext } from './types';
 
@@ -52,7 +52,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
   static readonly tools: Tool<TSchema>[] = [
     ListDBConnections.schema,
     SearchDBSchema.schema,
-    ExecuteSQL.schema,
+    ExecuteQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
   ];
