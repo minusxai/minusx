@@ -54,6 +54,8 @@ interface EnvironmentConfig {
   DAB_BENCH_BASE_DIR: string | undefined;
   DAB_BENCH_DATASETS: string | undefined;
   DAB_BENCH_RERUN: string | undefined;
+  DAB_QUESTION_TIMEOUT: string | undefined;
+  DAB_DATASET_TIMEOUT: string | undefined;
 }
 
 const errors: string[] = [];
@@ -131,6 +133,8 @@ const config: EnvironmentConfig = {
   DAB_BENCH_BASE_DIR: process.env.DAB_BENCH_BASE_DIR,
   DAB_BENCH_DATASETS: process.env.DAB_BENCH_DATASETS,
   DAB_BENCH_RERUN: process.env.DAB_BENCH_RERUN,
+  DAB_QUESTION_TIMEOUT: process.env.DAB_QUESTION_TIMEOUT,
+  DAB_DATASET_TIMEOUT: process.env.DAB_DATASET_TIMEOUT,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -196,3 +200,5 @@ export const ANALYTICS_CONFIG = config.ANALYTICS_CONFIG ?? config.NEXT_PUBLIC_DE
 export const DAB_BENCH_BASE_DIR = config.DAB_BENCH_BASE_DIR;
 export const DAB_BENCH_DATASETS = config.DAB_BENCH_DATASETS;
 export const DAB_BENCH_RERUN = config.DAB_BENCH_RERUN;
+export const DAB_QUESTION_TIMEOUT = config.DAB_QUESTION_TIMEOUT;
+export const DAB_DATASET_TIMEOUT = config.DAB_DATASET_TIMEOUT;

@@ -13,6 +13,8 @@ import {
   DAB_BENCH_BASE_DIR,
   DAB_BENCH_DATASETS,
   DAB_BENCH_RERUN,
+  DAB_QUESTION_TIMEOUT,
+  DAB_DATASET_TIMEOUT,
   MX_API_BASE_URL,
 } from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
@@ -136,6 +138,23 @@ const PER_DATASET_CONCURRENCY = 3;
 // RPM limits while still being meaningfully parallel.
 const MAX_PARALLEL_DATASETS = 3;
 
+// Default timeouts. Override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT
+// (seconds). A row that hits its timeout is cancelled and dropped from
+// the output JSONL — resume picks it up on the next run. A dataset that
+// hits its timeout cancels its in-flight rows and stops draining its
+// queue; other datasets keep running.
+const DEFAULT_QUESTION_TIMEOUT_SEC = 300;   // 5 min
+const DEFAULT_DATASET_TIMEOUT_SEC = 1800;   // 30 min
+
+function parseSeconds(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const questionTimeoutSec = parseSeconds(DAB_QUESTION_TIMEOUT, DEFAULT_QUESTION_TIMEOUT_SEC);
+const datasetTimeoutSec = parseSeconds(DAB_DATASET_TIMEOUT, DEFAULT_DATASET_TIMEOUT_SEC);
+
 const rerun = DAB_BENCH_RERUN === '1' || DAB_BENCH_RERUN === 'true';
 const proxied = !!MX_API_BASE_URL;
 
@@ -145,6 +164,9 @@ console.log(
 );
 console.log(
   `  concurrency: ${MAX_PARALLEL_DATASETS} datasets × ${PER_DATASET_CONCURRENCY} rows = ${MAX_PARALLEL_DATASETS * PER_DATASET_CONCURRENCY} agents peak${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
+);
+console.log(
+  `  timeouts: question=${questionTimeoutSec}s, dataset=${datasetTimeoutSec}s (override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT)`,
 );
 
 async function main() {
@@ -157,7 +179,13 @@ async function main() {
   // to its agent context, so concurrent datasets don't clobber each
   // other's wiring.
   const queue = [...DATASETS];
-  const results: Array<{ rows: number; errors: number; durationMs: number }> = [];
+  const results: Array<{
+    rows: number;
+    errors: number;
+    timeouts: number;
+    datasetTimedOut: boolean;
+    durationMs: number;
+  }> = [];
   const workers = Array.from(
     { length: Math.min(MAX_PARALLEL_DATASETS, queue.length) },
     async () => {
@@ -171,6 +199,8 @@ async function main() {
           concurrency: PER_DATASET_CONCURRENCY,
           quiet: parallel,
           rerun,
+          rowTimeoutMs: questionTimeoutSec * 1000,
+          datasetTimeoutMs: datasetTimeoutSec * 1000,
         });
         results.push(result);
       }
@@ -180,8 +210,17 @@ async function main() {
 
   const totalRows = results.reduce((s, r) => s + r.rows, 0);
   const totalErrors = results.reduce((s, r) => s + r.errors, 0);
+  const totalTimeouts = results.reduce((s, r) => s + r.timeouts, 0);
+  const datasetTimeouts = results.filter((r) => r.datasetTimedOut).length;
 
-  logSummary(DATASETS.length, totalRows, totalErrors, Date.now() - globalStart);
+  logSummary(
+    DATASETS.length,
+    totalRows,
+    totalErrors,
+    Date.now() - globalStart,
+    totalTimeouts,
+    datasetTimeouts,
+  );
 }
 
 main();

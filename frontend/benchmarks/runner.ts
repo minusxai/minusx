@@ -58,6 +58,15 @@ export interface BenchmarkRunConfig {
    *  already have. Toggle from `dataanalystbench.ts` via the
    *  `DAB_BENCH_RERUN` env var. */
   rerun?: boolean;
+  /** Per-row timeout in ms. When exceeded, the orchestrator is cancelled
+   *  via AbortController and the row is **not persisted** to the output
+   *  JSONL (resume picks it up on the next run). 0/undefined disables. */
+  rowTimeoutMs?: number;
+  /** Per-dataset timeout in ms. When exceeded, all in-flight orchestrators
+   *  for this dataset are cancelled and the worker pool stops draining
+   *  the queue. Already-completed rows persist; the rest get retried
+   *  on resume. 0/undefined disables. */
+  datasetTimeoutMs?: number;
 }
 
 export interface BenchmarkResult {
@@ -134,10 +143,21 @@ export function logHeader(text: string): void {
   console.log(`\n${c.bold}${c.magenta}▸ ${text}${c.reset}`);
 }
 
-export function logSummary(datasets: number, totalRows: number, totalErrors: number, totalMs: number): void {
+export function logSummary(
+  datasets: number,
+  totalRows: number,
+  totalErrors: number,
+  totalMs: number,
+  totalTimeouts = 0,
+  datasetTimeouts = 0,
+): void {
   const dur = formatDuration(totalMs);
   const errStr = totalErrors > 0 ? `  ${c.red}${totalErrors} errors${c.reset}` : '';
-  console.log(`\n${c.bold}${c.magenta}▸ Done${c.reset}  ${datasets} datasets, ${totalRows} rows${errStr}  ${c.dim}${dur}${c.reset}\n`);
+  const toStr = totalTimeouts > 0 ? `  ${c.yellow}${totalTimeouts} row timeouts${c.reset}` : '';
+  const dsToStr = datasetTimeouts > 0 ? `  ${c.yellow}${datasetTimeouts} dataset timeouts${c.reset}` : '';
+  console.log(
+    `\n${c.bold}${c.magenta}▸ Done${c.reset}  ${datasets} datasets, ${totalRows} rows${errStr}${toStr}${dsToStr}  ${c.dim}${dur}${c.reset}\n`,
+  );
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────
@@ -145,6 +165,14 @@ export function logSummary(datasets: number, totalRows: number, totalErrors: num
 export interface DatasetResult {
   rows: number;
   errors: number;
+  /** Rows that were started but cancelled by row-timeout or
+   *  dataset-timeout. Not persisted to the output JSONL — they'll be
+   *  retried on the next resume. */
+  timeouts: number;
+  /** True when the dataset itself hit `datasetTimeoutMs` and was
+   *  short-circuited. The dataset's output JSONL holds whatever
+   *  persisted before the cut-off. */
+  datasetTimedOut: boolean;
   durationMs: number;
 }
 
@@ -225,7 +253,13 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   let completed = 0;
   let running = 0;
   let errors = 0;
+  let timeouts = 0;
+  let datasetTimedOut = false;
   const startedAt = Date.now();
+
+  // In-flight orchestrators — used for fast-cancel on dataset timeout.
+  // Each `runRow` adds itself on start and removes on finish.
+  const inFlight = new Set<Orchestrator>();
 
   // Tick the progress bar every 300ms while running. Disabled in quiet
   // mode (multi-dataset parallel runs interleave too many concurrent
@@ -247,6 +281,20 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     };
     const orch = new Orchestrator(config.registrables);
     const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
+    inFlight.add(orch);
+
+    // Per-row timeout: when it fires, cancel the orchestrator (which
+    // aborts pi-ai's stream) and flag this row as cancelled. The row's
+    // own `try/catch` catches the abort error, but we discriminate via
+    // the `rowCancelled` flag below so we can mark it timeout vs. error.
+    let rowCancelled = false;
+    const rowTimeoutMs = config.rowTimeoutMs ?? 0;
+    const rowTimeoutHandle = rowTimeoutMs > 0
+      ? setTimeout(() => {
+        rowCancelled = true;
+        orch.cancel();
+      }, rowTimeoutMs)
+      : null;
 
     const rowStart = Date.now();
     let error: string | undefined;
@@ -258,10 +306,30 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       await stream.result();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (rowTimeoutHandle) clearTimeout(rowTimeoutHandle);
+      inFlight.delete(orch);
     }
 
     const durationMs = Date.now() - rowStart;
     running--;
+
+    // Cancellation paths (row-timeout self-cancel OR dataset-timeout
+    // external cancel) → don't persist; row will be retried on resume.
+    const cancelled = rowCancelled || datasetTimedOut;
+    if (cancelled) {
+      timeouts++;
+      const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
+      const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
+      const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
+      const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
+      const reason = rowCancelled ? `TIMEOUT after ${formatDuration(rowTimeoutMs)}` : 'CANCELLED (dataset timeout)';
+      if (!config.quiet) clearLine();
+      console.log(`  ${c.yellow}⏱${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${reason}${c.reset}`);
+      if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
+      return;
+    }
+
     completed++;
     if (error) errors++;
 
@@ -288,32 +356,50 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
   }
 
+  // Dataset-level timeout: when it fires, flag and cancel all in-flight
+  // orchestrators. Workers also check `datasetTimedOut` at the top of
+  // their loop so the queue stops draining.
+  const datasetTimeoutMs = config.datasetTimeoutMs ?? 0;
+  const datasetTimeoutHandle = datasetTimeoutMs > 0
+    ? setTimeout(() => {
+      datasetTimedOut = true;
+      for (const orch of inFlight) orch.cancel();
+    }, datasetTimeoutMs)
+    : null;
+
   // Simple concurrency pool — only over the not-yet-completed rows.
   const queue = [...remainingRows];
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-    while (queue.length > 0) {
+    while (queue.length > 0 && !datasetTimedOut) {
       const item = queue.shift()!;
       await runRow(item.row, item.i);
     }
   });
   await Promise.all(workers);
 
+  if (datasetTimeoutHandle) clearTimeout(datasetTimeoutHandle);
   if (tick) clearInterval(tick);
   const totalMs = Date.now() - startedAt;
+
+  if (datasetTimedOut) {
+    if (!config.quiet) clearLine();
+    console.log(`  ${c.yellow}⏱ ${c.bold}${label}${c.reset} ${c.yellow}DATASET TIMEOUT after ${formatDuration(datasetTimeoutMs)}${c.reset} — ${queue.length} rows skipped, will retry on resume`);
+  }
+
   if (!config.quiet) {
     // Render final progress bar (stays visible)
     clearLine();
     console.log(progressLine(completed, total, 0, errors, totalMs));
   } else {
     const errStr = errors > 0 ? `  ${c.red}${errors} err${c.reset}` : '';
+    const toStr = timeouts > 0 ? `  ${c.yellow}${timeouts} timeout${timeouts === 1 ? '' : 's'}${c.reset}` : '';
     const skipNote = skipped > 0 ? `${c.dim} (+${skipped} skipped)${c.reset}` : '';
-    console.log(`  ${c.bold}${c.cyan}${label}${c.reset}  done  ${c.dim}${completed}/${total}${c.reset}${skipNote}${errStr}  ${c.dim}${formatDuration(totalMs)}${c.reset}`);
+    console.log(`  ${c.bold}${c.cyan}${label}${c.reset}  done  ${c.dim}${completed}/${total}${c.reset}${skipNote}${errStr}${toStr}  ${c.dim}${formatDuration(totalMs)}${c.reset}`);
   }
 
-  // `rows` = rows actually run this invocation. Skipped rows aren't
-  // counted here — the global summary reports them via the per-dataset
-  // resume notes printed at start.
-  return { rows: completed, errors, durationMs: totalMs };
+  // `rows` = rows actually run + persisted this invocation. Timeouts
+  // are returned separately so the global summary can report them.
+  return { rows: completed, errors, timeouts, datasetTimedOut, durationMs: totalMs };
 }
 
 export { type ConnectionInfo };
