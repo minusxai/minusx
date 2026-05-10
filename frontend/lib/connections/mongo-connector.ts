@@ -73,6 +73,15 @@ export function documentsToQueryResultColumns(
 export class MongoConnector extends NodeConnector {
   private readonly uri: string;
   private readonly database: string;
+  // Lazy-init: the mongodb driver pools connections per URI internally and
+  // is designed for ONE long-lived client per app, not one-per-query.
+  // Opening and closing a client per call races the driver's session
+  // lifecycle (MongoExpiredSessionError under any concurrency). We open
+  // once on first use and let GC reclaim the connection pool when the
+  // connector goes out of scope. For benchmark CLI runs the process exits
+  // anyway; for v=2 chat each request builds fresh connectors that die
+  // after the turn — small connection-pool leak is acceptable.
+  private clientPromise: Promise<MongoClient> | null = null;
 
   constructor(name: string, config: Record<string, any>) {
     super(name, config);
@@ -81,10 +90,17 @@ export class MongoConnector extends NodeConnector {
     this.database = c.database;
   }
 
+  private getClient(): Promise<MongoClient> {
+    if (!this.clientPromise) {
+      const client = new MongoClient(this.uri);
+      this.clientPromise = client.connect();
+    }
+    return this.clientPromise;
+  }
+
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {
-    const client = new MongoClient(this.uri);
     try {
-      await client.connect();
+      const client = await this.getClient();
       await client.db(this.database).command({ ping: 1 });
       if (includeSchema) {
         const schemas = await this.collectSchema(client);
@@ -93,33 +109,21 @@ export class MongoConnector extends NodeConnector {
       return { success: true, message: 'Connection successful' };
     } catch (err: any) {
       return { success: false, message: err?.message || String(err) };
-    } finally {
-      await client.close();
     }
   }
 
   async query(sql: string): Promise<QueryResult> {
-    const client = new MongoClient(this.uri);
-    try {
-      await client.connect();
-      const queryLeaf = new QueryLeaf(client, this.database);
-      const result = await queryLeaf.execute(sql);
-      const rows = (Array.isArray(result) ? result : []) as Record<string, unknown>[];
-      const { columns, types } = documentsToQueryResultColumns(rows);
-      return { columns, types, rows };
-    } finally {
-      await client.close();
-    }
+    const client = await this.getClient();
+    const queryLeaf = new QueryLeaf(client, this.database);
+    const result = await queryLeaf.execute(sql);
+    const rows = (Array.isArray(result) ? result : []) as Record<string, unknown>[];
+    const { columns, types } = documentsToQueryResultColumns(rows);
+    return { columns, types, rows };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    const client = new MongoClient(this.uri);
-    try {
-      await client.connect();
-      return this.collectSchema(client);
-    } finally {
-      await client.close();
-    }
+    const client = await this.getClient();
+    return this.collectSchema(client);
   }
 
   private async collectSchema(client: MongoClient): Promise<SchemaEntry[]> {
