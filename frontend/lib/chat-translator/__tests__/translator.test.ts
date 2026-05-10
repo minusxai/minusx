@@ -246,11 +246,10 @@ describe('piLogToLegacy — forward translation', () => {
     expect(resultByTaskId(out, 'tc2')).toBeUndefined();
   });
 
-  it('v2-native server tool names are renamed to v1 contract for the UI', () => {
-    // The frontend UI dispatches on legacy v1 tool names (e.g. ReadFiles).
-    // After the ExecuteSQL→ExecuteQuery rename the v2 orchestrator emits
-    // ExecuteQuery natively with {query, connectionId}, so only
-    // ListDBConnections still needs renaming for the UI.
+  it('v2-native server tool names pass through unchanged to the UI', () => {
+    // After ExecuteSQL→ExecuteQuery and a first-class ListDBConnections
+    // display, every v2 tool name now matches the UI dispatch keys
+    // directly — no rename layer needed in the translator.
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'q' }),
       assistantMessage({
@@ -269,11 +268,10 @@ describe('piLogToLegacy — forward translation', () => {
     ];
     const out = piLogToLegacy(log);
     const qTask = taskById(out, 'tcQ')!;
-    // ExecuteQuery passes through unchanged — already the v1 contract.
     expect(qTask.agent).toBe('ExecuteQuery');
     expect(qTask.args).toEqual({ query: 'select 1', connectionId: 'default_duckdb' });
     const listTask = taskById(out, 'tcList')!;
-    expect(listTask.agent).toBe('ReadFiles');
+    expect(listTask.agent).toBe('ListDBConnections');
   });
 
   it('assistant with text + tool_calls → TalkToUser task FIRST, then per-tool tasks (preserves order)', () => {

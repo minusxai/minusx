@@ -13,6 +13,7 @@ import { PublishAllDetailCard } from './tools/PublishAllDisplay';
 import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
 import { SearchFilesDetailCard } from './tools/SearchFilesDisplay';
 import { SearchDBSchemaDetailCard } from './tools/SearchDBSchemaDisplay';
+import { ListDBConnectionsDetailCard } from './tools/ListDBConnectionsDisplay';
 import { FileDetailCard } from './tools/CreateFileDisplay';
 import { ClarifyDetailCard } from './tools/ClarifyDisplay';
 import { EditFileDetailCard } from './tools/EditFileDisplay';
@@ -444,6 +445,7 @@ export default function AgentTurnContainer({
     'CreateFile': FileDetailCard,
     'SearchFiles': SearchFilesDetailCard,
     'SearchDBSchema': SearchDBSchemaDetailCard,
+    'ListDBConnections': ListDBConnectionsDetailCard,
   };
 
   const FILE_LABELS = new Set(['file create', 'file edit', 'file read']);

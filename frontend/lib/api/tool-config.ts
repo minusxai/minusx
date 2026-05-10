@@ -9,6 +9,7 @@ import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
 import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
 import CreateFileDisplay from '@/components/explore/tools/CreateFileDisplay';
 import SearchDBSchemaDisplay from '@/components/explore/tools/SearchDBSchemaDisplay';
+import ListDBConnectionsDisplay from '@/components/explore/tools/ListDBConnectionsDisplay';
 import PublishAllDisplay from '@/components/explore/tools/PublishAllDisplay';
 import LoadSkillDisplay from '@/components/explore/tools/LoadSkillDisplay';
 import { DisplayProps } from '@/lib/types';
@@ -173,6 +174,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipIcon: LuSearch,
 
     timelineVerb: 'Searching',
+  },
+  'ListDBConnections': {
+    displayComponent: ListDBConnectionsDisplay,
+
+    chipLabel: 'connection list',
+    chipLabelPlural: 'connection lists',
+    chipIcon: LuDatabase,
+
+    timelineVerb: 'Listing connections',
   },
   'PublishAll': {
     displayComponent: PublishAllDisplay,
