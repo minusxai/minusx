@@ -4,7 +4,7 @@
 // Each benchmark file (e.g. dataanalystbench.ts) defines config + agent,
 // then calls runBenchmark() — this module does the rest.
 
-import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
@@ -51,9 +51,20 @@ export interface BenchmarkRunConfig {
    *  multiple datasets in parallel — concurrent progress bars step on
    *  each other. */
   quiet?: boolean;
+  /** Force re-running every row even when the output JSONL already
+   *  contains results. Default false: read the existing output (if any),
+   *  collect completed `input_index` values, and skip those rows on
+   *  subsequent runs so we don't re-burn LLM tokens on results we
+   *  already have. Toggle from `dataanalystbench.ts` via the
+   *  `DAB_BENCH_RERUN` env var. */
+  rerun?: boolean;
 }
 
 export interface BenchmarkResult {
+  /** Position of this row in the source `_input.jsonl` (0-based). Lets
+   *  the runner skip already-done rows on resume by parsing the existing
+   *  `_output.jsonl` and matching on this field. */
+  input_index: number;
   input: InputRow;
   /** Raw pi-ai conversation log. Saved as-is so the output file can be
    * imported as a v2 conversation (`meta.version: 2`, `content.log: <this>`)
@@ -177,12 +188,37 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     process.exit(1);
   }
 
-  // Truncate output
-  writeFileSync(outputPath, '');
+  // Resume support: if the output JSONL already exists and rerun is not
+  // forced, parse it and skip rows whose `input_index` is already
+  // persisted. We append (rather than truncate) so prior results survive.
+  // Force a clean slate by setting `DAB_BENCH_RERUN=1`.
+  const completedIndices = new Set<number>();
+  if (!config.rerun && existsSync(outputPath)) {
+    const existing = readFileSync(outputPath, 'utf-8').split('\n').filter((line) => line.trim().length > 0);
+    for (const line of existing) {
+      try {
+        const row = JSON.parse(line) as { input_index?: number };
+        if (typeof row.input_index === 'number') completedIndices.add(row.input_index);
+      } catch { /* tolerate malformed lines */ }
+    }
+  } else {
+    // Fresh run (or no prior output) — start with an empty file.
+    writeFileSync(outputPath, '');
+  }
+
   const concurrency = config.concurrency ?? 1;
   const total = inputRows.length;
+  const remainingRows = inputRows
+    .map((row, i) => ({ row, i }))
+    .filter(({ i }) => !completedIndices.has(i));
+  const skipped = total - remainingRows.length;
 
-  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows, concurrency=${concurrency}${c.reset}`);
+  const resumeNote = config.rerun
+    ? `${c.yellow}rerun: clearing prior output${c.reset}`
+    : skipped > 0
+      ? `${c.dim}resume: skipping ${skipped}/${total} already-done${c.reset}`
+      : null;
+  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows, concurrency=${concurrency}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
   console.log(`  ${c.dim}${outputPath}${c.reset}\n`);
 
   // Tracking
@@ -229,7 +265,13 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     completed++;
     if (error) errors++;
 
-    const result: BenchmarkResult = { input: row, log: orch.log as ConversationLog, duration_ms: durationMs, error };
+    const result: BenchmarkResult = {
+      input_index: index,
+      input: row,
+      log: orch.log as ConversationLog,
+      duration_ms: durationMs,
+      error,
+    };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
     // Log completion above the progress bar
@@ -246,8 +288,8 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
   }
 
-  // Simple concurrency pool
-  const queue = inputRows.map((row, i) => ({ row, i }));
+  // Simple concurrency pool — only over the not-yet-completed rows.
+  const queue = [...remainingRows];
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
     while (queue.length > 0) {
       const item = queue.shift()!;
@@ -264,9 +306,13 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     console.log(progressLine(completed, total, 0, errors, totalMs));
   } else {
     const errStr = errors > 0 ? `  ${c.red}${errors} err${c.reset}` : '';
-    console.log(`  ${c.bold}${c.cyan}${label}${c.reset}  done  ${c.dim}${completed}/${total}${c.reset}${errStr}  ${c.dim}${formatDuration(totalMs)}${c.reset}`);
+    const skipNote = skipped > 0 ? `${c.dim} (+${skipped} skipped)${c.reset}` : '';
+    console.log(`  ${c.bold}${c.cyan}${label}${c.reset}  done  ${c.dim}${completed}/${total}${c.reset}${skipNote}${errStr}  ${c.dim}${formatDuration(totalMs)}${c.reset}`);
   }
 
+  // `rows` = rows actually run this invocation. Skipped rows aren't
+  // counted here — the global summary reports them via the per-dataset
+  // resume notes printed at start.
   return { rows: completed, errors, durationMs: totalMs };
 }
 

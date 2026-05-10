@@ -9,8 +9,14 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { type Tool, type TSchema } from '@mariozechner/pi-ai';
 import { getModel } from '@/lib/llm/get-model';
-import { DAB_BENCH_BASE_DIR, DAB_BENCH_DATASETS } from '@/lib/config';
+import {
+  DAB_BENCH_BASE_DIR,
+  DAB_BENCH_DATASETS,
+  DAB_BENCH_RERUN,
+  MX_API_BASE_URL,
+} from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
+import { BENCHMARK_MAX_ROWS } from '@/agents/benchmark-analyst/connection-source';
 import {
   BenchmarkAnalystAgent,
   SearchDBSchema,
@@ -45,6 +51,7 @@ const CONFIG = {
   - Only tools you have access to: ${tools.map((t) => `\`${t.name}\``).join(', ')}. Don't hallucinate any other tools.
   - You DO NOT have any other existing files with questions.
   - The answer needs to be in under 200 words. This is a benchmark, a user is not reading the answer and the evaluation might be error-prone on long winded answers. Be concise and specific. Don't add any unnecessary information. Just answer the question as directly as possible.
+  - **ExecuteQuery returns at most ${BENCHMARK_MAX_ROWS} rows per call.** Use SQL \`LIMIT\` / \`ORDER BY\` to choose which ${BENCHMARK_MAX_ROWS} rows you see, aggregations (\`COUNT\`, \`SUM\`, \`GROUP BY\`) to summarise large tables, and \`OFFSET\` to page through results when you need rows beyond the first ${BENCHMARK_MAX_ROWS}. The cap applies even if your query specifies a larger LIMIT.
   `
 };
 
@@ -118,29 +125,58 @@ class Agent extends BenchmarkAnalystAgent {
 
 const registrables = [SearchDBSchema, ExecuteQuery, Agent];
 
+// Per-dataset row concurrency. Hard-capped low (3) because each in-flight
+// row spawns an agent that issues many LLM calls; with multiple datasets
+// running concurrently, larger values produce rate-limit retry storms
+// and amplify memory pressure from result-set materialisation.
+const PER_DATASET_CONCURRENCY = 3;
+
+// Max datasets running in parallel. With PER_DATASET_CONCURRENCY=3, peak
+// in-flight agents = 3 × 3 = 9 — well under typical Anthropic Haiku 4.5
+// RPM limits while still being meaningfully parallel.
+const MAX_PARALLEL_DATASETS = 3;
+
+const rerun = DAB_BENCH_RERUN === '1' || DAB_BENCH_RERUN === 'true';
+const proxied = !!MX_API_BASE_URL;
 
 logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);
+console.log(
+  `  routing: ${proxied ? 'mxllm proxy (' + MX_API_BASE_URL + ')' : 'DIRECT to provider — set MX_API_BASE_URL to route through mxllm'}`,
+);
+console.log(
+  `  concurrency: ${MAX_PARALLEL_DATASETS} datasets × ${PER_DATASET_CONCURRENCY} rows = ${MAX_PARALLEL_DATASETS * PER_DATASET_CONCURRENCY} agents peak${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
+);
 
 async function main() {
   const globalStart = Date.now();
-
-  // Run all datasets in parallel. Each dataset's executors are scoped to
-  // its agent context (no global wiring), so concurrent datasets don't
-  // clobber each other. `quiet: true` disables per-dataset progress bars
-  // since they'd interleave unreadably across N parallel runs.
   const parallel = DATASETS.length > 1;
-  const results = await Promise.all(
-    DATASETS.map((ds) =>
-      runBenchmark({
-        input: ds.input,
-        connections: ds.connections,
-        agentClass: Agent,
-        registrables,
-        concurrency: CONFIG.concurrency,
-        quiet: parallel,
-      }),
-    ),
+
+  // Dataset-level worker pool — same shape as the row-level pool inside
+  // runBenchmark (`runner.ts`). Up to MAX_PARALLEL_DATASETS run
+  // concurrently; the rest queue. Each dataset's executors are scoped
+  // to its agent context, so concurrent datasets don't clobber each
+  // other's wiring.
+  const queue = [...DATASETS];
+  const results: Array<{ rows: number; errors: number; durationMs: number }> = [];
+  const workers = Array.from(
+    { length: Math.min(MAX_PARALLEL_DATASETS, queue.length) },
+    async () => {
+      while (queue.length > 0) {
+        const ds = queue.shift()!;
+        const result = await runBenchmark({
+          input: ds.input,
+          connections: ds.connections,
+          agentClass: Agent,
+          registrables,
+          concurrency: PER_DATASET_CONCURRENCY,
+          quiet: parallel,
+          rerun,
+        });
+        results.push(result);
+      }
+    },
   );
+  await Promise.all(workers);
 
   const totalRows = results.reduce((s, r) => s + r.rows, 0);
   const totalErrors = results.reduce((s, r) => s + r.errors, 0);
