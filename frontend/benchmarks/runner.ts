@@ -219,15 +219,36 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   // Resume support: if the output JSONL already exists and rerun is not
   // forced, parse it and skip rows whose `input_index` is already
   // persisted. We append (rather than truncate) so prior results survive.
+  //
+  // On-startup cleanup: rows lacking `input_index` predate the resume
+  // mechanism (early benchmark outputs). We rewrite the file in place
+  // with only indexed rows preserved. Self-healing — first run after
+  // the migration cleans up automatically; subsequent runs are no-ops.
   // Force a clean slate by setting `DAB_BENCH_RERUN=1`.
   const completedIndices = new Set<number>();
   if (!config.rerun && existsSync(outputPath)) {
-    const existing = readFileSync(outputPath, 'utf-8').split('\n').filter((line) => line.trim().length > 0);
-    for (const line of existing) {
+    const lines = readFileSync(outputPath, 'utf-8').split('\n').filter((line) => line.trim().length > 0);
+    const indexed: string[] = [];
+    let droppedUnindexed = 0;
+    for (const line of lines) {
       try {
         const row = JSON.parse(line) as { input_index?: number };
-        if (typeof row.input_index === 'number') completedIndices.add(row.input_index);
-      } catch { /* tolerate malformed lines */ }
+        if (typeof row.input_index === 'number') {
+          completedIndices.add(row.input_index);
+          indexed.push(line);
+        } else {
+          droppedUnindexed++;
+        }
+      } catch {
+        droppedUnindexed++; // malformed line — drop on cleanup pass
+      }
+    }
+    if (droppedUnindexed > 0) {
+      // Rewrite once; subsequent appends in this run go to the cleaned file.
+      writeFileSync(outputPath, indexed.length > 0 ? indexed.join('\n') + '\n' : '');
+      console.log(
+        `  ${c.dim}cleanup: dropped ${droppedUnindexed} unindexed/malformed row${droppedUnindexed === 1 ? '' : 's'} from ${path.basename(outputPath)}${c.reset}`,
+      );
     }
   } else {
     // Fresh run (or no prior output) — start with an empty file.
