@@ -34,7 +34,7 @@ const tools = [
 // ── Config ────────────────────────────────────────────────────
 
 const CONFIG = {
-  model: { provider: 'anthropic', model: 'claude-haiku-4-5' },
+  model: { provider: 'anthropic', model: 'claude-sonnet-4-6', "options":{"reasoning":"low"}},
   concurrency: 10,
   promptId: 'default.system',
   promptVars: {
@@ -108,17 +108,34 @@ class Agent extends BenchmarkAnalystAgent {
   );
 
   protected getSystemPrompt(): string {
-    const vars: Record<string, string> = {
-      connection_id: `Available connections: \n${JSON.stringify(this.context.connections ?? [])}`,
-      ...CONFIG.promptVars,
-    };
-    const rendered = renderPrompt(CONFIG.promptId, vars);
-    const prompt = CONFIG.systemPromptAppend
-      ? `${rendered}\n\n${CONFIG.systemPromptAppend}`
-      : rendered;
-    // Dump to file for live inspection
-    // const outPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rendered_system_prompt.md');
-    // writeFileSync(outPath, prompt);
+    // const vars: Record<string, string> = {
+    //   connection_id: `Available connections: \n${JSON.stringify(this.context.connections ?? [])}`,
+    //   ...CONFIG.promptVars,
+    // };
+    // const rendered = renderPrompt(CONFIG.promptId, vars);
+    // const prompt = CONFIG.systemPromptAppend
+    //   ? `${rendered}\n\n${CONFIG.systemPromptAppend}`
+    //   : rendered;
+
+    const prompt = `
+    You are ${CONFIG.promptVars.agent_name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
+    You have access to the following tools: ${tools.map((t) => `\`${t.name}\``).join(', ')}.
+
+    Connections available to you: \n${JSON.stringify(this.context.connections ?? [])}
+
+    ## Analysis guidelines:
+      - Carefully consider the question and the data connections you have access to.
+      - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc). NEVER hallucinate table or column names.
+      - Outline your approach in 1-2 sentences before executing any SQL queries.
+      - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
+      - Be concise, specific and accurate.
+
+    ## Data Documentation:
+    ${this.context.contextDocs ?? 'No documentation available.'}
+    `
+    // console.log('--- System prompt ---');
+    // console.log(prompt);
+    // console.log('--- End system prompt ---');
     return prompt;
   }
 }
