@@ -434,31 +434,15 @@ export default function BenchmarkPage() {
 
     return (
       <Box h="calc(100vh - 48px)" display="flex" flexDirection="column">
-        {/* Header */}
-        <Box px={6} py={4} borderBottom="1px solid" borderColor="border.muted" bg="bg.subtle" flexShrink={0}>
-          <HStack justify="space-between" align="start">
-            <VStack align="start" gap={1}>
-              <HStack gap={2}>
-                <Icon as={LuFileText} boxSize="4" color="fg.muted" />
-                <Text fontSize="sm" fontWeight="semibold">{fileName}</Text>
-                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">{parsed.rows.length} rows</Text>
-              </HStack>
-              {hasEvals && (
-                <HStack gap={2} ml={6}>
-                  <Text
-                    fontSize="sm"
-                    fontWeight="bold"
-                    fontFamily="mono"
-                    color={pct >= 70 ? 'accent.success' : pct >= 40 ? 'accent.warning' : 'accent.danger'}
-                  >
-                    {pct}%
-                  </Text>
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                    {passed}/{evalTotal} passed
-                  </Text>
-                </HStack>
-              )}
-            </VStack>
+        {/* Header + stats */}
+        <Box px={8} py={6} borderBottom="1px solid" borderColor="border.muted" bg="bg.subtle" flexShrink={0}>
+          {/* Top row: file name + actions */}
+          <HStack justify="space-between" mb={5}>
+            <HStack gap={2}>
+              <Icon as={LuFileText} boxSize="4" color="fg.muted" />
+              <Text fontSize="sm" fontWeight="medium" color="fg.muted">{fileName}</Text>
+              <Text fontSize="xs" color="fg.subtle" fontFamily="mono">{parsed.rows.length} rows</Text>
+            </HStack>
             <HStack gap={3}>
               {connectionsConfig && (
                 <Text fontSize="2xs" color="fg.subtle">
@@ -477,31 +461,54 @@ export default function BenchmarkPage() {
               </Text>
             </HStack>
           </HStack>
-        </Box>
 
-        {/* Aggregate stats bar */}
-        <Box px={6} py={3} borderBottom="1px solid" borderColor="border.muted" flexShrink={0}>
-          <HStack gap={4} flexWrap="wrap">
-            <HStack gap={1.5}>
-              <Icon as={LuClock} boxSize="3" color="accent.cyan" />
-              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{formatDuration(stats.total.duration_ms)}</Text>
-            </HStack>
-            <HStack gap={1.5}>
-              <Icon as={LuCoins} boxSize="3" color="accent.success" />
-              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{formatCost(stats.total.totalCost)}</Text>
-            </HStack>
-            <HStack gap={1.5}>
-              <Icon as={LuHash} boxSize="3" color="accent.primary" />
-              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{stats.total.totalTokens.toLocaleString()} tokens</Text>
-            </HStack>
-            <HStack gap={1.5}>
-              <Icon as={LuWrench} boxSize="3" color="accent.teal" />
-              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{stats.total.toolCalls} tools</Text>
-            </HStack>
-            <HStack gap={1.5}>
-              <Icon as={LuCpu} boxSize="3" color="accent.secondary" />
-              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{stats.total.llmCalls} LLM calls</Text>
-            </HStack>
+          {/* Big metrics row */}
+          <HStack gap={8} flexWrap="wrap" align="baseline">
+            {hasEvals && (
+              <VStack gap={0} align="start">
+                <Text fontSize="3xl" fontWeight="bold" fontFamily="mono" lineHeight="1"
+                  color={pct >= 70 ? 'accent.success' : pct >= 40 ? 'accent.warning' : 'accent.danger'}
+                >
+                  {pct}%
+                </Text>
+                <Text fontSize="xs" color="fg.muted">{passed}/{evalTotal} passed</Text>
+              </VStack>
+            )}
+            <VStack gap={0} align="start">
+              <HStack gap={1.5} align="baseline">
+                <Icon as={LuClock} boxSize="4" color="accent.cyan" />
+                <Text fontSize="xl" fontWeight="bold" fontFamily="mono" lineHeight="1">{formatDuration(stats.total.duration_ms)}</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.muted">total time</Text>
+            </VStack>
+            <VStack gap={0} align="start">
+              <HStack gap={1.5} align="baseline">
+                <Icon as={LuCoins} boxSize="4" color="accent.success" />
+                <Text fontSize="xl" fontWeight="bold" fontFamily="mono" lineHeight="1">{formatCost(stats.total.totalCost)}</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.muted">cost</Text>
+            </VStack>
+            <VStack gap={0} align="start">
+              <HStack gap={1.5} align="baseline">
+                <Icon as={LuHash} boxSize="4" color="accent.primary" />
+                <Text fontSize="xl" fontWeight="bold" fontFamily="mono" lineHeight="1">{stats.total.totalTokens.toLocaleString()}</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.muted">tokens</Text>
+            </VStack>
+            <VStack gap={0} align="start">
+              <HStack gap={1.5} align="baseline">
+                <Icon as={LuWrench} boxSize="4" color="accent.teal" />
+                <Text fontSize="xl" fontWeight="bold" fontFamily="mono" lineHeight="1">{stats.total.toolCalls}</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.muted">tool calls</Text>
+            </VStack>
+            <VStack gap={0} align="start">
+              <HStack gap={1.5} align="baseline">
+                <Icon as={LuCpu} boxSize="4" color="accent.secondary" />
+                <Text fontSize="xl" fontWeight="bold" fontFamily="mono" lineHeight="1">{stats.total.llmCalls}</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.muted">LLM calls</Text>
+            </VStack>
           </HStack>
         </Box>
 
