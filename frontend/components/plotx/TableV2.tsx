@@ -27,6 +27,8 @@ interface TableProps {
   pageSize?: number
   sql?: string
   databaseName?: string
+  /** Called when a row is clicked. Receives the row's original data object and its index. */
+  onRowClick?: (row: Record<string, any>, index: number) => void
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -99,7 +101,7 @@ interface FacetedFilterValue {
 const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
   v != null && typeof v === 'object' && 'search' in v
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName }: TableProps) => {
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -699,7 +701,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                     style={{
                       height: ROW_HEIGHT,
                       background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-muted)' : undefined,
+                      cursor: onRowClick ? 'pointer' : undefined,
                     }}
+                    onClick={onRowClick ? () => onRowClick(original, virtualRow.index) : undefined}
                   >
                     {visibleColIds.map((colId, cellIdx) => (
                       <td

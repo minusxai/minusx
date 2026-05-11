@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Box, Text, VStack, HStack, Flex, Grid, Icon, Spinner } from '@chakra-ui/react';
-import { createListCollection } from '@chakra-ui/react';
-import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuTriangleAlert, LuFileText, LuChevronLeft, LuChevronRight, LuCheck, LuX, LuBraces, LuMessageSquare, LuActivity, LuSearch, LuMessageCircle } from 'react-icons/lu';
+import { Box, Text, VStack, HStack, Flex, Icon, Spinner } from '@chakra-ui/react';
+import { LuClock, LuCoins, LuCpu, LuHash, LuWrench, LuUpload, LuFileText, LuMessageSquare, LuActivity, LuSearch, LuMessageCircle, LuArrowLeft, LuCheck, LuX, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { TableV2 } from '@/components/plotx';
 import { Button } from '@chakra-ui/react';
 import { parseLogToMessages } from '@/lib/conversations-utils';
 import { piLogToLegacy } from '@/lib/chat-translator';
@@ -30,6 +29,7 @@ interface BenchmarkRow {
   error?: string;
   eval?: EvalResult;
   connections?: BenchmarkConnectionEntry[];
+  benchmark?: string;
 }
 
 type ParsedFile =
@@ -51,12 +51,6 @@ function isProductionLog(log: unknown[]): log is ConversationLogEntry[] {
   return log.length > 0 && typeof (log[0] as any)?._type === 'string';
 }
 
-/**
- * Detect a benchmark `<dataset>_connections.json` file: a JSON array whose
- * entries match the BenchmarkConnectionEntry shape ({name, dialect, config}).
- * Returned separately so the user can drop it alongside the JSONL without
- * clobbering their parsed conversation/benchmark view.
- */
 function tryParseConnections(text: string): BenchmarkConnectionEntry[] | null {
   try {
     const obj = JSON.parse(text);
@@ -137,50 +131,6 @@ function formatDuration(ms: number): string {
 }
 
 // ── Stat display components ───────────────────────────────────────────────
-
-function StatCard({ icon, label, value, accent }: { icon: React.ElementType; label: string; value: string; accent?: string }) {
-  return (
-    <Box
-      px={2}
-      py={1.5}
-      borderRadius="md"
-      bg="bg.canvas"
-      border="1px solid"
-      borderColor="border.muted"
-    >
-      <HStack gap={1.5} mb={0.5}>
-        <Icon as={icon} boxSize="3" color={accent ?? 'fg.subtle'} />
-        <Text fontSize="2xs" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" fontWeight="medium">{label}</Text>
-      </HStack>
-      <Text fontSize="sm" fontWeight="bold" fontFamily="mono" letterSpacing="-0.02em">{value}</Text>
-    </Box>
-  );
-}
-
-function StatsPanel({ stats, label }: { stats: RunStats; label?: string }) {
-  return (
-    <VStack gap={2} align="stretch">
-      {label && (
-        <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider">{label}</Text>
-      )}
-      <Grid templateColumns="repeat(2, 1fr)" gap={2}>
-        <StatCard icon={LuClock} label="Time" value={formatDuration(stats.duration_ms)} accent="accent.cyan" />
-        <StatCard icon={LuCoins} label="Cost" value={formatCost(stats.totalCost)} accent="accent.success" />
-        <StatCard icon={LuHash} label="Tokens" value={stats.totalTokens.toLocaleString()} accent="accent.primary" />
-        <StatCard icon={LuCpu} label="LLM calls" value={String(stats.llmCalls)} accent="accent.secondary" />
-      </Grid>
-      <StatCard icon={LuWrench} label="Tool calls" value={String(stats.toolCalls)} accent="accent.teal" />
-      {stats.error && (
-        <Box px={3} py={2} borderRadius="lg" bg="red.subtle" border="1px solid" borderColor="border.error">
-          <HStack gap={1.5}>
-            <Icon as={LuTriangleAlert} boxSize="3.5" color="fg.error" />
-            <Text fontSize="xs" color="fg.error" fontWeight="medium">{stats.error}</Text>
-          </HStack>
-        </Box>
-      )}
-    </VStack>
-  );
-}
 
 // ── Conversation viewer ───────────────────────────────────────────────────
 
@@ -380,7 +330,8 @@ function UploadScreen({ onDrop, onInputChange }: {
 
 export default function BenchmarkPage() {
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
-  const [selectedRow, setSelectedRow] = useState(0);
+  // null = table view, number = detail view for that row index
+  const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [isContinuing, setIsContinuing] = useState(false);
   const [connectionsConfig, setConnectionsConfig] = useState<BenchmarkConnectionEntry[] | null>(null);
@@ -388,9 +339,6 @@ export default function BenchmarkPage() {
 
   const handleFile = useCallback((file: File) => {
     file.text().then(text => {
-      // Connection configs (the dataset's connections.json) are detected
-      // by shape and stored separately so the user can drop them after
-      // the JSONL without resetting the conversation view.
       const conns = tryParseConnections(text);
       if (conns) {
         setConnectionsConfig(conns);
@@ -401,8 +349,7 @@ export default function BenchmarkPage() {
       try {
         const result = parseUploadedFile(text);
         setParsed(result);
-        setSelectedRow(0);
-        // Auto-populate connections from embedded data if not already loaded
+        setSelectedRow(result.kind === 'conversation' ? 0 : null);
         if (result.kind === 'benchmark' && result.embeddedConnections && !connectionsConfig) {
           setConnectionsConfig(result.embeddedConnections);
           setConnectionsFileName('(embedded in output)');
@@ -426,32 +373,159 @@ export default function BenchmarkPage() {
     if (e.target.files && e.target.files.length > 0) handleFiles(e.target.files);
   }, [handleFiles]);
 
-  const stats = useMemo(() => {
-    if (parsed?.kind !== 'benchmark') return null;
-    return aggregateStats(parsed.rows);
-  }, [parsed]);
+  const isBenchmark = parsed?.kind === 'benchmark';
 
-  const rowCollection = useMemo(() => {
-    if (parsed?.kind !== 'benchmark') return null;
-    return createListCollection({
-      items: parsed.rows.map((row, i) => ({
-        label: `${i}: ${row.input.user_message.slice(0, 80)}${row.input.user_message.length > 80 ? '...' : ''}`,
-        value: String(i),
-      })),
+  const stats = useMemo(() => {
+    if (!isBenchmark) return null;
+    return aggregateStats(parsed.rows);
+  }, [parsed, isBenchmark]);
+
+  // Flatten benchmark rows into TableV2-compatible data
+  const tableData = useMemo(() => {
+    if (!isBenchmark || !stats) return null;
+    const hasEvals = parsed.rows.some(r => r.eval);
+    const hasBenchmark = parsed.rows.some(r => r.benchmark);
+    const columns = [
+      '#',
+      ...(hasBenchmark ? ['Dataset'] : []),
+      ...(hasEvals ? ['Eval'] : []),
+      'Question',
+      'Time (s)', 'Cost ($)', 'Tool Calls', 'LLM Calls', 'Error',
+    ];
+    const types = [
+      'INTEGER',
+      ...(hasBenchmark ? ['VARCHAR'] : []),
+      ...(hasEvals ? ['VARCHAR'] : []),
+      'VARCHAR',
+      'DOUBLE', 'DOUBLE', 'INTEGER', 'INTEGER', 'VARCHAR',
+    ];
+    const rows = parsed.rows.map((row, i) => {
+      const st = stats.perRow[i];
+      return {
+        '#': i + 1,
+        ...(hasBenchmark ? { 'Dataset': row.benchmark ?? '' } : {}),
+        ...(hasEvals ? { 'Eval': row.eval ? (row.eval.pass ? '\u2705' : '\u274C') : '-' } : {}),
+        'Question': row.input.user_message,
+        'Time (s)': Math.round(row.duration_ms / 100) / 10,
+        'Cost ($)': Math.round(st.totalCost * 10000) / 10000,
+        'Tool Calls': st.toolCalls,
+        'LLM Calls': st.llmCalls,
+        'Error': row.error ?? '',
+        _rowIndex: i,
+      };
     });
-  }, [parsed]);
+    return { columns, types, rows };
+  }, [parsed, stats, isBenchmark]);
 
   // Not loaded — show upload screen
   if (!parsed) {
     return <UploadScreen onDrop={handleDrop} onInputChange={handleInputChange} />;
   }
 
-  // Get the log to render
+  const resetFile = () => { setParsed(null); setFileName(''); setSelectedRow(null); };
+
+  // ── Benchmark: table view (no row selected) ──
+  if (isBenchmark && selectedRow === null && stats && tableData) {
+    const hasEvals = parsed.rows.some(r => r.eval);
+    const evaled = hasEvals ? parsed.rows.filter(r => r.eval) : [];
+    const passed = evaled.filter(r => r.eval!.pass).length;
+    const evalTotal = evaled.length;
+    const pct = evalTotal > 0 ? Math.round((passed / evalTotal) * 100) : 0;
+
+    return (
+      <Box h="calc(100vh - 48px)" display="flex" flexDirection="column">
+        {/* Header */}
+        <Box px={6} py={4} borderBottom="1px solid" borderColor="border.muted" bg="bg.subtle" flexShrink={0}>
+          <HStack justify="space-between" align="start">
+            <VStack align="start" gap={1}>
+              <HStack gap={2}>
+                <Icon as={LuFileText} boxSize="4" color="fg.muted" />
+                <Text fontSize="sm" fontWeight="semibold">{fileName}</Text>
+                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">{parsed.rows.length} rows</Text>
+              </HStack>
+              {hasEvals && (
+                <HStack gap={2} ml={6}>
+                  <Text
+                    fontSize="sm"
+                    fontWeight="bold"
+                    fontFamily="mono"
+                    color={pct >= 70 ? 'accent.success' : pct >= 40 ? 'accent.warning' : 'accent.danger'}
+                  >
+                    {pct}%
+                  </Text>
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                    {passed}/{evalTotal} passed
+                  </Text>
+                </HStack>
+              )}
+            </VStack>
+            <HStack gap={3}>
+              {connectionsConfig && (
+                <Text fontSize="2xs" color="fg.subtle">
+                  Connections: {connectionsFileName}
+                </Text>
+              )}
+              <Text
+                fontSize="xs"
+                color="accent.primary"
+                cursor="pointer"
+                fontWeight="medium"
+                _hover={{ textDecoration: 'underline' }}
+                onClick={resetFile}
+              >
+                New file
+              </Text>
+            </HStack>
+          </HStack>
+        </Box>
+
+        {/* Aggregate stats bar */}
+        <Box px={6} py={3} borderBottom="1px solid" borderColor="border.muted" flexShrink={0}>
+          <HStack gap={4} flexWrap="wrap">
+            <HStack gap={1.5}>
+              <Icon as={LuClock} boxSize="3" color="accent.cyan" />
+              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{formatDuration(stats.total.duration_ms)}</Text>
+            </HStack>
+            <HStack gap={1.5}>
+              <Icon as={LuCoins} boxSize="3" color="accent.success" />
+              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{formatCost(stats.total.totalCost)}</Text>
+            </HStack>
+            <HStack gap={1.5}>
+              <Icon as={LuHash} boxSize="3" color="accent.primary" />
+              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{stats.total.totalTokens.toLocaleString()} tokens</Text>
+            </HStack>
+            <HStack gap={1.5}>
+              <Icon as={LuWrench} boxSize="3" color="accent.teal" />
+              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{stats.total.toolCalls} tools</Text>
+            </HStack>
+            <HStack gap={1.5}>
+              <Icon as={LuCpu} boxSize="3" color="accent.secondary" />
+              <Text fontSize="xs" fontFamily="mono" color="fg.muted">{stats.total.llmCalls} LLM calls</Text>
+            </HStack>
+          </HStack>
+        </Box>
+
+        {/* Results table */}
+        <Box flex={1} overflow="hidden">
+          <TableV2
+            columns={tableData.columns}
+            types={tableData.types}
+            rows={tableData.rows}
+            onRowClick={(row) => setSelectedRow(row._rowIndex as number)}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  // ── Detail view (single conversation) ──
+  // For benchmark rows or single-conversation files.
+  const activeRowIndex = selectedRow ?? 0;
   let currentLog: ConversationLogEntry[] | null = null;
   if (parsed.kind === 'conversation') {
     currentLog = parsed.log;
   } else {
-    const row = parsed.rows[selectedRow];
+    const row = parsed.rows[activeRowIndex];
     if (row) {
       currentLog = isProductionLog(row.log as unknown[])
         ? (row.log as unknown as ConversationLogEntry[])
@@ -459,25 +533,9 @@ export default function BenchmarkPage() {
     }
   }
 
-  const isBenchmark = parsed.kind === 'benchmark';
-
-  const resetFile = () => { setParsed(null); setFileName(''); setSelectedRow(0); };
-
-  // Pi-ai log for whatever the user is currently viewing — a single
-  // dropped conversation file or the selected row of a benchmark JSONL.
-  // null when the log is in legacy task-log shape (older outputs that
-  // pre-date the runner's pi-ai change), since the orchestrator needs
-  // pi-ai shape to resume the conversation.
   const continuablePiLog: ConversationLog | null = (() => {
-    if (parsed.kind === 'conversation') {
-      // The /benchmark uploader only routes through `convertOrchestratorLog`
-      // when the file is non-production (pi-ai) shape — but it converts
-      // for display. We don't have the raw pi-ai log on the parsed object,
-      // so single-conversation continuation is currently unsupported.
-      // (Benchmark JSONL → row-by-row continuation works.)
-      return null;
-    }
-    const row = parsed.rows[selectedRow];
+    if (parsed.kind === 'conversation') return null;
+    const row = parsed.rows[activeRowIndex];
     if (!row) return null;
     const log = row.log as unknown[];
     if (!Array.isArray(log) || isProductionLog(log)) return null;
@@ -486,7 +544,7 @@ export default function BenchmarkPage() {
 
   const continueLabel: string | undefined = (() => {
     if (parsed.kind !== 'benchmark') return undefined;
-    return parsed.rows[selectedRow]?.input?.user_message;
+    return parsed.rows[activeRowIndex]?.input?.user_message;
   })();
 
   const handleContinueConversation = async () => {
@@ -504,24 +562,109 @@ export default function BenchmarkPage() {
     }
   };
 
+  const activeRow = isBenchmark ? parsed.rows[activeRowIndex] : null;
+  const activeRowStats = stats?.perRow[activeRowIndex];
+
   return (
-    <Flex h="calc(100vh - 48px)">
-      {/* ── Main content: conversation ── */}
-      <Box flex={1} overflowY="auto">
-        {/* Header bar for conversation-only files */}
-        {!isBenchmark && (
-          <HStack
-            px={5}
-            py={3}
-            borderBottom="1px solid"
-            borderColor="border.muted"
-            justify="space-between"
-            bg="bg.subtle"
-          >
+    <Flex h="calc(100vh - 48px)" direction="column">
+      {/* Detail header */}
+      <HStack
+        px={5}
+        py={3}
+        borderBottom="1px solid"
+        borderColor="border.muted"
+        justify="space-between"
+        bg="bg.subtle"
+        flexShrink={0}
+      >
+        <HStack gap={3}>
+          {isBenchmark && (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => setSelectedRow(null)}
+              aria-label="Back to results table"
+            >
+              <LuArrowLeft />
+              Back
+            </Button>
+          )}
+          {isBenchmark && (
+            <Text fontSize="xs" fontFamily="mono" color="fg.muted">
+              Row {activeRowIndex + 1} / {parsed.rows.length}
+            </Text>
+          )}
+          {!isBenchmark && (
             <HStack gap={2}>
               <Icon as={LuFileText} boxSize="4" color="fg.muted" />
               <Text fontSize="sm" fontWeight="medium">{fileName}</Text>
             </HStack>
+          )}
+        </HStack>
+        <HStack gap={3}>
+          {activeRowStats && (
+            <HStack gap={3}>
+              <HStack gap={1}>
+                <Icon as={LuClock} boxSize="3" color="accent.cyan" />
+                <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{formatDuration(activeRowStats.duration_ms)}</Text>
+              </HStack>
+              <HStack gap={1}>
+                <Icon as={LuCoins} boxSize="3" color="accent.success" />
+                <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{formatCost(activeRowStats.totalCost)}</Text>
+              </HStack>
+              <HStack gap={1}>
+                <Icon as={LuWrench} boxSize="3" color="accent.teal" />
+                <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{activeRowStats.toolCalls}</Text>
+              </HStack>
+            </HStack>
+          )}
+          {activeRow?.eval && (
+            <Box
+              px={2}
+              py={0.5}
+              borderRadius="full"
+              bg={activeRow.eval.pass ? 'accent.success/15' : 'accent.danger/15'}
+            >
+              <HStack gap={1}>
+                <Icon
+                  as={activeRow.eval.pass ? LuCheck : LuX}
+                  boxSize="3"
+                  color={activeRow.eval.pass ? 'accent.success' : 'accent.danger'}
+                />
+                <Text
+                  fontSize="2xs"
+                  fontWeight="bold"
+                  fontFamily="mono"
+                  color={activeRow.eval.pass ? 'accent.success' : 'accent.danger'}
+                >
+                  {activeRow.eval.pass ? 'PASS' : 'FAIL'}
+                </Text>
+              </HStack>
+            </Box>
+          )}
+          {isBenchmark && (
+            <HStack gap={0.5}>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={activeRowIndex <= 0}
+                onClick={() => setSelectedRow(activeRowIndex - 1)}
+                aria-label="Previous row"
+              >
+                <LuChevronLeft />
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={activeRowIndex >= parsed.rows.length - 1}
+                onClick={() => setSelectedRow(activeRowIndex + 1)}
+                aria-label="Next row"
+              >
+                <LuChevronRight />
+              </Button>
+            </HStack>
+          )}
+          {!isBenchmark && (
             <Text
               fontSize="xs"
               color="accent.primary"
@@ -531,19 +674,15 @@ export default function BenchmarkPage() {
             >
               Upload new file
             </Text>
-          </HStack>
-        )}
+          )}
+        </HStack>
+      </HStack>
 
-        {/* Conversation */}
+      {/* Conversation content */}
+      <Box flex={1} overflowY="auto">
         <Box maxW="960px" mx="auto" px={4} py={4}>
           {currentLog && <LogViewer log={currentLog} />}
 
-          {/* Continue this benchmark conversation in the v=2 chat UI.
-              Imports the row's pi-ai log + the dataset's connections.json
-              as a v=2 conversation file then navigates to
-              /explore/<fileId>?v=2. Connections are required because the
-              orchestrator needs NodeConnector configs to actually run SQL
-              against the benchmark's databases. */}
           {continuablePiLog && (
             <VStack gap={2} pt={6} pb={2}>
               <Button
@@ -556,7 +695,7 @@ export default function BenchmarkPage() {
                 aria-label="Continue conversation in chat"
               >
                 {isContinuing ? <Spinner size="sm" /> : <LuMessageCircle />}
-                {isContinuing ? 'Importing…' : 'Continue conversation'}
+                {isContinuing ? 'Importing...' : 'Continue conversation'}
               </Button>
               {connectionsConfig ? (
                 <Text fontSize="2xs" color="fg.subtle">
@@ -575,7 +714,7 @@ export default function BenchmarkPage() {
                   onDragOver={(e) => e.preventDefault()}
                 >
                   <Text fontSize="2xs" color="accent.warning" textAlign="center">
-                    Drop or click to attach the dataset&apos;s connections.json (e.g. stockindex_connections.json)
+                    Drop or click to attach the dataset&apos;s connections.json
                   </Text>
                   <input
                     id="benchmark-connections-input"
@@ -590,165 +729,6 @@ export default function BenchmarkPage() {
           )}
         </Box>
       </Box>
-
-      {/* ── Right sidebar: stats + controls ── */}
-      {isBenchmark && stats && (
-        <Box
-          w="320px"
-          minW="320px"
-          borderLeft="1px solid"
-          borderColor="border.muted"
-          bg="bg.subtle"
-          overflowY="auto"
-        >
-          {/* Sidebar header */}
-          <Box px={4} py={3} borderBottom="1px solid" borderColor="border.muted">
-            <HStack justify="space-between" align="center">
-              <HStack gap={2}>
-                <Box w="2px" h="14px" bg="accent.primary" borderRadius="full" />
-                <Text fontSize="sm" fontWeight="semibold">Benchmark</Text>
-              </HStack>
-              <Text
-                fontSize="xs"
-                color="accent.primary"
-                cursor="pointer"
-                fontWeight="medium"
-                _hover={{ textDecoration: 'underline' }}
-                onClick={resetFile}
-              >
-                New file
-              </Text>
-            </HStack>
-            <HStack gap={1.5} mt={1.5} ml={3}>
-              <Icon as={LuFileText} boxSize="3" color="fg.subtle" />
-              <Text fontSize="2xs" color="fg.subtle" truncate>{fileName}</Text>
-            </HStack>
-          </Box>
-
-          <VStack gap={0} align="stretch">
-            {/* Aggregate eval score */}
-            {parsed.rows.some(r => r.eval) && (() => {
-              const evaled = parsed.rows.filter(r => r.eval);
-              const passed = evaled.filter(r => r.eval!.pass).length;
-              const total = evaled.length;
-              const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
-              return (
-                <Box px={4} py={3} borderBottom="1px solid" borderColor="border.muted">
-                  <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" mb={2}>
-                    Eval Score
-                  </Text>
-                  <HStack gap={3} align="baseline">
-                    <Text fontSize="2xl" fontWeight="bold" fontFamily="mono" color={pct >= 70 ? 'accent.success' : pct >= 40 ? 'accent.warning' : 'accent.danger'}>
-                      {pct}%
-                    </Text>
-                    <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-                      {passed}/{total} passed
-                    </Text>
-                  </HStack>
-                </Box>
-              );
-            })()}
-
-            {/* Aggregate stats */}
-            <Box px={4} py={4}>
-              <StatsPanel stats={stats.total} label={`Run total — ${parsed.rows.length} rows`} />
-            </Box>
-
-            {/* Row selector */}
-            <Box px={4} py={3} borderTop="1px solid" borderColor="border.muted">
-              <VStack gap={2.5} align="stretch">
-                <HStack justify="space-between" align="center">
-                  <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider">
-                    Select row
-                  </Text>
-                  <HStack gap={0.5}>
-                    <Button
-                      size="2xs"
-                      variant="ghost"
-                      disabled={selectedRow <= 0}
-                      onClick={() => setSelectedRow(r => r - 1)}
-                      px={1}
-                    >
-                      <LuChevronLeft />
-                    </Button>
-                    <Text fontSize="2xs" color="fg.muted" fontFamily="mono" minW="40px" textAlign="center">
-                      {selectedRow + 1}/{parsed.rows.length}
-                    </Text>
-                    <Button
-                      size="2xs"
-                      variant="ghost"
-                      disabled={selectedRow >= parsed.rows.length - 1}
-                      onClick={() => setSelectedRow(r => r + 1)}
-                      px={1}
-                    >
-                      <LuChevronRight />
-                    </Button>
-                  </HStack>
-                </HStack>
-                {rowCollection && (
-                  <SelectRoot
-                    collection={rowCollection}
-                    value={[String(selectedRow)]}
-                    onValueChange={(e) => setSelectedRow(Number(e.value[0]))}
-                    size="sm"
-                    positioning={{ sameWidth: true, placement: 'bottom' }}
-                  >
-                    <SelectTrigger>
-                      <SelectValueText placeholder="Select row" />
-                    </SelectTrigger>
-                    <SelectContent maxH="300px" overflowY="auto" zIndex="popover">
-                      {rowCollection.items.map((item) => (
-                        <SelectItem key={item.value} item={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </SelectRoot>
-                )}
-              </VStack>
-            </Box>
-
-            {/* Per-row stats */}
-            {stats.perRow[selectedRow] && (
-              <Box px={4} py={4} borderTop="1px solid" borderColor="border.muted">
-                <StatsPanel stats={stats.perRow[selectedRow]} label="Selected row" />
-              </Box>
-            )}
-
-            {/* Per-row eval */}
-            {parsed.rows[selectedRow]?.eval && (
-              <Box px={4} py={3} borderTop="1px solid" borderColor="border.muted">
-                <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" mb={2}>
-                  Eval
-                </Text>
-                <HStack gap={2} mb={2}>
-                  <Box
-                    px={2} py={0.5} borderRadius="full"
-                    bg={parsed.rows[selectedRow].eval!.pass ? 'accent.success/15' : 'accent.danger/15'}
-                  >
-                    <HStack gap={1}>
-                      <Icon
-                        as={parsed.rows[selectedRow].eval!.pass ? LuCheck : LuX}
-                        boxSize="3"
-                        color={parsed.rows[selectedRow].eval!.pass ? 'accent.success' : 'accent.danger'}
-                      />
-                      <Text
-                        fontSize="xs" fontWeight="bold" fontFamily="mono"
-                        color={parsed.rows[selectedRow].eval!.pass ? 'accent.success' : 'accent.danger'}
-                      >
-                        {parsed.rows[selectedRow].eval!.pass ? 'PASS' : 'FAIL'}
-                      </Text>
-                    </HStack>
-                  </Box>
-                </HStack>
-                <Text fontSize="xs" color="fg.muted" lineClamp={4}>
-                  {parsed.rows[selectedRow].eval!.reason}
-                </Text>
-              </Box>
-            )}
-          </VStack>
-        </Box>
-      )}
     </Flex>
   );
 }
