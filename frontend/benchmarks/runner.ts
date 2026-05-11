@@ -31,6 +31,8 @@ process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
 export interface InputRow {
   user_message: string;
   allowed_connections: string[];
+  docs?: string;
+  additional_docs?: string;
 }
 
 export interface BenchmarkRunConfig {
@@ -297,8 +299,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       connections: row.allowed_connections
         .map((name) => connectionInfos.get(name))
         .filter((ci): ci is ConnectionInfo => !!ci),
-      schemaSource,
-      sqlExecutor,
+        contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
+        schemaSource,
+        sqlExecutor,
     };
     const orch = new Orchestrator(config.registrables);
     const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);

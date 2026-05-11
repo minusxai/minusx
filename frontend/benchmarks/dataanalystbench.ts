@@ -131,11 +131,11 @@ class Agent extends BenchmarkAnalystAgent {
       - Be concise, specific and accurate.
 
     ## Data Documentation:
-
+    ${this.context.contextDocs ?? 'No documentation available.'}
     `
-    // Dump to file for live inspection
-    // const outPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'rendered_system_prompt.md');
-    // writeFileSync(outPath, prompt);
+    // console.log('--- System prompt ---');
+    // console.log(prompt);
+    // console.log('--- End system prompt ---');
     return prompt;
   }
 }
