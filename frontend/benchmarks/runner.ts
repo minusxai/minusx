@@ -84,6 +84,9 @@ export interface BenchmarkResult {
   log: ConversationLog;
   duration_ms: number;
   error?: string;
+  /** Dataset connections embedded so the /benchmark viewer can continue
+   *  conversations without needing a separate connections.json drop. */
+  connections?: BenchmarkConnectionEntry[];
 }
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────
@@ -363,6 +366,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       log: orch.log as ConversationLog,
       duration_ms: durationMs,
       error,
+      connections: entries,
     };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 

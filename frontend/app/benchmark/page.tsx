@@ -29,11 +29,12 @@ interface BenchmarkRow {
   duration_ms: number;
   error?: string;
   eval?: EvalResult;
+  connections?: BenchmarkConnectionEntry[];
 }
 
 type ParsedFile =
   | { kind: 'conversation'; log: ConversationLogEntry[] }
-  | { kind: 'benchmark'; rows: BenchmarkRow[] };
+  | { kind: 'benchmark'; rows: BenchmarkRow[]; embeddedConnections?: BenchmarkConnectionEntry[] };
 
 interface RunStats {
   duration_ms: number;
@@ -87,7 +88,8 @@ function parseUploadedFile(text: string): ParsedFile {
   }
   const lines = text.split('\n').filter(l => l.trim().length > 0);
   const rows: BenchmarkRow[] = lines.map(line => JSON.parse(line) as BenchmarkRow);
-  return { kind: 'benchmark', rows };
+  const embeddedConnections = rows.find(r => r.connections?.length)?.connections;
+  return { kind: 'benchmark', rows, embeddedConnections };
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────
@@ -397,13 +399,19 @@ export default function BenchmarkPage() {
       }
       setFileName(file.name);
       try {
-        setParsed(parseUploadedFile(text));
+        const result = parseUploadedFile(text);
+        setParsed(result);
         setSelectedRow(0);
+        // Auto-populate connections from embedded data if not already loaded
+        if (result.kind === 'benchmark' && result.embeddedConnections && !connectionsConfig) {
+          setConnectionsConfig(result.embeddedConnections);
+          setConnectionsFileName('(embedded in output)');
+        }
       } catch (e) {
         console.error('Failed to parse file:', e);
       }
     });
-  }, []);
+  }, [connectionsConfig]);
 
   const handleFiles = useCallback((files: FileList | File[]) => {
     Array.from(files).forEach((f) => handleFile(f));
