@@ -12,8 +12,7 @@ import {
   buildBenchmarkSources,
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
-import { getNodeConnector } from '@/lib/connections';
-import type { NodeConnector } from '@/lib/connections/base';
+import { buildBenchmarkConnectors } from '@/agents/benchmark-analyst/shared-duckdb';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { ConversationLog } from '@/orchestrator/types';
 
@@ -191,16 +190,13 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
   const label = config.label ?? path.basename(inputPath).replace(/_input\.jsonl$/, '');
 
-  // Load connections
-  const connectorsByName = new Map<string, NodeConnector>();
-  const connectionInfos = new Map<string, ConnectionInfo>();
+  // Load connections. For sqlite/duckdb entries we route through a
+  // single shared DuckDBInstance (see `shared-duckdb.ts`) to avoid the
+  // thread-pool oversubscription that came from one DuckDBInstance per
+  // file × multiple concurrent agents. Other dialects fall back to
+  // per-connector NodeConnectors.
   const entries = JSON.parse(readFileSync(connectionsPath, 'utf-8')) as BenchmarkConnectionEntry[];
-  for (const { name, dialect, config: connConfig, description } of entries) {
-    const conn = getNodeConnector(name, dialect, connConfig as Record<string, unknown>);
-    if (!conn) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
-    connectorsByName.set(name, conn);
-    connectionInfos.set(name, { name, dialect, description });
-  }
+  const { connectorsByName, connectionInfos } = await buildBenchmarkConnectors(entries);
 
   // Build per-dataset executors. We pass them through agent context (not
   // global singletons) so multiple datasets can run in parallel without
