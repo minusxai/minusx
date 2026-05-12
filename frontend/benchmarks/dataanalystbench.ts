@@ -129,6 +129,9 @@ class Agent extends BenchmarkAnalystAgent {
       - Outline your approach in 1-2 sentences before executing any SQL queries.
       - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
       - Be concise, specific and accurate.
+    
+    ## Response Format:
+    - Only the first 30 words of your response will be evaluated, so make sure to put the most important information at the beginning that directly and fully answers the question.
 
     ## Data Documentation:
     ${this.context.contextDocs ?? 'No documentation available.'}

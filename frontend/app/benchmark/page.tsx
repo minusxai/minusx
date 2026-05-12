@@ -425,14 +425,14 @@ export default function BenchmarkPage() {
     const columns = [
       '#',
       ...(hasBenchmark ? ['Dataset'] : []),
-      ...(hasEvals ? ['Eval'] : []),
+      ...(hasEvals ? ['Eval', 'Eval Reason'] : []),
       'Question',
       'Time (s)', 'Cost ($)', 'Tool Calls', 'LLM Calls', 'Max Tool (s)', 'Slow Tool', 'Error',
     ];
     const types = [
       'INTEGER',
       ...(hasBenchmark ? ['VARCHAR'] : []),
-      ...(hasEvals ? ['VARCHAR'] : []),
+      ...(hasEvals ? ['VARCHAR', 'VARCHAR'] : []),
       'VARCHAR',
       'DOUBLE', 'DOUBLE', 'INTEGER', 'INTEGER', 'DOUBLE', 'VARCHAR', 'VARCHAR',
     ];
@@ -441,7 +441,10 @@ export default function BenchmarkPage() {
       return {
         '#': i + 1,
         ...(hasBenchmark ? { 'Dataset': row.benchmark ?? '' } : {}),
-        ...(hasEvals ? { 'Eval': row.eval ? (row.eval.pass ? '\u2705' : '\u274C') : '-' } : {}),
+        ...(hasEvals ? {
+          'Eval': row.eval ? (row.eval.pass ? '\u2705' : '\u274C') : '-',
+          'Eval Reason': row.eval?.reason ?? '',
+        } : {}),
         'Question': row.input.user_message,
         'Time (s)': Math.round(row.duration_ms / 100) / 10,
         'Cost ($)': Math.round(st.totalCost * 10000) / 10000,
@@ -686,28 +689,42 @@ export default function BenchmarkPage() {
             </HStack>
           )}
           {activeRow?.eval && (
-            <Box
-              px={2}
-              py={0.5}
-              borderRadius="full"
-              bg={activeRow.eval.pass ? 'accent.success/15' : 'accent.danger/15'}
-            >
-              <HStack gap={1}>
-                <Icon
-                  as={activeRow.eval.pass ? LuCheck : LuX}
-                  boxSize="3"
-                  color={activeRow.eval.pass ? 'accent.success' : 'accent.danger'}
-                />
+            <HStack gap={2} align="center" maxW="50vw">
+              <Box
+                px={2}
+                py={0.5}
+                borderRadius="full"
+                bg={activeRow.eval.pass ? 'accent.success/15' : 'accent.danger/15'}
+                flexShrink={0}
+              >
+                <HStack gap={1}>
+                  <Icon
+                    as={activeRow.eval.pass ? LuCheck : LuX}
+                    boxSize="3"
+                    color={activeRow.eval.pass ? 'accent.success' : 'accent.danger'}
+                  />
+                  <Text
+                    fontSize="2xs"
+                    fontWeight="bold"
+                    fontFamily="mono"
+                    color={activeRow.eval.pass ? 'accent.success' : 'accent.danger'}
+                  >
+                    {activeRow.eval.pass ? 'PASS' : 'FAIL'}
+                  </Text>
+                </HStack>
+              </Box>
+              {activeRow.eval.reason && (
                 <Text
                   fontSize="2xs"
-                  fontWeight="bold"
+                  color="fg.muted"
                   fontFamily="mono"
-                  color={activeRow.eval.pass ? 'accent.success' : 'accent.danger'}
+                  truncate
+                  title={activeRow.eval.reason}
                 >
-                  {activeRow.eval.pass ? 'PASS' : 'FAIL'}
+                  {activeRow.eval.reason}
                 </Text>
-              </HStack>
-            </Box>
+              )}
+            </HStack>
           )}
           {isBenchmark && (
             <HStack gap={0.5}>
