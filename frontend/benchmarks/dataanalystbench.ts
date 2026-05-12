@@ -144,14 +144,14 @@ class Agent extends BenchmarkAnalystAgent {
 
 const registrables = [SearchDBSchema, ExecuteQuery, Agent];
 
-// Per-dataset row concurrency. Hard-capped low (3) because each in-flight
+// Per-dataset row concurrency. Hard-capped low because each in-flight
 // row spawns an agent that issues many LLM calls; with multiple datasets
 // running concurrently, larger values produce rate-limit retry storms
 // and amplify memory pressure from result-set materialisation.
-const PER_DATASET_CONCURRENCY = 3;
+const PER_DATASET_CONCURRENCY = 4;
 
-// Max datasets running in parallel. With PER_DATASET_CONCURRENCY=3, peak
-// in-flight agents = 3 × 3 = 9 — well under typical Anthropic Haiku 4.5
+// Max datasets running in parallel. With PER_DATASET_CONCURRENCY=4, peak
+// in-flight agents = 3 × 4 = 12 — well under typical Anthropic Haiku 4.5
 // RPM limits while still being meaningfully parallel.
 const MAX_PARALLEL_DATASETS = 3;
 
