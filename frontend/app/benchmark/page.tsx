@@ -42,6 +42,8 @@ interface RunStats {
   totalTokens: number;
   llmCalls: number;
   toolCalls: number;
+  maxToolMs: number;
+  maxToolName: string | null;
   error?: string;
 }
 
@@ -90,13 +92,35 @@ function parseUploadedFile(text: string): ParsedFile {
 
 function extractStats(row: BenchmarkRow): RunStats {
   let totalCost = 0, totalTokens = 0, llmCalls = 0, toolCalls = 0;
+  let maxToolMs = 0;
+  let maxToolName: string | null = null;
+  // toolCallId -> timestamp of the assistant message that emitted it
+  const assistantTsByToolCallId = new Map<string, number>();
+
   for (const entry of row.log as any[]) {
-    if (entry.role === 'assistant' && entry.usage) {
-      llmCalls++;
-      totalTokens += entry.usage.totalTokens ?? 0;
-      totalCost += entry.usage.cost?.total ?? 0;
+    if (entry.role === 'assistant') {
+      if (entry.usage) {
+        llmCalls++;
+        totalTokens += entry.usage.totalTokens ?? 0;
+        totalCost += entry.usage.cost?.total ?? 0;
+      }
+      for (const c of entry.content ?? []) {
+        if (c?.type === 'toolCall' && c.id) {
+          assistantTsByToolCallId.set(c.id, entry.timestamp ?? 0);
+        }
+      }
     }
-    if (entry.role === 'toolResult') toolCalls++;
+    if (entry.role === 'toolResult') {
+      toolCalls++;
+      const start = assistantTsByToolCallId.get(entry.toolCallId);
+      if (start && entry.timestamp) {
+        const dur = entry.timestamp - start;
+        if (dur > maxToolMs) {
+          maxToolMs = dur;
+          maxToolName = entry.toolName ?? null;
+        }
+      }
+    }
     if (entry._type === 'task_debug' && entry.llmDebug) {
       for (const call of entry.llmDebug) {
         llmCalls++;
@@ -106,17 +130,30 @@ function extractStats(row: BenchmarkRow): RunStats {
     }
     if (entry._type === 'task_result') toolCalls++;
   }
-  return { duration_ms: row.duration_ms, totalCost, totalTokens, llmCalls, toolCalls, error: row.error };
+  return { duration_ms: row.duration_ms, totalCost, totalTokens, llmCalls, toolCalls, maxToolMs, maxToolName, error: row.error };
 }
 
 function aggregateStats(rows: BenchmarkRow[]): { total: RunStats; perRow: RunStats[] } {
   const perRow = rows.map(extractStats);
+  // For the "total" summary, surface the worst single tool call across the
+  // whole run — not a sum, since durations of parallel tool calls overlap
+  // and summing distorts the picture.
+  let maxToolMs = 0;
+  let maxToolName: string | null = null;
+  for (const r of perRow) {
+    if (r.maxToolMs > maxToolMs) {
+      maxToolMs = r.maxToolMs;
+      maxToolName = r.maxToolName;
+    }
+  }
   const total: RunStats = {
     duration_ms: perRow.reduce((s, r) => s + r.duration_ms, 0),
     totalCost: perRow.reduce((s, r) => s + r.totalCost, 0),
     totalTokens: perRow.reduce((s, r) => s + r.totalTokens, 0),
     llmCalls: perRow.reduce((s, r) => s + r.llmCalls, 0),
     toolCalls: perRow.reduce((s, r) => s + r.toolCalls, 0),
+    maxToolMs,
+    maxToolName,
   };
   return { total, perRow };
 }
@@ -390,14 +427,14 @@ export default function BenchmarkPage() {
       ...(hasBenchmark ? ['Dataset'] : []),
       ...(hasEvals ? ['Eval'] : []),
       'Question',
-      'Time (s)', 'Cost ($)', 'Tool Calls', 'LLM Calls', 'Error',
+      'Time (s)', 'Cost ($)', 'Tool Calls', 'LLM Calls', 'Max Tool (s)', 'Slow Tool', 'Error',
     ];
     const types = [
       'INTEGER',
       ...(hasBenchmark ? ['VARCHAR'] : []),
       ...(hasEvals ? ['VARCHAR'] : []),
       'VARCHAR',
-      'DOUBLE', 'DOUBLE', 'INTEGER', 'INTEGER', 'VARCHAR',
+      'DOUBLE', 'DOUBLE', 'INTEGER', 'INTEGER', 'DOUBLE', 'VARCHAR', 'VARCHAR',
     ];
     const rows = parsed.rows.map((row, i) => {
       const st = stats.perRow[i];
@@ -410,6 +447,8 @@ export default function BenchmarkPage() {
         'Cost ($)': Math.round(st.totalCost * 10000) / 10000,
         'Tool Calls': st.toolCalls,
         'LLM Calls': st.llmCalls,
+        'Max Tool (s)': Math.round(st.maxToolMs / 100) / 10,
+        'Slow Tool': st.maxToolName ?? '',
         'Error': row.error ?? '',
         _rowIndex: i,
       };
@@ -509,6 +548,19 @@ export default function BenchmarkPage() {
               </HStack>
               <Text fontSize="xs" color="fg.muted">LLM calls</Text>
             </VStack>
+            {stats.total.maxToolMs > 0 && (
+              <VStack gap={0} align="start">
+                <HStack gap={1.5} align="baseline">
+                  <Icon as={LuClock} boxSize="4" color="accent.warning" />
+                  <Text fontSize="xl" fontWeight="bold" fontFamily="mono" lineHeight="1">
+                    {formatDuration(stats.total.maxToolMs)}
+                  </Text>
+                </HStack>
+                <Text fontSize="xs" color="fg.muted">
+                  slowest tool{stats.total.maxToolName ? ` (${stats.total.maxToolName})` : ''}
+                </Text>
+              </VStack>
+            )}
           </HStack>
         </Box>
 
@@ -623,6 +675,14 @@ export default function BenchmarkPage() {
                 <Icon as={LuWrench} boxSize="3" color="accent.teal" />
                 <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{activeRowStats.toolCalls}</Text>
               </HStack>
+              {activeRowStats.maxToolMs > 0 && (
+                <HStack gap={1}>
+                  <Icon as={LuClock} boxSize="3" color="accent.warning" />
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.muted">
+                    max: {activeRowStats.maxToolName ?? 'tool'} {formatDuration(activeRowStats.maxToolMs)}
+                  </Text>
+                </HStack>
+              )}
             </HStack>
           )}
           {activeRow?.eval && (

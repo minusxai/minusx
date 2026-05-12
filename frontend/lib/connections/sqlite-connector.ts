@@ -1,13 +1,34 @@
 import 'server-only';
 import * as fs from 'fs';
-import Database from 'better-sqlite3';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { resolveDuckDbFilePath } from './duckdb-connector';
+import { withSqliteViaDuckdbConnection } from './sqlite-via-duckdb-registry';
+import { immutableSet } from '@/lib/utils/immutable-collections';
+
+const SKIP_SCHEMAS = immutableSet(['information_schema', 'pg_catalog']);
+
+// Make rows JSON-safe: JSON.stringify handles Date natively; BigInt needs
+// an explicit replacer. Same shape as the DuckDB connector.
+function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return JSON.parse(JSON.stringify(rows, (_, v) => {
+    if (typeof v === 'bigint') {
+      return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+        ? Number(v) : v.toString();
+    }
+    return v;
+  }));
+}
 
 /**
- * Node.js SQLite connector.
- * Uses better-sqlite3 (synchronous) in read-only mode.
- * Config: { file_path: string }
+ * SQLite connector. Routes queries through DuckDB's `sqlite_scanner`
+ * extension instead of better-sqlite3, so SQLite I/O lands on DuckDB's
+ * worker threads and stops blocking the Node event loop. This was the
+ * dominant cause of multi-row benchmark slowdowns (sibling rows'
+ * synchronous `stmt.all()` calls were starving DuckDB callbacks on the
+ * JS thread, producing 270-625× wall-clock blow-up vs direct DB time).
+ *
+ * SQL dialect is now DuckDB (Postgres-flavoured). Column types reflect
+ * that: INTEGER → BIGINT, TEXT → VARCHAR, REAL → DOUBLE.
  */
 export class SqliteConnector extends NodeConnector {
   private readonly absPath: string;
@@ -22,12 +43,9 @@ export class SqliteConnector extends NodeConnector {
       return { success: false, message: `File not found: ${this.absPath}` };
     }
     try {
-      const db = new Database(this.absPath, { readonly: true });
-      try {
-        db.prepare('SELECT 1').get();
-      } finally {
-        db.close();
-      }
+      await withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
+        await conn.run('SELECT 1');
+      });
       if (includeSchema) {
         const schemas = await this.getSchema();
         return { success: true, message: 'Connection successful', schema: { schemas } };
@@ -39,48 +57,65 @@ export class SqliteConnector extends NodeConnector {
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
-    const db = new Database(this.absPath, { readonly: true });
-    try {
-      // Replace named params (:name) with positional ? (SQLite syntax)
+    return withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
+      // Replace named params (:name) with positional $N (DuckDB syntax)
       const paramValues: unknown[] = [];
       const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
         paramValues.push(params?.[key] ?? null);
-        return '?';
+        return `$${paramValues.length}`;
       });
 
-      const stmt = db.prepare(positionalSql);
-      const columnDefs = stmt.columns();
-      const rows = stmt.all(...paramValues) as Record<string, unknown>[];
+      // Build display query with params inlined (same as DuckDB connector)
+      let finalQuery = sql;
+      if (params) {
+        for (const [key, val] of Object.entries(params)) {
+          const replacement = typeof val === 'number' ? String(val) : `'${String(val).replace(/'/g, "''")}'`;
+          finalQuery = finalQuery.replace(new RegExp(`:${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), replacement);
+        }
+      }
 
-      const columns = columnDefs.map((c) => c.name);
-      const types = columnDefs.map((c) => c.type || 'TEXT');
-
-      return { columns, types, rows };
-    } finally {
-      db.close();
-    }
+      const result = await conn.run(positionalSql, paramValues as never);
+      const colCount = result.columnCount;
+      const columns: string[] = [];
+      const types: string[] = [];
+      for (let i = 0; i < colCount; i++) {
+        columns.push(result.columnName(i));
+        types.push(result.columnType(i).toString());
+      }
+      const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
+      const rows = makeJsonSafe(rawRows);
+      return { columns, types, rows, finalQuery };
+    });
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    const db = new Database(this.absPath, { readonly: true });
-    try {
-      const tables = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-      ).all() as Array<{ name: string }>;
+    return withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
+      const result = await conn.run(`
+        SELECT table_schema, table_name, column_name, data_type
+        FROM information_schema.columns
+        WHERE table_catalog = 'db'
+        ORDER BY table_schema, table_name, ordinal_position
+      `);
+      const rows = await result.getRowObjectsJS() as Array<{
+        table_schema: string;
+        table_name: string;
+        column_name: string;
+        data_type: string;
+      }>;
 
-      const schemaTables = tables.map(({ name: tableName }) => {
-        const cols = db.prepare(
-          `PRAGMA table_info("${tableName.replace(/"/g, '""')}")`,
-        ).all() as Array<{ name: string; type: string }>;
-        return {
-          table: tableName,
-          columns: cols.map((c) => ({ name: c.name, type: c.type || 'TEXT' })),
-        };
-      });
+      const schemaMap = new Map<string, Map<string, Array<{ name: string; type: string }>>>();
+      for (const row of rows) {
+        if (SKIP_SCHEMAS.has(row.table_schema)) continue;
+        if (!schemaMap.has(row.table_schema)) schemaMap.set(row.table_schema, new Map());
+        const tableMap = schemaMap.get(row.table_schema)!;
+        if (!tableMap.has(row.table_name)) tableMap.set(row.table_name, []);
+        tableMap.get(row.table_name)!.push({ name: row.column_name, type: row.data_type });
+      }
 
-      return [{ schema: 'main', tables: schemaTables }];
-    } finally {
-      db.close();
-    }
+      return Array.from(schemaMap.entries()).map(([schema, tables]) => ({
+        schema,
+        tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
+      }));
+    });
   }
 }
