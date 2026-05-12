@@ -102,6 +102,22 @@ export function buildBenchmarkSources(
   connectorsByName: Map<string, NodeConnector>,
   allowedNames: ReadonlySet<string>,
 ): { schemaSource: SchemaSource; sqlExecutor: SqlExecutor } {
+  // Schema cache scoped to this benchmark run. Without it, every
+  // SearchDBSchema call re-introspects the connector (DuckDB
+  // `information_schema.columns`, SQLite `sqlite_master` + `PRAGMA
+  // table_info` per table) — repeated across every row × every search.
+  // The benchmark DB files don't change during a run, so memoising the
+  // full schema per connector is safe. Stores the in-flight Promise so
+  // concurrent first-callers don't issue duplicate introspection queries.
+  const schemaPromises = new Map<string, Promise<Awaited<ReturnType<NodeConnector['getSchema']>>>>();
+  const getCachedSchema = (name: string, conn: NodeConnector) => {
+    const cached = schemaPromises.get(name);
+    if (cached) return cached;
+    const p = conn.getSchema();
+    schemaPromises.set(name, p);
+    return p;
+  };
+
   const schemaSource: SchemaSource = {
     async search(query, connection) {
       if (!allowedNames.has(connection)) {
@@ -109,7 +125,7 @@ export function buildBenchmarkSources(
       }
       const conn = connectorsByName.get(connection);
       if (!conn) throw new Error(`connector '${connection}' not loaded`);
-      const schema = await conn.getSchema();
+      const schema = await getCachedSchema(connection, conn);
       const q = query.toLowerCase();
       return schema.flatMap((s) =>
         s.tables
