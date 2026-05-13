@@ -22,6 +22,10 @@ import type { ConversationLogEntry } from '@/lib/types';
 interface EvalResult {
   pass: boolean;
   reason: string;
+  /** % of runs that did NOT pass (0..100). For single-run rows this is
+   *  redundant with `pass` (0 or 100); for DAB_TIMES_RUN>1 rows it
+   *  surfaces flakiness directly. Populated by mxscripts/eval_output.py. */
+  failure_rate?: number;
 }
 
 interface BenchmarkRow {
@@ -438,6 +442,7 @@ export default function BenchmarkPage() {
   const tableData = useMemo(() => {
     if (!isBenchmark || !stats) return null;
     const hasEvals = parsed.rows.some(r => r.eval);
+    const hasFailureRate = parsed.rows.some(r => r.eval?.failure_rate != null);
     const hasBenchmark = parsed.rows.some(r => r.benchmark);
     const hasQueryId = parsed.rows.some(r => r.input_index != null);
     const columns = [
@@ -446,6 +451,7 @@ export default function BenchmarkPage() {
       'Question',
       'Answer',
       ...(hasEvals ? ['Eval', 'Eval Reason'] : []),
+      ...(hasFailureRate ? ['Failure Rate (%)'] : []),
       'Time (s)', 'Cost ($)', 'Tool Calls', 'LLM Calls', 'Max Tool (s)', 'Slow Tool', 'Error',
     ];
     const types = [
@@ -454,6 +460,7 @@ export default function BenchmarkPage() {
       'VARCHAR',
       'VARCHAR',
       ...(hasEvals ? ['VARCHAR', 'VARCHAR'] : []),
+      ...(hasFailureRate ? ['DOUBLE'] : []),
       'DOUBLE', 'DOUBLE', 'INTEGER', 'INTEGER', 'DOUBLE', 'VARCHAR', 'VARCHAR',
     ];
     const rows = parsed.rows.map((row, i) => {
@@ -466,6 +473,11 @@ export default function BenchmarkPage() {
         ...(hasEvals ? {
           'Eval': row.eval ? (row.eval.pass ? '\u2705' : '\u274C') : '-',
           'Eval Reason': row.eval?.reason ?? '',
+        } : {}),
+        ...(hasFailureRate ? {
+          'Failure Rate (%)': row.eval?.failure_rate != null
+            ? Math.round(row.eval.failure_rate * 10) / 10
+            : null,
         } : {}),
         'Time (s)': Math.round(row.duration_ms / 100) / 10,
         'Cost ($)': Math.round(st.totalCost * 10000) / 10000,
