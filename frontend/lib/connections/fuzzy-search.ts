@@ -10,6 +10,7 @@ export interface FuzzySearchResult {
   matches: Array<{ value: string; similarity: number }>;
   searchTerm: string;
   method: 'jaro_winkler' | 'trigram' | 'levenshtein' | 'substring';
+  query: string;
 }
 
 interface FuzzySearchParams {
@@ -43,33 +44,37 @@ function rowsToMatches(rows: Record<string, unknown>[]): Array<{ value: string; 
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
 
 async function fuzzyDuckDb(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
+  const col = escapeIdent(p.column);
+  const castCol = `CAST(${col} AS VARCHAR)`;
   const sql = `
-    SELECT DISTINCT ${escapeIdent(p.column)}::VARCHAR AS value,
-           jaro_winkler_similarity(lower(${escapeIdent(p.column)}::VARCHAR), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
+    SELECT DISTINCT ${castCol} AS value,
+           jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
     FROM ${escapeIdent(p.schema)}.${escapeIdent(p.table)}
-    WHERE ${escapeIdent(p.column)} IS NOT NULL
-      AND jaro_winkler_similarity(lower(${escapeIdent(p.column)}::VARCHAR), lower('${escapeLiteral(p.searchTerm)}')) > 0.6
+    WHERE ${col} IS NOT NULL
+      AND jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.8
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'jaro_winkler' };
+  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'jaro_winkler', query: sql.trim() };
 }
 
 async function fuzzyPostgres(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
   // Try pg_trgm similarity() first
+  const col = escapeIdent(p.column);
+  const castCol = `CAST(${col} AS TEXT)`;
   const trigramSql = `
-    SELECT DISTINCT ${escapeIdent(p.column)}::TEXT AS value,
-           similarity(lower(${escapeIdent(p.column)}::TEXT), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
+    SELECT DISTINCT ${castCol} AS value,
+           similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
     FROM ${escapeIdent(p.schema)}.${escapeIdent(p.table)}
-    WHERE ${escapeIdent(p.column)} IS NOT NULL
-      AND similarity(lower(${escapeIdent(p.column)}::TEXT), lower('${escapeLiteral(p.searchTerm)}')) > 0.3
+    WHERE ${col} IS NOT NULL
+      AND similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.3
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
   try {
     const result = await queryFn(trigramSql);
-    return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'trigram' };
+    return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'trigram', query: trigramSql.trim() };
   } catch {
     // pg_trgm not available — fall back to ILIKE
     return fuzzySubstring(queryFn, p, 'double');
@@ -89,7 +94,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: Required<FuzzySearchParams>): Pr
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'levenshtein' };
+  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'levenshtein', query: sql.trim() };
 }
 
 type QuoteStyle = 'double' | 'backtick';
@@ -118,7 +123,7 @@ async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, 
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'substring' };
+  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'substring', query: sql.trim() };
 }
 
 async function fuzzyBigQuery(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
@@ -135,7 +140,7 @@ async function fuzzyBigQuery(queryFn: QueryFn, p: Required<FuzzySearchParams>): 
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'substring' };
+  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'substring', query: sql.trim() };
 }
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────

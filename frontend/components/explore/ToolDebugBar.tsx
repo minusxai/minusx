@@ -19,10 +19,11 @@ interface ToolDebugBarProps {
 const TOOL_COLOR_MAP: Record<string, string> = {
   ExecuteQuery: 'accent.danger',
   CreateFile: 'accent.secondary',
-  EditFile: 'accent.teal',
+  EditFile: 'accent.secondary',
   ReadFiles: 'accent.primary',
   SearchFiles: 'accent.warning',
   SearchDBSchema: 'accent.warning',
+  FuzzySearch: 'accent.primary',
   Navigate: 'accent.cyan',
   TalkToUser: 'fg.subtle',
   AnalystAgent: 'fg.subtle',

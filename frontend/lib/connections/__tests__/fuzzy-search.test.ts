@@ -40,10 +40,10 @@ describe('fuzzySearch — DuckDB', () => {
     expect(result.method).toBe('jaro_winkler');
   });
 
-  it('applies > 0.6 threshold', async () => {
+  it('applies > 0.8 threshold', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('> 0.6');
+    expect(getCapturedSql(queryFn)).toContain('> 0.8');
   });
 
   it('double-quotes identifiers', async () => {
@@ -57,7 +57,7 @@ describe('fuzzySearch — DuckDB', () => {
   it('casts column to VARCHAR', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('::VARCHAR');
+    expect(getCapturedSql(queryFn)).toContain('CAST');
   });
 
   it('parses result rows into matches', async () => {
@@ -138,7 +138,7 @@ describe('fuzzySearch — PostgreSQL', () => {
   it('casts column to TEXT', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('::TEXT');
+    expect(getCapturedSql(queryFn)).toContain('CAST');
   });
 
   it('falls back to ILIKE when pg_trgm is not installed', async () => {
