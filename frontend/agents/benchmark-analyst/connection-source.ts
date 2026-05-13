@@ -123,7 +123,12 @@ export function buildBenchmarkSources(
         const dialect = dialectsByName.get(connection) ?? 'duckdb';
         const cappedSql = await enforceQueryLimit(sql, { dialect });
         const result = await conn.query(cappedSql);
-        return { rows: result.rows };
+        return {
+          rows: result.rows,
+          columns: result.columns,
+          types: result.types,
+          finalQuery: result.finalQuery,
+        };
       } catch (err) {
         return { rows: [], error: err instanceof Error ? err.message : String(err) };
       }

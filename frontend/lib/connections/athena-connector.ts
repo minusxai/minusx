@@ -8,6 +8,7 @@ import {
 import { GlueClient, GetDatabasesCommand, GetTablesCommand } from '@aws-sdk/client-glue';
 import type { QueryResult, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 const POLL_INTERVAL_MS = 500;
 
@@ -89,6 +90,8 @@ export class AthenaConnector extends NodeConnectorBase {
       return '?';
     });
 
+    const finalQuery = inlineSqlParams(sql, params);
+
     const { QueryExecutionId } = await client.send(
       new StartQueryExecutionCommand({
         QueryString: athenaSql,
@@ -120,7 +123,7 @@ export class AthenaConnector extends NodeConnectorBase {
       return obj;
     });
 
-    return { columns, types, rows };
+    return { columns, types, rows, finalQuery };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

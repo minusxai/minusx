@@ -116,7 +116,12 @@ export interface QueryResult {
   rows: Record<string, any>[];
   id?: string;        // query hash for delta deduplication
   cachedAt?: number;  // Unix timestamp (ms) when result was cached; absent on cache miss
-  finalQuery?: string; // Fully resolved SQL with params inlined (for display)
+  /** Fully resolved SQL with `:name` placeholders inlined as literals.
+   *  Populated by every connector via `lib/sql/inline-params.ts`.
+   *  Optional here (vs required on the connector contract in
+   *  `lib/connections/base.ts`) because cached/legacy entries in Redux or
+   *  IndexedDB may predate the field. */
+  finalQuery?: string;
 }
 
 export interface CompressedQueryResult {
@@ -128,6 +133,9 @@ export interface CompressedQueryResult {
   truncated: boolean;  // true if data was cut short by LIMIT_CHARS
   id?: string;         // query hash (from QueryResult.id)
   error?: string;      // set when query execution failed
+  /** Fully resolved SQL, propagated from QueryResult so LLM-facing
+   *  compressions surface the actual executed query alongside the data. */
+  finalQuery?: string;
 }
 
 export interface Rectangle {

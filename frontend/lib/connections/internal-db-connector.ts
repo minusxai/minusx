@@ -3,6 +3,7 @@ import { init, parse, Dialect } from '@polyglot-sql/sdk';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { getModules } from '@/lib/modules/registry';
 import { NodeConnector, QueryResult, SchemaEntry, TestConnectionResult } from './base';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 const WRITE_OPERATIONS = immutableSet(['insert', 'update', 'delete', 'create', 'drop', 'alter', 'truncate', 'merge', 'replace']);
 
@@ -44,9 +45,10 @@ export class InternalDbConnector extends NodeConnector {
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
     await assertReadOnly(sql);
     const { sql: positionalSql, values } = namedToPositional(sql, params);
+    const finalQuery = inlineSqlParams(sql, params);
     const result = await getModules().db.exec<Record<string, unknown>>(positionalSql, values);
     const columns = result.rows.length > 0 ? Object.keys(result.rows[0]) : [];
-    return { columns, types: columns.map(() => 'text'), rows: result.rows };
+    return { columns, types: columns.map(() => 'text'), rows: result.rows, finalQuery };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

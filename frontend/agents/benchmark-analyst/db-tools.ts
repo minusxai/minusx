@@ -131,8 +131,14 @@ export class ExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAna
     );
 
     return {
-      // LLM sees: { columns, types, data: markdown, totalRows, shownRows, truncated }.
-      content: [{ type: 'text', text: JSON.stringify({ success: true, ...compressed }) }],
+      // LLM sees: { columns, types, data: markdown, totalRows, shownRows,
+      // truncated, finalQuery }. `finalQuery` is the SQL with `:name`
+      // parameters inlined as literals — the closest readable form of what
+      // the engine actually saw (see lib/sql/inline-params.ts).
+      content: [{
+        type: 'text',
+        text: JSON.stringify({ success: true, ...compressed, finalQuery: result.finalQuery }),
+      }],
       isError: false,
       // UI display reads `details.queryResult.{columns,types,rows}` — full
       // untruncated rows, separate from what the LLM sees.

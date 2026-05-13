@@ -36,6 +36,12 @@ export interface QueryResult {
   columns: string[];
   types: string[];
   rows: Record<string, unknown>[];
+  /** The SQL the engine effectively saw, with `:name` placeholders replaced
+   *  by their inlined literal values via `lib/sql/inline-params.ts`. Useful
+   *  for display, logging, and surfacing to LLMs. For dialects that take SQL
+   *  without parameter substitution (e.g. Mongo via queryleaf) this is
+   *  simply the input SQL. */
+  finalQuery: string;
 }
 
 export interface TestConnectionResult {

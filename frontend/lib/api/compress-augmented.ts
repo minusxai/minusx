@@ -100,7 +100,7 @@ function mdTableCell(value: string): string {
 
 export function compressQueryResult(qr: QueryResult & { error?: string }, maxChars = LIMIT_CHARS): CompressedQueryResult {
   if ((qr as any).error) {
-    return { columns: [], types: [], data: '', totalRows: 0, shownRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
+    return { columns: [], types: [], data: '', totalRows: 0, shownRows: 0, truncated: false, id: qr.id, error: (qr as any).error, finalQuery: qr.finalQuery };
   }
   const { columns = [], types = [], rows = [] } = qr;
   const totalRows = rows.length;
@@ -118,7 +118,7 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
     shownRows++;
   }
 
-  return { columns, types, data: md, totalRows, shownRows, truncated, id: qr.id };
+  return { columns, types, data: md, totalRows, shownRows, truncated, id: qr.id, finalQuery: qr.finalQuery };
 }
 
 function compressFileState(fs: FileState): CompressedFileState {

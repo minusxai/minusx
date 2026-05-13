@@ -1,23 +1,20 @@
 import 'server-only';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { getNodeConnector } from '@/lib/connections';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { connectionTypeToDialect } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { QueryResult } from './base';
 
-export interface QueryResult {
-  columns: string[];
-  types: string[];
-  rows: Record<string, any>[];
-  finalQuery?: string;
-}
+export type { QueryResult };
 
 /**
  * Execute a SQL query against a named connection.
  *
- * Tries the Node.js connector first (DuckDB, CSV, Google Sheets).
- * Falls back to the Python backend for all other connection types.
+ * Every supported connection type has a Node.js connector in
+ * `getNodeConnector` (DuckDB, SQLite, Postgres, BigQuery, Athena, CSV,
+ * Google Sheets, Mongo, internal_db). Unknown connection names or types
+ * throw.
  *
  * @param databaseName - Connection name (matches the `name` field in connection config)
  * @param query        - SQL query string
@@ -29,40 +26,30 @@ export async function runQuery(
   query: string,
   params: Record<string, string | number>,
   user: EffectiveUser,
-  parameterTypes?: Record<string, 'text' | 'number' | 'date'>
 ): Promise<QueryResult> {
-  // Try Node.js connector first — use getRawByName so credentials (e.g. service_account_json) are included
+  // Use getRawByName so credentials (e.g. service_account_json) are included.
   const rawConn = await ConnectionsAPI.getRawByName(databaseName, user.mode).catch(() => null);
+  if (!rawConn) {
+    throw new Error(`Connection not found: ${databaseName}`);
+  }
+
+  const { type, config } = rawConn;
+  if (type === 'internal_db' && user.mode !== 'internals') {
+    throw new Error('internal_db connections are only available in internals mode');
+  }
+
+  const connector = getNodeConnector(databaseName, type, config);
+  if (!connector) {
+    throw new Error(`No connector available for type: ${type}`);
+  }
 
   // Single seam for row-cap enforcement: every server-side execution (v1 chat
   // ExecuteQuery, /api/query, v2 chat orchestrator) flows through here, so
   // applying enforceQueryLimit at this point covers them all uniformly.
   // enforceQueryLimit is a no-op on parse failure and on non-SELECT statements
   // (ATTACH, INSERT, DDL, …), so this is safe for the full set of inputs.
-  const dialect = rawConn ? connectionTypeToDialect(rawConn.type) : 'duckdb';
+  const dialect = connectionTypeToDialect(type);
   const cappedQuery = await enforceQueryLimit(query, { dialect });
 
-  if (rawConn) {
-    const { type, config } = rawConn;
-    if (type === 'internal_db' && user.mode !== 'internals') {
-      throw new Error('internal_db connections are only available in internals mode');
-    }
-    const connector = getNodeConnector(databaseName, type, config);
-    if (connector) {
-      return connector.query(cappedQuery, params);
-    }
-  }
-
-  // Fall back to Python backend (handles all non-Node types, and unknown connections)
-  const response = await pythonBackendFetch('/api/execute-query', {
-    method: 'POST',
-    body: JSON.stringify({ query: cappedQuery, parameters: params, connection_name: databaseName, ...(parameterTypes && { parameter_types: parameterTypes }) }),
-  }, user);
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.detail || data.message || 'Query execution failed');
-  }
-
-  return response.json();
+  return connector.query(cappedQuery, params);
 }

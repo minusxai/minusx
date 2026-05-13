@@ -4,6 +4,7 @@ import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from '.
 import { resolveDuckDbFilePath } from './duckdb-connector';
 import { withSqliteViaDuckdbConnection } from './sqlite-via-duckdb-registry';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 const SKIP_SCHEMAS = immutableSet(['information_schema', 'pg_catalog']);
 
@@ -65,14 +66,7 @@ export class SqliteConnector extends NodeConnector {
         return `$${paramValues.length}`;
       });
 
-      // Build display query with params inlined (same as DuckDB connector)
-      let finalQuery = sql;
-      if (params) {
-        for (const [key, val] of Object.entries(params)) {
-          const replacement = typeof val === 'number' ? String(val) : `'${String(val).replace(/'/g, "''")}'`;
-          finalQuery = finalQuery.replace(new RegExp(`:${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), replacement);
-        }
-      }
+      const finalQuery = inlineSqlParams(sql, params);
 
       const result = await conn.run(positionalSql, paramValues as never);
       const colCount = result.columnCount;
