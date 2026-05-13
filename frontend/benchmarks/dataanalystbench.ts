@@ -130,8 +130,18 @@ class Agent extends BenchmarkAnalystAgent {
       - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
       - Be concise, specific and accurate.
     
-    ## Response Format:
-    - Only the first 30 words of your response will be evaluated, so make sure to put the most important information at the beginning that directly and fully answers the question.
+    ## Response Format [EXTREMELY IMPORTANT]:
+    - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.
+    - Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary. 
+    - Format: 
+        TL;DR: <your concise answer to the question, based on the data and your analysis>
+        Analysis: <a description of your analysis, general discussion about the results, and continuation question for the user to investigate further.>
+    Example:
+    Q: What is the total revenue for product X in the last quarter?
+    Agent:
+    <Runs tools to analyze the data, arrives at the answer>
+    TL;DR: $123,456 was the total revenue for product X in the last quarter.
+    Analysis: <markdown table showing revenue by month>. The revenue over quarter-over-quarter has grown by 20%, with the highest revenue in March. Would you like to see a breakdown by region or customer segment?
 
     ## Data Documentation:
     ${this.context.contextDocs ?? 'No documentation available.'}

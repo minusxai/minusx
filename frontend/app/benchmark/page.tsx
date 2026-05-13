@@ -13,6 +13,8 @@ import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connec
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
 import ToolDebugBar from '@/components/explore/ToolDebugBar';
+import { immutableSet } from '@/lib/utils/immutable-collections';
+import Markdown from '@/components/Markdown';
 import type { ConversationLogEntry } from '@/lib/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -23,6 +25,7 @@ interface EvalResult {
 }
 
 interface BenchmarkRow {
+  input_index?: number;
   input: { user_message: string; allowed_connections: string[] };
   log: unknown[];
   duration_ms: number;
@@ -86,6 +89,18 @@ function parseUploadedFile(text: string): ParsedFile {
   const rows: BenchmarkRow[] = lines.map(line => JSON.parse(line) as BenchmarkRow);
   const embeddedConnections = rows.find(r => r.connections?.length)?.connections;
   return { kind: 'benchmark', rows, embeddedConnections };
+}
+
+function extractAnswer(row: BenchmarkRow): string {
+  let lastText = '';
+  for (const entry of row.log as any[]) {
+    if (entry.role === 'assistant') {
+      for (const c of entry.content ?? []) {
+        if (c?.type === 'text' && c.text) lastText = c.text;
+      }
+    }
+  }
+  return lastText;
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────
@@ -365,6 +380,8 @@ function UploadScreen({ onDrop, onInputChange }: {
 
 // ── Main page ─────────────────────────────────────────────────────────────
 
+const WRAP_COLUMNS = immutableSet(['Question', 'Answer', 'Eval Reason']);
+
 export default function BenchmarkPage() {
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   // null = table view, number = detail view for that row index
@@ -422,30 +439,34 @@ export default function BenchmarkPage() {
     if (!isBenchmark || !stats) return null;
     const hasEvals = parsed.rows.some(r => r.eval);
     const hasBenchmark = parsed.rows.some(r => r.benchmark);
+    const hasQueryId = parsed.rows.some(r => r.input_index != null);
     const columns = [
-      '#',
       ...(hasBenchmark ? ['Dataset'] : []),
-      ...(hasEvals ? ['Eval', 'Eval Reason'] : []),
+      ...(hasQueryId ? ['Query ID'] : []),
       'Question',
+      'Answer',
+      ...(hasEvals ? ['Eval', 'Eval Reason'] : []),
       'Time (s)', 'Cost ($)', 'Tool Calls', 'LLM Calls', 'Max Tool (s)', 'Slow Tool', 'Error',
     ];
     const types = [
-      'INTEGER',
       ...(hasBenchmark ? ['VARCHAR'] : []),
-      ...(hasEvals ? ['VARCHAR', 'VARCHAR'] : []),
+      ...(hasQueryId ? ['INTEGER'] : []),
       'VARCHAR',
+      'VARCHAR',
+      ...(hasEvals ? ['VARCHAR', 'VARCHAR'] : []),
       'DOUBLE', 'DOUBLE', 'INTEGER', 'INTEGER', 'DOUBLE', 'VARCHAR', 'VARCHAR',
     ];
     const rows = parsed.rows.map((row, i) => {
       const st = stats.perRow[i];
       return {
-        '#': i + 1,
         ...(hasBenchmark ? { 'Dataset': row.benchmark ?? '' } : {}),
+        ...(hasQueryId ? { 'Query ID': row.input_index ?? i } : {}),
+        'Question': row.input.user_message,
+        'Answer': extractAnswer(row),
         ...(hasEvals ? {
           'Eval': row.eval ? (row.eval.pass ? '\u2705' : '\u274C') : '-',
           'Eval Reason': row.eval?.reason ?? '',
         } : {}),
-        'Question': row.input.user_message,
         'Time (s)': Math.round(row.duration_ms / 100) / 10,
         'Cost ($)': Math.round(st.totalCost * 10000) / 10000,
         'Tool Calls': st.toolCalls,
@@ -574,6 +595,15 @@ export default function BenchmarkPage() {
             types={tableData.types}
             rows={tableData.rows}
             onRowClick={(row) => setSelectedRow(row._rowIndex as number)}
+            initialColumnSizing={{ 'Question': 250, 'Answer': 500, 'Eval Reason': 250, 'Query ID': 100, 'Eval': 100 }}
+            initialSorting={[{ id: 'Dataset', desc: false }, { id: 'Query ID', desc: false }]}
+            wrapColumns={WRAP_COLUMNS}
+            renderCell={(colId, value) => {
+              if (colId === 'Answer' && typeof value === 'string' && value) {
+                return <Markdown context="sidebar" fontSize="2xs">{value}</Markdown>;
+              }
+              return undefined;
+            }}
           />
         </Box>
       </Box>
