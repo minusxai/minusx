@@ -97,7 +97,7 @@ describe('ExploreDataset', () => {
       {
         queries: [
           { connection: 'orders_db', query: 'SELECT product_id, SUM(amount) as total FROM orders GROUP BY product_id ORDER BY total DESC LIMIT 1000', label: 'revenue' },
-          { connection: 'products_db', query: 'SELECT id, name, category FROM products', label: 'products' },
+          { connection: 'products_db', query: 'SELECT id, name, category FROM products WHERE id IN ($revenue.product_id)', label: 'products' },
         ],
         prompt: 'Join on product_id=id, return product name + total revenue sorted desc',
       },

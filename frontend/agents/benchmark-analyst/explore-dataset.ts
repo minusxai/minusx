@@ -45,7 +45,7 @@ const QuerySpec = Type.Object({
 
 const ExploreDatasetParams = Type.Object({
   queries: Type.Array(QuerySpec, {
-    description: 'One or more queries to run sequentially (can span different connections). Later queries can reference earlier results via $label.column_name (e.g. WHERE id IN ($revenue.product_id)). Each result is labelled and passed to the LLM together. Use multiple queries, and the $reference only when data lives in different databases — avoids needing to manually copy IDs between queries. If same DB, it is simpler to just use CTE/subqueries.',
+    description: 'One or more queries to run sequentially (can span different connections). When using multiple queries, the 2nd+ query MUST reference an earlier result via $label.column_name (e.g. WHERE id IN ($revenue.product_id)) to keep datasets aligned. If you need independent explorations, use separate ExploreDataset calls instead. If same DB, prefer CTE/subqueries in a single query.',
     minItems: 1,
   }),
   prompt: Type.String({ description: 'A precise, 1-2 sentence instruction. State exactly what output you need (e.g. "group rows by real-world entity and return a mapping of canonical_name → [ids]"). Do NOT ask open-ended questions.' }),
@@ -111,6 +111,25 @@ export class ExploreDataset extends MXTool<
       if (!connector) {
         return {
           content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Connection '${connection}' not found. Use ListDBConnections to see available connections.` }) }],
+          isError: true,
+          details: { analysis: '', totalRowCount: 0, executedQueries },
+        };
+      }
+
+      // Validate: LIMIT must be >= 1000 (smaller limits miss relevant data)
+      const limitMatch = rawQuery.match(/\bLIMIT\s+(\d+)\b/i);
+      if (limitMatch && parseInt(limitMatch[1], 10) < 1000) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query "${label || connection}" has LIMIT ${limitMatch[1]} which is too low — a smaller limit will miss relevant data and lead to incorrect results. Use LIMIT 1000 or higher.` }) }],
+          isError: true,
+          details: { analysis: '', totalRowCount: 0, executedQueries },
+        };
+      }
+
+      // Validate: 2nd+ queries must reference an earlier result via $label.col
+      if (i > 0 && !/\$[a-zA-Z_]\w*\.\w+/.test(rawQuery)) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query ${i + 1} ("${label || connection}") must reference an earlier query result using $label.column_name (e.g. WHERE id IN ($${queries[0].label || 'prev'}.id)). For independent explorations, use separate ExploreDataset calls.` }) }],
           isError: true,
           details: { analysis: '', totalRowCount: 0, executedQueries },
         };
