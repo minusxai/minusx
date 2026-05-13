@@ -1,13 +1,14 @@
 export type ConnectionTypeOption = {
-  type: 'bigquery' | 'postgresql' | 'csv' | 'xlsx' | 'google-sheets' | 'athena' | 'clickhouse' | 'databricks' | 'snowflake';
+  type: 'bigquery' | 'postgresql' | 'csv' | 'xlsx' | 'google-sheets' | 'athena' | 'clickhouse' | 'databricks' | 'snowflake' | 'duckdb' | 'sqlite';
   name: string;
   logo: string;
   comingSoon: boolean;
-  group: 'external-engine' | 'minusx-warehouse' | 'coming-soon';
+  group: 'external-engine' | 'minusx-warehouse' | 'coming-soon' | 'dev-only';
   description: string;
   note?: string;
   redirectToStatic?: boolean;
   isStatic?: boolean;
+  devOnly?: boolean;
 };
 
 export const CONNECTION_TYPES: ConnectionTypeOption[] = [
@@ -90,6 +91,24 @@ export const CONNECTION_TYPES: ConnectionTypeOption[] = [
     group: 'coming-soon',
     description: 'Snowflake warehouse support is planned.',
   },
+  {
+    type: 'duckdb',
+    name: 'DuckDB',
+    logo: '/logos/duckdb.svg',
+    comingSoon: false,
+    group: 'dev-only',
+    devOnly: true,
+    description: 'Connect to a local DuckDB database file.',
+  },
+  {
+    type: 'sqlite',
+    name: 'SQLite',
+    logo: '/logos/sqlite.svg',
+    comingSoon: false,
+    group: 'dev-only',
+    devOnly: true,
+    description: 'Connect to a local SQLite database file (via DuckDB sqlite_scanner).',
+  },
 ];
 
 export const CONNECTION_TYPE_GROUPS = [
@@ -107,5 +126,10 @@ export const CONNECTION_TYPE_GROUPS = [
     id: 'coming-soon',
     title: 'Coming Soon',
     description: 'These engines are visible so teams can see what is planned next.',
+  },
+  {
+    id: 'dev-only',
+    title: 'Dev Only',
+    description: 'Local file-based connectors available in dev mode.',
   },
 ] as const;

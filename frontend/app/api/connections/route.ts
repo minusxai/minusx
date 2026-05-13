@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { listAllConnections, createConnection } from '@/lib/data/connections.server';
 import { successResponse, handleApiError } from '@/lib/api/api-responses';
+import { validateConnectionType } from '@/lib/data/helpers/connections';
 import { withAuth } from '@/lib/api/with-auth';
 
 // GET /api/connections - List all connections
@@ -27,6 +28,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const input = await request.json();
+    validateConnectionType(input.type);
     const result = await createConnection(input, user);
     // Unwrap the data layer result before wrapping with successResponse
     return successResponse(result.connection, 201);

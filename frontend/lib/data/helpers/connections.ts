@@ -3,11 +3,26 @@
  * Validation, config sanitization, and constants
  */
 
+import { IS_DEV } from '@/lib/constants';
+
 /**
  * Reserved connection names that cannot be used
  */
 // 'static' is the shared CSV/Google Sheets landing zone — one per mode, cannot be deleted or renamed
 export const RESERVED_NAMES = ['static'];
+
+/** Connection types only available in development (NODE_ENV !== 'production'). */
+export const DEV_ONLY_CONNECTION_TYPES = ['duckdb', 'sqlite'];
+
+/**
+ * Reject dev-only connection types in production.
+ * @throws Error if the type is dev-only and we're in production
+ */
+export function validateConnectionType(type: string): void {
+  if (!IS_DEV && DEV_ONLY_CONNECTION_TYPES.includes(type)) {
+    throw new Error(`Connection type '${type}' is only available in development mode`);
+  }
+}
 
 export function validateDuckDbFilePath(type: string, _config: Record<string, any>): void {
   if (type !== 'duckdb') return;

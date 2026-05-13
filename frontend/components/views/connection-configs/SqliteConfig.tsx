@@ -3,7 +3,7 @@
 import { Box, Text, Input } from '@chakra-ui/react';
 import { BaseConfigProps } from './types';
 
-export default function DuckDBConfig({ config, onChange }: BaseConfigProps) {
+export default function SqliteConfig({ config, onChange }: BaseConfigProps) {
   const filePath = config.file_path || '';
 
   return (
@@ -14,7 +14,7 @@ export default function DuckDBConfig({ config, onChange }: BaseConfigProps) {
       <Input
         value={filePath}
         onChange={(e) => onChange({ ...config, file_path: e.target.value })}
-        placeholder="./my-database.duckdb"
+        placeholder="./my-database.sqlite"
         fontFamily="mono"
       />
       <Text fontSize="xs" color="fg.muted" mt={1}>

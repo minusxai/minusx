@@ -46,7 +46,7 @@ import { getPublishedVersion } from '@/lib/context/context-utils';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import StaticTablesBrowser from '../StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig } from './connection-configs';
+import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
 import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
@@ -58,6 +58,7 @@ const LEGACY_TYPE_INFO: Record<string, { logo: string; name: string }> = {
   'csv':          { logo: '/logos/csv.svg',          name: 'CSV / Sheets' },
   'google-sheets':{ logo: '/logos/google-sheets.svg', name: 'Google Sheets' },
   'duckdb':       { logo: '/logos/duckdb.svg',        name: 'DuckDB' },
+  'sqlite':       { logo: '/logos/sqlite.svg',        name: 'SQLite' },
 };
 
 function getTypeInfo(type: string): { logo: string; name: string } {
@@ -417,7 +418,7 @@ export default function ConnectionFormV2({
   const connectionJson = JSON.stringify({
     name: fileName,
     type: content.type,
-    config: content.type === 'duckdb'
+    config: (content.type === 'duckdb' || content.type === 'sqlite')
       ? { file_path: filePath }
       : content.type === 'bigquery'
       ? {
@@ -477,7 +478,7 @@ export default function ConnectionFormV2({
     }
 
     // Type-specific validation
-    if (content.type === 'duckdb') {
+    if (content.type === 'duckdb' || content.type === 'sqlite') {
       if (!filePath) return false;
     } else if (content.type === 'bigquery') {
       if (!projectId || !serviceAccountJson) return false;
@@ -514,17 +515,18 @@ export default function ConnectionFormV2({
     }
   };
 
-  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'duckdb' | 'sqlite') => {
     // Clear config when switching types
+    const configByType: Record<string, Record<string, any>> = {
+      bigquery: { project_id: '', service_account_json: '' },
+      csv: { schema_name: 'public', files: [] },
+      'google-sheets': { spreadsheet_url: '', spreadsheet_id: '', schema_name: 'public', files: [] },
+      duckdb: { file_path: '' },
+      sqlite: { file_path: '' },
+    };
     onChange({
       type: newType,
-      config: newType === 'bigquery'
-        ? { project_id: '', service_account_json: '' }
-        : newType === 'csv'
-        ? { schema_name: 'public', files: [] }
-        : newType === 'google-sheets'
-        ? { spreadsheet_url: '', spreadsheet_id: '', schema_name: 'public', files: [] }
-        : { host: 'localhost', port: 5432, database: '', username: '', password: '' }
+      config: configByType[newType] ?? { host: 'localhost', port: 5432, database: '', username: '', password: '' },
     });
   };
 
@@ -533,8 +535,8 @@ export default function ConnectionFormV2({
     setTestResult(null);
 
     try {
-      if (content.type === 'duckdb') {
-        // For DuckDB, test the connection (works in both create and view modes)
+      if (content.type === 'duckdb' || content.type === 'sqlite') {
+        // For DuckDB/SQLite, test the connection (works in both create and view modes)
         const result = await testConnection(
           content.type,
           config,
@@ -685,7 +687,7 @@ export default function ConnectionFormV2({
       return;
     }
 
-    if (content.type === 'duckdb') {
+    if (content.type === 'duckdb' || content.type === 'sqlite') {
       if (!filePath) {
         setNameError('Database file path is required');
         return;
@@ -1305,6 +1307,24 @@ export default function ConnectionFormV2({
         {/* Athena Configuration */}
         {content.type === 'athena' && (
           <AthenaConfig
+            config={config}
+            onChange={(newConfig) => onChange({ config: newConfig })}
+            mode={mode}
+          />
+        )}
+
+        {/* DuckDB Configuration */}
+        {content.type === 'duckdb' && (
+          <DuckDBConfig
+            config={config}
+            onChange={(newConfig) => onChange({ config: newConfig })}
+            mode={mode}
+          />
+        )}
+
+        {/* SQLite Configuration */}
+        {content.type === 'sqlite' && (
+          <SqliteConfig
             config={config}
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}

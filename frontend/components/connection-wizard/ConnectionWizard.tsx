@@ -126,7 +126,7 @@ export default function ConnectionWizard({
   return (
     <>
       <style>{fadeInUpKeyframes}</style>
-      <StepIndicatorBar currentStep={step} showSlackStep={showSlackStep} />
+      <StepIndicatorBar currentStep={step} showSlackStep={showSlackStep} onSkip={onComplete} />
 
       <Box
         bg="bg.surface"
