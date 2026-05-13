@@ -27,32 +27,29 @@ beforeAll(() => {
   if (!RUN_REAL) return;
 
   setSchemaSource({
-    async search(query: string, _connection: string) {
-      const hits = [];
-      if (/user/i.test(query)) {
-        hits.push({
-          table: 'users',
-          columns: [
-            { name: 'id', type: 'int' },
-            { name: 'email', type: 'varchar' },
-            { name: 'created_at', type: 'timestamp' },
-          ],
-          description: 'one row per user account',
-        });
-      }
-      if (/order/i.test(query)) {
-        hits.push({
-          table: 'orders',
-          columns: [
-            { name: 'id', type: 'int' },
-            { name: 'user_id', type: 'int' },
-            { name: 'total', type: 'decimal' },
-            { name: 'placed_at', type: 'timestamp' },
-          ],
-          description: 'one row per order placed',
-        });
-      }
-      return hits;
+    async getSchema(_connection: string) {
+      return [{
+        schema: 'main',
+        tables: [
+          {
+            table: 'users',
+            columns: [
+              { name: 'id', type: 'int' },
+              { name: 'email', type: 'varchar' },
+              { name: 'created_at', type: 'timestamp' },
+            ],
+          },
+          {
+            table: 'orders',
+            columns: [
+              { name: 'id', type: 'int' },
+              { name: 'user_id', type: 'int' },
+              { name: 'total', type: 'decimal' },
+              { name: 'placed_at', type: 'timestamp' },
+            ],
+          },
+        ],
+      }];
     },
   });
 

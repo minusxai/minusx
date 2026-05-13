@@ -8,19 +8,24 @@ import {
   resetSources,
   setSchemaSource,
   setSqlExecutor,
-  type SchemaHit,
 } from '../sources';
 
 const ctx: AnalystAgentContext = { userId: 'u', mode: 'org' };
 
+const fakeSchemas = [
+  {
+    schema: 'main',
+    tables: [
+      { table: 'users', columns: [{ name: 'id', type: 'int' }, { name: 'created_at', type: 'timestamp' }] },
+    ],
+  },
+];
+
 describe('SearchDBSchema', () => {
   beforeEach(() => resetSources());
 
-  it('returns structured {success, queryType, tableCount, results} on keyword match', async () => {
-    const hits: SchemaHit[] = [
-      { table: 'users', columns: [{ name: 'id', type: 'int' }, { name: 'created_at', type: 'timestamp' }] },
-    ];
-    setSchemaSource({ search: async () => hits });
+  it('returns production-shaped {success, queryType, tableCount, results} on keyword match', async () => {
+    setSchemaSource({ getSchema: async () => fakeSchemas });
 
     const orch = new Orchestrator([]);
     const tool = new SearchDBSchema(orch, { connection: 'main', query: 'users' }, ctx);
@@ -29,16 +34,19 @@ describe('SearchDBSchema', () => {
     expect(res.isError).toBe(false);
     expect(res.content[0]).toMatchObject({ type: 'text' });
     const parsed = JSON.parse((res.content[0] as { text: string }).text);
-    expect(parsed).toMatchObject({
-      success: true,
-      queryType: 'string',
-      tableCount: hits.length,
-      results: hits,
-    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.queryType).toBe('string');
+    expect(parsed.tableCount).toBeGreaterThanOrEqual(1);
+    // Production format: results[].schema wraps the full schema object, with score/matchCount
+    expect(parsed.results).toHaveLength(1);
+    expect(parsed.results[0].schema).toBeDefined();
+    expect(parsed.results[0].schema.schema).toBe('main');
+    expect(parsed.results[0].score).toBeGreaterThan(0);
+    expect(parsed.results[0].matchCount).toBeGreaterThan(0);
   });
 
-  it('returns empty results array when the source has no matches', async () => {
-    setSchemaSource({ search: async () => [] });
+  it('returns empty results array when no schemas match the query', async () => {
+    setSchemaSource({ getSchema: async () => fakeSchemas });
 
     const orch = new Orchestrator([]);
     const tool = new SearchDBSchema(orch, { connection: 'main', query: 'foobars' }, ctx);
@@ -47,6 +55,20 @@ describe('SearchDBSchema', () => {
     expect(res.isError).toBe(false);
     const parsed = JSON.parse((res.content[0] as { text: string }).text);
     expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
+  });
+
+  it('returns full schema when no query is provided', async () => {
+    setSchemaSource({ getSchema: async () => fakeSchemas });
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection: 'main' }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed.success).toBe(true);
+    expect(parsed.queryType).toBe('none');
+    expect(parsed.schema).toEqual(fakeSchemas);
   });
 });
 

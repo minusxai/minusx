@@ -3,6 +3,7 @@ import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { getSchemaSource, getSqlExecutor } from './sources';
 import type { BenchmarkAnalystContext } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { searchDatabaseSchema } from '@/lib/search/schema-search';
 
 const ListDBConnectionsParams = Type.Object({});
 
@@ -45,23 +46,23 @@ export class SearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benchmar
 
   async run(): Promise<ToolResponse<SearchDBSchemaDetails>> {
     const query = this.parameters.query ?? '';
-    const hits = await (this.context.schemaSource ?? getSchemaSource()).search(query, this.parameters.connection, this.context);
-    // Per-run whitelist (set by chat-v2 from a context file) filters hits
-    // before they reach the LLM. Match either bare table name or a qualified
-    // `schema.table` form so context whitelists in either shape work.
+    const schemas = await (this.context.schemaSource ?? getSchemaSource()).getSchema(this.parameters.connection, this.context);
+
+    // Per-run whitelist (set by chat-v2 from a context file) filters schemas
+    // before they reach the LLM. Same logic as production tool-handlers.server.ts.
     const whitelist = this.context.whitelistedTables;
-    const filtered = whitelist
-      ? hits.filter((h) => {
-          if (whitelist.includes(h.table)) return true;
-          const schema = (h as { schema?: unknown }).schema;
-          return typeof schema === 'string' && whitelist.includes(`${schema}.${h.table}`);
-        })
-      : hits;
-    const queryType: 'none' | 'string' | 'jsonpath' =
-      !query ? 'none' : query.startsWith('$') ? 'jsonpath' : 'string';
-    const payload: SearchDBSchemaDetails = queryType === 'none'
-      ? { success: true, queryType, tableCount: filtered.length, schema: filtered }
-      : { success: true, queryType, tableCount: filtered.length, results: filtered };
+    const filteredSchemas = whitelist
+      ? schemas.map((s: any) => ({
+          ...s,
+          tables: (s.tables || []).filter((t: any) =>
+            whitelist.includes(t.table) ||
+            (s.schema && whitelist.includes(`${s.schema}.${t.table}`)),
+          ),
+        })).filter((s: any) => s.tables.length > 0)
+      : schemas;
+
+    // Use production searchDatabaseSchema for identical result shape
+    const payload = await searchDatabaseSchema(filteredSchemas, query || undefined) as SearchDBSchemaDetails;
     return {
       content: [{ type: 'text', text: JSON.stringify(payload) }],
       isError: false,
