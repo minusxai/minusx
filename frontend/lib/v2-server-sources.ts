@@ -6,12 +6,9 @@
 
 import 'server-only';
 import { runQuery } from '@/lib/connections/run-query';
-import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
-import { connectionTypeToDialect } from '@/lib/types';
 import {
   setSqlExecutor,
   setSchemaSource,
@@ -54,20 +51,10 @@ export function setupV2ServerSources(): void {
           error: 'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
         };
       }
-      // Look up dialect for enforceQueryLimit. Defaults to duckdb on
-      // miss — enforceQueryLimit silently no-ops on parse failure, so a
-      // wrong-dialect guess just means the SQL passes through unchanged.
-      let dialect = 'duckdb';
-      try {
-        const raw = await ConnectionsAPI.getRawByName(connection, user.mode);
-        if (raw) dialect = connectionTypeToDialect(raw.type);
-      } catch { /* fall through with default */ }
-
-      const cappedSql = await enforceQueryLimit(sql, { dialect });
-
+      // Row-cap enforcement happens inside `runQuery` — see limit-enforcer.ts.
       const start = Date.now();
       try {
-        const result = await runQuery(connection, cappedSql, {}, user);
+        const result = await runQuery(connection, sql, {}, user);
         return {
           rows: result.rows,
           columns: result.columns,
