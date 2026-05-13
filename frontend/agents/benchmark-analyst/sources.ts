@@ -1,13 +1,8 @@
 import type { AgentContext } from '@/orchestrator/types';
 
-export interface SchemaHit {
-  table: string;
-  columns: { name: string; type: string }[];
-  description?: string;
-}
-
 export interface SchemaSource {
-  search(query: string, connection: string, ctx?: AgentContext): Promise<SchemaHit[]>;
+  /** Return the raw schema array for a connection: [{schema, tables: [{table, columns}]}] */
+  getSchema(connection: string, ctx?: AgentContext): Promise<any[]>;
 }
 
 /**

@@ -13,7 +13,7 @@ const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, SlackAgen
 describe.each(specs as TestSpec[])('faux spec: $name', (spec) => {
   beforeEach(() => {
     resetSources();
-    setSchemaSource({ search: async () => [] });
+    setSchemaSource({ getSchema: async () => [] });
     setSqlExecutor({ execute: async () => ({ rows: [] }) });
   });
 

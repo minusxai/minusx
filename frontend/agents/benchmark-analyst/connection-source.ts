@@ -119,23 +119,13 @@ export function buildBenchmarkSources(
   };
 
   const schemaSource: SchemaSource = {
-    async search(query, connection) {
+    async getSchema(connection) {
       if (!allowedNames.has(connection)) {
         throw new Error(`'${connection}' is not in this agent's connections`);
       }
       const conn = connectorsByName.get(connection);
       if (!conn) throw new Error(`connector '${connection}' not loaded`);
-      const schema = await getCachedSchema(connection, conn);
-      const q = query.toLowerCase();
-      return schema.flatMap((s) =>
-        s.tables
-          .filter(
-            (t) =>
-              t.table.toLowerCase().includes(q) ||
-              t.columns.some((col) => col.name.toLowerCase().includes(q)),
-          )
-          .map((t) => ({ table: t.table, columns: t.columns })),
-      );
+      return getCachedSchema(connection, conn);
     },
   };
   const sqlExecutor: SqlExecutor = {

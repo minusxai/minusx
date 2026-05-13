@@ -14,7 +14,6 @@ import {
   setSchemaSource,
   type SqlExecutor,
   type SchemaSource,
-  type SchemaHit,
 } from '@/agents/benchmark-analyst/sources';
 import type { AgentContext } from '@/orchestrator/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -74,11 +73,11 @@ export function setupV2ServerSources(): void {
   setSqlExecutor(executor);
 
   // ── SchemaSource ─────────────────────────────────────────────────────────
-  // Loads the connection file (cached schema) and flattens to SchemaHit[].
-  // Whitelist filtering is left to SearchDBSchema.run() — same result, avoids
-  // coupling the source to agent context internals.
+  // Loads the connection file (cached schema) and returns raw schema arrays.
+  // SearchDBSchema.run() handles keyword/JSONPath filtering and whitelist
+  // via searchDatabaseSchema() — identical to the v=1 production path.
   const schemaSource: SchemaSource = {
-    async search(query, connection, ctx) {
+    async getSchema(connection, ctx) {
       const user = getUserFromCtx(ctx);
       if (!user) return [];
 
@@ -90,23 +89,7 @@ export function setupV2ServerSources(): void {
         const content = loadedConnection.content as {
           schema?: { schemas: Array<{ schema: string; tables: Array<{ table: string; columns?: Array<{ name: string; type: string }> }> }> };
         };
-        const schemas = content.schema?.schemas ?? [];
-
-        // Flatten nested schemas → individual SchemaHit entries.
-        // SearchDBSchema.run() does keyword / JSONPath filtering post-load when
-        // a query is present (matches v=1 semantics for unwhitelisted agents).
-        // We return all tables here so the agent can filter or search as needed.
-        const hits: SchemaHit[] = schemas.flatMap((s) =>
-          s.tables.map((t) => ({
-            table: t.table,
-            // Keep schema name on each hit so the whitelist filter in
-            // db-tools can match qualified `schema.table` entries.
-            ...(s.schema ? { schema: s.schema } : {}),
-            columns: (t.columns ?? []).map((c) => ({ name: c.name, type: c.type })),
-          })),
-        );
-
-        return hits;
+        return content.schema?.schemas ?? [];
       } catch {
         return [];
       }

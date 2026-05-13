@@ -57,13 +57,15 @@ describe('buildBenchmarkSources', () => {
     expect(result.error).toMatch(/not loaded/);
   });
 
-  it('returns a SchemaSource that filters tables by query keyword', async () => {
+  it('returns a SchemaSource that provides raw schemas', async () => {
     const connectors = new Map<string, NodeConnector>([['default_duckdb', fakeConnector()]]);
     const { schemaSource } = buildBenchmarkSources(connectors, new Set(['default_duckdb']));
 
-    const hits = await schemaSource.search('order', 'default_duckdb');
-    expect(hits).toHaveLength(1);
-    expect(hits[0].table).toBe('orders');
+    const schemas = await schemaSource.getSchema('default_duckdb');
+    expect(schemas).toHaveLength(1);
+    expect(schemas[0].schema).toBe('main');
+    expect(schemas[0].tables).toHaveLength(1);
+    expect(schemas[0].tables[0].table).toBe('orders');
   });
 });
 
