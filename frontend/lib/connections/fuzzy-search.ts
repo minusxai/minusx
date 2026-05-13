@@ -148,7 +148,7 @@ export async function fuzzySearch(
   const p = {
     ...params,
     schema: params.schema || 'main',
-    limit: params.limit || 10,
+    limit: params.limit || 100,
   };
 
   switch (connectorType) {

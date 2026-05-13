@@ -122,7 +122,7 @@ class FuzzySearch(Tool):
         column: str = Field(..., description="Text column to search in"),
         search_term: str = Field(..., description="The value to fuzzy-match against"),
         schema: str = Field("main", description="Schema name (default: 'main')"),
-        limit: int = Field(10, description="Max results to return"),
+        limit: int = Field(100, description="Max results to return"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
