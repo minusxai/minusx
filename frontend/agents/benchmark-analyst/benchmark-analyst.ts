@@ -6,7 +6,7 @@ import {
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from './db-tools';
+import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, FuzzySearch } from './db-tools';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 
 export const fauxRegistration = registerFauxProvider({
@@ -43,6 +43,7 @@ export class BenchmarkAnalystAgent<
     ListDBConnections.schema,
     BaseSearchDBSchema.schema,
     BaseExecuteQuery.schema,
+    FuzzySearch.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
@@ -62,6 +63,7 @@ ${JSON.stringify(visibleConnections)}
   - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc). NEVER hallucinate table or column names.
   - Outline your approach in 1-2 sentences before executing any SQL queries.
   - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
+  - When filtering on text or categorical columns, use FuzzySearch FIRST to find the actual stored values before writing WHERE clauses. Text data often has typos, inconsistent spacing, abbreviations, or casing differences — never assume the user's wording matches the data exactly.
   - Be concise, specific and accurate.
 
 ## Response Format [EXTREMELY IMPORTANT]:
@@ -82,4 +84,3 @@ ${this.context.contextDocs ?? 'No documentation available.'}
 `;
   }
 }
-

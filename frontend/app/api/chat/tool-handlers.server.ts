@@ -18,6 +18,9 @@ import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
+import { getNodeConnector } from '@/lib/connections';
+import { fuzzySearch } from '@/lib/connections/fuzzy-search';
 
 // ============================================================================
 // Tool Implementations
@@ -64,6 +67,53 @@ registerTool('SearchDBSchema', async (args, user) => {
 
   // No _schema injected (no active context) — return full schema
   return searchDatabaseSchema(schemaData.schemas, query);
+});
+
+/**
+ * FuzzySearch - Fuzzy match a search term against distinct values in a text column
+ */
+registerTool('FuzzySearch', async (args, user) => {
+  const { connection_id, table, column, search_term, schema: schemaName, limit } = args;
+
+  if (!connection_id || !table || !column || !search_term) {
+    throw new Error('connection_id, table, column, and search_term are required');
+  }
+
+  // Load connection with cached schema (same path as SearchDBSchema)
+  const connectionPath = resolvePath(user.mode, `/database/${connection_id}`);
+  const connectionFile = await FilesAPI.loadFileByPath(connectionPath, user);
+  const loadedConnection = await connectionLoader(connectionFile.data, user);
+  const content = loadedConnection.content as ConnectionContent;
+
+  // Validate column category — FuzzySearch only works on text/categorical columns
+  const schemaData = (content.schema?.schemas ?? []) as any[];
+  const targetSchema = schemaData.find((s) => s.schema === (schemaName ?? 'main'));
+  const targetTable = targetSchema?.tables?.find((t: any) => t.table === table);
+  const targetColumn = targetTable?.columns?.find((c: any) => c.name === column);
+  const category = targetColumn?.meta?.category as string | undefined;
+
+  if (category && category !== 'text' && category !== 'categorical') {
+    return {
+      success: false,
+      error: `FuzzySearch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
+    };
+  }
+
+  const connector = getNodeConnector(connection_id, content.type, content.config);
+  if (!connector) {
+    throw new Error(`No connector available for type: ${content.type}`);
+  }
+
+  const queryFn = (sql: string) => connector.query(sql);
+  const result = await fuzzySearch(content.type, queryFn, {
+    table,
+    column,
+    searchTerm: search_term,
+    schema: schemaName,
+    limit,
+  });
+
+  return { success: true, ...result };
 });
 
 /**

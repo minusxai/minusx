@@ -103,6 +103,43 @@ class SearchDBSchema(Tool):
         raise UserInputException(self._unique_id)
 
 @register_agent
+class FuzzySearch(Tool):
+    """Search for approximate/fuzzy matches of a value in a text column.
+
+    Use this BEFORE writing WHERE filters on text columns when the exact
+    stored value might differ from the user's wording (typos, spacing,
+    abbreviations, casing differences, etc.).
+
+    Returns the closest matching distinct values with similarity scores.
+
+    Example: user asks about "Get Me Bodied" but column stores "GetMe Bodied".
+    """
+
+    def __init__(
+        self,
+        connection_id: str = Field(..., description="Database connection name"),
+        table: str = Field(..., description="Table name to search"),
+        column: str = Field(..., description="Text column to search in"),
+        search_term: str = Field(..., description="The value to fuzzy-match against"),
+        schema: str = Field("main", description="Schema name (default: 'main')"),
+        limit: int = Field(100, description="Max results to return"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.connection_id = connection_id
+        self.table = table
+        self.column = column
+        self.search_term = search_term
+        self.schema = schema
+        self.limit = limit
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        raise UserInputException(self._unique_id)
+
+@register_agent
 class SearchFiles(Tool):
     """Search files by name, description, or content across questions and dashboards.
     - Purpose: Find existing questions/dashboards that might be relevant

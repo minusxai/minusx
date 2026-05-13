@@ -14,6 +14,7 @@ function toCategory(c: ColumnClassification): ColumnCategory {
     case 'categorical': return 'categorical';
     case 'numeric': return 'numeric';
     case 'temporal': return 'temporal';
+    case 'text': return 'text';
     default: return 'other';
   }
 }
@@ -119,8 +120,9 @@ function classifyColumn(
   if (['date', 'timestamp', 'time', 'datetime', 'interval'].some(k => t.includes(k))) return 'temporal';
   if (t.includes('uuid')) return 'id_unique';
 
+  const isStringType = ['text', 'varchar', 'character', 'string', 'char'].some(k => t.includes(k));
   const ratio = rowCount > 0 ? nDistinct / rowCount : 1;
-  if (ratio >= ID_UNIQUE_RATIO_MIN) return 'id_unique';
+  if (ratio >= ID_UNIQUE_RATIO_MIN && !isStringType) return 'id_unique';
 
   if (['int', 'float', 'double', 'decimal', 'numeric', 'real', 'bigint', 'smallint', 'number', 'int64', 'float64'].some(k => t.includes(k))) {
     return 'numeric';
@@ -132,7 +134,7 @@ function classifyColumn(
     }
   }
 
-  if (['text', 'varchar', 'character', 'string', 'char'].some(k => t.includes(k))) return 'text';
+  if (isStringType) return 'text';
   return 'unknown';
 }
 

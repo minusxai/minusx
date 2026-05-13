@@ -12,6 +12,7 @@ import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
+import { fuzzySearch } from '@/lib/connections/fuzzy-search';
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -288,3 +289,71 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 }
 
+const FuzzySearchParams = Type.Object({
+  connection: Type.String({ description: 'Database connection name' }),
+  table: Type.String({ description: 'Table name to search' }),
+  column: Type.String({ description: 'Text column to search in' }),
+  search_term: Type.String({ description: 'The value to fuzzy-match against' }),
+  schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
+  limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
+});
+
+export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnalystContext> {
+  static readonly schema: Tool<typeof FuzzySearchParams> = {
+    name: 'FuzzySearch',
+    description: 'Search for approximate/fuzzy matches of a value in a text column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user\'s wording (typos, spacing, abbreviations, etc.). Returns the closest matching distinct values with similarity scores.',
+    parameters: FuzzySearchParams,
+  };
+
+  protected connectors = new Map<string, NodeConnector>();
+  protected dialects = new Map<string, string>();
+
+  async run(): Promise<ToolResponse> {
+    await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
+
+    const { connection, table, column, search_term, schema: schemaName, limit } = this.parameters;
+    const dialect = this.dialects.get(connection) ?? 'duckdb';
+
+    // Validate column category
+    const connector = this.connectors.get(connection);
+    if (!connector) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Connection '${connection}' not found. Use ListDBConnections to see available connections.` }) }],
+        isError: true,
+      };
+    }
+
+    const schemas = await cachedConnectorSchema(connection, connector);
+    const targetSchema = schemas.find((s) => s.schema === (schemaName ?? 'main'));
+    const targetTable = targetSchema?.tables?.find((t) => t.table === table);
+    const targetColumn = targetTable?.columns?.find((c) => c.name === column);
+    const category = (targetColumn as any)?.meta?.category as string | undefined;
+
+    if (category && category !== 'text' && category !== 'categorical') {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          success: false,
+          error: `FuzzySearch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
+        }) }],
+        isError: true,
+      };
+    }
+
+    const queryFn = async (sql: string) => connector.query(sql);
+
+    try {
+      const result = await fuzzySearch(dialect, queryFn, {
+        table, column, searchTerm: search_term, schema: schemaName, limit,
+      });
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }) }],
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }) }],
+        isError: true,
+      };
+    }
+  }
+}

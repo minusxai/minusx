@@ -2,7 +2,7 @@ import 'server-only';
 
 export interface ColumnMeta {
   description?: string;
-  category?: 'categorical' | 'numeric' | 'temporal' | 'other';
+  category?: 'categorical' | 'numeric' | 'temporal' | 'text' | 'other';
   nullCount?: number;
   /** Only for categorical columns */
   nDistinct?: number;
