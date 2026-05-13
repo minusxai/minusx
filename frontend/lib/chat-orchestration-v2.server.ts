@@ -30,6 +30,10 @@ import { SearchFiles } from '@/agents/analyst/file-tools';
 import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
+import {
+  DoubleCheckBenchmarkAgent,
+  CheckEquivalence,
+} from '@/agents/benchmark-analyst/double-check-benchmark';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import {
   loadBenchmarkConnectionsFromEnv,
@@ -65,9 +69,10 @@ import type { DebugMessage } from '@/store/chatSlice';
  * routes via `runQuery` → `ConnectionsAPI.getRawByName`, and
  * `SearchDBSchema.run()` routes via `loadConnectionSchema` →
  * `FilesAPI.loadFileByPath`. For benchmark conversations (root invocation
- * name = 'BenchmarkAnalystAgent') we swap them for `Base*` variants via
- * `BENCHMARK_TOOL_SWAPS` below — same `schema.name`, different `run()`,
- * registers from `ctx.connections[*].config`.
+ * name = `'BenchmarkAnalystAgent'` or `'DoubleCheckBenchmarkAgent'`) we
+ * swap them for `Base*` variants via `BENCHMARK_TOOL_SWAPS` below — same
+ * `schema.name`, different `run()`, registers from
+ * `ctx.connections[*].config`.
  */
 export const V2_REGISTRABLES: RegistrableClass[] = [
   ListDBConnections,
@@ -82,9 +87,14 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   PublishAll,
   LoadSkillFrontend,
   WebAnalystAgent,
-  // Lets the orchestrator resume benchmark conversations (root invocation
-  // name is 'BenchmarkAnalystAgent') in v=2 chat.
+  // Lets the orchestrator resume / reconstruct benchmark conversations
+  // (root invocation name is `'BenchmarkAnalystAgent'` for single-agent
+  // benchmark runs, or `'DoubleCheckBenchmarkAgent'` for cross-check runs)
+  // in v=2 chat. `CheckEquivalence` is the judge tool dispatched by the
+  // DoubleCheck controller.
   BenchmarkAnalystAgent,
+  DoubleCheckBenchmarkAgent,
+  CheckEquivalence,
 ];
 
 /**
@@ -231,7 +241,14 @@ async function setupOrchestration(
   // BenchmarkAnalystAgent + a minimal BenchmarkAnalystContext seeded from
   // the saved root entry's connections. All other conversations use the
   // production WebAnalystAgent path.
-  const isBenchmarkRoot = getRootAgentName(savedLog) === 'BenchmarkAnalystAgent';
+  // A benchmark conversation's saved log has either single-agent
+  // (`BenchmarkAnalystAgent`) or cross-check (`DoubleCheckBenchmarkAgent`)
+  // root. Both share the same per-conversation context model
+  // (`meta.benchmark_connections` carrying full configs) and should
+  // continue with the benchmark `Base*` DB tool variants — not the
+  // production `runQuery`/`loadConnectionSchema` path.
+  const rootName = getRootAgentName(savedLog);
+  const isBenchmarkRoot = rootName === 'BenchmarkAnalystAgent' || rootName === 'DoubleCheckBenchmarkAgent';
 
   // Benchmark conversations get the `Base*` tool variants (build connectors
   // from ctx.connections[*].config); production conversations get the
