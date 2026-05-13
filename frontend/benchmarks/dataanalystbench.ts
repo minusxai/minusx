@@ -24,6 +24,7 @@ import {
   ListDBConnections,
   BaseSearchDBSchema,
   BaseExecuteQuery,
+  FuzzySearch
 } from '@/agents/benchmark-analyst/db-tools';
 import {
   DoubleCheckBenchmarkAgent,

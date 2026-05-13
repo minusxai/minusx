@@ -12,7 +12,7 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, LoadSkill
+from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, LoadSkill, FuzzySearch
 from .prompt_loader import HIDDEN_SKILLS, get_prompt, get_skill, list_skills
 
 # Map page type → skills to preload into the system prompt
@@ -322,7 +322,7 @@ class AnalystAgent(Agent):
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
-        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill]
+        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill, FuzzySearch]
 
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()
@@ -423,7 +423,7 @@ class SlackAgent(AnalystAgent):
         """Slack uses a read/query-focused subset of Analyst tools."""
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
-        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles, LoadSkill]
+        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles, LoadSkill, FuzzySearch]
 
 
 @register_agent

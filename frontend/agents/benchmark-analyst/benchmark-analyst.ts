@@ -6,7 +6,7 @@ import {
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from './db-tools';
+import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, FuzzySearch } from './db-tools';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 
 export const fauxRegistration = registerFauxProvider({
@@ -43,6 +43,7 @@ export class BenchmarkAnalystAgent<
     ListDBConnections.schema,
     BaseSearchDBSchema.schema,
     BaseExecuteQuery.schema,
+    FuzzySearch.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
@@ -82,4 +83,3 @@ ${this.context.contextDocs ?? 'No documentation available.'}
 `;
   }
 }
-
