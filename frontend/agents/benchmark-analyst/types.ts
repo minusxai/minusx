@@ -52,3 +52,14 @@ export interface BenchmarkAnalystContext extends AgentContext {
    */
   contextDocs?: string;
 }
+
+/**
+ * Strip `config` (which may contain credentials) from a connections list,
+ * leaving only the metadata the LLM should see. Used by `ListDBConnections`
+ * (tool output) and `BenchmarkAnalystAgent.getSystemPrompt` (prompt body).
+ */
+export function publicConnectionMetadata(
+  connections?: ConnectionInfo[],
+): Array<{ name: string; dialect: string; description?: string }> {
+  return (connections ?? []).map(({ name, dialect, description }) => ({ name, dialect, description }));
+}

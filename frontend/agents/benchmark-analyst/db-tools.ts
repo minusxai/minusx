@@ -6,7 +6,7 @@
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import type { BenchmarkAnalystContext, ConnectionInfo } from './types';
+import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
@@ -48,12 +48,8 @@ export class ListDBConnections extends MXTool<typeof ListDBConnectionsParams, Be
   };
 
   async run(): Promise<ToolResponse> {
-    // Strip `config` (which may contain credentials) before surfacing to the LLM.
-    const visible = (this.context.connections ?? []).map(({ name, dialect, description }) =>
-      ({ name, dialect, description }),
-    );
     return {
-      content: [{ type: 'text', text: JSON.stringify(visible) }],
+      content: [{ type: 'text', text: JSON.stringify(publicConnectionMetadata(this.context.connections)) }],
       isError: false,
     };
   }
@@ -287,5 +283,3 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 }
 
-// Re-export for legacy type-only imports.
-export type { ConnectionInfo };

@@ -30,9 +30,8 @@ import { SearchFiles } from '@/agents/analyst/file-tools';
 import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
-import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
+import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import {
-  benchmarkEntriesToConnectionInfos,
   loadBenchmarkConnectionsFromEnv,
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
@@ -284,9 +283,9 @@ async function setupOrchestration(
       // Restrict configs to the agent's allowed connection set (saved-log
       // root carries the per-row allowlist); names outside it stay
       // metadata-only so they can't be queried even by name collision.
-      const fullConnections = benchmarkEntriesToConnectionInfos(
-        entries.filter((e) => allowedNames.has(e.name)),
-      );
+      // `BenchmarkConnectionEntry[]` is directly assignable to
+      // `ConnectionInfo[]` (narrower→wider on the `config` field).
+      const fullConnections: ConnectionInfo[] = entries.filter((e) => allowedNames.has(e.name));
       const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
         ...baseBenchCtx,
         connections: fullConnections.length > 0 ? fullConnections : baseBenchCtx.connections,

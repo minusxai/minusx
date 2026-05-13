@@ -7,7 +7,7 @@ import {
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
 import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from './db-tools';
-import type { BenchmarkAnalystContext } from './types';
+import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -49,13 +49,7 @@ export class BenchmarkAnalystAgent<
   protected getSystemPrompt(): string {
     const ToolCls = this.constructor as typeof BenchmarkAnalystAgent;
     const toolNames = ToolCls.tools.map((t) => `\`${t.name}\``).join(', ');
-    // Surface only metadata to the LLM — strip configs (credentials) that
-    // may live in context.connections for benchmark / chat-continuation paths.
-    const visibleConnections = (this.context.connections ?? []).map((c) => ({
-      name: c.name,
-      dialect: c.dialect,
-      description: c.description,
-    }));
+    const visibleConnections = publicConnectionMetadata(this.context.connections);
 
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
 You have access to the following tools: ${toolNames}.
@@ -89,4 +83,3 @@ ${this.context.contextDocs ?? 'No documentation available.'}
   }
 }
 
-export { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery };

@@ -18,12 +18,12 @@ import {
   MAX_LLM_CONCURRENCY,
   MX_API_BASE_URL,
 } from '@/lib/config';
+import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
-  BenchmarkAnalystAgent,
   ListDBConnections,
   BaseSearchDBSchema,
   BaseExecuteQuery,
-} from '@/agents/benchmark-analyst/benchmark-analyst';
+} from '@/agents/benchmark-analyst/db-tools';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
 // ── Config ────────────────────────────────────────────────────

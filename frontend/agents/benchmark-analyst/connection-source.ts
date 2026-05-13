@@ -1,39 +1,25 @@
 // Benchmark connection JSON normalisers. Used by the CLI runner
 // (`benchmarks/runner.ts`) and the v=2 chat continuation path
-// (`lib/chat-orchestration-v2.server.ts`) to turn raw
+// (`lib/chat-orchestration-v2.server.ts`) to load
 // `<dataset>_connections.json` / `meta.benchmark_connections` /
-// `BENCHMARK_CONNECTIONS_CONFIG` blobs into the JSON shape that goes
-// into `BenchmarkAnalystContext.connections`.
+// `BENCHMARK_CONNECTIONS_CONFIG` blobs into `ConnectionInfo[]` for
+// `BenchmarkAnalystContext.connections`.
 //
-// Connector instantiation happens lazily inside the tool
+// `BenchmarkConnectionEntry` is just a `ConnectionInfo` with `config`
+// narrowed to required — an array of them is directly assignable to
+// `ConnectionInfo[]`, no conversion helper needed. Connector
+// instantiation happens lazily inside the tool
 // (`BaseExecuteQuery._initialiseConnectors`); this module only handles
-// the metadata side.
+// the JSON-shape side.
 import 'server-only';
 import type { ConnectionInfo } from './types';
 
-export interface BenchmarkConnectionEntry {
-  name: string;
-  dialect: string;
+/** A `ConnectionInfo` with `config` required — the shape stored on
+ *  disk in `<dataset>_connections.json` and on a conversation file's
+ *  `meta.benchmark_connections`. */
+export type BenchmarkConnectionEntry = ConnectionInfo & {
   config: Record<string, unknown>;
-  description?: string;
-}
-
-/**
- * Convert raw benchmark-connection entries (from a JSON file or env var)
- * into the `ConnectionInfo[]` shape consumed by `BaseExecuteQuery` /
- * `BaseSearchDBSchema` via `BenchmarkAnalystContext.connections`. Each
- * entry includes `config` so the tool can build a NodeConnector.
- */
-export function benchmarkEntriesToConnectionInfos(
-  entries: BenchmarkConnectionEntry[],
-): ConnectionInfo[] {
-  return entries.map(({ name, dialect, config, description }) => ({
-    name,
-    dialect,
-    description,
-    config,
-  }));
-}
+};
 
 /**
  * Parse `BENCHMARK_CONNECTIONS_CONFIG` (a JSON array of {name, dialect,

@@ -8,10 +8,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs
 import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
-import {
-  benchmarkEntriesToConnectionInfos,
-  type BenchmarkConnectionEntry,
-} from '@/agents/benchmark-analyst/connection-source';
+import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -226,8 +223,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   // share one process-wide DuckDBInstance (one thread pool / buffer
   // cache) via `getOrCreateBenchmarkConnector` — see `shared-duckdb.ts`.
   const entries = JSON.parse(readFileSync(connectionsPath, 'utf-8')) as BenchmarkConnectionEntry[];
-  const allConnections = benchmarkEntriesToConnectionInfos(entries);
-  const connectionsByName = new Map(allConnections.map((c) => [c.name, c]));
+  // `BenchmarkConnectionEntry[]` is assignable to `ConnectionInfo[]` (the
+  // former narrows `config` to required; the latter has it optional).
+  const connectionsByName = new Map<string, ConnectionInfo>(entries.map((c) => [c.name, c]));
 
   // Load input rows
   const inputRows: InputRow[] = readFileSync(inputPath, 'utf-8')
