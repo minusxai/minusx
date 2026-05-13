@@ -12,20 +12,22 @@ export function ExploreDatasetDetailCard({ msg }: DetailCardProps) {
   const args = parseToolArgs(msg);
   const result = parseToolContent(msg);
   const prompt = args.prompt || '';
-  const query = args.query || '';
-  const connection = args.connection || '';
+  const queries: Array<{ connection?: string; query?: string; label?: string }> = args.queries || [];
+  const executedQueries: Array<{ connection: string; finalQuery: string; rowCount: number }> = result?.executedQueries || [];
   const analysis = result?.analysis || '';
   const success = result?.success !== false;
+  const connections = queries.map(q => q.connection).filter(Boolean).join(', ');
 
   return (
     <VStack gap={1} align="stretch" px={3} pb={2}>
-      {/* Header: connection + prompt */}
+      {/* Header */}
       <HStack gap={2} mb={1}>
         <Box bg="bg.muted" px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
           <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">Explore</Text>
         </Box>
         <Text fontSize="xs" fontFamily="mono" color="fg.muted" truncate flex={1}>
-          {connection}
+          {connections || 'unknown'}
+          {executedQueries.length > 0 && ` · ${executedQueries.reduce((s, q) => s + q.rowCount, 0)} rows`}
         </Text>
       </HStack>
 
@@ -37,15 +39,17 @@ export function ExploreDatasetDetailCard({ msg }: DetailCardProps) {
         </Text>
       </Box>
 
-      {/* Query */}
-      {query && (
-        <Box px={2} py={1.5} bg="bg.subtle" borderRadius="sm">
-          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mb={0.5}>Query</Text>
+      {/* Queries */}
+      {executedQueries.map((eq, i) => (
+        <Box key={i} px={2} py={1.5} bg="bg.subtle" borderRadius="sm">
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mb={0.5}>
+            {queries[i]?.label || eq.connection} · {eq.rowCount} rows
+          </Text>
           <Text fontSize="xs" fontFamily="mono" color="fg.default" whiteSpace="pre-wrap">
-            {query}
+            {eq.finalQuery}
           </Text>
         </Box>
-      )}
+      ))}
 
       {!success ? (
         <HStack gap={1.5}>
@@ -72,7 +76,7 @@ export default function ExploreDatasetDisplay({ toolCallTuple, showThinking }: D
   const [toolCall, toolMessage] = toolCallTuple;
   const [isExpanded, setIsExpanded] = useState(false);
 
-  let args: Record<string, string> = {};
+  let args: Record<string, unknown> = {};
   try {
     args = typeof toolCall.function?.arguments === 'string'
       ? JSON.parse(toolCall.function.arguments)
@@ -90,7 +94,9 @@ export default function ExploreDatasetDisplay({ toolCallTuple, showThinking }: D
     result = null;
   }
 
-  const prompt = args.prompt || '';
+  const prompt = (args.prompt as string) || '';
+  const queries = (args.queries as Array<Record<string, string>>) || [];
+  const numQueries = queries.length;
   const success = result?.success !== false;
   const analysis = (result?.analysis as string) || '';
 
@@ -134,7 +140,7 @@ export default function ExploreDatasetDisplay({ toolCallTuple, showThinking }: D
           <HStack gap={1} minW={0} flex={1}>
             <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
               <Icon as={LuBrain} boxSize={3} display="inline" verticalAlign="middle" mr={1} />
-              Explore: {prompt}
+              Explore{numQueries > 1 ? ` (${numQueries} queries)` : ''}: {prompt}
             </Text>
           </HStack>
         </HStack>

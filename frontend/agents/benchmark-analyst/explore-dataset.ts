@@ -1,6 +1,7 @@
-// ExploreDataset: runs a SQL query and passes the results to an LLM for
-// analysis. Useful for entity resolution, deduplication, clustering, and
-// other data-reasoning tasks that can't be expressed in SQL alone.
+// ExploreDataset: runs one or more SQL queries (potentially across different
+// databases) and passes the combined results to an LLM for analysis. Useful
+// for entity resolution, deduplication, clustering, and other data-reasoning
+// tasks that can't be expressed in SQL alone — especially cross-DB scenarios.
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import type { AssistantMessage, Context, TextContent } from '@mariozechner/pi-ai';
@@ -36,16 +37,24 @@ async function buildConnectorsFromContext(
 
 // ─── ExploreDataset ──────────────────────────────────────────────────────
 
-const ExploreDatasetParams = Type.Object({
+const QuerySpec = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
-  query: Type.String({ description: 'SQL query to fetch the data to analyze. Typically ordered by some relevant column, ~1000 rows max.' }),
+  query: Type.String({ description: 'SQL query to run on this connection (~1000 rows). Can reference columns from earlier queries using $label.column_name, e.g. WHERE id IN ($revenue.product_id) expands to all product_id values from the query labelled "revenue".' }),
+  label: Type.Optional(Type.String({ description: 'Short label for this dataset (e.g. "revenue", "products"). Shown to the LLM as a header.' })),
+});
+
+const ExploreDatasetParams = Type.Object({
+  queries: Type.Array(QuerySpec, {
+    description: 'One or more queries to run sequentially (can span different connections). Later queries can reference earlier results via $label.column_name (e.g. WHERE id IN ($revenue.product_id)). Each result is labelled and passed to the LLM together. Use multiple queries, and the $reference only when data lives in different databases — avoids needing to manually copy IDs between queries. If same DB, it is simpler to just use CTE/subqueries.',
+    minItems: 1,
+  }),
   prompt: Type.String({ description: 'A precise, 1-2 sentence instruction. State exactly what output you need (e.g. "group rows by real-world entity and return a mapping of canonical_name → [ids]"). Do NOT ask open-ended questions.' }),
 });
 
 interface ExploreDatasetDetails extends Record<string, unknown> {
   analysis: string;
-  queryRowCount: number;
-  finalQuery?: string;
+  totalRowCount: number;
+  executedQueries: Array<{ connection: string; finalQuery: string; rowCount: number }>;
 }
 
 const SYSTEM_PROMPT = `You are a data tool. Another agent sends you data + a task. Return ONLY the answer — no preamble, no methodology, no commentary.
@@ -67,9 +76,11 @@ export class ExploreDataset extends MXTool<
   static readonly schema: Tool<typeof ExploreDatasetParams> = {
     name: 'ExploreDataset',
     description:
-      `Runs a SQL query (up to 1000 rows) and passes the results to an LLM for analysis. Use for entity resolution, deduplication, clustering, or pattern detection that cannot be expressed in SQL alone.
-      NOTE: ⚠️ When using ExploreDataset for entity resolution in preparation for a ranking/aggregation query, do NOT pre-filter the input to a small top-N rows. Pass the full candidate set (or all rows blocked by artist/title similarity), otherwise duplicates outside the top-N will be silently missed, leading to incorrect rankings.
-      If you need to filter down, use at least 1000 rows ordered by a relevant column (e.g. popularity, totals etc) to give the LLM the best chance of finding the relevant patterns.`,
+      `Runs one or more SQL queries (up to 1000 rows each, potentially across different databases) and passes the combined results to a smaller LLM for analysis. Use for entity resolution, deduplication, clustering, or pattern detection that cannot be expressed in SQL alone. Queries run sequentially — later queries can reference earlier results via $label.column_name (e.g. WHERE id IN ($revenue.product_id)). Use this for cross-DB joins without manually copying IDs.
+      IMPORTANT — keep the dataset small and focused:
+      1. A smaller LLM processes this data. Sending 1000+ rows overwhelms it — it will only process a fraction. For ranking/aggregation questions, send the top 50-200 rows by the ranking metric, then use $label references to pull related data from other tables.
+      2. Always ORDER BY the most relevant column (revenue, popularity, etc.) — never by arbitrary columns (id, created_at). The LLM sees the data in order and may truncate from the bottom.
+      3. For cross-DB entity resolution: query the ranking table first (e.g. top 100 by revenue), then use $label.id to fetch metadata only for those IDs from the other DB. This keeps both datasets small and aligned.`,
     parameters: ExploreDatasetParams,
   };
 
@@ -80,42 +91,59 @@ export class ExploreDataset extends MXTool<
     // 1. Build connectors
     await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
 
-    const { connection, query: rawQuery, prompt } = this.parameters;
+    const { queries, prompt } = this.parameters;
 
-    // 2. Execute the query
-    const connector = this.connectors.get(connection);
-    if (!connector) {
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Connection '${connection}' not found. Use ListDBConnections to see available connections.` }) }],
-        isError: true,
-        details: { analysis: '', queryRowCount: 0 },
-      };
+    // 2. Execute queries sequentially, interpolating $label.col references
+    const dataSections: string[] = [];
+    const executedQueries: ExploreDatasetDetails['executedQueries'] = [];
+    const labeledResults = new Map<string, Record<string, unknown>[]>();
+    let totalRowCount = 0;
+
+    for (let i = 0; i < queries.length; i++) {
+      const { connection, query: rawQuery, label } = queries[i];
+      const connector = this.connectors.get(connection);
+      if (!connector) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Connection '${connection}' not found. Use ListDBConnections to see available connections.` }) }],
+          isError: true,
+          details: { analysis: '', totalRowCount: 0, executedQueries },
+        };
+      }
+
+      // Interpolate references to previous query results (e.g. $revenue.product_id)
+      const interpolated = interpolateRefs(rawQuery, labeledResults);
+
+      let result: QueryResult;
+      try {
+        const dialect = this.dialects.get(connection) ?? 'duckdb';
+        const cappedSql = await enforceQueryLimit(interpolated, { dialect });
+        result = await connector.query(cappedSql);
+        executedQueries.push({ connection, finalQuery: result.finalQuery ?? cappedSql, rowCount: result.rows.length });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query ${i + 1} (${connection}) failed: ${errMsg}` }) }],
+          isError: true,
+          details: { analysis: '', totalRowCount: 0, executedQueries },
+        };
+      }
+
+      if (label) labeledResults.set(label, result.rows);
+      totalRowCount += result.rows.length;
+
+      const columns = result.columns ?? (result.rows[0] ? Object.keys(result.rows[0]) : []);
+      const types = result.types ?? columns.map(() => 'unknown');
+      const compressed = compressQueryResult(
+        { columns, types, rows: result.rows },
+        TOOL_MAX_LIMIT_CHARS,
+      );
+
+      const header = label || `Dataset ${i + 1} (${connection})`;
+      dataSections.push(`## ${header}\n${compressed.data}`);
     }
 
-    let result: QueryResult;
-    try {
-      const dialect = this.dialects.get(connection) ?? 'duckdb';
-      const cappedSql = await enforceQueryLimit(rawQuery, { dialect });
-      result = await connector.query(cappedSql);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: false, error: errMsg }) }],
-        isError: true,
-        details: { analysis: '', queryRowCount: 0 },
-      };
-    }
-
-    // 3. Format results as text for the LLM
-    const columns = result.columns ?? (result.rows[0] ? Object.keys(result.rows[0]) : []);
-    const types = result.types ?? columns.map(() => 'unknown');
-    const compressed = compressQueryResult(
-      { columns, types, rows: result.rows },
-      TOOL_MAX_LIMIT_CHARS,
-    );
-
-    // 4. Call LLM with data + prompt
-    const userContent = `## Data\n${compressed.data}\n\n## Task\n${prompt}`;
+    // 3. Call LLM with combined data + prompt
+    const userContent = `${dataSections.join('\n\n')}\n\n## Task\n${prompt}`;
     const ctx: Context = {
       systemPrompt: SYSTEM_PROMPT,
       messages: [
@@ -128,17 +156,48 @@ export class ExploreDataset extends MXTool<
     const responseMsg = await this.orchestrator.callLLM(model, ctx, this.id);
     const analysis = extractText(responseMsg);
 
-    const finalQuery = result.finalQuery ?? rawQuery;
-
     return {
-      content: [{ type: 'text', text: JSON.stringify({ success: true, analysis, finalQuery }) }],
+      content: [{ type: 'text', text: JSON.stringify({ success: true, analysis, executedQueries }) }],
       isError: false,
-      details: { analysis, queryRowCount: result.rows.length, finalQuery },
+      details: { analysis, totalRowCount, executedQueries },
     };
   }
 }
 
 // ─── pure helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Replace `$label.column_name` references in a query with actual values
+ * from a previous query's result. E.g. `$revenue.track_id` → `4233, 5281, 10838`.
+ *
+ * Returns bare comma-separated values (no wrapping parens) so the agent's
+ * SQL `IN ($revenue.track_id)` produces `IN (4233, 5281, 10838)`.
+ *
+ * - `label` matches the query's `label` field (case-sensitive).
+ * - String values are single-quote escaped; numbers are bare.
+ * - If the referenced label/column doesn't exist or has no rows, the
+ *   replacement is `NULL` so the query still parses.
+ */
+function interpolateRefs(
+  sql: string,
+  labeledResults: Map<string, Record<string, unknown>[]>,
+): string {
+  return sql.replace(/\$([a-zA-Z_]\w*)\.(\w+)/g, (_match, label, column) => {
+    const rows = labeledResults.get(label);
+    if (!rows || rows.length === 0) return 'NULL';
+
+    const values = rows
+      .map((r) => r[column])
+      .filter((v) => v != null);
+
+    if (values.length === 0) return 'NULL';
+
+    const formatted = values.map((v) =>
+      typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`,
+    );
+    return formatted.join(', ');
+  });
+}
 
 function extractText(msg: AssistantMessage): string {
   return msg.content
