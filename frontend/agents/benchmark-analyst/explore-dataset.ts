@@ -76,11 +76,17 @@ export class ExploreDataset extends MXTool<
   static readonly schema: Tool<typeof ExploreDatasetParams> = {
     name: 'ExploreDataset',
     description:
-      `Runs one or more SQL queries (up to 1000 rows each, potentially across different databases) and passes the combined results to a smaller LLM for analysis. Use for entity resolution, deduplication, clustering, or pattern detection that cannot be expressed in SQL alone. Queries run sequentially — later queries can reference earlier results via $label.column_name (e.g. WHERE id IN ($revenue.product_id)). Use this for cross-DB joins without manually copying IDs.
+      `Runs one or more SQL queries (at least 1000 rows each, potentially across different databases) and passes the combined results to a smaller LLM for analysis. Use for entity resolution, deduplication, clustering, or pattern detection that cannot be expressed in SQL alone. Queries run sequentially — later queries can reference earlier results via $label.column_name (e.g. WHERE id IN ($revenue.product_id)). Use this for cross-DB joins without manually copying IDs.
       IMPORTANT — keep the dataset small and focused:
-      1. A smaller LLM processes this data. Sending 1000+ rows overwhelms it — it will only process a fraction. For ranking/aggregation questions, send the top 50-200 rows by the ranking metric, then use $label references to pull related data from other tables.
+      1. A smaller LLM processes this data. For ranking/aggregation questions, send the top 1000 rows by the ranking metric, then use $label references to pull related data from other tables.
       2. Always ORDER BY the most relevant column (revenue, popularity, etc.) — never by arbitrary columns (id, created_at). The LLM sees the data in order and may truncate from the bottom.
-      3. For cross-DB entity resolution: query the ranking table first (e.g. top 100 by revenue), then use $label.id to fetch metadata only for those IDs from the other DB. This keeps both datasets small and aligned.`,
+      3. For cross-DB entity resolution: query the ranking table first (e.g. top 1000 by revenue), then use $label.id to fetch metadata only for those IDs from the other DB. This keeps both datasets small and aligned.
+      
+      ## Example:
+      query 1: connection=prod_revenue, query="SELECT product_id, SUM(revenue) AS revenue FROM sales GROUP BY product_id ORDER BY revenue DESC LIMIT 1000", label="revenue"
+      query 2: connection=prod_catalog, query="SELECT id, name, category FROM products WHERE id IN ($revenue.product_id)", label="products"
+      prompt: "Group these products into 5 clusters based on their names and categories. Return a mapping of cluster_name → [product_ids]."
+      `,
     parameters: ExploreDatasetParams,
   };
 
@@ -143,7 +149,8 @@ export class ExploreDataset extends MXTool<
     }
 
     // 3. Call LLM with combined data + prompt
-    const userContent = `${dataSections.join('\n\n')}\n\n## Task\n${prompt}`;
+    const rowSummary = executedQueries.map(q => `${q.rowCount} rows from ${q.connection}`).join(', ');
+    const userContent = `${dataSections.join('\n\n')}\n\n## Task (${rowSummary} — process ALL rows, not just a sample)\n${prompt}`;
     const ctx: Context = {
       systemPrompt: SYSTEM_PROMPT,
       messages: [
@@ -153,7 +160,7 @@ export class ExploreDataset extends MXTool<
     };
 
     const model = exploreModel;
-    const responseMsg = await this.orchestrator.callLLM(model, ctx, this.id);
+    const responseMsg = await this.orchestrator.callLLM(model, ctx, this.id, { maxTokens: 16384 });
     const analysis = extractText(responseMsg);
 
     return {
