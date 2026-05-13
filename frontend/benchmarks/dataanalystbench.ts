@@ -15,6 +15,7 @@ import {
   DAB_QUESTION_TIMEOUT,
   DAB_DATASET_TIMEOUT,
   DAB_TIMES_RUN,
+  DAB_DOUBLE_CHECK,
   MAX_LLM_CONCURRENCY,
   MX_API_BASE_URL,
 } from '@/lib/config';
@@ -24,6 +25,10 @@ import {
   BaseSearchDBSchema,
   BaseExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools';
+import {
+  DoubleCheckBenchmarkAgent,
+  CheckEquivalence,
+} from '@/agents/benchmark-analyst/double-check-benchmark';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
 // ── Config ────────────────────────────────────────────────────
@@ -74,17 +79,51 @@ function discoverDatasets(baseDir: string): { input: string; connections: string
 const DATASETS = discoverDatasets(BASE);
 
 // ── Agent (customize the model here; tools + prompt come from BenchmarkAnalystAgent) ──
+//
+// DAB_DOUBLE_CHECK toggles cross-check mode: the root agent becomes a
+// `DoubleCheckBenchmarkAgent` that spawns two `BenchmarkAnalystAgent`
+// instances in parallel (dispatched as tool calls), judges via
+// `CheckEquivalence`, and retries once on disagreement. ~4× sub-agent
+// runs + 2 judge calls per row.
 
-class Agent extends BenchmarkAnalystAgent {
-  static model = getModel(
-    CONFIG.model.provider as never,
-    CONFIG.model.model as never,
-  );
+const doubleCheck = DAB_DOUBLE_CHECK === '1' || DAB_DOUBLE_CHECK === 'true';
+const benchmarkModel = getModel(
+  CONFIG.model.provider as never,
+  CONFIG.model.model as never,
+);
+
+// Two parallel Agent subclasses — TypeScript can't infer `static schema`
+// through a conditional `extends`, so we declare both and pick one.
+class SingleAgent extends BenchmarkAnalystAgent {
+  static model = benchmarkModel;
 }
+class DoubleCheckAgent extends DoubleCheckBenchmarkAgent {
+  static model = benchmarkModel;
+}
+// Sub-agent class registered in DoubleCheck mode: needs the configured
+// `benchmarkModel`, not the default fallback that `BenchmarkAnalystAgent`
+// resolves at module load (faux when ANALYST_AGENT_MODEL_CONFIG is unset).
+// The orchestrator looks up by `schema.name === 'BenchmarkAnalystAgent'`,
+// inherited from the parent — so this subclass IS what `DoubleCheckBenchmarkAgent`
+// invokes via `orch.invoke(BenchmarkAnalystAgent, …)`.
+class BenchmarkAnalystAgentForDoubleCheck extends BenchmarkAnalystAgent {
+  static model = benchmarkModel;
+}
+
+const RootAgent = doubleCheck ? DoubleCheckAgent : SingleAgent;
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-const registrables = [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, Agent];
+const registrables = doubleCheck
+  ? [
+      ListDBConnections,
+      BaseSearchDBSchema,
+      BaseExecuteQuery,
+      BenchmarkAnalystAgentForDoubleCheck,
+      CheckEquivalence,
+      RootAgent,
+    ]
+  : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent];
 
 // Default timeouts. Override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT
 // (seconds). A row that hits its timeout is cancelled and dropped from
@@ -137,6 +176,9 @@ console.log(
 console.log(
   `  timeouts: question=${questionTimeoutSec}s, dataset=${datasetTimeoutSec}s (override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT)`,
 );
+if (doubleCheck) {
+  console.log(`  doubleCheck: ON (each row runs 2 analysts in parallel + 1 judge call; retry once on disagreement ⇒ ~4× LLM cost)`);
+}
 if (timesRun > 1) {
   console.log(`  timesRun: ${timesRun} (each row runs ${timesRun}× in parallel; output rows carry \`logs\`)`);
 }
@@ -153,7 +195,7 @@ async function main() {
       runBenchmark({
         input: ds.input,
         connections: ds.connections,
-        agentClass: Agent,
+        agentClass: RootAgent,
         registrables,
         quiet: parallel,
         rerun,
