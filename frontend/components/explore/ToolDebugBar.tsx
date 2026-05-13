@@ -33,6 +33,7 @@ const TOOL_COLOR_MAP: Record<string, string> = {
   PublishAll: 'accent.success',
   LoadSkill: 'accent.cyan',
   WebSearch: 'accent.primary',
+  ExploreDataset: 'accent.primary',
 };
 
 function getToolColor(name: string): string {
