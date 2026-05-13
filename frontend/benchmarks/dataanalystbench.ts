@@ -15,6 +15,7 @@ import {
   DAB_BENCH_RERUN,
   DAB_QUESTION_TIMEOUT,
   DAB_DATASET_TIMEOUT,
+  DAB_TIMES_RUN,
   MX_API_BASE_URL,
 } from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
@@ -185,6 +186,17 @@ function parseSeconds(raw: string | undefined, fallback: number): number {
 const questionTimeoutSec = parseSeconds(DAB_QUESTION_TIMEOUT, DEFAULT_QUESTION_TIMEOUT_SEC);
 const datasetTimeoutSec = parseSeconds(DAB_DATASET_TIMEOUT, DEFAULT_DATASET_TIMEOUT_SEC);
 
+// Repeats per input row. Default 1 = current single-run behaviour
+// (output rows have `log`). With N>1, each row's agent is invoked N
+// times serially and the output row carries `logs: ConversationLog[]`
+// for downstream eval (`mxscripts/eval_output.py`) to collapse.
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+const timesRun = parsePositiveInt(DAB_TIMES_RUN, 1);
+
 const rerun = DAB_BENCH_RERUN === '1' || DAB_BENCH_RERUN === 'true';
 const proxied = !!MX_API_BASE_URL;
 
@@ -198,6 +210,9 @@ console.log(
 console.log(
   `  timeouts: question=${questionTimeoutSec}s, dataset=${datasetTimeoutSec}s (override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT)`,
 );
+if (timesRun > 1) {
+  console.log(`  timesRun: ${timesRun} (each row runs ${timesRun}× serially; output rows carry \`logs\`)`);
+}
 
 async function main() {
   const globalStart = Date.now();
@@ -231,6 +246,7 @@ async function main() {
           rerun,
           rowTimeoutMs: questionTimeoutSec * 1000,
           datasetTimeoutMs: datasetTimeoutSec * 1000,
+          timesRun,
         });
         results.push(result);
       }

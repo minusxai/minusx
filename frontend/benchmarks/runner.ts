@@ -68,6 +68,14 @@ export interface BenchmarkRunConfig {
    *  the queue. Already-completed rows persist; the rest get retried
    *  on resume. 0/undefined disables. */
   datasetTimeoutMs?: number;
+  /** Number of times to run each input row. Each run produces its own
+   *  conversation log. When >1, all runs are executed serially (to keep
+   *  peak in-flight agent count constant), then a single row is persisted
+   *  with `logs: ConversationLog[]` instead of `log`. Resume is still
+   *  row-atomic: if any run is cancelled by row/dataset timeout, the
+   *  whole row is dropped and retried on the next invocation. Default 1
+   *  (current behaviour, emits `log`). */
+  timesRun?: number;
 }
 
 export interface BenchmarkResult {
@@ -76,11 +84,18 @@ export interface BenchmarkResult {
    *  `_output.jsonl` and matching on this field. */
   input_index: number;
   input: InputRow;
-  /** Raw pi-ai conversation log. Saved as-is so the output file can be
-   * imported as a v2 conversation (`meta.version: 2`, `content.log: <this>`)
-   * and continued in the chat UI. Display-time legacy conversion happens in
-   * the /benchmark viewer via `piLogToLegacy`. */
-  log: ConversationLog;
+  /** Raw pi-ai conversation log from a single run. Emitted when
+   *  `timesRun === 1` (default). Saved as-is so the output file can be
+   *  imported as a v2 conversation (`meta.version: 2`, `content.log: <this>`)
+   *  and continued in the chat UI. Display-time legacy conversion happens in
+   *  the /benchmark viewer via `piLogToLegacy`. Mutually exclusive with
+   *  `logs`. */
+  log?: ConversationLog;
+  /** Array of raw pi-ai conversation logs, one per run. Emitted when
+   *  `timesRun > 1`. Downstream eval scripts collapse this back to
+   *  a single `log` (picking the first success or fanning out failures
+   *  to separate rows). Mutually exclusive with `log`. */
+  logs?: ConversationLog[];
   duration_ms: number;
   error?: string;
   /** Dataset connections embedded so the /benchmark viewer can continue
@@ -257,6 +272,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   }
 
   const concurrency = config.concurrency ?? 1;
+  const timesRun = Math.max(1, Math.floor(config.timesRun ?? 1));
   const total = inputRows.length;
   const remainingRows = inputRows
     .map((row, i) => ({ row, i }))
@@ -268,7 +284,8 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     : skipped > 0
       ? `${c.dim}resume: skipping ${skipped}/${total} already-done${c.reset}`
       : null;
-  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows, concurrency=${concurrency}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
+  const timesRunNote = timesRun > 1 ? `, timesRun=${timesRun}` : '';
+  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows, concurrency=${concurrency}${timesRunNote}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
   console.log(`  ${c.dim}${outputPath}${c.reset}\n`);
 
   // Tracking
@@ -302,81 +319,116 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
         schemaSource,
         sqlExecutor,
     };
-    const orch = new Orchestrator(config.registrables);
-    const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
-    inFlight.add(orch);
 
-    // Per-row timeout: when it fires, cancel the orchestrator (which
-    // aborts pi-ai's stream) and flag this row as cancelled. The row's
-    // own `try/catch` catches the abort error, but we discriminate via
-    // the `rowCancelled` flag below so we can mark it timeout vs. error.
-    let rowCancelled = false;
-    const rowTimeoutMs = config.rowTimeoutMs ?? 0;
-    const rowTimeoutHandle = rowTimeoutMs > 0
-      ? setTimeout(() => {
-        rowCancelled = true;
-        orch.cancel();
-      }, rowTimeoutMs)
-      : null;
-
+    // Multi-run loop: execute the agent `timesRun` times serially against
+    // the same input. Serial (not parallel) keeps peak in-flight agent
+    // count constant — running N copies concurrently would multiply the
+    // already-tight rate-limit budget by N. The per-run timeout still
+    // applies to each individual run (not the row total).
     const rowStart = Date.now();
-    let error: string | undefined;
-    try {
-      // RegistrableClass types `new` as → MXTool; the caller guarantees an
-      // MXAgent subclass via `agentClass`.
-      const stream = orch.run(agent as unknown as MXAgent);
-      for await (const _ of stream) { /* drain */ }
-      await stream.result();
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    } finally {
-      if (rowTimeoutHandle) clearTimeout(rowTimeoutHandle);
-      inFlight.delete(orch);
+    const collectedLogs: ConversationLog[] = [];
+    let rowCancelled = false;
+    let cancelReason: string | undefined;
+    let firstError: string | undefined;
+    const rowTimeoutMs = config.rowTimeoutMs ?? 0;
+
+    for (let runIdx = 0; runIdx < timesRun; runIdx++) {
+      if (datasetTimedOut) {
+        rowCancelled = true;
+        cancelReason = 'CANCELLED (dataset timeout)';
+        break;
+      }
+
+      const orch = new Orchestrator(config.registrables);
+      const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
+      inFlight.add(orch);
+
+      // Per-run timeout: when it fires, cancel the orchestrator (which
+      // aborts pi-ai's stream) and flag this row as cancelled. The
+      // try/catch catches the abort error, but we discriminate via
+      // `runCancelled` so we mark it timeout vs. error.
+      let runCancelled = false;
+      const runTimeoutHandle = rowTimeoutMs > 0
+        ? setTimeout(() => {
+          runCancelled = true;
+          orch.cancel();
+        }, rowTimeoutMs)
+        : null;
+
+      try {
+        // RegistrableClass types `new` as → MXTool; the caller guarantees an
+        // MXAgent subclass via `agentClass`.
+        const stream = orch.run(agent as unknown as MXAgent);
+        for await (const _ of stream) { /* drain */ }
+        await stream.result();
+      } catch (err) {
+        if (!firstError) firstError = err instanceof Error ? err.message : String(err);
+      } finally {
+        if (runTimeoutHandle) clearTimeout(runTimeoutHandle);
+        inFlight.delete(orch);
+      }
+
+      // Row-atomic cancellation: if any run within this row was cancelled
+      // (by its own timeout or by the dataset timeout firing mid-run),
+      // drop the whole row. Resume picks it up next invocation and
+      // re-does all N runs.
+      if (runCancelled || datasetTimedOut) {
+        rowCancelled = true;
+        cancelReason = runCancelled
+          ? `TIMEOUT after ${formatDuration(rowTimeoutMs)}`
+          : 'CANCELLED (dataset timeout)';
+        break;
+      }
+
+      collectedLogs.push(orch.log as ConversationLog);
     }
 
     const durationMs = Date.now() - rowStart;
     running--;
 
-    // Cancellation paths (row-timeout self-cancel OR dataset-timeout
-    // external cancel) → don't persist; row will be retried on resume.
-    const cancelled = rowCancelled || datasetTimedOut;
-    if (cancelled) {
+    if (rowCancelled) {
       timeouts++;
       const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
       const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
       const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
       const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
-      const reason = rowCancelled ? `TIMEOUT after ${formatDuration(rowTimeoutMs)}` : 'CANCELLED (dataset timeout)';
       if (!config.quiet) clearLine();
-      console.log(`  ${c.yellow}⏱${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${reason}${c.reset}`);
+      console.log(`  ${c.yellow}⏱${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${cancelReason}${c.reset}`);
       if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
       return;
     }
 
     completed++;
-    if (error) errors++;
+    if (firstError) errors++;
 
+    // Emit `log` (singular) when timesRun === 1 to preserve the existing
+    // output shape — the /benchmark viewer and any older tooling still
+    // read `log`. Emit `logs` (plural, array) when timesRun > 1; the
+    // post-processing eval_output.py script collapses it back to `log`.
     const result: BenchmarkResult = {
       input_index: index,
       input: row,
-      log: orch.log as ConversationLog,
+      ...(timesRun > 1
+        ? { logs: collectedLogs }
+        : { log: collectedLogs[0] }),
       duration_ms: durationMs,
-      error,
+      error: firstError,
       connections: entries,
     };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
     // Log completion above the progress bar
     if (!config.quiet) clearLine();
-    const icon = error ? `${c.red}✗${c.reset}` : `${c.green}✓${c.reset}`;
+    const icon = firstError ? `${c.red}✗${c.reset}` : `${c.green}✓${c.reset}`;
     const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
     // In quiet (parallel) mode the dataset label prefixes the row line so
     // interleaved completions from different datasets are distinguishable.
     const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
     const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
     const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
-    const errMsg = error ? `  ${c.red}${error.slice(0, 60)}${c.reset}` : '';
-    console.log(`  ${icon} ${labelPrefix}${idx}  ${msg}  ${dur}${errMsg}`);
+    const runsSuffix = timesRun > 1 ? `  ${c.dim}×${collectedLogs.length}${c.reset}` : '';
+    const errMsg = firstError ? `  ${c.red}${firstError.slice(0, 60)}${c.reset}` : '';
+    console.log(`  ${icon} ${labelPrefix}${idx}  ${msg}  ${dur}${runsSuffix}${errMsg}`);
     if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
   }
 
