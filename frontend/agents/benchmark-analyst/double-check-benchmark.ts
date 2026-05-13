@@ -21,6 +21,7 @@ import { Type, type Tool } from '@mariozechner/pi-ai';
 import type {
   AssistantMessage,
   Context,
+  Message,
   TextContent,
   ToolResultMessage,
 } from '@mariozechner/pi-ai';
@@ -166,13 +167,26 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
     }]);
     if (this._readEquivalence(SLOTS.r1_check)) return synthesiseFinal(t1);
 
-    // ── Round 2 — fresh analysts with cross-feedback ────────────────────
+    // ── Round 2 — analysts continue from round-1 history + cross-feedback ─
+    // Each round-2 sub-agent is seeded with its own round-1 counterpart's
+    // full thread (original user message + all internal assistant turns +
+    // tool results), so it can build on its prior reasoning instead of
+    // restarting. The feedback prompt is appended on top as the new user
+    // turn by `MXAgent.buildMessages()` (threadHistory ++ user ++ toolThread).
     const fb1 = buildFeedbackPrompt(userMessage, t1, t2);
     const fb2 = buildFeedbackPrompt(userMessage, t2, t1);
-    await this._dispatchSlots([
-      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb1 }, id: SLOTS.r2_agent1 },
-      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb2 }, id: SLOTS.r2_agent2 },
-    ]);
+    const r1History1 = this.orchestrator.extractAgentHistory(SLOTS.r1_agent1);
+    const r1History2 = this.orchestrator.extractAgentHistory(SLOTS.r1_agent2);
+    await this._dispatchSlots(
+      [
+        { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb1 }, id: SLOTS.r2_agent1 },
+        { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb2 }, id: SLOTS.r2_agent2 },
+      ],
+      {
+        [SLOTS.r2_agent1]: r1History1,
+        [SLOTS.r2_agent2]: r1History2,
+      },
+    );
     const t1b = this._readAgentText(SLOTS.r2_agent1);
     const t2b = this._readAgentText(SLOTS.r2_agent2);
 
@@ -196,7 +210,10 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
    * and the row's effective LLM concurrency stays governed by
    * `MAX_LLM_CONCURRENCY`.
    */
-  private async _dispatchSlots(slots: SlotSpec[]): Promise<void> {
+  private async _dispatchSlots(
+    slots: SlotSpec[],
+    threadHistoryByToolCallId?: Record<string, Message[]>,
+  ): Promise<void> {
     const missing = slots.filter((s) => !this._findResult(s.id));
     if (missing.length === 0) return;
 
@@ -218,7 +235,11 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
       stopReason: 'toolUse',
       timestamp: Date.now(),
     };
-    await this.orchestrator.dispatch(synthMsg, this);
+    await this.orchestrator.dispatch(
+      synthMsg,
+      this,
+      threadHistoryByToolCallId ? { threadHistoryByToolCallId } : undefined,
+    );
   }
 
   private _findResult(slotId: string): ToolResultMessage | undefined {
@@ -269,7 +290,7 @@ function buildFeedbackPrompt(originalQ: string, yourAnswer: string, otherAnswer:
     `Your previous final answer was: "${yourAnswer}"`,
     `Another analyst's answer was: "${otherAnswer}"`,
     '',
-    "If the other analyst's answer makes you reconsider, give a new final answer (TL;DR + Analysis as before). If you still agree with your previous answer, restate it.",
+    "If the other analyst's answer makes you reconsider, give a new final answer (TL;DR + Analysis as before; Don't reference previous answer at all). If you still agree with your previous answer, restate it.",
   ].join('\n');
 }
 

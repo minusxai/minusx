@@ -1,4 +1,4 @@
-import { fauxAssistantMessage, type TextContent } from '@mariozechner/pi-ai';
+import { fauxAssistantMessage, type Message, type TextContent } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLogEntry } from '@/orchestrator/types';
 import {
@@ -200,6 +200,206 @@ describe('DoubleCheckBenchmarkAgent', () => {
     // `getSystemPrompt` would have read this.context.connections).
     expect(findToolResult(orch.log, 'r1-agent1')).toBeDefined();
     expect(findToolResult(orch.log, 'r1-agent2')).toBeDefined();
+  });
+
+  it('round-2 analysts inherit round-1 history via threadHistory (not just the feedback prompt)', async () => {
+    // Round 1 produces divergent answers → judge says DIFFERENT → round 2
+    // dispatches each analyst with the *other-counterpart-agnostic* feedback
+    // prompt as the new user msg, but seeded with the matching round-1
+    // sub-agent's thread (its synthesised user msg + every internal turn
+    // pushed under it) as `threadHistory`. We assert on what dispatch was
+    // actually called with — the threadHistory itself is not echoed in the
+    // log (it only shapes the LLM call the sub-agent will make).
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: 41', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 (revised)', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 (revised)', { stopReason: 'stop' }),
+      fauxAssistantMessage('EQUIVALENT', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const dispatchSpy = vi.spyOn(orch, 'dispatch');
+    const root = new DoubleCheckBenchmarkAgent(orch, { userMessage: 'What is 6 × 7?' }, CTX);
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    await stream.result();
+
+    // dispatch should have been called 4 times: r1-analysts, r1-check,
+    // r2-analysts, r2-check. The 3rd call (index 2) is the round-2
+    // analysts dispatch — the one we threaded history through.
+    expect(dispatchSpy.mock.calls.length).toBeGreaterThanOrEqual(4);
+
+    const r2AnalystsCall = dispatchSpy.mock.calls.find((args) => {
+      const msg = args[0];
+      const ids = (msg.content as { type: string; id?: string }[])
+        .filter((c) => c.type === 'toolCall')
+        .map((c) => c.id);
+      return ids.includes('r2-agent1') && ids.includes('r2-agent2');
+    });
+    expect(r2AnalystsCall).toBeDefined();
+
+    const opts = r2AnalystsCall![2] as
+      | { threadHistoryByToolCallId?: Record<string, Message[]> }
+      | undefined;
+    expect(opts).toBeDefined();
+    expect(opts!.threadHistoryByToolCallId).toBeDefined();
+
+    const r2a1Hist = opts!.threadHistoryByToolCallId!['r2-agent1'];
+    const r2a2Hist = opts!.threadHistoryByToolCallId!['r2-agent2'];
+    expect(r2a1Hist).toBeDefined();
+    expect(r2a2Hist).toBeDefined();
+
+    // History begins with the original round-1 user message and includes
+    // the analyst's internal assistant turn(s). Faux responses for round 1
+    // were single-shot `stopReason: 'stop'` messages, so each history is:
+    // [user 'What is 6 × 7?', assistant 'TL;DR: 41' (or 42)].
+    expect(r2a1Hist[0].role).toBe('user');
+    expect(r2a1Hist[0].content).toBe('What is 6 × 7?');
+    expect(r2a2Hist[0].role).toBe('user');
+    expect(r2a2Hist[0].content).toBe('What is 6 × 7?');
+
+    // Sub-agent's *own* round-1 answer is spliced in. Each analyst sees
+    // its own prior reasoning — not the other's (that's in the feedback
+    // prompt only). r1-agent1 said 'TL;DR: 41'; r1-agent2 said 'TL;DR: 42'.
+    const extractAssistantText = (msgs: Message[]): string =>
+      msgs
+        .filter((m): m is Message & { role: 'assistant' } => m.role === 'assistant')
+        .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+        .filter((c): c is TextContent => c.type === 'text')
+        .map((c) => c.text)
+        .join('|');
+    expect(extractAssistantText(r2a1Hist)).toContain('TL;DR: 41');
+    expect(extractAssistantText(r2a1Hist)).not.toContain('TL;DR: 42');
+    expect(extractAssistantText(r2a2Hist)).toContain('TL;DR: 42');
+    expect(extractAssistantText(r2a2Hist)).not.toContain('TL;DR: 41');
+
+    // No system prompt in the history — by pi-ai's `Message` type union
+    // (`user | assistant | toolResult`), there is no 'system' role. The
+    // round-2 sub-agent's system prompt is built fresh by
+    // `MXAgent.llm()` via `getSystemPrompt()`, not inherited.
+    const hasSystemRole = r2a1Hist.some(
+      (m) => (m as { role?: string }).role === 'system',
+    );
+    expect(hasSystemRole).toBe(false);
+  });
+
+  it('extractAgentHistory: includes every interleaved assistant/toolResult turn under the invocation', async () => {
+    // Seed a realistic multi-step trace under a single sub-agent
+    // invocation: two tool-use rounds (SearchDBSchema → ExecuteQuery)
+    // wrapped by a parent's synth-AssistantMessage that announces the
+    // sub-agent toolCall. The sub-agent's final `stopReason: 'stop'`
+    // turn lives only inside the parent's toolResult wrapper's
+    // `MXAgentDetails.assistantMessage` (matching how
+    // `appendAgentResult` records it in real runs).
+    const parentId = 'parent-root';
+    const subId = 'sub-1';
+    const seedLog: ConversationLogEntry[] = [
+      {
+        type: 'toolCall',
+        id: parentId,
+        name: 'DoubleCheckBenchmarkAgent',
+        arguments: { userMessage: 'outer' },
+        context: CTX,
+        parent_id: null,
+      },
+      // Parent's synth assistant message dispatching the sub-agent.
+      {
+        role: 'assistant',
+        content: [{
+          type: 'toolCall', id: subId, name: 'BenchmarkAnalystAgent',
+          arguments: { userMessage: 'Find top revenue customer' },
+        }],
+        api: 'controller' as never, provider: 'controller', model: 'controller',
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        stopReason: 'toolUse', timestamp: Date.now(), parent_id: parentId,
+      },
+      // Sub-agent step 1: assistant{toolUse: SearchDBSchema} + its toolResult.
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Let me look at the schema first.' },
+          { type: 'toolCall', id: 'tc-search', name: 'SearchDBSchema', arguments: { query: 'customers' } },
+        ],
+        api: 'faux' as never, provider: 'faux', model: 'stub',
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        stopReason: 'toolUse', timestamp: Date.now(), parent_id: subId,
+      },
+      {
+        role: 'toolResult', toolCallId: 'tc-search', toolName: 'SearchDBSchema',
+        content: [{ type: 'text', text: 'customers(id, name, revenue)' }],
+        isError: false, timestamp: Date.now(), parent_id: subId,
+      } as never,
+      // Sub-agent step 2: assistant{toolUse: ExecuteQuery} + its toolResult.
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Now I will query for the top customer.' },
+          { type: 'toolCall', id: 'tc-exec', name: 'ExecuteQuery', arguments: { sql: 'SELECT name FROM customers ORDER BY revenue DESC LIMIT 1' } },
+        ],
+        api: 'faux' as never, provider: 'faux', model: 'stub',
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+        stopReason: 'toolUse', timestamp: Date.now(), parent_id: subId,
+      },
+      {
+        role: 'toolResult', toolCallId: 'tc-exec', toolName: 'ExecuteQuery',
+        content: [{ type: 'text', text: '{"rows":[["Acme"]]}' }],
+        isError: false, timestamp: Date.now(), parent_id: subId,
+      } as never,
+      // Sub-agent's final stop turn lives ONLY inside the parent's
+      // toolResult wrapper, not under subId — exactly as
+      // `appendAgentResult` writes it.
+      {
+        role: 'toolResult', toolCallId: subId, toolName: 'BenchmarkAnalystAgent',
+        content: [{ type: 'text', text: 'TL;DR: Acme' }],
+        isError: false,
+        details: {
+          type: 'mx_agent',
+          assistantMessage: {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'TL;DR: Acme' }],
+            api: 'faux' as never, provider: 'faux', model: 'stub',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            stopReason: 'stop',
+            timestamp: Date.now(),
+          },
+        },
+        timestamp: Date.now(), parent_id: parentId,
+      } as never,
+    ];
+
+    const orch = new Orchestrator(REGISTRABLES, seedLog);
+    const hist = orch.extractAgentHistory(subId);
+
+    // Expected: [user, assistant(search), toolResult(search), assistant(exec),
+    // toolResult(exec), assistant(stop "TL;DR: Acme")].
+    expect(hist).toHaveLength(6);
+    expect(hist[0].role).toBe('user');
+    expect(hist[0].content).toBe('Find top revenue customer');
+
+    // Step 1 — schema search.
+    const a1 = hist[1] as { role: string; content: { type: string; name?: string; text?: string }[] };
+    expect(a1.role).toBe('assistant');
+    expect(a1.content.some((c) => c.type === 'toolCall' && c.name === 'SearchDBSchema')).toBe(true);
+    const tr1 = hist[2] as { role: string; toolName: string };
+    expect(tr1.role).toBe('toolResult');
+    expect(tr1.toolName).toBe('SearchDBSchema');
+
+    // Step 2 — execute query.
+    const a2 = hist[3] as { role: string; content: { type: string; name?: string }[] };
+    expect(a2.role).toBe('assistant');
+    expect(a2.content.some((c) => c.type === 'toolCall' && c.name === 'ExecuteQuery')).toBe(true);
+    const tr2 = hist[4] as { role: string; toolName: string };
+    expect(tr2.role).toBe('toolResult');
+    expect(tr2.toolName).toBe('ExecuteQuery');
+
+    // Final stop turn — spliced in from MXAgentDetails (not under subId
+    // directly). Must be there or round-2 agents miss the round-1 answer.
+    const aFinal = hist[5] as { role: string; stopReason: string; content: { type: string; text?: string }[] };
+    expect(aFinal.role).toBe('assistant');
+    expect(aFinal.stopReason).toBe('stop');
+    expect(aFinal.content.some((c) => c.type === 'text' && c.text === 'TL;DR: Acme')).toBe(true);
   });
 
   it('resumability: pre-populating round-1 results in the log skips re-dispatching round 1', async () => {

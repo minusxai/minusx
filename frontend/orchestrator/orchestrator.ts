@@ -303,7 +303,11 @@ export class Orchestrator {
     return stream;
   }
 
-  async dispatch(message: AssistantMessage, parent: MXAgent): Promise<void> {
+  async dispatch(
+    message: AssistantMessage,
+    parent: MXAgent,
+    opts?: { threadHistoryByToolCallId?: Record<string, Message[]> },
+  ): Promise<void> {
     this.log.push({ ...message, parent_id: parent.id });
     parent.toolThread.push(message);
 
@@ -353,7 +357,13 @@ export class Orchestrator {
           return;
         }
 
-        const instance = this.instantiate(Cls, validation.value as Record<string, unknown>, parent.context, tc.id);
+        const instance = this.instantiate(
+          Cls,
+          validation.value as Record<string, unknown>,
+          parent.context,
+          tc.id,
+          opts?.threadHistoryByToolCallId?.[tc.id],
+        );
 
         if (instance instanceof MXAgent) {
           // Sub-agent: any UIE inside it has already emitted its own per-tool
@@ -569,6 +579,52 @@ export class Orchestrator {
       }
     }
     return out;
+  }
+
+  /**
+   * Build a `Message[]` snapshot of a completed agent invocation, suitable
+   * for seeding another agent's `threadHistory`. Combines the invocation's
+   * original user message (from its toolCall arguments) with everything
+   * appended under it (`collectToolThread`). Works for both root
+   * invocations (top-level `AgentInvocation` log entries) and sub-agent
+   * invocations (toolCall blocks inside a parent's assistant message).
+   *
+   * For sub-agent invocations, the final `stopReason: 'stop'` turn is
+   * NOT in the log under the sub-agent's id — `appendAgentResult` wraps
+   * it as a `ToolResultMessage` under the calling agent and stashes the
+   * original assistant message in `details.assistantMessage`. We splice
+   * it back in here so the returned history is complete. Root
+   * invocations don't need this — their final turn is already pushed
+   * under the root's id by `appendAgentResult`'s null-parent branch.
+   *
+   * Used by controller-style agents (e.g. `DoubleCheckBenchmarkAgent`) to
+   * give a round-2 sub-agent the full prior round-1 reasoning trace —
+   * including its tool calls and results — rather than re-running it
+   * from scratch on a feedback prompt alone.
+   */
+  extractAgentHistory(invocationId: string): Message[] {
+    const root = this.findRootInvocation(invocationId);
+    const args =
+      root?.arguments ?? this.findSubAgentToolCall(invocationId)?.toolCall.arguments;
+    if (!args) {
+      throw new Error(`extractAgentHistory: invocation '${invocationId}' not found`);
+    }
+    const userMsg: Message = {
+      role: 'user',
+      content: ((args as { userMessage?: string }).userMessage ?? '') as string,
+      timestamp: Date.now(),
+    };
+    const thread: Message[] = [...this.collectToolThread(invocationId)];
+    if (!root) {
+      for (const e of this.log) {
+        if (!('role' in e) || e.role !== 'toolResult') continue;
+        if ((e as ToolResultMessage).toolCallId !== invocationId) continue;
+        const details = (e as ToolResultMessage).details as MXAgentDetails | undefined;
+        if (details?.type === 'mx_agent') thread.push(details.assistantMessage);
+        break;
+      }
+    }
+    return [userMsg, ...thread];
   }
 
   protected isAgentInvocation(e: ConversationLogEntry): e is AgentInvocation & { parent_id: string | null } {
