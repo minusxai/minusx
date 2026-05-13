@@ -2,53 +2,45 @@ import 'dotenv/config';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import { ExecuteQuery, ListDBConnections, SearchDBSchema } from '@/agents/analyst/analyst-agent';
 import { SlackAgent } from '../slack-agent';
-import { setSchemaSource, setSqlExecutor } from '@/agents/analyst/sources';
 import specs from './specs/slack.real.json';
+
+// Stub the production query/schema chokepoints so the real LLM sees
+// a predictable table-shaped fixture without needing a real DB.
+vi.mock('@/lib/connections/load-schema', () => ({
+  loadConnectionSchema: vi.fn(async () => [{
+    schema: 'main',
+    tables: [
+      {
+        table: 'users',
+        columns: [
+          { name: 'id', type: 'int' },
+          { name: 'email', type: 'varchar' },
+          { name: 'created_at', type: 'timestamp' },
+        ],
+      },
+      {
+        table: 'orders',
+        columns: [
+          { name: 'id', type: 'int' },
+          { name: 'user_id', type: 'int' },
+          { name: 'total', type: 'decimal' },
+          { name: 'placed_at', type: 'timestamp' },
+        ],
+      },
+    ],
+  }]),
+}));
+vi.mock('@/lib/connections/run-query', () => ({
+  runQuery: vi.fn(async (_db: string, sql: string) => {
+    if (/count\s*\(/i.test(sql)) return { columns: ['count'], types: ['int'], rows: [{ count: 42 }], finalQuery: sql };
+    return { columns: ['note'], types: ['text'], rows: [{ note: 'stub executor — wire a real DB to get real rows' }], finalQuery: sql };
+  }),
+}));
 
 const RUN_REAL = process.env.RUN_REAL_LLM === '1';
 const itIfReal = RUN_REAL ? it : it.skip;
 
 const registrables = [ListDBConnections, SearchDBSchema, ExecuteQuery, SlackAgent];
-
-beforeAll(() => {
-  if (!RUN_REAL) return;
-
-  setSchemaSource({
-    async getSchema(_connection: string) {
-      return [{
-        schema: 'main',
-        tables: [
-          {
-            table: 'users',
-            columns: [
-              { name: 'id', type: 'int' },
-              { name: 'email', type: 'varchar' },
-              { name: 'created_at', type: 'timestamp' },
-            ],
-          },
-          {
-            table: 'orders',
-            columns: [
-              { name: 'id', type: 'int' },
-              { name: 'user_id', type: 'int' },
-              { name: 'total', type: 'decimal' },
-              { name: 'placed_at', type: 'timestamp' },
-            ],
-          },
-        ],
-      }];
-    },
-  });
-
-  setSqlExecutor({
-    async execute(sql: string, _connection: string) {
-      if (/count\s*\(/i.test(sql)) return { rows: [{ count: 42 }] };
-      return { rows: [{ note: 'stub executor — wire a real DB to get real rows' }] };
-    },
-  });
-
-  // Model is read from ANALYST_AGENT_MODEL_CONFIG at module load (see model-config.ts).
-});
 
 describe.each(specs as TestSpec[])('real-llm slack spec: $name', (spec) => {
   itIfReal(

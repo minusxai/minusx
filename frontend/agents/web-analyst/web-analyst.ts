@@ -4,7 +4,8 @@ import {
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { ListDBConnections, SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
+import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
+import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {

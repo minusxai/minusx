@@ -1,7 +1,8 @@
 // Benchmark-only: one process-wide in-memory DuckDBInstance shared by
 // every sqlite/duckdb connection across every dataset. ATTACHes
-// cumulatively as `buildBenchmarkConnectors` is called per dataset, so
-// parallel datasets reuse the same instance (one thread pool, one
+// cumulatively as `getOrCreateBenchmarkConnector` is called per
+// connection (typically from `BaseExecuteQuery._initialiseConnectors`),
+// so parallel datasets reuse the same instance (one thread pool, one
 // buffer cache) instead of each spawning their own.
 //
 // Scope: **benchmark only**. Production connectors still use one
@@ -22,8 +23,6 @@ import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import { resolveDuckDbFilePath } from '@/lib/connections/duckdb-connector';
 import { getNodeConnector } from '@/lib/connections';
 import { NodeConnector, type SchemaEntry, type QueryResult, type TestConnectionResult } from '@/lib/connections/base';
-import type { BenchmarkConnectionEntry, BenchmarkConnections } from './connection-source';
-import type { ConnectionInfo } from './types';
 
 // Make rows JSON-safe (BigInt → Number where it fits; else string).
 // Same shape as the production connectors so the runner output JSONL
@@ -252,43 +251,35 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
 }
 
 /**
- * Build the benchmark's NodeConnector map. sqlite/duckdb entries are
- * routed through a process-wide shared DuckDBInstance (one thread
- * pool, one buffer cache); other dialects (mongo, postgres, …) fall
- * back to per-connector NodeConnectors via `getNodeConnector`.
+ * Build a single benchmark NodeConnector for one connection. Idempotent
+ * with respect to the shared DuckDBInstance: sqlite/duckdb entries route
+ * through a process-wide singleton (`getOrCreateShared`) with idempotent
+ * `ensureAttached`, so repeated calls for the same name are cheap and
+ * safe. Other dialects (postgres, bigquery, …) fall through to
+ * `getNodeConnector`.
+ *
+ * Used by `BaseExecuteQuery._initialiseConnectors` / `BaseSearchDBSchema._initialiseConnectors`
+ * to lazily wire up connectors from `ctx.connections[*]` on each tool
+ * invocation. The single in-memory `:memory:` DuckDBInstance with all
+ * dataset files ATTACHed is preserved across tool calls (one thread
+ * pool, one buffer cache).
  */
-export async function buildBenchmarkConnectors(
-  entries: BenchmarkConnectionEntry[],
-): Promise<BenchmarkConnections> {
-  // First pass: resolve the sqlite/duckdb entries we'll route through
-  // the shared instance, and ensure they're all ATTACHed before we
-  // hand out connectors. Other dialects (mongo, postgres) are
-  // delegated to `getNodeConnector` below.
-  const toAttach: AttachedEntry[] = [];
-  for (const e of entries) {
-    if (!isAttachable(e.dialect)) continue;
-    const filePath = (e.config as { file_path?: unknown }).file_path;
+export async function getOrCreateBenchmarkConnector(
+  name: string,
+  dialect: string,
+  config: Record<string, unknown>,
+): Promise<NodeConnector> {
+  if (isAttachable(dialect)) {
+    const filePath = (config as { file_path?: unknown }).file_path;
     if (typeof filePath !== 'string') {
-      throw new Error(`Missing or non-string file_path for connection '${e.name}'`);
+      throw new Error(`Missing or non-string file_path for connection '${name}'`);
     }
-    toAttach.push({ name: e.name, dialect: e.dialect, absPath: resolveDuckDbFilePath(filePath) });
+    const absPath = resolveDuckDbFilePath(filePath);
+    const shared = await getOrCreateShared();
+    await shared.ensureAttached([{ name, dialect, absPath }]);
+    return new BenchmarkSharedDuckdbConnector(name, shared);
   }
-  const shared = toAttach.length > 0 ? await getOrCreateShared() : null;
-  if (shared) await shared.ensureAttached(toAttach);
-
-  const connectorsByName = new Map<string, NodeConnector>();
-  const dialectsByName = new Map<string, string>();
-  const connectionInfos = new Map<string, ConnectionInfo>();
-  for (const e of entries) {
-    if (shared && isAttachable(e.dialect)) {
-      connectorsByName.set(e.name, new BenchmarkSharedDuckdbConnector(e.name, shared));
-    } else {
-      const conn = getNodeConnector(e.name, e.dialect, e.config);
-      if (!conn) throw new Error(`Unknown dialect '${e.dialect}' for connection '${e.name}'`);
-      connectorsByName.set(e.name, conn);
-    }
-    dialectsByName.set(e.name, e.dialect);
-    connectionInfos.set(e.name, { name: e.name, dialect: e.dialect, description: e.description });
-  }
-  return { connectorsByName, dialectsByName, connectionInfos };
+  const conn = getNodeConnector(name, dialect, config);
+  if (!conn) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
+  return conn;
 }

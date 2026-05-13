@@ -8,12 +8,8 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs
 import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
-import {
-  buildBenchmarkSources,
-  type BenchmarkConnectionEntry,
-} from '@/agents/benchmark-analyst/connection-source';
-import { buildBenchmarkConnectors } from '@/agents/benchmark-analyst/shared-duckdb';
-import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
+import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
+import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { ConversationLog } from '@/orchestrator/types';
 
 // Suppress Node's TLS warning emitted when NODE_TLS_REJECT_UNAUTHORIZED=0
@@ -203,22 +199,15 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
   const label = config.label ?? path.basename(inputPath).replace(/_input\.jsonl$/, '');
 
-  // Load connections. For sqlite/duckdb entries we route through a
-  // single shared DuckDBInstance (see `shared-duckdb.ts`) to avoid the
-  // thread-pool oversubscription that came from one DuckDBInstance per
-  // file × multiple concurrent agents. Other dialects fall back to
-  // per-connector NodeConnectors.
+  // Load the dataset's connection configs. Each entry becomes a
+  // `ConnectionInfo` (with `config`) that the agent's `Base*` DB tools
+  // unpack into NodeConnectors at run-time. sqlite/duckdb connections
+  // share one process-wide DuckDBInstance (one thread pool / buffer
+  // cache) via `getOrCreateBenchmarkConnector` — see `shared-duckdb.ts`.
   const entries = JSON.parse(readFileSync(connectionsPath, 'utf-8')) as BenchmarkConnectionEntry[];
-  const { connectorsByName, dialectsByName, connectionInfos } = await buildBenchmarkConnectors(entries);
-
-  // Build per-dataset executors. We pass them through agent context (not
-  // global singletons) so multiple datasets can run in parallel without
-  // clobbering each other's wiring.
-  const { schemaSource, sqlExecutor } = buildBenchmarkSources(
-    connectorsByName,
-    dialectsByName,
-    new Set(connectorsByName.keys()),
-  );
+  // `BenchmarkConnectionEntry[]` is assignable to `ConnectionInfo[]` (the
+  // former narrows `config` to required; the latter has it optional).
+  const connectionsByName = new Map<string, ConnectionInfo>(entries.map((c) => [c.name, c]));
 
   // Load input rows
   const inputRows: InputRow[] = readFileSync(inputPath, 'utf-8')
@@ -309,13 +298,11 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     running++;
     if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
 
-    const ctx = {
+    const ctx: BenchmarkAnalystContext = {
       connections: row.allowed_connections
-        .map((name) => connectionInfos.get(name))
-        .filter((ci): ci is ConnectionInfo => !!ci),
-        contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
-        schemaSource,
-        sqlExecutor,
+        .map((name) => connectionsByName.get(name))
+        .filter((c): c is ConnectionInfo => !!c),
+      contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
     };
 
     // Multi-run fan-out: execute the agent `timesRun` times in parallel

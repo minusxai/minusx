@@ -105,20 +105,24 @@ describe('buildBenchmarkContextFromSavedLog', () => {
     expect(ctx.connections).toEqual(connections);
   });
 
-  it('drops serialised-empty schemaSource/sqlExecutor (functions cannot survive JSON)', () => {
+  it('ignores any extra non-context fields on the saved root invocation', () => {
+    // Older saved logs may carry stale shape (e.g. `schemaSource: {}` left
+    // over from when the context exposed function overrides). The current
+    // shape is JSON-only; the rebuilder picks only known fields and
+    // ignores everything else.
     const log: ConversationLog = [
       {
         type: 'toolCall',
         id: 'r1',
         name: 'BenchmarkAnalystAgent',
         arguments: { userMessage: 'q' },
-        context: { connections: [], schemaSource: {}, sqlExecutor: {} },
+        context: { connections: [], unknownLegacyField: {} },
         parent_id: null,
       },
     ] as unknown as ConversationLog;
     const ctx = buildBenchmarkContextFromSavedLog(log);
-    expect(ctx.schemaSource).toBeUndefined();
-    expect(ctx.sqlExecutor).toBeUndefined();
+    expect(ctx.connections).toEqual([]);
+    expect((ctx as Record<string, unknown>).unknownLegacyField).toBeUndefined();
   });
 
   it('returns an empty context when the log has no root', () => {

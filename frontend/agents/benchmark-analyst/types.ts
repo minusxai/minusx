@@ -1,11 +1,33 @@
 import type { AgentContext } from '@/orchestrator/types';
-import type { SchemaSource, SqlExecutor } from './sources';
 
-/** Metadata about a database connection visible to the agent. */
+/**
+ * Connection metadata as carried in `BenchmarkAnalystContext.connections`.
+ *
+ * Two flavours, distinguished by the presence of `config`:
+ * - **Metadata-only** (`config` absent): just name + dialect + optional
+ *   description. Used by the production analyst path where connectors are
+ *   resolved server-side via `ConnectionsAPI.getRawByName`. The list
+ *   serves only `ListDBConnections` (LLM never sees the config).
+ * - **Connector-config-included** (`config` present): full JSON blob
+ *   needed to instantiate a `NodeConnector`. Used by the benchmark CLI
+ *   runner and by chat-continuation of benchmark conversations. The
+ *   `BaseExecuteQuery` / `BaseSearchDBSchema` tool variants instantiate
+ *   connectors directly from these entries.
+ *
+ * `config` is JSON-serialisable so the whole `ConnectionInfo[]` round-trips
+ * through agent-context serialisation (logged, resumed) without losing
+ * fidelity. It may contain credentials (Postgres password,
+ * `service_account_json`, …) — this is acceptable because the production
+ * path never populates `config`, and the benchmark/continuation paths
+ * already store the same configs on the conversation file's
+ * `meta.benchmark_connections`. `ListDBConnections` strips `config` before
+ * surfacing the list to the LLM.
+ */
 export interface ConnectionInfo {
   name: string;
   dialect: string;
   description?: string;
+  config?: Record<string, unknown>;
 }
 
 /**
@@ -29,11 +51,15 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * so the LLM knows what the data means without re-deriving it.
    */
   contextDocs?: string;
-  /**
-   * Per-row executor overrides for benchmark/test parallelism. When set,
-   * tools use these instead of the global singletons so N rows can run
-   * concurrently without shared-state races.
-   */
-  schemaSource?: SchemaSource;
-  sqlExecutor?: SqlExecutor;
+}
+
+/**
+ * Strip `config` (which may contain credentials) from a connections list,
+ * leaving only the metadata the LLM should see. Used by `ListDBConnections`
+ * (tool output) and `BenchmarkAnalystAgent.getSystemPrompt` (prompt body).
+ */
+export function publicConnectionMetadata(
+  connections?: ConnectionInfo[],
+): Array<{ name: string; dialect: string; description?: string }> {
+  return (connections ?? []).map(({ name, dialect, description }) => ({ name, dialect, description }));
 }

@@ -7,7 +7,6 @@
 // e.g. `DAB_BENCH_DATASETS=agnews,yelp npm run benchmark:dab`.
 
 import { readdirSync, existsSync } from 'node:fs';
-import { type Tool, type TSchema } from '@mariozechner/pi-ai';
 import { getModel } from '@/lib/llm/get-model';
 import {
   DAB_BENCH_BASE_DIR,
@@ -19,44 +18,18 @@ import {
   MAX_LLM_CONCURRENCY,
   MX_API_BASE_URL,
 } from '@/lib/config';
-import { renderPrompt } from '@/orchestrator/prompts';
-import { DEFAULT_LIMIT, MAX_LIMIT } from '@/lib/sql/limit-enforcer';
+import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
-  BenchmarkAnalystAgent,
-  SearchDBSchema,
-  ExecuteQuery,
-} from '@/agents/benchmark-analyst/benchmark-analyst';
+  ListDBConnections,
+  BaseSearchDBSchema,
+  BaseExecuteQuery,
+} from '@/agents/benchmark-analyst/db-tools';
 import { runBenchmark, logHeader, logSummary } from './runner';
-
-const tools = [
-    SearchDBSchema.schema,
-    ExecuteQuery.schema,
-  ];
 
 // ── Config ────────────────────────────────────────────────────
 
 const CONFIG = {
   model: { provider: 'anthropic', model: 'claude-sonnet-4-6', "options":{"reasoning":"low"}},
-  concurrency: 10,
-  promptId: 'default.system',
-  promptVars: {
-    agent_name: 'MinusX Benchmark Agent',
-    max_steps: '40',
-    allowed_viz_types: 'table',
-    role: 'admin',
-    schema: '',
-    context: '',
-    skills_catalog: '',
-    home_folder: '',
-    preloaded_skills: '',
-  } as Record<string, string>,
-  systemPromptAppend: `## Benchmark Specific Instructions and Customization
-  - You are solving a benchmark task. Your goal is to analyze the questions, and give very specific answers.
-  - Only tools you have access to: ${tools.map((t) => `\`${t.name}\``).join(', ')}. Don't hallucinate any other tools.
-  - You DO NOT have any other existing files with questions.
-  - The answer needs to be in under 200 words. This is a benchmark, a user is not reading the answer and the evaluation might be error-prone on long winded answers. Be concise and specific. Don't add any unnecessary information. Just answer the question as directly as possible.
-  - **ExecuteQuery returns at most ${DEFAULT_LIMIT} rows per call when no LIMIT is specified, and clamps explicit LIMITs above ${MAX_LIMIT}.** Use SQL \`LIMIT\` / \`ORDER BY\` to control which rows you see, aggregations (\`COUNT\`, \`SUM\`, \`GROUP BY\`) to summarise large tables, and \`OFFSET\` to page through results.
-  `
 };
 
 // ── Datasets─────────────────────────────────────────────────
@@ -100,64 +73,18 @@ function discoverDatasets(baseDir: string): { input: string; connections: string
 
 const DATASETS = discoverDatasets(BASE);
 
-// ── Agent (customize tools / prompt here) ─────────────────────────────────
+// ── Agent (customize the model here; tools + prompt come from BenchmarkAnalystAgent) ──
 
 class Agent extends BenchmarkAnalystAgent {
-  static readonly tools: Tool<TSchema>[] = tools;
   static model = getModel(
     CONFIG.model.provider as never,
     CONFIG.model.model as never,
   );
-
-  protected getSystemPrompt(): string {
-    // const vars: Record<string, string> = {
-    //   connection_id: `Available connections: \n${JSON.stringify(this.context.connections ?? [])}`,
-    //   ...CONFIG.promptVars,
-    // };
-    // const rendered = renderPrompt(CONFIG.promptId, vars);
-    // const prompt = CONFIG.systemPromptAppend
-    //   ? `${rendered}\n\n${CONFIG.systemPromptAppend}`
-    //   : rendered;
-
-    const prompt = `
-    You are ${CONFIG.promptVars.agent_name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
-    You have access to the following tools: ${tools.map((t) => `\`${t.name}\``).join(', ')}.
-
-    Connections available to you: \n${JSON.stringify(this.context.connections ?? [])}
-
-    ## Analysis guidelines:
-      - Carefully consider the question and the data connections you have access to.
-      - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc). NEVER hallucinate table or column names.
-      - Outline your approach in 1-2 sentences before executing any SQL queries.
-      - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
-      - Be concise, specific and accurate.
-    
-    ## Response Format [EXTREMELY IMPORTANT]:
-    - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.
-    - Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary. 
-    - Format: 
-        TL;DR: <your concise answer to the question, based on the data and your analysis>
-        Analysis: <a description of your analysis, general discussion about the results, and continuation question for the user to investigate further.>
-    Example:
-    Q: What is the total revenue for product X in the last quarter?
-    Agent:
-    <Runs tools to analyze the data, arrives at the answer>
-    TL;DR: $123,456 was the total revenue for product X in the last quarter.
-    Analysis: <markdown table showing revenue by month>. The revenue over quarter-over-quarter has grown by 20%, with the highest revenue in March. Would you like to see a breakdown by region or customer segment?
-
-    ## Data Documentation:
-    ${this.context.contextDocs ?? 'No documentation available.'}
-    `
-    // console.log('--- System prompt ---');
-    // console.log(prompt);
-    // console.log('--- End system prompt ---');
-    return prompt;
-  }
 }
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-const registrables = [SearchDBSchema, ExecuteQuery, Agent];
+const registrables = [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, Agent];
 
 // Default timeouts. Override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT
 // (seconds). A row that hits its timeout is cancelled and dropped from
