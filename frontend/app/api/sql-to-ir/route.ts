@@ -1,6 +1,6 @@
 /**
- * API route for SQL to IR conversion
- * Proxies to Python backend /api/sql-to-ir endpoint
+ * API route for SQL → IR conversion. Runs locally via the WASM-backed
+ * `parseSqlToIrLocal` helper.
  */
 
 import { NextRequest, NextResponse } from 'next/server';

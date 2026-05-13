@@ -209,13 +209,14 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   // file × multiple concurrent agents. Other dialects fall back to
   // per-connector NodeConnectors.
   const entries = JSON.parse(readFileSync(connectionsPath, 'utf-8')) as BenchmarkConnectionEntry[];
-  const { connectorsByName, connectionInfos } = await buildBenchmarkConnectors(entries);
+  const { connectorsByName, dialectsByName, connectionInfos } = await buildBenchmarkConnectors(entries);
 
   // Build per-dataset executors. We pass them through agent context (not
   // global singletons) so multiple datasets can run in parallel without
   // clobbering each other's wiring.
   const { schemaSource, sqlExecutor } = buildBenchmarkSources(
     connectorsByName,
+    dialectsByName,
     new Set(connectorsByName.keys()),
   );
 

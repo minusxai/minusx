@@ -2,6 +2,7 @@ import 'server-only';
 import { Pool } from 'pg';
 import type { NodeConnector, QueryResult, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 const PG_OID_TO_TYPE: Record<number, string> = {
   16:   'boolean',
@@ -69,12 +70,14 @@ export class PostgresConnector extends NodeConnectorBase {
       return `$${seenParams[key]}`;
     });
 
+    const finalQuery = inlineSqlParams(sql, params);
+
     const result = await pool.query(positionalSql, paramValues as any[]);
 
     const columns = result.fields.map((f: any) => f.name as string);
     const types = result.fields.map((f: any) => PG_OID_TO_TYPE[f.dataTypeID as number] ?? 'text');
 
-    return { columns, types, rows: result.rows };
+    return { columns, types, rows: result.rows, finalQuery };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

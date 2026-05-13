@@ -7,6 +7,7 @@
 import 'server-only';
 import { getNodeConnector } from '@/lib/connections';
 import { NodeConnector } from '@/lib/connections/base';
+import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import {
   setSchemaSource,
   setSqlExecutor,
@@ -24,6 +25,7 @@ export interface BenchmarkConnectionEntry {
 
 export interface BenchmarkConnections {
   connectorsByName: Map<string, NodeConnector>;
+  dialectsByName: Map<string, string>;
   connectionInfos: Map<string, ConnectionInfo>;
 }
 
@@ -46,6 +48,12 @@ export function buildConnectorsFromEntries(
   return connectorsByName;
 }
 
+export function buildDialectsFromEntries(
+  entries: BenchmarkConnectionEntry[],
+): Map<string, string> {
+  return new Map(entries.map((e) => [e.name, e.dialect]));
+}
+
 /**
  * Parse `BENCHMARK_CONNECTIONS_CONFIG` (a JSON array of {name, dialect, config,
  * description?}) into a NodeConnector map plus the public ConnectionInfo
@@ -55,40 +63,15 @@ export function buildConnectorsFromEntries(
 export function loadBenchmarkConnectionsFromEnv(): BenchmarkConnections {
   // eslint-disable-next-line no-restricted-syntax -- benchmark module reads its own scoped env var directly
   const raw = process.env.BENCHMARK_CONNECTIONS_CONFIG;
-  if (!raw) return { connectorsByName: new Map(), connectionInfos: new Map() };
+  if (!raw) return { connectorsByName: new Map(), dialectsByName: new Map(), connectionInfos: new Map() };
   const entries = JSON.parse(raw) as BenchmarkConnectionEntry[];
   const connectorsByName = buildConnectorsFromEntries(entries);
+  const dialectsByName = buildDialectsFromEntries(entries);
   const connectionInfos = new Map<string, ConnectionInfo>();
   for (const { name, dialect, description } of entries) {
     connectionInfos.set(name, { name, dialect, description });
   }
-  return { connectorsByName, connectionInfos };
-}
-
-/**
- * Cap row results at this count for benchmark runs. Prevents the agent
- * from issuing unbounded SELECTs that materialise millions of rows
- * through `better-sqlite3 .all()` (or equivalent) and OOM the JS heap.
- * Threaded into the SQL via `LIMIT` if not already present, plus a
- * post-execution slice as belt-and-suspenders.
- */
-export const BENCHMARK_MAX_ROWS = 100;
-
-/**
- * Append `LIMIT N` if the SQL doesn't already specify one. Pushes the
- * row cap into the engine — for SQL connectors the database itself
- * stops at N; for queryleaf-backed Mongo, queryleaf emits a `$limit`
- * aggregation stage so the cursor only fetches N docs. Strips a single
- * trailing `;` because some SQL dialects reject `... ; LIMIT 100`.
- *
- * Intentionally non-clamping: if the LLM specified an explicit LIMIT
- * (even one larger than N), we trust it. The post-execution slice
- * enforces the hard cap regardless.
- */
-export function appendLimitIfMissing(sql: string, limit: number): string {
-  const trimmed = sql.trim().replace(/;$/, '').trim();
-  if (/\blimit\s+\d+\b/i.test(trimmed)) return trimmed;
-  return `${trimmed} LIMIT ${limit}`;
+  return { connectorsByName, dialectsByName, connectionInfos };
 }
 
 /**
@@ -100,6 +83,7 @@ export function appendLimitIfMissing(sql: string, limit: number): string {
  */
 export function buildBenchmarkSources(
   connectorsByName: Map<string, NodeConnector>,
+  dialectsByName: Map<string, string>,
   allowedNames: ReadonlySet<string>,
 ): { schemaSource: SchemaSource; sqlExecutor: SqlExecutor } {
   // Schema cache scoped to this benchmark run. Without it, every
@@ -136,16 +120,15 @@ export function buildBenchmarkSources(
       const conn = connectorsByName.get(connection);
       if (!conn) return { rows: [], error: `connector '${connection}' not loaded` };
       try {
-        const cappedSql = appendLimitIfMissing(sql, BENCHMARK_MAX_ROWS);
+        const dialect = dialectsByName.get(connection) ?? 'duckdb';
+        const cappedSql = await enforceQueryLimit(sql, { dialect });
         const result = await conn.query(cappedSql);
-        // JS-side slice in case the LLM specified an explicit LIMIT > N
-        // (we don't clamp the SQL itself in that case so the LLM's
-        // intent is preserved in the log, but the persisted result is
-        // hard-capped to N rows).
-        const rows = result.rows.length > BENCHMARK_MAX_ROWS
-          ? result.rows.slice(0, BENCHMARK_MAX_ROWS)
-          : result.rows;
-        return { rows };
+        return {
+          rows: result.rows,
+          columns: result.columns,
+          types: result.types,
+          finalQuery: result.finalQuery,
+        };
       } catch (err) {
         return { rows: [], error: err instanceof Error ? err.message : String(err) };
       }
@@ -161,9 +144,10 @@ export function buildBenchmarkSources(
  */
 export function setupBenchmarkSources(
   connectorsByName: Map<string, NodeConnector>,
+  dialectsByName: Map<string, string>,
   allowedNames: ReadonlySet<string>,
 ): void {
-  const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, allowedNames);
+  const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, dialectsByName, allowedNames);
   setSchemaSource(schemaSource);
   setSqlExecutor(sqlExecutor);
 }

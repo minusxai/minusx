@@ -24,6 +24,7 @@ function pgliteQueryFn(db: PGlite): QueryFn {
       columns: fields.map(f => f.name),
       types: fields.map(() => 'text'),
       rows: result.rows,
+      finalQuery: sql,
     };
   };
 }

@@ -457,11 +457,18 @@ class ExecuteQuery(Tool):
     Use this to run ad-hoc queries for data exploration.
     Results are cached but not associated with any question file.
 
+    Row-count cap (enforced server-side, transparent to the query):
+    - A default LIMIT of 1000 rows is appended when the query has no LIMIT clause.
+    - Any explicit LIMIT above 10000 is capped at 10000.
+    - For cardinality / aggregate questions use COUNT / SUM / GROUP BY, not raw row counts.
+    - For paging through large tables use explicit LIMIT/OFFSET in the SQL.
+
     Returns a JSON object with:
     - data: GFM markdown containing the first shownRows rows of output
-    - totalRows: total rows returned by the query
+    - totalRows: total rows returned by the query (post row-cap)
     - shownRows: number of rows included in the data field (may be < totalRows if output was large)
     - truncated: true when data was cut short (shownRows < totalRows)
+    - finalQuery: the SQL the engine effectively saw, with `:name` parameters inlined as literals
 
     Chart images (when vizSettings is provided) are full-fidelity — never truncated.
 

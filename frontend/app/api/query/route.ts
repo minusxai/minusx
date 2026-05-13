@@ -7,7 +7,6 @@ import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { getQueryHash } from '@/lib/utils/query-hash';
@@ -81,7 +80,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const parseStart = Date.now();
     const body = await request.json();
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
-    const { connection_name, query, parameters, references, parameterTypes, filePath, fileId, fileVersion } = body;
+    const { connection_name, query, parameters, references, filePath, fileId, fileVersion } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
@@ -179,7 +178,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues, queryDialect);
 
       const queryStart = Date.now();
-      const result = await runQuery(connection_name, noneResolvedQuery, resolvedParams, user, parameterTypes) as QueryResult & { finalQuery?: string };
+      const result = await runQuery(connection_name, noneResolvedQuery, resolvedParams, user);
       const durationMs = Date.now() - queryStart;
 
       const displayQuery = result.finalQuery ?? noneResolvedQuery;

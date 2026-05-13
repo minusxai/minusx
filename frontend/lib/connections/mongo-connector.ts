@@ -118,7 +118,9 @@ export class MongoConnector extends NodeConnector {
     const result = await queryLeaf.execute(sql);
     const rows = (Array.isArray(result) ? result : []) as Record<string, unknown>[];
     const { columns, types } = documentsToQueryResultColumns(rows);
-    return { columns, types, rows };
+    // Mongo connector doesn't accept `:name` params — queryleaf takes SQL
+    // as-is — so `finalQuery` is literally the input SQL.
+    return { columns, types, rows, finalQuery: sql };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

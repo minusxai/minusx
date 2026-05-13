@@ -14,7 +14,7 @@ import type { SchemaEntry, SchemaColumn, QueryResult } from '../base';
 const PG_STATS_COLS = ['schema_name', 'table_name', 'column_name', 'null_frac', 'n_distinct', 'most_common_vals', 'most_common_freqs', 'histogram_bounds', 'description'];
 
 function qr(columns: string[], rows: Record<string, unknown>[]): QueryResult {
-  return { columns, types: columns.map(() => 'text'), rows };
+  return { columns, types: columns.map(() => 'text'), rows, finalQuery: '<test>' };
 }
 
 function schema(entries: SchemaEntry[]): SchemaEntry[] { return entries; }

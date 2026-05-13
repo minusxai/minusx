@@ -40,8 +40,10 @@ export function setupV2ServerSources(): void {
   _wired = true;
 
   // ── SqlExecutor ─────────────────────────────────────────────────────────
-  // Reuses the same `runQuery` helper that /api/query calls: identical
-  // Node-connector / Python-backend fallback and caching semantics.
+  // Reuses the same `runQuery` helper that /api/query calls — every
+  // connection type now resolves to a Node connector, so row-cap
+  // enforcement and `finalQuery` inlining behave identically across v=1
+  // chat ExecuteQuery and v=2 orchestrator.
   const executor: SqlExecutor = {
     async execute(sql, connection, ctx) {
       const user = getUserFromCtx(ctx);
@@ -51,6 +53,7 @@ export function setupV2ServerSources(): void {
           error: 'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
         };
       }
+      // Row-cap enforcement happens inside `runQuery` — see limit-enforcer.ts.
       const start = Date.now();
       try {
         const result = await runQuery(connection, sql, {}, user);

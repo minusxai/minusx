@@ -10,6 +10,7 @@ import {
   LOCAL_UPLOAD_PATH,
 } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 // ---------------------------------------------------------------------------
 // Config shape
@@ -193,6 +194,8 @@ export class CsvConnector extends NodeConnector {
         return `$${paramValues.length}`;
       });
 
+      const finalQuery = inlineSqlParams(sql, params);
+
       const result = await conn.run(positionalSql, paramValues as never);
       const colCount = result.columnCount;
       const columns: string[] = [];
@@ -203,7 +206,7 @@ export class CsvConnector extends NodeConnector {
       }
       const rawRows = (await result.getRowObjectsJS()) as Record<string, unknown>[];
       const rows = makeJsonSafe(rawRows);
-      return { columns, types, rows };
+      return { columns, types, rows, finalQuery };
     });
   }
 

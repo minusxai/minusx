@@ -20,7 +20,7 @@ import {
   MX_API_BASE_URL,
 } from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
-import { BENCHMARK_MAX_ROWS } from '@/agents/benchmark-analyst/connection-source';
+import { DEFAULT_LIMIT, MAX_LIMIT } from '@/lib/sql/limit-enforcer';
 import {
   BenchmarkAnalystAgent,
   SearchDBSchema,
@@ -55,7 +55,7 @@ const CONFIG = {
   - Only tools you have access to: ${tools.map((t) => `\`${t.name}\``).join(', ')}. Don't hallucinate any other tools.
   - You DO NOT have any other existing files with questions.
   - The answer needs to be in under 200 words. This is a benchmark, a user is not reading the answer and the evaluation might be error-prone on long winded answers. Be concise and specific. Don't add any unnecessary information. Just answer the question as directly as possible.
-  - **ExecuteQuery returns at most ${BENCHMARK_MAX_ROWS} rows per call.** Use SQL \`LIMIT\` / \`ORDER BY\` to choose which ${BENCHMARK_MAX_ROWS} rows you see, aggregations (\`COUNT\`, \`SUM\`, \`GROUP BY\`) to summarise large tables, and \`OFFSET\` to page through results when you need rows beyond the first ${BENCHMARK_MAX_ROWS}. The cap applies even if your query specifies a larger LIMIT.
+  - **ExecuteQuery returns at most ${DEFAULT_LIMIT} rows per call when no LIMIT is specified, and clamps explicit LIMITs above ${MAX_LIMIT}.** Use SQL \`LIMIT\` / \`ORDER BY\` to control which rows you see, aggregations (\`COUNT\`, \`SUM\`, \`GROUP BY\`) to summarise large tables, and \`OFFSET\` to page through results.
   `
 };
 

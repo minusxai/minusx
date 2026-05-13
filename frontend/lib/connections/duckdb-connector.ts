@@ -5,6 +5,7 @@ import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { withDuckDbConnection } from './duckdb-registry';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 const SKIP_SCHEMAS = immutableSet(['system', 'temp']);
 
@@ -73,21 +74,15 @@ export class DuckDbConnector extends NodeConnector {
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
     return withDuckDbConnection(this.absPath, 'READ_ONLY', async (conn) => {
-      // Replace named params (:name) with positional $1, $2, ... (DuckDB syntax)
+      // Replace named params (:name) with positional $1, $2, ... (DuckDB
+      // prepared-statement syntax). The engine receives this + paramValues.
       const paramValues: unknown[] = [];
       const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
         paramValues.push(params?.[key] ?? null);
         return `$${paramValues.length}`;
       });
 
-      // Build display query with params inlined
-      let finalQuery = sql;
-      if (params) {
-        for (const [key, val] of Object.entries(params)) {
-          const replacement = typeof val === 'number' ? String(val) : `'${String(val).replace(/'/g, "''")}'`;
-          finalQuery = finalQuery.replace(new RegExp(`:${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), replacement);
-        }
-      }
+      const finalQuery = inlineSqlParams(sql, params);
 
       const result = await conn.run(positionalSql, paramValues as never);
       const colCount = result.columnCount;

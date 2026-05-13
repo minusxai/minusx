@@ -14,9 +14,9 @@ import type { Mock } from 'vitest';
  *   - Cron dedup: time-window (findOrCreate ±30s)
  *   - Run file content: RunFileContent with output: AlertOutput inside
  *
- * No Python backend needed: query execution is mocked via pythonBackendFetch.
- * Connection type is set to 'postgresql' so getNodeConnector() returns null
- * and falls through to the pythonBackendFetch mock.
+ * No live database needed: `getNodeConnector` is mocked to return a fake
+ * NodeConnector whose `query()` is a vi.fn() that returns a canned result.
+ * Tests can `.mockImplementationOnce` / `.mockRejectedValueOnce` on it.
  */
 
 import { POST as runPostHandler } from '@/app/api/jobs/run/route';
@@ -40,25 +40,17 @@ vi.mock('@/lib/database/db-config', () => ({
 const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
 
 // ─── Node connector mock ─────────────────────────────────────────────────────
-// Force getNodeConnector to return null so runQuery falls through to
-// pythonBackendFetch for all connection types including 'postgresql'.
-vi.mock('@/lib/connections', () => ({
-  ...vi.importActual('@/lib/connections'),
-  getNodeConnector: vi.fn().mockReturnValue(null),
+// `runQuery` routes every connection through `getNodeConnector` now (no
+// Python fallback). The mock connector below returns a canned row by default
+// and is overridable per-test via `mockConnectorQuery.mockImplementationOnce`
+// / `.mockRejectedValueOnce`. Hoisted so the inline `vi.mock` factory below
+// can reference it (vi.mock factories run before top-level test code).
+const { mockConnectorQuery } = vi.hoisted(() => ({
+  mockConnectorQuery: vi.fn(),
 }));
 
-// ─── Query execution mock (no Python backend needed) ─────────────────────────
-// Mocked pythonBackendFetch returns a single row with value=150 for any query.
-vi.mock('@/lib/api/python-backend-client', () => ({
-  pythonBackendFetch: vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      columns: ['revenue'],
-      types: ['FLOAT'],
-      rows: [{ revenue: 150 }],
-    }),
-  }),
+vi.mock('@/lib/connections', () => ({
+  getNodeConnector: vi.fn().mockReturnValue({ query: mockConnectorQuery }),
 }));
 
 // ─── Webhook executor mock ────────────────────────────────────────────────────
@@ -167,6 +159,15 @@ describe('Job Runs E2E', () => {
 
   beforeEach(() => {
     process.env.CRON_SECRET = TEST_CRON_SECRET;
+    // Reset connector mock between tests so per-test `.mockImplementationOnce`
+    // / `.mockRejectedValueOnce` don't leak. Default: a single revenue row.
+    mockConnectorQuery.mockReset();
+    mockConnectorQuery.mockResolvedValue({
+      columns: ['revenue'],
+      types: ['FLOAT'],
+      rows: [{ revenue: 150 }],
+      finalQuery: '<mock>',
+    });
   });
 
   // ── 1. Manual run ────────────────────────────────────────────────────────────
@@ -221,17 +222,17 @@ describe('Job Runs E2E', () => {
       // Intercept handler execution to verify run file exists with status=running
       let capturedRunFileId: number | null = null;
 
-      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      (pythonBackendFetch as unknown as Mock).mockImplementationOnce(async () => {
+      mockConnectorQuery.mockImplementationOnce(async () => {
         // By the time the query runs, the job_run should already have output_file_id
         const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
         if (runs.length > 0) {
           capturedRunFileId = runs[0].output_file_id;
         }
         return {
-          ok: true,
-          status: 200,
-          json: async () => ({ columns: ['revenue'], types: ['FLOAT'], rows: [{ revenue: 150 }] }),
+          columns: ['revenue'],
+          types: ['FLOAT'],
+          rows: [{ revenue: 150 }],
+          finalQuery: '<mock>',
         };
       });
 
@@ -251,8 +252,7 @@ describe('Job Runs E2E', () => {
     });
 
     it('captures query error as failed test result (run status stays SUCCESS)', async () => {
-      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      (pythonBackendFetch as unknown as Mock).mockRejectedValueOnce(new Error('DB connection refused'));
+      mockConnectorQuery.mockRejectedValueOnce(new Error('DB connection refused'));
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);

@@ -2,6 +2,7 @@ import 'server-only';
 import { BigQuery } from '@google-cloud/bigquery';
 import type { QueryResult, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
+import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 const POLL_INTERVAL_MS = 500;
 
@@ -103,6 +104,8 @@ export class BigQueryConnector extends NodeConnectorBase {
       return `@${key}`;
     });
 
+    const finalQuery = inlineSqlParams(sql, params);
+
     const hasParams = Object.keys(queryParams).length > 0;
     // BigQuery requires explicit types for null parameters; default them to STRING.
     const nullTypes: Record<string, string> = {};
@@ -114,7 +117,7 @@ export class BigQueryConnector extends NodeConnectorBase {
       hasParams ? queryParams : undefined,
       hasParams && Object.keys(nullTypes).length ? nullTypes : undefined,
     );
-    return { columns, types, rows: rows.map(normalizeBigQueryRow) };
+    return { columns, types, rows: rows.map(normalizeBigQueryRow), finalQuery };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

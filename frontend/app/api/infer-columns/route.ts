@@ -83,7 +83,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }
     }
 
-    // Infer columns locally via WASM (replaces Python backend call)
+    // Infer columns locally via WASM.
     const data = await inferColumnsLocal(query, schemaData, dialect);
     return NextResponse.json(data);
 
