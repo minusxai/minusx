@@ -755,6 +755,24 @@ export default function BenchmarkPage() {
                   </Text>
                 </HStack>
               </Box>
+              {activeRow.eval.failure_rate != null && (
+                <Text
+                  fontSize="2xs"
+                  fontWeight="bold"
+                  fontFamily="mono"
+                  color={
+                    activeRow.eval.failure_rate === 0
+                      ? 'accent.success'
+                      : activeRow.eval.failure_rate >= 50
+                        ? 'accent.danger'
+                        : 'accent.warning'
+                  }
+                  flexShrink={0}
+                  title="Failure rate across all runs (DAB_TIMES_RUN)"
+                >
+                  {Math.round(activeRow.eval.failure_rate * 10) / 10}% fail
+                </Text>
+              )}
               {activeRow.eval.reason && (
                 <Text
                   fontSize="2xs"
