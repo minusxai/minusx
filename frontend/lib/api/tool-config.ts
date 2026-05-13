@@ -13,6 +13,7 @@ import ListDBConnectionsDisplay from '@/components/explore/tools/ListDBConnectio
 import PublishAllDisplay from '@/components/explore/tools/PublishAllDisplay';
 import LoadSkillDisplay from '@/components/explore/tools/LoadSkillDisplay';
 import FuzzySearchDisplay from '@/components/explore/tools/FuzzySearchDisplay';
+import ExploreDatasetDisplay from '@/components/explore/tools/ExploreDatasetDisplay';
 import { DisplayProps } from '@/lib/types';
 import type { IconType } from 'react-icons/lib';
 import {
@@ -220,6 +221,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipIcon: LuBookMarked,
 
     timelineVerb: 'Loading',
+  },
+  'ExploreDataset': {
+    displayComponent: ExploreDatasetDisplay,
+
+    chipLabel: 'exploration',
+    chipLabelPlural: 'explorations',
+    chipIcon: LuBrain,
+
+    timelineVerb: 'Exploring data',
   },
   'WebSearch': {
     displayComponent: null,
