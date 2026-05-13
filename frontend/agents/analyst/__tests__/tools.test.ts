@@ -4,11 +4,19 @@ import {
   ExecuteQuery,
   SearchDBSchema,
 } from '../analyst-agent';
-import {
-  resetSources,
-  setSchemaSource,
-  setSqlExecutor,
-} from '../sources';
+
+// Mock the production chokepoints. Production `SearchDBSchema` / `ExecuteQuery`
+// route here, so configuring these mocks is how tests inject schemas/rows.
+const { mockLoadSchema, mockRunQuery } = vi.hoisted(() => ({
+  mockLoadSchema: vi.fn(),
+  mockRunQuery: vi.fn(),
+}));
+vi.mock('@/lib/connections/load-schema', () => ({
+  loadConnectionSchema: mockLoadSchema,
+}));
+vi.mock('@/lib/connections/run-query', () => ({
+  runQuery: mockRunQuery,
+}));
 
 const ctx: AnalystAgentContext = { userId: 'u', mode: 'org' };
 
@@ -22,10 +30,13 @@ const fakeSchemas = [
 ];
 
 describe('SearchDBSchema', () => {
-  beforeEach(() => resetSources());
+  beforeEach(() => {
+    mockLoadSchema.mockReset();
+    mockRunQuery.mockReset();
+  });
 
   it('returns production-shaped {success, queryType, tableCount, results} on keyword match', async () => {
-    setSchemaSource({ getSchema: async () => fakeSchemas });
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
 
     const orch = new Orchestrator([]);
     const tool = new SearchDBSchema(orch, { connection: 'main', query: 'users' }, ctx);
@@ -46,7 +57,7 @@ describe('SearchDBSchema', () => {
   });
 
   it('returns empty results array when no schemas match the query', async () => {
-    setSchemaSource({ getSchema: async () => fakeSchemas });
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
 
     const orch = new Orchestrator([]);
     const tool = new SearchDBSchema(orch, { connection: 'main', query: 'foobars' }, ctx);
@@ -58,7 +69,7 @@ describe('SearchDBSchema', () => {
   });
 
   it('returns full schema when no query is provided', async () => {
-    setSchemaSource({ getSchema: async () => fakeSchemas });
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
 
     const orch = new Orchestrator([]);
     const tool = new SearchDBSchema(orch, { connection: 'main' }, ctx);
@@ -73,11 +84,14 @@ describe('SearchDBSchema', () => {
 });
 
 describe('ExecuteQuery', () => {
-  beforeEach(() => resetSources());
+  beforeEach(() => {
+    mockLoadSchema.mockReset();
+    mockRunQuery.mockReset();
+  });
 
   it('returns compressed markdown + metadata on success', async () => {
     const rows = [{ count: 42 }];
-    setSqlExecutor({ execute: async () => ({ rows }) });
+    mockRunQuery.mockResolvedValue({ columns: ['count'], types: ['int'], rows, finalQuery: 'SELECT count(*) FROM users' });
 
     const orch = new Orchestrator([]);
     const tool = new ExecuteQuery(orch, { connectionId: 'main', query: 'SELECT count(*) FROM users' }, ctx);
@@ -102,7 +116,7 @@ describe('ExecuteQuery', () => {
   });
 
   it('returns isError=true with the error message when the executor fails', async () => {
-    setSqlExecutor({ execute: async () => ({ rows: [], error: 'syntax error near "FRM"' }) });
+    mockRunQuery.mockRejectedValue(new Error('syntax error near "FRM"'));
 
     const orch = new Orchestrator([]);
     const tool = new ExecuteQuery(orch, { connectionId: 'main', query: 'SELECT * FRM bad' }, ctx);

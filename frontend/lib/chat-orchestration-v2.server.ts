@@ -9,7 +9,6 @@
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import { setupV2ServerSources } from '@/lib/v2-server-sources';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
@@ -28,13 +27,17 @@ import {
   LoadSkillFrontend,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
-import { ListDBConnections, SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
+import {
+  ListDBConnections,
+  SearchDBSchema,
+  ExecuteQuery,
+  BaseSearchDBSchema,
+  BaseExecuteQuery,
+} from '@/agents/benchmark-analyst/db-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
 import {
-  buildBenchmarkSources,
-  buildConnectorsFromEntries,
-  buildDialectsFromEntries,
+  benchmarkEntriesToConnectionInfos,
   loadBenchmarkConnectionsFromEnv,
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
@@ -62,11 +65,16 @@ import type {
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 
-// Wire the production `SqlExecutor` (and future `SchemaSource`) on first
-// import. Idempotent — safe even when this module is loaded by both
-// `/api/chat` and `/api/chat/stream` handlers.
-setupV2ServerSources();
-
+/**
+ * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
+ * `SearchDBSchema`) are the *production* variants — `ExecuteQuery.run()`
+ * routes via `runQuery` → `ConnectionsAPI.getRawByName`, and
+ * `SearchDBSchema.run()` routes via `loadConnectionSchema` →
+ * `FilesAPI.loadFileByPath`. For benchmark conversations (root invocation
+ * name = 'BenchmarkAnalystAgent') we swap them for `Base*` variants via
+ * `BENCHMARK_TOOL_SWAPS` below — same `schema.name`, different `run()`,
+ * registers from `ctx.connections[*].config`.
+ */
 export const V2_REGISTRABLES: RegistrableClass[] = [
   ListDBConnections,
   SearchDBSchema,
@@ -84,6 +92,27 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   // name is 'BenchmarkAnalystAgent') in v=2 chat.
   BenchmarkAnalystAgent,
 ];
+
+/**
+ * For each registrable whose `schema.name` matches, swap in the override
+ * class. Used to register the benchmark `Base*` tool variants in place of
+ * the production ones when the conversation root is `BenchmarkAnalystAgent`.
+ */
+const BENCHMARK_TOOL_SWAPS: Record<string, RegistrableClass> = {
+  ExecuteQuery: BaseExecuteQuery,
+  SearchDBSchema: BaseSearchDBSchema,
+};
+
+function toolName(cls: RegistrableClass): string {
+  return (cls as { schema?: { name?: string } }).schema?.name ?? '';
+}
+
+function withSwaps(
+  base: RegistrableClass[],
+  swaps: Record<string, RegistrableClass>,
+): RegistrableClass[] {
+  return base.map((cls) => swaps[toolName(cls)] ?? cls);
+}
 
 /** Subset of legacy ChatResponse the v=2 path produces. */
 export interface V2LegacyChatResponse {
@@ -147,11 +176,13 @@ export function getRootAgentName(log: ConversationLog): string | undefined {
 }
 
 /**
- * Reconstruct a BenchmarkAnalystContext from a saved benchmark conversation
- * log. The runner stored connections + whitelist on the root invocation's
- * `context`, but `schemaSource`/`sqlExecutor` (functions) serialised as
- * `{}`. We deliberately leave those undefined so the DB tools fall back to
- * the production server-side singletons wired by `setupV2ServerSources`.
+ * Reconstruct a `BenchmarkAnalystContext` from a saved benchmark
+ * conversation log. The runner stored connections + whitelist on the
+ * root invocation's `context`; we read them back here so chat
+ * continuation can reseed the agent with the same per-row state.
+ *
+ * Configs may be present on `ctx.connections[*].config` (the new shape)
+ * so the `Base*` DB tools can build NodeConnectors at run-time.
  */
 export function buildBenchmarkContextFromSavedLog(log: ConversationLog): BenchmarkAnalystContext {
   for (const entry of log) {
@@ -208,7 +239,13 @@ async function setupOrchestration(
   // production WebAnalystAgent path.
   const isBenchmarkRoot = getRootAgentName(savedLog) === 'BenchmarkAnalystAgent';
 
-  const orch = new Orchestrator(V2_REGISTRABLES, [...savedLog]);
+  // Benchmark conversations get the `Base*` tool variants (build connectors
+  // from ctx.connections[*].config); production conversations get the
+  // default registrables (route via runQuery / loadConnectionSchema).
+  const registrables = isBenchmarkRoot
+    ? withSwaps(V2_REGISTRABLES, BENCHMARK_TOOL_SWAPS)
+    : V2_REGISTRABLES;
+  const orch = new Orchestrator(registrables, [...savedLog]);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
@@ -234,28 +271,30 @@ async function setupOrchestration(
 
   if (body.user_message) {
     if (isBenchmarkRoot) {
-      // Wire NodeConnector-backed executors per-conversation. Connection
-      // configs come from the conversation file's `meta.benchmark_connections`
-      // (set at import time when the user dropped a connections.json
-      // alongside the JSONL); falling back to BENCHMARK_CONNECTIONS_CONFIG
-      // env so dev workflows that pre-set the env still work. Per-context
-      // executors override the production singletons via db-tools.ts:
-      // `this.context.sqlExecutor ?? getSqlExecutor()`.
+      // Per-conversation connector configs come from the conversation
+      // file's `meta.benchmark_connections` (set at import time when the
+      // user dropped a connections.json alongside the JSONL); falling
+      // back to `BENCHMARK_CONNECTIONS_CONFIG` env so dev workflows that
+      // pre-set the env still work. The `Base*` DB tools registered for
+      // this orchestrator build NodeConnectors from `ctx.connections[*].config`
+      // at run-time, so we just need to make sure those entries are
+      // populated here (with full config, not just metadata).
       const baseBenchCtx = buildBenchmarkContextFromSavedLog(savedLog);
       const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
       const fileMeta = (file.data as { meta?: Record<string, unknown> | null }).meta ?? null;
       const persistedConnections = fileMeta?.benchmark_connections;
-      const { connectorsByName, dialectsByName } = Array.isArray(persistedConnections)
-        ? {
-            connectorsByName: buildConnectorsFromEntries(persistedConnections as BenchmarkConnectionEntry[]),
-            dialectsByName: buildDialectsFromEntries(persistedConnections as BenchmarkConnectionEntry[]),
-          }
+      const entries: BenchmarkConnectionEntry[] = Array.isArray(persistedConnections)
+        ? (persistedConnections as BenchmarkConnectionEntry[])
         : loadBenchmarkConnectionsFromEnv();
-      const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, dialectsByName, allowedNames);
+      // Restrict configs to the agent's allowed connection set (saved-log
+      // root carries the per-row allowlist); names outside it stay
+      // metadata-only so they can't be queried even by name collision.
+      const fullConnections = benchmarkEntriesToConnectionInfos(
+        entries.filter((e) => allowedNames.has(e.name)),
+      );
       const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
         ...baseBenchCtx,
-        schemaSource,
-        sqlExecutor,
+        connections: fullConnections.length > 0 ? fullConnections : baseBenchCtx.connections,
         effectiveUser: user,
       };
       const agent = new BenchmarkAnalystAgent(orch, { userMessage: body.user_message }, benchCtx);
