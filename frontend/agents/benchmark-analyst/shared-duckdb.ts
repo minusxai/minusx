@@ -277,6 +277,7 @@ export async function buildBenchmarkConnectors(
   if (shared) await shared.ensureAttached(toAttach);
 
   const connectorsByName = new Map<string, NodeConnector>();
+  const dialectsByName = new Map<string, string>();
   const connectionInfos = new Map<string, ConnectionInfo>();
   for (const e of entries) {
     if (shared && isAttachable(e.dialect)) {
@@ -286,7 +287,8 @@ export async function buildBenchmarkConnectors(
       if (!conn) throw new Error(`Unknown dialect '${e.dialect}' for connection '${e.name}'`);
       connectorsByName.set(e.name, conn);
     }
+    dialectsByName.set(e.name, e.dialect);
     connectionInfos.set(e.name, { name: e.name, dialect: e.dialect, description: e.description });
   }
-  return { connectorsByName, connectionInfos };
+  return { connectorsByName, dialectsByName, connectionInfos };
 }

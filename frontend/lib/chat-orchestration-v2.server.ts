@@ -34,6 +34,7 @@ import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
 import {
   buildBenchmarkSources,
   buildConnectorsFromEntries,
+  buildDialectsFromEntries,
   loadBenchmarkConnectionsFromEnv,
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
@@ -244,10 +245,13 @@ async function setupOrchestration(
       const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
       const fileMeta = (file.data as { meta?: Record<string, unknown> | null }).meta ?? null;
       const persistedConnections = fileMeta?.benchmark_connections;
-      const connectorsByName = Array.isArray(persistedConnections)
-        ? buildConnectorsFromEntries(persistedConnections as BenchmarkConnectionEntry[])
-        : loadBenchmarkConnectionsFromEnv().connectorsByName;
-      const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, allowedNames);
+      const { connectorsByName, dialectsByName } = Array.isArray(persistedConnections)
+        ? {
+            connectorsByName: buildConnectorsFromEntries(persistedConnections as BenchmarkConnectionEntry[]),
+            dialectsByName: buildDialectsFromEntries(persistedConnections as BenchmarkConnectionEntry[]),
+          }
+        : loadBenchmarkConnectionsFromEnv();
+      const { schemaSource, sqlExecutor } = buildBenchmarkSources(connectorsByName, dialectsByName, allowedNames);
       const benchCtx: BenchmarkAnalystContext & { effectiveUser: EffectiveUser } = {
         ...baseBenchCtx,
         schemaSource,

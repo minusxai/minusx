@@ -4,11 +4,8 @@
 // SchemaSource/SqlExecutor singletons.
 
 import { describe, it, expect } from 'vitest';
-import {
-  appendLimitIfMissing,
-  buildBenchmarkSources,
-  BENCHMARK_MAX_ROWS,
-} from '@/agents/benchmark-analyst/connection-source';
+import { buildBenchmarkSources } from '@/agents/benchmark-analyst/connection-source';
+import { DEFAULT_LIMIT } from '@/lib/sql/limit-enforcer';
 import type { NodeConnector } from '@/lib/connections/base';
 
 function fakeConnector(): NodeConnector {
@@ -32,19 +29,22 @@ function fakeConnector(): NodeConnector {
 describe('buildBenchmarkSources', () => {
   it('returns a SqlExecutor that runs against the named connector', async () => {
     const connectors = new Map<string, NodeConnector>([['default_duckdb', fakeConnector()]]);
+    const dialects = new Map<string, string>([['default_duckdb', 'duckdb']]);
     const allowed = new Set(['default_duckdb']);
-    const { sqlExecutor } = buildBenchmarkSources(connectors, allowed);
+    const { sqlExecutor } = buildBenchmarkSources(connectors, dialects, allowed);
 
-    const result = await sqlExecutor.execute('select 1', 'default_duckdb');
+    const result = await sqlExecutor.execute('SELECT * FROM orders', 'default_duckdb');
     expect(result.error).toBeUndefined();
-    // The executor appends `LIMIT 100` (BENCHMARK_MAX_ROWS) to bound results.
-    expect(result.rows).toEqual([{ sql: 'select 1 LIMIT 100', ok: true }]);
+    // The executor caps results via enforceQueryLimit's default row limit.
+    const echoed = (result.rows[0] as { sql: string }).sql.toUpperCase();
+    expect(echoed).toContain(`LIMIT ${DEFAULT_LIMIT}`);
   });
 
   it('returns an error from SqlExecutor when the connection is not in the allowlist', async () => {
     const connectors = new Map<string, NodeConnector>([['default_duckdb', fakeConnector()]]);
+    const dialects = new Map<string, string>([['default_duckdb', 'duckdb']]);
     const allowed = new Set(['default_duckdb']);
-    const { sqlExecutor } = buildBenchmarkSources(connectors, allowed);
+    const { sqlExecutor } = buildBenchmarkSources(connectors, dialects, allowed);
 
     const result = await sqlExecutor.execute('select 1', 'other_db');
     expect(result.error).toMatch(/not in this agent's connections/);
@@ -52,14 +52,15 @@ describe('buildBenchmarkSources', () => {
 
   it('returns an error from SqlExecutor when the connector is not loaded (env missing)', async () => {
     // Connection is allowed but the env didn't supply a connector for it.
-    const { sqlExecutor } = buildBenchmarkSources(new Map(), new Set(['default_duckdb']));
+    const { sqlExecutor } = buildBenchmarkSources(new Map(), new Map(), new Set(['default_duckdb']));
     const result = await sqlExecutor.execute('select 1', 'default_duckdb');
     expect(result.error).toMatch(/not loaded/);
   });
 
   it('returns a SchemaSource that provides raw schemas', async () => {
     const connectors = new Map<string, NodeConnector>([['default_duckdb', fakeConnector()]]);
-    const { schemaSource } = buildBenchmarkSources(connectors, new Set(['default_duckdb']));
+    const dialects = new Map<string, string>([['default_duckdb', 'duckdb']]);
+    const { schemaSource } = buildBenchmarkSources(connectors, dialects, new Set(['default_duckdb']));
 
     const schemas = await schemaSource.getSchema('default_duckdb');
     expect(schemas).toHaveLength(1);
@@ -67,32 +68,5 @@ describe('buildBenchmarkSources', () => {
     expect(schemas[0].tables).toHaveLength(1);
     expect(schemas[0].tables[0].table).toBe('orders');
   });
-});
 
-describe('appendLimitIfMissing', () => {
-  it('appends LIMIT when the SQL has no LIMIT clause', () => {
-    expect(appendLimitIfMissing('select * from t', 100)).toBe('select * from t LIMIT 100');
-  });
-
-  it('strips a single trailing semicolon before appending', () => {
-    expect(appendLimitIfMissing('select * from t;', 100)).toBe('select * from t LIMIT 100');
-  });
-
-  it('leaves the SQL alone when LIMIT is already present (case-insensitive)', () => {
-    expect(appendLimitIfMissing('SELECT * FROM t LIMIT 5', 100)).toBe('SELECT * FROM t LIMIT 5');
-    expect(appendLimitIfMissing('select * from t limit 200', 100)).toBe('select * from t limit 200');
-  });
-
-  it('caps SqlExecutor results to BENCHMARK_MAX_ROWS even when the connector returns more', async () => {
-    const tooManyRows = Array.from({ length: BENCHMARK_MAX_ROWS + 50 }, (_, i) => ({ i }));
-    const conn: NodeConnector = {
-      async getSchema() { return []; },
-      async query() { return { rows: tooManyRows }; },
-    } as unknown as NodeConnector;
-    const connectors = new Map<string, NodeConnector>([['db', conn]]);
-    const { sqlExecutor } = buildBenchmarkSources(connectors, new Set(['db']));
-    const result = await sqlExecutor.execute('select * from t', 'db');
-    expect(result.rows).toHaveLength(BENCHMARK_MAX_ROWS);
-    expect(result.error).toBeUndefined();
-  });
 });

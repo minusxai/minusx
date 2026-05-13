@@ -14,6 +14,11 @@ async function ensureInit() {
   }
 }
 
+/** Row cap applied to queries that arrive without an explicit LIMIT. */
+export const DEFAULT_LIMIT = 1000;
+/** Hard ceiling: an explicit LIMIT above this is clamped down. */
+export const MAX_LIMIT = 10000;
+
 export interface EnforceLimitOptions {
   defaultLimit?: number;
   maxLimit?: number;
@@ -32,7 +37,7 @@ export async function enforceQueryLimit(
   sql: string,
   options: EnforceLimitOptions,
 ): Promise<string> {
-  const { defaultLimit = 1000, maxLimit = 10000, dialect } = options;
+  const { defaultLimit = DEFAULT_LIMIT, maxLimit = MAX_LIMIT, dialect } = options;
 
   await ensureInit();
 
