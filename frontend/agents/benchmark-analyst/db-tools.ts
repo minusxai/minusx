@@ -96,7 +96,7 @@ interface ExecuteQueryDetails extends Record<string, unknown> {
 export class ExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAnalystContext, ExecuteQueryDetails> {
   static readonly schema: Tool<typeof ExecuteQueryParams> = {
     name: 'ExecuteQuery',
-    description: 'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types. Increase maxChars (up to 100,000) or OFFSET in SQL to page large results.',
+    description: 'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.',
     parameters: ExecuteQueryParams,
   };
 

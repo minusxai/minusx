@@ -101,7 +101,7 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
   server.registerTool(
     'ExecuteQuery',
     {
-      description: 'Execute a SQL query against a database connection. Returns columns, types, and rows.',
+      description: 'Execute a SQL query against a database connection. A default LIMIT of 1000 rows is applied when your query has no LIMIT clause; an explicit LIMIT above 10000 is capped at 10000. Use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Returns columns, types, and rows.',
       inputSchema: {
         query: z.string().describe('SQL query to execute'),
         connection_id: z.string().describe('Database connection ID'),

@@ -77,26 +77,28 @@ vi.mock('@/store/store', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock: Python backend (for executeQueries tests)
+// Mock: runQuery (single chokepoint for SQL execution; replaces previous
+// pythonBackendFetch mock that intercepted the Python-fallback path).
 // ---------------------------------------------------------------------------
-vi.mock('@/lib/api/python-backend-client', () => ({
-  pythonBackendFetch: vi.fn(async (url: string, init?: any) => {
-    if (url.includes('/api/execute-query')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          columns: ['month', 'total'],
-          types: ['TEXT', 'INTEGER'],
-          rows: [
-            { month: 'Jan', total: 1000 },
-            { month: 'Feb', total: 1500 },
-          ]
-        })
-      } as Response;
-    }
-    throw new Error(`Unmocked pythonBackendFetch call to ${url}`);
-  })
+const { mockRunQuery } = vi.hoisted(() => ({
+  mockRunQuery: vi.fn(async (
+    _db: string,
+    query: string,
+    _params?: Record<string, string | number>,
+    _user?: unknown,
+  ) => ({
+    columns: ['month', 'total'],
+    types: ['TEXT', 'INTEGER'],
+    rows: [
+      { month: 'Jan', total: 1000 },
+      { month: 'Feb', total: 1500 },
+    ],
+    finalQuery: query,
+  })),
+}));
+
+vi.mock('@/lib/connections/run-query', () => ({
+  runQuery: mockRunQuery,
 }));
 
 // ---------------------------------------------------------------------------

@@ -57,80 +57,65 @@ vi.mock('@/store/store', () => ({
   getStore: () => testStore
 }));
 
-// Mock python-backend-client to return realistic test data (no real Python backend in tests)
-vi.mock('@/lib/api/python-backend-client', () => ({
-  pythonBackendFetch: vi.fn(async (url: string, init?: any) => {
-    // Mock query results with realistic test data
-    if (url.includes('/api/execute-query')) {
-      const body = init?.body ? JSON.parse(init.body) : {};
-      const query = body.query || '';
-
-      // Return appropriate mock data based on query content
-      if (query.includes('products')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            columns: ['category', 'count'],
-            types: ['TEXT', 'INTEGER'],
-            rows: [
-              { category: 'Electronics', count: 42 },
-              { category: 'Books', count: 28 }
-            ]
-          })
-        } as Response;
-      } else if (query.includes('sales')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            columns: ['month', 'total'],
-            types: ['TEXT', 'INTEGER'],
-            rows: [
-              { month: 'Jan', total: 1000 },
-              { month: 'Feb', total: 1500 },
-              { month: 'Mar', total: 1200 }
-            ]
-          })
-        } as Response;
-      } else if (query.includes('users')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            columns: ['name', 'age'],
-            types: ['TEXT', 'INTEGER'],
-            rows: [
-              { name: 'Alice', age: 25 },
-              { name: 'Bob', age: 30 }
-            ]
-          })
-        } as Response;
-      } else if (query.includes('cached_test')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            columns: ['id'],
-            types: ['INTEGER'],
-            rows: [{ id: 1 }, { id: 2 }]
-          })
-        } as Response;
-      }
-
-      // Default: return empty results for unmatched queries
+// Mock runQuery to return realistic test data (no real DB in tests).
+// `runQuery` is now the single chokepoint for SQL execution — replaces
+// the previous pythonBackendFetch mock. Hoisted so the inline `vi.mock`
+// factory can reference it (mock factories run before top-level code).
+const { mockRunQuery } = vi.hoisted(() => ({
+  mockRunQuery: vi.fn(async (
+    _db: string,
+    query: string,
+    _params?: Record<string, string | number>,
+    _user?: unknown,
+  ) => {
+    if (query.includes('products')) {
       return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          columns: [],
-          types: [],
-          rows: []
-        })
-      } as Response;
+        columns: ['category', 'count'],
+        types: ['TEXT', 'INTEGER'],
+        rows: [
+          { category: 'Electronics', count: 42 },
+          { category: 'Books', count: 28 },
+        ],
+        finalQuery: query,
+      };
     }
-    throw new Error(`Unmocked pythonBackendFetch call to ${url}`);
-  })
+    if (query.includes('sales')) {
+      return {
+        columns: ['month', 'total'],
+        types: ['TEXT', 'INTEGER'],
+        rows: [
+          { month: 'Jan', total: 1000 },
+          { month: 'Feb', total: 1500 },
+          { month: 'Mar', total: 1200 },
+        ],
+        finalQuery: query,
+      };
+    }
+    if (query.includes('users')) {
+      return {
+        columns: ['name', 'age'],
+        types: ['TEXT', 'INTEGER'],
+        rows: [
+          { name: 'Alice', age: 25 },
+          { name: 'Bob', age: 30 },
+        ],
+        finalQuery: query,
+      };
+    }
+    if (query.includes('cached_test')) {
+      return {
+        columns: ['id'],
+        types: ['INTEGER'],
+        rows: [{ id: 1 }, { id: 2 }],
+        finalQuery: query,
+      };
+    }
+    return { columns: [], types: [], rows: [], finalQuery: query };
+  }),
+}));
+
+vi.mock('@/lib/connections/run-query', () => ({
+  runQuery: mockRunQuery,
 }));
 
 describe('Phase 1: Unified File System API E2E', () => {
@@ -677,13 +662,8 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     it('error result has success:false and error message in both content and details', async () => {
-      // Override the mock for this one call to simulate a backend error
-      const { pythonBackendFetch } = await vi.importMock<any>('@/lib/api/python-backend-client');
-      (pythonBackendFetch as unknown as Mock).mockImplementationOnce(async () => ({
-        ok: false,
-        status: 400,
-        json: async () => ({ detail: 'Table "nonexistent_table_xyz" does not exist' })
-      }));
+      // Override the mock for this one call to simulate a query error.
+      mockRunQuery.mockRejectedValueOnce(new Error('Table "nonexistent_table_xyz" does not exist'));
 
       const result = await executeQuery({
         query: 'SELECT * FROM nonexistent_table_xyz',
@@ -1561,8 +1541,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     it('uses parameterValues from content when no override is set', async () => {
       console.log('\n[TEST] EditFile tool handler: auto-execute uses parameterValues from content');
 
-      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      const callsBefore = (pythonBackendFetch as unknown as Mock).mock.calls.length;
+      const callsBefore = mockRunQuery.mock.calls.length;
 
       // Call the registered EditFile frontend tool handler
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
@@ -1586,12 +1565,12 @@ describe('Phase 1: Unified File System API E2E', () => {
         store.getState() as any
       );
 
-      // Verify auto-execute was triggered and used parameterValues.limit=50 (not empty string)
-      const newCalls = (pythonBackendFetch as unknown as Mock).mock.calls.slice(callsBefore);
-      const executeCall = newCalls.find((args: any) => (args[0] as string).includes('/api/execute-query'));
+      // Verify auto-execute was triggered and used parameterValues.limit=50 (not empty string).
+      // mockRunQuery signature: (databaseName, query, params, user) — params is 3rd arg.
+      const newCalls = mockRunQuery.mock.calls.slice(callsBefore);
+      const executeCall = newCalls[0];
       expect(executeCall).toBeDefined();
-      const body = JSON.parse((executeCall as any[])[1].body);
-      expect(body.parameters).toEqual({ limit: 50 });
+      expect(executeCall[2]).toEqual({ limit: 50 });
 
       console.log('✓ Auto-execute used parameterValues.limit=50 from content, not empty string');
     });
@@ -1602,8 +1581,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Edit parameterValues in content (user changed the filter to 99, marks file dirty)
       editFile({ fileId: paramQuestionId, changes: { content: { parameterValues: { limit: 99 } } } });
 
-      const { pythonBackendFetch } = await import('@/lib/api/python-backend-client');
-      const callsBefore = (pythonBackendFetch as unknown as Mock).mock.calls.length;
+      const callsBefore = mockRunQuery.mock.calls.length;
 
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
       const toolCall: ToolCall = {
@@ -1626,12 +1604,11 @@ describe('Phase 1: Unified File System API E2E', () => {
         store.getState() as any
       );
 
-      // Verify auto-execute used updated value=99, NOT original 50
-      const newCalls = (pythonBackendFetch as unknown as Mock).mock.calls.slice(callsBefore);
-      const executeCall = newCalls.find((args: any) => (args[0] as string).includes('/api/execute-query'));
+      // Verify auto-execute used updated value=99, NOT original 50.
+      const newCalls = mockRunQuery.mock.calls.slice(callsBefore);
+      const executeCall = newCalls[0];
       expect(executeCall).toBeDefined();
-      const body = JSON.parse((executeCall as any[])[1].body);
-      expect(body.parameters).toEqual({ limit: 99 });
+      expect(executeCall[2]).toEqual({ limit: 99 });
 
       console.log('✓ Auto-execute used updated parameterValues.limit=99 from edited content');
     });
