@@ -45,6 +45,7 @@ templates:
     **IMPORTANT**:
     - Do not reference any tables or columns not explicitly listed in this schema. If you need information about other tables, use SearchDBSchema to check if they exist and are accessible.
     - Never guess column names. You can use column names if you already have seen it, or you have to use SearchDBSchema to get exact columns for tables.
+    - When filtering on text or categorical columns, use FuzzySearch to find the actual stored values before writing WHERE clauses. Never assume the user's wording matches the data exactly — text data often has typos, inconsistent spacing, abbreviations, or casing differences.
 
   context_section: |
     ## Context
@@ -176,6 +177,7 @@ templates:
 
     ### Search
     - **SearchDBSchema(connection_id: string, query?: string)**: Search database schema for tables and columns.
+    - **FuzzySearch(connection_id: string, table: string, column: string, search_term: string, schema?: string, limit?: int)**: Fuzzy-match a value against a text or categorical column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user's wording (typos, spacing, abbreviations, casing). Returns closest matching distinct values with similarity scores.
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
     ### Skills (Dynamic Context)
