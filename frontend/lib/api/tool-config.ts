@@ -12,6 +12,7 @@ import SearchDBSchemaDisplay from '@/components/explore/tools/SearchDBSchemaDisp
 import ListDBConnectionsDisplay from '@/components/explore/tools/ListDBConnectionsDisplay';
 import PublishAllDisplay from '@/components/explore/tools/PublishAllDisplay';
 import LoadSkillDisplay from '@/components/explore/tools/LoadSkillDisplay';
+import FuzzySearchDisplay from '@/components/explore/tools/FuzzySearchDisplay';
 import { DisplayProps } from '@/lib/types';
 import type { IconType } from 'react-icons/lib';
 import {
@@ -174,6 +175,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipIcon: LuSearch,
 
     timelineVerb: 'Searching',
+  },
+  'FuzzySearch': {
+    displayComponent: FuzzySearchDisplay,
+
+    chipLabel: 'fuzzy search',
+    chipLabelPlural: 'fuzzy searches',
+    chipIcon: LuSearch,
+
+    timelineVerb: 'Fuzzy searching',
   },
   'ListDBConnections': {
     displayComponent: ListDBConnectionsDisplay,
