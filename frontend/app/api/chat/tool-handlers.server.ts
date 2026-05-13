@@ -18,6 +18,9 @@ import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
+import { getNodeConnector } from '@/lib/connections';
+import { fuzzySearch } from '@/lib/connections/fuzzy-search';
 
 // ============================================================================
 // Tool Implementations
@@ -64,6 +67,38 @@ registerTool('SearchDBSchema', async (args, user) => {
 
   // No _schema injected (no active context) — return full schema
   return searchDatabaseSchema(schemaData.schemas, query);
+});
+
+/**
+ * FuzzySearch - Fuzzy match a search term against distinct values in a text column
+ */
+registerTool('FuzzySearch', async (args, user) => {
+  const { connection_id, table, column, search_term, schema, limit } = args;
+
+  if (!connection_id || !table || !column || !search_term) {
+    throw new Error('connection_id, table, column, and search_term are required');
+  }
+
+  const rawConn = await ConnectionsAPI.getRawByName(connection_id, user.mode).catch(() => null);
+  if (!rawConn) {
+    throw new Error(`Connection not found: ${connection_id}`);
+  }
+
+  const connector = getNodeConnector(connection_id, rawConn.type, rawConn.config);
+  if (!connector) {
+    throw new Error(`No connector available for type: ${rawConn.type}`);
+  }
+
+  const queryFn = (sql: string) => connector.query(sql);
+  const result = await fuzzySearch(rawConn.type, queryFn, {
+    table,
+    column,
+    searchTerm: search_term,
+    schema,
+    limit,
+  });
+
+  return { success: true, ...result };
 });
 
 /**
