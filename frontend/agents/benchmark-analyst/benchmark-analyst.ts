@@ -67,8 +67,8 @@ ${JSON.stringify(visibleConnections)}
   - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
   - When filtering on text or categorical columns, use FuzzySearch FIRST to find the actual stored values before writing WHERE clauses. Text data often has typos, inconsistent spacing, abbreviations, or casing differences — never assume the user's wording matches the data exactly.
   - When you need an LLM to reason about the data — such as entity resolution, deduplication, clustering, pattern detection, or other tasks that can't be expressed in SQL — use ExploreDataset. It runs the provided query and passes the results to an LLM for analysis. Use it for unknown-unknowns where FuzzySearch isn't applicable (e.g. grouping similar rows across the whole table is O(n²) for FuzzySearch but natural for an LLM).
-  - A smaller LLM is used for ExploreDataset calls, so you can send bulk rows (~1000 rows) either pre-aggregated and/or ordered by a relevant column, with a sharp and clear prompt.
-  - Be concise, specific and accurate.
+  - A smaller LLM is used for ExploreDataset calls, so you can send bulk rows (at least 1000 rows) either pre-aggregated and/or ordered by a relevant column, with a sharp and clear prompt.
+  - Be concise, specific and accurate in responses.
 
 ## Response Format [EXTREMELY IMPORTANT]:
 - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.

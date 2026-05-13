@@ -67,7 +67,9 @@ export class ExploreDataset extends MXTool<
   static readonly schema: Tool<typeof ExploreDatasetParams> = {
     name: 'ExploreDataset',
     description:
-      'Runs a SQL query (up to 1000 rows) and passes the results to an LLM for analysis. Use for entity resolution, deduplication, clustering, or pattern detection that cannot be expressed in SQL alone.',
+      `Runs a SQL query (up to 1000 rows) and passes the results to an LLM for analysis. Use for entity resolution, deduplication, clustering, or pattern detection that cannot be expressed in SQL alone.
+      NOTE: ⚠️ When using ExploreDataset for entity resolution in preparation for a ranking/aggregation query, do NOT pre-filter the input to a small top-N rows. Pass the full candidate set (or all rows blocked by artist/title similarity), otherwise duplicates outside the top-N will be silently missed, leading to incorrect rankings.
+      If you need to filter down, use at least 1000 rows ordered by a relevant column (e.g. popularity, totals etc) to give the LLM the best chance of finding the relevant patterns.`,
     parameters: ExploreDatasetParams,
   };
 
