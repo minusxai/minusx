@@ -22,9 +22,10 @@ const stepperKeyframes = `
 interface StepIndicatorBarProps {
   currentStep: ConnectionWizardStep;
   showSlackStep?: boolean;
+  onSkip?: () => void;
 }
 
-export default function StepIndicatorBar({ currentStep, showSlackStep = false }: StepIndicatorBarProps) {
+export default function StepIndicatorBar({ currentStep, showSlackStep = false, onSkip }: StepIndicatorBarProps) {
   const STEPS = showSlackStep ? ALL_STEPS : STEPS_WITHOUT_SLACK;
   const displayStep = currentStep === 'questionnaire' ? 'context' : currentStep;
 
@@ -162,6 +163,22 @@ export default function StepIndicatorBar({ currentStep, showSlackStep = false }:
             );
           })}
         </HStack>
+
+        {onSkip && (
+          <Text
+            as="button"
+            position="absolute"
+            right={6}
+            fontSize="xs"
+            fontFamily="mono"
+            color="fg.subtle"
+            cursor="pointer"
+            _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
+            onClick={onSkip}
+          >
+            Skip
+          </Text>
+        )}
       </Flex>
     </>
   );
