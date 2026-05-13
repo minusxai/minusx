@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { validateDuckDbFilePath } from '@/lib/data/helpers/connections';
+import { validateDuckDbFilePath, validateConnectionType } from '@/lib/data/helpers/connections';
 import { getNodeConnector } from '@/lib/connections';
 
 interface TestConnectionRequest {
@@ -26,6 +26,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.badRequest('type and config are required');
     }
 
+    validateConnectionType(type);
     validateDuckDbFilePath(type, config);
 
     // Handle DuckDB (and csv/google-sheets which are DuckDB-backed) in Node.js.

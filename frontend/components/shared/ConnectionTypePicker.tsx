@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { CONNECTION_TYPES, CONNECTION_TYPE_GROUPS } from '@/lib/ui/connection-type-options';
 import type { ConnectionTypeOption } from '@/lib/ui/connection-type-options';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { IS_DEV } from '@/lib/constants';
 
 interface ConnectionTypePickerProps {
   onSelect: (connType: ConnectionTypeOption) => void;
@@ -23,11 +24,12 @@ function resolveAgentName(text: string, agentName: string): string {
 export default function ConnectionTypePicker({ onSelect, disabled = false }: ConnectionTypePickerProps) {
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
+  const devMode = IS_DEV;
 
   return (
     <VStack align="stretch" gap={5}>
       {CONNECTION_TYPE_GROUPS.map((group) => {
-        const options = CONNECTION_TYPES.filter((ct) => ct.group === group.id);
+        const options = CONNECTION_TYPES.filter((ct) => ct.group === group.id && (!ct.devOnly || devMode));
         if (options.length === 0) return null;
 
         const isManagedWarehouse = group.id === 'minusx-warehouse';
