@@ -6,12 +6,32 @@
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
+import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
+
+// ─── Shared connector wiring ──────────────────────────────────────────────
+//
+// `BaseExecuteQuery` and `BaseSearchDBSchema` both lazily build a per-tool
+// connector map from `ctx.connections[*].config` at the top of `run()`.
+// The loop is identical apart from `BaseExecuteQuery` also tracking each
+// entry's dialect (for `enforceQueryLimit`). One helper, both call sites.
+async function buildConnectorsFromContext(
+  connections: ConnectionInfo[] | undefined,
+  connectors: Map<string, NodeConnector>,
+  dialects?: Map<string, string>,
+): Promise<void> {
+  for (const entry of connections ?? []) {
+    if (!entry.config) continue;
+    if (connectors.has(entry.name)) continue;
+    const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+    connectors.set(entry.name, c);
+    dialects?.set(entry.name, entry.dialect);
+  }
+}
 
 // ─── Schema cache ─────────────────────────────────────────────────────────
 //
@@ -96,23 +116,14 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
   protected connectors = new Map<string, NodeConnector>();
 
   /**
-   * Lazy initialisation invoked at the top of `run()`. Reads
-   * `ctx.connections` (JSON, may include `config`) and builds a
-   * `NodeConnector` per entry that has a `config`. Idempotent — repeated
-   * invocations on the same instance do nothing after the first; the
-   * underlying `BenchmarkSharedDuckdb.ensureAttached` is also idempotent
-   * across instances.
+   * Lazy initialisation invoked at the top of `run()`. See
+   * `buildConnectorsFromContext` above for the shared logic.
    *
    * Production tools override this to a no-op (see `db-tools.server.ts`),
    * so their `run()` always falls through to `_loadSchemaFallback`.
    */
   protected async _initialiseConnectors(): Promise<void> {
-    for (const entry of this.context.connections ?? []) {
-      if (!entry.config) continue;
-      if (this.connectors.has(entry.name)) continue;
-      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
-      this.connectors.set(entry.name, c);
-    }
+    await buildConnectorsFromContext(this.context.connections, this.connectors);
   }
 
   /**
@@ -201,13 +212,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   protected dialects = new Map<string, string>();
 
   protected async _initialiseConnectors(): Promise<void> {
-    for (const entry of this.context.connections ?? []) {
-      if (!entry.config) continue;
-      if (this.connectors.has(entry.name)) continue;
-      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
-      this.connectors.set(entry.name, c);
-      this.dialects.set(entry.name, entry.dialect);
-    }
+    await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
   }
 
   /**

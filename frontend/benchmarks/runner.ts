@@ -9,26 +9,8 @@ import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
-import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
+import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { ConversationLog } from '@/orchestrator/types';
-import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-
-/**
- * Synthesised user for the benchmark CLI. Production code paths require
- * an `EffectiveUser` on the agent context; the CLI runner doesn't have a
- * session, so we mint a fixed admin shape. The `Base*` DB tools route
- * via `ctx.connections[*].config` and never reach `ConnectionsAPI` (which
- * would require a real user / DB session), so this user is effectively
- * inert — it just satisfies type signatures.
- */
-const CLI_USER: EffectiveUser = {
-  userId: 0,
-  email: 'benchmark@cli.local',
-  name: 'CLI Benchmark User',
-  role: 'admin',
-  home_folder: '/org',
-  mode: 'org',
-};
 
 // Suppress Node's TLS warning emitted when NODE_TLS_REJECT_UNAUTHORIZED=0
 // is set in .env (loaded before us via --env-file).
@@ -316,12 +298,11 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     running++;
     if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
 
-    const ctx = {
+    const ctx: BenchmarkAnalystContext = {
       connections: row.allowed_connections
         .map((name) => connectionsByName.get(name))
         .filter((c): c is ConnectionInfo => !!c),
       contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
-      effectiveUser: CLI_USER,
     };
 
     // Multi-run fan-out: execute the agent `timesRun` times in parallel
