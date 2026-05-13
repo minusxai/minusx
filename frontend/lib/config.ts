@@ -57,6 +57,7 @@ interface EnvironmentConfig {
   DAB_QUESTION_TIMEOUT: string | undefined;
   DAB_DATASET_TIMEOUT: string | undefined;
   DAB_TIMES_RUN: string | undefined;
+  MAX_LLM_CONCURRENCY: string | undefined;
 }
 
 const errors: string[] = [];
@@ -137,6 +138,7 @@ const config: EnvironmentConfig = {
   DAB_QUESTION_TIMEOUT: process.env.DAB_QUESTION_TIMEOUT,
   DAB_DATASET_TIMEOUT: process.env.DAB_DATASET_TIMEOUT,
   DAB_TIMES_RUN: process.env.DAB_TIMES_RUN,
+  MAX_LLM_CONCURRENCY: process.env.MAX_LLM_CONCURRENCY,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -205,3 +207,4 @@ export const DAB_BENCH_RERUN = config.DAB_BENCH_RERUN;
 export const DAB_QUESTION_TIMEOUT = config.DAB_QUESTION_TIMEOUT;
 export const DAB_DATASET_TIMEOUT = config.DAB_DATASET_TIMEOUT;
 export const DAB_TIMES_RUN = config.DAB_TIMES_RUN;
+export const MAX_LLM_CONCURRENCY = config.MAX_LLM_CONCURRENCY;

@@ -43,8 +43,6 @@ export interface BenchmarkRunConfig {
   agentClass: RegistrableClass;
   /** All registrables (tools + agent) for the Orchestrator */
   registrables: RegistrableClass[];
-  /** Max concurrent rows (default: 1 = sequential) */
-  concurrency?: number;
   /** Dataset label for display (derived from input path if omitted) */
   label?: string;
   /** Suppress the interval-driven progress bar. Per-row completion logs
@@ -271,7 +269,6 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     writeFileSync(outputPath, '');
   }
 
-  const concurrency = config.concurrency ?? 1;
   const timesRun = Math.max(1, Math.floor(config.timesRun ?? 1));
   const total = inputRows.length;
   const remainingRows = inputRows
@@ -285,7 +282,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       ? `${c.dim}resume: skipping ${skipped}/${total} already-done${c.reset}`
       : null;
   const timesRunNote = timesRun > 1 ? `, timesRun=${timesRun}` : '';
-  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows, concurrency=${concurrency}${timesRunNote}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
+  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows${timesRunNote}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
   console.log(`  ${c.dim}${outputPath}${c.reset}\n`);
 
   // Tracking
@@ -320,80 +317,90 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
         sqlExecutor,
     };
 
-    // Multi-run loop: execute the agent `timesRun` times serially against
-    // the same input. Serial (not parallel) keeps peak in-flight agent
-    // count constant — running N copies concurrently would multiply the
-    // already-tight rate-limit budget by N. The per-run timeout still
-    // applies to each individual run (not the row total).
+    // Multi-run fan-out: execute the agent `timesRun` times in parallel
+    // against the same input. Provider RPS is governed entirely by the
+    // global `MAX_LLM_CONCURRENCY` LLM gate inside the orchestrator —
+    // there is no per-row throttle here. The per-run timeout applies
+    // independently to each individual run.
     const rowStart = Date.now();
-    const collectedLogs: ConversationLog[] = [];
-    let rowCancelled = false;
-    let cancelReason: string | undefined;
-    let firstError: string | undefined;
     const rowTimeoutMs = config.rowTimeoutMs ?? 0;
 
-    for (let runIdx = 0; runIdx < timesRun; runIdx++) {
-      if (datasetTimedOut) {
-        rowCancelled = true;
-        cancelReason = 'CANCELLED (dataset timeout)';
-        break;
+    type RunOutcome =
+      | { kind: 'ok'; log: ConversationLog; error?: string }
+      | { kind: 'cancelled'; reason: string };
+
+    const outcomes = await Promise.all(
+      Array.from({ length: timesRun }, async (): Promise<RunOutcome> => {
+        if (datasetTimedOut) {
+          return { kind: 'cancelled', reason: 'CANCELLED (dataset timeout)' };
+        }
+
+        const orch = new Orchestrator(config.registrables);
+        const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
+        inFlight.add(orch);
+
+        // Per-run timeout: when it fires, cancel the orchestrator (which
+        // aborts pi-ai's stream) and flag this run as cancelled. The
+        // try/catch catches the abort error, but we discriminate via
+        // `runCancelled` so we mark it timeout vs. error.
+        let runCancelled = false;
+        const runTimeoutHandle = rowTimeoutMs > 0
+          ? setTimeout(() => {
+            runCancelled = true;
+            orch.cancel();
+          }, rowTimeoutMs)
+          : null;
+
+        let error: string | undefined;
+        try {
+          // RegistrableClass types `new` as → MXTool; the caller guarantees an
+          // MXAgent subclass via `agentClass`.
+          const stream = orch.run(agent as unknown as MXAgent);
+          for await (const _ of stream) { /* drain */ }
+          await stream.result();
+        } catch (err) {
+          error = err instanceof Error ? err.message : String(err);
+        } finally {
+          if (runTimeoutHandle) clearTimeout(runTimeoutHandle);
+          inFlight.delete(orch);
+        }
+
+        if (runCancelled) {
+          return { kind: 'cancelled', reason: `TIMEOUT after ${formatDuration(rowTimeoutMs)}` };
+        }
+        if (datasetTimedOut) {
+          return { kind: 'cancelled', reason: 'CANCELLED (dataset timeout)' };
+        }
+        return { kind: 'ok', log: orch.log as ConversationLog, error };
+      }),
+    );
+
+    // Row-atomic persistence: if ANY run within this row was cancelled
+    // (per-run timeout or dataset timeout), drop the whole row. Resume
+    // picks it up next invocation and re-does all N runs.
+    const cancelled = outcomes.find(
+      (o): o is { kind: 'cancelled'; reason: string } => o.kind === 'cancelled',
+    );
+    const collectedLogs: ConversationLog[] = [];
+    let firstError: string | undefined;
+    for (const o of outcomes) {
+      if (o.kind === 'ok') {
+        collectedLogs.push(o.log);
+        if (o.error && !firstError) firstError = o.error;
       }
-
-      const orch = new Orchestrator(config.registrables);
-      const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
-      inFlight.add(orch);
-
-      // Per-run timeout: when it fires, cancel the orchestrator (which
-      // aborts pi-ai's stream) and flag this row as cancelled. The
-      // try/catch catches the abort error, but we discriminate via
-      // `runCancelled` so we mark it timeout vs. error.
-      let runCancelled = false;
-      const runTimeoutHandle = rowTimeoutMs > 0
-        ? setTimeout(() => {
-          runCancelled = true;
-          orch.cancel();
-        }, rowTimeoutMs)
-        : null;
-
-      try {
-        // RegistrableClass types `new` as → MXTool; the caller guarantees an
-        // MXAgent subclass via `agentClass`.
-        const stream = orch.run(agent as unknown as MXAgent);
-        for await (const _ of stream) { /* drain */ }
-        await stream.result();
-      } catch (err) {
-        if (!firstError) firstError = err instanceof Error ? err.message : String(err);
-      } finally {
-        if (runTimeoutHandle) clearTimeout(runTimeoutHandle);
-        inFlight.delete(orch);
-      }
-
-      // Row-atomic cancellation: if any run within this row was cancelled
-      // (by its own timeout or by the dataset timeout firing mid-run),
-      // drop the whole row. Resume picks it up next invocation and
-      // re-does all N runs.
-      if (runCancelled || datasetTimedOut) {
-        rowCancelled = true;
-        cancelReason = runCancelled
-          ? `TIMEOUT after ${formatDuration(rowTimeoutMs)}`
-          : 'CANCELLED (dataset timeout)';
-        break;
-      }
-
-      collectedLogs.push(orch.log as ConversationLog);
     }
 
     const durationMs = Date.now() - rowStart;
     running--;
 
-    if (rowCancelled) {
+    if (cancelled) {
       timeouts++;
       const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
       const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
       const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
       const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
       if (!config.quiet) clearLine();
-      console.log(`  ${c.yellow}⏱${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${cancelReason}${c.reset}`);
+      console.log(`  ${c.yellow}⏱${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${cancelled.reason}${c.reset}`);
       if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
       return;
     }
@@ -433,8 +440,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   }
 
   // Dataset-level timeout: when it fires, flag and cancel all in-flight
-  // orchestrators. Workers also check `datasetTimedOut` at the top of
-  // their loop so the queue stops draining.
+  // orchestrators for this dataset. Already-running rows that are still
+  // in their timesRun loop also notice `datasetTimedOut` between
+  // iterations and bail. Other datasets keep running.
   const datasetTimeoutMs = config.datasetTimeoutMs ?? 0;
   const datasetTimeoutHandle = datasetTimeoutMs > 0
     ? setTimeout(() => {
@@ -443,15 +451,12 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     }, datasetTimeoutMs)
     : null;
 
-  // Simple concurrency pool — only over the not-yet-completed rows.
-  const queue = [...remainingRows];
-  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-    while (queue.length > 0 && !datasetTimedOut) {
-      const item = queue.shift()!;
-      await runRow(item.row, item.i);
-    }
-  });
-  await Promise.all(workers);
+  // Dispatch every remaining row at once. There is no per-dataset row
+  // concurrency cap — the global LLM-call semaphore inside the
+  // Orchestrator (`MAX_LLM_CONCURRENCY` env) is the only throttle on
+  // provider RPS. All Orchestrator instances queue at the LLM gate
+  // until their turn comes up.
+  await Promise.all(remainingRows.map(({ row, i }) => runRow(row, i)));
 
   if (datasetTimeoutHandle) clearTimeout(datasetTimeoutHandle);
   if (tick) clearInterval(tick);
@@ -459,7 +464,8 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
   if (datasetTimedOut) {
     if (!config.quiet) clearLine();
-    console.log(`  ${c.yellow}⏱ ${c.bold}${label}${c.reset} ${c.yellow}DATASET TIMEOUT after ${formatDuration(datasetTimeoutMs)}${c.reset} — ${queue.length} rows skipped, will retry on resume`);
+    const skipped = remainingRows.length - completed - timeouts;
+    console.log(`  ${c.yellow}⏱ ${c.bold}${label}${c.reset} ${c.yellow}DATASET TIMEOUT after ${formatDuration(datasetTimeoutMs)}${c.reset} — ${skipped} rows skipped, will retry on resume`);
   }
 
   if (!config.quiet) {

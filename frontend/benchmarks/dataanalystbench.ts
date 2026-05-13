@@ -16,6 +16,7 @@ import {
   DAB_QUESTION_TIMEOUT,
   DAB_DATASET_TIMEOUT,
   DAB_TIMES_RUN,
+  MAX_LLM_CONCURRENCY,
   MX_API_BASE_URL,
 } from '@/lib/config';
 import { renderPrompt } from '@/orchestrator/prompts';
@@ -158,22 +159,16 @@ class Agent extends BenchmarkAnalystAgent {
 
 const registrables = [SearchDBSchema, ExecuteQuery, Agent];
 
-// Per-dataset row concurrency. Hard-capped low because each in-flight
-// row spawns an agent that issues many LLM calls; with multiple datasets
-// running concurrently, larger values produce rate-limit retry storms
-// and amplify memory pressure from result-set materialisation.
-const PER_DATASET_CONCURRENCY = 4;
-
-// Max datasets running in parallel. With PER_DATASET_CONCURRENCY=4, peak
-// in-flight agents = 3 × 4 = 12 — well under typical Anthropic Haiku 4.5
-// RPM limits while still being meaningfully parallel.
-const MAX_PARALLEL_DATASETS = 3;
-
 // Default timeouts. Override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT
 // (seconds). A row that hits its timeout is cancelled and dropped from
 // the output JSONL — resume picks it up on the next run. A dataset that
-// hits its timeout cancels its in-flight rows and stops draining its
-// queue; other datasets keep running.
+// hits its timeout cancels its in-flight rows; other datasets keep running.
+//
+// Concurrency is now governed solely by the global `MAX_LLM_CONCURRENCY`
+// env var (read inside the Orchestrator's `callLLM`). Every dataset and
+// every row dispatches eagerly; agents queue at the LLM gate until their
+// turn comes up. The previous `PER_DATASET_CONCURRENCY` × `MAX_PARALLEL_DATASETS`
+// knobs were redundant once the LLM-level cap landed.
 const DEFAULT_QUESTION_TIMEOUT_SEC = 300;   // 5 min
 const DEFAULT_DATASET_TIMEOUT_SEC = 1800;   // 30 min
 
@@ -188,8 +183,9 @@ const datasetTimeoutSec = parseSeconds(DAB_DATASET_TIMEOUT, DEFAULT_DATASET_TIME
 
 // Repeats per input row. Default 1 = current single-run behaviour
 // (output rows have `log`). With N>1, each row's agent is invoked N
-// times serially and the output row carries `logs: ConversationLog[]`
-// for downstream eval (`mxscripts/eval_output.py`) to collapse.
+// times in parallel (throttled only by the global LLM gate) and the
+// output row carries `logs: ConversationLog[]` for downstream eval
+// (`mxscripts/eval_output.py`) to collapse.
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
   const n = Number(raw);
@@ -200,59 +196,46 @@ const timesRun = parsePositiveInt(DAB_TIMES_RUN, 1);
 const rerun = DAB_BENCH_RERUN === '1' || DAB_BENCH_RERUN === 'true';
 const proxied = !!MX_API_BASE_URL;
 
+const llmConcurrencyNote = MAX_LLM_CONCURRENCY
+  ? `max ${MAX_LLM_CONCURRENCY} concurrent LLM calls`
+  : 'unbounded (set MAX_LLM_CONCURRENCY env to cap)';
+
 logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);
 console.log(
   `  routing: ${proxied ? 'mxllm proxy (' + MX_API_BASE_URL + ')' : 'DIRECT to provider — set MX_API_BASE_URL to route through mxllm'}`,
 );
 console.log(
-  `  concurrency: ${MAX_PARALLEL_DATASETS} datasets × ${PER_DATASET_CONCURRENCY} rows = ${MAX_PARALLEL_DATASETS * PER_DATASET_CONCURRENCY} agents peak${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
+  `  concurrency: ${llmConcurrencyNote}; datasets/rows dispatched eagerly${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
 );
 console.log(
   `  timeouts: question=${questionTimeoutSec}s, dataset=${datasetTimeoutSec}s (override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT)`,
 );
 if (timesRun > 1) {
-  console.log(`  timesRun: ${timesRun} (each row runs ${timesRun}× serially; output rows carry \`logs\`)`);
+  console.log(`  timesRun: ${timesRun} (each row runs ${timesRun}× in parallel; output rows carry \`logs\`)`);
 }
 
 async function main() {
   const globalStart = Date.now();
   const parallel = DATASETS.length > 1;
 
-  // Dataset-level worker pool — same shape as the row-level pool inside
-  // runBenchmark (`runner.ts`). Up to MAX_PARALLEL_DATASETS run
-  // concurrently; the rest queue. Each dataset's executors are scoped
-  // to its agent context, so concurrent datasets don't clobber each
-  // other's wiring.
-  const queue = [...DATASETS];
-  const results: Array<{
-    rows: number;
-    errors: number;
-    timeouts: number;
-    datasetTimedOut: boolean;
-    durationMs: number;
-  }> = [];
-  const workers = Array.from(
-    { length: Math.min(MAX_PARALLEL_DATASETS, queue.length) },
-    async () => {
-      while (queue.length > 0) {
-        const ds = queue.shift()!;
-        const result = await runBenchmark({
-          input: ds.input,
-          connections: ds.connections,
-          agentClass: Agent,
-          registrables,
-          concurrency: PER_DATASET_CONCURRENCY,
-          quiet: parallel,
-          rerun,
-          rowTimeoutMs: questionTimeoutSec * 1000,
-          datasetTimeoutMs: datasetTimeoutSec * 1000,
-          timesRun,
-        });
-        results.push(result);
-      }
-    },
+  // All datasets dispatch in parallel. Provider RPS is governed by
+  // `MAX_LLM_CONCURRENCY` inside the Orchestrator's LLM gate; no
+  // dataset-level worker pool needed.
+  const results = await Promise.all(
+    DATASETS.map((ds) =>
+      runBenchmark({
+        input: ds.input,
+        connections: ds.connections,
+        agentClass: Agent,
+        registrables,
+        quiet: parallel,
+        rerun,
+        rowTimeoutMs: questionTimeoutSec * 1000,
+        datasetTimeoutMs: datasetTimeoutSec * 1000,
+        timesRun,
+      }),
+    ),
   );
-  await Promise.all(workers);
 
   const totalRows = results.reduce((s, r) => s + r.rows, 0);
   const totalErrors = results.reduce((s, r) => s + r.errors, 0);

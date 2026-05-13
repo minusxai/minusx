@@ -29,6 +29,44 @@ import {
 } from './types';
 import { normalizeParameters, synthErrorAssistantMessage, validateParameters } from './utils';
 
+// Optional process-wide cap on concurrent LLM calls. Set via the
+// `MAX_LLM_CONCURRENCY` env var (read once at module load). Used by
+// batch callers (benchmarks) to keep total in-flight provider requests
+// below provider RPM ceilings. No-op when unset or non-positive — the
+// `acquire`/`release` calls in `callLLM` short-circuit and behave
+// identically to the previous code path. Module-level so every
+// Orchestrator instance in this process shares the same budget.
+const llmConcurrencyLimit = (() => {
+  // eslint-disable-next-line no-restricted-syntax -- orchestrator is a standalone module; avoid coupling to lib/config for one optional batch-runner override
+  const raw = process.env.MAX_LLM_CONCURRENCY;
+  if (!raw) return 0;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+})();
+
+let llmInFlight = 0;
+const llmWaiters: Array<() => void> = [];
+
+async function acquireLlmSlot(): Promise<void> {
+  if (llmConcurrencyLimit === 0) return;
+  if (llmInFlight < llmConcurrencyLimit) {
+    llmInFlight++;
+    return;
+  }
+  await new Promise<void>((resolve) => llmWaiters.push(resolve));
+  // Slot transferred from release(); counter stays unchanged.
+}
+
+function releaseLlmSlot(): void {
+  if (llmConcurrencyLimit === 0) return;
+  const next = llmWaiters.shift();
+  if (next) {
+    next();
+  } else {
+    llmInFlight--;
+  }
+}
+
 export class Orchestrator {
   log: ConversationLog;
   protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
@@ -98,47 +136,56 @@ export class Orchestrator {
     const callId = randomUUID();
     const t0 = Date.now();
 
-    // Spread `callOptions` blindly into pi-ai's stream options. We treat it
-    // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new pi-ai
-    // options (`thinkingBudgets`, `metadata`, …) never touches this code.
-    const piStream = streamSimple(model, context, {
-      ...(callOptions ?? {}),
-      headers: {
-        ...((callOptions?.headers as Record<string, string> | undefined) ?? {}),
-        'X-MX-Request-Call-ID': callId,
-      },
-      signal: this.controller?.signal,
-    });
-
-    let result: AssistantMessage | null = null;
-    let errored = false;
+    // Optional global LLM-concurrency cap (MAX_LLM_CONCURRENCY env). No-op
+    // when unset, so production code paths are unaffected. Acquire before
+    // dispatching the request so queued calls don't materialize provider
+    // sockets until they have a slot.
+    await acquireLlmSlot();
     try {
-      for await (const ev of piStream) {
-        this.stream?.push({ ...ev, parent_id: agentId });
-        if (ev.type === 'done') result = ev.message;
-        else if (ev.type === 'error') {
-          result = ev.error;
-          errored = true;
+      // Spread `callOptions` blindly into pi-ai's stream options. We treat it
+      // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new pi-ai
+      // options (`thinkingBudgets`, `metadata`, …) never touches this code.
+      const piStream = streamSimple(model, context, {
+        ...(callOptions ?? {}),
+        headers: {
+          ...((callOptions?.headers as Record<string, string> | undefined) ?? {}),
+          'X-MX-Request-Call-ID': callId,
+        },
+        signal: this.controller?.signal,
+      });
+
+      let result: AssistantMessage | null = null;
+      let errored = false;
+      try {
+        for await (const ev of piStream) {
+          this.stream?.push({ ...ev, parent_id: agentId });
+          if (ev.type === 'done') result = ev.message;
+          else if (ev.type === 'error') {
+            result = ev.error;
+            errored = true;
+          }
+        }
+      } finally {
+        if (result) {
+          const durationSec = (Date.now() - t0) / 1000;
+          const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+          const target = firstTool ?? (result as unknown as Record<string, unknown>);
+          target['_duration'] = durationSec;
+          target['_lllmCallId'] = callId;
         }
       }
-    } finally {
-      if (result) {
-        const durationSec = (Date.now() - t0) / 1000;
-        const firstTool = result.content?.find((c: unknown) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
-        const target = firstTool ?? (result as unknown as Record<string, unknown>);
-        target['_duration'] = durationSec;
-        target['_lllmCallId'] = callId;
+      if (!result) {
+        throw new Error(`callLLM: pi-ai stream ended without done/error event (agent=${agentId})`);
       }
+      if (errored) {
+        throw new Error(
+          `callLLM: pi-ai stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
+        );
+      }
+      return result;
+    } finally {
+      releaseLlmSlot();
     }
-    if (!result) {
-      throw new Error(`callLLM: pi-ai stream ended without done/error event (agent=${agentId})`);
-    }
-    if (errored) {
-      throw new Error(
-        `callLLM: pi-ai stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
-      );
-    }
-    return result;
   }
 
   run(root: MXAgent): EventStream<StreamEvent, AssistantMessage | null> {
