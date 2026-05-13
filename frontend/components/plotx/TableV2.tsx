@@ -29,6 +29,14 @@ interface TableProps {
   databaseName?: string
   /** Called when a row is clicked. Receives the row's original data object and its index. */
   onRowClick?: (row: Record<string, any>, index: number) => void
+  /** Optional initial column sizes (column name → width in px) */
+  initialColumnSizing?: Record<string, number>
+  /** Columns whose text should wrap instead of truncating with ellipsis */
+  wrapColumns?: ReadonlySet<string>
+  /** Custom cell renderer for specific columns. Return undefined to use default formatting. */
+  renderCell?: (colId: string, value: any, row: Record<string, any>) => React.ReactNode | undefined
+  /** Initial sort state: array of { id: columnName, desc: boolean } */
+  initialSorting?: SortingState
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -101,11 +109,11 @@ interface FacetedFilterValue {
 const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
   v != null && typeof v === 'object' && 'search' in v
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick }: TableProps) => {
-  const [sorting, setSorting] = useState<SortingState>([])
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting }: TableProps) => {
+  const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(initialColumnSizing ?? {})
   const [drillDown, setDrillDown] = useState<DrillDownState | null>(null)
   const closeDrillDown = useCallback(() => setDrillDown(null), [])
   const [stats, setStats] = useState<Record<string, ColumnStats> | null>(null)
@@ -126,8 +134,8 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   useEffect(() => {
     setColumnVisibility({})
     setColumnFilters([])
-    setSorting([])
-    setColumnSizing({})
+    setSorting(initialSorting ?? [])
+    setColumnSizing(initialColumnSizing ?? {})
   }, [colNames])
 
   // Column definitions for TanStack Table
@@ -338,9 +346,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             '&::-webkit-scrollbar-thumb': { background: 'rgba(128,128,128,0.3)', borderRadius: '3px' },
             '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(128,128,128,0.5)' },
             '&::-webkit-scrollbar-corner': { background: 'transparent' },
-            '& .table-v2-row': {
-              boxShadow: 'inset 0 -1px 0 var(--chakra-colors-border-muted)',
-            },
+            '& .table-v2-row': {},
             '& .table-v2-row:hover': {
               background: 'var(--chakra-colors-bg-muted) !important',
             },
@@ -699,25 +705,29 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                     data-row-idx={virtualRow.index}
                     className="table-v2-row"
                     style={{
-                      height: ROW_HEIGHT,
-                      background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-muted)' : undefined,
+                      height: wrapColumns?.size ? undefined : ROW_HEIGHT,
+                      background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-emphasized)' : undefined,
                       cursor: onRowClick ? 'pointer' : undefined,
                     }}
                     onClick={onRowClick ? () => onRowClick(original, virtualRow.index) : undefined}
                   >
-                    {visibleColIds.map((colId, cellIdx) => (
-                      <td
-                        key={colId}
-                        data-col-id={colId}
-                        className="table-v2-cell"
-                        style={{
-                          width: colSizes[colId],
-                          borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
-                        }}
-                      >
-                        {formatValue(original[colId], columnTypes[colIndexMap[colId]])}
-                      </td>
-                    ))}
+                    {visibleColIds.map((colId, cellIdx) => {
+                      const shouldWrap = wrapColumns?.has(colId)
+                      return (
+                        <td
+                          key={colId}
+                          data-col-id={colId}
+                          className="table-v2-cell"
+                          style={{
+                            width: colSizes[colId],
+                            borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
+                            ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
+                          }}
+                        >
+                          {renderCell?.(colId, original[colId], original) ?? formatValue(original[colId], columnTypes[colIndexMap[colId]])}
+                        </td>
+                      )
+                    })}
                   </tr>
                 )
               })}
