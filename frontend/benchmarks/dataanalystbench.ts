@@ -123,8 +123,9 @@ const registrables = doubleCheck
       BenchmarkAnalystAgentForDoubleCheck,
       CheckEquivalence,
       RootAgent,
+      FuzzySearch
     ]
-  : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent];
+  : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzySearch];
 
 // Default timeouts. Override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT
 // (seconds). A row that hits its timeout is cancelled and dropped from
