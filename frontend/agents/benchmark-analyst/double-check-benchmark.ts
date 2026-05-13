@@ -290,7 +290,7 @@ function buildFeedbackPrompt(originalQ: string, yourAnswer: string, otherAnswer:
     `Your previous final answer was: "${yourAnswer}"`,
     `Another analyst's answer was: "${otherAnswer}"`,
     '',
-    "If the other analyst's answer makes you reconsider, give a new final answer (TL;DR + Analysis as before; Don't reference previous answer at all). If you still agree with your previous answer, restate it.",
+    "If the other analyst's answer makes you reconsider, give a new final answer (TL;DR + Analysis as before at the top before anything else; Put all comparisons and justification at the bottom under a 'Justification' section). If you still agree with your previous answer, restate it.",
   ].join('\n');
 }
 
