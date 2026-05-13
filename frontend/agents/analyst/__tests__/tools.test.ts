@@ -18,7 +18,22 @@ vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
 }));
 
-const ctx: AnalystAgentContext = { userId: 'u', mode: 'org' };
+// Production tools route via `loadConnectionSchema(name, user)` /
+// `runQuery(name, sql, params, user)` — both require an EffectiveUser on
+// the context. Synthesise a fake one for these tests; the mocked functions
+// ignore the value but the production-side guards check for presence.
+const ctx: AnalystAgentContext = {
+  userId: 'u',
+  mode: 'org',
+  effectiveUser: {
+    userId: 1,
+    email: 'test@example.com',
+    name: 'Test',
+    role: 'admin',
+    home_folder: '/org',
+    mode: 'org',
+  },
+} as AnalystAgentContext;
 
 const fakeSchemas = [
   {

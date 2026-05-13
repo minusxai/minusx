@@ -10,20 +10,20 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import { getAnalystModel } from './model-config';
 import { ReadFiles, SearchFiles } from './file-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
+import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import {
-  ListDBConnections,
   SearchDBSchema,
   ExecuteQuery,
-} from '@/agents/benchmark-analyst/db-tools';
+} from '@/agents/benchmark-analyst/db-tools.server';
 import type { RemoteAnalystContext } from './types';
 
 // Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
+export { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 export {
-  ListDBConnections,
   SearchDBSchema,
   ExecuteQuery,
-} from '@/agents/benchmark-analyst/db-tools';
+} from '@/agents/benchmark-analyst/db-tools.server';
 export type { AnalystAgentContext, ConnectionInfo, RemoteAnalystContext } from './types';
 
 export const fauxRegistration = registerFauxProvider({

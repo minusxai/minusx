@@ -27,13 +27,8 @@ import {
   LoadSkillFrontend,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
-import {
-  ListDBConnections,
-  SearchDBSchema,
-  ExecuteQuery,
-  BaseSearchDBSchema,
-  BaseExecuteQuery,
-} from '@/agents/benchmark-analyst/db-tools';
+import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
+import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
 import {

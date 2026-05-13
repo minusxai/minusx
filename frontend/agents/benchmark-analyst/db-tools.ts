@@ -1,14 +1,17 @@
+// CLI-safe DB tools. NO server-only imports — this module is loaded by
+// `npm run benchmark:dab` (Node CLI) as well as by the v=2 server agent
+// path. Production variants (which need `runQuery` / `loadConnectionSchema`
+// → server-only chain into NextAuth) live in `db-tools.server.ts` and
+// extend the `Base*` classes here.
+
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
-import { runQuery } from '@/lib/connections/run-query';
-import { loadConnectionSchema } from '@/lib/connections/load-schema';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
-import type { NodeConnector, SchemaEntry } from '@/lib/connections/base';
-import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 
 // ─── Schema cache ─────────────────────────────────────────────────────────
 //
@@ -56,7 +59,7 @@ export class ListDBConnections extends MXTool<typeof ListDBConnectionsParams, Be
   }
 }
 
-// ─── SearchDBSchema ───────────────────────────────────────────────────────
+// ─── SearchDBSchema (Base) ────────────────────────────────────────────────
 
 const SearchDBSchemaParams = Type.Object({
   connection: Type.String(),
@@ -86,10 +89,10 @@ const SEARCH_DB_SCHEMA_SCHEMA: Tool<typeof SearchDBSchemaParams> = {
  * by benchmark chat-continuation: both paths arrive with full
  * connector configs in agent context.
  *
- * Falls back to `loadConnectionSchema(name, user)` (production path, reads
- * the connection file's cached schema) when no local config is present
- * — useful so the LLM gets a sensible answer if it asks about a name
- * that wasn't pre-loaded into `ctx.connections`.
+ * When the LLM asks about a name that isn't in `ctx.connections`, falls
+ * through to `_loadSchemaFallback` (default: empty schema). Production
+ * subclasses override this hook to look up the schema via the server-side
+ * `loadConnectionSchema(name, user)` helper.
  */
 export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, BenchmarkAnalystContext, SearchDBSchemaDetails> {
   static readonly schema = SEARCH_DB_SCHEMA_SCHEMA;
@@ -104,8 +107,8 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
    * underlying `BenchmarkSharedDuckdb.ensureAttached` is also idempotent
    * across instances.
    *
-   * Production tools override this to a no-op (see `SearchDBSchema`
-   * below), so their `run()` always falls through to `loadConnectionSchema`.
+   * Production tools override this to a no-op (see `db-tools.server.ts`),
+   * so their `run()` always falls through to `_loadSchemaFallback`.
    */
   protected async _initialiseConnectors(): Promise<void> {
     for (const entry of this.context.connections ?? []) {
@@ -116,6 +119,16 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
     }
   }
 
+  /**
+   * Hook for production subclasses (`db-tools.server.ts::SearchDBSchema`)
+   * to plug in `loadConnectionSchema(name, user)`. Default returns empty
+   * schemas — fine for benchmark/CLI where every queryable connection
+   * should already be in `ctx.connections`.
+   */
+  protected async _loadSchemaFallback(_connection: string): Promise<SchemaEntry[]> {
+    return [];
+  }
+
   async run(): Promise<ToolResponse<SearchDBSchemaDetails>> {
     await this._initialiseConnectors();
 
@@ -123,10 +136,7 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
     const local = this.connectors.get(this.parameters.connection);
     const schemas: SchemaEntry[] = local
       ? await cachedConnectorSchema(this.parameters.connection, local)
-      : await loadConnectionSchema(
-          this.parameters.connection,
-          (this.context as { effectiveUser?: EffectiveUser }).effectiveUser as EffectiveUser,
-        );
+      : await this._loadSchemaFallback(this.parameters.connection);
 
     // Per-run whitelist (set by chat-v2 from a context file) filters schemas
     // before they reach the LLM. Same logic as production tool-handlers.server.ts.
@@ -141,7 +151,6 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
         })).filter((s) => s.tables.length > 0)
       : schemas;
 
-    // Use production searchDatabaseSchema for identical result shape
     const payload = await searchDatabaseSchema(filteredSchemas, query || undefined) as SearchDBSchemaDetails;
     return {
       content: [{ type: 'text', text: JSON.stringify(payload) }],
@@ -151,24 +160,7 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
   }
 }
 
-/**
- * Production SearchDBSchema variant. Overrides `_initialiseConnectors`
- * to a no-op so `run()` always falls through to `loadConnectionSchema`,
- * reading the cached schema from the connection file via FilesAPI. Used
- * by `RemoteAnalystAgent` / `WebAnalystAgent`. Shares `schema.name`
- * with `BaseSearchDBSchema` so the LLM sees one tool name.
- */
-export class SearchDBSchema extends BaseSearchDBSchema {
-  static readonly schema = SEARCH_DB_SCHEMA_SCHEMA;
-
-  protected override async _initialiseConnectors(): Promise<void> {
-    // Production: never use embedded connectors. context.connections is
-    // metadata-only here (no `config`), and connections resolve via
-    // ConnectionsAPI inside runQuery / loadConnectionSchema.
-  }
-}
-
-// ─── ExecuteQuery ─────────────────────────────────────────────────────────
+// ─── ExecuteQuery (Base) ──────────────────────────────────────────────────
 
 const ExecuteQueryParams = Type.Object({
   connectionId: Type.String(),
@@ -202,9 +194,9 @@ const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
  * all dataset files ATTACHed); other dialects use the regular
  * `getNodeConnector` factory.
  *
- * Falls back to `runQuery` (production path) when no local config is
- * present for the requested name — useful belt-and-suspenders so the
- * LLM gets a sensible error message rather than a TypeError.
+ * When the LLM asks about a name that isn't in `ctx.connections`, falls
+ * through to `_executeFallback` (default: throws). Production subclasses
+ * override this hook to route via the server-side `runQuery` helper.
  */
 export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAnalystContext, ExecuteQueryDetails> {
   static readonly schema = EXECUTE_QUERY_SCHEMA;
@@ -222,6 +214,21 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
     }
   }
 
+  /**
+   * Hook for production subclasses (`db-tools.server.ts::ExecuteQuery`)
+   * to plug in `runQuery`. Default throws — fine for benchmark/CLI where
+   * every queryable connection should already be in `ctx.connections`.
+   */
+  protected async _executeFallback(
+    connectionId: string,
+    _query: string,
+    _params: Record<string, string | number>,
+  ): Promise<QueryResult> {
+    throw new Error(
+      `Connection '${connectionId}' is not in this agent's context. Use ListDBConnections to see available connection names.`,
+    );
+  }
+
   async run(): Promise<ToolResponse<ExecuteQueryDetails>> {
     await this._initialiseConnectors();
 
@@ -232,7 +239,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
     );
 
     const start = Date.now();
-    let result: { columns?: string[]; types?: string[]; rows: Record<string, unknown>[]; finalQuery?: string };
+    let result: QueryResult;
     try {
       const local = this.connectors.get(connectionId);
       if (local) {
@@ -240,12 +247,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
         const cappedSql = await enforceQueryLimit(rawQuery, { dialect });
         result = await local.query(cappedSql);
       } else {
-        result = await runQuery(
-          connectionId,
-          rawQuery,
-          {},
-          (this.context as { effectiveUser?: EffectiveUser }).effectiveUser as EffectiveUser,
-        );
+        result = await this._executeFallback(connectionId, rawQuery, {});
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -257,12 +259,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
     }
     const executionMs = Date.now() - start;
 
-    // Derive columns/types from rows when the executor didn't supply them.
-    // Empty result → empty arrays.
     const columns = result.columns ?? (result.rows[0] ? Object.keys(result.rows[0]) : []);
     const types = result.types ?? columns.map(() => 'unknown');
 
-    // Compress for LLM-visible content: markdown table + truncation metadata.
     const compressed = compressQueryResult(
       { columns, types, rows: result.rows },
       maxChars,
@@ -270,9 +269,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
 
     return {
       // LLM sees: { columns, types, data: markdown, totalRows, shownRows,
-      // truncated, finalQuery }. `finalQuery` is the SQL with `:name`
-      // parameters inlined as literals — the closest readable form of what
-      // the engine actually saw (see lib/sql/inline-params.ts).
+      // truncated, finalQuery }.
       content: [{
         type: 'text',
         text: JSON.stringify({ success: true, ...compressed, finalQuery: result.finalQuery }),
@@ -290,23 +287,5 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 }
 
-/**
- * Production ExecuteQuery variant. Overrides `_initialiseConnectors`
- * to a no-op so `run()` always falls through to `runQuery`, which
- * routes via `ConnectionsAPI.getRawByName` + `getNodeConnector` (the
- * standard production seam). Used by `RemoteAnalystAgent` /
- * `WebAnalystAgent`. Shares `schema.name` with `BaseExecuteQuery`.
- */
-export class ExecuteQuery extends BaseExecuteQuery {
-  static readonly schema = EXECUTE_QUERY_SCHEMA;
-
-  protected override async _initialiseConnectors(): Promise<void> {
-    // Production: never use embedded connectors. context.connections is
-    // metadata-only here (no `config`); query execution goes through
-    // runQuery → ConnectionsAPI.getRawByName as usual.
-  }
-}
-
-// Backward-compatible alias for legacy type imports that may still
-// reference `ConnectionInfo` re-exported from this module.
+// Re-export for legacy type-only imports.
 export type { ConnectionInfo };
