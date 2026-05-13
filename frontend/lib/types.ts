@@ -841,13 +841,13 @@ export interface DbFile extends BaseFileMetadata {
  */
 export interface DatabaseConnection extends BaseEntity {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'internal_db';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db';
   config: Record<string, any>;  // Safe config fields only (no sensitive data)
 }
 
 export interface DatabaseConnectionCreate {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite';
   config: Record<string, any>;
 }
 
@@ -908,7 +908,7 @@ export interface GoogleSheetsConnectionConfig {
 
 // Connection file content type (stored as file in /database/)
 export interface ConnectionContent extends BaseFileContent {
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'internal_db';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db';
   config: Record<string, any>;
   description?: string;
   schema?: DatabaseSchema;  // Added by connection loader via introspection
@@ -1274,6 +1274,7 @@ export function connectionTypeToDialect(type: string): string {
     csv: 'duckdb',
     'google-sheets': 'duckdb',
     athena: 'presto',
+    sqlite: 'sqlite',
   };
   return map[type] ?? 'duckdb';
 }
