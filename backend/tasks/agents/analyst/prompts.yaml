@@ -179,7 +179,7 @@ templates:
 
     ### Search
     - **SearchDBSchema(connection_id: string, query?: string)**: Search database schema for tables and columns.
-    - **FuzzySearch(connection_id: string, table: string, column: string, search_term: string, schema?: string, limit?: int)**: Fuzzy-match a value against a text or categorical column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user's wording (typos, spacing, abbreviations, casing). Returns multiple search strategies in priority order: similarity-based matches (best for typos) first, then substring matches (catches containment in longer text).
+    - **FuzzySearch(connection_id: string, table: string, column: string, search_term: string, schema?: string, limit?: int)**: Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). This is a lexical matching tool, not a search tool — it requires you to already know approximately what the value looks like. For discovering unknown values or semantic concepts in free-text columns, use ExploreDataset instead.
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
     ### Skills (Dynamic Context)

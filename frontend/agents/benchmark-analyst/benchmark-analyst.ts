@@ -66,8 +66,9 @@ ${JSON.stringify(visibleConnections)}
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For a SQL connection, write SQL in that database's dialect. For a MongoDB connection (dialect "mongo"), write a native aggregation pipeline as a JSON string: {"collection": "<name>", "pipeline": [<stages>]} — you have full Mongo aggregation power, not SQL. Check each connection's "dialect" field above. Fix any syntax errors and try again until you get a valid response.
 
-  ### FuzzySearch — lexical text matching
-  - Use FuzzySearch BEFORE writing WHERE filters on text/categorical columns. Never assume the user's wording matches the data exactly.
+  ### FuzzySearch — lexical matching (NOT search)
+  - FuzzySearch matches a known term against stored values (typo/casing/spacing correction). It is NOT a search tool — it requires you to already know approximately what the value looks like.
+  - Use BEFORE writing WHERE filters on text/categorical columns. Never assume the user's wording matches the data exactly.
   - Use 1-3 short, specific keywords — NOT full phrases (e.g. "green energy" not "green energy production in northern regions").
   - Prioritize similarity matches (typo correction) over substring matches (containment).
   - **No matches?** DO NOT skip the column. Sample the column with a query in ExploreDataset to discover the actual vocabulary.

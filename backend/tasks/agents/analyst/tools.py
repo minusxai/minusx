@@ -104,21 +104,21 @@ class SearchDBSchema(Tool):
 
 @register_agent
 class FuzzySearch(Tool):
-    """Search for approximate/fuzzy matches of a value in a text column.
+    """Match a known term against stored values in a text or categorical column.
 
-    Use this BEFORE writing WHERE filters on text columns when the exact
-    stored value might differ from the user's wording (typos, spacing,
-    abbreviations, casing differences, etc.).
+    This is a LEXICAL MATCHING tool, not a search tool — it finds values that
+    are spelled similarly to your term (typos, spacing, casing differences).
+    It requires you to already know approximately what the value looks like.
+    For discovering unknown values or semantic concepts in free-text columns
+    (descriptions, reviews, notes), use ExploreDataset instead.
 
-    IMPORTANT: Use short, specific keywords as search_term — ideally 1-3
-    distinctive words, NOT full natural-language phrases. Avoid filler words.
-    Good: "revenue", "green energy northern". Bad: "green energy production in northern regions".
+    Use 1-3 short, specific keywords — NOT full phrases.
+    Good: "revenue", "green energy". Bad: "green energy production in northern regions".
 
-    Returns multiple search strategies in priority order:
-    - Similarity-based (jaro_winkler, trigram, or levenshtein): best for typos and close spellings. Prioritize these matches.
-    - Substring-based: catches exact containment in longer text. Use these when similarity returns no matches, or as supplementary results.
+    Returns similarity-based matches (best for typos) and substring matches
+    (catches containment). Prioritize similarity matches.
 
-    Example: user asks about "Get Me Bodied" but column stores "GetMe Bodied".
+    Example: user says "Hello World" but column stores "HelloWooorld".
     """
 
     def __init__(

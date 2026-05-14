@@ -364,7 +364,7 @@ const FuzzySearchParams = Type.Object({
 export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnalystContext> {
   static readonly schema: Tool<typeof FuzzySearchParams> = {
     name: 'FuzzySearch',
-    description: 'Search for approximate/fuzzy matches of a value in a text column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user\'s wording (typos, spacing, abbreviations, etc.). IMPORTANT: Use 1-3 short, specific keywords as search_term, NOT full phrases. Returns the closest matching distinct values with similarity scores.',
+    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). This is a LEXICAL MATCHING tool, not a search tool — it requires you to already know approximately what the value looks like. For discovering unknown values or semantic concepts in free-text columns, use ExploreDataset instead. Use 1-3 short, specific keywords. Returns similarity-based and substring matches.',
     parameters: FuzzySearchParams,
   };
 
@@ -409,8 +409,7 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
         table, column, searchTerm: search_term, schema: schemaName, limit,
       });
 
-      // Enhance hint based on column category when all results are empty
-      if (result.hint && category === 'text') {
+      if (result.hint && category != 'categorical') {
         result.hint = `No matches found in free-text column "${column}". FuzzySearch is the WRONG tool for this column — free-text descriptions use varied vocabulary, not exact category labels. You MUST use ExploreDataset to semantically classify values in this column instead.`;
       }
 
