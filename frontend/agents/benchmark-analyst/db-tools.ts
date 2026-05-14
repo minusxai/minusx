@@ -95,7 +95,7 @@ interface SearchDBSchemaDetails extends Record<string, unknown> {
 
 const SEARCH_DB_SCHEMA_SCHEMA: Tool<typeof SearchDBSchemaParams> = {
   name: 'SearchDBSchema',
-  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Each table includes `indexes: [{name, columns, unique}]` when the connection supports index introspection (Postgres, SQLite, DuckDB) — prefer filtering and joining on indexed columns. Note a leading-wildcard `LIKE \'%x%\'` cannot use a B-tree index; it forces a full scan regardless. Use ListDBConnections first to see available connection names.',
+  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Always inspect a table here before writing any SQL against it — do not guess column names. Each table includes `indexes: [{name, columns, unique}]` when the connection supports index introspection (Postgres, SQLite, DuckDB) — prefer filtering and joining on indexed columns. Note a leading-wildcard `LIKE \'%x%\'` cannot use a B-tree index; it forces a full scan regardless. Use ListDBConnections first to see available connection names.',
   parameters: SearchDBSchemaParams,
 };
 
@@ -186,7 +186,7 @@ const EXECUTE_QUERY_BASE_FIELDS = {
 const ExecuteQueryParams = Type.Object({
   ...EXECUTE_QUERY_BASE_FIELDS,
   timeout: Type.Optional(Type.Number({
-    description: 'Query timeout in seconds (default 60, max 300). The query is cancelled if it exceeds this — fail fast on an expensive scan and rewrite it (add filters, use an indexed column, avoid leading-wildcard LIKE) rather than burning your turn budget. Raise it (up to 300) only for a query you have good reason to believe is genuinely heavy.',
+    description: 'Query timeout in seconds (default 60, max 300). Set this to 180-300 UP FRONT for a query that will scan a large table (full-table aggregation, citation/graph traversal, JSON extraction over all rows) — do not eat a 60s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
   })),
 });
 
@@ -227,7 +227,7 @@ interface ExecuteQueryDetails extends Record<string, unknown> {
  * the production schema (no timeout support yet) uses this as-is.
  */
 export const EXECUTE_QUERY_DESCRIPTION =
-  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.';
+  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Before querying a table, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzySearch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.';
 
 const EXECUTE_QUERY_TIMEOUT_NOTE =
   ' A query that exceeds its `timeout` (default 60s, max 300s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout.';
@@ -303,7 +303,14 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
         result = await this._executeFallback(connectionId, rawQuery, {});
       }
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      let errMsg = err instanceof Error ? err.message : String(err);
+      // Make a timeout actionable at the point of failure: a cancelled
+      // query returns NO rows (not partial), so the agent must either
+      // raise the timeout or narrow the query — and narrowing risks
+      // dropping rows the question needs.
+      if (/exceeded the \d+s timeout/i.test(errMsg)) {
+        errMsg += ` No rows were returned. Either retry with a higher \`timeout\` (up to ${MAX_QUERY_TIMEOUT_SEC}s), or narrow the query — but if you narrow it, beware you may exclude rows the question needs.`;
+      }
       return {
         content: [{ type: 'text', text: JSON.stringify({ success: false, error: errMsg }) }],
         isError: true,
