@@ -248,9 +248,14 @@ function interpolateRefs(
 
 /**
  * Mongo analog of `interpolateRefs` for native `{collection,pipeline}` JSON.
- * Replaces *quoted* `"$label.column"` tokens with a JSON array literal of the
- * referenced column's values, so `{"$in": "$revenue.id"}` becomes
- * `{"$in": [4233,5281]}` — still valid JSON.
+ * Replaces `$label.column` tokens with a JSON array literal of the referenced
+ * column's values, so `{"$in": "$revenue.id"}` becomes `{"$in": [4233,5281]}`
+ * — still valid JSON.
+ *
+ * The surrounding quotes are optional: the LLM frequently writes the SQL-habit
+ * form `{"$in": $revenue.id}` (unquoted) instead of `{"$in": "$revenue.id"}`.
+ * Both are interpolated to the same JSON array, so the unquoted form also
+ * yields valid JSON the connector can run.
  *
  * Only *known* labels are interpolated. This is deliberate: a Mongo nested
  * field reference like `"$user.name"` matches the same `$x.y` shape, so an
@@ -261,7 +266,7 @@ export function interpolateMongoRefs(
   json: string,
   labeledResults: Map<string, Record<string, unknown>[]>,
 ): string {
-  return json.replace(/"\$([a-zA-Z_]\w*)\.(\w+)"/g, (match, label, column) => {
+  return json.replace(/"?\$([a-zA-Z_]\w*)\.(\w+)"?/g, (match, label, column) => {
     const rows = labeledResults.get(label);
     if (!rows) return match; // unknown label — leave as a Mongo field path
     const values = rows.map((r) => r[column]).filter((v) => v != null);

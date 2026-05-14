@@ -261,6 +261,22 @@ describe('interpolateMongoRefs', () => {
     const out = interpolateMongoRefs('["$a.x","$b.y"]', labeled);
     expect(out).toBe('[[1],["q"]]');
   });
+
+  it('replaces an UNQUOTED "$label.column" token (the common SQL-habit mistake)', () => {
+    // The LLM frequently writes `{"$in": $revenue.id}` (SQL `IN ($revenue.id)`
+    // habit) instead of the quoted `{"$in": "$revenue.id"}`. We interpolate it
+    // anyway so the result is valid JSON the connector can run.
+    const labeled = new Map([['revenue', [{ id: 10 }, { id: 20 }, { id: 30 }]]]);
+    const json = '{"collection":"biz","pipeline":[{"$match":{"id":{"$in":$revenue.id}}}]}';
+    const out = interpolateMongoRefs(json, labeled);
+    expect(out).toBe('{"collection":"biz","pipeline":[{"$match":{"id":{"$in":[10,20,30]}}}]}');
+    expect(JSON.parse(out)).toBeDefined(); // unquoted ref → now valid JSON
+  });
+
+  it('leaves an unquoted unknown label untouched', () => {
+    const labeled = new Map([['revenue', [{ id: 1 }]]]);
+    expect(interpolateMongoRefs('{"$in":$user.name}', labeled)).toBe('{"$in":$user.name}');
+  });
 });
 
 describe('ExploreDataset — MongoDB connections (native pipelines)', () => {
