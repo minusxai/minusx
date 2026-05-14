@@ -95,7 +95,7 @@ interface SearchDBSchemaDetails extends Record<string, unknown> {
 
 const SEARCH_DB_SCHEMA_SCHEMA: Tool<typeof SearchDBSchemaParams> = {
   name: 'SearchDBSchema',
-  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Use ListDBConnections first to see available connection names.',
+  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Each table includes `indexes: [{name, columns, unique}]` when the connection supports index introspection (Postgres, SQLite, DuckDB) — prefer filtering and joining on indexed columns. Note a leading-wildcard `LIKE \'%x%\'` cannot use a B-tree index; it forces a full scan regardless. Use ListDBConnections first to see available connection names.',
   parameters: SearchDBSchemaParams,
 };
 
@@ -176,7 +176,24 @@ const ExecuteQueryParams = Type.Object({
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of the markdown table returned to the LLM (default 10,000, max 100,000). Increase only if you need to see more rows in text form. Use OFFSET in SQL to page through large results instead.',
   })),
+  timeout: Type.Optional(Type.Number({
+    description: 'Query timeout in seconds (default 60, max 300). The query is cancelled if it exceeds this — fail fast on an expensive scan and rewrite it (add filters, use an indexed column, avoid leading-wildcard LIKE) rather than burning your turn budget. Raise it (up to 300) only for a query you have good reason to believe is genuinely heavy.',
+  })),
 });
+
+/** Default query timeout when the agent doesn't specify one. */
+export const DEFAULT_QUERY_TIMEOUT_SEC = 60;
+/** Hard ceiling on the agent-supplied query timeout. */
+export const MAX_QUERY_TIMEOUT_SEC = 300;
+
+/**
+ * Clamp the agent-supplied `timeout` (seconds) into `[1, MAX_QUERY_TIMEOUT_SEC]`,
+ * falling back to `DEFAULT_QUERY_TIMEOUT_SEC` when unset or non-finite.
+ */
+export function clampQueryTimeoutSeconds(raw?: number): number {
+  if (raw == null || !Number.isFinite(raw)) return DEFAULT_QUERY_TIMEOUT_SEC;
+  return Math.min(Math.max(Math.floor(raw), 1), MAX_QUERY_TIMEOUT_SEC);
+}
 
 interface ExecuteQueryDetails extends Record<string, unknown> {
   success: boolean;
@@ -188,7 +205,7 @@ interface ExecuteQueryDetails extends Record<string, unknown> {
 
 const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
   name: 'ExecuteQuery',
-  description: 'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.',
+  description: 'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. A query that exceeds its `timeout` (default 60s, max 300s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.',
   parameters: ExecuteQueryParams,
 };
 
@@ -240,6 +257,8 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       TOOL_MAX_LIMIT_CHARS,
     );
 
+    const timeoutMs = clampQueryTimeoutSeconds(this.parameters.timeout) * 1000;
+
     const start = Date.now();
     let result: QueryResult;
     try {
@@ -247,7 +266,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       if (local) {
         const dialect = this.dialects.get(connectionId) ?? 'duckdb';
         const cappedSql = await enforceQueryLimit(rawQuery, { dialect });
-        result = await local.query(cappedSql);
+        result = await local.query(cappedSql, undefined, timeoutMs);
       } else {
         result = await this._executeFallback(connectionId, rawQuery, {});
       }

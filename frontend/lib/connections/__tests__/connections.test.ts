@@ -785,13 +785,14 @@ describe('PostgresConnector.testConnection()', () => {
 
   it('includes schema when includeSchema=true', async () => {
     const mockQuery = vi.fn()
-      .mockResolvedValueOnce({ rows: [], fields: [] })
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce({ rows: [], fields: [] })          // SELECT 1
+      .mockResolvedValueOnce({                                  // getSchema: columns
         rows: [
           { table_schema: 'public', table_name: 'users', column_name: 'id', data_type: 'integer' },
         ],
         fields: [],
-      });
+      })
+      .mockResolvedValueOnce({ rows: [], fields: [] });         // getSchema: indexes
     makeMockPool(mockQuery);
 
     const result = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).testConnection(true);
@@ -944,6 +945,71 @@ describe('PostgresConnector.getSchema()', () => {
     const schema = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).getSchema();
 
     expect(schema).toEqual([]);
+  });
+
+  it('populates tables[].indexes from the index catalog query', async () => {
+    // getSchema now runs two queries: columns, then indexes.
+    const mockQuery = vi.fn()
+      .mockResolvedValueOnce({
+        rows: [
+          { table_schema: 'public', table_name: 'users', column_name: 'id', data_type: 'integer' },
+          { table_schema: 'public', table_name: 'users', column_name: 'email', data_type: 'text' },
+        ],
+        fields: [],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { table_schema: 'public', table_name: 'users', index_name: 'users_pkey', is_unique: true, column_name: 'id', col_pos: 1 },
+          { table_schema: 'public', table_name: 'users', index_name: 'idx_email', is_unique: false, column_name: 'email', col_pos: 1 },
+        ],
+        fields: [],
+      });
+    makeMockPool(mockQuery);
+
+    const schema = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).getSchema();
+    const users = schema.find(s => s.schema === 'public')!.tables[0];
+    expect(users.indexes).toEqual([
+      { name: 'users_pkey', columns: ['id'], unique: true },
+      { name: 'idx_email', columns: ['email'], unique: false },
+    ]);
+  });
+
+  it('groups multi-column index columns in indkey order', async () => {
+    const mockQuery = vi.fn()
+      .mockResolvedValueOnce({
+        rows: [
+          { table_schema: 'public', table_name: 'events', column_name: 'country', data_type: 'text' },
+          { table_schema: 'public', table_name: 'events', column_name: 'ts', data_type: 'timestamp' },
+        ],
+        fields: [],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          // Deliberately out of order — implementation must sort by col_pos.
+          { table_schema: 'public', table_name: 'events', index_name: 'idx_multi', is_unique: false, column_name: 'ts', col_pos: 2 },
+          { table_schema: 'public', table_name: 'events', index_name: 'idx_multi', is_unique: false, column_name: 'country', col_pos: 1 },
+        ],
+        fields: [],
+      });
+    makeMockPool(mockQuery);
+
+    const schema = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).getSchema();
+    expect(schema[0].tables[0].indexes).toEqual([
+      { name: 'idx_multi', columns: ['country', 'ts'], unique: false },
+    ]);
+  });
+
+  it('sets indexes to [] for tables with no indexes', async () => {
+    const mockQuery = vi.fn()
+      .mockResolvedValueOnce({
+        rows: [{ table_schema: 'public', table_name: 'logs', column_name: 'msg', data_type: 'text' }],
+        fields: [],
+      })
+      .mockResolvedValueOnce({ rows: [], fields: [] });
+    makeMockPool(mockQuery);
+
+    const schema = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).getSchema();
+    expect(schema[0].tables[0].indexes).toEqual([]);
   });
 });
 

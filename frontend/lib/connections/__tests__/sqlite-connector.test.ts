@@ -23,6 +23,8 @@ beforeAll(() => {
     CREATE TABLE orders (order_id INTEGER PRIMARY KEY, amount REAL, status TEXT);
     INSERT INTO orders VALUES (1, 99.5, 'active');
     INSERT INTO orders VALUES (2, 50.0, 'inactive');
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_orders_status_amount ON orders(status, amount);
   `);
   db.close();
 });
@@ -95,5 +97,19 @@ describe('SqliteConnector.getSchema()', () => {
 
     const usersTable = schema[0].tables.find(t => t.table === 'users')!;
     expect(usersTable.columns.map(c => c.name)).toEqual(['id', 'name', 'email']);
+  });
+
+  it('populates tables[].indexes from the attached SQLite db', async () => {
+    const schema = await new SqliteConnector('test', { file_path: sqliteDbPath }).getSchema();
+
+    const usersTable = schema[0].tables.find(t => t.table === 'users')!;
+    expect(usersTable.indexes).toEqual([
+      { name: 'idx_users_email', columns: ['email'], unique: false },
+    ]);
+
+    const ordersTable = schema[0].tables.find(t => t.table === 'orders')!;
+    expect(ordersTable.indexes).toEqual([
+      { name: 'idx_orders_status_amount', columns: ['status', 'amount'], unique: false },
+    ]);
   });
 });

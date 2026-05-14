@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { withDuckDbConnection } from './duckdb-registry';
+import { collectDuckDbIndexes } from './duckdb-indexes';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -132,9 +133,19 @@ export class DuckDbConnector extends NodeConnector {
         tableMap.get(row.table_name)!.push({ name: row.column_name, type: row.data_type });
       }
 
+      // No `databaseName` filter — a directly-opened DuckDB file has just
+      // its own catalog plus `system`/`temp` (which carry no user indexes).
+      // `duckdb_indexes().schema_name` is the bare schema (`main`), matching
+      // the `schemaName` computed above.
+      const indexMap = await collectDuckDbIndexes(conn);
+
       return Array.from(schemaMap.entries()).map(([schema, tables]) => ({
         schema,
-        tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
+        tables: Array.from(tables.entries()).map(([table, columns]) => ({
+          table,
+          columns,
+          indexes: indexMap.get(`${schema}.${table}`) ?? [],
+        })),
       }));
     });
   }

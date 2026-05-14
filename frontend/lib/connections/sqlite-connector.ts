@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { resolveDuckDbFilePath } from './duckdb-connector';
 import { withSqliteViaDuckdbConnection } from './sqlite-via-duckdb-registry';
+import { collectDuckDbIndexes } from './duckdb-indexes';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -106,9 +107,17 @@ export class SqliteConnector extends NodeConnector {
         tableMap.get(row.table_name)!.push({ name: row.column_name, type: row.data_type });
       }
 
+      // SQLite's own indexes surface through DuckDB's `duckdb_indexes()` on
+      // the attached catalog (alias `db`, matching the columns query above).
+      const indexMap = await collectDuckDbIndexes(conn, 'db');
+
       return Array.from(schemaMap.entries()).map(([schema, tables]) => ({
         schema,
-        tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
+        tables: Array.from(tables.entries()).map(([table, columns]) => ({
+          table,
+          columns,
+          indexes: indexMap.get(`${schema}.${table}`) ?? [],
+        })),
       }));
     });
   }

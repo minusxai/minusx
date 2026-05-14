@@ -22,6 +22,7 @@ import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import { resolveDuckDbFilePath } from '@/lib/connections/duckdb-connector';
 import { getNodeConnector } from '@/lib/connections';
+import { collectDuckDbIndexes } from '@/lib/connections/duckdb-indexes';
 import { NodeConnector, type SchemaEntry, type QueryResult, type TestConnectionResult } from '@/lib/connections/base';
 
 // Make rows JSON-safe (BigInt → Number where it fits; else string).
@@ -149,9 +150,31 @@ class BenchmarkSharedDuckdb {
     }
   }
 
-  async query(name: string, sql: string): Promise<QueryResult> {
+  async query(name: string, sql: string, timeoutMs?: number): Promise<QueryResult> {
     return this.withConnection(name, async (conn) => {
-      const result = await conn.run(sql);
+      // Best-effort statement timeout. DuckDB has no `statement_timeout`
+      // GUC, so we arm a timer that calls `conn.interrupt()` — that
+      // rejects the in-flight `conn.run()` promise. Cleared on completion
+      // (success or failure) so it never fires against a later query on
+      // this short-lived connection.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      if (timeoutMs && timeoutMs > 0) {
+        timer = setTimeout(() => conn.interrupt(), timeoutMs);
+      }
+      let result;
+      try {
+        result = await conn.run(sql);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Normalise the interrupt error so callers/the LLM get a clear
+        // "timed out" signal rather than a raw "INTERRUPT" string.
+        if (timer && /interrupt/i.test(msg)) {
+          throw new Error(`Query exceeded the ${Math.round(timeoutMs! / 1000)}s timeout and was cancelled.`);
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
       const cc = result.columnCount;
       const columns: string[] = [];
       const types: string[] = [];
@@ -186,9 +209,18 @@ class BenchmarkSharedDuckdb {
         if (!tableMap.has(r.table_name)) tableMap.set(r.table_name, []);
         tableMap.get(r.table_name)!.push({ name: r.column_name, type: r.data_type });
       }
+
+      // Indexes on the attached database (sqlite indexes surface through
+      // DuckDB's `duckdb_indexes()` — filtered to this catalog by `name`).
+      const indexMap = await collectDuckDbIndexes(conn, name);
+
       return Array.from(byTable.entries()).map(([schema, tables]) => ({
         schema,
-        tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
+        tables: Array.from(tables.entries()).map(([table, columns]) => ({
+          table,
+          columns,
+          indexes: indexMap.get(`${schema}.${table}`) ?? [],
+        })),
       }));
     });
   }
@@ -241,8 +273,12 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
     }
   }
 
-  async query(sql: string): Promise<QueryResult> {
-    return this.shared.query(this.name, sql);
+  async query(
+    sql: string,
+    _params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryResult> {
+    return this.shared.query(this.name, sql, timeoutMs);
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
