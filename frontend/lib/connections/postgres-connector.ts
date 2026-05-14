@@ -1,8 +1,8 @@
 import 'server-only';
-import { Pool } from 'pg';
 import type { NodeConnector, QueryResult, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+import { getOrCreatePgPool } from './pg-registry';
 
 const PG_OID_TO_TYPE: Record<number, string> = {
   16:   'boolean',
@@ -26,25 +26,10 @@ const PG_OID_TO_TYPE: Record<number, string> = {
 };
 
 export class PostgresConnector extends NodeConnectorBase {
-  private pool: Pool | null = null;
-
-  private getPool(): Pool {
-    if (!this.pool) {
-      this.pool = new Pool({
-        host: this.config.host ?? 'localhost',
-        port: Number(this.config.port ?? 5432),
-        database: this.config.database,
-        user: this.config.username,
-        password: this.config.password ?? undefined,
-        ssl: this.config.ssl ?? { rejectUnauthorized: false },
-      });
-    }
-    return this.pool;
-  }
 
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {
     try {
-      const pool = this.getPool();
+      const pool = getOrCreatePgPool(this.config);
       await pool.query('SELECT 1', []);
       if (includeSchema) {
         const schemas = await this.getSchema();
@@ -57,7 +42,7 @@ export class PostgresConnector extends NodeConnectorBase {
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
-    const pool = this.getPool();
+    const pool = getOrCreatePgPool(this.config);
 
     // Substitute :paramName → $N (positional), reusing index for repeated names
     const paramValues: unknown[] = [];
@@ -81,7 +66,7 @@ export class PostgresConnector extends NodeConnectorBase {
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    const pool = this.getPool();
+    const pool = getOrCreatePgPool(this.config);
     const result = await pool.query(`
       SELECT table_schema, table_name, column_name, data_type
       FROM information_schema.columns

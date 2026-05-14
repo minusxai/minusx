@@ -67,6 +67,7 @@ import { BigQuery } from '@google-cloud/bigquery';
 import { BigQueryConnector } from '../bigquery-connector';
 import { Pool } from 'pg';
 import { PostgresConnector } from '../postgres-connector';
+import { clearPgPoolRegistry } from '../pg-registry';
 import { CsvConnector } from '../csv-connector';
 import { SqliteConnector } from '../sqlite-connector';
 import { MongoConnector } from '../mongo-connector';
@@ -82,6 +83,7 @@ const MockPool = Pool as MockedClass<typeof Pool>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearPgPoolRegistry();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -893,6 +895,7 @@ describe('PostgresConnector.query()', () => {
       const result = await new PostgresConnector('test', POSTGRES_BASE_CONFIG).query('SELECT col');
       expect(result.types[0]).toBe(expectedType);
       vi.clearAllMocks();
+      clearPgPoolRegistry();
     }
   });
 });
