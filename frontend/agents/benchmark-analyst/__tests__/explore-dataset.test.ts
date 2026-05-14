@@ -168,6 +168,41 @@ describe('ExploreDataset', () => {
     expect(secondQuery).not.toContain('$revenue.id');
   });
 
+  it('passes contextDocs to the explore LLM system prompt', async () => {
+    const docs = '## Revenue Table\nContains daily revenue by product.';
+    const ctxWithDocs: BenchmarkAnalystContext = {
+      ...CTX,
+      contextDocs: docs,
+    };
+
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const callLLMSpy = vi.spyOn(orch, 'callLLM');
+
+    const tool = new ExploreDataset(
+      orch,
+      {
+        queries: [
+          { connection: 'orders_db', query: 'SELECT id, name, category FROM products ORDER BY id', label: 'products' },
+        ],
+        prompt: 'Summarize',
+      },
+      ctxWithDocs,
+      'test-docs',
+    );
+
+    await tool.run();
+
+    expect(callLLMSpy).toHaveBeenCalledOnce();
+    const ctx = callLLMSpy.mock.calls[0][1];
+    expect(ctx.systemPrompt).toContain(docs);
+
+    callLLMSpy.mockRestore();
+  });
+
   it('returns error when connection is not found', async () => {
     const orch = new Orchestrator(REGISTRABLES);
     const tool = new ExploreDataset(
