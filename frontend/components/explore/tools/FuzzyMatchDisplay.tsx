@@ -8,7 +8,7 @@ import { type DetailCardProps, parseToolArgs, parseToolContent } from './DetailC
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
 
-export function FuzzySearchDetailCard({ msg }: DetailCardProps) {
+export function FuzzyMatchDetailCard({ msg }: DetailCardProps) {
   const args = parseToolArgs(msg);
   const result = parseToolContent(msg);
   const searchTerm = args.search_term || '';
@@ -68,7 +68,7 @@ export function FuzzySearchDetailCard({ msg }: DetailCardProps) {
 
 // ─── Compact display ─────────────────────────────────────────────
 
-export default function FuzzySearchDisplay({ toolCallTuple, showThinking }: DisplayProps) {
+export default function FuzzyMatchDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   const [isExpanded, setIsExpanded] = useState(false);
 

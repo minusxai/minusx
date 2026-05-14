@@ -23,7 +23,7 @@ const TOOL_COLOR_MAP: Record<string, string> = {
   ReadFiles: 'accent.primary',
   SearchFiles: 'accent.warning',
   SearchDBSchema: 'accent.warning',
-  FuzzySearch: 'accent.primary',
+  FuzzyMatch: 'accent.primary',
   Navigate: 'accent.cyan',
   TalkToUser: 'fg.subtle',
   AnalystAgent: 'fg.subtle',

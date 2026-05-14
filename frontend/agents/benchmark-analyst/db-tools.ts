@@ -12,7 +12,8 @@ import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
-import { fuzzySearch } from '@/lib/connections/fuzzy-search';
+import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
+import { ExploreDataset } from './explore-dataset';
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -352,20 +353,22 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 }
 
-const FuzzySearchParams = Type.Object({
+const FuzzyMatchParams = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
   table: Type.String({ description: 'Table name to search' }),
   column: Type.String({ description: 'Text column to search in' }),
-  search_term: Type.String({ description: 'The value to fuzzy-match against' }),
+  search_term: Type.String({ description: 'Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases.' }),
   schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
   limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
+  semantic_expansion: Type.Optional(Type.Boolean({ description: 'Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only.' })),
+  return_columns: Type.Optional(Type.Array(Type.String(), { description: 'Additional columns to include in each match result for identification (e.g. ["name", "category", "product_subcategory"]). Without this, only the matched column value and similarity score are returned.' })),
 });
 
-export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnalystContext> {
-  static readonly schema: Tool<typeof FuzzySearchParams> = {
-    name: 'FuzzySearch',
-    description: 'Search for approximate/fuzzy matches of a value in a text column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user\'s wording (typos, spacing, abbreviations, etc.). Returns the closest matching distinct values with similarity scores.',
-    parameters: FuzzySearchParams,
+export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalystContext> {
+  static readonly schema: Tool<typeof FuzzyMatchParams> = {
+    name: 'FuzzyMatch',
+    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). Use 1-3 short, specific keywords. Returns similarity-based and substring matches. Use return_columns to include identifying columns (e.g. name, category, product_subcategory) in results — without it, only the matched column value and similarity are returned. When semantic_expansion is enabled (default: true), if no lexical matches are found, the tool automatically finds semantically similar terms in the column and fuzzy-matches those too.',
+    parameters: FuzzyMatchParams,
   };
 
   protected connectors = new Map<string, NodeConnector>();
@@ -374,8 +377,9 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
   async run(): Promise<ToolResponse> {
     await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
 
-    const { connection, table, column, search_term, schema: schemaName, limit } = this.parameters;
+    const { connection, table, column, search_term, schema: schemaName, limit, semantic_expansion, return_columns } = this.parameters;
     const dialect = this.dialects.get(connection) ?? 'duckdb';
+    const returnColumns = return_columns ?? [];
 
     // Validate column category
     const connector = this.connectors.get(connection);
@@ -396,7 +400,7 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
       return {
         content: [{ type: 'text', text: JSON.stringify({
           success: false,
-          error: `FuzzySearch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
+          error: `FuzzyMatch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
         }) }],
         isError: true,
       };
@@ -405,18 +409,90 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
     const queryFn = async (sql: string) => connector.query(sql);
 
     try {
-      const result = await fuzzySearch(dialect, queryFn, {
-        table, column, searchTerm: search_term, schema: schemaName, limit,
+      const result = await fuzzyMatch(dialect, queryFn, {
+        table, column, searchTerm: search_term, schema: schemaName, limit, returnColumns,
       });
+
+      // Semantic expansion: when lexical matching returns nothing on a non-categorical
+      // column, automatically find semantically similar terms and fuzzy-match those.
+      const shouldExpand = semantic_expansion !== false && result.allEmpty;
+      if (shouldExpand) {
+        const expandedTerms = await this.getSemanticTerms(connection, table, column, search_term, schemaName);
+        if (expandedTerms.length > 0) {
+          const combinedSearch = expandedTerms.join(' ');
+          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, column, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
+          return {
+            content: [{ type: 'text', text: JSON.stringify({
+              searchTerm: search_term,
+              results: result.results,
+              note: `No matches found for "${search_term}". Expanding search with semantically similar terms.`,
+              expandedTerms: expandedTerms,
+              expandedResults: expandedResult.results,
+            }) }],
+            isError: false,
+          };
+        }
+      }
+
       return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }) }],
+        content: [{ type: 'text', text: JSON.stringify({ ...result }) }],
         isError: false,
       };
     } catch (err) {
       return {
-        content: [{ type: 'text', text: JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }) }],
+        content: [{ type: 'text', text: JSON.stringify({error: err instanceof Error ? err.message : String(err) }) }],
         isError: true,
       };
     }
   }
+
+  /**
+   * Use ExploreDataset to find semantically similar terms in the column.
+   * Returns a list of individual terms (empty array on failure).
+   */
+  private async getSemanticTerms(
+    connection: string,
+    table: string,
+    column: string,
+    searchTerm: string,
+    schemaName?: string,
+  ): Promise<string[]> {
+    const q = (name: string) => `"${name.replace(/"/g, '""')}"`;
+    const qualTable = schemaName ? `${q(schemaName)}.${q(table)}` : q(table);
+
+    const explore = new ExploreDataset(
+      this.orchestrator,
+      {
+        queries: [{
+          connection,
+          query: `SELECT DISTINCT ${q(column)} AS value FROM ${qualTable} WHERE ${q(column)} IS NOT NULL LIMIT 1000`,
+          label: 'values',
+        }],
+        prompt: `The user searched for "${searchTerm}" but no lexical matches were found in column "${column}". Identify which terms from the column are semantically related to "${searchTerm}" — they may be synonyms, plural or misspelt words, or different terminology. Return ONLY the terms, one per line (each term is just 1-2 words max), no bullets, no numbering, no extra text.`,
+      },
+      this.context,
+      this.id,
+    );
+
+    try {
+      const response = await explore.run();
+      const text = response.content?.[0];
+      if (!text || text.type !== 'text') return [];
+      const raw = (() => {
+        try {
+          const parsed = JSON.parse(text.text);
+          return String(parsed.analysis ?? parsed.error ?? text.text);
+        } catch {
+          return text.text;
+        }
+      })();
+      return raw
+        .split('\n')
+        .map((line) => line.replace(/^[\s\-\*\d.)+]+/, '').trim())
+        .filter((t) => t.length > 0);
+    } catch {
+      return [];
+    }
+  }
+
 }

@@ -45,7 +45,9 @@ templates:
     **IMPORTANT**:
     - Do not reference any tables or columns not explicitly listed in this schema. If you need information about other tables, use SearchDBSchema to check if they exist and are accessible.
     - Never guess column names. You can use column names if you already have seen it, or you have to use SearchDBSchema to get exact columns for tables.
-    - When filtering on text or categorical columns, use FuzzySearch to find the actual stored values before writing WHERE clauses. Never assume the user's wording matches the data exactly — text data often has typos, inconsistent spacing, abbreviations, or casing differences. FuzzySearch returns results from multiple strategies (similarity + substring); prioritize similarity matches for typo/spelling correction, and use substring matches when similarity returns nothing or when matching short terms in longer text.
+    - Use FuzzyMatch BEFORE writing WHERE filters on text/categorical columns. Never assume the user's wording matches the data exactly. Use 1-3 short, specific keywords — NOT full phrases (e.g. "green energy" not "green energy production in northern regions"). Prioritize similarity matches (typo correction) over substring matches (containment).
+    - If FuzzyMatch returns no matches, DO NOT skip the column. Read the hint — typically sample the column with a query to discover the actual vocabulary.
+    - If FuzzyMatch returns some matches, question your recall. Examine the found matches' other columns (descriptions, metadata) to learn the domain vocabulary, then search for additional entities you may have missed.
 
   context_section: |
     ## Context
@@ -177,7 +179,7 @@ templates:
 
     ### Search
     - **SearchDBSchema(connection_id: string, query?: string)**: Search database schema for tables and columns.
-    - **FuzzySearch(connection_id: string, table: string, column: string, search_term: string, schema?: string, limit?: int)**: Fuzzy-match a value against a text or categorical column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user's wording (typos, spacing, abbreviations, casing). Returns multiple search strategies in priority order: similarity-based matches (best for typos) first, then substring matches (catches containment in longer text).
+    - **FuzzyMatch(connection_id: string, table: string, column: string, search_term: string, schema?: string, limit?: int)**: Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). This is a lexical matching tool, not a search tool — it requires you to already know approximately what the value looks like. For discovering unknown values or semantic concepts in free-text columns, use ExploreDataset instead.
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
     ### Skills (Dynamic Context)

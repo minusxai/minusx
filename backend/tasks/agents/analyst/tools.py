@@ -103,18 +103,17 @@ class SearchDBSchema(Tool):
         raise UserInputException(self._unique_id)
 
 @register_agent
-class FuzzySearch(Tool):
-    """Search for approximate/fuzzy matches of a value in a text column.
+class FuzzyMatch(Tool):
+    """Match a known term against stored values in a text or categorical column.
 
-    Use this BEFORE writing WHERE filters on text columns when the exact
-    stored value might differ from the user's wording (typos, spacing,
-    abbreviations, casing differences, etc.).
+    Use 1-3 short, specific keywords. Returns similarity-based and substring
+    matches. Use return_columns to include identifying columns (e.g. name, id)
+    in results — without it, only the matched column value and similarity are
+    returned. When semantic_expansion is enabled (default: true), if no lexical
+    matches are found, the tool automatically finds semantically similar terms
+    in the column and fuzzy-matches those too.
 
-    Returns multiple search strategies in priority order:
-    - Similarity-based (jaro_winkler, trigram, or levenshtein): best for typos and close spellings. Prioritize these matches.
-    - Substring-based: catches exact containment in longer text. Use these when similarity returns no matches, or as supplementary results.
-
-    Example: user asks about "Get Me Bodied" but column stores "GetMe Bodied".
+    Example: user says "Hello World" but column stores "HelloWooorld".
     """
 
     def __init__(
@@ -122,9 +121,11 @@ class FuzzySearch(Tool):
         connection_id: str = Field(..., description="Database connection name"),
         table: str = Field(..., description="Table name to search"),
         column: str = Field(..., description="Text column to search in"),
-        search_term: str = Field(..., description="The value to fuzzy-match against"),
+        search_term: str = Field(..., description="Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases."),
         schema: str = Field("main", description="Schema name (default: 'main')"),
         limit: int = Field(100, description="Max results to return"),
+        semantic_expansion: bool = Field(True, description="Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only."),
+        return_columns: Optional[List[str]] = Field(None, description="Additional columns to include in each match result for identification (e.g. ['name', 'id']). Without this, only the matched column value and similarity score are returned."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -134,6 +135,8 @@ class FuzzySearch(Tool):
         self.search_term = search_term
         self.schema = schema
         self.limit = limit
+        self.semantic_expansion = semantic_expansion
+        self.return_columns = return_columns
 
     async def reduce(self, child_batches):
         pass

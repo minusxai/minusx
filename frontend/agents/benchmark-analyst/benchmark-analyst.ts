@@ -6,7 +6,7 @@ import {
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, FuzzySearch } from './db-tools';
+import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, FuzzyMatch } from './db-tools';
 import { ExploreDataset } from './explore-dataset';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 
@@ -44,7 +44,7 @@ export class BenchmarkAnalystAgent<
     ListDBConnections.schema,
     BaseSearchDBSchema.schema,
     BaseExecuteQuery.schema,
-    FuzzySearch.schema,
+    FuzzyMatch.schema,
     ExploreDataset.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
@@ -61,13 +61,36 @@ Connections available to you:
 ${JSON.stringify(visibleConnections)}
 
 ## Analysis guidelines:
-  - Carefully consider the question and the data connections you have access to.
+  - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
   - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc).
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For a SQL connection, write SQL in that database's dialect. For a MongoDB connection (dialect "mongo"), write a native aggregation pipeline as a JSON string: {"collection": "<name>", "pipeline": [<stages>]} — you have full Mongo aggregation power, not SQL. Check each connection's "dialect" field above. Fix any syntax errors and try again until you get a valid response.
-  - When filtering on text or categorical columns, use FuzzySearch FIRST to find the actual stored values before writing WHERE clauses. Text data often has typos, inconsistent spacing, abbreviations, or casing differences — never assume the user's wording matches the data exactly. FuzzySearch returns results from multiple strategies (similarity + substring); prioritize similarity matches for typo/spelling correction, and use substring matches when similarity returns nothing or when matching short terms in longer text.
-  - Use ExploreDataset when you need an LLM to reason over data (entity resolution, deduplication, clustering, pattern detection) — especially that which can't be expressed in SQL. For ranking questions: query the ranking metric first (e.g. top 100 product names by revenue), then use $label.column_name to pull metadata from other tables for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format. If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
-  - Be concise, specific and accurate in responses.
+
+  ### FuzzyMatch — lexical matching (NOT search)
+  - FuzzyMatch matches a known term against stored values (typo/casing/spacing correction). It is NOT a search tool — it requires you to already know approximately what the value looks like.
+  - Use BEFORE writing WHERE filters on text/categorical columns. Never assume the user's wording matches the data exactly.
+  - Use 1-3 short, specific keywords — NOT full phrases (e.g. "green energy" not "green energy production in northern regions").
+  - Prioritize similarity matches (typo correction) over substring matches (containment).
+  - **No matches?** DO NOT skip the column. Sample the column with a query in ExploreDataset to discover the actual vocabulary.
+  - **Some matches?** Question your recall. FuzzyMatch on a name/label/description columns finds the *easy* hits. To find entities you missed:
+    1. Examine the found matches' other columns (descriptions, metadata) to learn the domain vocabulary.
+    2. Use that vocabulary to search other columns, or use ExploreDataset to semantically classify the full column.
+    Example: searching "solar" in a "name" column finds "SolarMax", "SunPower Solar". But "GreenWatt Inc" is also a solar company — discoverable only by examining its "description" ("photovoltaic panels", "renewable energy"). A name-only search misses it.
+
+  ## ExploreDataset — semantic reasoning over data
+  - Use when you need an LLM to reason over data: entity resolution, deduplication, clustering, pattern detection, or semantic classification that SQL/FuzzyMatch cannot express.
+  - Use when filtering on a SEMANTIC concept (e.g. "funny team names", "eco-friendly options") and the column is free-text — FuzzyMatch/LIKE are lexical and will miss synonyms. Cast a wide net (broad OR query or pull all rows if small), then use ExploreDataset with a precise classification prompt.
+  - For ranking questions: query the ranking metric first (e.g. top 100 by revenue), then use $label.column_name to pull metadata for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format.
+  - If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
+
+  ## Search Tool Selection — TL;DR
+  | Need | Tool |
+  |---|---|
+  | Explore tables, columns, types | SearchDBSchema |
+  | Known term, possibly stored differently (typos, casing, spacing) | FuzzyMatch |
+  | Semantic concept in free-text (e.g. "eco-friendly", "funny names") | ExploreDataset |
+  | Found some hits but unsure if complete | FuzzyMatch → examine results → ExploreDataset |
+  | Entity resolution, dedup, clustering | ExploreDataset |
 
 ## Response Format [EXTREMELY IMPORTANT]:
 - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.

@@ -20,7 +20,7 @@ import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { getNodeConnector } from '@/lib/connections';
-import { fuzzySearch } from '@/lib/connections/fuzzy-search';
+import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
 
 // ============================================================================
 // Tool Implementations
@@ -70,10 +70,10 @@ registerTool('SearchDBSchema', async (args, user) => {
 });
 
 /**
- * FuzzySearch - Fuzzy match a search term against distinct values in a text column
+ * FuzzyMatch - Fuzzy match a search term against distinct values in a text column
  */
-registerTool('FuzzySearch', async (args, user) => {
-  const { connection_id, table, column, search_term, schema: schemaName, limit } = args;
+registerTool('FuzzyMatch', async (args, user) => {
+  const { connection_id, table, column, search_term, schema: schemaName, limit, return_columns } = args;
 
   if (!connection_id || !table || !column || !search_term) {
     throw new Error('connection_id, table, column, and search_term are required');
@@ -85,7 +85,7 @@ registerTool('FuzzySearch', async (args, user) => {
   const loadedConnection = await connectionLoader(connectionFile.data, user);
   const content = loadedConnection.content as ConnectionContent;
 
-  // Validate column category — FuzzySearch only works on text/categorical columns
+  // Validate column category — FuzzyMatch only works on text/categorical columns
   const schemaData = (content.schema?.schemas ?? []) as any[];
   const targetSchema = schemaData.find((s) => schemaName ? s.schema === schemaName : true);
   const targetTable = targetSchema?.tables?.find((t: any) => t.table === table);
@@ -95,7 +95,7 @@ registerTool('FuzzySearch', async (args, user) => {
   if (category && category !== 'text' && category !== 'categorical') {
     return {
       success: false,
-      error: `FuzzySearch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
+      error: `FuzzyMatch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
     };
   }
 
@@ -105,12 +105,13 @@ registerTool('FuzzySearch', async (args, user) => {
   }
 
   const queryFn = (sql: string) => connector.query(sql);
-  const result = await fuzzySearch(content.type, queryFn, {
+  const result = await fuzzyMatch(content.type, queryFn, {
     table,
     column,
     searchTerm: search_term,
     schema: schemaName,
     limit,
+    returnColumns: return_columns ?? [],
   });
 
   return { success: true, ...result };

@@ -8,7 +8,7 @@ import {
   BaseExecuteQuery,
   BaseSearchDBSchema,
   ListDBConnections,
-  FuzzySearch,
+  FuzzyMatch,
 } from '../db-tools';
 import { ExploreDataset, setExploreModel, interpolateMongoRefs } from '../explore-dataset';
 import type { BenchmarkAnalystContext } from '../types';
@@ -37,7 +37,7 @@ const REGISTRABLES = [
   BaseSearchDBSchema,
   BaseExecuteQuery,
   BenchmarkAnalystAgent,
-  FuzzySearch,
+  FuzzyMatch,
   ExploreDataset,
 ];
 
