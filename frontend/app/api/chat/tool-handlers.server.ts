@@ -87,7 +87,7 @@ registerTool('FuzzySearch', async (args, user) => {
 
   // Validate column category — FuzzySearch only works on text/categorical columns
   const schemaData = (content.schema?.schemas ?? []) as any[];
-  const targetSchema = schemaData.find((s) => s.schema === (schemaName ?? 'main'));
+  const targetSchema = schemaData.find((s) => schemaName ? s.schema === schemaName : true);
   const targetTable = targetSchema?.tables?.find((t: any) => t.table === table);
   const targetColumn = targetTable?.columns?.find((c: any) => c.name === column);
   const category = targetColumn?.meta?.category as string | undefined;

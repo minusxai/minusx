@@ -197,11 +197,12 @@ describe('fuzzySearch — PostgreSQL', () => {
     expect(result.results[0].query).not.toContain('similarity(');
   });
 
-  it('uses "main" as default schema', async () => {
+  it('omits schema prefix when schema not provided', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('postgresql', queryFn, { table: 'users', column: 'name', searchTerm: 'alice' });
     const sql = getCapturedSql(queryFn);
-    expect(sql).toContain('"main"."users"');
+    expect(sql).not.toContain('"main".');
+    expect(sql).toContain('"users"');
   });
 });
 
@@ -582,10 +583,12 @@ describe('fuzzySearch — substring-only connectors (BigQuery, default)', () => 
 // ─── Defaults ────────────────────────────────────────────────────────────────
 
 describe('fuzzySearch — defaults', () => {
-  it('defaults schema to "main"', async () => {
+  it('omits schema prefix when schema not provided', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, { table: 'tracks', column: 'title', searchTerm: 'test' });
-    expect(getCapturedSql(queryFn)).toContain('"main"."tracks"');
+    const sql = getCapturedSql(queryFn);
+    expect(sql).not.toContain('"main".');
+    expect(sql).toContain('"tracks"');
   });
 
   it('defaults limit to 100', async () => {
