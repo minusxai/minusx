@@ -419,6 +419,15 @@ describe('fuzzySearch — DuckDB dual-strategy scenarios', () => {
     expect(substrSql).toContain("'%python%'");
     expect(substrSql).not.toContain(' OR ');
   });
+
+  it('substring ranks by term/value length ratio and orders DESC', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'Shell' });
+    const substrSql = getCapturedSql(queryFn, 1);
+    // "Shell" is 5 chars → similarity = 5.0 / (CASE WHENcol), 1)
+    expect(substrSql).toContain('5.0 / (CASE WHEN');
+    expect(substrSql).toContain('ORDER BY similarity DESC');
+  });
 });
 
 describe('fuzzySearch — PostgreSQL dual-strategy scenarios', () => {
@@ -556,6 +565,17 @@ describe('fuzzySearch — substring-only connectors (BigQuery, default)', () => 
     const result = await fuzzySearch('some_db', queryFn, { table: 't', column: 'c', searchTerm: 'notfound' });
     expect(result.results).toHaveLength(1);
     expect(result.results[0].matches).toHaveLength(0);
+  });
+
+  it('default connector: substring SQL scores by term/value length ratio', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    // "hello" is 5 chars
+    const result = await fuzzySearch('some_db', queryFn, { table: 't', column: 'c', searchTerm: 'hello' });
+    const sql = result.results[0].query;
+    expect(sql).toContain('5.0 / (CASE WHEN');
+    expect(sql).toContain('ORDER BY similarity DESC');
+    // Should NOT have the old hardcoded 1.0
+    expect(sql).not.toContain('1.0 AS similarity');
   });
 });
 

@@ -140,12 +140,15 @@ async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, 
     conditions.push(`LOWER(${q(p.column)}) LIKE ${wordPattern}`);
   }
 
+  const termLen = term.length;
+  const lenExpr = `LENGTH(${q(p.column)})`;
   const sql = `
-    SELECT DISTINCT ${q(p.column)} AS value, 1.0 AS similarity
+    SELECT DISTINCT ${q(p.column)} AS value,
+           ${termLen}.0 / (CASE WHEN ${lenExpr} > 0 THEN ${lenExpr} ELSE 1 END) AS similarity
     FROM ${q(p.schema)}.${q(p.table)}
     WHERE ${q(p.column)} IS NOT NULL
       AND (${conditions.join(' OR ')})
-    ORDER BY ${q(p.column)}
+    ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
