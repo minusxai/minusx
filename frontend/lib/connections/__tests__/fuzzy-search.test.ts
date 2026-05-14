@@ -280,26 +280,78 @@ describe('fuzzySearch — Athena', () => {
   });
 });
 
-// ─── MongoDB / Unknown (default fallback) ────────────────────────────────────
+// ─── MongoDB (native aggregation) ────────────────────────────────────────────
 
-describe('fuzzySearch — default/unknown connector', () => {
-  it('uses substring matching for mongo', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+describe('fuzzySearch — MongoDB (native aggregation)', () => {
+  // Mongo fuzzy search runs a native aggregation pipeline, not SQL. The
+  // `queryFn` receives a JSON `{collection,pipeline}` string (the same
+  // string MongoConnector.query() expects).
+
+  it('builds a native {collection,pipeline} JSON query, not SQL', async () => {
+    const queryFn = vi.fn<(q: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('mongo', queryFn, DEFAULT_PARAMS);
+    const sent = JSON.parse(getCapturedSql(queryFn));
+    expect(sent.collection).toBe('tracks');
+    expect(Array.isArray(sent.pipeline)).toBe(true);
+  });
+
+  it('uses a case-insensitive $regex $match on the target column', async () => {
+    const queryFn = vi.fn<(q: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('mongo', queryFn, DEFAULT_PARAMS);
+    const { pipeline } = JSON.parse(getCapturedSql(queryFn));
+    expect(pipeline[0]).toEqual({
+      $match: { title: { $regex: 'Strawberry Jam', $options: 'i' } },
+    });
+  });
+
+  it('regex-escapes special characters in the search term', async () => {
+    const queryFn = vi.fn<(q: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('mongo', queryFn, { table: 't', column: 'c', searchTerm: 'a.b*c(d)' });
+    const { pipeline } = JSON.parse(getCapturedSql(queryFn));
+    expect(pipeline[0].$match.c.$regex).toBe('a\\.b\\*c\\(d\\)');
+  });
+
+  it('groups for distinct values, limits, and projects to {value, similarity}', async () => {
+    const queryFn = vi.fn<(q: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('mongo', queryFn, { ...DEFAULT_PARAMS, limit: 25 });
+    const { pipeline } = JSON.parse(getCapturedSql(queryFn));
+    expect(pipeline).toContainEqual({ $group: { _id: '$title' } });
+    expect(pipeline).toContainEqual({ $limit: 25 });
+    expect(pipeline[pipeline.length - 1]).toEqual({
+      $project: { _id: 0, value: '$_id', similarity: { $literal: 1 } },
+    });
+  });
+
+  it('maps result rows to matches (method: substring, binary $regex match)', async () => {
+    const queryFn = vi.fn<(q: string) => Promise<QueryResult>>().mockResolvedValue(qr([
+      { value: 'Strawberry Jam', similarity: 1 },
+      { value: 'Strawberry Jam Deluxe', similarity: 1 },
+    ]));
     const result = await fuzzySearch('mongo', queryFn, DEFAULT_PARAMS);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].method).toBe('substring');
+    expect(result.results[0].matches).toEqual([
+      { value: 'Strawberry Jam', similarity: 1 },
+      { value: 'Strawberry Jam Deluxe', similarity: 1 },
+    ]);
+    expect(result.searchTerm).toBe('Strawberry Jam');
+  });
+});
+
+// ─── Unknown connector (SQL substring fallback) ──────────────────────────────
+
+describe('fuzzySearch — unknown connector', () => {
+  it('uses substring matching for unknown connector types', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    const result = await fuzzySearch('some_future_db', queryFn, DEFAULT_PARAMS);
     expect(result.results).toHaveLength(1);
     expect(result.results[0].method).toBe('substring');
     expect(result.results[0].query).toContain('LIKE');
   });
 
-  it('uses substring matching for unknown connector types', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    const result = await fuzzySearch('some_future_db', queryFn, DEFAULT_PARAMS);
-    expect(result.results[0].method).toBe('substring');
-  });
-
   it('splits search term into words for flexible matching', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    await fuzzySearch('mongo', queryFn, DEFAULT_PARAMS);
+    await fuzzySearch('some_db', queryFn, DEFAULT_PARAMS);
     const sql = getCapturedSql(queryFn);
     // "Strawberry Jam" → should produce '%strawberry%jam%' pattern
     expect(sql).toContain('%strawberry%jam%');
@@ -307,11 +359,9 @@ describe('fuzzySearch — default/unknown connector', () => {
 
   it('does not add word-split pattern for single-word search', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    await fuzzySearch('mongo', queryFn, { table: 't', column: 'c', searchTerm: 'hello' });
+    await fuzzySearch('some_db', queryFn, { table: 't', column: 'c', searchTerm: 'hello' });
     const sql = getCapturedSql(queryFn);
-    // Single word → only one LIKE pattern, no OR for word-split
     expect(sql).toContain("'%hello%'");
-    // Should not have a second LIKE with word-split (no words to split)
     const likeCount = (sql.match(/LIKE/g) || []).length;
     expect(likeCount).toBe(1);
   });

@@ -52,11 +52,11 @@ export interface QueryResult {
   columns: string[];
   types: string[];
   rows: Record<string, unknown>[];
-  /** The SQL the engine effectively saw, with `:name` placeholders replaced
-   *  by their inlined literal values via `lib/sql/inline-params.ts`. Useful
-   *  for display, logging, and surfacing to LLMs. For dialects that take SQL
-   *  without parameter substitution (e.g. Mongo via queryleaf) this is
-   *  simply the input SQL. */
+  /** The query the engine effectively ran. For SQL connectors: the SQL with
+   *  `:name` placeholders replaced by their inlined literal values via
+   *  `lib/sql/inline-params.ts`. For MongoDB: the JSON `{collection, pipeline}`
+   *  actually executed (with the row-cap `$limit` applied). Useful for
+   *  display, logging, and surfacing to LLMs. */
   finalQuery: string;
 }
 
@@ -139,14 +139,19 @@ export abstract class NodeConnector {
   abstract testConnection(includeSchema?: boolean): Promise<TestConnectionResult>;
 
   /**
-   * Execute a SQL query and return results.
+   * Execute a query and return results.
    *
+   * `query` is a dialect-specific query string: SQL for relational
+   * connectors; for MongoDB, a JSON string `{collection, pipeline}` (a
+   * native aggregation pipeline).
+   *
+   * `params` is `:name` substitution for SQL connectors (ignored by Mongo).
    * `timeoutMs` is a best-effort cancellation hint: connectors that can
-   * interrupt an in-flight query (DuckDB, SQLite-via-DuckDB, Postgres)
-   * honour it and reject when exceeded; others currently ignore it.
+   * interrupt / time-bound an in-flight query (DuckDB, SQLite-via-DuckDB,
+   * Postgres, Mongo via `maxTimeMS`) honour it; others currently ignore it.
    */
   abstract query(
-    sql: string,
+    query: string,
     params?: Record<string, string | number>,
     timeoutMs?: number,
   ): Promise<QueryResult>;

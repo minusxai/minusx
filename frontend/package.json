@@ -35,7 +35,6 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@monaco-editor/react": "^4.7.0",
     "@polyglot-sql/sdk": "^0.3.2",
-    "@queryleaf/lib": "^0.2.3",
     "@reduxjs/toolkit": "^2.11.0",
     "@resvg/resvg-js": "^2.6.2",
     "@tanstack/react-table": "^8.21.3",

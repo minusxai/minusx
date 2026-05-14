@@ -169,6 +169,35 @@ async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: Q
   return { matches: rowsToMatches(result.rows), method: 'substring', query: sql.trim() };
 }
 
+/** Escape a string for literal use inside a MongoDB `$regex`. */
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 200);
+}
+
+/**
+ * MongoDB fuzzy search — native aggregation, no SQL. The `queryFn` here runs
+ * a JSON `{collection,pipeline}` string (the same shape `MongoConnector.query`
+ * expects). Mongo's `$regex` is a binary (case-insensitive) substring/pattern
+ * match with no graded similarity, so every hit scores 1 and the method is
+ * reported as `'substring'` — consistent with the other substring-only
+ * connectors. `p.schema` is irrelevant for Mongo (single-database connector);
+ * `p.table` is the collection name.
+ */
+async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
+  const pipeline = [
+    { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
+    { $group: { _id: `$${p.column}` } },
+    { $limit: p.limit },
+    { $project: { _id: 0, value: '$_id', similarity: { $literal: 1 } } },
+  ];
+  const query = JSON.stringify({ collection: p.table, pipeline });
+  const result = await queryFn(query);
+  return {
+    results: [{ matches: rowsToMatches(result.rows), method: 'substring', query }],
+    searchTerm: p.searchTerm,
+  };
+}
+
 async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
   const term = escapeLiteral(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
@@ -214,8 +243,10 @@ export async function fuzzySearch(
       return fuzzyBigQuery(queryFn, p);
     case 'athena':
       return fuzzyAthena(queryFn, p);
+    case 'mongo':
+      return fuzzyMongo(queryFn, p);
     default: {
-      // MongoDB and unknown connectors — use basic substring matching
+      // Unknown connectors — fall back to a basic SQL substring match.
       const substringEntry = await fuzzySubstring(queryFn, p);
       return { results: [substringEntry], searchTerm: p.searchTerm };
     }

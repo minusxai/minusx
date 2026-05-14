@@ -7,6 +7,7 @@ import {
   buildMongoUri,
   inferSqlType,
   documentsToQueryResultColumns,
+  enforceMongoLimit,
 } from '@/lib/connections/mongo-connector';
 
 describe('buildMongoUri', () => {
@@ -55,9 +56,9 @@ describe('inferSqlType', () => {
 });
 
 describe('documentsToQueryResultColumns', () => {
-  // QueryLeaf returns BSON documents (each may have arbitrary keys). We
-  // flatten to {columns, types, rows} by taking the union of keys across
-  // all rows and inferring types from the first non-null value seen.
+  // A native aggregation pipeline returns BSON documents (each may have
+  // arbitrary keys). We flatten to {columns, types, rows} by taking the union
+  // of keys across all rows and inferring types from the first non-null value.
 
   it('returns empty columns/types when no rows', () => {
     expect(documentsToQueryResultColumns([])).toEqual({ columns: [], types: [] });
@@ -80,5 +81,51 @@ describe('documentsToQueryResultColumns', () => {
     const docs = [{ a: null }, { a: null }];
     const { columns, types } = documentsToQueryResultColumns(docs);
     expect(types[columns.indexOf('a')]).toBe('UNKNOWN');
+  });
+});
+
+describe('enforceMongoLimit', () => {
+  // Mirrors the SQL `enforceQueryLimit` behaviour for aggregation pipelines:
+  // default cap of 1000 rows, hard ceiling of 10000, applied at the END of
+  // the pipeline. A terminal `$limit` is the row cap; an early `$limit` is a
+  // deliberate sub-step and is left untouched.
+
+  it('appends {$limit: 1000} to an empty pipeline', () => {
+    expect(enforceMongoLimit([])).toEqual([{ $limit: 1000 }]);
+  });
+
+  it('appends {$limit: 1000} when the pipeline has no terminal $limit', () => {
+    const pipe = [{ $match: { country: 'DE' } }];
+    expect(enforceMongoLimit(pipe)).toEqual([
+      { $match: { country: 'DE' } },
+      { $limit: 1000 },
+    ]);
+  });
+
+  it('clamps a terminal $limit above the 10000 ceiling', () => {
+    expect(enforceMongoLimit([{ $match: {} }, { $limit: 50000 }])).toEqual([
+      { $match: {} },
+      { $limit: 10000 },
+    ]);
+  });
+
+  it('leaves a terminal $limit at or below the ceiling unchanged', () => {
+    expect(enforceMongoLimit([{ $limit: 500 }])).toEqual([{ $limit: 500 }]);
+    expect(enforceMongoLimit([{ $limit: 10000 }])).toEqual([{ $limit: 10000 }]);
+  });
+
+  it('leaves an early (non-terminal) $limit untouched and still appends the default', () => {
+    const pipe = [{ $limit: 5 }, { $match: { x: 1 } }];
+    expect(enforceMongoLimit(pipe)).toEqual([
+      { $limit: 5 },
+      { $match: { x: 1 } },
+      { $limit: 1000 },
+    ]);
+  });
+
+  it('does not mutate the input pipeline', () => {
+    const pipe = [{ $match: {} }];
+    enforceMongoLimit(pipe);
+    expect(pipe).toEqual([{ $match: {} }]);
   });
 });

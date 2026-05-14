@@ -28,24 +28,32 @@ vi.mock('@duckdb/node-api', () => ({
   DuckDBConnection: vi.fn(),
 }));
 
+// Mutable mongodb-mock state. `mock`-prefixed so vitest's vi.mock hoisting
+// permits the factory closure to reference them. Tests set these per-case;
+// `mockMongoAggregate(collection, pipeline)` lets a test return different
+// docs per collection (needed for the multi-collection getSchema tests).
+let mockMongoCollections: Array<{ name: string }> = [];
+let mockMongoAggregate: (collection: string, pipeline: unknown) => Record<string, unknown>[] = () => [];
+const mockMongoAggregateCalls: Array<{ collection: string; pipeline: unknown; options: unknown }> = [];
+
 vi.mock('mongodb', () => ({
   MongoClient: vi.fn().mockImplementation(function (this: any) {
     // `connect` resolves to the client itself — matches the real driver
-    // and keeps `getSharedMongoClient`'s `client.connect()` chain
-    // intact when other code awaits its result.
+    // and keeps `getSharedMongoClient`'s `client.connect()` chain intact.
     this.connect = vi.fn().mockImplementation(async () => this);
     this.close  = vi.fn().mockResolvedValue(undefined);
     this.db     = vi.fn().mockReturnValue({
       command: vi.fn().mockResolvedValue({ ok: 1 }),
-      listCollections: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+      listCollections: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockImplementation(async () => mockMongoCollections),
+      }),
+      collection: vi.fn().mockImplementation((name: string) => ({
+        aggregate: vi.fn().mockImplementation((pipeline: unknown, options: unknown) => {
+          mockMongoAggregateCalls.push({ collection: name, pipeline, options });
+          return { toArray: vi.fn().mockImplementation(async () => mockMongoAggregate(name, pipeline)) };
+        }),
+      })),
     });
-  }),
-}));
-
-const mockQueryLeafExecute = vi.fn();
-vi.mock('@queryleaf/lib', () => ({
-  QueryLeaf: vi.fn().mockImplementation(function (this: any) {
-    this.execute = mockQueryLeafExecute;
   }),
 }));
 
@@ -1091,80 +1099,96 @@ describe('getNodeConnector() factory', () => {
 
 const MONGO_BASE_CONFIG = { host: 'localhost', port: 27017, database: 'testdb' };
 
-describe('MongoConnector.query() — SQL → queryleaf rewrite', () => {
-  // The connector rewrites `IS [NOT] NULL` to `[!]= NULL` before passing
-  // SQL to queryleaf, because queryleaf's parser throws
-  // "Unsupported operator: IS NOT" / "IS" on the standard SQL form even
-  // though it accepts the non-standard `!= NULL` / `= NULL`. These tests
-  // assert that whatever the LLM emits, queryleaf only ever sees the
-  // queryleaf-compatible form.
+describe('MongoConnector.query() — native aggregation pipeline', () => {
+  // The `query` string is JSON `{collection, pipeline}`. The connector
+  // parses it, applies `enforceMongoLimit`, and runs the pipeline natively
+  // via `collection.aggregate()`.
 
   beforeEach(() => {
-    mockQueryLeafExecute.mockReset();
-    mockQueryLeafExecute.mockResolvedValue([]);
+    mockMongoAggregate = () => [];
+    mockMongoAggregateCalls.length = 0;
   });
 
-  it('rewrites `IS NOT NULL` → `!= NULL` before calling queryleaf.execute', async () => {
+  it('runs the parsed pipeline via collection.aggregate and projects rows to {columns,types}', async () => {
+    mockMongoAggregate = () => [{ name: 'Acme', stars: 5 }, { name: 'Globex', stars: 3 }];
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    await conn.query("SELECT name FROM business WHERE attributes.WiFi IS NOT NULL");
-    expect(mockQueryLeafExecute).toHaveBeenCalledTimes(1);
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
-      "SELECT name FROM business WHERE attributes.WiFi != NULL",
-    );
+    const q = JSON.stringify({ collection: 'business', pipeline: [{ $match: { open: true } }] });
+    const result = await conn.query(q);
+
+    expect(mockMongoAggregateCalls).toHaveLength(1);
+    expect(mockMongoAggregateCalls[0].collection).toBe('business');
+    // enforceMongoLimit appends {$limit:1000} since the pipeline has none
+    expect(mockMongoAggregateCalls[0].pipeline).toEqual([{ $match: { open: true } }, { $limit: 1000 }]);
+    expect(result.columns.sort()).toEqual(['name', 'stars']);
+    expect(result.rows).toEqual([{ name: 'Acme', stars: 5 }, { name: 'Globex', stars: 3 }]);
   });
 
-  it('rewrites `IS NULL` → `= NULL` before calling queryleaf.execute', async () => {
+  it('passes timeoutMs through as maxTimeMS', async () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    await conn.query("SELECT name FROM business WHERE attributes.WiFi IS NULL");
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
-      "SELECT name FROM business WHERE attributes.WiFi = NULL",
-    );
+    await conn.query(JSON.stringify({ collection: 'c', pipeline: [] }), undefined, 5000);
+    expect(mockMongoAggregateCalls[0].options).toEqual({ maxTimeMS: 5000 });
   });
 
-  it('is case-insensitive and handles multi-line / multi-whitespace forms', async () => {
+  it('omits maxTimeMS when no timeout is given', async () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    await conn.query("SELECT a FROM t WHERE\n  x is\n  not\n  null\n  AND y Is Null");
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
-      "SELECT a FROM t WHERE\n  x != NULL\n  AND y = NULL",
-    );
+    await conn.query(JSON.stringify({ collection: 'c', pipeline: [] }));
+    expect(mockMongoAggregateCalls[0].options).toEqual({});
   });
 
-  it('does NOT match inside identifiers like `IS_NOT_NULL` (word boundary)', async () => {
+  it('finalQuery reflects the collection + limit-enforced pipeline', async () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    const sql = "SELECT IS_NOT_NULL_FLAG FROM t";
-    await conn.query(sql);
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(sql);
+    const result = await conn.query(JSON.stringify({ collection: 'c', pipeline: [{ $count: 'n' }] }));
+    expect(JSON.parse(result.finalQuery!)).toEqual({
+      collection: 'c',
+      pipeline: [{ $count: 'n' }, { $limit: 1000 }],
+    });
   });
 
-  it('passes through SQL with no null-checks unchanged', async () => {
+  it('throws a helpful error on invalid JSON', async () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    const sql = "SELECT name FROM business WHERE attributes.WiFi != null LIMIT 3";
-    await conn.query(sql);
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(sql);
+    await expect(conn.query('not json')).rejects.toThrow(/JSON parse failed/i);
   });
 
-  it('finalQuery in QueryResult reflects the rewritten SQL (what queryleaf actually saw)', async () => {
+  it('throws when "collection" is missing', async () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    const result = await conn.query("SELECT a FROM t WHERE x IS NOT NULL");
-    expect(result.finalQuery).toBe("SELECT a FROM t WHERE x != NULL");
+    await expect(conn.query(JSON.stringify({ pipeline: [] }))).rejects.toThrow(/"collection"/);
   });
 
-  it('rewrites `REGEXP` → `~` (queryleaf accepts Postgres-style regex but not MySQL `REGEXP`)', async () => {
+  it('throws when "pipeline" is not an array', async () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    await conn.query("SELECT business_id FROM business WHERE description REGEXP 'Shopping'");
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
-      "SELECT business_id FROM business WHERE description ~ 'Shopping'",
-    );
+    await expect(
+      conn.query(JSON.stringify({ collection: 'c', pipeline: 'nope' })),
+    ).rejects.toThrow(/"pipeline"/);
+  });
+});
+
+describe('MongoConnector.getSchema() — N-doc sampling, union of fields', () => {
+  beforeEach(() => {
+    mockMongoCollections = [];
+    mockMongoAggregate = () => [];
+    mockMongoAggregateCalls.length = 0;
   });
 
-  it('REGEXP rewrite is case-insensitive and word-boundaried', async () => {
+  it('samples up to 100 docs per collection and unions their field sets (excluding _id)', async () => {
+    mockMongoCollections = [{ name: 'users' }];
+    // Disjoint key sets across sampled docs — the union must surface them all,
+    // which one-doc sampling would miss.
+    mockMongoAggregate = () => [
+      { _id: 1, name: 'a' },
+      { _id: 2, email: 'b@x' },
+      { _id: 3, age: 30 },
+    ];
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-    // Lowercase `regexp` is also rewritten; the keyword `REGEXP_REPLACE`
-    // (an identifier, not the operator) is left alone by `\b`.
-    await conn.query("SELECT REGEXP_REPLACE(name,'a','b'), x FROM t WHERE y regexp 'p'");
-    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
-      "SELECT REGEXP_REPLACE(name,'a','b'), x FROM t WHERE y ~ 'p'",
-    );
+    const schema = await conn.getSchema();
+    const users = schema[0].tables.find((t) => t.table === 'users')!;
+    expect(users.columns.map((c) => c.name).sort()).toEqual(['age', 'email', 'name']);
+  });
+
+  it('samples via a $sample stage of size 100', async () => {
+    mockMongoCollections = [{ name: 'c' }];
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    await conn.getSchema();
+    expect(mockMongoAggregateCalls[0].pipeline).toEqual([{ $sample: { size: 100 } }]);
   });
 });
 
@@ -1181,22 +1205,19 @@ describe('MongoConnector client lifecycle — process-wide pooling', () => {
   // than "absolute call count" — robust to other tests priming the
   // cache for known URIs.
 
-  beforeEach(() => {
-    mockQueryLeafExecute.mockReset();
-    mockQueryLeafExecute.mockResolvedValue([]);
-  });
+  const PING_QUERY = JSON.stringify({ collection: 't', pipeline: [] });
 
   it('reuses one MongoClient across many MongoConnectors for the same URI', async () => {
     // Prime the cache once so the next 10 calls definitely hit it
     // regardless of what tests ran before this one.
-    await new MongoConnector('prime', MONGO_BASE_CONFIG).query('SELECT 1 FROM t');
+    await new MongoConnector('prime', MONGO_BASE_CONFIG).query(PING_QUERY);
     const callsBefore = MockMongoClient.mock.calls.length;
 
     // 10 fresh connectors with identical config — mimics 10 sequential
     // ExecuteQuery calls in the benchmark path.
     for (let i = 0; i < 10; i++) {
       const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
-      await conn.query('SELECT 1 FROM t');
+      await conn.query(PING_QUERY);
     }
 
     // Zero NEW MongoClient constructions — every one reuses the cached
@@ -1209,8 +1230,8 @@ describe('MongoConnector client lifecycle — process-wide pooling', () => {
 
     // Hostnames not yet seen by any earlier test, so each one is a
     // fresh cache miss.
-    await new MongoConnector('a', { host: 'lifecycle-host-aaa', port: 27017, database: 'db' }).query('SELECT 1 FROM t');
-    await new MongoConnector('b', { host: 'lifecycle-host-bbb', port: 27017, database: 'db' }).query('SELECT 1 FROM t');
+    await new MongoConnector('a', { host: 'lifecycle-host-aaa', port: 27017, database: 'db' }).query(PING_QUERY);
+    await new MongoConnector('b', { host: 'lifecycle-host-bbb', port: 27017, database: 'db' }).query(PING_QUERY);
 
     expect(MockMongoClient.mock.calls.length - callsBefore).toBe(2);
   });

@@ -1,15 +1,19 @@
 import 'server-only';
 import { MongoClient } from 'mongodb';
-import { QueryLeaf } from '@queryleaf/lib';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
+import { DEFAULT_LIMIT, MAX_LIMIT } from '@/lib/sql/limit-enforcer';
 
 /**
  * Node.js MongoDB connector.
  *
- * Translates SQL → MongoDB queries via @queryleaf/lib so the agent's
- * `ExecuteSQL` tool can target Mongo just like it does Postgres / DuckDB
- * / SQLite. Schema inference samples one document per collection (Mongo
- * is schemaless) and uses field types from that sample.
+ * Executes **native MongoDB aggregation pipelines** — the `query` string is
+ * JSON of the form `{"collection": "...", "pipeline": [...stages]}`, run
+ * directly via `db.collection(c).aggregate(pipeline)`. The aggregation
+ * framework is the universal Mongo read interface (`find`, `count`,
+ * `distinct`, `$lookup` joins are all expressible as pipeline stages).
+ *
+ * Schema inference samples up to 100 documents per collection (Mongo is
+ * schemaless) and unions the field sets seen.
  *
  * Config: { host: string; port: number; database: string;
  *           username?: string; password?: string }
@@ -49,7 +53,7 @@ export function inferSqlType(v: unknown): string {
 }
 
 /**
- * Project a list of BSON documents (QueryLeaf's execute() result) onto a
+ * Project a list of BSON documents (an aggregation result) onto a
  * SQL-style {columns, types} pair. Columns are the union of keys across
  * all rows; type per column is inferred from the first non-null value.
  */
@@ -68,6 +72,30 @@ export function documentsToQueryResultColumns(
     return 'UNKNOWN';
   });
   return { columns, types };
+}
+
+/**
+ * Cap an aggregation pipeline's result size, mirroring the SQL
+ * `enforceQueryLimit` contract (default 1000 rows, hard ceiling 10000).
+ * Applied at the END of the pipeline:
+ *  - a terminal `$limit` is the row cap — clamped to `maxLimit`, otherwise
+ *    left as-is (a deliberately small terminal limit is honoured);
+ *  - any other final stage → a `{$limit: defaultLimit}` is appended;
+ *  - an early (non-terminal) `$limit` is a deliberate sub-step — untouched.
+ * Pure — returns a new array, never mutates the input.
+ */
+export function enforceMongoLimit(
+  pipeline: ReadonlyArray<Record<string, unknown>>,
+  defaultLimit: number = DEFAULT_LIMIT,
+  maxLimit: number = MAX_LIMIT,
+): Record<string, unknown>[] {
+  const last = pipeline[pipeline.length - 1];
+  if (last && typeof last.$limit === 'number') {
+    return last.$limit > maxLimit
+      ? [...pipeline.slice(0, -1), { $limit: maxLimit }]
+      : [...pipeline];
+  }
+  return [...pipeline, { $limit: defaultLimit }];
 }
 
 export class MongoConnector extends NodeConnector {
@@ -99,17 +127,58 @@ export class MongoConnector extends NodeConnector {
     }
   }
 
-  async query(sql: string): Promise<QueryResult> {
+  /**
+   * Execute a native MongoDB aggregation pipeline.
+   *
+   * `query` is a JSON string `{"collection": "...", "pipeline": [...stages]}`.
+   * `params` is unused (Mongo has no `:name` substitution). `timeoutMs`, when
+   * set, is passed through as the aggregation's `maxTimeMS`.
+   */
+  async query(
+    query: string,
+    _params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryResult> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(query);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `MongoDB query must be a JSON string of the form {"collection": "...", "pipeline": [...]}. JSON parse failed: ${msg}`,
+      );
+    }
+    const { collection, pipeline } = (parsed ?? {}) as {
+      collection?: unknown;
+      pipeline?: unknown;
+    };
+    if (typeof collection !== 'string' || collection.length === 0) {
+      throw new Error('MongoDB query JSON must have a non-empty string "collection" field.');
+    }
+    if (!Array.isArray(pipeline)) {
+      throw new Error(
+        'MongoDB query JSON must have an array "pipeline" field (a list of aggregation stages).',
+      );
+    }
+
+    const cappedPipeline = enforceMongoLimit(pipeline as Record<string, unknown>[]);
     const client = await this.getClient();
-    const queryLeaf = new QueryLeaf(client, this.database);
-    const rewrittenSql = rewriteForQueryleaf(sql);
-    const result = await queryLeaf.execute(rewrittenSql);
-    const rows = (Array.isArray(result) ? result : []) as Record<string, unknown>[];
+    const options = timeoutMs && timeoutMs > 0 ? { maxTimeMS: timeoutMs } : {};
+    const rows = (await client
+      .db(this.database)
+      .collection(collection)
+      .aggregate(cappedPipeline, options)
+      .toArray()) as Record<string, unknown>[];
+
     const { columns, types } = documentsToQueryResultColumns(rows);
-    // Mongo connector doesn't accept `:name` params — queryleaf takes SQL
-    // as-is — so `finalQuery` reflects what queryleaf actually ran, which
-    // may differ from `sql` by the queryleaf-compat rewrites applied below.
-    return { columns, types, rows, finalQuery: rewrittenSql };
+    // `finalQuery` reflects what actually ran — the collection + the
+    // (limit-enforced) pipeline.
+    return {
+      columns,
+      types,
+      rows,
+      finalQuery: JSON.stringify({ collection, pipeline: cappedPipeline }),
+    };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
@@ -122,12 +191,18 @@ export class MongoConnector extends NodeConnector {
     const collections = await db.listCollections().toArray();
     const tables = await Promise.all(
       collections.map(async (c) => {
-        const sample = await db.collection(c.name).findOne();
-        const cols = sample
-          ? Object.entries(sample)
-              .filter(([k]) => k !== '_id')
-              .map(([k, v]) => ({ name: k, type: inferSqlType(v) }))
-          : [];
+        // Mongo is schemaless — sample up to 100 docs and union their
+        // field sets so optional fields (absent from any single doc)
+        // still surface. `documentsToQueryResultColumns` does the union
+        // + per-column type inference.
+        const sample = (await db
+          .collection(c.name)
+          .aggregate([{ $sample: { size: 100 } }])
+          .toArray()) as Record<string, unknown>[];
+        const { columns, types } = documentsToQueryResultColumns(sample);
+        const cols = columns
+          .map((name, i) => ({ name, type: types[i] }))
+          .filter((col) => col.name !== '_id');
         return { table: c.name, columns: cols };
       }),
     );
@@ -169,42 +244,4 @@ function getSharedMongoClient(uri: string): Promise<MongoClient> {
     sharedMongoClients.set(uri, p);
   }
   return p;
-}
-
-/**
- * Rewrite SQL fragments the LLM emits so queryleaf can parse them.
- * queryleaf's dialect is its own thing — it accepts some non-standard
- * forms (e.g. `!= null`) but rejects standard ones (`IS NOT NULL`,
- * `REGEXP`). Rather than prompt-engineer around its quirks per call,
- * we normalise SQL into the operators it does support before handing
- * it off.
- *
- * Rewrites:
- *   - `IS NOT NULL` → `!= NULL`  (queryleaf throws "Unsupported
- *     operator: IS NOT" on the standard form, even though it accepts
- *     the non-standard `!= NULL`).
- *   - `IS NULL`     → `= NULL`   (symmetric.)
- *   - `REGEXP`      → `~`        (queryleaf supports Postgres-style
- *     regex operators `~` / `~*` per its own parser error message but
- *     not the MySQL `REGEXP` keyword. `~` is the case-sensitive
- *     equivalent of `REGEXP`.)
- *
- * Implementation is regex rather than AST round-trip because:
- *  - queryleaf has its own non-standard dialect, so a standard JS SQL
- *    parser can't safely parse what queryleaf will run;
- *  - rewrites are operator-level, not structural surgery;
- *  - the SQL is exclusively LLM-generated — false-positives on the
- *    literal strings `'IS NOT NULL'` / `'REGEXP'` inside quoted values
- *    are vanishingly unlikely in practice and would at worst surface
- *    as a queryleaf error the agent recovers from on its next turn.
- *
- * Word boundaries (`\b`) prevent matches inside identifiers like
- * `IS_NOT_NULLABLE`. `\s+` matches arbitrary inter-token whitespace
- * including newlines. Case-insensitive flag handles every casing.
- */
-function rewriteForQueryleaf(sql: string): string {
-  return sql
-    .replace(/\bIS\s+NOT\s+NULL\b/gi, '!= NULL')
-    .replace(/\bIS\s+NULL\b/gi,       '= NULL')
-    .replace(/\bREGEXP\b/gi,          '~');
 }

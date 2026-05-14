@@ -95,7 +95,7 @@ interface SearchDBSchemaDetails extends Record<string, unknown> {
 
 const SEARCH_DB_SCHEMA_SCHEMA: Tool<typeof SearchDBSchemaParams> = {
   name: 'SearchDBSchema',
-  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Always inspect a table here before writing any SQL against it — do not guess column names. Each table includes `indexes: [{name, columns, unique}]` when the connection supports index introspection (Postgres, SQLite, DuckDB) — prefer filtering and joining on indexed columns. Note a leading-wildcard `LIKE \'%x%\'` cannot use a B-tree index; it forces a full scan regardless. Use ListDBConnections first to see available connection names.',
+  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Always inspect a table/collection here before querying it — do not guess column or field names. Each table includes `indexes: [{name, columns, unique}]` when the connection supports index introspection (Postgres, SQLite, DuckDB) — prefer filtering and joining on indexed columns; a leading-wildcard `LIKE \'%x%\'` cannot use a B-tree index and forces a full scan regardless. Use ListDBConnections first to see available connection names.',
   parameters: SearchDBSchemaParams,
 };
 
@@ -227,7 +227,7 @@ interface ExecuteQueryDetails extends Record<string, unknown> {
  * the production schema (no timeout support yet) uses this as-is.
  */
 export const EXECUTE_QUERY_DESCRIPTION =
-  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Before querying a table, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzySearch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.';
+  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect: for SQL connectors it is SQL; for a MongoDB connection it is a JSON string `{"collection": "...", "pipeline": [...aggregation stages]}` — a native aggregation pipeline, not SQL. A default row cap of 1000 is applied when the query has none, and an explicit cap above 10000 is reduced to 10000 (SQL: `LIMIT`; Mongo: a trailing `$limit` stage) — use COUNT/SUM/GROUP BY (Mongo: `$count`/`$group`) for cardinality questions and LIMIT/OFFSET (Mongo: `$limit`/`$skip`) to page through large results. Before querying a table/collection, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzySearch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (the query as actually run). Increase maxChars (up to 100,000) to see more rows in the text response.';
 
 const EXECUTE_QUERY_TIMEOUT_NOTE =
   ' A query that exceeds its `timeout` (default 60s, max 300s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout.';
@@ -297,8 +297,13 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       const local = this.connectors.get(connectionId);
       if (local) {
         const dialect = this.dialects.get(connectionId) ?? 'duckdb';
-        const cappedSql = await enforceQueryLimit(rawQuery, { dialect });
-        result = await local.query(cappedSql, undefined, timeoutMs);
+        // MongoDB queries are JSON `{collection,pipeline}` strings, not SQL —
+        // `enforceQueryLimit` is a SQL-AST parser, so skip it. MongoConnector
+        // applies its own `enforceMongoLimit` to the pipeline internally.
+        const cappedQuery = dialect === 'mongo'
+          ? rawQuery
+          : await enforceQueryLimit(rawQuery, { dialect });
+        result = await local.query(cappedQuery, undefined, timeoutMs);
       } else {
         result = await this._executeFallback(connectionId, rawQuery, {});
       }
