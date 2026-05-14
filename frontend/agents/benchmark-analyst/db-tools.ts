@@ -360,12 +360,13 @@ const FuzzyMatchParams = Type.Object({
   search_term: Type.String({ description: 'Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases.' }),
   schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
   limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
+  semantic_expansion: Type.Optional(Type.Boolean({ description: 'Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only.' })),
 });
 
 export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalystContext> {
   static readonly schema: Tool<typeof FuzzyMatchParams> = {
     name: 'FuzzyMatch',
-    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). This is a LEXICAL MATCHING tool, not a search tool — it requires you to already know approximately what the value looks like. For discovering unknown values or semantic concepts in free-text columns, use ExploreDataset instead. Use 1-3 short, specific keywords. Returns similarity-based and substring matches.',
+    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). Use 1-3 short, specific keywords. Returns similarity-based and substring matches. When semantic_expansion is enabled (default: true), if no lexical matches are found, the tool automatically finds semantically similar terms in the column and fuzzy-matches those too. The response includes expandedTerms showing which additional terms were searched.',
     parameters: FuzzyMatchParams,
   };
 
@@ -375,7 +376,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
   async run(): Promise<ToolResponse> {
     await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
 
-    const { connection, table, column, search_term, schema: schemaName, limit } = this.parameters;
+    const { connection, table, column, search_term, schema: schemaName, limit, semantic_expansion } = this.parameters;
     const dialect = this.dialects.get(connection) ?? 'duckdb';
 
     // Validate column category
@@ -410,39 +411,50 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         table, column, searchTerm: search_term, schema: schemaName, limit,
       });
 
-      // Semantic fallback: when lexical matching returns nothing on a non-categorical
-      // column, automatically query distinct values and ask an LLM to classify them.
-      if (result.allEmpty && category !== 'categorical') {
-        const fallback = await this.semanticFallback(connection, table, column, search_term, schemaName);
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ success: true, ...result, semanticFallback: fallback }) }],
-          isError: false,
-        };
+      // Semantic expansion: when lexical matching returns nothing on a non-categorical
+      // column, automatically find semantically similar terms and fuzzy-match those.
+      const shouldExpand = semantic_expansion !== false && result.allEmpty;
+      if (shouldExpand) {
+        const expandedTerms = await this.getSemanticTerms(connection, table, column, search_term, schemaName);
+        if (expandedTerms.length > 0) {
+          const combinedSearch = expandedTerms.join(' ');
+          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, column, searchTerm: combinedSearch, schema: schemaName, limit });
+          return {
+            content: [{ type: 'text', text: JSON.stringify({
+              searchTerm: search_term,
+              results: result.results,
+              note: `No matches found for "${search_term}". Expanding search with semantically similar terms.`,
+              expandedTerms: expandedTerms,
+              expandedResults: expandedResult.results,
+            }) }],
+            isError: false,
+          };
+        }
       }
 
       return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }) }],
+        content: [{ type: 'text', text: JSON.stringify({ ...result }) }],
         isError: false,
       };
     } catch (err) {
       return {
-        content: [{ type: 'text', text: JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }) }],
+        content: [{ type: 'text', text: JSON.stringify({error: err instanceof Error ? err.message : String(err) }) }],
         isError: true,
       };
     }
   }
 
   /**
-   * When lexical matching fails on a free-text column, invoke ExploreDataset
-   * to semantically classify values in the column.
+   * Use ExploreDataset to find semantically similar terms in the column.
+   * Returns a list of individual terms (empty array on failure).
    */
-  private async semanticFallback(
+  private async getSemanticTerms(
     connection: string,
     table: string,
     column: string,
     searchTerm: string,
     schemaName?: string,
-  ): Promise<string> {
+  ): Promise<string[]> {
     const q = (name: string) => `"${name.replace(/"/g, '""')}"`;
     const qualTable = schemaName ? `${q(schemaName)}.${q(table)}` : q(table);
 
@@ -454,20 +466,31 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
           query: `SELECT DISTINCT ${q(column)} AS value FROM ${qualTable} WHERE ${q(column)} IS NOT NULL LIMIT 1000`,
           label: 'values',
         }],
-        prompt: `The user searched for "${searchTerm}" but no lexical matches were found in column "${column}". Identify which values are semantically related to "${searchTerm}" — they may use synonyms, descriptions, or different terminology. Return ONLY the matching values, one per line. If none match, say "NONE".`,
+        prompt: `The user searched for "${searchTerm}" but no lexical matches were found in column "${column}". Identify which terms from the column are semantically related to "${searchTerm}" — they may be synonyms, plural or misspelt words, or different terminology. Return ONLY the terms, one per line (each term is just 1-2 words max), no bullets, no numbering, no extra text.`,
       },
       this.context,
       this.id,
     );
 
-    const response = await explore.run();
-    const text = response.content?.[0];
-    if (!text || text.type !== 'text') return 'Semantic fallback returned no results.';
     try {
-      const parsed = JSON.parse(text.text);
-      return parsed.analysis ?? parsed.error ?? text.text;
+      const response = await explore.run();
+      const text = response.content?.[0];
+      if (!text || text.type !== 'text') return [];
+      const raw = (() => {
+        try {
+          const parsed = JSON.parse(text.text);
+          return String(parsed.analysis ?? parsed.error ?? text.text);
+        } catch {
+          return text.text;
+        }
+      })();
+      return raw
+        .split('\n')
+        .map((line) => line.replace(/^[\s\-\*\d.)+]+/, '').trim())
+        .filter((t) => t.length > 0);
     } catch {
-      return text.text;
+      return [];
     }
   }
+
 }

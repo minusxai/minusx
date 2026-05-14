@@ -106,17 +106,11 @@ class SearchDBSchema(Tool):
 class FuzzyMatch(Tool):
     """Match a known term against stored values in a text or categorical column.
 
-    This is a LEXICAL MATCHING tool, not a search tool — it finds values that
-    are spelled similarly to your term (typos, spacing, casing differences).
-    It requires you to already know approximately what the value looks like.
-    For discovering unknown values or semantic concepts in free-text columns
-    (descriptions, reviews, notes), use ExploreDataset instead.
-
-    Use 1-3 short, specific keywords — NOT full phrases.
-    Good: "revenue", "green energy". Bad: "green energy production in northern regions".
-
-    Returns similarity-based matches (best for typos) and substring matches
-    (catches containment). Prioritize similarity matches.
+    Use 1-3 short, specific keywords. Returns similarity-based and substring
+    matches. When semantic_expansion is enabled (default: true), if no lexical
+    matches are found, the tool automatically finds semantically similar terms
+    in the column and fuzzy-matches those too. The response includes
+    expandedTerms showing which additional terms were searched.
 
     Example: user says "Hello World" but column stores "HelloWooorld".
     """
@@ -129,6 +123,7 @@ class FuzzyMatch(Tool):
         search_term: str = Field(..., description="Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases."),
         schema: str = Field("main", description="Schema name (default: 'main')"),
         limit: int = Field(100, description="Max results to return"),
+        semantic_expansion: bool = Field(True, description="Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -138,6 +133,7 @@ class FuzzyMatch(Tool):
         self.search_term = search_term
         self.schema = schema
         self.limit = limit
+        self.semantic_expansion = semantic_expansion
 
     async def reduce(self, child_batches):
         pass
