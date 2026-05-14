@@ -13,10 +13,10 @@ import {
   DAB_BENCH_DATASETS,
   DAB_BENCH_RERUN,
   DAB_QUESTION_TIMEOUT,
-  DAB_DATASET_TIMEOUT,
   DAB_TIMES_RUN,
   DAB_DOUBLE_CHECK,
   MAX_LLM_CONCURRENCY,
+  MAX_AGENTS_CONCURRENCY,
   MX_API_BASE_URL,
 } from '@/lib/config';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
@@ -129,18 +129,19 @@ const registrables = doubleCheck
     ]
   : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzySearch, ExploreDataset];
 
-// Default timeouts. Override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT
-// (seconds). A row that hits its timeout is cancelled and dropped from
-// the output JSONL — resume picks it up on the next run. A dataset that
-// hits its timeout cancels its in-flight rows; other datasets keep running.
+// Default per-question timeout (seconds). Override via DAB_QUESTION_TIMEOUT.
+// A row that hits its timeout is cancelled and dropped from the output
+// JSONL — resume picks it up on the next run. The timer is armed AFTER
+// the row acquires its `MAX_AGENTS_CONCURRENCY` slot in the runner, so
+// queue-wait under high contention does not consume timeout budget.
 //
-// Concurrency is now governed solely by the global `MAX_LLM_CONCURRENCY`
-// env var (read inside the Orchestrator's `callLLM`). Every dataset and
-// every row dispatches eagerly; agents queue at the LLM gate until their
-// turn comes up. The previous `PER_DATASET_CONCURRENCY` × `MAX_PARALLEL_DATASETS`
-// knobs were redundant once the LLM-level cap landed.
+// Concurrency stacks two independent throttles:
+//   - `MAX_AGENTS_CONCURRENCY` — caps simultaneous orchestrator runs
+//     (gates the per-row timeout too).
+//   - `MAX_LLM_CONCURRENCY` — caps in-flight provider calls (inside
+//     `callLLM`'s semaphore). Set `MAX_AGENTS_CONCURRENCY ≤ MAX_LLM_CONCURRENCY`
+//     for negligible LLM-slot contention within an active row.
 const DEFAULT_QUESTION_TIMEOUT_SEC = 300;   // 5 min
-const DEFAULT_DATASET_TIMEOUT_SEC = 1800;   // 30 min
 
 function parseSeconds(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -149,7 +150,6 @@ function parseSeconds(raw: string | undefined, fallback: number): number {
 }
 
 const questionTimeoutSec = parseSeconds(DAB_QUESTION_TIMEOUT, DEFAULT_QUESTION_TIMEOUT_SEC);
-const datasetTimeoutSec = parseSeconds(DAB_DATASET_TIMEOUT, DEFAULT_DATASET_TIMEOUT_SEC);
 
 // Repeats per input row. Default 1 = current single-run behaviour
 // (output rows have `log`). With N>1, each row's agent is invoked N
@@ -166,19 +166,22 @@ const timesRun = parsePositiveInt(DAB_TIMES_RUN, 1);
 const rerun = DAB_BENCH_RERUN === '1' || DAB_BENCH_RERUN === 'true';
 const proxied = !!MX_API_BASE_URL;
 
+const agentsConcurrencyNote = MAX_AGENTS_CONCURRENCY
+  ? `max ${MAX_AGENTS_CONCURRENCY} concurrent agent runs`
+  : 'unbounded agent runs (set MAX_AGENTS_CONCURRENCY env to cap)';
 const llmConcurrencyNote = MAX_LLM_CONCURRENCY
   ? `max ${MAX_LLM_CONCURRENCY} concurrent LLM calls`
-  : 'unbounded (set MAX_LLM_CONCURRENCY env to cap)';
+  : 'unbounded LLM calls (set MAX_LLM_CONCURRENCY env to cap)';
 
 logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);
 console.log(
   `  routing: ${proxied ? 'mxllm proxy (' + MX_API_BASE_URL + ')' : 'DIRECT to provider — set MX_API_BASE_URL to route through mxllm'}`,
 );
 console.log(
-  `  concurrency: ${llmConcurrencyNote}; datasets/rows dispatched eagerly${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
+  `  concurrency: ${agentsConcurrencyNote}; ${llmConcurrencyNote}${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
 );
 console.log(
-  `  timeouts: question=${questionTimeoutSec}s, dataset=${datasetTimeoutSec}s (override via DAB_QUESTION_TIMEOUT / DAB_DATASET_TIMEOUT)`,
+  `  timeout: question=${questionTimeoutSec}s (armed after agent-slot acquisition; override via DAB_QUESTION_TIMEOUT)`,
 );
 if (doubleCheck) {
   console.log(`  doubleCheck: ON (each row runs 2 analysts in parallel + 1 judge call; retry once on disagreement ⇒ ~4× LLM cost)`);
@@ -204,7 +207,6 @@ async function main() {
         quiet: parallel,
         rerun,
         rowTimeoutMs: questionTimeoutSec * 1000,
-        datasetTimeoutMs: datasetTimeoutSec * 1000,
         timesRun,
       }),
     ),
@@ -213,7 +215,6 @@ async function main() {
   const totalRows = results.reduce((s, r) => s + r.rows, 0);
   const totalErrors = results.reduce((s, r) => s + r.errors, 0);
   const totalTimeouts = results.reduce((s, r) => s + r.timeouts, 0);
-  const datasetTimeouts = results.filter((r) => r.datasetTimedOut).length;
 
   logSummary(
     DATASETS.length,
@@ -221,7 +222,6 @@ async function main() {
     totalErrors,
     Date.now() - globalStart,
     totalTimeouts,
-    datasetTimeouts,
   );
 
   // Force-exit. The MongoConnector keeps its mongo client open by
