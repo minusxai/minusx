@@ -8,6 +8,7 @@ import {
 import {
   CheckEquivalence,
   DoubleCheckBenchmarkAgent,
+  setJudgeModel,
 } from '../double-check-benchmark';
 import {
   BaseExecuteQuery,
@@ -59,6 +60,16 @@ function findToolCallInAssistantMsgs(log: ConversationLogEntry[], id: string) {
 }
 
 describe('DoubleCheckBenchmarkAgent', () => {
+  // Override the judge model to use the same faux provider as the analysts,
+  // so scripted responses feed both analysts and the judge.
+  let originalJudgeModel: ReturnType<typeof setJudgeModel>;
+  beforeAll(() => {
+    originalJudgeModel = setJudgeModel(fauxRegistration.getModel());
+  });
+  afterAll(() => {
+    setJudgeModel(originalJudgeModel);
+  });
+
   it('round-1 consensus: returns agent 1 text; only one round dispatched', async () => {
     fauxRegistration.setResponses([
       // The two analysts run in parallel; both get the same scripted reply.

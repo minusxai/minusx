@@ -26,8 +26,19 @@ import type {
   ToolResultMessage,
 } from '@mariozechner/pi-ai';
 import { MXAgent, MXTool, type ToolResponse, type MXAgentDetails } from '@/orchestrator/types';
+import { getModel } from '@/lib/llm/get-model';
 import { BenchmarkAnalystAgent } from './benchmark-analyst';
 import type { BenchmarkAnalystContext } from './types';
+
+/** Dedicated judge model — always Opus, independent of the analyst model config. */
+let judgeModel = getModel('anthropic', 'claude-opus-4-7');
+
+/** Override the judge model (for tests). Returns the previous model. */
+export function setJudgeModel(m: typeof judgeModel): typeof judgeModel {
+  const prev = judgeModel;
+  judgeModel = m;
+  return prev;
+}
 
 // ─── Slot ids & round budget ──────────────────────────────────────────────
 // Stable across resumes; uniquely identify each dispatched toolCall within
@@ -54,10 +65,8 @@ const CheckEquivalenceParams = Type.Object({
 
 interface CheckEquivalenceDetails extends Record<string, unknown> {
   equivalent: boolean;
-  /** Raw LLM verdict text — useful when debugging false positives /
-   *  negatives. Stored only in `details`, not in the LLM-visible
-   *  content (which is just the boolean). */
-  rawVerdict?: string;
+  /** Full LLM verdict including the one-sentence reason. */
+  reason: string;
 }
 
 /**
@@ -72,7 +81,7 @@ export class CheckEquivalence extends MXTool<
 > {
   static readonly schema: Tool<typeof CheckEquivalenceParams> = {
     name: 'CheckEquivalence',
-    description: 'Compares two analyst answers to the same question and decides whether they are semantically equivalent. Returns {equivalent: boolean}.',
+    description: 'Compares two analyst answers to the same question and decides whether they are semantically equivalent. Returns {equivalent: boolean, reason: string}.',
     parameters: CheckEquivalenceParams,
   };
 
@@ -80,23 +89,35 @@ export class CheckEquivalence extends MXTool<
     const { question, answerA, answerB } = this.parameters;
     const judgeCtx: Context = {
       systemPrompt:
-        'You compare two analyst answers to the same question and decide whether they are semantically equivalent (same factual content / same TL;DR). Reply with exactly EQUIVALENT or DIFFERENT — nothing else.',
+        `You compare two analyst answers to the same question and decide whether they are semantically equivalent (same factual content / same TL;DR). Reply with EQUIVALENT or DIFFERENT followed by a one-sentence explanation.
+        ## Guidelines for judging equivalence:
+        - Agent A is the main agent, agent B is the challenger.
+        - They may not obviously have exactly the same wording, but if they convey the same information and reach the same conclusion, they are equivalent.
+        - If they have mutually exclusive extra information but the core answer is the same, they are equivalent
+        - If they reach wildly different conclusions, they are different.
+        ## Response format:
+        EQUIVALENT
+        Reason: <one sentence reason>
+        or
+        DIFFERENT
+        Reason: <one sentence reason>`,
       messages: [
         {
           role: 'user',
-          content: `Question: ${question}\n\nAnswer A: ${answerA}\n\nAnswer B: ${answerB}\n\nAre these answers semantically equivalent? Reply EQUIVALENT or DIFFERENT.`,
+          content: `Question: ${question}\n\nAnswer A: ${answerA}\n\nAnswer B: ${answerB}\n\nAre these answers semantically equivalent?`,
           timestamp: Date.now(),
         },
       ],
       tools: [],
     };
-    const model = BenchmarkAnalystAgent.model;
-    const verdictMsg = await this.orchestrator.callLLM(model, judgeCtx, this.id);
-    const verdict = extractText(verdictMsg).trim().toUpperCase();
-    const equivalent = verdict.startsWith('EQUIVALENT');
-    const details: CheckEquivalenceDetails = { equivalent, rawVerdict: verdict };
+    const verdictMsg = await this.orchestrator.callLLM(judgeModel, judgeCtx, this.id);
+    const reason = extractText(verdictMsg).trim();
+    const upper = reason.toUpperCase();
+    const equivalent = upper.startsWith('EQUIVALENT')
+      || (upper.includes('EQUIVALENT') && !upper.includes('DIFFERENT'));
+    const details: CheckEquivalenceDetails = { equivalent, reason };
     return {
-      content: [{ type: 'text', text: JSON.stringify({ equivalent }) }],
+      content: [{ type: 'text', text: JSON.stringify({ equivalent, reason }) }],
       isError: false,
       details,
     };
