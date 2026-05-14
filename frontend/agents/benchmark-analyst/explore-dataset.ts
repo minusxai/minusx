@@ -1,7 +1,9 @@
-// ExploreDataset: runs one or more SQL queries (potentially across different
+// ExploreDataset: runs one or more queries (potentially across different
 // databases) and passes the combined results to an LLM for analysis. Useful
 // for entity resolution, deduplication, clustering, and other data-reasoning
-// tasks that can't be expressed in SQL alone — especially cross-DB scenarios.
+// tasks that can't be expressed in a query alone — especially cross-DB
+// scenarios. A query is SQL for relational connections, or a native
+// `{collection, pipeline}` aggregation pipeline (JSON string) for MongoDB.
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import type { AssistantMessage, Context, TextContent } from '@mariozechner/pi-ai';
@@ -39,7 +41,7 @@ async function buildConnectorsFromContext(
 
 const QuerySpec = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
-  query: Type.String({ description: 'SQL query to run on this connection (~1000 rows). Can reference columns from earlier queries using $label.column_name, e.g. WHERE id IN ($revenue.product_id) expands to all product_id values from the query labelled "revenue".' }),
+  query: Type.String({ description: 'Query to run on this connection (~1000 rows). For a SQL connection this is a SQL query; for a MongoDB connection it is a JSON string {"collection": "...", "pipeline": [...aggregation stages]} — a native aggregation pipeline. Can reference columns from earlier queries using $label.column_name: in SQL, `WHERE id IN ($revenue.product_id)` expands to all product_id values from the query labelled "revenue"; in a Mongo pipeline, the quoted token `{"$in": "$revenue.product_id"}` expands to the JSON array `{"$in": [101, 102, ...]}`.' }),
   label: Type.Optional(Type.String({ description: 'Short label for this dataset (e.g. "revenue", "products"). Shown to the LLM as a header.' })),
 });
 
@@ -96,6 +98,8 @@ export class ExploreDataset extends MXTool<
       query 1: connection=prod_revenue, query="SELECT product_id, SUM(revenue) AS revenue FROM sales GROUP BY product_id ORDER BY revenue DESC LIMIT 1000", label="revenue"
       query 2: connection=prod_catalog, query="SELECT id, name, category FROM products WHERE id IN ($revenue.product_id)", label="products"
       prompt: "Group these products into 5 clusters based on their names and categories. Return a mapping of cluster_name → [product_ids]."
+
+      For a MongoDB connection, query is instead a JSON string {"collection": "...", "pipeline": [...]} (a native aggregation pipeline). $label.column references work inside it as quoted tokens, e.g. {"$match": {"id": {"$in": "$revenue.product_id"}}} expands to a JSON array of the referenced values.
       `,
     parameters: ExploreDatasetParams,
   };
@@ -126,11 +130,15 @@ export class ExploreDataset extends MXTool<
         };
       }
 
-      // Validate: LIMIT must be >= 1000 (smaller limits miss relevant data)
-      const limitMatch = rawQuery.match(/\bLIMIT\s+(\d+)\b/i);
-      if (limitMatch && parseInt(limitMatch[1], 10) < 1000) {
+      const dialect = this.dialects.get(connection) ?? 'duckdb';
+      const isMongo = dialect === 'mongo';
+
+      // Validate: result-set size must be >= 1000 (smaller misses relevant data).
+      // SQL: a `LIMIT n` clause; Mongo: a terminal `{$limit:n}` pipeline stage.
+      const lowLimit = detectLowLimit(rawQuery, isMongo);
+      if (lowLimit !== null) {
         return {
-          content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query "${label || connection}" has LIMIT ${limitMatch[1]} which is too low — a smaller limit will miss relevant data and lead to incorrect results. Use LIMIT 1000 or higher.` }) }],
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query "${label || connection}" has a row limit of ${lowLimit} which is too low — a smaller limit will miss relevant data and lead to incorrect results. Use a limit of 1000 or higher.` }) }],
           isError: true,
           details: { analysis: '', totalRowCount: 0, executedQueries },
         };
@@ -146,14 +154,17 @@ export class ExploreDataset extends MXTool<
       }
 
       // Interpolate references to previous query results (e.g. $revenue.product_id)
-      const interpolated = interpolateRefs(rawQuery, labeledResults);
+      const interpolated = isMongo
+        ? interpolateMongoRefs(rawQuery, labeledResults)
+        : interpolateRefs(rawQuery, labeledResults);
 
       let result: QueryResult;
       try {
-        const dialect = this.dialects.get(connection) ?? 'duckdb';
-        const cappedSql = await enforceQueryLimit(interpolated, { dialect });
-        result = await connector.query(cappedSql);
-        executedQueries.push({ connection, finalQuery: result.finalQuery ?? cappedSql, rowCount: result.rows.length });
+        // enforceQueryLimit is a SQL-AST parser — skip it for Mongo; the
+        // connector's own enforceMongoLimit caps native pipelines.
+        const cappedQuery = isMongo ? interpolated : await enforceQueryLimit(interpolated, { dialect });
+        result = await connector.query(cappedQuery);
+        executedQueries.push({ connection, finalQuery: result.finalQuery ?? cappedQuery, rowCount: result.rows.length });
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         return {
@@ -233,6 +244,53 @@ function interpolateRefs(
     );
     return formatted.join(', ');
   });
+}
+
+/**
+ * Mongo analog of `interpolateRefs` for native `{collection,pipeline}` JSON.
+ * Replaces *quoted* `"$label.column"` tokens with a JSON array literal of the
+ * referenced column's values, so `{"$in": "$revenue.id"}` becomes
+ * `{"$in": [4233,5281]}` — still valid JSON.
+ *
+ * Only *known* labels are interpolated. This is deliberate: a Mongo nested
+ * field reference like `"$user.name"` matches the same `$x.y` shape, so an
+ * unknown label is left untouched and treated as a field path by Mongo.
+ * A missing/empty column interpolates to `[]` (a `$in: []` matches nothing).
+ */
+export function interpolateMongoRefs(
+  json: string,
+  labeledResults: Map<string, Record<string, unknown>[]>,
+): string {
+  return json.replace(/"\$([a-zA-Z_]\w*)\.(\w+)"/g, (match, label, column) => {
+    const rows = labeledResults.get(label);
+    if (!rows) return match; // unknown label — leave as a Mongo field path
+    const values = rows.map((r) => r[column]).filter((v) => v != null);
+    return JSON.stringify(values);
+  });
+}
+
+/**
+ * Detect an artificially small result cap. SQL: a `LIMIT n` clause with
+ * `n < 1000`. Mongo: a terminal `{$limit:n}` pipeline stage with `n < 1000`.
+ * Returns the offending limit, or `null` if none (and `null` on un-parseable
+ * Mongo JSON — `MongoConnector.query` surfaces that error with more context).
+ */
+function detectLowLimit(rawQuery: string, isMongo: boolean): number | null {
+  if (isMongo) {
+    let pipeline: unknown;
+    try {
+      pipeline = (JSON.parse(rawQuery) as { pipeline?: unknown }).pipeline;
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(pipeline) || pipeline.length === 0) return null;
+    const last = pipeline[pipeline.length - 1] as Record<string, unknown>;
+    return typeof last?.$limit === 'number' && last.$limit < 1000 ? last.$limit : null;
+  }
+  const m = rawQuery.match(/\bLIMIT\s+(\d+)\b/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return n < 1000 ? n : null;
 }
 
 function extractText(msg: AssistantMessage): string {

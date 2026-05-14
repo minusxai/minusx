@@ -11,7 +11,7 @@ these accept but ignore it — wire each one:
 
 - [ ] **PostgresConnector** — `SET LOCAL statement_timeout` in a txn (avoid leaking onto pooled connections).
 - [ ] **BigQueryConnector** — pass `jobTimeoutMs` to the query job.
-- [ ] **MongoConnector** — `maxTimeMS` option (thread through QueryLeaf).
+- [x] **MongoConnector** — `maxTimeMS` option. Done alongside the native-pipeline rewrite: `query()` passes `{ maxTimeMS: timeoutMs }` to `aggregate()`.
 - [ ] **AthenaConnector** — poll-with-deadline + `StopQueryExecution` (no native interrupt).
 
 Acceptance: slow query + small `timeout` rejects with an "exceeded the Ns

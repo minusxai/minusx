@@ -10,7 +10,7 @@ import {
   ListDBConnections,
   FuzzySearch,
 } from '../db-tools';
-import { ExploreDataset, setExploreModel } from '../explore-dataset';
+import { ExploreDataset, setExploreModel, interpolateMongoRefs } from '../explore-dataset';
 import type { BenchmarkAnalystContext } from '../types';
 
 const defaultRows = () => ({
@@ -22,7 +22,7 @@ const defaultRows = () => ({
     { id: 3, name: 'Gadget C', category: 'home' },
   ] as Record<string, unknown>[],
 });
-const mockQuery = vi.fn(async () => defaultRows());
+const mockQuery = vi.fn(async (_query?: string) => defaultRows());
 
 vi.mock('../shared-duckdb', () => ({
   getOrCreateBenchmarkConnector: vi.fn(async () => ({
@@ -45,6 +45,7 @@ const CTX: BenchmarkAnalystContext = {
   connections: [
     { name: 'orders_db', dialect: 'duckdb', description: 'orders', config: { file_path: '/test/orders.duckdb' } },
     { name: 'products_db', dialect: 'sqlite', description: 'products', config: { file_path: '/test/products.db' } },
+    { name: 'mongo_db', dialect: 'mongo', description: 'biz', config: { host: 'localhost', port: 27017, database: 'd' } },
   ],
   contextDocs: '',
 };
@@ -221,5 +222,126 @@ describe('ExploreDataset', () => {
     const content = JSON.parse((result.content[0] as TextContent).text);
     expect(content.success).toBe(false);
     expect(content.error).toContain('not found');
+  });
+});
+
+describe('interpolateMongoRefs', () => {
+  it('replaces a quoted "$label.column" token with a JSON array of values', () => {
+    const labeled = new Map([['revenue', [{ id: 10 }, { id: 20 }, { id: 30 }]]]);
+    const json = '{"collection":"biz","pipeline":[{"$match":{"id":{"$in":"$revenue.id"}}}]}';
+    const out = interpolateMongoRefs(json, labeled);
+    expect(out).toBe('{"collection":"biz","pipeline":[{"$match":{"id":{"$in":[10,20,30]}}}]}');
+    expect(JSON.parse(out)).toBeDefined(); // still valid JSON
+  });
+
+  it('JSON-encodes string values (quoted array elements)', () => {
+    const labeled = new Map([['cities', [{ name: 'NYC' }, { name: 'LA' }]]]);
+    const out = interpolateMongoRefs('{"$in":"$cities.name"}', labeled);
+    expect(out).toBe('{"$in":["NYC","LA"]}');
+  });
+
+  it('leaves an unknown label untouched (it is a Mongo field path, not a ref)', () => {
+    const labeled = new Map([['revenue', [{ id: 1 }]]]);
+    // "$user.name" is a nested-field reference, not a known query label
+    const json = '{"$project":{"n":"$user.name"}}';
+    expect(interpolateMongoRefs(json, labeled)).toBe(json);
+  });
+
+  it('interpolates a missing/empty column to [] ', () => {
+    const labeled = new Map([['revenue', [{ id: 1 }, { id: 2 }]]]);
+    const out = interpolateMongoRefs('{"$in":"$revenue.missing"}', labeled);
+    expect(out).toBe('{"$in":[]}');
+  });
+
+  it('replaces multiple refs in one pipeline', () => {
+    const labeled = new Map([
+      ['a', [{ x: 1 }]],
+      ['b', [{ y: 'q' }]],
+    ]);
+    const out = interpolateMongoRefs('["$a.x","$b.y"]', labeled);
+    expect(out).toBe('[[1],["q"]]');
+  });
+});
+
+describe('ExploreDataset — MongoDB connections (native pipelines)', () => {
+  beforeEach(() => {
+    mockQuery.mockClear();
+    mockQuery.mockImplementation(async () => defaultRows());
+  });
+
+  it('runs a native {collection,pipeline} JSON query without SQL limit-enforcement', async () => {
+    fauxRegistration.setResponses([fauxAssistantMessage('done', { stopReason: 'stop' })]);
+    const orch = new Orchestrator(REGISTRABLES);
+    const queryJson = JSON.stringify({ collection: 'biz', pipeline: [{ $group: { _id: '$category' } }] });
+    const tool = new ExploreDataset(
+      orch,
+      {
+        queries: [{ connection: 'mongo_db', query: queryJson, label: 'cats' }],
+        prompt: 'summarize',
+      },
+      CTX,
+      'test-mongo-single',
+    );
+
+    const result = await tool.run();
+
+    expect(result.isError).toBe(false);
+    // The JSON string reached the connector verbatim — enforceQueryLimit (a
+    // SQL parser) did not run on it.
+    expect(mockQuery.mock.calls[0][0]).toBe(queryJson);
+  });
+
+  it('interpolates $label.column refs into the pipeline JSON as a JSON array', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        columns: ['id'], types: ['INTEGER'],
+        rows: [{ id: 10 }, { id: 20 }, { id: 30 }],
+      })
+      .mockResolvedValueOnce(defaultRows());
+    fauxRegistration.setResponses([fauxAssistantMessage('done', { stopReason: 'stop' })]);
+    const orch = new Orchestrator(REGISTRABLES);
+    const tool = new ExploreDataset(
+      orch,
+      {
+        queries: [
+          { connection: 'mongo_db', query: JSON.stringify({ collection: 'sales', pipeline: [{ $group: { _id: '$id' } }] }), label: 'revenue' },
+          { connection: 'mongo_db', query: JSON.stringify({ collection: 'biz', pipeline: [{ $match: { id: { $in: '$revenue.id' } } }] }), label: 'biz' },
+        ],
+        prompt: 'join them',
+      },
+      CTX,
+      'test-mongo-ref',
+    );
+
+    const result = await tool.run();
+
+    expect(result.isError).toBe(false);
+    const secondQuery = mockQuery.mock.calls[1][0] as string;
+    // "$revenue.id" → [10,20,30] (a real JSON array — the query is still valid JSON)
+    expect(JSON.parse(secondQuery).pipeline[0].$match.id.$in).toEqual([10, 20, 30]);
+    expect(secondQuery).not.toContain('$revenue.id');
+  });
+
+  it('rejects a pipeline whose terminal $limit is below 1000', async () => {
+    const orch = new Orchestrator(REGISTRABLES);
+    const tool = new ExploreDataset(
+      orch,
+      {
+        queries: [{
+          connection: 'mongo_db',
+          query: JSON.stringify({ collection: 'biz', pipeline: [{ $sort: { n: -1 } }, { $limit: 50 }] }),
+          label: 'top',
+        }],
+        prompt: 'x',
+      },
+      CTX,
+      'test-mongo-lowlimit',
+    );
+
+    const result = await tool.run();
+
+    expect(result.isError).toBe(true);
+    const content = JSON.parse((result.content[0] as TextContent).text);
+    expect(content.error).toMatch(/too low/i);
   });
 });
