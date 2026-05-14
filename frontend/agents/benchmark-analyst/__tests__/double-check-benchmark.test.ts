@@ -140,7 +140,7 @@ describe('DoubleCheckBenchmarkAgent', () => {
     expect((r2Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(true);
   });
 
-  it('all three rounds disagree → "Failed to reach consensus"', async () => {
+  it('all three rounds disagree → returns last-round agent-1 answer (not a failure string)', async () => {
     fauxRegistration.setResponses([
       // Round 1 — analysts + judge.
       fauxAssistantMessage('TL;DR: 41', { stopReason: 'stop' }),
@@ -164,9 +164,14 @@ describe('DoubleCheckBenchmarkAgent', () => {
 
     expect(result).not.toBeNull();
     expect(result!.stopReason).toBe('stop');
-    expect((result!.content[0] as TextContent).text).toContain('Failed to reach consensus');
+    // Final answer is r3-agent1's text — a real candidate the validator
+    // can judge — not a hardcoded failure string. The cross-check signal
+    // remains available via r3-check's `equivalent: false` details.
+    expect((result!.content[0] as TextContent).text).toContain('TL;DR: 41 (r3)');
+    expect((result!.content[0] as TextContent).text).not.toContain('Failed to reach consensus');
 
-    // All three judges ran and all returned DIFFERENT.
+    // All three judges ran and all returned DIFFERENT — the disagreement
+    // signal is preserved in the log for downstream consumers.
     const r1Check = findToolResult(orch.log, 'r1-check');
     const r2Check = findToolResult(orch.log, 'r2-check');
     const r3Check = findToolResult(orch.log, 'r3-check');

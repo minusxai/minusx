@@ -34,7 +34,9 @@ import type { BenchmarkAnalystContext } from './types';
 // a single DoubleCheck run. Round 1 is the initial pair; rounds
 // 2..MAX_ROUNDS are feedback retries (each seeded with the full prior
 // per-side history concatenated). If MAX_ROUNDS rounds fail to agree,
-// the controller returns `"Failed to reach consensus"`.
+// the controller returns the last round's agent-1 answer as a best-effort
+// candidate (the cross-check disagreement is still visible to downstream
+// consumers via the final `rN-check` toolResult's `equivalent: false`).
 const MAX_ROUNDS = 3;
 const slotIds = (round: number) => ({
   agent1: `r${round}-agent1`,
@@ -126,7 +128,8 @@ interface SlotSpec {
  * `this.toolThread` by slot id. Already-completed slots (from a prior
  * interrupted run) are skipped, making the controller fully resumable.
  *
- * Returns either the consensus answer or `"Failed to reach consensus"`.
+ * Returns the consensus answer once judges agree, or the last round's
+ * agent-1 answer if no consensus is reached within `MAX_ROUNDS`.
  */
 export class DoubleCheckBenchmarkAgent extends MXAgent<
   typeof DoubleCheckBenchmarkAgentParams,
@@ -135,7 +138,7 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
   static readonly schema: Tool<typeof DoubleCheckBenchmarkAgentParams> = {
     name: 'DoubleCheckBenchmarkAgent',
     description:
-      'Runs two BenchmarkAnalystAgent instances in parallel; on disagreement, retries once with cross-feedback; returns the consensus answer or "Failed to reach consensus".',
+      'Runs two BenchmarkAnalystAgent instances in parallel; on disagreement, retries with cross-feedback for up to MAX_ROUNDS-1 more rounds; returns the consensus answer, or the last round\'s agent-1 answer if no consensus is reached.',
     parameters: DoubleCheckBenchmarkAgentParams,
   };
   // No LLM-driven tools — `run()` is hand-rolled.
@@ -209,7 +212,14 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
       priorHistories2.push(this.orchestrator.extractAgentHistory(slots.agent2));
     }
 
-    return synthesiseFinal('Failed to reach consensus');
+    // No consensus after MAX_ROUNDS. Return the last round's agent-1
+    // answer rather than a hardcoded failure string — even without
+    // agreement between the two analysts, the most recently revised
+    // answer is a real candidate the downstream validator can judge
+    // (and it might still be correct). The cross-check signal is
+    // available to evaluators via the `r3-check` toolResult details
+    // (`equivalent: false`) if they want to discount disagreement.
+    return synthesiseFinal(t1);
   }
 
   /**
