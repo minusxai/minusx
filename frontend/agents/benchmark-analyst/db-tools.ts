@@ -408,6 +408,12 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
       const result = await fuzzySearch(dialect, queryFn, {
         table, column, searchTerm: search_term, schema: schemaName, limit,
       });
+
+      // Enhance hint based on column category when all results are empty
+      if (result.hint && category === 'text') {
+        result.hint = `No matches found in free-text column "${column}". FuzzySearch is the WRONG tool for this column — free-text descriptions use varied vocabulary, not exact category labels. You MUST use ExploreDataset to semantically classify values in this column instead.`;
+      }
+
       return {
         content: [{ type: 'text', text: JSON.stringify({ success: true, ...result }) }],
         isError: false,

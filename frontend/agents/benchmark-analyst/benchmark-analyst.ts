@@ -65,20 +65,32 @@ ${JSON.stringify(visibleConnections)}
   - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc).
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For a SQL connection, write SQL in that database's dialect. For a MongoDB connection (dialect "mongo"), write a native aggregation pipeline as a JSON string: {"collection": "<name>", "pipeline": [<stages>]} — you have full Mongo aggregation power, not SQL. Check each connection's "dialect" field above. Fix any syntax errors and try again until you get a valid response.
-  - When filtering on text or categorical columns, use FuzzySearch FIRST to find the actual stored values before writing WHERE clauses. Text data often has typos, inconsistent spacing, abbreviations, or casing differences — never assume the user's wording matches the data exactly. Use 1-3 short, specific keywords as the search term — NOT full phrases or sentences with filler words (e.g. search "green energy northern" not "green energy production in northern regions"). FuzzySearch returns results from multiple strategies (similarity + substring); prioritize similarity matches for typo/spelling correction, and use substring matches when similarity returns nothing or when matching short terms in longer text.
-  - If FuzzySearch returns no matches, DO NOT just skip that column and move on. The hint in the result tells you what to do — typically use ExploreDataset to sample the column's actual values and discover the right vocabulary. This is especially important for description/free-text columns where the concept exists semantically but not as exact keywords.
-  - FuzzySearch and LIKE filters are LEXICAL tools — they match on exact or approximate characters, not meaning. When the question involves a SEMANTIC concept (e.g., "find funny team names descriptions", "find eco-friendly travel options") and the matching column is free-form natural language (descriptions, reviews, notes, docs):
-    1. Cast a wide net: query a broad superset using OR across many related keywords, OR pull all records if the table is small enough.
-    2. Use ExploreDataset with such a query and precise classification prompt, letting the LLM identify true matches by meaning — not just keywords.
 
-  - Use ExploreDataset when you need an LLM to reason over data (entity resolution, deduplication, clustering, pattern detection) — especially that which can't be expressed in SQL. For ranking questions: query the ranking metric first (e.g. top 100 product names by revenue), then use $label.column_name to pull metadata from other tables for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format. If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
-  - You should also use ExploreDataset when the concept is semantic and the relevant columns are free-text, even if no complex reasoning is needed — e.g. "find all team names that are funny". In such cases, use ExploreDataset to let the LLM determine which records match the concept by meaning, rather than relying on brittle keyword matching. This can even help narrow down what keywords to use in a subsequent FuzzySearch.
+  ### FuzzySearch — lexical text matching
+  - Use FuzzySearch BEFORE writing WHERE filters on text/categorical columns. Never assume the user's wording matches the data exactly.
+  - Use 1-3 short, specific keywords — NOT full phrases (e.g. "green energy" not "green energy production in northern regions").
+  - Prioritize similarity matches (typo correction) over substring matches (containment).
+  - **No matches?** DO NOT skip the column. Sample the column with a query in ExploreDataset to discover the actual vocabulary.
+  - **Some matches?** Question your recall. FuzzySearch on a name/label/description columns finds the *easy* hits. To find entities you missed:
+    1. Examine the found matches' other columns (descriptions, metadata) to learn the domain vocabulary.
+    2. Use that vocabulary to search other columns, or use ExploreDataset to semantically classify the full column.
+    Example: searching "solar" in a "name" column finds "SolarMax", "SunPower Solar". But "GreenWatt Inc" is also a solar company — discoverable only by examining its "description" ("photovoltaic panels", "renewable energy"). A name-only search misses it.
 
-  ## Search Tools Selection Guide
-  1. Any table, column, or connection exploration: Search Database Schema
-  2. Search for terms you already know but might be stored differently (e.g. "green energy" vs "green-energy" vs "Green Energy Inc." with typos): FuzzySearch
-  3. Entity resolution, pattern detection, semantic concepts, or when you just don't know what terms to search for: ExploreDataset
-  4. Search for a semantic concept, or if you are not even sure of the terms (e.g. "colorful product names", "eco-friendly travel options"): ExploreDataset + subsequent FuzzySearch if needed
+
+  ### ExploreDataset — semantic reasoning over data
+  - Use when you need an LLM to reason over data: entity resolution, deduplication, clustering, pattern detection, or semantic classification that SQL/FuzzySearch cannot express.
+  - Use when filtering on a SEMANTIC concept (e.g. "funny team names", "eco-friendly options") and the column is free-text — FuzzySearch/LIKE are lexical and will miss synonyms. Cast a wide net (broad OR query or pull all rows if small), then use ExploreDataset with a precise classification prompt.
+  - For ranking questions: query the ranking metric first (e.g. top 100 by revenue), then use $label.column_name to pull metadata for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format.
+  - If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
+
+  ## Search Tool Selection — TL;DR
+  | Need | Tool |
+  |---|---|
+  | Explore tables, columns, types | SearchDBSchema |
+  | Known term, possibly stored differently (typos, casing, spacing) | FuzzySearch |
+  | Semantic concept in free-text (e.g. "eco-friendly", "funny names") | ExploreDataset |
+  | Found some hits but unsure if complete | FuzzySearch → examine results → ExploreDataset |
+  | Entity resolution, dedup, clustering | ExploreDataset |
 
 ## Response Format [EXTREMELY IMPORTANT]:
 - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.
