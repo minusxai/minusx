@@ -73,15 +73,6 @@ export function documentsToQueryResultColumns(
 export class MongoConnector extends NodeConnector {
   private readonly uri: string;
   private readonly database: string;
-  // Lazy-init: the mongodb driver pools connections per URI internally and
-  // is designed for ONE long-lived client per app, not one-per-query.
-  // Opening and closing a client per call races the driver's session
-  // lifecycle (MongoExpiredSessionError under any concurrency). We open
-  // once on first use and let GC reclaim the connection pool when the
-  // connector goes out of scope. For benchmark CLI runs the process exits
-  // anyway; for v=2 chat each request builds fresh connectors that die
-  // after the turn — small connection-pool leak is acceptable.
-  private clientPromise: Promise<MongoClient> | null = null;
 
   constructor(name: string, config: Record<string, any>) {
     super(name, config);
@@ -91,11 +82,7 @@ export class MongoConnector extends NodeConnector {
   }
 
   private getClient(): Promise<MongoClient> {
-    if (!this.clientPromise) {
-      const client = new MongoClient(this.uri);
-      this.clientPromise = client.connect();
-    }
-    return this.clientPromise;
+    return getSharedMongoClient(this.uri);
   }
 
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {
@@ -115,13 +102,13 @@ export class MongoConnector extends NodeConnector {
   async query(sql: string): Promise<QueryResult> {
     const client = await this.getClient();
     const queryLeaf = new QueryLeaf(client, this.database);
-    const rewrittenSql = rewriteNullChecks(sql);
+    const rewrittenSql = rewriteForQueryleaf(sql);
     const result = await queryLeaf.execute(rewrittenSql);
     const rows = (Array.isArray(result) ? result : []) as Record<string, unknown>[];
     const { columns, types } = documentsToQueryResultColumns(rows);
     // Mongo connector doesn't accept `:name` params — queryleaf takes SQL
     // as-is — so `finalQuery` reflects what queryleaf actually ran, which
-    // may differ from `sql` by the `IS [NOT] NULL` rewrite below.
+    // may differ from `sql` by the queryleaf-compat rewrites applied below.
     return { columns, types, rows, finalQuery: rewrittenSql };
   }
 
@@ -149,29 +136,75 @@ export class MongoConnector extends NodeConnector {
 }
 
 /**
- * Rewrite the SQL standard `IS [NOT] NULL` operators to queryleaf's
- * supported `[!]= NULL` form. queryleaf's parser throws "Unsupported
- * operator: IS NOT" (and the symmetric "IS" case) even though it
- * happily accepts the non-standard `!= NULL` / `= NULL` against MongoDB
- * documents — the inverse of every standard SQL dialect.
+ * Process-wide cache of MongoClient promises keyed by Mongo URI.
  *
- * Implementation is a regex pass rather than an AST round-trip because:
- *  - queryleaf has its own non-standard dialect (it accepts `!= null`,
- *    which any standard SQL parser would reject), so a standard
- *    JS SQL parser can't safely parse what queryleaf will run;
- *  - the rewrite is a single operator pair, not structural surgery;
- *  - the SQL we receive is exclusively LLM-generated against MongoDB
- *    connections — the theoretical false-positive ("the literal string
- *    `'IS NOT NULL'` appears inside a quoted value") is vanishingly
- *    unlikely in practice, and would at worst cause queryleaf to error
- *    on the next turn, which the agent can recover from.
+ * Background: `MongoConnector` is constructed fresh on every
+ * `ExecuteQuery` / `SearchDBSchema` invocation (`shared-duckdb.ts`
+ * falls through to `getNodeConnector` for non-attachable dialects).
+ * Each fresh connector opened a brand-new `MongoClient`, which opens a
+ * fresh socket pool (default `maxPoolSize=100`). Connectors went out of
+ * scope after their tool call but their MongoClient sockets stayed
+ * alive until heartbeat timeout — so under benchmark load (rows ×
+ * `DAB_TIMES_RUN` × DoubleCheck rounds × per-row tool calls), Mongo's
+ * connection count climbed into the thousands and the container OOM'd
+ * with `connect ECONNREFUSED` once it stopped accepting new sockets.
  *
- * Word boundaries (`\b`) keep the match from firing inside identifiers
- * like `IS_NOT_NULLABLE`. `\s+` matches one-or-more whitespace including
- * newlines. Case-insensitive flag handles every casing the model emits.
+ * Fix: process-wide singleton per URI, mirroring the DuckDB pattern in
+ * `shared-duckdb.ts::getOrCreateBenchmarkConnector`. All
+ * MongoConnectors pointing at the same Mongo share one MongoClient
+ * (and therefore one socket pool capped at `maxPoolSize`). Lifetime is
+ * the process — no explicit `client.close()` because (a) closing per
+ * call races the driver's session lifecycle (MongoExpiredSessionError)
+ * and (b) the benchmark CLI exits when it's done; for v=2 chat the
+ * Node process is long-lived and a stable client per Mongo URI is
+ * exactly what `mongodb`'s authors recommend.
  */
-function rewriteNullChecks(sql: string): string {
+// eslint-disable-next-line no-restricted-syntax -- intentional process-wide singleton cache: connection-pool sharing across requests is the whole point. Key is the full Mongo URI (host:port/db + credentials), so cross-tenant collisions are impossible; entries are immutable promises (MongoClient instances live for the process lifetime by mongodb-driver design).
+const sharedMongoClients = new Map<string, Promise<MongoClient>>();
+
+function getSharedMongoClient(uri: string): Promise<MongoClient> {
+  let p = sharedMongoClients.get(uri);
+  if (!p) {
+    p = new MongoClient(uri).connect();
+    sharedMongoClients.set(uri, p);
+  }
+  return p;
+}
+
+/**
+ * Rewrite SQL fragments the LLM emits so queryleaf can parse them.
+ * queryleaf's dialect is its own thing — it accepts some non-standard
+ * forms (e.g. `!= null`) but rejects standard ones (`IS NOT NULL`,
+ * `REGEXP`). Rather than prompt-engineer around its quirks per call,
+ * we normalise SQL into the operators it does support before handing
+ * it off.
+ *
+ * Rewrites:
+ *   - `IS NOT NULL` → `!= NULL`  (queryleaf throws "Unsupported
+ *     operator: IS NOT" on the standard form, even though it accepts
+ *     the non-standard `!= NULL`).
+ *   - `IS NULL`     → `= NULL`   (symmetric.)
+ *   - `REGEXP`      → `~`        (queryleaf supports Postgres-style
+ *     regex operators `~` / `~*` per its own parser error message but
+ *     not the MySQL `REGEXP` keyword. `~` is the case-sensitive
+ *     equivalent of `REGEXP`.)
+ *
+ * Implementation is regex rather than AST round-trip because:
+ *  - queryleaf has its own non-standard dialect, so a standard JS SQL
+ *    parser can't safely parse what queryleaf will run;
+ *  - rewrites are operator-level, not structural surgery;
+ *  - the SQL is exclusively LLM-generated — false-positives on the
+ *    literal strings `'IS NOT NULL'` / `'REGEXP'` inside quoted values
+ *    are vanishingly unlikely in practice and would at worst surface
+ *    as a queryleaf error the agent recovers from on its next turn.
+ *
+ * Word boundaries (`\b`) prevent matches inside identifiers like
+ * `IS_NOT_NULLABLE`. `\s+` matches arbitrary inter-token whitespace
+ * including newlines. Case-insensitive flag handles every casing.
+ */
+function rewriteForQueryleaf(sql: string): string {
   return sql
     .replace(/\bIS\s+NOT\s+NULL\b/gi, '!= NULL')
-    .replace(/\bIS\s+NULL\b/gi,       '= NULL');
+    .replace(/\bIS\s+NULL\b/gi,       '= NULL')
+    .replace(/\bREGEXP\b/gi,          '~');
 }

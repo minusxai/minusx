@@ -30,7 +30,10 @@ vi.mock('@duckdb/node-api', () => ({
 
 vi.mock('mongodb', () => ({
   MongoClient: vi.fn().mockImplementation(function (this: any) {
-    this.connect = vi.fn().mockResolvedValue(undefined);
+    // `connect` resolves to the client itself — matches the real driver
+    // and keeps `getSharedMongoClient`'s `client.connect()` chain
+    // intact when other code awaits its result.
+    this.connect = vi.fn().mockImplementation(async () => this);
     this.close  = vi.fn().mockResolvedValue(undefined);
     this.db     = vi.fn().mockReturnValue({
       command: vi.fn().mockResolvedValue({ ok: 1 }),
@@ -67,7 +70,10 @@ import { PostgresConnector } from '../postgres-connector';
 import { CsvConnector } from '../csv-connector';
 import { SqliteConnector } from '../sqlite-connector';
 import { MongoConnector } from '../mongo-connector';
+import { MongoClient } from 'mongodb';
 import { getNodeConnector } from '../index';
+
+const MockMongoClient = MongoClient as MockedClass<typeof MongoClient>;
 
 const MockAthenaClient = AthenaClient as MockedClass<typeof AthenaClient>;
 const MockGlueClient = GlueClient as MockedClass<typeof GlueClient>;
@@ -1072,5 +1078,71 @@ describe('MongoConnector.query() — SQL → queryleaf rewrite', () => {
     const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
     const result = await conn.query("SELECT a FROM t WHERE x IS NOT NULL");
     expect(result.finalQuery).toBe("SELECT a FROM t WHERE x != NULL");
+  });
+
+  it('rewrites `REGEXP` → `~` (queryleaf accepts Postgres-style regex but not MySQL `REGEXP`)', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    await conn.query("SELECT business_id FROM business WHERE description REGEXP 'Shopping'");
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
+      "SELECT business_id FROM business WHERE description ~ 'Shopping'",
+    );
+  });
+
+  it('REGEXP rewrite is case-insensitive and word-boundaried', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    // Lowercase `regexp` is also rewritten; the keyword `REGEXP_REPLACE`
+    // (an identifier, not the operator) is left alone by `\b`.
+    await conn.query("SELECT REGEXP_REPLACE(name,'a','b'), x FROM t WHERE y regexp 'p'");
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
+      "SELECT REGEXP_REPLACE(name,'a','b'), x FROM t WHERE y ~ 'p'",
+    );
+  });
+});
+
+describe('MongoConnector client lifecycle — process-wide pooling', () => {
+  // Regression guard for a leak where every fresh `MongoConnector`
+  // opened a brand-new `MongoClient` (and therefore a fresh socket
+  // pool, default `maxPoolSize=100`). Under benchmark load this
+  // climbed into the thousands and the Mongo container OOM'd. Fix:
+  // process-wide cache keyed by URI — all connectors pointing at the
+  // same Mongo share one MongoClient.
+  //
+  // The cache is module-level and persists across tests in this file,
+  // so assertions are framed as "delta vs. before this test" rather
+  // than "absolute call count" — robust to other tests priming the
+  // cache for known URIs.
+
+  beforeEach(() => {
+    mockQueryLeafExecute.mockReset();
+    mockQueryLeafExecute.mockResolvedValue([]);
+  });
+
+  it('reuses one MongoClient across many MongoConnectors for the same URI', async () => {
+    // Prime the cache once so the next 10 calls definitely hit it
+    // regardless of what tests ran before this one.
+    await new MongoConnector('prime', MONGO_BASE_CONFIG).query('SELECT 1 FROM t');
+    const callsBefore = MockMongoClient.mock.calls.length;
+
+    // 10 fresh connectors with identical config — mimics 10 sequential
+    // ExecuteQuery calls in the benchmark path.
+    for (let i = 0; i < 10; i++) {
+      const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+      await conn.query('SELECT 1 FROM t');
+    }
+
+    // Zero NEW MongoClient constructions — every one reuses the cached
+    // promise.
+    expect(MockMongoClient.mock.calls.length - callsBefore).toBe(0);
+  });
+
+  it('opens distinct MongoClients for distinct URIs', async () => {
+    const callsBefore = MockMongoClient.mock.calls.length;
+
+    // Hostnames not yet seen by any earlier test, so each one is a
+    // fresh cache miss.
+    await new MongoConnector('a', { host: 'lifecycle-host-aaa', port: 27017, database: 'db' }).query('SELECT 1 FROM t');
+    await new MongoConnector('b', { host: 'lifecycle-host-bbb', port: 27017, database: 'db' }).query('SELECT 1 FROM t');
+
+    expect(MockMongoClient.mock.calls.length - callsBefore).toBe(2);
   });
 });
