@@ -356,7 +356,7 @@ const FuzzySearchParams = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
   table: Type.String({ description: 'Table name to search' }),
   column: Type.String({ description: 'Text column to search in' }),
-  search_term: Type.String({ description: 'The value to fuzzy-match against' }),
+  search_term: Type.String({ description: 'Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases.' }),
   schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
   limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
 });
@@ -364,7 +364,7 @@ const FuzzySearchParams = Type.Object({
 export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnalystContext> {
   static readonly schema: Tool<typeof FuzzySearchParams> = {
     name: 'FuzzySearch',
-    description: 'Search for approximate/fuzzy matches of a value in a text column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user\'s wording (typos, spacing, abbreviations, etc.). Returns the closest matching distinct values with similarity scores.',
+    description: 'Search for approximate/fuzzy matches of a value in a text column. Use BEFORE writing WHERE filters on text columns when the exact stored value might differ from the user\'s wording (typos, spacing, abbreviations, etc.). IMPORTANT: Use 1-3 short, specific keywords as search_term, NOT full phrases. Returns the closest matching distinct values with similarity scores.',
     parameters: FuzzySearchParams,
   };
 

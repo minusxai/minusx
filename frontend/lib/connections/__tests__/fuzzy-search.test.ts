@@ -357,6 +357,25 @@ describe('fuzzySearch — unknown connector', () => {
     expect(sql).toContain('%strawberry%jam%');
   });
 
+  it('adds per-word LIKE conditions for multi-word search', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('mongo', queryFn, { table: 't', column: 'c', searchTerm: 'green energy' });
+    const sql = getCapturedSql(queryFn);
+    // Should match individual words, not just the full phrase
+    expect(sql).toContain("'%green%'");
+    expect(sql).toContain("'%energy%'");
+  });
+
+  it('does not add per-word conditions for single-word search', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('mongo', queryFn, { table: 't', column: 'c', searchTerm: 'green' });
+    const sql = getCapturedSql(queryFn);
+    expect(sql).toContain("'%green%'");
+    // Should only have one LIKE — no per-word split needed
+    const likeCount = (sql.match(/LIKE/g) || []).length;
+    expect(likeCount).toBe(1);
+  });
+
   it('does not add word-split pattern for single-word search', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('some_db', queryFn, { table: 't', column: 'c', searchTerm: 'hello' });

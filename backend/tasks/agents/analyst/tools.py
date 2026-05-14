@@ -110,6 +110,10 @@ class FuzzySearch(Tool):
     stored value might differ from the user's wording (typos, spacing,
     abbreviations, casing differences, etc.).
 
+    IMPORTANT: Use short, specific keywords as search_term — ideally 1-3
+    distinctive words, NOT full natural-language phrases. Avoid filler words.
+    Good: "revenue", "green energy northern". Bad: "green energy production in northern regions".
+
     Returns multiple search strategies in priority order:
     - Similarity-based (jaro_winkler, trigram, or levenshtein): best for typos and close spellings. Prioritize these matches.
     - Substring-based: catches exact containment in longer text. Use these when similarity returns no matches, or as supplementary results.
@@ -122,7 +126,7 @@ class FuzzySearch(Tool):
         connection_id: str = Field(..., description="Database connection name"),
         table: str = Field(..., description="Table name to search"),
         column: str = Field(..., description="Text column to search in"),
-        search_term: str = Field(..., description="The value to fuzzy-match against"),
+        search_term: str = Field(..., description="Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases."),
         schema: str = Field("main", description="Schema name (default: 'main')"),
         limit: int = Field(100, description="Max results to return"),
         **kwargs

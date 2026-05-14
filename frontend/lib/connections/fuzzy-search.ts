@@ -153,6 +153,12 @@ async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: Q
   if (wordPattern) {
     conditions.push(`LOWER(${q(p.column)}) LIKE ${wordPattern}`);
   }
+  // Add per-word matching so partial matches (e.g. "green" from "green energy") are found
+  if (words.length > 1) {
+    for (const word of words) {
+      conditions.push(`LOWER(${q(p.column)}) LIKE '%${word}%'`);
+    }
+  }
 
   const termLen = term.length;
   const lenExpr = `LENGTH(${q(p.column)})`;
