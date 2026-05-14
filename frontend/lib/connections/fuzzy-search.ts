@@ -6,19 +6,19 @@ import type { QueryResult } from './base';
 
 type QueryFn = (sql: string) => Promise<QueryResult>;
 
-export interface FuzzySearchResultEntry {
+export interface FuzzyMatchResultEntry {
   method: 'jaro_winkler' | 'trigram' | 'levenshtein' | 'substring';
   matches: Array<{ value: string; similarity: number }>;
   query: string;
 }
 
-export interface FuzzySearchResult {
-  results: FuzzySearchResultEntry[];
+export interface FuzzyMatchResult {
+  results: FuzzyMatchResultEntry[];
   searchTerm: string;
   hint?: string;
 }
 
-interface FuzzySearchParams {
+interface FuzzyMatchParams {
   table: string;
   column: string;
   searchTerm: string;
@@ -62,7 +62,7 @@ function rowsToMatches(rows: Record<string, unknown>[]): Array<{ value: string; 
 
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
 
-async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
+async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS VARCHAR)`;
   const sql = `
@@ -87,7 +87,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySe
   };
 }
 
-async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
+async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS TEXT)`;
   const trigramSql = `
@@ -101,7 +101,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<Fuzzy
   `;
   // Run substring in parallel; attempt trigram separately so its failure doesn't cancel substring
   const substringPromise = fuzzySubstring(queryFn, p);
-  let trigramEntry: FuzzySearchResultEntry | null = null;
+  let trigramEntry: FuzzyMatchResultEntry | null = null;
   try {
     const trigramResult = await queryFn(trigramSql);
     trigramEntry = { matches: rowsToMatches(trigramResult.rows), method: 'trigram', query: trigramSql.trim() };
@@ -113,7 +113,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<Fuzzy
   return { results, searchTerm: p.searchTerm };
 }
 
-async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
+async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
   const maxDist = Math.max(Math.floor(p.searchTerm.length / 3), 3);
   const sql = `
     SELECT DISTINCT ${escapeIdent(p.column)} AS value,
@@ -140,7 +140,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySe
 
 type QuoteStyle = 'double' | 'backtick';
 
-async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: QuoteStyle = 'double'): Promise<FuzzySearchResultEntry> {
+async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: QuoteStyle = 'double'): Promise<FuzzyMatchResultEntry> {
   const q = quoteStyle === 'backtick'
     ? (name: string) => `\`${name.replace(/`/g, '\\`')}\``
     : escapeIdent;
@@ -190,7 +190,7 @@ function escapeRegex(value: string): string {
  * connectors. `p.schema` is irrelevant for Mongo (single-database connector);
  * `p.table` is the collection name.
  */
-async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
+async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
   const pipeline = [
     { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
     { $group: { _id: `$${p.column}` } },
@@ -205,7 +205,7 @@ async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySea
   };
 }
 
-async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
+async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
   const term = escapeLiteral(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
 
@@ -227,18 +227,18 @@ async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<Fuzzy
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
-export async function fuzzySearch(
+export async function fuzzyMatch(
   connectorType: string,
   queryFn: QueryFn,
-  params: FuzzySearchParams,
-): Promise<FuzzySearchResult> {
+  params: FuzzyMatchParams,
+): Promise<FuzzyMatchResult> {
   const p = {
     ...params,
     schema: params.schema,
     limit: params.limit || 100,
   };
 
-  let result: FuzzySearchResult;
+  let result: FuzzyMatchResult;
 
   switch (connectorType) {
     case 'duckdb':
@@ -268,7 +268,7 @@ export async function fuzzySearch(
 
   const allEmpty = result.results.every(r => r.matches.length === 0);
   if (allEmpty) {
-    result.hint = 'No matches found. This likely means the column uses different vocabulary or stores free-text descriptions rather than exact category labels. You SHOULD use ExploreDataset on this column to discover what values actually exist — that will reveal the right keywords for a follow-up FuzzySearch or SQL filter.';
+    result.hint = 'No matches found. This likely means the column uses different vocabulary or stores free-text descriptions rather than exact category labels. You SHOULD use ExploreDataset on this column to discover what values actually exist — that will reveal the right keywords for a follow-up FuzzyMatch or SQL filter.';
   }
 
   return result;

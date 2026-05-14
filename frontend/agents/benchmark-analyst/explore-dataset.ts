@@ -63,7 +63,7 @@ function buildExploreSystemPrompt(contextDocs?: string): string {
   return `You are a data tool. Another agent sends you data + a task. Return ONLY the answer — no preamble, no methodology, no commentary.
 
 You are invoked when:
-- When the main agent needs an LLM to reason about the data — such as entity resolution, deduplication, clustering, pattern detection, or other tasks that can't be expressed in SQL. You are mainly invoked for unknown-unknowns where FuzzySearch isn't applicable (e.g. grouping similar rows across the whole table is O(n²) for FuzzySearch but natural for an LLM).
+- When the main agent needs an LLM to reason about the data — such as entity resolution, deduplication, clustering, pattern detection, or other tasks that can't be expressed in SQL. You are mainly invoked for unknown-unknowns where FuzzyMatch isn't applicable (e.g. grouping similar rows across the whole table is O(n²) for FuzzyMatch but natural for an LLM).
 
 ## Guidelines
 - Never give only a small subset of results unless asked. Answer the main agent's question promptly and completely.

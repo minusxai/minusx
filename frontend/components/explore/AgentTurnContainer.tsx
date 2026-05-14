@@ -18,7 +18,7 @@ import { FileDetailCard } from './tools/CreateFileDisplay';
 import { ClarifyDetailCard } from './tools/ClarifyDisplay';
 import { EditFileDetailCard } from './tools/EditFileDisplay';
 import { ReadFilesDetailCard } from './tools/ReadFilesDisplay';
-import { FuzzySearchDetailCard } from './tools/FuzzySearchDisplay';
+import { FuzzyMatchDetailCard } from './tools/FuzzyMatchDisplay';
 import { ExploreDatasetDetailCard } from './tools/ExploreDatasetDisplay';
 import { getToolConfig } from '@/lib/api/tool-config';
 import { WebSearchDetailCard, type WebSearchResult } from './tools/WebSearchDisplay';
@@ -447,7 +447,7 @@ export default function AgentTurnContainer({
     'CreateFile': FileDetailCard,
     'SearchFiles': SearchFilesDetailCard,
     'SearchDBSchema': SearchDBSchemaDetailCard,
-    'FuzzySearch': FuzzySearchDetailCard,
+    'FuzzyMatch': FuzzyMatchDetailCard,
     'ExploreDataset': ExploreDatasetDetailCard,
     'ListDBConnections': ListDBConnectionsDetailCard,
   };

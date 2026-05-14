@@ -103,7 +103,7 @@ class SearchDBSchema(Tool):
         raise UserInputException(self._unique_id)
 
 @register_agent
-class FuzzySearch(Tool):
+class FuzzyMatch(Tool):
     """Match a known term against stored values in a text or categorical column.
 
     This is a LEXICAL MATCHING tool, not a search tool — it finds values that

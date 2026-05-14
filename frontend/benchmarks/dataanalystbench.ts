@@ -24,7 +24,7 @@ import {
   ListDBConnections,
   BaseSearchDBSchema,
   BaseExecuteQuery,
-  FuzzySearch
+  FuzzyMatch
 } from '@/agents/benchmark-analyst/db-tools';
 import { ExploreDataset } from '@/agents/benchmark-analyst/explore-dataset';
 import {
@@ -124,10 +124,10 @@ const registrables = doubleCheck
       BenchmarkAnalystAgentForDoubleCheck,
       CheckEquivalence,
       RootAgent,
-      FuzzySearch,
+      FuzzyMatch,
       ExploreDataset,
     ]
-  : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzySearch, ExploreDataset];
+  : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzyMatch, ExploreDataset];
 
 // Default per-question timeout (seconds). Override via DAB_QUESTION_TIMEOUT.
 // A row that hits its timeout is cancelled and dropped from the output

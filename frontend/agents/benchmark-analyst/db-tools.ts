@@ -12,7 +12,7 @@ import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
-import { fuzzySearch } from '@/lib/connections/fuzzy-search';
+import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -352,7 +352,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 }
 
-const FuzzySearchParams = Type.Object({
+const FuzzyMatchParams = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
   table: Type.String({ description: 'Table name to search' }),
   column: Type.String({ description: 'Text column to search in' }),
@@ -361,11 +361,11 @@ const FuzzySearchParams = Type.Object({
   limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
 });
 
-export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnalystContext> {
-  static readonly schema: Tool<typeof FuzzySearchParams> = {
-    name: 'FuzzySearch',
+export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalystContext> {
+  static readonly schema: Tool<typeof FuzzyMatchParams> = {
+    name: 'FuzzyMatch',
     description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). This is a LEXICAL MATCHING tool, not a search tool — it requires you to already know approximately what the value looks like. For discovering unknown values or semantic concepts in free-text columns, use ExploreDataset instead. Use 1-3 short, specific keywords. Returns similarity-based and substring matches.',
-    parameters: FuzzySearchParams,
+    parameters: FuzzyMatchParams,
   };
 
   protected connectors = new Map<string, NodeConnector>();
@@ -396,7 +396,7 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
       return {
         content: [{ type: 'text', text: JSON.stringify({
           success: false,
-          error: `FuzzySearch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
+          error: `FuzzyMatch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
         }) }],
         isError: true,
       };
@@ -405,12 +405,12 @@ export class FuzzySearch extends MXTool<typeof FuzzySearchParams, BenchmarkAnaly
     const queryFn = async (sql: string) => connector.query(sql);
 
     try {
-      const result = await fuzzySearch(dialect, queryFn, {
+      const result = await fuzzyMatch(dialect, queryFn, {
         table, column, searchTerm: search_term, schema: schemaName, limit,
       });
 
       if (result.hint && category != 'categorical') {
-        result.hint = `No matches found in free-text column "${column}". FuzzySearch is the WRONG tool for this column — free-text descriptions use varied vocabulary, not exact category labels. You MUST use ExploreDataset to semantically classify values in this column instead.`;
+        result.hint = `No matches found in free-text column "${column}". FuzzyMatch is the WRONG tool for this column — free-text descriptions use varied vocabulary, not exact category labels. You MUST use ExploreDataset to semantically classify values in this column instead.`;
       }
 
       return {
