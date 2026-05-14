@@ -39,6 +39,7 @@ interface BenchmarkRow {
   eval?: EvalResult;
   connections?: BenchmarkConnectionEntry[];
   benchmark?: string;
+  git_commit?: string;
 }
 
 type ParsedFile =
@@ -446,10 +447,12 @@ export default function BenchmarkPage() {
     const hasEvals = parsed.rows.some(r => r.eval);
     const hasFailureRate = parsed.rows.some(r => r.eval?.failure_rate != null);
     const hasBenchmark = parsed.rows.some(r => r.benchmark);
+    const hasCommit = parsed.rows.some(r => r.git_commit);
     const hasQueryId = parsed.rows.some(r => r.input_index != null);
     const hasRunIdx = parsed.rows.some(r => r.eval?.run_idx != null);
     const columns = [
       ...(hasBenchmark ? ['Dataset'] : []),
+      ...(hasCommit ? ['Commit'] : []),
       ...(hasQueryId ? ['Query ID'] : []),
       ...(hasRunIdx ? ['Run ID'] : []),
       'Question',
@@ -460,6 +463,7 @@ export default function BenchmarkPage() {
     ];
     const types = [
       ...(hasBenchmark ? ['VARCHAR'] : []),
+      ...(hasCommit ? ['VARCHAR'] : []),
       ...(hasQueryId ? ['INTEGER'] : []),
       ...(hasRunIdx ? ['INTEGER'] : []),
       'VARCHAR',
@@ -472,6 +476,7 @@ export default function BenchmarkPage() {
       const st = stats.perRow[i];
       return {
         ...(hasBenchmark ? { 'Dataset': row.benchmark ?? '' } : {}),
+        ...(hasCommit ? { 'Commit': row.git_commit ?? '' } : {}),
         ...(hasQueryId ? { 'Query ID': row.input_index ?? i } : {}),
         ...(hasRunIdx ? { 'Run ID': row.eval?.run_idx ?? 0 } : {}),
         'Question': row.input.user_message,
@@ -613,7 +618,7 @@ export default function BenchmarkPage() {
             types={tableData.types}
             rows={tableData.rows}
             onRowClick={(row) => setSelectedRow(row._rowIndex as number)}
-            initialColumnSizing={{ 'Question': 250, 'Answer': 500, 'Eval Reason': 250, 'Query ID': 100, 'Run ID': 80, 'Eval': 100 }}
+            initialColumnSizing={{ 'Question': 250, 'Answer': 500, 'Eval Reason': 250, 'Query ID': 80, 'Run ID': 60, 'Eval': 80, 'Commit': 90 }}
             initialSorting={[{ id: 'Dataset', desc: false }, { id: 'Query ID', desc: false }, { id: 'Run ID', desc: false }]}
             wrapColumns={WRAP_COLUMNS}
             renderCell={(colId, value) => {
