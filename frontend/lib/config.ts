@@ -55,10 +55,10 @@ interface EnvironmentConfig {
   DAB_BENCH_DATASETS: string | undefined;
   DAB_BENCH_RERUN: string | undefined;
   DAB_QUESTION_TIMEOUT: string | undefined;
-  DAB_DATASET_TIMEOUT: string | undefined;
   DAB_TIMES_RUN: string | undefined;
   DAB_DOUBLE_CHECK: string | undefined;
   MAX_LLM_CONCURRENCY: string | undefined;
+  MAX_AGENTS_CONCURRENCY: string | undefined;
 }
 
 const errors: string[] = [];
@@ -137,10 +137,10 @@ const config: EnvironmentConfig = {
   DAB_BENCH_DATASETS: process.env.DAB_BENCH_DATASETS,
   DAB_BENCH_RERUN: process.env.DAB_BENCH_RERUN,
   DAB_QUESTION_TIMEOUT: process.env.DAB_QUESTION_TIMEOUT,
-  DAB_DATASET_TIMEOUT: process.env.DAB_DATASET_TIMEOUT,
   DAB_TIMES_RUN: process.env.DAB_TIMES_RUN,
   DAB_DOUBLE_CHECK: process.env.DAB_DOUBLE_CHECK,
   MAX_LLM_CONCURRENCY: process.env.MAX_LLM_CONCURRENCY,
+  MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -207,7 +207,7 @@ export const DAB_BENCH_BASE_DIR = config.DAB_BENCH_BASE_DIR;
 export const DAB_BENCH_DATASETS = config.DAB_BENCH_DATASETS;
 export const DAB_BENCH_RERUN = config.DAB_BENCH_RERUN;
 export const DAB_QUESTION_TIMEOUT = config.DAB_QUESTION_TIMEOUT;
-export const DAB_DATASET_TIMEOUT = config.DAB_DATASET_TIMEOUT;
 export const DAB_TIMES_RUN = config.DAB_TIMES_RUN;
 export const DAB_DOUBLE_CHECK = config.DAB_DOUBLE_CHECK;
 export const MAX_LLM_CONCURRENCY = config.MAX_LLM_CONCURRENCY;
+export const MAX_AGENTS_CONCURRENCY = config.MAX_AGENTS_CONCURRENCY;
