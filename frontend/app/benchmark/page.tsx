@@ -26,6 +26,8 @@ interface EvalResult {
    *  redundant with `pass` (0 or 100); for DAB_TIMES_RUN>1 rows it
    *  surfaces flakiness directly. Populated by mxscripts/eval_output.py. */
   failure_rate?: number;
+  /** Index of the run within a multi-run batch (0-based). */
+  run_idx?: number;
 }
 
 interface BenchmarkRow {
@@ -445,9 +447,11 @@ export default function BenchmarkPage() {
     const hasFailureRate = parsed.rows.some(r => r.eval?.failure_rate != null);
     const hasBenchmark = parsed.rows.some(r => r.benchmark);
     const hasQueryId = parsed.rows.some(r => r.input_index != null);
+    const hasRunIdx = parsed.rows.some(r => r.eval?.run_idx != null);
     const columns = [
       ...(hasBenchmark ? ['Dataset'] : []),
       ...(hasQueryId ? ['Query ID'] : []),
+      ...(hasRunIdx ? ['Run ID'] : []),
       'Question',
       'Answer',
       ...(hasEvals ? ['Eval', 'Eval Reason'] : []),
@@ -457,6 +461,7 @@ export default function BenchmarkPage() {
     const types = [
       ...(hasBenchmark ? ['VARCHAR'] : []),
       ...(hasQueryId ? ['INTEGER'] : []),
+      ...(hasRunIdx ? ['INTEGER'] : []),
       'VARCHAR',
       'VARCHAR',
       ...(hasEvals ? ['VARCHAR', 'VARCHAR'] : []),
@@ -468,6 +473,7 @@ export default function BenchmarkPage() {
       return {
         ...(hasBenchmark ? { 'Dataset': row.benchmark ?? '' } : {}),
         ...(hasQueryId ? { 'Query ID': row.input_index ?? i } : {}),
+        ...(hasRunIdx ? { 'Run ID': row.eval?.run_idx ?? 0 } : {}),
         'Question': row.input.user_message,
         'Answer': extractAnswer(row),
         ...(hasEvals ? {
@@ -607,8 +613,8 @@ export default function BenchmarkPage() {
             types={tableData.types}
             rows={tableData.rows}
             onRowClick={(row) => setSelectedRow(row._rowIndex as number)}
-            initialColumnSizing={{ 'Question': 250, 'Answer': 500, 'Eval Reason': 250, 'Query ID': 100, 'Eval': 100 }}
-            initialSorting={[{ id: 'Dataset', desc: false }, { id: 'Query ID', desc: false }]}
+            initialColumnSizing={{ 'Question': 250, 'Answer': 500, 'Eval Reason': 250, 'Query ID': 100, 'Run ID': 80, 'Eval': 100 }}
+            initialSorting={[{ id: 'Dataset', desc: false }, { id: 'Query ID', desc: false }, { id: 'Run ID', desc: false }]}
             wrapColumns={WRAP_COLUMNS}
             renderCell={(colId, value) => {
               if (colId === 'Answer' && typeof value === 'string' && value) {
