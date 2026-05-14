@@ -74,13 +74,13 @@ ${JSON.stringify(visibleConnections)}
 - Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary.
 - Format:
     TL;DR: <your concise answer to the question, based on the data and your analysis>
-    Analysis: <a description of your analysis, general discussion about the results, and continuation question for the user to investigate further.>
+    Analysis: <a concise analysis at the top presenting all important info first, followed by reasoning of how you arrived at the answer.>
 Example:
 Q: What is the total revenue for product X in the last quarter?
 Agent:
 <Runs tools to analyze the data, arrives at the answer>
 TL;DR: $123,456 was the total revenue for product X in the last quarter.
-Analysis: <markdown table showing revenue by month>. The revenue over quarter-over-quarter has grown by 20%, with the highest revenue in March. Would you like to see a breakdown by region or customer segment?
+Analysis: <csv table showing revenue by month>. The revenue over quarter-over-quarter has grown by 20%, with the highest revenue in March. This was caluclated by using the revenue data from the last quarter.
 
 ## Data Documentation:
 ${this.context.contextDocs ?? 'No documentation available.'}
