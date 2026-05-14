@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files and postinstall script (needed during npm ci)
-COPY package*.json ./
+COPY package*.json .npmrc ./
 COPY scripts/copy-duckdb-wasm.mjs ./scripts/copy-duckdb-wasm.mjs
 
 RUN --mount=type=cache,target=/root/.npm \
