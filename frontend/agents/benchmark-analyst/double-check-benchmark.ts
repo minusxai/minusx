@@ -31,7 +31,14 @@ import { BenchmarkAnalystAgent } from './benchmark-analyst';
 import type { BenchmarkAnalystContext } from './types';
 
 /** Dedicated judge model — always Opus, independent of the analyst model config. */
-const JUDGE_MODEL = getModel('anthropic', 'claude-opus-4-7');
+let judgeModel = getModel('anthropic', 'claude-opus-4-7');
+
+/** Override the judge model (for tests). Returns the previous model. */
+export function setJudgeModel(m: typeof judgeModel): typeof judgeModel {
+  const prev = judgeModel;
+  judgeModel = m;
+  return prev;
+}
 
 // ─── Slot ids & round budget ──────────────────────────────────────────────
 // Stable across resumes; uniquely identify each dispatched toolCall within
@@ -103,7 +110,7 @@ export class CheckEquivalence extends MXTool<
       ],
       tools: [],
     };
-    const verdictMsg = await this.orchestrator.callLLM(JUDGE_MODEL, judgeCtx, this.id);
+    const verdictMsg = await this.orchestrator.callLLM(judgeModel, judgeCtx, this.id);
     const reason = extractText(verdictMsg).trim();
     const upper = reason.toUpperCase();
     const equivalent = upper.startsWith('EQUIVALENT')
