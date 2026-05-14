@@ -110,7 +110,9 @@ class FuzzySearch(Tool):
     stored value might differ from the user's wording (typos, spacing,
     abbreviations, casing differences, etc.).
 
-    Returns the closest matching distinct values with similarity scores.
+    Returns multiple search strategies in priority order:
+    - Similarity-based (jaro_winkler, trigram, or levenshtein): best for typos and close spellings. Prioritize these matches.
+    - Substring-based: catches exact containment in longer text. Use these when similarity returns no matches, or as supplementary results.
 
     Example: user asks about "Get Me Bodied" but column stores "GetMe Bodied".
     """
