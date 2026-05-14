@@ -23,6 +23,8 @@ beforeAll(() => {
     CREATE TABLE orders (order_id INTEGER PRIMARY KEY, amount REAL, status TEXT);
     INSERT INTO orders VALUES (1, 99.5, 'active');
     INSERT INTO orders VALUES (2, 50.0, 'inactive');
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_orders_status_amount ON orders(status, amount);
   `);
   db.close();
 });
@@ -80,6 +82,22 @@ describe('SqliteConnector.query()', () => {
     );
     expect(result.rows).toEqual([]);
   });
+
+  it('interrupts a slow query past the timeout and rejects with a timeout error', async () => {
+    const connector = new SqliteConnector('test', { file_path: sqliteDbPath });
+    const start = Date.now();
+    await expect(
+      connector.query('SELECT count(*) AS c FROM range(20000000000)', undefined, 1000),
+    ).rejects.toThrow(/timeout/i);
+    expect(Date.now() - start).toBeLessThan(15000);
+  }, 20000);
+
+  it('completes a fast query normally when within the timeout', async () => {
+    const result = await new SqliteConnector('test', { file_path: sqliteDbPath }).query(
+      'SELECT id FROM users ORDER BY id', undefined, 60000,
+    );
+    expect(result.rows).toEqual([{ id: 1 }, { id: 2 }]);
+  });
 });
 
 describe('SqliteConnector.getSchema()', () => {
@@ -95,5 +113,19 @@ describe('SqliteConnector.getSchema()', () => {
 
     const usersTable = schema[0].tables.find(t => t.table === 'users')!;
     expect(usersTable.columns.map(c => c.name)).toEqual(['id', 'name', 'email']);
+  });
+
+  it('populates tables[].indexes from the attached SQLite db', async () => {
+    const schema = await new SqliteConnector('test', { file_path: sqliteDbPath }).getSchema();
+
+    const usersTable = schema[0].tables.find(t => t.table === 'users')!;
+    expect(usersTable.indexes).toEqual([
+      { name: 'idx_users_email', columns: ['email'], unique: false },
+    ]);
+
+    const ordersTable = schema[0].tables.find(t => t.table === 'orders')!;
+    expect(ordersTable.indexes).toEqual([
+      { name: 'idx_orders_status_amount', columns: ['status', 'amount'], unique: false },
+    ]);
   });
 });

@@ -62,11 +62,11 @@ ${JSON.stringify(visibleConnections)}
 
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to.
-  - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc). NEVER hallucinate table or column names.
-  - Outline your approach in 1-2 sentences before executing any SQL queries.
-  - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response. NEVER hallucinate SQL syntax.
+  - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc).
+  - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
+  - Execute queries in the SQL dialect of the connected databases using the Execute SQL tool. Fix any syntax errors and try again until you get a valid response.
   - When filtering on text or categorical columns, use FuzzySearch FIRST to find the actual stored values before writing WHERE clauses. Text data often has typos, inconsistent spacing, abbreviations, or casing differences — never assume the user's wording matches the data exactly. FuzzySearch returns results from multiple strategies (similarity + substring); prioritize similarity matches for typo/spelling correction, and use substring matches when similarity returns nothing or when matching short terms in longer text.
-  - Use ExploreDataset when you need an LLM to reason over data (entity resolution, deduplication, clustering, pattern detection) — tasks that are O(n²) for FuzzySearch or can't be expressed in SQL. A smaller, cheaper LLM processes this. For ranking questions: query the ranking metric first (e.g. top 100 product names by revenue), then use $label.column_name to pull metadata from other tables for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format. If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
+  - Use ExploreDataset when you need an LLM to reason over data (entity resolution, deduplication, clustering, pattern detection) — especially that which can't be expressed in SQL. For ranking questions: query the ranking metric first (e.g. top 100 product names by revenue), then use $label.column_name to pull metadata from other tables for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format. If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
   - Be concise, specific and accurate in responses.
 
 ## Response Format [EXTREMELY IMPORTANT]:

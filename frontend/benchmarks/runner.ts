@@ -212,6 +212,14 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     path.dirname(inputPath),
     path.basename(inputPath).replace('input', 'output'),
   );
+  // Sidecar for timed-out rows. They're dropped from `_output.jsonl` by
+  // row-atomic persistence (so resume re-does them), but their partial
+  // `orch.log`s are the only window into *what* the agent was grinding on
+  // — captured here for offline analysis. Diagnostic only; never read back.
+  const timeoutsPath = path.join(
+    path.dirname(inputPath),
+    path.basename(inputPath).replace('input', 'timeouts'),
+  );
 
   const label = config.label ?? path.basename(inputPath).replace(/_input\.jsonl$/, '');
 
@@ -275,6 +283,10 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     writeFileSync(outputPath, '');
   }
 
+  // Always start the timeouts sidecar empty — it's per-run diagnostic
+  // data, not resume state. An empty file means "no timeouts this run".
+  writeFileSync(timeoutsPath, '');
+
   const timesRun = Math.max(1, Math.floor(config.timesRun ?? 1));
   const total = inputRows.length;
   const remainingRows = inputRows
@@ -327,7 +339,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
     type RunOutcome =
       | { kind: 'ok'; log: ConversationLog; error?: string }
-      | { kind: 'cancelled'; reason: string };
+      // `log` is the partial `orch.log` at cancellation — discarded from
+      // `_output.jsonl` but written to the timeouts sidecar for analysis.
+      | { kind: 'cancelled'; reason: string; log: ConversationLog };
 
     const outcomes = await Promise.all(
       Array.from({ length: timesRun }, async (): Promise<RunOutcome> => {
@@ -366,7 +380,12 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
         }
 
         if (runCancelled) {
-          return { kind: 'cancelled', reason: `TIMEOUT after ${formatDuration(rowTimeoutMs)}` };
+          return {
+            kind: 'cancelled',
+            reason: `TIMEOUT after ${formatDuration(rowTimeoutMs)}`,
+            // `orch.log` holds the partial conversation up to the abort.
+            log: orch.log as ConversationLog,
+          };
         }
         return { kind: 'ok', log: orch.log as ConversationLog, error };
       }),
@@ -376,7 +395,8 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     // (per-run timeout), drop the whole row. Resume picks it up next
     // invocation and re-does all N runs.
     const cancelled = outcomes.find(
-      (o): o is { kind: 'cancelled'; reason: string } => o.kind === 'cancelled',
+      (o): o is { kind: 'cancelled'; reason: string; log: ConversationLog } =>
+        o.kind === 'cancelled',
     );
     const collectedLogs: ConversationLog[] = [];
     let firstError: string | undefined;
@@ -392,6 +412,22 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
     if (cancelled) {
       timeouts++;
+      // Dropped from `_output.jsonl`, but persist the partial logs of
+      // every run (timed-out and completed alike) to the timeouts
+      // sidecar — same shape as a multi-run `BenchmarkResult` plus a
+      // `timed_out` flag and `reason`, so the existing analysis tooling
+      // reads it the same way.
+      const timeoutRow = {
+        input_index: index,
+        input: row,
+        logs: outcomes.map((o) => o.log),
+        duration_ms: durationMs,
+        timed_out: true,
+        reason: cancelled.reason,
+        connections: entries,
+      };
+      appendFileSync(timeoutsPath, JSON.stringify(timeoutRow) + '\n');
+
       const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
       const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
       const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');

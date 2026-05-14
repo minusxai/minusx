@@ -4,7 +4,7 @@
 // → server-only chain into NextAuth) live in `db-tools.server.ts` and
 // extend the `Base*` classes here.
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type, type Tool, type TSchema } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
@@ -95,7 +95,7 @@ interface SearchDBSchemaDetails extends Record<string, unknown> {
 
 const SEARCH_DB_SCHEMA_SCHEMA: Tool<typeof SearchDBSchemaParams> = {
   name: 'SearchDBSchema',
-  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Use ListDBConnections first to see available connection names.',
+  description: 'Search a connection\'s schema. Empty query returns full schema; non-empty does keyword match (or JSONPath when prefixed with `$`). Returns {success, queryType, tableCount, schema|results}. Always inspect a table here before writing any SQL against it — do not guess column names. Each table includes `indexes: [{name, columns, unique}]` when the connection supports index introspection (Postgres, SQLite, DuckDB) — prefer filtering and joining on indexed columns. Note a leading-wildcard `LIKE \'%x%\'` cannot use a B-tree index; it forces a full scan regardless. Use ListDBConnections first to see available connection names.',
   parameters: SearchDBSchemaParams,
 };
 
@@ -170,13 +170,48 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
 
 // ─── ExecuteQuery (Base) ──────────────────────────────────────────────────
 
-const ExecuteQueryParams = Type.Object({
+// Fields common to the benchmark and production ExecuteQuery schemas.
+// Kept separate so the production variant (`db-tools.server.ts`) can build
+// a schema WITHOUT the benchmark-only `timeout` param — the timeout is only
+// honoured on the benchmark path today; wiring it through the production
+// `_executeFallback` → `runQuery` chain is a tracked follow-up (Tasks.md).
+const EXECUTE_QUERY_BASE_FIELDS = {
   connectionId: Type.String(),
   query: Type.String(),
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of the markdown table returned to the LLM (default 10,000, max 100,000). Increase only if you need to see more rows in text form. Use OFFSET in SQL to page through large results instead.',
   })),
+} as const;
+
+const ExecuteQueryParams = Type.Object({
+  ...EXECUTE_QUERY_BASE_FIELDS,
+  timeout: Type.Optional(Type.Number({
+    description: 'Query timeout in seconds (default 60, max 300). Set this to 180-300 UP FRONT for a query that will scan a large table (full-table aggregation, citation/graph traversal, JSON extraction over all rows) — do not eat a 60s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
+  })),
 });
+
+/**
+ * Production ExecuteQuery params — same as `ExecuteQueryParams` minus
+ * `timeout`. Consumed by `db-tools.server.ts::ExecuteQuery`, which routes
+ * through `_executeFallback` → `runQuery` (a path that does not yet honour
+ * the timeout — see Tasks.md). Hiding the param keeps the production tool
+ * from advertising a capability it doesn't deliver.
+ */
+export const ExecuteQueryParamsNoTimeout = Type.Object(EXECUTE_QUERY_BASE_FIELDS);
+
+/** Default query timeout when the agent doesn't specify one. */
+export const DEFAULT_QUERY_TIMEOUT_SEC = 60;
+/** Hard ceiling on the agent-supplied query timeout. */
+export const MAX_QUERY_TIMEOUT_SEC = 300;
+
+/**
+ * Clamp the agent-supplied `timeout` (seconds) into `[1, MAX_QUERY_TIMEOUT_SEC]`,
+ * falling back to `DEFAULT_QUERY_TIMEOUT_SEC` when unset or non-finite.
+ */
+export function clampQueryTimeoutSeconds(raw?: number): number {
+  if (raw == null || !Number.isFinite(raw)) return DEFAULT_QUERY_TIMEOUT_SEC;
+  return Math.min(Math.max(Math.floor(raw), 1), MAX_QUERY_TIMEOUT_SEC);
+}
 
 interface ExecuteQueryDetails extends Record<string, unknown> {
   success: boolean;
@@ -186,9 +221,20 @@ interface ExecuteQueryDetails extends Record<string, unknown> {
   finalQuery?: string;
 }
 
+/**
+ * Base ExecuteQuery description — shared verbatim by the benchmark and
+ * production schemas. The benchmark schema appends `EXECUTE_QUERY_TIMEOUT_NOTE`;
+ * the production schema (no timeout support yet) uses this as-is.
+ */
+export const EXECUTE_QUERY_DESCRIPTION =
+  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Before querying a table, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzySearch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.';
+
+const EXECUTE_QUERY_TIMEOUT_NOTE =
+  ' A query that exceeds its `timeout` (default 60s, max 300s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout.';
+
 const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
   name: 'ExecuteQuery',
-  description: 'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect (SQL for relational connectors; for mongo, currently routed via QueryLeaf as SQL). A default LIMIT of 1000 rows is applied when your query has no LIMIT clause, and any explicit LIMIT above 10000 is capped at 10000 — use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (SQL with parameters inlined). Increase maxChars (up to 100,000) to see more rows in the text response.',
+  description: EXECUTE_QUERY_DESCRIPTION + EXECUTE_QUERY_TIMEOUT_NOTE,
   parameters: ExecuteQueryParams,
 };
 
@@ -207,7 +253,10 @@ const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
  * override this hook to route via the server-side `runQuery` helper.
  */
 export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAnalystContext, ExecuteQueryDetails> {
-  static readonly schema = EXECUTE_QUERY_SCHEMA;
+  // Typed as the loose `Tool<TSchema>` (not the inferred specific type) so
+  // the production subclass in `db-tools.server.ts` can override `schema`
+  // with a no-`timeout` variant. Matches `MXTool`'s own declaration.
+  static readonly schema: Tool<TSchema> = EXECUTE_QUERY_SCHEMA;
 
   protected connectors = new Map<string, NodeConnector>();
   protected dialects = new Map<string, string>();
@@ -240,6 +289,8 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       TOOL_MAX_LIMIT_CHARS,
     );
 
+    const timeoutMs = clampQueryTimeoutSeconds(this.parameters.timeout) * 1000;
+
     const start = Date.now();
     let result: QueryResult;
     try {
@@ -247,12 +298,19 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       if (local) {
         const dialect = this.dialects.get(connectionId) ?? 'duckdb';
         const cappedSql = await enforceQueryLimit(rawQuery, { dialect });
-        result = await local.query(cappedSql);
+        result = await local.query(cappedSql, undefined, timeoutMs);
       } else {
         result = await this._executeFallback(connectionId, rawQuery, {});
       }
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      let errMsg = err instanceof Error ? err.message : String(err);
+      // Make a timeout actionable at the point of failure: a cancelled
+      // query returns NO rows (not partial), so the agent must either
+      // raise the timeout or narrow the query — and narrowing risks
+      // dropping rows the question needs.
+      if (/exceeded the \d+s timeout/i.test(errMsg)) {
+        errMsg += ` No rows were returned. Either retry with a higher \`timeout\` (up to ${MAX_QUERY_TIMEOUT_SEC}s), or narrow the query — but if you narrow it, beware you may exclude rows the question needs.`;
+      }
       return {
         content: [{ type: 'text', text: JSON.stringify({ success: false, error: errMsg }) }],
         isError: true,

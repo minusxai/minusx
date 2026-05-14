@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { withDuckDbConnection } from './duckdb-registry';
+import { collectDuckDbIndexes } from './duckdb-indexes';
+import { runDuckDbWithTimeout } from './duckdb-query';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -72,7 +74,11 @@ export class DuckDbConnector extends NodeConnector {
     }
   }
 
-  async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
+  async query(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryResult> {
     return withDuckDbConnection(this.absPath, 'READ_ONLY', async (conn) => {
       // Replace named params (:name) with positional $1, $2, ... (DuckDB
       // prepared-statement syntax). The engine receives this + paramValues.
@@ -84,7 +90,7 @@ export class DuckDbConnector extends NodeConnector {
 
       const finalQuery = inlineSqlParams(sql, params);
 
-      const result = await conn.run(positionalSql, paramValues as never);
+      const result = await runDuckDbWithTimeout(conn, positionalSql, timeoutMs, paramValues);
       const colCount = result.columnCount;
       const columns: string[] = [];
       const types: string[] = [];
@@ -132,9 +138,19 @@ export class DuckDbConnector extends NodeConnector {
         tableMap.get(row.table_name)!.push({ name: row.column_name, type: row.data_type });
       }
 
+      // No `databaseName` filter — a directly-opened DuckDB file has just
+      // its own catalog plus `system`/`temp` (which carry no user indexes).
+      // `duckdb_indexes().schema_name` is the bare schema (`main`), matching
+      // the `schemaName` computed above.
+      const indexMap = await collectDuckDbIndexes(conn);
+
       return Array.from(schemaMap.entries()).map(([schema, tables]) => ({
         schema,
-        tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
+        tables: Array.from(tables.entries()).map(([table, columns]) => ({
+          table,
+          columns,
+          indexes: indexMap.get(`${schema}.${table}`) ?? [],
+        })),
       }));
     });
   }

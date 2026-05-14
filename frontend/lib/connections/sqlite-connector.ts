@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { resolveDuckDbFilePath } from './duckdb-connector';
 import { withSqliteViaDuckdbConnection } from './sqlite-via-duckdb-registry';
+import { collectDuckDbIndexes } from './duckdb-indexes';
+import { runDuckDbWithTimeout } from './duckdb-query';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -57,7 +59,11 @@ export class SqliteConnector extends NodeConnector {
     }
   }
 
-  async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
+  async query(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryResult> {
     return withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
       // Replace named params (:name) with positional $N (DuckDB syntax)
       const paramValues: unknown[] = [];
@@ -68,7 +74,7 @@ export class SqliteConnector extends NodeConnector {
 
       const finalQuery = inlineSqlParams(sql, params);
 
-      const result = await conn.run(positionalSql, paramValues as never);
+      const result = await runDuckDbWithTimeout(conn, positionalSql, timeoutMs, paramValues);
       const colCount = result.columnCount;
       const columns: string[] = [];
       const types: string[] = [];
@@ -106,9 +112,17 @@ export class SqliteConnector extends NodeConnector {
         tableMap.get(row.table_name)!.push({ name: row.column_name, type: row.data_type });
       }
 
+      // SQLite's own indexes surface through DuckDB's `duckdb_indexes()` on
+      // the attached catalog (alias `db`, matching the columns query above).
+      const indexMap = await collectDuckDbIndexes(conn, 'db');
+
       return Array.from(schemaMap.entries()).map(([schema, tables]) => ({
         schema,
-        tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
+        tables: Array.from(tables.entries()).map(([table, columns]) => ({
+          table,
+          columns,
+          indexes: indexMap.get(`${schema}.${table}`) ?? [],
+        })),
       }));
     });
   }

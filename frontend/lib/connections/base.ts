@@ -22,9 +22,25 @@ export interface SchemaColumn {
   meta?: ColumnMeta;
 }
 
+/**
+ * One index on a table. `columns` lists the indexed columns/expressions in
+ * order. Surfaced to the agent via `SearchDBSchema` so it can prefer
+ * filtering/joining on indexed columns. Populated by connectors that can
+ * introspect indexes (Postgres, SQLite, DuckDB, benchmark DuckDB-attached
+ * SQLite); left `undefined` by connectors with no index concept (BigQuery,
+ * Athena, CSV) — an honest absence rather than a fabricated empty list.
+ */
+export interface TableIndex {
+  name: string;
+  columns: string[];
+  unique: boolean;
+}
+
 export interface SchemaTable {
   table: string;
   columns: SchemaColumn[];
+  /** Indexes on this table, when the connector can introspect them. */
+  indexes?: TableIndex[];
 }
 
 export interface SchemaEntry {
@@ -124,8 +140,16 @@ export abstract class NodeConnector {
 
   /**
    * Execute a SQL query and return results.
+   *
+   * `timeoutMs` is a best-effort cancellation hint: connectors that can
+   * interrupt an in-flight query (DuckDB, SQLite-via-DuckDB, Postgres)
+   * honour it and reject when exceeded; others currently ignore it.
    */
-  abstract query(sql: string, params?: Record<string, string | number>): Promise<QueryResult>;
+  abstract query(
+    sql: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryResult>;
 
   /**
    * Get database schema.
