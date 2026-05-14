@@ -115,12 +115,14 @@ export class MongoConnector extends NodeConnector {
   async query(sql: string): Promise<QueryResult> {
     const client = await this.getClient();
     const queryLeaf = new QueryLeaf(client, this.database);
-    const result = await queryLeaf.execute(sql);
+    const rewrittenSql = rewriteNullChecks(sql);
+    const result = await queryLeaf.execute(rewrittenSql);
     const rows = (Array.isArray(result) ? result : []) as Record<string, unknown>[];
     const { columns, types } = documentsToQueryResultColumns(rows);
     // Mongo connector doesn't accept `:name` params — queryleaf takes SQL
-    // as-is — so `finalQuery` is literally the input SQL.
-    return { columns, types, rows, finalQuery: sql };
+    // as-is — so `finalQuery` reflects what queryleaf actually ran, which
+    // may differ from `sql` by the `IS [NOT] NULL` rewrite below.
+    return { columns, types, rows, finalQuery: rewrittenSql };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
@@ -144,4 +146,32 @@ export class MongoConnector extends NodeConnector {
     );
     return [{ schema: this.database, tables }];
   }
+}
+
+/**
+ * Rewrite the SQL standard `IS [NOT] NULL` operators to queryleaf's
+ * supported `[!]= NULL` form. queryleaf's parser throws "Unsupported
+ * operator: IS NOT" (and the symmetric "IS" case) even though it
+ * happily accepts the non-standard `!= NULL` / `= NULL` against MongoDB
+ * documents — the inverse of every standard SQL dialect.
+ *
+ * Implementation is a regex pass rather than an AST round-trip because:
+ *  - queryleaf has its own non-standard dialect (it accepts `!= null`,
+ *    which any standard SQL parser would reject), so a standard
+ *    JS SQL parser can't safely parse what queryleaf will run;
+ *  - the rewrite is a single operator pair, not structural surgery;
+ *  - the SQL we receive is exclusively LLM-generated against MongoDB
+ *    connections — the theoretical false-positive ("the literal string
+ *    `'IS NOT NULL'` appears inside a quoted value") is vanishingly
+ *    unlikely in practice, and would at worst cause queryleaf to error
+ *    on the next turn, which the agent can recover from.
+ *
+ * Word boundaries (`\b`) keep the match from firing inside identifiers
+ * like `IS_NOT_NULLABLE`. `\s+` matches one-or-more whitespace including
+ * newlines. Case-insensitive flag handles every casing the model emits.
+ */
+function rewriteNullChecks(sql: string): string {
+  return sql
+    .replace(/\bIS\s+NOT\s+NULL\b/gi, '!= NULL')
+    .replace(/\bIS\s+NULL\b/gi,       '= NULL');
 }

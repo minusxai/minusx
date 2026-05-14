@@ -28,6 +28,24 @@ vi.mock('@duckdb/node-api', () => ({
   DuckDBConnection: vi.fn(),
 }));
 
+vi.mock('mongodb', () => ({
+  MongoClient: vi.fn().mockImplementation(function (this: any) {
+    this.connect = vi.fn().mockResolvedValue(undefined);
+    this.close  = vi.fn().mockResolvedValue(undefined);
+    this.db     = vi.fn().mockReturnValue({
+      command: vi.fn().mockResolvedValue({ ok: 1 }),
+      listCollections: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+    });
+  }),
+}));
+
+const mockQueryLeafExecute = vi.fn();
+vi.mock('@queryleaf/lib', () => ({
+  QueryLeaf: vi.fn().mockImplementation(function (this: any) {
+    this.execute = mockQueryLeafExecute;
+  }),
+}));
+
 vi.mock('@/lib/config', () => ({
   OBJECT_STORE_PUBLIC_URL: undefined,
   MX_NETWORK_LOG_EXCLUDE: '',
@@ -48,6 +66,7 @@ import { Pool } from 'pg';
 import { PostgresConnector } from '../postgres-connector';
 import { CsvConnector } from '../csv-connector';
 import { SqliteConnector } from '../sqlite-connector';
+import { MongoConnector } from '../mongo-connector';
 import { getNodeConnector } from '../index';
 
 const MockAthenaClient = AthenaClient as MockedClass<typeof AthenaClient>;
@@ -994,3 +1013,64 @@ describe('getNodeConnector() factory', () => {
 // SqliteConnector tests moved to sqlite-connector.test.ts — they now
 // require real DuckDB (via sqlite_scanner) which is mocked in this file
 // for the Athena/BigQuery/Postgres suites.
+
+const MONGO_BASE_CONFIG = { host: 'localhost', port: 27017, database: 'testdb' };
+
+describe('MongoConnector.query() — SQL → queryleaf rewrite', () => {
+  // The connector rewrites `IS [NOT] NULL` to `[!]= NULL` before passing
+  // SQL to queryleaf, because queryleaf's parser throws
+  // "Unsupported operator: IS NOT" / "IS" on the standard SQL form even
+  // though it accepts the non-standard `!= NULL` / `= NULL`. These tests
+  // assert that whatever the LLM emits, queryleaf only ever sees the
+  // queryleaf-compatible form.
+
+  beforeEach(() => {
+    mockQueryLeafExecute.mockReset();
+    mockQueryLeafExecute.mockResolvedValue([]);
+  });
+
+  it('rewrites `IS NOT NULL` → `!= NULL` before calling queryleaf.execute', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    await conn.query("SELECT name FROM business WHERE attributes.WiFi IS NOT NULL");
+    expect(mockQueryLeafExecute).toHaveBeenCalledTimes(1);
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
+      "SELECT name FROM business WHERE attributes.WiFi != NULL",
+    );
+  });
+
+  it('rewrites `IS NULL` → `= NULL` before calling queryleaf.execute', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    await conn.query("SELECT name FROM business WHERE attributes.WiFi IS NULL");
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
+      "SELECT name FROM business WHERE attributes.WiFi = NULL",
+    );
+  });
+
+  it('is case-insensitive and handles multi-line / multi-whitespace forms', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    await conn.query("SELECT a FROM t WHERE\n  x is\n  not\n  null\n  AND y Is Null");
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(
+      "SELECT a FROM t WHERE\n  x != NULL\n  AND y = NULL",
+    );
+  });
+
+  it('does NOT match inside identifiers like `IS_NOT_NULL` (word boundary)', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    const sql = "SELECT IS_NOT_NULL_FLAG FROM t";
+    await conn.query(sql);
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(sql);
+  });
+
+  it('passes through SQL with no null-checks unchanged', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    const sql = "SELECT name FROM business WHERE attributes.WiFi != null LIMIT 3";
+    await conn.query(sql);
+    expect(mockQueryLeafExecute.mock.calls[0][0]).toBe(sql);
+  });
+
+  it('finalQuery in QueryResult reflects the rewritten SQL (what queryleaf actually saw)', async () => {
+    const conn = new MongoConnector('test', MONGO_BASE_CONFIG);
+    const result = await conn.query("SELECT a FROM t WHERE x IS NOT NULL");
+    expect(result.finalQuery).toBe("SELECT a FROM t WHERE x != NULL");
+  });
+});
