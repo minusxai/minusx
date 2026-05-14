@@ -5,6 +5,7 @@
 // then calls runBenchmark() — this module does the rest.
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
@@ -20,6 +21,15 @@ import { createSemaphore, parseConcurrencyLimit } from '@/orchestrator/concurren
 // budget while queued — the timer only ticks once the row is actually
 // running. No-op when unset or non-positive: every row dispatches
 // eagerly, gated only by `MAX_LLM_CONCURRENCY` inside the orchestrator.
+// Resolve git commit once at startup so every output row carries provenance.
+const GIT_COMMIT = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    return undefined;
+  }
+})();
+
 const agentSemaphore = createSemaphore(
   // eslint-disable-next-line no-restricted-syntax -- runner is the benchmark CLI entry path; avoid coupling to lib/config for one optional knob
   parseConcurrencyLimit(process.env.MAX_AGENTS_CONCURRENCY),
@@ -105,6 +115,8 @@ export interface BenchmarkResult {
   /** Dataset connections embedded so the /benchmark viewer can continue
    *  conversations without needing a separate connections.json drop. */
   connections?: BenchmarkConnectionEntry[];
+  /** Short git commit hash at the time of the benchmark run. */
+  git_commit?: string;
 }
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────
@@ -406,6 +418,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       duration_ms: durationMs,
       error: firstError,
       connections: entries,
+      git_commit: GIT_COMMIT,
     };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
