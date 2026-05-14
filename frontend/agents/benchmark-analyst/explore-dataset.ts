@@ -57,16 +57,26 @@ interface ExploreDatasetDetails extends Record<string, unknown> {
   executedQueries: Array<{ connection: string; finalQuery: string; rowCount: number }>;
 }
 
-const SYSTEM_PROMPT = `You are a data tool. Another agent sends you data + a task. Return ONLY the answer — no preamble, no methodology, no commentary.
+function buildExploreSystemPrompt(contextDocs?: string): string {
+  return `You are a data tool. Another agent sends you data + a task. Return ONLY the answer — no preamble, no methodology, no commentary.
 
 You are invoked when:
 - When the main agent needs an LLM to reason about the data — such as entity resolution, deduplication, clustering, pattern detection, or other tasks that can't be expressed in SQL. You are mainly invoked for unknown-unknowns where FuzzySearch isn't applicable (e.g. grouping similar rows across the whole table is O(n²) for FuzzySearch but natural for an LLM).
 
+## Guidelines
+- Never give only a small subset of results unless asked. Answer the main agent's question promptly and completely.
+- Never give up midway. Example: IF the main agent asks "group these products into 5 clusters", don't return 3 clusters and say "... similarly". Return all data expected.
+
+## Data Documentation (The main agent has access to this; here just for your reference to better understand the data and the main agent's needs)
+${contextDocs ?? 'No documentation available.'}
+
 Output format:
-- Structured and machine-readable: IDs, mappings, lists, JSON, or tables.
-- No prose. No bullet-point explanations. No "Here is the analysis:" headers.
-- If the data is insufficient, reply: "INSUFFICIENT DATA: <one-line reason>"
+- Simple, machine-readable: single line json or csv also works
+- No prose. No "Here is the analysis:" headers.
+- If the data is insufficient, add a warning: "MAYBE INSUFFICIENT DATA: <one-line reason>". NEVER refuse to answer. Your goal is to help the main agent do its job better, even if the data is imperfect. Always provide your best guess and flag any concerns about data quality or gaps.
 - If the task asks for groupings, return them as: Group "label": id1, id2, id3`;
+}
+
 
 export class ExploreDataset extends MXTool<
   typeof ExploreDatasetParams,
@@ -171,7 +181,7 @@ export class ExploreDataset extends MXTool<
     const rowSummary = executedQueries.map(q => `${q.rowCount} rows from ${q.connection}`).join(', ');
     const userContent = `${dataSections.join('\n\n')}\n\n## Task (${rowSummary} — process ALL rows, not just a sample)\n${prompt}`;
     const ctx: Context = {
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildExploreSystemPrompt(this.context.contextDocs),
       messages: [
         { role: 'user', content: userContent, timestamp: Date.now() },
       ],
