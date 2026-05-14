@@ -5,7 +5,8 @@
  * - SQL generation (correct function, quoting, thresholds)
  * - Result parsing
  * - Escaping / injection safety
- * - Fallback behavior (PostgreSQL pg_trgm → ILIKE)
+ * - Multi-strategy results (similarity + substring)
+ * - Fallback behavior (PostgreSQL pg_trgm → substring-only)
  * - Default parameters
  */
 
@@ -27,29 +28,38 @@ const DEFAULT_PARAMS = { table: 'tracks', column: 'title', searchTerm: 'Strawber
 // ─── DuckDB ─────────────────────────────────────────────────────────────────
 
 describe('fuzzySearch — DuckDB', () => {
-  it('uses jaro_winkler_similarity', async () => {
+  it('returns both jaro_winkler and substring results', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    const result = await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('jaro_winkler');
+    expect(result.results[1].method).toBe('substring');
+  });
+
+  it('uses jaro_winkler_similarity in first strategy', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
+    const sql = getCapturedSql(queryFn, 0);
     expect(sql).toContain('jaro_winkler_similarity');
   });
 
-  it('returns method jaro_winkler', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    const result = await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(result.method).toBe('jaro_winkler');
-  });
-
-  it('applies > 0.8 threshold', async () => {
+  it('uses LIKE in second strategy', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('> 0.8');
+    const sql = getCapturedSql(queryFn, 1);
+    expect(sql).toContain('LIKE');
+  });
+
+  it('applies > 0.8 threshold for jaro_winkler', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
+    expect(getCapturedSql(queryFn, 0)).toContain('> 0.8');
   });
 
   it('double-quotes identifiers', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, { ...DEFAULT_PARAMS, schema: 'my_schema' });
-    const sql = getCapturedSql(queryFn);
+    const sql = getCapturedSql(queryFn, 0);
     expect(sql).toContain('"my_schema"."tracks"');
     expect(sql).toContain('"title"');
   });
@@ -57,107 +67,137 @@ describe('fuzzySearch — DuckDB', () => {
   it('casts column to VARCHAR', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('CAST');
+    expect(getCapturedSql(queryFn, 0)).toContain('CAST');
   });
 
   it('parses result rows into matches', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([
-      { value: 'Strawbery Jam', similarity: 0.92 },
-      { value: 'Strawberry Jam (Remix)', similarity: 0.78 },
-    ]));
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>()
+      .mockResolvedValueOnce(qr([
+        { value: 'Strawbery Jam', similarity: 0.92 },
+        { value: 'Strawberry Jam (Remix)', similarity: 0.78 },
+      ]))
+      .mockResolvedValueOnce(qr([]));
     const result = await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(result.matches).toHaveLength(2);
-    expect(result.matches[0]).toEqual({ value: 'Strawbery Jam', similarity: 0.92 });
-    expect(result.matches[1]).toEqual({ value: 'Strawberry Jam (Remix)', similarity: 0.78 });
+    expect(result.results[0].matches).toHaveLength(2);
+    expect(result.results[0].matches[0]).toEqual({ value: 'Strawbery Jam', similarity: 0.92 });
+    expect(result.results[0].matches[1]).toEqual({ value: 'Strawberry Jam (Remix)', similarity: 0.78 });
     expect(result.searchTerm).toBe('Strawberry Jam');
   });
 
   it('handles empty result set', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS);
-    expect(result.matches).toEqual([]);
+    expect(result.results[0].matches).toEqual([]);
+    expect(result.results[1].matches).toEqual([]);
   });
 
   it('orders by similarity DESC and applies LIMIT', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('duckdb', queryFn, { ...DEFAULT_PARAMS, limit: 5 });
-    const sql = getCapturedSql(queryFn);
+    const sql = getCapturedSql(queryFn, 0);
     expect(sql).toMatch(/ORDER BY similarity DESC/);
     expect(sql).toMatch(/LIMIT 5/);
+  });
+
+  it('substring catches short terms in long text that jaro_winkler misses', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>()
+      // jaro_winkler returns nothing (short term vs long value)
+      .mockResolvedValueOnce(qr([]))
+      // substring finds it
+      .mockResolvedValueOnce(qr([
+        { value: 'Shell is a command-line scripting language', similarity: 1.0 },
+      ]));
+    const result = await fuzzySearch('duckdb', queryFn, { table: 'languages', column: 'language_description', searchTerm: 'Shell' });
+    expect(result.results[0].method).toBe('jaro_winkler');
+    expect(result.results[0].matches).toHaveLength(0);
+    expect(result.results[1].method).toBe('substring');
+    expect(result.results[1].matches).toHaveLength(1);
+    expect(result.results[1].matches[0].value).toBe('Shell is a command-line scripting language');
   });
 });
 
 // ─── SQLite (routes through DuckDB) ─────────────────────────────────────────
 
 describe('fuzzySearch — SQLite', () => {
-  it('uses same jaro_winkler strategy as DuckDB', async () => {
+  it('uses same dual strategy as DuckDB', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('sqlite', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('jaro_winkler_similarity');
-    expect(result.method).toBe('jaro_winkler');
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('jaro_winkler');
+    expect(result.results[1].method).toBe('substring');
   });
 });
 
 // ─── CSV ─────────────────────────────────────────────────────────────────────
 
 describe('fuzzySearch — CSV', () => {
-  it('uses same jaro_winkler strategy as DuckDB', async () => {
+  it('uses same dual strategy as DuckDB', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('csv', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('jaro_winkler_similarity');
-    expect(result.method).toBe('jaro_winkler');
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('jaro_winkler');
+    expect(result.results[1].method).toBe('substring');
   });
 });
 
 // ─── Google Sheets ───────────────────────────────────────────────────────────
 
 describe('fuzzySearch — Google Sheets', () => {
-  it('uses same jaro_winkler strategy as DuckDB', async () => {
+  it('uses same dual strategy as DuckDB', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('google-sheets', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('jaro_winkler_similarity');
-    expect(result.method).toBe('jaro_winkler');
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('jaro_winkler');
+    expect(result.results[1].method).toBe('substring');
   });
 });
 
 // ─── PostgreSQL ──────────────────────────────────────────────────────────────
 
 describe('fuzzySearch — PostgreSQL', () => {
-  it('tries pg_trgm similarity() first', async () => {
+  it('returns both trigram and substring when pg_trgm is available', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([
       { value: 'Strawbery Jam', similarity: 0.55 },
     ]));
     const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
-    expect(sql).toContain('similarity(');
-    expect(sql).toContain('> 0.3');
-    expect(result.method).toBe('trigram');
-    expect(result.matches).toHaveLength(1);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('trigram');
+    expect(result.results[0].matches).toHaveLength(1);
+    expect(result.results[1].method).toBe('substring');
+  });
+
+  it('uses similarity() with > 0.3 threshold for trigram', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
+    const trigramQuery = result.results[0].query;
+    expect(trigramQuery).toContain('similarity(');
+    expect(trigramQuery).toContain('> 0.3');
   });
 
   it('casts column to TEXT', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
-    expect(getCapturedSql(queryFn)).toContain('CAST');
+    const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
+    expect(result.results[0].query).toContain('CAST');
   });
 
-  it('falls back to ILIKE when pg_trgm is not installed', async () => {
+  it('returns only substring when pg_trgm is not installed', async () => {
+    // Substring runs in parallel (call 1), trigram fails (call 0)
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>()
-      .mockRejectedValueOnce(new Error('function similarity(text, text) does not exist'))
-      .mockResolvedValueOnce(qr([{ value: 'Strawbery Jam', similarity: 1.0 }]));
+      .mockImplementation((sql: string) => {
+        if (sql.includes('similarity(')) {
+          return Promise.reject(new Error('function similarity(text, text) does not exist'));
+        }
+        return Promise.resolve(qr([{ value: 'Strawbery Jam', similarity: 1.0 }]));
+      });
 
     const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
-    expect(queryFn).toHaveBeenCalledTimes(2);
-    expect(result.method).toBe('substring');
-    // Second call should use LIKE instead of similarity()
-    const fallbackSql = getCapturedSql(queryFn, 1);
-    expect(fallbackSql).toContain('LIKE');
-    expect(fallbackSql).not.toContain('similarity(');
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].method).toBe('substring');
+    expect(result.results[0].query).toContain('LIKE');
+    expect(result.results[0].query).not.toContain('similarity(');
   });
 
-  it('uses "public" as default schema when none specified', async () => {
-    // PostgreSQL default schema is typically 'public', but our default is 'main'
-    // The tool caller should pass the correct schema; we test the default behavior
+  it('uses "main" as default schema', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('postgresql', queryFn, { table: 'users', column: 'name', searchTerm: 'alice' });
     const sql = getCapturedSql(queryFn);
@@ -171,16 +211,18 @@ describe('fuzzySearch — BigQuery', () => {
   it('uses CONTAINS_SUBSTR and LIKE (no native fuzzy)', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('bigquery', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].method).toBe('substring');
+    const sql = result.results[0].query;
     expect(sql).toContain('CONTAINS_SUBSTR');
     expect(sql).toContain('LIKE');
-    expect(result.method).toBe('substring');
   });
 
   it('uses backtick quoting for identifiers', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('bigquery', queryFn, { ...DEFAULT_PARAMS, schema: 'dataset1' });
-    const sql = getCapturedSql(queryFn);
+    const result = await fuzzySearch('bigquery', queryFn, { ...DEFAULT_PARAMS, schema: 'dataset1' });
+    const sql = result.results[0].query;
     expect(sql).toContain('`dataset1`');
     expect(sql).toContain('`tracks`');
     expect(sql).toContain('`title`');
@@ -191,26 +233,32 @@ describe('fuzzySearch — BigQuery', () => {
       { value: 'Strawberry Jam', similarity: 1.0 },
     ]));
     const result = await fuzzySearch('bigquery', queryFn, DEFAULT_PARAMS);
-    expect(result.matches[0]?.similarity).toBe(1.0);
+    expect(result.results[0].matches[0]?.similarity).toBe(1.0);
   });
 });
 
 // ─── Athena ──────────────────────────────────────────────────────────────────
 
 describe('fuzzySearch — Athena', () => {
-  it('uses levenshtein_distance', async () => {
+  it('returns both levenshtein and substring results', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('athena', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('levenshtein');
+    expect(result.results[1].method).toBe('substring');
+  });
+
+  it('uses levenshtein_distance in first strategy', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('athena', queryFn, DEFAULT_PARAMS);
+    const sql = getCapturedSql(queryFn, 0);
     expect(sql).toContain('levenshtein_distance');
-    expect(result.method).toBe('levenshtein');
   });
 
   it('normalizes distance to 0-1 similarity', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzySearch('athena', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
-    // Should compute: 1.0 - distance / GREATEST(len1, len2, 1)
+    const sql = getCapturedSql(queryFn, 0);
     expect(sql).toContain('1.0 -');
     expect(sql).toContain('GREATEST');
   });
@@ -219,7 +267,7 @@ describe('fuzzySearch — Athena', () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     // "Strawberry Jam" is 14 chars → max distance = max(floor(14/3), 3) = 4
     await fuzzySearch('athena', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
+    const sql = getCapturedSql(queryFn, 0);
     expect(sql).toContain('<= 4');
   });
 
@@ -227,7 +275,7 @@ describe('fuzzySearch — Athena', () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     // "ab" is 2 chars → max(floor(2/3), 3) = max(0, 3) = 3
     await fuzzySearch('athena', queryFn, { table: 't', column: 'c', searchTerm: 'ab' });
-    expect(getCapturedSql(queryFn)).toContain('<= 3');
+    expect(getCapturedSql(queryFn, 0)).toContain('<= 3');
   });
 });
 
@@ -237,15 +285,15 @@ describe('fuzzySearch — default/unknown connector', () => {
   it('uses substring matching for mongo', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('mongo', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn);
-    expect(sql).toContain('LIKE');
-    expect(result.method).toBe('substring');
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].method).toBe('substring');
+    expect(result.results[0].query).toContain('LIKE');
   });
 
   it('uses substring matching for unknown connector types', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     const result = await fuzzySearch('some_future_db', queryFn, DEFAULT_PARAMS);
-    expect(result.method).toBe('substring');
+    expect(result.results[0].method).toBe('substring');
   });
 
   it('splits search term into words for flexible matching', async () => {
@@ -265,6 +313,249 @@ describe('fuzzySearch — default/unknown connector', () => {
     // Should not have a second LIKE with word-split (no words to split)
     const likeCount = (sql.match(/LIKE/g) || []).length;
     expect(likeCount).toBe(1);
+  });
+});
+
+// ─── Dual-Strategy Positive/Negative Scenarios ──────────────────────────────
+
+describe('fuzzySearch — DuckDB dual-strategy scenarios', () => {
+  // Helper: mock queryFn that routes by SQL content
+  function routedMock(jaroRows: Record<string, unknown>[], substrRows: Record<string, unknown>[]) {
+    return vi.fn<(sql: string) => Promise<QueryResult>>().mockImplementation((sql: string) => {
+      if (sql.includes('jaro_winkler_similarity')) return Promise.resolve(qr(jaroRows));
+      if (sql.includes('LIKE')) return Promise.resolve(qr(substrRows));
+      return Promise.resolve(qr([]));
+    });
+  }
+
+  it('both strategies find matches — similarity match ranked first', async () => {
+    // "Strawbery Jam" is a typo match (jaro_winkler) AND a substring match
+    const queryFn = routedMock(
+      [{ value: 'Strawberry Jam', similarity: 0.95 }],
+      [{ value: 'Strawberry Jam', similarity: 1.0 }, { value: 'Strawberry Jam Deluxe', similarity: 1.0 }],
+    );
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'Strawbery Jam' });
+    expect(result.results[0].method).toBe('jaro_winkler');
+    expect(result.results[0].matches).toHaveLength(1);
+    expect(result.results[0].matches[0].similarity).toBe(0.95);
+    expect(result.results[1].method).toBe('substring');
+    expect(result.results[1].matches).toHaveLength(2);
+  });
+
+  it('similarity finds typo match, substring misses (different enough spelling)', async () => {
+    // jaro_winkler catches "Jonh" → "John" but LIKE '%jonh%' won't match "John"
+    const queryFn = routedMock(
+      [{ value: 'John Smith', similarity: 0.92 }],
+      [], // no substring match for "Jonh"
+    );
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'Jonh' });
+    expect(result.results[0].matches).toHaveLength(1);
+    expect(result.results[0].matches[0].value).toBe('John Smith');
+    expect(result.results[1].matches).toHaveLength(0);
+  });
+
+  it('substring finds containment match, similarity misses (short term in long text)', async () => {
+    // "SQL" in "SQL is a structured query language" — jaro_winkler fails on length mismatch
+    const queryFn = routedMock(
+      [], // jaro_winkler misses
+      [{ value: 'SQL is a structured query language', similarity: 1.0 }],
+    );
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'SQL' });
+    expect(result.results[0].matches).toHaveLength(0);
+    expect(result.results[1].matches).toHaveLength(1);
+    expect(result.results[1].matches[0].value).toBe('SQL is a structured query language');
+  });
+
+  it('neither strategy finds matches — both return empty', async () => {
+    const queryFn = routedMock([], []);
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'xyznonexistent' });
+    expect(result.results[0].matches).toHaveLength(0);
+    expect(result.results[1].matches).toHaveLength(0);
+  });
+
+  it('similarity returns multiple ranked matches', async () => {
+    const queryFn = routedMock(
+      [
+        { value: 'Revenue', similarity: 0.96 },
+        { value: 'Revnue', similarity: 0.91 },
+        { value: 'Revenues', similarity: 0.88 },
+      ],
+      [{ value: 'Revenue', similarity: 1.0 }, { value: 'Revenues', similarity: 1.0 }],
+    );
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'Revenue' });
+    // Similarity results should preserve order (DESC by similarity)
+    expect(result.results[0].matches).toHaveLength(3);
+    expect(result.results[0].matches[0].similarity).toBeGreaterThanOrEqual(result.results[0].matches[1].similarity);
+    expect(result.results[0].matches[1].similarity).toBeGreaterThanOrEqual(result.results[0].matches[2].similarity);
+    // Substring also finds exact and prefix matches
+    expect(result.results[1].matches).toHaveLength(2);
+  });
+
+  it('case-insensitive: search term casing does not affect SQL generation', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'HELLO World' });
+    const jaroSql = getCapturedSql(queryFn, 0);
+    const substrSql = getCapturedSql(queryFn, 1);
+    // jaro_winkler uses lower()
+    expect(jaroSql).toContain("lower('HELLO World')");
+    // substring uses LOWER() on column and lowercased term
+    expect(substrSql).toContain("'%hello world%'");
+  });
+
+  it('multi-word search term generates word-split LIKE pattern in substring', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'New York City' });
+    const substrSql = getCapturedSql(queryFn, 1);
+    // Should have both exact phrase and word-split patterns
+    expect(substrSql).toContain("'%new york city%'");
+    expect(substrSql).toContain("'%new%york%city%'");
+    expect(substrSql).toContain(' OR ');
+  });
+
+  it('single-word search term does not generate word-split pattern in substring', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'Python' });
+    const substrSql = getCapturedSql(queryFn, 1);
+    expect(substrSql).toContain("'%python%'");
+    expect(substrSql).not.toContain(' OR ');
+  });
+});
+
+describe('fuzzySearch — PostgreSQL dual-strategy scenarios', () => {
+  function routedMock(trigramRows: Record<string, unknown>[], substrRows: Record<string, unknown>[]) {
+    return vi.fn<(sql: string) => Promise<QueryResult>>().mockImplementation((sql: string) => {
+      if (sql.includes('similarity(')) return Promise.resolve(qr(trigramRows));
+      if (sql.includes('LIKE')) return Promise.resolve(qr(substrRows));
+      return Promise.resolve(qr([]));
+    });
+  }
+
+  it('trigram finds close match, substring finds containment — both returned', async () => {
+    const queryFn = routedMock(
+      [{ value: 'Strawbery Jam', similarity: 0.55 }],
+      [{ value: 'Strawberry Jam (Deluxe Edition)', similarity: 1.0 }],
+    );
+    const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('trigram');
+    expect(result.results[0].matches[0].value).toBe('Strawbery Jam');
+    expect(result.results[1].method).toBe('substring');
+    expect(result.results[1].matches[0].value).toBe('Strawberry Jam (Deluxe Edition)');
+  });
+
+  it('trigram fails gracefully — only substring returned, no error', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockImplementation((sql: string) => {
+      if (sql.includes('similarity(')) return Promise.reject(new Error('pg_trgm not installed'));
+      return Promise.resolve(qr([{ value: 'Strawberry Jam', similarity: 1.0 }]));
+    });
+    const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].method).toBe('substring');
+    expect(result.results[0].matches).toHaveLength(1);
+  });
+
+  it('both trigram and substring return empty — no error, just empty results', async () => {
+    const queryFn = routedMock([], []);
+    const result = await fuzzySearch('postgresql', queryFn, { table: 't', column: 'c', searchTerm: 'zzzznotfound' });
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].matches).toHaveLength(0);
+    expect(result.results[1].matches).toHaveLength(0);
+  });
+
+  it('trigram uses lower threshold (0.3) than jaro_winkler (0.8)', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    const result = await fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS);
+    expect(result.results[0].query).toContain('> 0.3');
+    expect(result.results[0].query).not.toContain('> 0.8');
+  });
+});
+
+describe('fuzzySearch — Athena dual-strategy scenarios', () => {
+  function routedMock(levenRows: Record<string, unknown>[], substrRows: Record<string, unknown>[]) {
+    return vi.fn<(sql: string) => Promise<QueryResult>>().mockImplementation((sql: string) => {
+      if (sql.includes('levenshtein_distance')) return Promise.resolve(qr(levenRows));
+      if (sql.includes('LIKE')) return Promise.resolve(qr(substrRows));
+      return Promise.resolve(qr([]));
+    });
+  }
+
+  it('levenshtein finds close match, substring finds containment', async () => {
+    const queryFn = routedMock(
+      [{ value: 'Strawbery Jam', similarity: 0.85 }],
+      [{ value: 'Strawberry Jam Remix', similarity: 1.0 }],
+    );
+    const result = await fuzzySearch('athena', queryFn, DEFAULT_PARAMS);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].method).toBe('levenshtein');
+    expect(result.results[0].matches[0].value).toBe('Strawbery Jam');
+    expect(result.results[1].method).toBe('substring');
+    expect(result.results[1].matches[0].value).toBe('Strawberry Jam Remix');
+  });
+
+  it('levenshtein misses long text (distance too high), substring catches it', async () => {
+    // Short search term "API" in "API Gateway for microservices" — distance is huge
+    const queryFn = routedMock(
+      [],
+      [{ value: 'API Gateway for microservices', similarity: 1.0 }],
+    );
+    const result = await fuzzySearch('athena', queryFn, { table: 't', column: 'c', searchTerm: 'API' });
+    expect(result.results[0].matches).toHaveLength(0);
+    expect(result.results[1].matches).toHaveLength(1);
+  });
+
+  it('both strategies return empty — no error', async () => {
+    const queryFn = routedMock([], []);
+    const result = await fuzzySearch('athena', queryFn, { table: 't', column: 'c', searchTerm: 'nonexistent' });
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].matches).toHaveLength(0);
+    expect(result.results[1].matches).toHaveLength(0);
+  });
+
+  it('max distance scales with search term length', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    // "a]" → 1 char → max(floor(1/3), 3) = 3
+    await fuzzySearch('athena', queryFn, { table: 't', column: 'c', searchTerm: 'a' });
+    expect(getCapturedSql(queryFn, 0)).toContain('<= 3');
+
+    queryFn.mockClear();
+    // "abcdefghijklmnopqrstuvwx" → 24 chars → max(floor(24/3), 3) = 8
+    await fuzzySearch('athena', queryFn, { table: 't', column: 'c', searchTerm: 'abcdefghijklmnopqrstuvwx' });
+    expect(getCapturedSql(queryFn, 0)).toContain('<= 8');
+  });
+});
+
+describe('fuzzySearch — substring-only connectors (BigQuery, default)', () => {
+  it('BigQuery: positive match via CONTAINS_SUBSTR', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([
+      { value: 'United States of America', similarity: 1.0 },
+    ]));
+    const result = await fuzzySearch('bigquery', queryFn, { table: 't', column: 'c', searchTerm: 'States' });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].matches).toHaveLength(1);
+    expect(result.results[0].matches[0].value).toBe('United States of America');
+  });
+
+  it('BigQuery: negative match — no results', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    const result = await fuzzySearch('bigquery', queryFn, { table: 't', column: 'c', searchTerm: 'xyznotfound' });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].matches).toHaveLength(0);
+  });
+
+  it('default connector: positive match via LIKE', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([
+      { value: 'hello world', similarity: 1.0 },
+    ]));
+    const result = await fuzzySearch('some_db', queryFn, { table: 't', column: 'c', searchTerm: 'hello' });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].matches).toHaveLength(1);
+  });
+
+  it('default connector: negative match — empty results', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    const result = await fuzzySearch('some_db', queryFn, { table: 't', column: 'c', searchTerm: 'notfound' });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].matches).toHaveLength(0);
   });
 });
 
@@ -333,10 +624,10 @@ describe('fuzzySearch — errors', () => {
     await expect(fuzzySearch('duckdb', queryFn, DEFAULT_PARAMS)).rejects.toThrow('connection refused');
   });
 
-  it('PostgreSQL propagates error when both trigram and fallback fail', async () => {
+  it('PostgreSQL propagates error when substring also fails', async () => {
+    // Both trigram and substring fail — the substring error propagates
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>()
-      .mockRejectedValueOnce(new Error('pg_trgm not installed'))
-      .mockRejectedValueOnce(new Error('relation does not exist'));
+      .mockRejectedValue(new Error('relation does not exist'));
     await expect(fuzzySearch('postgresql', queryFn, DEFAULT_PARAMS)).rejects.toThrow('relation does not exist');
   });
 });
