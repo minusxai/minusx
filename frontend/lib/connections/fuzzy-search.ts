@@ -6,11 +6,15 @@ import type { QueryResult } from './base';
 
 type QueryFn = (sql: string) => Promise<QueryResult>;
 
-export interface FuzzySearchResult {
-  matches: Array<{ value: string; similarity: number }>;
-  searchTerm: string;
+export interface FuzzySearchResultEntry {
   method: 'jaro_winkler' | 'trigram' | 'levenshtein' | 'substring';
+  matches: Array<{ value: string; similarity: number }>;
   query: string;
+}
+
+export interface FuzzySearchResult {
+  results: FuzzySearchResultEntry[];
+  searchTerm: string;
 }
 
 interface FuzzySearchParams {
@@ -55,12 +59,20 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: Required<FuzzySearchParams>): Pr
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
-  const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'jaro_winkler', query: sql.trim() };
+  const [jaroResult, substringEntry] = await Promise.all([
+    queryFn(sql),
+    fuzzySubstring(queryFn, p),
+  ]);
+  return {
+    results: [
+      { matches: rowsToMatches(jaroResult.rows), method: 'jaro_winkler', query: sql.trim() },
+      substringEntry,
+    ],
+    searchTerm: p.searchTerm,
+  };
 }
 
 async function fuzzyPostgres(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
-  // Try pg_trgm similarity() first
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS TEXT)`;
   const trigramSql = `
@@ -72,13 +84,18 @@ async function fuzzyPostgres(queryFn: QueryFn, p: Required<FuzzySearchParams>): 
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
+  // Run substring in parallel; attempt trigram separately so its failure doesn't cancel substring
+  const substringPromise = fuzzySubstring(queryFn, p);
+  let trigramEntry: FuzzySearchResultEntry | null = null;
   try {
-    const result = await queryFn(trigramSql);
-    return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'trigram', query: trigramSql.trim() };
+    const trigramResult = await queryFn(trigramSql);
+    trigramEntry = { matches: rowsToMatches(trigramResult.rows), method: 'trigram', query: trigramSql.trim() };
   } catch {
-    // pg_trgm not available — fall back to ILIKE
-    return fuzzySubstring(queryFn, p, 'double');
+    // pg_trgm not available — skip trigram
   }
+  const substringEntry = await substringPromise;
+  const results = trigramEntry ? [trigramEntry, substringEntry] : [substringEntry];
+  return { results, searchTerm: p.searchTerm };
 }
 
 async function fuzzyAthena(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
@@ -93,13 +110,22 @@ async function fuzzyAthena(queryFn: QueryFn, p: Required<FuzzySearchParams>): Pr
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
-  const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'levenshtein', query: sql.trim() };
+  const [levenResult, substringEntry] = await Promise.all([
+    queryFn(sql),
+    fuzzySubstring(queryFn, p),
+  ]);
+  return {
+    results: [
+      { matches: rowsToMatches(levenResult.rows), method: 'levenshtein', query: sql.trim() },
+      substringEntry,
+    ],
+    searchTerm: p.searchTerm,
+  };
 }
 
 type QuoteStyle = 'double' | 'backtick';
 
-async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, quoteStyle: QuoteStyle = 'double'): Promise<FuzzySearchResult> {
+async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, quoteStyle: QuoteStyle = 'double'): Promise<FuzzySearchResultEntry> {
   const q = quoteStyle === 'backtick'
     ? (name: string) => `\`${name.replace(/`/g, '\\`')}\``
     : escapeIdent;
@@ -114,16 +140,19 @@ async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, 
     conditions.push(`LOWER(${q(p.column)}) LIKE ${wordPattern}`);
   }
 
+  const termLen = term.length;
+  const lenExpr = `LENGTH(${q(p.column)})`;
   const sql = `
-    SELECT DISTINCT ${q(p.column)} AS value, 1.0 AS similarity
+    SELECT DISTINCT ${q(p.column)} AS value,
+           ${termLen}.0 / (CASE WHEN ${lenExpr} > 0 THEN ${lenExpr} ELSE 1 END) AS similarity
     FROM ${q(p.schema)}.${q(p.table)}
     WHERE ${q(p.column)} IS NOT NULL
       AND (${conditions.join(' OR ')})
-    ORDER BY ${q(p.column)}
+    ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'substring', query: sql.trim() };
+  return { matches: rowsToMatches(result.rows), method: 'substring', query: sql.trim() };
 }
 
 async function fuzzyBigQuery(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
@@ -140,7 +169,10 @@ async function fuzzyBigQuery(queryFn: QueryFn, p: Required<FuzzySearchParams>): 
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), searchTerm: p.searchTerm, method: 'substring', query: sql.trim() };
+  return {
+    results: [{ matches: rowsToMatches(result.rows), method: 'substring', query: sql.trim() }],
+    searchTerm: p.searchTerm,
+  };
 }
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
@@ -168,8 +200,10 @@ export async function fuzzySearch(
       return fuzzyBigQuery(queryFn, p);
     case 'athena':
       return fuzzyAthena(queryFn, p);
-    default:
+    default: {
       // MongoDB and unknown connectors — use basic substring matching
-      return fuzzySubstring(queryFn, p);
+      const substringEntry = await fuzzySubstring(queryFn, p);
+      return { results: [substringEntry], searchTerm: p.searchTerm };
+    }
   }
 }
