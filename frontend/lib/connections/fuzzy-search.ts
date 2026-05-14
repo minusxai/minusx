@@ -25,11 +25,25 @@ interface FuzzySearchParams {
   limit?: number;
 }
 
+/** Params after defaults are applied (limit resolved, schema still optional). */
+interface ResolvedParams {
+  table: string;
+  column: string;
+  searchTerm: string;
+  schema?: string;
+  limit: number;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Escape a SQL identifier (table/column/schema name) for double-quoting. */
 function escapeIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+/** Build a qualified table reference, omitting schema if not provided. */
+function qualifiedTable(schema: string | undefined, table: string, quoteFn: (name: string) => string = escapeIdent): string {
+  return schema ? `${quoteFn(schema)}.${quoteFn(table)}` : quoteFn(table);
 }
 
 /** Escape a SQL string literal (single-quoted value). */
@@ -47,13 +61,13 @@ function rowsToMatches(rows: Record<string, unknown>[]): Array<{ value: string; 
 
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
 
-async function fuzzyDuckDb(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
+async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS VARCHAR)`;
   const sql = `
     SELECT DISTINCT ${castCol} AS value,
            jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
-    FROM ${escapeIdent(p.schema)}.${escapeIdent(p.table)}
+    FROM ${qualifiedTable(p.schema, p.table)}
     WHERE ${col} IS NOT NULL
       AND jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.8
     ORDER BY similarity DESC
@@ -72,13 +86,13 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: Required<FuzzySearchParams>): Pr
   };
 }
 
-async function fuzzyPostgres(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
+async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS TEXT)`;
   const trigramSql = `
     SELECT DISTINCT ${castCol} AS value,
            similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
-    FROM ${escapeIdent(p.schema)}.${escapeIdent(p.table)}
+    FROM ${qualifiedTable(p.schema, p.table)}
     WHERE ${col} IS NOT NULL
       AND similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.3
     ORDER BY similarity DESC
@@ -98,13 +112,13 @@ async function fuzzyPostgres(queryFn: QueryFn, p: Required<FuzzySearchParams>): 
   return { results, searchTerm: p.searchTerm };
 }
 
-async function fuzzyAthena(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
+async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
   const maxDist = Math.max(Math.floor(p.searchTerm.length / 3), 3);
   const sql = `
     SELECT DISTINCT ${escapeIdent(p.column)} AS value,
            1.0 - CAST(levenshtein_distance(lower(CAST(${escapeIdent(p.column)} AS VARCHAR)), lower('${escapeLiteral(p.searchTerm)}')) AS DOUBLE)
                  / GREATEST(length(${escapeIdent(p.column)}), length('${escapeLiteral(p.searchTerm)}'), 1) AS similarity
-    FROM ${escapeIdent(p.schema)}.${escapeIdent(p.table)}
+    FROM ${qualifiedTable(p.schema, p.table)}
     WHERE ${escapeIdent(p.column)} IS NOT NULL
       AND levenshtein_distance(lower(CAST(${escapeIdent(p.column)} AS VARCHAR)), lower('${escapeLiteral(p.searchTerm)}')) <= ${maxDist}
     ORDER BY similarity DESC
@@ -125,7 +139,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: Required<FuzzySearchParams>): Pr
 
 type QuoteStyle = 'double' | 'backtick';
 
-async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, quoteStyle: QuoteStyle = 'double'): Promise<FuzzySearchResultEntry> {
+async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: QuoteStyle = 'double'): Promise<FuzzySearchResultEntry> {
   const q = quoteStyle === 'backtick'
     ? (name: string) => `\`${name.replace(/`/g, '\\`')}\``
     : escapeIdent;
@@ -145,7 +159,7 @@ async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, 
   const sql = `
     SELECT DISTINCT ${q(p.column)} AS value,
            ${termLen}.0 / (CASE WHEN ${lenExpr} > 0 THEN ${lenExpr} ELSE 1 END) AS similarity
-    FROM ${q(p.schema)}.${q(p.table)}
+    FROM ${qualifiedTable(p.schema, p.table, q)}
     WHERE ${q(p.column)} IS NOT NULL
       AND (${conditions.join(' OR ')})
     ORDER BY similarity DESC
@@ -155,13 +169,13 @@ async function fuzzySubstring(queryFn: QueryFn, p: Required<FuzzySearchParams>, 
   return { matches: rowsToMatches(result.rows), method: 'substring', query: sql.trim() };
 }
 
-async function fuzzyBigQuery(queryFn: QueryFn, p: Required<FuzzySearchParams>): Promise<FuzzySearchResult> {
+async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzySearchResult> {
   const term = escapeLiteral(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
 
   const sql = `
     SELECT DISTINCT ${q(p.column)} AS value, 1.0 AS similarity
-    FROM ${q(p.schema)}.${q(p.table)}
+    FROM ${qualifiedTable(p.schema, p.table, q)}
     WHERE ${q(p.column)} IS NOT NULL
       AND (CONTAINS_SUBSTR(${q(p.column)}, '${term}')
            OR LOWER(${q(p.column)}) LIKE '%${term.toLowerCase()}%')
@@ -184,7 +198,7 @@ export async function fuzzySearch(
 ): Promise<FuzzySearchResult> {
   const p = {
     ...params,
-    schema: params.schema || 'main',
+    schema: params.schema,
     limit: params.limit || 100,
   };
 
