@@ -51,3 +51,21 @@ describe('DuckDbConnector.getSchema()', () => {
     ]);
   });
 });
+
+describe('DuckDbConnector.query() timeout', () => {
+  it('interrupts a slow query past the timeout and rejects with a timeout error', async () => {
+    const connector = new DuckDbConnector('test', { file_path: duckDbPath });
+    const start = Date.now();
+    await expect(
+      // range(20B) is a multi-second scan; a 1s timeout must cancel it.
+      connector.query('SELECT count(*) AS c FROM range(20000000000)', undefined, 1000),
+    ).rejects.toThrow(/timeout/i);
+    expect(Date.now() - start).toBeLessThan(15000);
+  }, 20000);
+
+  it('completes a fast query normally when within the timeout', async () => {
+    const connector = new DuckDbConnector('test', { file_path: duckDbPath });
+    const result = await connector.query('SELECT id FROM users ORDER BY id', undefined, 60000);
+    expect(result.rows.map(r => r.id)).toEqual([]);
+  });
+});

@@ -82,6 +82,22 @@ describe('SqliteConnector.query()', () => {
     );
     expect(result.rows).toEqual([]);
   });
+
+  it('interrupts a slow query past the timeout and rejects with a timeout error', async () => {
+    const connector = new SqliteConnector('test', { file_path: sqliteDbPath });
+    const start = Date.now();
+    await expect(
+      connector.query('SELECT count(*) AS c FROM range(20000000000)', undefined, 1000),
+    ).rejects.toThrow(/timeout/i);
+    expect(Date.now() - start).toBeLessThan(15000);
+  }, 20000);
+
+  it('completes a fast query normally when within the timeout', async () => {
+    const result = await new SqliteConnector('test', { file_path: sqliteDbPath }).query(
+      'SELECT id FROM users ORDER BY id', undefined, 60000,
+    );
+    expect(result.rows).toEqual([{ id: 1 }, { id: 2 }]);
+  });
 });
 
 describe('SqliteConnector.getSchema()', () => {

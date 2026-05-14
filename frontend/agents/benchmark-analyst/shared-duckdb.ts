@@ -23,6 +23,7 @@ import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import { resolveDuckDbFilePath } from '@/lib/connections/duckdb-connector';
 import { getNodeConnector } from '@/lib/connections';
 import { collectDuckDbIndexes } from '@/lib/connections/duckdb-indexes';
+import { runDuckDbWithTimeout } from '@/lib/connections/duckdb-query';
 import { NodeConnector, type SchemaEntry, type QueryResult, type TestConnectionResult } from '@/lib/connections/base';
 
 // Make rows JSON-safe (BigInt → Number where it fits; else string).
@@ -152,29 +153,10 @@ class BenchmarkSharedDuckdb {
 
   async query(name: string, sql: string, timeoutMs?: number): Promise<QueryResult> {
     return this.withConnection(name, async (conn) => {
-      // Best-effort statement timeout. DuckDB has no `statement_timeout`
-      // GUC, so we arm a timer that calls `conn.interrupt()` — that
-      // rejects the in-flight `conn.run()` promise. Cleared on completion
-      // (success or failure) so it never fires against a later query on
-      // this short-lived connection.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      if (timeoutMs && timeoutMs > 0) {
-        timer = setTimeout(() => conn.interrupt(), timeoutMs);
-      }
-      let result;
-      try {
-        result = await conn.run(sql);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // Normalise the interrupt error so callers/the LLM get a clear
-        // "timed out" signal rather than a raw "INTERRUPT" string.
-        if (timer && /interrupt/i.test(msg)) {
-          throw new Error(`Query exceeded the ${Math.round(timeoutMs! / 1000)}s timeout and was cancelled.`);
-        }
-        throw err;
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
+      // Best-effort statement timeout via `conn.interrupt()` — see
+      // `runDuckDbWithTimeout`. Shared with the native DuckDb/Sqlite
+      // connectors so the interrupt logic lives in exactly one place.
+      const result = await runDuckDbWithTimeout(conn, sql, timeoutMs);
       const cc = result.columnCount;
       const columns: string[] = [];
       const types: string[] = [];
