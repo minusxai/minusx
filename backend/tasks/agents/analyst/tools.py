@@ -107,10 +107,11 @@ class FuzzyMatch(Tool):
     """Match a known term against stored values in a text or categorical column.
 
     Use 1-3 short, specific keywords. Returns similarity-based and substring
-    matches. When semantic_expansion is enabled (default: true), if no lexical
+    matches. Use return_columns to include identifying columns (e.g. name, id)
+    in results — without it, only the matched column value and similarity are
+    returned. When semantic_expansion is enabled (default: true), if no lexical
     matches are found, the tool automatically finds semantically similar terms
-    in the column and fuzzy-matches those too. The response includes
-    expandedTerms showing which additional terms were searched.
+    in the column and fuzzy-matches those too.
 
     Example: user says "Hello World" but column stores "HelloWooorld".
     """
@@ -124,6 +125,7 @@ class FuzzyMatch(Tool):
         schema: str = Field("main", description="Schema name (default: 'main')"),
         limit: int = Field(100, description="Max results to return"),
         semantic_expansion: bool = Field(True, description="Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only."),
+        return_columns: Optional[List[str]] = Field(None, description="Additional columns to include in each match result for identification (e.g. ['name', 'id']). Without this, only the matched column value and similarity score are returned."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -134,6 +136,7 @@ class FuzzyMatch(Tool):
         self.schema = schema
         self.limit = limit
         self.semantic_expansion = semantic_expansion
+        self.return_columns = return_columns
 
     async def reduce(self, child_batches):
         pass

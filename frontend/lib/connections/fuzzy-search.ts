@@ -6,9 +6,16 @@ import type { QueryResult } from './base';
 
 type QueryFn = (sql: string) => Promise<QueryResult>;
 
+export interface FuzzyMatchMatch {
+  value: string;
+  similarity: number;
+  /** Extra column values when `returnColumns` is specified. Keyed by column name. */
+  [key: string]: unknown;
+}
+
 export interface FuzzyMatchResultEntry {
   method: 'jaro_winkler' | 'trigram' | 'levenshtein' | 'substring';
-  matches: Array<{ value: string; similarity: number }>;
+  matches: FuzzyMatchMatch[];
   query: string;
 }
 
@@ -24,6 +31,8 @@ interface FuzzyMatchParams {
   searchTerm: string;
   schema?: string;
   limit?: number;
+  /** Additional columns to include in each match result (e.g. ['name', 'gmap_id']). */
+  returnColumns?: string[];
 }
 
 /** Internal result type before allEmpty is computed. */
@@ -36,6 +45,7 @@ interface ResolvedParams {
   searchTerm: string;
   schema?: string;
   limit: number;
+  returnColumns: string[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -55,12 +65,24 @@ function escapeLiteral(value: string): string {
   return value.replace(/'/g, "''").slice(0, 200);
 }
 
-/** Extract matches from query result rows. */
-function rowsToMatches(rows: Record<string, unknown>[]): Array<{ value: string; similarity: number }> {
-  return rows.map(r => ({
-    value: String(r['value'] ?? ''),
-    similarity: Number(r['similarity'] ?? 1),
-  }));
+/** Extract matches from query result rows, including any extra returnColumns. */
+function rowsToMatches(rows: Record<string, unknown>[], returnColumns: string[] = []): FuzzyMatchMatch[] {
+  return rows.map(r => {
+    const match: FuzzyMatchMatch = {
+      value: String(r['value'] ?? ''),
+      similarity: Number(r['similarity'] ?? 1),
+    };
+    for (const col of returnColumns) {
+      match[col] = r[col] ?? null;
+    }
+    return match;
+  });
+}
+
+/** Build the extra SELECT columns fragment for returnColumns. */
+function extraSelectCols(returnColumns: string[], quoteFn: (name: string) => string = escapeIdent): string {
+  if (returnColumns.length === 0) return '';
+  return ', ' + returnColumns.map(c => quoteFn(c)).join(', ');
 }
 
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
@@ -68,9 +90,11 @@ function rowsToMatches(rows: Record<string, unknown>[]): Array<{ value: string; 
 async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS VARCHAR)`;
+  const extra = extraSelectCols(p.returnColumns);
+  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
   const sql = `
-    SELECT DISTINCT ${castCol} AS value,
-           jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
+    SELECT ${distinct}${castCol} AS value,
+           jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity${extra}
     FROM ${qualifiedTable(p.schema, p.table)}
     WHERE ${col} IS NOT NULL
       AND jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.8
@@ -83,7 +107,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   ]);
   return {
     results: [
-      { matches: rowsToMatches(jaroResult.rows), method: 'jaro_winkler', query: sql.trim() },
+      { matches: rowsToMatches(jaroResult.rows, p.returnColumns), method: 'jaro_winkler', query: sql.trim() },
       substringEntry,
     ],
     searchTerm: p.searchTerm,
@@ -93,9 +117,11 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
 async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS TEXT)`;
+  const extra = extraSelectCols(p.returnColumns);
+  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
   const trigramSql = `
-    SELECT DISTINCT ${castCol} AS value,
-           similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity
+    SELECT ${distinct}${castCol} AS value,
+           similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity${extra}
     FROM ${qualifiedTable(p.schema, p.table)}
     WHERE ${col} IS NOT NULL
       AND similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.3
@@ -107,7 +133,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   let trigramEntry: FuzzyMatchResultEntry | null = null;
   try {
     const trigramResult = await queryFn(trigramSql);
-    trigramEntry = { matches: rowsToMatches(trigramResult.rows), method: 'trigram', query: trigramSql.trim() };
+    trigramEntry = { matches: rowsToMatches(trigramResult.rows, p.returnColumns), method: 'trigram', query: trigramSql.trim() };
   } catch {
     // pg_trgm not available — skip trigram
   }
@@ -118,10 +144,12 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
 
 async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const maxDist = Math.max(Math.floor(p.searchTerm.length / 3), 3);
+  const extra = extraSelectCols(p.returnColumns);
+  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
   const sql = `
-    SELECT DISTINCT ${escapeIdent(p.column)} AS value,
+    SELECT ${distinct}${escapeIdent(p.column)} AS value,
            1.0 - CAST(levenshtein_distance(lower(CAST(${escapeIdent(p.column)} AS VARCHAR)), lower('${escapeLiteral(p.searchTerm)}')) AS DOUBLE)
-                 / GREATEST(length(${escapeIdent(p.column)}), length('${escapeLiteral(p.searchTerm)}'), 1) AS similarity
+                 / GREATEST(length(${escapeIdent(p.column)}), length('${escapeLiteral(p.searchTerm)}'), 1) AS similarity${extra}
     FROM ${qualifiedTable(p.schema, p.table)}
     WHERE ${escapeIdent(p.column)} IS NOT NULL
       AND levenshtein_distance(lower(CAST(${escapeIdent(p.column)} AS VARCHAR)), lower('${escapeLiteral(p.searchTerm)}')) <= ${maxDist}
@@ -134,7 +162,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   ]);
   return {
     results: [
-      { matches: rowsToMatches(levenResult.rows), method: 'levenshtein', query: sql.trim() },
+      { matches: rowsToMatches(levenResult.rows, p.returnColumns), method: 'levenshtein', query: sql.trim() },
       substringEntry,
     ],
     searchTerm: p.searchTerm,
@@ -166,9 +194,11 @@ async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: Q
 
   const termLen = term.length;
   const lenExpr = `LENGTH(${q(p.column)})`;
+  const extra = extraSelectCols(p.returnColumns, q);
+  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
   const sql = `
-    SELECT DISTINCT ${q(p.column)} AS value,
-           ${termLen}.0 / (CASE WHEN ${lenExpr} > 0 THEN ${lenExpr} ELSE 1 END) AS similarity
+    SELECT ${distinct}${q(p.column)} AS value,
+           ${termLen}.0 / (CASE WHEN ${lenExpr} > 0 THEN ${lenExpr} ELSE 1 END) AS similarity${extra}
     FROM ${qualifiedTable(p.schema, p.table, q)}
     WHERE ${q(p.column)} IS NOT NULL
       AND (${conditions.join(' OR ')})
@@ -176,7 +206,7 @@ async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: Q
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows), method: 'substring', query: sql.trim() };
+  return { matches: rowsToMatches(result.rows, p.returnColumns), method: 'substring', query: sql.trim() };
 }
 
 /** Escape a string for literal use inside a MongoDB `$regex`. */
@@ -194,16 +224,27 @@ function escapeRegex(value: string): string {
  * `p.table` is the collection name.
  */
 async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
-  const pipeline = [
-    { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
-    { $group: { _id: `$${p.column}` } },
-    { $limit: p.limit },
-    { $project: { _id: 0, value: '$_id', similarity: { $literal: 1 } } },
-  ];
+  const extraProject: Record<string, unknown> = { _id: 0, value: '$_id', similarity: { $literal: 1 } };
+  for (const col of p.returnColumns) {
+    extraProject[col] = `$${col}`;
+  }
+  // When returnColumns requested, skip $group to preserve per-document columns
+  const pipeline = p.returnColumns.length > 0
+    ? [
+        { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
+        { $limit: p.limit },
+        { $project: { _id: 0, value: `$${p.column}`, similarity: { $literal: 1 }, ...Object.fromEntries(p.returnColumns.map(c => [c, `$${c}`])) } },
+      ]
+    : [
+        { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
+        { $group: { _id: `$${p.column}` } },
+        { $limit: p.limit },
+        { $project: { _id: 0, value: '$_id', similarity: { $literal: 1 } } },
+      ];
   const query = JSON.stringify({ collection: p.table, pipeline });
   const result = await queryFn(query);
   return {
-    results: [{ matches: rowsToMatches(result.rows), method: 'substring', query }],
+    results: [{ matches: rowsToMatches(result.rows, p.returnColumns), method: 'substring', query }],
     searchTerm: p.searchTerm,
   };
 }
@@ -211,9 +252,11 @@ async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzy
 async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const term = escapeLiteral(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
+  const extra = extraSelectCols(p.returnColumns, q);
+  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
 
   const sql = `
-    SELECT DISTINCT ${q(p.column)} AS value, 1.0 AS similarity
+    SELECT ${distinct}${q(p.column)} AS value, 1.0 AS similarity${extra}
     FROM ${qualifiedTable(p.schema, p.table, q)}
     WHERE ${q(p.column)} IS NOT NULL
       AND (CONTAINS_SUBSTR(${q(p.column)}, '${term}')
@@ -223,7 +266,7 @@ async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   `;
   const result = await queryFn(sql);
   return {
-    results: [{ matches: rowsToMatches(result.rows), method: 'substring', query: sql.trim() }],
+    results: [{ matches: rowsToMatches(result.rows, p.returnColumns), method: 'substring', query: sql.trim() }],
     searchTerm: p.searchTerm,
   };
 }
@@ -235,10 +278,11 @@ export async function fuzzyMatch(
   queryFn: QueryFn,
   params: FuzzyMatchParams,
 ): Promise<FuzzyMatchResult> {
-  const p = {
+  const p: ResolvedParams = {
     ...params,
     schema: params.schema,
     limit: params.limit || 100,
+    returnColumns: params.returnColumns ?? [],
   };
 
   let raw: RawFuzzyMatchResult;

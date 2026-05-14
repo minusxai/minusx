@@ -73,7 +73,7 @@ registerTool('SearchDBSchema', async (args, user) => {
  * FuzzyMatch - Fuzzy match a search term against distinct values in a text column
  */
 registerTool('FuzzyMatch', async (args, user) => {
-  const { connection_id, table, column, search_term, schema: schemaName, limit } = args;
+  const { connection_id, table, column, search_term, schema: schemaName, limit, return_columns } = args;
 
   if (!connection_id || !table || !column || !search_term) {
     throw new Error('connection_id, table, column, and search_term are required');
@@ -111,6 +111,7 @@ registerTool('FuzzyMatch', async (args, user) => {
     searchTerm: search_term,
     schema: schemaName,
     limit,
+    returnColumns: return_columns ?? [],
   });
 
   return { success: true, ...result };

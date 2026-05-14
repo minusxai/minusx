@@ -114,6 +114,37 @@ describe('fuzzyMatch — DuckDB', () => {
     expect(result.results[1].matches).toHaveLength(1);
     expect(result.results[1].matches[0].value).toBe('Shell is a command-line scripting language');
   });
+
+  it('includes returnColumns in SELECT and match results', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>()
+      .mockResolvedValueOnce(qr([
+        { value: 'Strawbery Jam', similarity: 0.92, artist: 'Animal Collective', id: 42 },
+      ]))
+      .mockResolvedValueOnce(qr([]));
+    const result = await fuzzyMatch('duckdb', queryFn, {
+      ...DEFAULT_PARAMS,
+      returnColumns: ['artist', 'id'],
+    });
+    // jaro_winkler SQL should include extra columns and drop DISTINCT
+    const sql = getCapturedSql(queryFn, 0);
+    expect(sql).toContain('"artist"');
+    expect(sql).toContain('"id"');
+    expect(sql).not.toMatch(/SELECT\s+DISTINCT/i);
+    // Match result should include the extra columns
+    expect(result.results[0].matches[0]).toEqual({
+      value: 'Strawbery Jam',
+      similarity: 0.92,
+      artist: 'Animal Collective',
+      id: 42,
+    });
+  });
+
+  it('uses DISTINCT when returnColumns is empty', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+    await fuzzyMatch('duckdb', queryFn, DEFAULT_PARAMS);
+    const sql = getCapturedSql(queryFn, 0);
+    expect(sql).toMatch(/SELECT\s+DISTINCT/i);
+  });
 });
 
 // ─── SQLite (routes through DuckDB) ─────────────────────────────────────────
@@ -203,6 +234,21 @@ describe('fuzzyMatch — PostgreSQL', () => {
     const sql = getCapturedSql(queryFn);
     expect(sql).not.toContain('"main".');
     expect(sql).toContain('"users"');
+  });
+
+  it('includes returnColumns in trigram and substring queries', async () => {
+    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([
+      { value: 'alice', similarity: 0.6, email: 'alice@test.com' },
+    ]));
+    const result = await fuzzyMatch('postgresql', queryFn, {
+      table: 'users', column: 'name', searchTerm: 'alice', returnColumns: ['email'],
+    });
+    // Trigram query should include extra column
+    const trigramSql = result.results[0].query;
+    expect(trigramSql).toContain('"email"');
+    expect(trigramSql).not.toMatch(/SELECT\s+DISTINCT/i);
+    // Match should include the extra column
+    expect(result.results[0].matches[0].email).toBe('alice@test.com');
   });
 });
 

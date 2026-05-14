@@ -361,12 +361,13 @@ const FuzzyMatchParams = Type.Object({
   schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
   limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
   semantic_expansion: Type.Optional(Type.Boolean({ description: 'Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only.' })),
+  return_columns: Type.Optional(Type.Array(Type.String(), { description: 'Additional columns to include in each match result for identification (e.g. ["name", "category", "product_subcategory"]). Without this, only the matched column value and similarity score are returned.' })),
 });
 
 export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalystContext> {
   static readonly schema: Tool<typeof FuzzyMatchParams> = {
     name: 'FuzzyMatch',
-    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). Use 1-3 short, specific keywords. Returns similarity-based and substring matches. When semantic_expansion is enabled (default: true), if no lexical matches are found, the tool automatically finds semantically similar terms in the column and fuzzy-matches those too. The response includes expandedTerms showing which additional terms were searched.',
+    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). Use 1-3 short, specific keywords. Returns similarity-based and substring matches. Use return_columns to include identifying columns (e.g. name, category, product_subcategory) in results — without it, only the matched column value and similarity are returned. When semantic_expansion is enabled (default: true), if no lexical matches are found, the tool automatically finds semantically similar terms in the column and fuzzy-matches those too.',
     parameters: FuzzyMatchParams,
   };
 
@@ -376,8 +377,9 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
   async run(): Promise<ToolResponse> {
     await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
 
-    const { connection, table, column, search_term, schema: schemaName, limit, semantic_expansion } = this.parameters;
+    const { connection, table, column, search_term, schema: schemaName, limit, semantic_expansion, return_columns } = this.parameters;
     const dialect = this.dialects.get(connection) ?? 'duckdb';
+    const returnColumns = return_columns ?? [];
 
     // Validate column category
     const connector = this.connectors.get(connection);
@@ -408,7 +410,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
 
     try {
       const result = await fuzzyMatch(dialect, queryFn, {
-        table, column, searchTerm: search_term, schema: schemaName, limit,
+        table, column, searchTerm: search_term, schema: schemaName, limit, returnColumns,
       });
 
       // Semantic expansion: when lexical matching returns nothing on a non-categorical
@@ -418,7 +420,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         const expandedTerms = await this.getSemanticTerms(connection, table, column, search_term, schemaName);
         if (expandedTerms.length > 0) {
           const combinedSearch = expandedTerms.join(' ');
-          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, column, searchTerm: combinedSearch, schema: schemaName, limit });
+          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, column, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
           return {
             content: [{ type: 'text', text: JSON.stringify({
               searchTerm: search_term,
