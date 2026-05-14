@@ -71,7 +71,50 @@ class BenchmarkSharedDuckdb {
   // ATTACH the same alias twice).
   private chain: Promise<void> = Promise.resolve();
 
+  // Bounded pool of long-lived connections, reused across every query /
+  // schema / attach. The previous connect()/closeSync()-per-query pattern
+  // churned native connections hard: `DAB_DOUBLE_CHECK` × `DAB_TIMES_RUN`
+  // can put ~30 agents on this single shared instance, and concurrent
+  // connect/close on it triggered a native double-free in the DuckDB
+  // addon (`malloc: pointer being freed was not allocated`). Pooled
+  // connections are created once, reused, and never closed mid-run — the
+  // benchmark CLI hard-exits at the end, so the OS reclaims them. `USE`
+  // is per-query, so any pooled connection can serve any attached db.
+  private static readonly MAX_POOL = 8;
+  private readonly idle: DuckDBConnection[] = [];
+  private readonly waiters: Array<(conn: DuckDBConnection) => void> = [];
+  private poolSize = 0;
+
   private constructor(private readonly instance: DuckDBInstance) {}
+
+  /**
+   * Take a connection from the pool, creating one if under `MAX_POOL`,
+   * otherwise waiting for a release. Every `acquireConnection` MUST be
+   * paired with exactly one `releaseConnection` (use try/finally).
+   */
+  private async acquireConnection(): Promise<DuckDBConnection> {
+    const free = this.idle.pop();
+    if (free) return free;
+    if (this.poolSize < BenchmarkSharedDuckdb.MAX_POOL) {
+      // Synchronous check + increment — no await between them, so two
+      // concurrent callers can't both pass the cap check.
+      this.poolSize++;
+      try {
+        return await this.instance.connect();
+      } catch (err) {
+        this.poolSize--;
+        throw err;
+      }
+    }
+    return new Promise<DuckDBConnection>((resolve) => this.waiters.push(resolve));
+  }
+
+  /** Return a connection to the pool — hands it to the next waiter if any. */
+  private releaseConnection(conn: DuckDBConnection): void {
+    const waiter = this.waiters.shift();
+    if (waiter) waiter(conn);
+    else this.idle.push(conn);
+  }
 
   static async create(): Promise<BenchmarkSharedDuckdb> {
     const instance = await DuckDBInstance.create(':memory:');
@@ -109,7 +152,7 @@ class BenchmarkSharedDuckdb {
     }
     if (toAttach.length === 0) return;
 
-    const conn = await this.instance.connect();
+    const conn = await this.acquireConnection();
     try {
       if (!this.installedSqlite && toAttach.some((e) => e.dialect === 'sqlite')) {
         await conn.run('INSTALL sqlite');
@@ -125,7 +168,7 @@ class BenchmarkSharedDuckdb {
         this.attached.set(e.name, e);
       }
     } finally {
-      conn.closeSync();
+      this.releaseConnection(conn);
     }
   }
 
@@ -140,14 +183,16 @@ class BenchmarkSharedDuckdb {
     if (!this.attached.has(name)) {
       throw new Error(`'${name}' is not attached to the shared DuckDB instance`);
     }
-    const conn = await this.instance.connect();
+    const conn = await this.acquireConnection();
     try {
-      // USE is per-connection. Sets default catalog so the agent's
-      // unqualified `FROM tablename` resolves to `<name>.main.tablename`.
+      // USE is per-connection — and re-run on every borrow, since a
+      // pooled connection may last have served a different catalog. Sets
+      // the default catalog so the agent's unqualified `FROM tablename`
+      // resolves to `<name>.main.tablename`.
       await conn.run(`USE ${quoteIdent(name)}`);
       return await fn(conn);
     } finally {
-      conn.closeSync();
+      this.releaseConnection(conn);
     }
   }
 

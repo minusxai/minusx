@@ -28,8 +28,17 @@ export async function runDuckDbWithTimeout(
   values?: unknown[],
 ): Promise<DuckDBRunResult> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // `settled` guards the timer callback: once the query has resolved (or
+  // rejected), `interrupt()` must NOT be called — the connection is about
+  // to be torn down by the caller, and `interrupt()` racing with
+  // connection teardown is a native double-free. `clearTimeout` should
+  // already prevent the callback from running, but for a native crash
+  // path the belt-and-suspenders check is worth its near-zero cost.
+  let settled = false;
   if (timeoutMs && timeoutMs > 0) {
-    timer = setTimeout(() => conn.interrupt(), timeoutMs);
+    timer = setTimeout(() => {
+      if (!settled) conn.interrupt();
+    }, timeoutMs);
   }
   try {
     return values !== undefined
@@ -44,6 +53,7 @@ export async function runDuckDbWithTimeout(
     }
     throw err;
   } finally {
+    settled = true;
     if (timer) clearTimeout(timer);
   }
 }
