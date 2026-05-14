@@ -140,13 +140,19 @@ describe('DoubleCheckBenchmarkAgent', () => {
     expect((r2Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(true);
   });
 
-  it('both rounds disagree → "Failed to reach consensus"', async () => {
+  it('all three rounds disagree → "Failed to reach consensus"', async () => {
     fauxRegistration.setResponses([
+      // Round 1 — analysts + judge.
       fauxAssistantMessage('TL;DR: 41', { stopReason: 'stop' }),
       fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
       fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
-      fauxAssistantMessage('TL;DR: 41', { stopReason: 'stop' }),
-      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      // Round 2 — analysts + judge.
+      fauxAssistantMessage('TL;DR: 41 (r2)', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 (r2)', { stopReason: 'stop' }),
+      fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
+      // Round 3 — analysts + judge. Still no agreement.
+      fauxAssistantMessage('TL;DR: 41 (r3)', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 (r3)', { stopReason: 'stop' }),
       fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
     ]);
 
@@ -160,8 +166,135 @@ describe('DoubleCheckBenchmarkAgent', () => {
     expect(result!.stopReason).toBe('stop');
     expect((result!.content[0] as TextContent).text).toContain('Failed to reach consensus');
 
+    // All three judges ran and all returned DIFFERENT.
+    const r1Check = findToolResult(orch.log, 'r1-check');
+    const r2Check = findToolResult(orch.log, 'r2-check');
+    const r3Check = findToolResult(orch.log, 'r3-check');
+    expect((r1Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(false);
+    expect((r2Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(false);
+    expect((r3Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(false);
+  });
+
+  it('round-1 & 2 disagree → round-3 consensus: returns round-3 agent 1 text', async () => {
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: 41', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 41 (r2)', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 (r2)', { stopReason: 'stop' }),
+      fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
+      // Round 3 settles on a shared answer.
+      fauxAssistantMessage('TL;DR: 42 (r3-final)', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 (r3-final)', { stopReason: 'stop' }),
+      fauxAssistantMessage('EQUIVALENT', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const root = new DoubleCheckBenchmarkAgent(orch, { userMessage: 'What is 6 × 7?' }, CTX);
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    const result = await stream.result();
+
+    expect(result).not.toBeNull();
+    expect(result!.stopReason).toBe('stop');
+    expect((result!.content[0] as TextContent).text).toContain('42 (r3-final)');
+
+    // All nine slots present.
+    for (const id of ['r1-agent1', 'r1-agent2', 'r1-check', 'r2-agent1', 'r2-agent2', 'r2-check', 'r3-agent1', 'r3-agent2', 'r3-check']) {
+      expect(findToolResult(orch.log, id)).toBeDefined();
+    }
+
     const r2Check = findToolResult(orch.log, 'r2-check');
     expect((r2Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(false);
+    const r3Check = findToolResult(orch.log, 'r3-check');
+    expect((r3Check as { details?: { equivalent?: boolean } }).details?.equivalent).toBe(true);
+  });
+
+  it('round-3 analysts inherit full r1+r2 history (concatenation, own-side only)', async () => {
+    // Round 1 + round 2 both diverge → round 3 fires. Each round-3
+    // sub-agent's `threadHistory` should be the concatenation of its own
+    // round-1 history and its own round-2 history, in order — proving
+    // we use extractAgentHistory(r1-agentN) ++ extractAgentHistory(r2-agentN)
+    // and not some interleaved or counterpart-leaking variant.
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: 41', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 41-r2', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42-r2', { stopReason: 'stop' }),
+      fauxAssistantMessage('DIFFERENT', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 final', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42 final', { stopReason: 'stop' }),
+      fauxAssistantMessage('EQUIVALENT', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const dispatchSpy = vi.spyOn(orch, 'dispatch');
+    const root = new DoubleCheckBenchmarkAgent(orch, { userMessage: 'What is 6 × 7?' }, CTX);
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    await stream.result();
+
+    const r3AnalystsCall = dispatchSpy.mock.calls.find((args) => {
+      const ids = (args[0].content as { type: string; id?: string }[])
+        .filter((c) => c.type === 'toolCall')
+        .map((c) => c.id);
+      return ids.includes('r3-agent1') && ids.includes('r3-agent2');
+    });
+    expect(r3AnalystsCall).toBeDefined();
+
+    const opts = r3AnalystsCall![2] as
+      | { threadHistoryByToolCallId?: Record<string, Message[]> }
+      | undefined;
+    expect(opts?.threadHistoryByToolCallId).toBeDefined();
+    const r3a1Hist = opts!.threadHistoryByToolCallId!['r3-agent1'];
+    const r3a2Hist = opts!.threadHistoryByToolCallId!['r3-agent2'];
+    expect(r3a1Hist).toBeDefined();
+    expect(r3a2Hist).toBeDefined();
+
+    // Shape: [user(orig), assistant(r1-stop), user(r1-feedback), assistant(r2-stop)].
+    // Faux LLM stops immediately, so each round contributes one user + one
+    // assistant turn (no intermediate tool-use turns).
+    expect(r3a1Hist).toHaveLength(4);
+
+    // [0] = original question (from r1-agent1's args)
+    expect(r3a1Hist[0].role).toBe('user');
+    expect(r3a1Hist[0].content).toBe('What is 6 × 7?');
+
+    // [1] = r1-agent1's own stop turn (spliced from MXAgentDetails)
+    expect((r3a1Hist[1] as { role: string }).role).toBe('assistant');
+
+    // [2] = the r1-feedback prompt that became r2-agent1's userMessage —
+    // a user turn embedded mid-history is the tell that r1's history was
+    // followed by r2's history (whose synthesised user msg = r2-agent1's
+    // args.userMessage = the round-1 feedback prompt).
+    expect((r3a1Hist[2] as { role: string }).role).toBe('user');
+    expect(r3a1Hist[2].content).toMatch(/Original question/);
+    expect(r3a1Hist[2].content).toMatch(/TL;DR: 41/);   // own r1 answer
+    expect(r3a1Hist[2].content).toMatch(/TL;DR: 42/);   // counterpart's r1 answer
+
+    // [3] = r2-agent1's own stop turn
+    expect((r3a1Hist[3] as { role: string }).role).toBe('assistant');
+
+    // Own-side: r3-agent1 sees its own r1 ("TL;DR: 41") and own r2
+    // ("TL;DR: 41-r2") in the assistant turns of the history — not the
+    // counterpart's answers.
+    const extractAssistantText = (msgs: Message[]): string =>
+      msgs
+        .filter((m): m is Message & { role: 'assistant' } => m.role === 'assistant')
+        .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+        .filter((c): c is TextContent => c.type === 'text')
+        .map((c) => c.text)
+        .join('|');
+    const a1Text = extractAssistantText(r3a1Hist);
+    expect(a1Text).toContain('TL;DR: 41');
+    expect(a1Text).toContain('TL;DR: 41-r2');
+    expect(a1Text).not.toContain('TL;DR: 42-r2');
+
+    const a2Text = extractAssistantText(r3a2Hist);
+    expect(a2Text).toContain('TL;DR: 42');
+    expect(a2Text).toContain('TL;DR: 42-r2');
+    expect(a2Text).not.toContain('TL;DR: 41-r2');
   });
 
   it('context flows to sub-agents via dispatch (sub-agent.context === DoubleCheck.context)', async () => {

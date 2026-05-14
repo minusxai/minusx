@@ -29,17 +29,18 @@ import { MXAgent, MXTool, type ToolResponse, type MXAgentDetails } from '@/orche
 import { BenchmarkAnalystAgent } from './benchmark-analyst';
 import type { BenchmarkAnalystContext } from './types';
 
-// ─── Slot ids ─────────────────────────────────────────────────────────────
-// Stable across resumes; uniquely identify each dispatched toolCall
-// within a single DoubleCheck run.
-const SLOTS = {
-  r1_agent1: 'r1-agent1',
-  r1_agent2: 'r1-agent2',
-  r1_check:  'r1-check',
-  r2_agent1: 'r2-agent1',
-  r2_agent2: 'r2-agent2',
-  r2_check:  'r2-check',
-} as const;
+// ─── Slot ids & round budget ──────────────────────────────────────────────
+// Stable across resumes; uniquely identify each dispatched toolCall within
+// a single DoubleCheck run. Round 1 is the initial pair; rounds
+// 2..MAX_ROUNDS are feedback retries (each seeded with the full prior
+// per-side history concatenated). If MAX_ROUNDS rounds fail to agree,
+// the controller returns `"Failed to reach consensus"`.
+const MAX_ROUNDS = 3;
+const slotIds = (round: number) => ({
+  agent1: `r${round}-agent1`,
+  agent2: `r${round}-agent2`,
+  check:  `r${round}-check`,
+});
 
 // ─── CheckEquivalence tool ────────────────────────────────────────────────
 
@@ -151,52 +152,62 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
   override async run(): Promise<AssistantMessage> {
     const { userMessage } = this.parameters;
 
-    // ── Round 1 — two analysts in parallel ──────────────────────────────
+    // ── Round 1 — two analysts, no feedback, no history seeding ─────────
+    const r1 = slotIds(1);
     await this._dispatchSlots([
-      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage }, id: SLOTS.r1_agent1 },
-      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage }, id: SLOTS.r1_agent2 },
+      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage }, id: r1.agent1 },
+      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage }, id: r1.agent2 },
     ]);
-    const t1 = this._readAgentText(SLOTS.r1_agent1);
-    const t2 = this._readAgentText(SLOTS.r1_agent2);
+    let t1 = this._readAgentText(r1.agent1);
+    let t2 = this._readAgentText(r1.agent2);
 
-    // ── Round 1 — judge ─────────────────────────────────────────────────
     await this._dispatchSlots([{
       name: CheckEquivalence.schema.name,
       args: { question: userMessage, answerA: t1, answerB: t2 },
-      id: SLOTS.r1_check,
+      id: r1.check,
     }]);
-    if (this._readEquivalence(SLOTS.r1_check)) return synthesiseFinal(t1);
+    if (this._readEquivalence(r1.check)) return synthesiseFinal(t1);
 
-    // ── Round 2 — analysts continue from round-1 history + cross-feedback ─
-    // Each round-2 sub-agent is seeded with its own round-1 counterpart's
-    // full thread (original user message + all internal assistant turns +
-    // tool results), so it can build on its prior reasoning instead of
-    // restarting. The feedback prompt is appended on top as the new user
-    // turn by `MXAgent.buildMessages()` (threadHistory ++ user ++ toolThread).
-    const fb1 = buildFeedbackPrompt(userMessage, t1, t2);
-    const fb2 = buildFeedbackPrompt(userMessage, t2, t1);
-    const r1History1 = this.orchestrator.extractAgentHistory(SLOTS.r1_agent1);
-    const r1History2 = this.orchestrator.extractAgentHistory(SLOTS.r1_agent2);
-    await this._dispatchSlots(
-      [
-        { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb1 }, id: SLOTS.r2_agent1 },
-        { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb2 }, id: SLOTS.r2_agent2 },
-      ],
-      {
-        [SLOTS.r2_agent1]: r1History1,
-        [SLOTS.r2_agent2]: r1History2,
-      },
-    );
-    const t1b = this._readAgentText(SLOTS.r2_agent1);
-    const t2b = this._readAgentText(SLOTS.r2_agent2);
+    // ── Feedback rounds 2..MAX_ROUNDS ───────────────────────────────────
+    // Each subsequent round's analysts inherit the **full** prior
+    // conversation as `threadHistory` — the per-side concatenation of
+    // every prior round's `extractAgentHistory`. The new user turn is a
+    // feedback prompt embedding both prior-round answers; `MXAgent.buildMessages`
+    // assembles it as: threadHistory ++ user(feedback) ++ toolThread.
+    // After MAX_ROUNDS without consensus, give up.
+    const priorHistories1: Message[][] = [this.orchestrator.extractAgentHistory(r1.agent1)];
+    const priorHistories2: Message[][] = [this.orchestrator.extractAgentHistory(r1.agent2)];
 
-    // ── Round 2 — judge ─────────────────────────────────────────────────
-    await this._dispatchSlots([{
-      name: CheckEquivalence.schema.name,
-      args: { question: userMessage, answerA: t1b, answerB: t2b },
-      id: SLOTS.r2_check,
-    }]);
-    if (this._readEquivalence(SLOTS.r2_check)) return synthesiseFinal(t1b);
+    for (let round = 2; round <= MAX_ROUNDS; round++) {
+      const slots = slotIds(round);
+      const fb1 = buildFeedbackPrompt(userMessage, t1, t2);
+      const fb2 = buildFeedbackPrompt(userMessage, t2, t1);
+
+      await this._dispatchSlots(
+        [
+          { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb1 }, id: slots.agent1 },
+          { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb2 }, id: slots.agent2 },
+        ],
+        {
+          [slots.agent1]: priorHistories1.flat(),
+          [slots.agent2]: priorHistories2.flat(),
+        },
+      );
+      t1 = this._readAgentText(slots.agent1);
+      t2 = this._readAgentText(slots.agent2);
+
+      await this._dispatchSlots([{
+        name: CheckEquivalence.schema.name,
+        args: { question: userMessage, answerA: t1, answerB: t2 },
+        id: slots.check,
+      }]);
+      if (this._readEquivalence(slots.check)) return synthesiseFinal(t1);
+
+      // Captured AFTER the equivalence check fails — only used by the
+      // next round's threadHistory, which won't run if we just exited.
+      priorHistories1.push(this.orchestrator.extractAgentHistory(slots.agent1));
+      priorHistories2.push(this.orchestrator.extractAgentHistory(slots.agent2));
+    }
 
     return synthesiseFinal('Failed to reach consensus');
   }
