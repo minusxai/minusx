@@ -15,7 +15,7 @@ export interface FuzzyMatchResultEntry {
 export interface FuzzyMatchResult {
   results: FuzzyMatchResultEntry[];
   searchTerm: string;
-  hint?: string;
+  allEmpty: boolean;
 }
 
 interface FuzzyMatchParams {
@@ -25,6 +25,9 @@ interface FuzzyMatchParams {
   schema?: string;
   limit?: number;
 }
+
+/** Internal result type before allEmpty is computed. */
+type RawFuzzyMatchResult = Omit<FuzzyMatchResult, 'allEmpty'>;
 
 /** Params after defaults are applied (limit resolved, schema still optional). */
 interface ResolvedParams {
@@ -62,7 +65,7 @@ function rowsToMatches(rows: Record<string, unknown>[]): Array<{ value: string; 
 
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
 
-async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
+async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS VARCHAR)`;
   const sql = `
@@ -87,7 +90,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMa
   };
 }
 
-async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
+async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const col = escapeIdent(p.column);
   const castCol = `CAST(${col} AS TEXT)`;
   const trigramSql = `
@@ -113,7 +116,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<Fuzzy
   return { results, searchTerm: p.searchTerm };
 }
 
-async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
+async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const maxDist = Math.max(Math.floor(p.searchTerm.length / 3), 3);
   const sql = `
     SELECT DISTINCT ${escapeIdent(p.column)} AS value,
@@ -190,7 +193,7 @@ function escapeRegex(value: string): string {
  * connectors. `p.schema` is irrelevant for Mongo (single-database connector);
  * `p.table` is the collection name.
  */
-async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
+async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const pipeline = [
     { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
     { $group: { _id: `$${p.column}` } },
@@ -205,7 +208,7 @@ async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMat
   };
 }
 
-async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<FuzzyMatchResult> {
+async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const term = escapeLiteral(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
 
@@ -238,38 +241,36 @@ export async function fuzzyMatch(
     limit: params.limit || 100,
   };
 
-  let result: FuzzyMatchResult;
+  let raw: RawFuzzyMatchResult;
 
   switch (connectorType) {
     case 'duckdb':
     case 'csv':
     case 'google-sheets':
     case 'sqlite':
-      result = await fuzzyDuckDb(queryFn, p);
+      raw = await fuzzyDuckDb(queryFn, p);
       break;
     case 'postgresql':
-      result = await fuzzyPostgres(queryFn, p);
+      raw = await fuzzyPostgres(queryFn, p);
       break;
     case 'bigquery':
-      result = await fuzzyBigQuery(queryFn, p);
+      raw = await fuzzyBigQuery(queryFn, p);
       break;
     case 'athena':
-      result = await fuzzyAthena(queryFn, p);
+      raw = await fuzzyAthena(queryFn, p);
       break;
     case 'mongo':
-      result = await fuzzyMongo(queryFn, p);
+      raw = await fuzzyMongo(queryFn, p);
       break;
     default: {
       // Unknown connectors — fall back to a basic SQL substring match.
       const substringEntry = await fuzzySubstring(queryFn, p);
-      result = { results: [substringEntry], searchTerm: p.searchTerm };
+      raw = { results: [substringEntry], searchTerm: p.searchTerm };
     }
   }
 
-  const allEmpty = result.results.every(r => r.matches.length === 0);
-  if (allEmpty) {
-    result.hint = 'No matches found. This likely means the column uses different vocabulary or stores free-text descriptions rather than exact category labels. You SHOULD use ExploreDataset on this column to discover what values actually exist — that will reveal the right keywords for a follow-up FuzzyMatch or SQL filter.';
-  }
-
-  return result;
+  return {
+    ...raw,
+    allEmpty: raw.results.every(r => r.matches.length === 0),
+  };
 }

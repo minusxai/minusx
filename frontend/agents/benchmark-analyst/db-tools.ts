@@ -13,6 +13,7 @@ import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
+import { ExploreDataset } from './explore-dataset';
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -409,8 +410,14 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         table, column, searchTerm: search_term, schema: schemaName, limit,
       });
 
-      if (result.hint && category != 'categorical') {
-        result.hint = `No matches found in free-text column "${column}". FuzzyMatch is the WRONG tool for this column — free-text descriptions use varied vocabulary, not exact category labels. You MUST use ExploreDataset to semantically classify values in this column instead.`;
+      // Semantic fallback: when lexical matching returns nothing on a non-categorical
+      // column, automatically query distinct values and ask an LLM to classify them.
+      if (result.allEmpty && category !== 'categorical') {
+        const fallback = await this.semanticFallback(connection, table, column, search_term, schemaName);
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: true, ...result, semanticFallback: fallback }) }],
+          isError: false,
+        };
       }
 
       return {
@@ -422,6 +429,45 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         content: [{ type: 'text', text: JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }) }],
         isError: true,
       };
+    }
+  }
+
+  /**
+   * When lexical matching fails on a free-text column, invoke ExploreDataset
+   * to semantically classify values in the column.
+   */
+  private async semanticFallback(
+    connection: string,
+    table: string,
+    column: string,
+    searchTerm: string,
+    schemaName?: string,
+  ): Promise<string> {
+    const q = (name: string) => `"${name.replace(/"/g, '""')}"`;
+    const qualTable = schemaName ? `${q(schemaName)}.${q(table)}` : q(table);
+
+    const explore = new ExploreDataset(
+      this.orchestrator,
+      {
+        queries: [{
+          connection,
+          query: `SELECT DISTINCT ${q(column)} AS value FROM ${qualTable} WHERE ${q(column)} IS NOT NULL LIMIT 1000`,
+          label: 'values',
+        }],
+        prompt: `The user searched for "${searchTerm}" but no lexical matches were found in column "${column}". Identify which values are semantically related to "${searchTerm}" — they may use synonyms, descriptions, or different terminology. Return ONLY the matching values, one per line. If none match, say "NONE".`,
+      },
+      this.context,
+      this.id,
+    );
+
+    const response = await explore.run();
+    const text = response.content?.[0];
+    if (!text || text.type !== 'text') return 'Semantic fallback returned no results.';
+    try {
+      const parsed = JSON.parse(text.text);
+      return parsed.analysis ?? parsed.error ?? text.text;
+    } catch {
+      return text.text;
     }
   }
 }
