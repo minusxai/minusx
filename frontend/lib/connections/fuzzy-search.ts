@@ -15,6 +15,7 @@ export interface FuzzySearchResultEntry {
 export interface FuzzySearchResult {
   results: FuzzySearchResultEntry[];
   searchTerm: string;
+  hint?: string;
 }
 
 interface FuzzySearchParams {
@@ -237,24 +238,38 @@ export async function fuzzySearch(
     limit: params.limit || 100,
   };
 
+  let result: FuzzySearchResult;
+
   switch (connectorType) {
     case 'duckdb':
     case 'csv':
     case 'google-sheets':
     case 'sqlite':
-      return fuzzyDuckDb(queryFn, p);
+      result = await fuzzyDuckDb(queryFn, p);
+      break;
     case 'postgresql':
-      return fuzzyPostgres(queryFn, p);
+      result = await fuzzyPostgres(queryFn, p);
+      break;
     case 'bigquery':
-      return fuzzyBigQuery(queryFn, p);
+      result = await fuzzyBigQuery(queryFn, p);
+      break;
     case 'athena':
-      return fuzzyAthena(queryFn, p);
+      result = await fuzzyAthena(queryFn, p);
+      break;
     case 'mongo':
-      return fuzzyMongo(queryFn, p);
+      result = await fuzzyMongo(queryFn, p);
+      break;
     default: {
       // Unknown connectors — fall back to a basic SQL substring match.
       const substringEntry = await fuzzySubstring(queryFn, p);
-      return { results: [substringEntry], searchTerm: p.searchTerm };
+      result = { results: [substringEntry], searchTerm: p.searchTerm };
     }
   }
+
+  const allEmpty = result.results.every(r => r.matches.length === 0);
+  if (allEmpty) {
+    result.hint = 'No matches found. This likely means the column uses different vocabulary or stores free-text descriptions rather than exact category labels. You SHOULD use ExploreDataset on this column to discover what values actually exist — that will reveal the right keywords for a follow-up FuzzySearch or SQL filter.';
+  }
+
+  return result;
 }

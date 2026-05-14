@@ -443,6 +443,21 @@ describe('fuzzySearch — DuckDB dual-strategy scenarios', () => {
     expect(result.results[1].matches).toHaveLength(0);
   });
 
+  it('includes hint when all results are empty', async () => {
+    const queryFn = routedMock([], []);
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'xyznonexistent' });
+    expect(result.hint).toContain('ExploreDataset');
+  });
+
+  it('does not include hint when matches exist', async () => {
+    const queryFn = routedMock(
+      [{ value: 'Revenue', similarity: 0.96 }],
+      [],
+    );
+    const result = await fuzzySearch('duckdb', queryFn, { table: 't', column: 'c', searchTerm: 'Revenue' });
+    expect(result.hint).toBeUndefined();
+  });
+
   it('similarity returns multiple ranked matches', async () => {
     const queryFn = routedMock(
       [
