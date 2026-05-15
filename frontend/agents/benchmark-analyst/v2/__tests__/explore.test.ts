@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { fauxAssistantMessage, type TextContent, registerFauxProvider } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
-import { ExploreV2, setExploreModel } from '../explore';
+import { ExploreV2 } from '../explore';
+import { setLighterModel } from '../data-tool-base';
 import { clearHandles } from '../handle-store';
 import { clearCatalogCache } from '../catalog';
 import type { QueryResult } from '@/lib/connections/base';
@@ -66,7 +67,7 @@ const CTX: BenchmarkAnalystContext = {
 
 describe('ExploreV2', () => {
   beforeAll(() => {
-    setExploreModel(fauxReg.getModel());
+    setLighterModel(fauxReg.getModel());
   });
 
   beforeEach(async () => {

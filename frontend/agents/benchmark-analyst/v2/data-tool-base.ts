@@ -11,7 +11,9 @@ import 'server-only';
 import type { TSchema } from '@mariozechner/pi-ai';
 import { MXTool } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext } from '../types';
-import type { Api, Model } from '@/lib/llm/get-model';
+import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
+import type { NodeConnector } from '@/lib/connections/base';
+import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 import { TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import {
   buildPromptPassContext,
@@ -23,9 +25,36 @@ import {
   type PromptPassResult,
 } from './prompt-pass';
 
+// Shared lighter model for the "+prompt" passes across V2 data tools.
+// Defaults to Haiku; tests override via `setLighterModel`.
+const DEFAULT_LIGHTER_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
+let lighterModel: Model<Api> = DEFAULT_LIGHTER_MODEL;
+export function setLighterModel(m: Model<Api>): void { lighterModel = m; }
+export function getLighterModel(): Model<Api> { return lighterModel; }
+
 export abstract class V2DataTool<P extends TSchema, D = unknown>
   extends MXTool<P, BenchmarkAnalystContext, D>
 {
+  /**
+   * Per-connection-name connectors, populated lazily by `ensureConnectors`.
+   * Tools that query data (ExecuteQuery, Explore) call `ensureConnectors`
+   * in `run()` before use; SearchDBSchema queries the catalog and leaves
+   * these untouched.
+   */
+  protected connectors = new Map<string, NodeConnector>();
+  protected dialects = new Map<string, string>();
+
+  /** Lazily build a NodeConnector per `this.context.connections[*]`. Idempotent. */
+  protected async ensureConnectors(): Promise<void> {
+    for (const entry of this.context.connections ?? []) {
+      if (!entry.config) continue;
+      if (this.connectors.has(entry.name)) continue;
+      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+      this.connectors.set(entry.name, c);
+      this.dialects.set(entry.name, entry.dialect);
+    }
+  }
+
   /**
    * Lighter-model "+prompt" pass. Reads `this.context` for grounding
    * (`contextDocs`, `originalMessage`), `this.orchestrator` for the LLM

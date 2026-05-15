@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { fauxAssistantMessage, type TextContent, registerFauxProvider } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
-import { SearchDBSchemaV2, setInfoModel, clearCatalogCache } from '../search-db-schema';
+import { SearchDBSchemaV2, clearCatalogCache } from '../search-db-schema';
+import { setLighterModel } from '../data-tool-base';
 import { clearHandles } from '../handle-store';
 
 const fauxReg = registerFauxProvider({
@@ -54,7 +55,7 @@ const CTX: BenchmarkAnalystContext = {
 
 describe('SearchDBSchemaV2', () => {
   beforeAll(() => {
-    setInfoModel(fauxReg.getModel());
+    setLighterModel(fauxReg.getModel());
   });
 
   beforeEach(async () => {

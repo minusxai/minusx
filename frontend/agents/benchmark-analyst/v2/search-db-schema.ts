@@ -8,13 +8,8 @@ import { getCatalogStore } from './catalog';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
 import { type PromptPassEntry } from './prompt-pass';
-import { V2DataTool } from './data-tool-base';
+import { V2DataTool, getLighterModel } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
-import { getModel, type Api, type Model } from '@/lib/llm/get-model';
-
-const DEFAULT_INFO_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
-let infoModel: Model<Api> = DEFAULT_INFO_MODEL;
-export function setInfoModel(model: Model<Api>) { infoModel = model; }
 
 const CatalogQuerySpec = Type.Object({
   query: Type.String({ description: 'SQL query against the catalog tables' }),
@@ -130,7 +125,7 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
           ? { label: c.label, result: c.raw }
           : { label: c.label, error: c.entry.error ?? 'query failed' },
       );
-      const { previews, info } = await this.runPromptPass(entries, prompt, infoModel, previewMaxChars);
+      const { previews, info } = await this.runPromptPass(entries, prompt, getLighterModel(), previewMaxChars);
       previews.forEach((p, i) => {
         if (p !== undefined) results[i].preview = p;
       });

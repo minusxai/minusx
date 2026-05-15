@@ -4,19 +4,12 @@
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import { type ToolResponse } from '@/orchestrator/types';
-import type { ConnectionInfo } from '../types';
-import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
 import { getCatalogStore } from './catalog';
-import { V2DataTool } from './data-tool-base';
+import { V2DataTool, getLighterModel } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
-import { getModel, type Api, type Model } from '@/lib/llm/get-model';
-
-const DEFAULT_EXPLORE_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
-let exploreModel: Model<Api> = DEFAULT_EXPLORE_MODEL;
-export function setExploreModel(model: Model<Api>) { exploreModel = model; }
 
 const ExploreFilter = Type.Object({
   connection: Type.Optional(Type.String({ description: 'Limit search to this connection' })),
@@ -82,23 +75,10 @@ Examples:
     parameters: ExploreParams,
   };
 
-  private connectors = new Map<string, NodeConnector>();
-  private dialects = new Map<string, string>();
-
-  private async initConnectors(): Promise<void> {
-    for (const entry of this.context.connections ?? []) {
-      if (!entry.config) continue;
-      if (this.connectors.has(entry.name)) continue;
-      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
-      this.connectors.set(entry.name, c);
-      this.dialects.set(entry.name, entry.dialect);
-    }
-  }
-
   async run(): Promise<ToolResponse<ExploreDetails>> {
     const { filter, prompt } = this.parameters;
 
-    await this.initConnectors();
+    await this.ensureConnectors();
 
     // Validate connection filter if provided
     if (filter.connection && !this.connectors.has(filter.connection)) {
@@ -164,7 +144,7 @@ Examples:
       const pass = await this.runPromptPass(
         [{ label: `Search: "${filter.match ?? '(no match filter)'}"`, result }],
         prompt,
-        exploreModel,
+        getLighterModel(),
       );
       preview = pass.previews[0] ?? compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
       info = pass.info;
