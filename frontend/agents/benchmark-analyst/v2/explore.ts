@@ -96,8 +96,15 @@ Examples:
 
     // Resolve in-scope text columns by querying the catalog (shared with
     // SearchDBSchema). Uses `column_stats.category` where available; falls
-    // back to a type-name heuristic for columns without stats.
-    const { conn: catalogConn } = await getCatalogStore(this.context.connections);
+    // back to a type-name heuristic for columns without stats. The
+    // `sampleConfig`/`catalogKey` plumbing matches SearchDBSchema so
+    // hitting Explore first vs SearchDBSchema first doesn't change which
+    // catalog instance the sub-agent ends up bound to.
+    const { conn: catalogConn } = await getCatalogStore(
+      this.context.connections,
+      this.catalogKey(),
+      this.buildSampleConfig(),
+    );
     const targets = await this.findSearchTargets(filter, catalogConn);
 
     // Run per-target searches in parallel — each is an independent query

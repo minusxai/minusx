@@ -4,7 +4,7 @@ import { fauxAssistantMessage, type TextContent, registerFauxProvider } from '@m
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
 import { ExploreV2 } from '../explore';
-import { setLighterModel } from '../data-tool-base';
+import { setLighterModel, setSamplingEnabled } from '../data-tool-base';
 import { clearHandles } from '../handle-store';
 import { clearCatalogCache } from '../catalog';
 import type { QueryResult } from '@/lib/connections/base';
@@ -68,6 +68,10 @@ const CTX: BenchmarkAnalystContext = {
 describe('ExploreV2', () => {
   beforeAll(() => {
     setLighterModel(fauxReg.getModel());
+    // Off by default: these tests target Explore behavior, not the
+    // catalog's sample-build LLM calls. Sample-build coverage lives in
+    // catalog.test.ts.
+    setSamplingEnabled(false);
   });
 
   beforeEach(async () => {

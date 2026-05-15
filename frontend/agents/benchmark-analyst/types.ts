@@ -61,6 +61,19 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * production paths leave it `undefined`.
    */
   originalMessage?: string;
+  /**
+   * Per-sub-agent catalog cache key. Each cache key holds an independent
+   * catalog DuckDB instance — the schema tables (connections / schemas /
+   * tables / columns / indexes / column_stats) come out identical, but
+   * the lighter-model-picked `sample_rows` / `sample_notes` can differ
+   * per key. `DoubleCheckBenchmarkAgent` sets this to `'agent-a'` /
+   * `'agent-b'` per sub-agent so the two sub-agents see different sample
+   * rows + different shape notes (forcing input-level diversity and
+   * making same-misinterpretation convergence less likely). Single-agent
+   * runs leave it `undefined` and fall through to `'default'` inside the
+   * catalog store.
+   */
+  catalogKey?: string;
 }
 
 /**

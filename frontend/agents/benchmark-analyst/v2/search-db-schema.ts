@@ -70,8 +70,15 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
     const { queries, prompt, sequential = false, maxChars } = this.parameters;
     const previewMaxChars = typeof maxChars === 'number' && maxChars > 0 ? maxChars : TOOL_MAX_LIMIT_CHARS;
 
-    // Build catalog if needed (shared with Explore, cached process-wide)
-    const { conn } = await getCatalogStore(this.context.connections);
+    // Build catalog if needed (shared with Explore; per-cacheKey cached).
+    // `sampleConfig` populates `sample_rows` + `sample_notes` via the
+    // lighter model — different `catalogKey`s (DoubleCheck sub-agents)
+    // get different slot prompts and therefore different sample picks.
+    const { conn } = await getCatalogStore(
+      this.context.connections,
+      this.catalogKey(),
+      this.buildSampleConfig(),
+    );
 
     // Execute queries
     type Collected = { entry: QueryResultEntry; raw: QueryResult | null; label: string };

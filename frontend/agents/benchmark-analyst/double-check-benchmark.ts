@@ -210,10 +210,22 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
 
     // ── Round 1 — two analysts, no feedback, no history seeding ─────────
     const r1 = slotIds(1);
-    await this._dispatchSlots([
-      { name: primaryName, args: { userMessage }, id: r1.agent1 },
-      { name: secondaryName, args: { userMessage }, id: r1.agent2 },
-    ]);
+    await this._dispatchSlots(
+      [
+        { name: primaryName, args: { userMessage }, id: r1.agent1 },
+        { name: secondaryName, args: { userMessage }, id: r1.agent2 },
+      ],
+      undefined,
+      // Slot the two analysts into distinct catalog-cache keys. The V2
+      // sub-agents read this from `context.catalogKey` to pick which
+      // sample_rows / sample_notes view of the catalog they see — input-
+      // level diversity so the two analysts don't converge on the same
+      // data-shape misreading. V1 sub-agents simply ignore the field.
+      {
+        [r1.agent1]: { catalogKey: 'agent-a' },
+        [r1.agent2]: { catalogKey: 'agent-b' },
+      },
+    );
     let t1 = this._readAgentText(r1.agent1);
     let t2 = this._readAgentText(r1.agent2);
 
@@ -247,6 +259,13 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
         {
           [slots.agent1]: priorHistories1.flat(),
           [slots.agent2]: priorHistories2.flat(),
+        },
+        // Same `catalogKey` slots as round 1 so each analyst hits its own
+        // cached catalog instance (no rebuild) and keeps reading from its
+        // own slot's sample rows.
+        {
+          [slots.agent1]: { catalogKey: 'agent-a' },
+          [slots.agent2]: { catalogKey: 'agent-b' },
         },
       );
       t1 = this._readAgentText(slots.agent1);
@@ -287,6 +306,7 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
   private async _dispatchSlots(
     slots: SlotSpec[],
     threadHistoryByToolCallId?: Record<string, Message[]>,
+    contextOverridesByToolCallId?: Record<string, Record<string, unknown>>,
   ): Promise<void> {
     const missing = slots.filter((s) => !this._findResult(s.id));
     if (missing.length === 0) return;
@@ -309,10 +329,16 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
       stopReason: 'toolUse',
       timestamp: Date.now(),
     };
+    const opts: {
+      threadHistoryByToolCallId?: Record<string, Message[]>;
+      contextOverridesByToolCallId?: Record<string, Record<string, unknown>>;
+    } = {};
+    if (threadHistoryByToolCallId) opts.threadHistoryByToolCallId = threadHistoryByToolCallId;
+    if (contextOverridesByToolCallId) opts.contextOverridesByToolCallId = contextOverridesByToolCallId;
     await this.orchestrator.dispatch(
       synthMsg,
       this,
-      threadHistoryByToolCallId ? { threadHistoryByToolCallId } : undefined,
+      Object.keys(opts).length > 0 ? opts : undefined,
     );
   }
 

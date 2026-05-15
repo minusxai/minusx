@@ -10,6 +10,18 @@ import type { SchemaEntry, NodeConnector, QueryResult, ColumnMeta } from '@/lib/
 import { profileDatabase } from '@/lib/connections/statistics-engine';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { ConnectionInfo } from '../types';
+import { buildSampleSql } from './sample-sql';
+import {
+  buildPromptPassContext,
+  extractText,
+  parsePromptPassResponse,
+  applyRerank,
+  pickPromptPassInfo,
+  PROMPT_ROW_CAP,
+  type PromptPassCallLLM,
+  type PromptPassEntry,
+} from './prompt-pass';
+import type { Api, Model } from '@/lib/llm/get-model';
 
 export interface CatalogTable {
   columns: string[];
@@ -24,6 +36,35 @@ export interface CatalogTables {
   columns: CatalogTable;
   indexes: CatalogTable;
   column_stats: CatalogTable;
+  /** Lighter-model-picked diverse/representative sample rows per table. */
+  sample_rows: CatalogTable;
+  /** One free-text shape note per table from the lighter model. */
+  sample_notes: CatalogTable;
+}
+
+/**
+ * Sample-build config. When passed to `buildCatalog`, each table gets:
+ *   1. A `poolSize`-row random sample pulled via `connector.query` (dialect-
+ *      specific `USING SAMPLE` / `TABLESAMPLE` / `$sample`).
+ *   2. A lighter-model pass over the pool (cells truncated to
+ *      `truncateCellChars` for LLM input only) returning `pickK` row picks
+ *      plus a 1–3 sentence shape/quirk note (`info`).
+ * Picks go into `catalog.sample_rows`; notes go into `catalog.sample_notes`.
+ * Per-table failures are logged + skipped — catalog still builds.
+ */
+export interface SampleConfig {
+  /** Free-text instruction passed to the lighter model. Used to steer
+   *  per-slot behaviour: `'representative'` for `'default' / 'agent-a'`,
+   *  `'edge cases / rare variants'` for `'agent-b'`. */
+  slotPrompt: string;
+  callLLM: PromptPassCallLLM;
+  model: Model<Api>;
+  /** Rows to pull from the source connector per table. Default 100. */
+  poolSize?: number;
+  /** Rows the lighter model is asked to pick out of the pool. Default 10. */
+  pickK?: number;
+  /** Max chars per cell shown to the LLM (full rows preserved in storage). Default 1000. */
+  truncateCellChars?: number;
 }
 
 /** A connector plus its dialect — the dialect drives `profileDatabase` dispatch. */
@@ -40,6 +81,7 @@ export interface CatalogConnector {
  */
 export async function buildCatalog(
   connectors: Map<string, CatalogConnector>,
+  sampleConfig?: SampleConfig,
 ): Promise<CatalogTables> {
   const connectionsRows: Record<string, unknown>[] = [];
   const schemasRows: Record<string, unknown>[] = [];
@@ -47,6 +89,8 @@ export async function buildCatalog(
   const columnsRows: Record<string, unknown>[] = [];
   const indexesRows: Record<string, unknown>[] = [];
   const columnStatsRows: Record<string, unknown>[] = [];
+  const sampleRowsRows: Record<string, unknown>[] = [];
+  const sampleNotesRows: Record<string, unknown>[] = [];
 
   for (const [connName, { connector, dialect }] of connectors) {
     connectionsRows.push({ connection_name: connName });
@@ -129,6 +173,21 @@ export async function buildCatalog(
             is_unique: idx.unique,
           });
         }
+
+        // Sample rows + shape note (when sampleConfig present). Failures
+        // are per-table — one bad table doesn't break the catalog build.
+        if (sampleConfig) {
+          try {
+            const built = await buildSampleForTable(
+              connName, schemaEntry.schema, table.table,
+              dialect, connector, sampleConfig,
+            );
+            sampleRowsRows.push(...built.rows);
+            if (built.note !== null) sampleNotesRows.push(built.note);
+          } catch (err) {
+            console.warn(`Sample build failed for ${connName}.${table.table}:`, err);
+          }
+        }
       }
     }
   }
@@ -176,7 +235,82 @@ export async function buildCatalog(
       ],
       rows: columnStatsRows,
     },
+    sample_rows: {
+      columns: ['connection_name', 'schema_name', 'table_name', 'row_index', 'row_json'],
+      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'INTEGER', 'VARCHAR'],
+      rows: sampleRowsRows,
+    },
+    sample_notes: {
+      columns: ['connection_name', 'schema_name', 'table_name', 'notes'],
+      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+      rows: sampleNotesRows,
+    },
   };
+}
+
+// ── Sample builder ─────────────────────────────────────────────────────────
+// Pulls a random pool from the source DB, asks the lighter model to pick a
+// representative/diverse subset + write a shape note. Returns the catalog
+// rows to splice into `sample_rows` + `sample_notes`. Per-table failures
+// throw (caller skips this table).
+
+async function buildSampleForTable(
+  connName: string,
+  schemaName: string,
+  tableName: string,
+  dialect: string,
+  connector: NodeConnector,
+  config: SampleConfig,
+): Promise<{ rows: Record<string, unknown>[]; note: Record<string, unknown> | null }> {
+  const poolSize = config.poolSize ?? 100;
+  const pickK = config.pickK ?? 10;
+  const truncateCellChars = config.truncateCellChars ?? 1000;
+
+  const sql = buildSampleSql(dialect, schemaName, tableName, poolSize);
+  const pool = await connector.query(sql);
+  if (pool.rows.length === 0) {
+    return { rows: [], note: null };
+  }
+
+  // Truncate big cells for LLM input only (storage keeps full content).
+  const truncatedRows = pool.rows.map((row) => {
+    const out: Record<string, unknown> = {};
+    for (const c of pool.columns) {
+      const v = row[c];
+      out[c] = typeof v === 'string' && v.length > truncateCellChars
+        ? `${v.slice(0, truncateCellChars)}...[truncated]`
+        : v;
+    }
+    return out;
+  });
+
+  const entry: PromptPassEntry = {
+    label: 'sample-pool',
+    result: { ...pool, rows: truncatedRows },
+  };
+  const llmCtx = buildPromptPassContext([entry], config.slotPrompt, {});
+  const text = extractText(await config.callLLM(config.model, llmCtx));
+  const parsed = parsePromptPassResponse(text);
+
+  const shown = pool.rows.slice(0, PROMPT_ROW_CAP);
+  const reranked = applyRerank(shown, parsed?.results?.[0]?.rerankedIds);
+  const picked = reranked.slice(0, pickK);
+  const info = pickPromptPassInfo(parsed, text);
+
+  const rows = picked.map((row, i) => ({
+    connection_name: connName,
+    schema_name: schemaName,
+    table_name: tableName,
+    row_index: i,
+    row_json: JSON.stringify(row),
+  }));
+  const note = {
+    connection_name: connName,
+    schema_name: schemaName,
+    table_name: tableName,
+    notes: info,
+  };
+  return { rows, note };
 }
 
 // ── Catalog store ──────────────────────────────────────────────────────────
@@ -208,10 +342,14 @@ function escapeCatalogValue(v: unknown): string {
  * tables. Both `SearchDBSchema` and `Explore` use this — they share the same
  * `columns` / `column_stats` view of the schema. `cacheKey` selects which
  * per-slot instance to use; defaults to `'default'` for single-agent runs.
+ * `sampleConfig` is forwarded to `buildCatalog` to populate
+ * `sample_rows` / `sample_notes` via the lighter model; omit it to skip
+ * sample-table building (those tables stay empty).
  */
 export async function getCatalogStore(
   connections: ConnectionInfo[] | undefined,
   cacheKey: string = 'default',
+  sampleConfig?: SampleConfig,
 ): Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> {
   const existing = catalogStores.get(cacheKey);
   if (existing) return existing;
@@ -225,7 +363,7 @@ export async function getCatalogStore(
       connectors.set(entry.name, { connector: c, dialect: entry.dialect });
     }
 
-    const catalog = await buildCatalog(connectors);
+    const catalog = await buildCatalog(connectors, sampleConfig);
     const db = await DuckDBInstance.create(':memory:');
     const conn = await db.connect();
 

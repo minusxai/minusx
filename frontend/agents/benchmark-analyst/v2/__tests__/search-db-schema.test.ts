@@ -4,7 +4,7 @@ import { fauxAssistantMessage, type TextContent, registerFauxProvider } from '@m
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
 import { SearchDBSchemaV2, clearCatalogCache } from '../search-db-schema';
-import { setLighterModel } from '../data-tool-base';
+import { setLighterModel, setSamplingEnabled } from '../data-tool-base';
 import { clearHandles } from '../handle-store';
 
 const fauxReg = registerFauxProvider({
@@ -56,6 +56,10 @@ const CTX: BenchmarkAnalystContext = {
 describe('SearchDBSchemaV2', () => {
   beforeAll(() => {
     setLighterModel(fauxReg.getModel());
+    // Sample-building has its own coverage in catalog.test.ts; turning it
+    // off here keeps the prompt-pass response queue under each test's
+    // direct control.
+    setSamplingEnabled(false);
   });
 
   beforeEach(async () => {
