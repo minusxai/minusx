@@ -107,7 +107,7 @@ registerTool('FuzzyMatch', async (args, user) => {
   const queryFn = (sql: string) => connector.query(sql);
   const result = await fuzzyMatch(content.type, queryFn, {
     table,
-    column,
+    columns: [column],
     searchTerm: search_term,
     schema: schemaName,
     limit,
