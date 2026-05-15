@@ -166,6 +166,10 @@ export type Markersize = number | null;
  */
 export type Stacked = boolean | null;
 /**
+ * show numeric value labels on each data point. Defaults to false.
+ */
+export type Showdatalabels = boolean | null;
+/**
  * annotations for cartesian charts. Each annotation specifies x, series, and text.
  */
 export type Annotations = ChartAnnotation[] | null;
@@ -523,6 +527,7 @@ export interface VisualizationStyleConfig {
   opacity?: Opacity;
   markerSize?: Markersize;
   stacked?: Stacked;
+  showDataLabels?: Showdatalabels;
 }
 /**
  * A chart annotation anchored to an existing chart x value and series with a short text label.

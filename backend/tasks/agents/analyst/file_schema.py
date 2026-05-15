@@ -159,6 +159,7 @@ class VisualizationStyleConfig(BaseModel):
     opacity: Optional[float] = Field(None, description="series opacity from 0.1 to 1.0")
     markerSize: Optional[int] = Field(None, description="point marker size for charts that render markers, such as scatter and line")
     stacked: Optional[bool] = Field(None, description="whether bar and area series should be stacked. Defaults to true for those chart types.")
+    showDataLabels: Optional[bool] = Field(None, description="show numeric value labels on each data point. Defaults to false.")
 
 class TrendCompareMode(str, Enum):
     """Which data points to compare in a trend chart."""
