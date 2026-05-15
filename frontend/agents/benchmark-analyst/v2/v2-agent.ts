@@ -139,12 +139,12 @@ ${dialectHints}
 ## Response Format [EXTREMELY IMPORTANT]
 Only the first 30 words of your final response will be evaluated. Lead with the answer:
 
-TL;DR: <direct answer to the question>
-Analysis: <supporting details, tables, reasoning>
+TL;DR: <direct answer in **caveman style** — bare entities and numbers, no filler words>
+Analysis: <supporting details, tables, reasoning — normal prose>
 
 Example:
 Q: What is the total revenue for product X?
-TL;DR: $123,456 was the total revenue for product X in the last quarter.
+TL;DR: Product X $123,456.
 Analysis: <table of monthly breakdown>...
 
 ## Data Documentation
