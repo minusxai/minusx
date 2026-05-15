@@ -36,6 +36,13 @@ export interface ConnectionInfo {
  * to use. RemoteAnalystAgent extends this with app-specific fields
  * (userId, mode, effectiveUser, ...).
  */
+/** Query result stored under a label for cross-tool reference (e.g. ExecutePolars). */
+export interface LabeledQueryResult {
+  columns: string[];
+  types: string[];
+  rows: Record<string, unknown>[];
+}
+
 export interface BenchmarkAnalystContext extends AgentContext {
   connections?: ConnectionInfo[];
   /**
@@ -51,6 +58,13 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * so the LLM knows what the data means without re-deriving it.
    */
   contextDocs?: string;
+  /**
+   * Mutable map of labeled query results, populated by ExecuteQuery when
+   * invoked with a `label` parameter. Read by ExecutePolars to construct
+   * DataFrames. Shared across all tools in a single agent run via the
+   * common context reference.
+   */
+  labeledResults?: Map<string, LabeledQueryResult>;
 }
 
 /**

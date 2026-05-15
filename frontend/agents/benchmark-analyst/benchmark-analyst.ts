@@ -8,6 +8,7 @@ import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
 import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, FuzzyMatch } from './db-tools';
 import { ExploreDataset } from './explore-dataset';
+import { ExecuteCode, ListLabeledResults } from './execute-code';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 
 export const fauxRegistration = registerFauxProvider({
@@ -46,6 +47,8 @@ export class BenchmarkAnalystAgent<
     BaseExecuteQuery.schema,
     FuzzyMatch.schema,
     ExploreDataset.schema,
+    ExecuteCode.schema,
+    ListLabeledResults.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
@@ -83,6 +86,17 @@ ${JSON.stringify(visibleConnections)}
   - For ranking questions: query the ranking metric first (e.g. top 100 by revenue), then use $label.column_name to pull metadata for just those IDs. Always ORDER BY the relevant metric. Write a precise prompt stating the exact output format.
   - If data is in the same DB, prefer CTE/subqueries in a single query instead of $ referencing.
 
+  ## ExecuteCode — programmatic DataFrame transformations & statistics
+  - Use when you need transformations that are awkward in SQL: complex pivots, multi-DataFrame joins/reshaping, iterative aggregations, custom row-level logic, or statistical analysis.
+  - First, run ExecuteQuery calls with a \`label\` param to name your result sets (e.g. \`label: "sales"\`).
+  - Then call ExecuteCode with JavaScript code that references those labels as DataFrame variables.
+  - **Available libraries (nothing else — no other imports or globals):**
+    - \`pl\` — nodejs-polars: DataFrame/Series creation, joins, groupBy, agg, filter, sort, select, withColumn, pivot, melt, etc.
+    - \`ss\` — simple-statistics: linearRegression, standardDeviation, tTest, sampleCorrelation, quantile, zScore, cumulativeStdNormalProbability, etc.
+  - Write a complete JavaScript function. To pass data from a DataFrame to \`ss\`, extract a column as an array: \`sales.getColumn("revenue").toArray()\`
+  - Example: after \`ExecuteQuery({..., label: "sales"})\` and \`ExecuteQuery({..., label: "products"})\`:
+    \`ExecuteCode({ code: '() => { const joined = sales.join(products, {on: "product_id"}); return joined.groupBy("category").agg(pl.col("revenue").sum()); }' })\`
+
   ## Search Tool Selection — TL;DR
   | Need | Tool |
   |---|---|
@@ -91,6 +105,7 @@ ${JSON.stringify(visibleConnections)}
   | Semantic concept in free-text (e.g. "eco-friendly", "funny names") | ExploreDataset |
   | Found some hits but unsure if complete | FuzzyMatch → examine results → ExploreDataset |
   | Entity resolution, dedup, clustering | ExploreDataset |
+  | Complex data transformations, pivots, multi-DF joins | ExecuteCode |
 
 ## Response Format [EXTREMELY IMPORTANT]:
 - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.

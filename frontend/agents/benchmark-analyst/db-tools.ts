@@ -182,6 +182,9 @@ const EXECUTE_QUERY_BASE_FIELDS = {
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of the markdown table returned to the LLM (default 10,000, max 100,000). Increase only if you need to see more rows in text form. Use OFFSET in SQL to page through large results instead.',
   })),
+  label: Type.Optional(Type.String({
+    description: 'Short label for this result (e.g. "sales", "products"). When set, the result is stored and can be referenced by ExecutePolars as a named DataFrame variable.',
+  })),
 } as const;
 
 const ExecuteQueryParams = Type.Object({
@@ -332,6 +335,13 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       { columns, types, rows: result.rows },
       maxChars,
     );
+
+    // Store labeled result for cross-tool reference (e.g. ExecutePolars).
+    const { label } = this.parameters as { label?: string };
+    if (label) {
+      if (!this.context.labeledResults) this.context.labeledResults = new Map();
+      this.context.labeledResults.set(label, { columns, types, rows: result.rows });
+    }
 
     return {
       // LLM sees: { columns, types, data: markdown, totalRows, shownRows,
