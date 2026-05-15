@@ -36,8 +36,35 @@ const TOOL_COLOR_MAP: Record<string, string> = {
   ExploreDataset: 'accent.primary',
 };
 
+/** Palette for distinguishing parallel branches */
+const BRANCH_COLORS = [
+  '#3498db', // blue
+  '#e67e22', // orange
+  '#2ecc71', // green
+  '#e74c3c', // red
+  '#9b59b6', // purple
+  '#1abc9c', // teal
+  '#f1c40f', // yellow
+  '#e84393', // pink
+];
+
 function getToolColor(name: string): string {
   return TOOL_COLOR_MAP[name] ?? 'fg.subtle';
+}
+
+/** Build a map of parent_id -> color for branch visualization */
+export function buildBranchColorMap(messages: Array<{ parent_id?: string }>): Map<string, string> {
+  const parentIds = new Set<string>();
+  for (const msg of messages) {
+    if (msg.parent_id) parentIds.add(msg.parent_id);
+  }
+  const map = new Map<string, string>();
+  let idx = 0;
+  for (const pid of parentIds) {
+    map.set(pid, BRANCH_COLORS[idx % BRANCH_COLORS.length]);
+    idx++;
+  }
+  return map;
 }
 
 function toInspectTuple(msg: FlatToolCall): ToolCallTuple {
@@ -71,11 +98,18 @@ export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
     [messages],
   );
 
+  const branchColorMap = useMemo(
+    () => buildBranchColorMap(toolCalls as Array<{ parent_id?: string }>),
+    [toolCalls],
+  );
+
+  const hasBranches = branchColorMap.size > 1;
+
   if (messages.length === 0) return null;
 
   return (
     <>
-      <HStack gap={2} px={3} py={1.5} mx={2} mt={1} bg="bg.canvas" border="1px solid" borderColor="border.muted" borderRadius="md">
+      <HStack gap={2} px={3} py={1.5} mx={2} mt={1} bg="bg.canvas" border="1px solid" borderColor="border.muted" borderRadius="md" alignItems="flex-start">
         <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
           <Button
             onClick={() => setShowToolInspector(true)}
@@ -98,7 +132,7 @@ export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
 
         {/* Minimap: colored blocks grouped by run_id (same assistant message) */}
         {toolCalls.length > 0 && (
-          <HStack gap={1.5} flex={1} minW={0} overflow="hidden">
+          <Box flex={1} minW={0} display="flex" flexWrap="wrap" gap="6px">
             {(() => {
               // Group tool calls by run_id
               const groups: (typeof toolCalls)[] = [];
@@ -121,27 +155,45 @@ export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
                     const name = msg.function.name;
                     const hasError = typeof msg.content === 'string' && msg.content.includes('"success":false');
                     const color = getToolColor(name);
+                    const parentId = (msg as any).parent_id as string | undefined;
+                    const branchColor = parentId ? branchColorMap.get(parentId) : undefined;
 
                     return (
-                      <Tooltip key={`${msg.tool_call_id}-${idx}`} content={name} positioning={{ placement: 'bottom' }}>
+                      <Tooltip key={`${msg.tool_call_id}-${idx}`} content={`${name}${hasBranches && parentId ? ` [${parentId}]` : ''}`} positioning={{ placement: 'bottom' }}>
                         <Box
                           w="24px"
                           h="48px"
-                          bg={color}
                           cursor="pointer"
                           _hover={{ opacity: 1, transform: 'scaleY(1.1)' }}
                           transition="all 0.1s"
                           opacity={0.7}
                           display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          onClick={() => setInspecting(toInspectTuple(msg))}
+                          flexDirection="column"
                           borderRadius="xs"
+                          overflow="hidden"
+                          onClick={() => setInspecting(toInspectTuple(msg))}
                         >
-                          {hasError
-                            ? <LuX size={10} color="white" />
-                            : <LuCheck size={10} color="white" />
-                          }
+                          {/* Main tool color block */}
+                          <Box
+                            flex={1}
+                            bg={color}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                          >
+                            {hasError
+                              ? <LuX size={10} color="white" />
+                              : <LuCheck size={10} color="white" />
+                            }
+                          </Box>
+                          {/* Branch color underline */}
+                          {hasBranches && (
+                            <Box
+                              h="4px"
+                              flexShrink={0}
+                              bg={branchColor ?? 'transparent'}
+                            />
+                          )}
                         </Box>
                       </Tooltip>
                     );
@@ -149,7 +201,7 @@ export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
                 </HStack>
               ));
             })()}
-          </HStack>
+          </Box>
         )}
       </HStack>
 
