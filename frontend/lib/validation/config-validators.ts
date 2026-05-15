@@ -71,12 +71,10 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
 
     for (const field of validFields) {
       if (branding[field] !== undefined) {
-        if (typeof branding[field] !== 'string' || branding[field].trim() === '') return false;
+        if (typeof branding[field] !== 'string') return false;
       }
     }
-    for (const field of Object.keys(branding)) {
-      if (!validFields.includes(field)) return false;
-    }
+    // Allow unknown branding fields — don't reject the entire config for extra keys
   }
 
   if (config.links !== undefined) {
@@ -87,12 +85,10 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
 
     for (const field of validFields) {
       if (links[field] !== undefined) {
-        if (typeof links[field] !== 'string' || links[field].trim() === '') return false;
+        if (typeof links[field] !== 'string') return false;
       }
     }
-    for (const field of Object.keys(links)) {
-      if (!validFields.includes(field)) return false;
-    }
+    // Allow unknown links fields
   }
 
   if (config.messaging !== undefined) {
