@@ -51,6 +51,16 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * so the LLM knows what the data means without re-deriving it.
    */
   contextDocs?: string;
+  /**
+   * The user's ORIGINAL question for this row. Carried in the context so
+   * tool helpers (e.g. `runPromptPass`) can read it directly without each
+   * tool plumbing it through arg-by-arg. Distinct from per-round agent
+   * userMessages (in DoubleCheck mode, round-2 sub-agents see a feedback
+   * prompt as their `parameters.userMessage`; `context.originalMessage`
+   * stays the original throughout). Populated by the benchmark runner;
+   * production paths leave it `undefined`.
+   */
+  originalMessage?: string;
 }
 
 /**

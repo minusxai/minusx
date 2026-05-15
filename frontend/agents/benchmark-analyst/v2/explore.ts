@@ -3,14 +3,14 @@
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import type { DuckDBConnection } from '@duckdb/node-api';
-import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
+import { type ToolResponse } from '@/orchestrator/types';
+import type { ConnectionInfo } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
 import { getCatalogStore } from './catalog';
-import { runPromptPass } from './prompt-pass';
+import { V2DataTool } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 
@@ -23,7 +23,9 @@ const ExploreFilter = Type.Object({
   schema: Type.Optional(Type.String({ description: 'Limit search to this schema' })),
   table: Type.Optional(Type.String({ description: 'Limit search to this table' })),
   columns: Type.Optional(Type.Array(Type.String(), { description: 'Limit search to these columns' })),
-  match: Type.String({ description: 'Term to search for (lexical/fuzzy matching)' }),
+  match: Type.Optional(Type.String({
+    description: 'Term to search for (lexical/fuzzy matching). Omit for sampling/clustering use cases — without a match filter Explore samples rows from in-scope text columns; combine with a `prompt` to have the lighter model pick the most diverse / cluster them / etc.',
+  })),
 });
 
 const ExploreParams = Type.Object({
@@ -52,11 +54,7 @@ interface SearchTarget {
   dialect: string;
 }
 
-export class ExploreV2 extends MXTool<
-  typeof ExploreParams,
-  BenchmarkAnalystContext,
-  ExploreDetails
-> {
+export class ExploreV2 extends V2DataTool<typeof ExploreParams, ExploreDetails> {
   static readonly schema: Tool<typeof ExploreParams> = {
     name: 'Explore',
     description: `Find ROWS matching a term/value across one or many tables — the discovery tool. Use Explore when you're searching for *where* something is, before you know its exact location.
@@ -65,11 +63,12 @@ USE EXPLORE WHEN:
 - You need to find which rows mention a value, and you're not sure which table/column has it (e.g. "find all businesses with 'vegan' in any text field").
 - You want fuzzy matching across many text columns at once — Explore runs per-dialect search automatically (jaro_winkler for duckdb/sqlite, similarity() for postgres with pg_trgm, $regex for mongo, ILIKE elsewhere).
 - You want semantic narrowing of lexical hits — pass a \`prompt\` and the lighter model re-ranks/filters by meaning ("rank by relevance to clean energy"). The re-rank is best-effort.
+- You want to SAMPLE / cluster / pick-diverse rows across text columns — omit \`match\` (no WHERE filter) and pass a \`prompt\` like "pick the 10 most diverse business names" or "cluster these articles by topic, return cluster labels in info".
 
 DO NOT use Explore when you already know the exact table/column and need a precise aggregate, join, or filter — use ExecuteQuery for that.
 
 FILTER:
-- match (required): the term to find. Per-dialect lexical/fuzzy match.
+- match (optional): the term to find. Per-dialect lexical/fuzzy match. **Omit for sampling/clustering** — combined with \`prompt\`, the lighter model picks diverse rows / clusters from the sampled set.
 - connection / schema / table / columns: scope to a subset. Omit for broad search.
 
 OUTPUT: {results: [{preview, handle, stats}], info?}. Each row is {id, matched_text, source, score} where \`source\` is "table.column" — tells you exactly where the hit came from. Use that to identify the right place, then ExecuteQuery to drill in.
@@ -150,7 +149,7 @@ Examples:
       columns: ['id', 'matched_text', 'source', 'score'],
       types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'DOUBLE'],
       rows: allRows.slice(0, 1000), // Cap at 1000 results
-      finalQuery: `EXPLORE match="${filter.match}"`,
+      finalQuery: filter.match ? `EXPLORE match="${filter.match}"` : `EXPLORE (sampling, no match filter)`,
     };
 
     const handle = storeHandle(result);
@@ -162,12 +161,10 @@ Examples:
     let preview: string;
     let info: string | undefined;
     if (prompt && result.rows.length > 0) {
-      const pass = await runPromptPass(
-        [{ label: `Search: "${filter.match}"`, result }],
+      const pass = await this.runPromptPass(
+        [{ label: `Search: "${filter.match ?? '(no match filter)'}"`, result }],
         prompt,
         exploreModel,
-        this.orchestrator,
-        this.id,
       );
       preview = pass.previews[0] ?? compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
       info = pass.info;
@@ -197,7 +194,7 @@ Examples:
       schema?: string;
       table?: string;
       columns?: string[];
-      match: string;
+      match?: string;
     },
     catalogConn: DuckDBConnection,
   ): Promise<SearchTarget[]> {
@@ -250,7 +247,7 @@ Examples:
 
   private async searchColumn(
     target: SearchTarget,
-    match: string,
+    match: string | undefined,
   ): Promise<Record<string, unknown>[]> {
     const connector = this.connectors.get(target.connection);
     if (!connector) return [];
@@ -269,9 +266,19 @@ Examples:
     // DuckDB and benchmark sqlite (which routes through the shared DuckDB
     // instance — see shared-duckdb.ts) both support `jaro_winkler_similarity`.
     const isDuckdbBacked = target.dialect === 'duckdb' || target.dialect === 'sqlite';
-    const escapedMatch = match.replace(/'/g, "''");
     const source = `${target.table}.${target.column}`;
 
+    // No match → sampling mode (no WHERE filter; just project non-null rows).
+    if (!match) {
+      const sql = buildSamplingSql(target, source);
+      try {
+        return (await connector.query(sql)).rows;
+      } catch {
+        return [];
+      }
+    }
+
+    const escapedMatch = match.replace(/'/g, "''");
     const sql = isDuckdbBacked
       ? buildJaroWinklerSql(target, source, escapedMatch)
       : buildGenericLikeSql(target, source, escapedMatch);
@@ -312,11 +319,15 @@ Examples:
   private async searchMongoColumn(
     connector: NodeConnector,
     target: SearchTarget,
-    match: string,
+    match: string | undefined,
   ): Promise<Record<string, unknown>[]> {
-    const escapedRegex = match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // No match → sampling: just project non-null rows from the collection.
+    const matchStage = match
+      ? { $match: { [target.column]: { $regex: match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } } }
+      : { $match: { [target.column]: { $exists: true, $ne: null } } };
+
     const pipeline = [
-      { $match: { [target.column]: { $regex: escapedRegex, $options: 'i' } } },
+      matchStage,
       {
         $project: {
           _id: 0,
@@ -345,12 +356,31 @@ Examples:
   private async searchPostgresColumn(
     connector: NodeConnector,
     target: SearchTarget,
-    match: string,
+    match: string | undefined,
   ): Promise<Record<string, unknown>[]> {
-    const escapedMatch = match.replace(/'/g, "''");
     const source = `${target.table}.${target.column}`;
     const schemaTable = `"${target.schema}"."${target.table}"`;
 
+    // No match → sampling: just project non-null rows.
+    if (!match) {
+      const sql = `
+        SELECT
+          ctid::text as id,
+          "${target.column}" as matched_text,
+          '${source}' as source,
+          1.0 as score
+        FROM ${schemaTable}
+        WHERE "${target.column}" IS NOT NULL
+        LIMIT 100
+      `;
+      try {
+        return (await connector.query(sql)).rows;
+      } catch {
+        return [];
+      }
+    }
+
+    const escapedMatch = match.replace(/'/g, "''");
     const fuzzySql = `
       SELECT
         ctid::text as id,
@@ -413,6 +443,21 @@ function buildJaroWinklerSql(target: SearchTarget, source: string, escapedMatch:
         OR jaro_winkler_similarity("${target.column}", '${escapedMatch}') > 0.7
       )
     ORDER BY score DESC
+    LIMIT 100
+  `;
+}
+
+/** No-match (sampling) SQL — for DuckDB / benchmark-sqlite / generic. Just
+ *  projects non-null rows so the prompt-pass model can pick diverse / cluster. */
+function buildSamplingSql(target: SearchTarget, source: string): string {
+  return `
+    SELECT
+      CAST(rowid AS VARCHAR) as id,
+      "${target.column}" as matched_text,
+      '${source}' as source,
+      1.0 as score
+    FROM "${target.table}"
+    WHERE "${target.column}" IS NOT NULL
     LIMIT 100
   `;
 }

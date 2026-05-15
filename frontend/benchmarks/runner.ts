@@ -326,6 +326,11 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
         .map((name) => connectionsByName.get(name))
         .filter((c): c is ConnectionInfo => !!c),
       contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
+      // Carried so V2 tool helpers (e.g. `runPromptPass`) can read it
+      // directly off the context — no need for tools to plumb it arg-by-arg.
+      // Distinct from per-round agent userMessages (DoubleCheck rotates a
+      // feedback prompt as the agent's parameters.userMessage on rounds 2+).
+      originalMessage: row.user_message,
     };
     rowContexts.set(i, ctx);
   }

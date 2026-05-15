@@ -2,13 +2,13 @@
 // Catalog tables: connections, schemas, tables, columns, indexes, column_stats
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
-import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import type { BenchmarkAnalystContext } from '../types';
+import { type ToolResponse } from '@/orchestrator/types';
 import type { QueryResult } from '@/lib/connections/base';
 import { getCatalogStore } from './catalog';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
-import { runPromptPass, type PromptPassEntry } from './prompt-pass';
+import { type PromptPassEntry } from './prompt-pass';
+import { V2DataTool } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 
@@ -28,6 +28,9 @@ const SearchDBSchemaParams = Type.Object({
   }),
   prompt: Type.Optional(Type.String({ description: 'Optional: if provided, an LLM summarizes all results and returns a single info string' })),
   sequential: Type.Optional(Type.Boolean({ description: 'If true, queries run sequentially (default: false, parallel)' })),
+  maxChars: Type.Optional(Type.Number({
+    description: 'Max characters of inline preview rows per result (default ~10,000). Increase up front (e.g. 30000–50000) only when you genuinely need to see more rows inline. Otherwise use the default + `fetchHandle` for pagination.',
+  })),
 });
 
 interface QueryResultEntry {
@@ -42,11 +45,7 @@ interface SearchDBSchemaDetails {
   queryCount: number;
 }
 
-export class SearchDBSchemaV2 extends MXTool<
-  typeof SearchDBSchemaParams,
-  BenchmarkAnalystContext,
-  SearchDBSchemaDetails
-> {
+export class SearchDBSchemaV2 extends V2DataTool<typeof SearchDBSchemaParams, SearchDBSchemaDetails> {
   static readonly schema: Tool<typeof SearchDBSchemaParams> = {
     name: 'SearchDBSchema',
     description: `Query the database schema catalog using SQL. The catalog is a set of 6 tables built from all connection schemas:
@@ -70,7 +69,8 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
   };
 
   async run(): Promise<ToolResponse<SearchDBSchemaDetails>> {
-    const { queries, prompt, sequential = false } = this.parameters;
+    const { queries, prompt, sequential = false, maxChars } = this.parameters;
+    const previewMaxChars = typeof maxChars === 'number' && maxChars > 0 ? maxChars : TOOL_MAX_LIMIT_CHARS;
 
     // Build catalog if needed (shared with Explore, cached process-wide)
     const { conn } = await getCatalogStore(this.context.connections);
@@ -101,7 +101,7 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
         // produces the re-ranked preview from the raw rows.
         const preview = prompt
           ? undefined
-          : compressQueryResult(queryResult, TOOL_MAX_LIMIT_CHARS).data;
+          : compressQueryResult(queryResult, previewMaxChars).data;
 
         return { entry: { preview, handle, stats }, raw: queryResult, label };
       } catch (err) {
@@ -130,9 +130,7 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
           ? { label: c.label, result: c.raw }
           : { label: c.label, error: c.entry.error ?? 'query failed' },
       );
-      const { previews, info } = await runPromptPass(
-        entries, prompt, infoModel, this.orchestrator, this.id,
-      );
+      const { previews, info } = await this.runPromptPass(entries, prompt, infoModel, previewMaxChars);
       previews.forEach((p, i) => {
         if (p !== undefined) results[i].preview = p;
       });

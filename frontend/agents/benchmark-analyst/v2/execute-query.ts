@@ -2,14 +2,15 @@
 // Supports cross-connection queries, sequential label interpolation, handles-as-tables
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
-import { MXTool, type ToolResponse } from '@/orchestrator/types';
+import { type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import { storeHandle, qualifyHandleRefs } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
 import { interpolateRefs, interpolateMongoRefs } from './query-refs';
-import { runPromptPass, type PromptPassEntry } from './prompt-pass';
+import { type PromptPassEntry } from './prompt-pass';
+import { V2DataTool } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { clampQueryTimeoutSeconds } from '../db-tools';
@@ -35,6 +36,9 @@ const ExecuteQueryParams = Type.Object({
   timeout: Type.Optional(Type.Number({
     description: 'Per-query timeout in seconds (default 60, max 300). Applies to every query in the batch. Set this to 180–300 UP FRONT for a query that will scan a large table (full-table aggregation, JSON extraction over all rows) — do not eat a 60s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
   })),
+  maxChars: Type.Optional(Type.Number({
+    description: 'Max characters of inline preview rows per result (default ~10,000). Increase up front (e.g. 30000–50000) only when you genuinely need to see more rows inline in this call. Otherwise prefer the default + `fetchHandle` for pagination.',
+  })),
 });
 
 interface QueryResultEntry {
@@ -49,11 +53,7 @@ interface ExecuteQueryDetails {
   errors: number;
 }
 
-export class ExecuteQueryV2 extends MXTool<
-  typeof ExecuteQueryParams,
-  BenchmarkAnalystContext,
-  ExecuteQueryDetails
-> {
+export class ExecuteQueryV2 extends V2DataTool<typeof ExecuteQueryParams, ExecuteQueryDetails> {
   static readonly schema: Tool<typeof ExecuteQueryParams> = {
     name: 'ExecuteQuery',
     description: `Execute SQL queries against data connections. Returns {results, info?} where each result has {preview, handle, stats}.
@@ -107,8 +107,9 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
   }
 
   async run(): Promise<ToolResponse<ExecuteQueryDetails>> {
-    const { queries, prompt, sequential = false, timeout } = this.parameters;
+    const { queries, prompt, sequential = false, timeout, maxChars } = this.parameters;
     const timeoutMs = clampQueryTimeoutSeconds(timeout) * 1000;
+    const previewMaxChars = typeof maxChars === 'number' && maxChars > 0 ? maxChars : TOOL_MAX_LIMIT_CHARS;
 
     await this.initConnectors();
 
@@ -192,7 +193,7 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
         // produces the re-ranked preview from the raw rows.
         const preview = prompt
           ? undefined
-          : compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
+          : compressQueryResult(result, previewMaxChars).data;
 
         return { entry: { preview, handle, stats }, raw: result, label };
       } catch (err) {
@@ -222,9 +223,7 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
           ? { label: c.label, result: c.raw }
           : { label: c.label, error: c.entry.error ?? 'query failed' },
       );
-      const { previews, info } = await runPromptPass(
-        entries, prompt, infoModel, this.orchestrator, this.id,
-      );
+      const { previews, info } = await this.runPromptPass(entries, prompt, infoModel, previewMaxChars);
       previews.forEach((p, i) => {
         if (p !== undefined) results[i].preview = p;
       });
