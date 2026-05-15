@@ -60,29 +60,36 @@ export class ExecuteQueryV2 extends MXTool<
 
 FEATURES:
 - Cross-connection queries: specify different connections for each query
-- Handle references: results from earlier queries (or any stored handle) can be joined as tables: FROM handle_xyz (works for duckdb/sqlite connections)
-- Sequential mode (sequential=true): queries run in order, $label.column references expand to values from earlier results
+- Handle references (FROM handle_xyz): in-engine join — **only works when the query's connection is duckdb or benchmark-sqlite** (both share one in-memory DuckDB instance where handle tables live). Scales to handles of any size with no inlining.
+- Sequential mode (sequential=true): queries run in order, $label.column references in later queries expand into the SQL/JSON as a literal list/JSON array. The **universal** cross-connection mechanism — works SQL→SQL across engines, SQL→Mongo, etc. Prefer FROM handle_xyz when both ends are duckdb/sqlite.
 - Per-query errors: a failing query returns {error} in its slot without failing the batch
 - Prompt: if provided, the lighter model re-ranks each result's preview rows and returns a single cross-result info summary
 - Timeout (seconds, default 60, max 300): per-query cancellation budget; bump UP FRONT for queries that scan large tables — don't eat a default kill then retry
 
 SEQUENTIAL MODE:
-In sequential mode, the 2nd+ query MUST reference an earlier result via $label.column.
-Example:
+In sequential mode (sequential=true), the 2nd+ query MUST reference an earlier result via $label.column. Works for SQL AND Mongo.
+
+SQL → SQL example:
   query1: {connection: "orders", query: "SELECT product_id FROM sales ORDER BY revenue DESC LIMIT 100", label: "top"}
   query2: {connection: "catalog", query: "SELECT * FROM products WHERE id IN ($top.product_id)", label: "details"}
 
-HANDLE AS TABLE:
-Any stored handle can be queried as a table:
+SQL → Mongo example — DO THIS instead of inlining a long $in array (handles don't apply across SQL/Mongo, but $label.column does):
+  sequential: true
+  query1: {connection: "metadata_db", query: "SELECT article_id FROM article_metadata WHERE author='Amy Jones'", label: "amy"}
+  query2: {connection: "articles_db", query: '{"collection":"articles","pipeline":[{"$match":{"article_id":{"$in":"$amy.article_id"}}},{"$project":{"title":1,"description":1}}]}'}
+The "$amy.article_id" string inside the JSON pipeline expands to a real JSON array of the article_ids from query1.
+
+HANDLE AS TABLE (duckdb / benchmark-sqlite only):
+Any stored handle can be joined as a table when the query's connection is duckdb or benchmark-sqlite (both route through the same in-memory DuckDB instance where handle tables are registered):
   "SELECT o.id FROM orders o JOIN handle_abc h ON o.product_id = h.id WHERE h.value > 100"
+For postgres / bigquery / mongo connections — handle tables don't exist in those engines. Use sequential mode + $label.column instead (above).
 
 FUZZY MATCHING:
-Use SQL functions directly: jaro_winkler_similarity(), levenshtein() (DuckDB), similarity() (PostgreSQL), etc.
-For semantic matching, pass results to an LLM via the prompt parameter.
+Use SQL functions directly: jaro_winkler_similarity() (DuckDB / benchmark sqlite), similarity() with pg_trgm (PostgreSQL).
+For semantic re-ranking, pass a \`prompt\` — the lighter model re-ranks each result's preview rows and writes one \`info\` summary across all results.
 
 MONGO:
-For Mongo connections, write a JSON aggregation pipeline: {"collection": "name", "pipeline": [stages]}
-$label.column references expand to JSON arrays for use with $in.`,
+For Mongo connections, write a JSON aggregation pipeline: {"collection": "name", "pipeline": [stages]}. Common stages: $match, $group, $project, $sort, $limit. Use sequential mode + $label.column for cross-DB chains (above) — NEVER paste hundreds of IDs into an inline $in array.`,
     parameters: ExecuteQueryParams,
   };
 

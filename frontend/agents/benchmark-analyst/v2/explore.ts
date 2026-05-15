@@ -59,28 +59,27 @@ export class ExploreV2 extends MXTool<
 > {
   static readonly schema: Tool<typeof ExploreParams> = {
     name: 'Explore',
-    description: `Cross-table discovery search — "search when you don't know which table has what you need."
+    description: `Find ROWS matching a term/value across one or many tables — the discovery tool. Use Explore when you're searching for *where* something is, before you know its exact location.
 
-Use Explore when:
-- You need to find where a value/term appears across the database
-- You're doing entity discovery or exploratory analysis
-- You want to identify which tables/columns contain relevant data
+USE EXPLORE WHEN:
+- You need to find which rows mention a value, and you're not sure which table/column has it (e.g. "find all businesses with 'vegan' in any text field").
+- You want fuzzy matching across many text columns at once — Explore runs per-dialect search automatically (jaro_winkler for duckdb/sqlite, similarity() for postgres with pg_trgm, $regex for mongo, ILIKE elsewhere).
+- You want semantic narrowing of lexical hits — pass a \`prompt\` and the lighter model re-ranks/filters by meaning ("rank by relevance to clean energy"). The re-rank is best-effort.
 
-Use ExecuteQuery when:
-- You already know which table has your data
-- You need to run specific SQL with joins, aggregations, etc.
+DO NOT use Explore when you already know the exact table/column and need a precise aggregate, join, or filter — use ExecuteQuery for that.
 
-FILTER OPTIONS:
-- connection: limit to one connection
-- schema: limit to one schema
-- table: limit to one table
-- columns: limit to specific column names
-- match: the term to search for (required)
+FILTER:
+- match (required): the term to find. Per-dialect lexical/fuzzy match.
+- connection / schema / table / columns: scope to a subset. Omit for broad search.
 
-The search runs lexical/fuzzy matching across all text columns in scope.
-Results include source (table.column) and score columns.
+OUTPUT: {results: [{preview, handle, stats}], info?}. Each row is {id, matched_text, source, score} where \`source\` is "table.column" — tells you exactly where the hit came from. Use that to identify the right place, then ExecuteQuery to drill in.
 
-If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by relevance to renewable energy").`,
+WORKS ACROSS DIALECTS: duckdb/sqlite (real fuzzy), postgres (pg_trgm similarity, falls back to ILIKE), mongo (native $regex aggregation pipeline), bigquery & others (generic LIKE).
+
+Examples:
+- Where does "amy jones" appear? \`{filter: {match: "amy jones"}}\`
+- Vegan options in the catalog: \`{filter: {connection: "catalog_db", columns: ["name", "description"], match: "vegan"}}\`
+- Energy products, ranked semantically: \`{filter: {match: "energy"}, prompt: "rank by relevance to renewable energy"}\``,
     parameters: ExploreParams,
   };
 
