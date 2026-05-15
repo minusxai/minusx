@@ -135,6 +135,14 @@ const c = {
   gray:    isTTY ? '\x1b[90m' : '',
 };
 
+// Row-level colors for multi-progress display (timesRun > 1).
+// Cycling palette — visually distinct in both light and dark terminals.
+const ROW_COLORS = isTTY
+  ? ['\x1b[36m', '\x1b[32m', '\x1b[33m', '\x1b[35m', '\x1b[34m',
+     '\x1b[96m', '\x1b[92m', '\x1b[93m', '\x1b[95m', '\x1b[94m']
+  : Array<string>(10).fill('');
+const ROW_BAR_WIDTH = 10;
+
 // ── Progress display ──────────────────────────────────────────────────────
 
 const BAR_WIDTH = 30;
@@ -310,117 +318,226 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   let timeouts = 0;
   const startedAt = Date.now();
 
-  // Tick the progress bar every 300ms while running. Disabled in quiet
-  // mode (multi-dataset parallel runs interleave too many concurrent
-  // progress bars to be readable).
-  const tick = (isTTY && !config.quiet)
-    ? setInterval(() => renderProgress(completed, total, running, errors, Date.now() - startedAt), 300)
-    : null;
-
-  async function runRow(row: InputRow, index: number): Promise<void> {
-    running++;
-    if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
-
+  // ── Per-row context setup (built upfront before dispatch) ────────────
+  const rowContexts = new Map<number, BenchmarkAnalystContext>();
+  for (const { row, i } of remainingRows) {
     const ctx: BenchmarkAnalystContext = {
       connections: row.allowed_connections
         .map((name) => connectionsByName.get(name))
         .filter((c): c is ConnectionInfo => !!c),
       contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
     };
+    rowContexts.set(i, ctx);
+  }
 
-    // Multi-run fan-out: execute the agent `timesRun` times in parallel
-    // against the same input. Each run independently acquires an
-    // `MAX_AGENTS_CONCURRENCY` slot, then arms its own per-run timer
-    // (so queue-wait time is outside the timeout budget). The global
-    // `MAX_LLM_CONCURRENCY` LLM gate inside the orchestrator further
-    // bounds total in-flight provider calls.
-    const rowStart = Date.now();
-    const rowTimeoutMs = config.rowTimeoutMs ?? 0;
+  // ── Single-run executor ────────────────────────────────────────────────
 
-    type RunOutcome =
-      | { kind: 'ok'; log: ConversationLog; error?: string }
-      // `log` is the partial `orch.log` at cancellation — discarded from
-      // `_output.jsonl` but written to the timeouts sidecar for analysis.
-      | { kind: 'cancelled'; reason: string; log: ConversationLog };
+  type RunOutcome =
+    | { kind: 'ok'; log: ConversationLog; error?: string }
+    | { kind: 'cancelled'; reason: string; log: ConversationLog };
 
-    const outcomes = await Promise.all(
-      Array.from({ length: timesRun }, async (): Promise<RunOutcome> => {
-        // Park here until an agent slot is available. The per-run
-        // timeout is NOT armed yet — queue-wait is free.
-        await agentSemaphore.acquire();
+  const rowTimeoutMs = config.rowTimeoutMs ?? 0;
 
-        const orch = new Orchestrator(config.registrables);
-        const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
+  // Per-row state for collecting outcomes, tracking timing, and display.
+  type RowStatus = 'waiting' | 'running' | 'done' | 'error' | 'timeout';
+  const rowState = new Map<number, {
+    row: InputRow;
+    outcomes: RunOutcome[];
+    startTime: number;
+    started: boolean;
+    status: RowStatus;
+    durationMs: number;
+  }>();
+  for (const { row, i } of remainingRows) {
+    rowState.set(i, { row, outcomes: [], startTime: 0, started: false, status: 'waiting', durationMs: 0 });
+  }
 
-        // Per-run timeout, armed AFTER slot acquisition: when it fires,
-        // cancel the orchestrator (which aborts pi-ai's stream) and
-        // flag this run as cancelled. The try/catch catches the abort
-        // error, but we discriminate via `runCancelled` so we mark it
-        // timeout vs. error.
-        let runCancelled = false;
-        const runTimeoutHandle = rowTimeoutMs > 0
-          ? setTimeout(() => {
-            runCancelled = true;
-            orch.cancel();
-          }, rowTimeoutMs)
-          : null;
+  // ── Multi-progress display (per-row bars, timesRun > 1) ──────────────
+  //
+  // Each question gets its own mini bar in a cycling color. Completed
+  // rows show ✓/✗/⏱ instead of the bar. A summary line at the bottom
+  // shows overall run/row counts. When timesRun === 1 the existing
+  // single progress bar is used.
+  const useMultiProgress = timesRun > 1 && isTTY && !config.quiet;
+  let multiProgressHeight = 0;
 
-        let error: string | undefined;
-        try {
-          // RegistrableClass types `new` as → MXTool; the caller guarantees an
-          // MXAgent subclass via `agentClass`.
-          const stream = orch.run(agent as unknown as MXAgent);
-          for await (const _ of stream) { /* drain */ }
-          await stream.result();
-        } catch (err) {
-          error = err instanceof Error ? err.message : String(err);
-        } finally {
-          if (runTimeoutHandle) clearTimeout(runTimeoutHandle);
-          agentSemaphore.release();
-        }
+  function clearMultiProgress(): void {
+    if (!isTTY || multiProgressHeight === 0) return;
+    process.stderr.write(`\x1b[${multiProgressHeight}A`);
+    for (let i = 0; i < multiProgressHeight; i++) {
+      process.stderr.write(`\x1b[K\n`);
+    }
+    process.stderr.write(`\x1b[${multiProgressHeight}A`);
+    multiProgressHeight = 0;
+  }
 
-        if (runCancelled) {
-          return {
-            kind: 'cancelled',
-            reason: `TIMEOUT after ${formatDuration(rowTimeoutMs)}`,
-            // `orch.log` holds the partial conversation up to the abort.
-            log: orch.log as ConversationLog,
-          };
-        }
-        return { kind: 'ok', log: orch.log as ConversationLog, error };
-      }),
-    );
+  function renderMultiProgress(): void {
+    if (!useMultiProgress) return;
+    clearMultiProgress();
 
-    // Row-atomic persistence: if ANY run within this row was cancelled
-    // (per-run timeout), drop the whole row. Resume picks it up next
-    // invocation and re-does all N runs.
-    const cancelled = outcomes.find(
+    const lines: string[] = [];
+    const idxWidth = String(total).length;
+    const msgWidth = 45;
+
+    for (const { i } of remainingRows) {
+      const state = rowState.get(i)!;
+      const color = ROW_COLORS[i % ROW_COLORS.length];
+      const idx = String(i + 1).padStart(idxWidth);
+      const rawMsg = state.row.user_message;
+      const msg = rawMsg.length > msgWidth ? rawMsg.slice(0, msgWidth) + '\u2026' : rawMsg;
+      const done = state.outcomes.length;
+
+      if (state.status === 'done') {
+        lines.push(`  ${color}${idx}${c.reset}  ${c.green}\u2713${c.reset}  ${done}/${timesRun}  ${c.dim}${formatDuration(state.durationMs)}  ${msg}${c.reset}`);
+      } else if (state.status === 'error') {
+        lines.push(`  ${color}${idx}${c.reset}  ${c.red}\u2717${c.reset}  ${done}/${timesRun}  ${c.dim}${formatDuration(state.durationMs)}  ${msg}${c.reset}`);
+      } else if (state.status === 'timeout') {
+        lines.push(`  ${color}${idx}${c.reset}  ${c.yellow}\u23F1${c.reset}  ${done}/${timesRun}  ${c.dim}${formatDuration(state.durationMs)}  ${msg}${c.reset}`);
+      } else if (state.started) {
+        const barFilled = Math.round((done / timesRun) * ROW_BAR_WIDTH);
+        const bar = `${color}${'\u2588'.repeat(barFilled)}${c.gray}${'\u2591'.repeat(ROW_BAR_WIDTH - barFilled)}${c.reset}`;
+        lines.push(`  ${color}${idx}${c.reset}  ${bar}  ${done}/${timesRun}  ${c.dim}${msg}${c.reset}`);
+      } else {
+        lines.push(`  ${c.dim}${idx}  ${'\u00B7'.repeat(ROW_BAR_WIDTH)}  0/${timesRun}  ${msg}${c.reset}`);
+      }
+    }
+
+    // Summary line
+    const totalRuns = remainingRows.length * timesRun;
+    const doneRuns = Array.from(rowState.values()).reduce((s, r) => s + r.outcomes.length, 0);
+    const pct = totalRuns > 0 ? Math.round((doneRuns / totalRuns) * 100) : 0;
+    const elapsed = formatDuration(Date.now() - startedAt);
+    const errStr = errors > 0 ? `  ${c.red}${errors} err${c.reset}` : '';
+    const toStr = timeouts > 0 ? `  ${c.yellow}${timeouts} timeout${c.reset}` : '';
+    lines.push(`  ${c.dim}\u2500\u2500${c.reset}  ${c.bold}${pct}%${c.reset}  ${c.dim}${doneRuns}/${totalRuns} runs  ${completed}/${remainingRows.length} rows${c.reset}${errStr}${toStr}  ${c.dim}${elapsed}${c.reset}`);
+
+    process.stderr.write(lines.join('\n') + '\n');
+    multiProgressHeight = lines.length;
+  }
+
+  // Helpers to abstract single-bar vs multi-progress rendering.
+  function clearProgressDisplay(): void {
+    if (useMultiProgress) clearMultiProgress();
+    else if (!config.quiet) clearLine();
+  }
+  function redrawProgressDisplay(): void {
+    if (useMultiProgress) renderMultiProgress();
+    else if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
+  }
+
+  // Tick the progress display every 300ms. Disabled in quiet mode.
+  const tick = (isTTY && !config.quiet)
+    ? setInterval(
+        useMultiProgress
+          ? () => renderMultiProgress()
+          : () => renderProgress(completed, total, running, errors, Date.now() - startedAt),
+        300,
+      )
+    : null;
+
+  // Render initial state for multi-progress.
+  if (useMultiProgress) renderMultiProgress();
+
+  async function executeSingleRun(row: InputRow, ctx: BenchmarkAnalystContext): Promise<RunOutcome> {
+    await agentSemaphore.acquire();
+
+    const orch = new Orchestrator(config.registrables);
+    const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
+
+    let runCancelled = false;
+    const runTimeoutHandle = rowTimeoutMs > 0
+      ? setTimeout(() => {
+        runCancelled = true;
+        orch.cancel();
+      }, rowTimeoutMs)
+      : null;
+
+    let error: string | undefined;
+    try {
+      const stream = orch.run(agent as unknown as MXAgent);
+      for await (const _ of stream) { /* drain */ }
+      await stream.result();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (runTimeoutHandle) clearTimeout(runTimeoutHandle);
+      agentSemaphore.release();
+    }
+
+    if (runCancelled) {
+      return {
+        kind: 'cancelled',
+        reason: `TIMEOUT after ${formatDuration(rowTimeoutMs)}`,
+        log: orch.log as ConversationLog,
+      };
+    }
+    return { kind: 'ok', log: orch.log as ConversationLog, error };
+  }
+
+  // ── Round-robin dispatch ───────────────────────────────────────────────
+  // Build a flat task queue interleaving rows across runs:
+  //   run0: [q1, q2, q3], run1: [q1, q2, q3], ...
+  // The FIFO semaphore ensures tasks execute in this deterministic order.
+  // Two stacked throttles:
+  //   - `MAX_AGENTS_CONCURRENCY` (in this module) caps simultaneous
+  //     orchestrator runs and gates the per-row timeout.
+  //   - `MAX_LLM_CONCURRENCY` (inside the Orchestrator) caps in-flight
+  //     provider calls process-wide. Both default to "no cap".
+  interface RunTask { rowIdx: number }
+  const tasks: RunTask[] = [];
+  for (let runIdx = 0; runIdx < timesRun; runIdx++) {
+    for (const { i } of remainingRows) {
+      tasks.push({ rowIdx: i });
+    }
+  }
+
+  await Promise.all(tasks.map(async ({ rowIdx }) => {
+    const state = rowState.get(rowIdx)!;
+    const ctx = rowContexts.get(rowIdx)!;
+
+    if (!state.started) {
+      state.started = true;
+      state.status = 'running';
+      state.startTime = Date.now();
+      running++;
+      redrawProgressDisplay();
+    }
+
+    const outcome = await executeSingleRun(state.row, ctx);
+    state.outcomes.push(outcome);
+
+    // When all runs for this row complete, process and persist results.
+    if (state.outcomes.length < timesRun) {
+      redrawProgressDisplay();
+      return;
+    }
+
+    const durationMs = Date.now() - state.startTime;
+    state.durationMs = durationMs;
+    running--;
+
+    // Row-atomic persistence: if ANY run was cancelled (timeout),
+    // drop the whole row. Resume picks it up next invocation.
+    const cancelled = state.outcomes.find(
       (o): o is { kind: 'cancelled'; reason: string; log: ConversationLog } =>
         o.kind === 'cancelled',
     );
     const collectedLogs: ConversationLog[] = [];
     let firstError: string | undefined;
-    for (const o of outcomes) {
+    for (const o of state.outcomes) {
       if (o.kind === 'ok') {
         collectedLogs.push(o.log);
         if (o.error && !firstError) firstError = o.error;
       }
     }
 
-    const durationMs = Date.now() - rowStart;
-    running--;
-
     if (cancelled) {
       timeouts++;
-      // Dropped from `_output.jsonl`, but persist the partial logs of
-      // every run (timed-out and completed alike) to the timeouts
-      // sidecar — same shape as a multi-run `BenchmarkResult` plus a
-      // `timed_out` flag and `reason`, so the existing analysis tooling
-      // reads it the same way.
+      state.status = 'timeout';
       const timeoutRow = {
-        input_index: index,
-        input: row,
-        logs: outcomes.map((o) => o.log),
+        input_index: rowIdx,
+        input: state.row,
+        logs: state.outcomes.map((o) => o.log),
         duration_ms: durationMs,
         timed_out: true,
         reason: cancelled.reason,
@@ -428,26 +545,25 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       };
       appendFileSync(timeoutsPath, JSON.stringify(timeoutRow) + '\n');
 
-      const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
-      const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
-      const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
-      const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
-      if (!config.quiet) clearLine();
-      console.log(`  ${c.yellow}⏱${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${cancelled.reason}${c.reset}`);
-      if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
+      if (!useMultiProgress) {
+        const idx = `${c.dim}${String(rowIdx + 1).padStart(String(total).length)}/${total}${c.reset}`;
+        const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
+        const msg = state.row.user_message.slice(0, 65) + (state.row.user_message.length > 65 ? '\u2026' : '');
+        const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
+        clearProgressDisplay();
+        console.log(`  ${c.yellow}\u23F1${c.reset} ${labelPrefix}${idx}  ${msg}  ${dur}  ${c.yellow}${cancelled.reason}${c.reset}`);
+      }
+      redrawProgressDisplay();
       return;
     }
 
     completed++;
     if (firstError) errors++;
+    state.status = firstError ? 'error' : 'done';
 
-    // Emit `log` (singular) when timesRun === 1 to preserve the existing
-    // output shape — the /benchmark viewer and any older tooling still
-    // read `log`. Emit `logs` (plural, array) when timesRun > 1; the
-    // post-processing eval_output.py script collapses it back to `log`.
     const result: BenchmarkResult = {
-      input_index: index,
-      input: row,
+      input_index: rowIdx,
+      input: state.row,
       ...(timesRun > 1
         ? { logs: collectedLogs }
         : { log: collectedLogs[0] }),
@@ -458,34 +574,27 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 
-    // Log completion above the progress bar
-    if (!config.quiet) clearLine();
-    const icon = firstError ? `${c.red}✗${c.reset}` : `${c.green}✓${c.reset}`;
-    const idx = `${c.dim}${String(index + 1).padStart(String(total).length)}/${total}${c.reset}`;
-    // In quiet (parallel) mode the dataset label prefixes the row line so
-    // interleaved completions from different datasets are distinguishable.
-    const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
-    const msg = row.user_message.slice(0, 65) + (row.user_message.length > 65 ? '…' : '');
-    const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
-    const runsSuffix = timesRun > 1 ? `  ${c.dim}×${collectedLogs.length}${c.reset}` : '';
-    const errMsg = firstError ? `  ${c.red}${firstError.slice(0, 60)}${c.reset}` : '';
-    console.log(`  ${icon} ${labelPrefix}${idx}  ${msg}  ${dur}${runsSuffix}${errMsg}`);
-    if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
-  }
-
-  // Dispatch every remaining row at once. Two stacked throttles:
-  //   - `MAX_AGENTS_CONCURRENCY` (in this module) caps simultaneous
-  //     orchestrator runs and gates the per-row timeout — queued rows
-  //     don't burn their timeout budget.
-  //   - `MAX_LLM_CONCURRENCY` (inside the Orchestrator) caps in-flight
-  //     provider calls process-wide. Both default to "no cap".
-  await Promise.all(remainingRows.map(({ row, i }) => runRow(row, i)));
+    if (!useMultiProgress) {
+      clearProgressDisplay();
+      const icon = firstError ? `${c.red}\u2717${c.reset}` : `${c.green}\u2713${c.reset}`;
+      const idx = `${c.dim}${String(rowIdx + 1).padStart(String(total).length)}/${total}${c.reset}`;
+      const labelPrefix = config.quiet ? `${c.cyan}${label}${c.reset}  ` : '';
+      const msg = state.row.user_message.slice(0, 65) + (state.row.user_message.length > 65 ? '\u2026' : '');
+      const dur = `${c.dim}${formatDuration(durationMs)}${c.reset}`;
+      const runsSuffix = timesRun > 1 ? `  ${c.dim}\u00D7${collectedLogs.length}${c.reset}` : '';
+      const errMsg = firstError ? `  ${c.red}${firstError.slice(0, 60)}${c.reset}` : '';
+      console.log(`  ${icon} ${labelPrefix}${idx}  ${msg}  ${dur}${runsSuffix}${errMsg}`);
+    }
+    redrawProgressDisplay();
+  }));
 
   if (tick) clearInterval(tick);
   const totalMs = Date.now() - startedAt;
 
-  if (!config.quiet) {
-    // Render final progress bar (stays visible)
+  if (useMultiProgress) {
+    // Render final multi-progress with updated elapsed time.
+    renderMultiProgress();
+  } else if (!config.quiet) {
     clearLine();
     console.log(progressLine(completed, total, 0, errors, totalMs));
   } else {
