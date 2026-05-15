@@ -69,6 +69,7 @@ const hasStyleConfig = (config?: VisualizationStyleConfig) =>
     || config.opacity != null
     || config.markerSize != null
     || config.stacked != null
+    || config.showDataLabels != null
   )
 
 export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange, displayMode = 'auto' }: StyleConfigPopoverProps) => {
@@ -130,6 +131,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     else if (next.opacity != null) normalized.opacity = next.opacity
     if (next.markerSize != null) normalized.markerSize = next.markerSize
     if (next.stacked != null) normalized.stacked = next.stacked
+    if (next.showDataLabels != null) normalized.showDataLabels = next.showDataLabels
     onChange(normalized)
   }
 
@@ -240,6 +242,20 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
           </HStack>
         </Box>
       )}
+
+      <Box>
+        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+          Data Labels
+        </Text>
+        <HStack gap={1} flexWrap="wrap">
+          <ChoicePill selected={!styleConfig?.showDataLabels} onClick={() => emitConfig({ ...(styleConfig ?? {}), showDataLabels: false })}>
+            Off
+          </ChoicePill>
+          <ChoicePill selected={!!styleConfig?.showDataLabels} onClick={() => emitConfig({ ...(styleConfig ?? {}), showDataLabels: true })}>
+            On
+          </ChoicePill>
+        </HStack>
+      </Box>
     </VStack>
   )
 

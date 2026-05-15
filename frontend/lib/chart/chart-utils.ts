@@ -1579,10 +1579,25 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         return true
       })
 
+    const showDataLabels = styleConfig?.showDataLabels === true
+    const dataLabel = showDataLabels ? {
+      show: true,
+      position: (type === 'bar' ? 'inside' : 'top') as 'inside' | 'top',
+      fontSize: 10,
+      fontFamily: getChartFontFamily(),
+      color: type === 'bar' ? '#000' : palette[index % palette.length],
+      formatter: (params: any) => {
+        const v = typeof params.value === 'number' ? params.value : Array.isArray(params.value) ? params.value[1] : null
+        if (v == null || !isFinite(v)) return ''
+        return applyPrefixSuffix(formatLargeNumber(v), yPrefix, ySuffix)
+      },
+    } : undefined
+
     const baseConfig = {
       name: seriesName,
       type: seriesType as 'line' | 'bar' | 'scatter',
       data: usesPointData ? pointData : series[index].data,
+      ...(dataLabel && { label: dataLabel }),
       itemStyle: {
         color: palette[index % palette.length],
         ...(rawOpacity != null ? { opacity: scaleOpacity(1) } : {}),
@@ -1614,8 +1629,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         return {
           ...baseConfig,
           type: 'line' as const,
-          symbol: 'none',
-          showSymbol: false,
+          symbol: showDataLabels ? 'circle' : 'none',
+          symbolSize: showDataLabels ? 1 : 0,
+          showSymbol: showDataLabels,
           ...(isStacked ? { stack: stackGroup } : {}),
           areaStyle: {
             color: withAlpha(areaColor, fillOpacity),
@@ -1830,6 +1846,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   }
 
   const baseOption: EChartsOption = {
+    ...(styleConfig?.showDataLabels === true && { labelLayout: { hideOverlap: true } }),
     ...buildChartTitleOption(chartTitle, showChartTitle ?? true, containerWidth),
     toolbox: buildToolbox({
       colorMode,
