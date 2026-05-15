@@ -120,23 +120,28 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
     const { conn: catalogConn } = await getCatalogStore(this.context.connections);
     const targets = await this.findSearchTargets(filter, catalogConn);
 
-    // Run searches
-    const allRows: Record<string, unknown>[] = [];
+    // Run per-target searches in parallel — each is an independent query
+    // against its target connection. A per-target failure (e.g. SQL syntax
+    // mismatch on an unusual dialect) is logged and produces empty rows for
+    // that target rather than failing the whole search.
     const searchedConnections = new Set<string>();
     const searchedTables = new Set<string>();
-
-    for (const target of targets) {
-      searchedConnections.add(target.connection);
-      searchedTables.add(`${target.connection}.${target.table}`);
-
-      try {
-        const rows = await this.searchColumn(target, filter.match);
-        allRows.push(...rows);
-      } catch (err) {
-        // Continue with other columns
-        console.warn(`Search failed for ${target.connection}.${target.table}.${target.column}:`, err);
-      }
-    }
+    const perTarget = await Promise.all(
+      targets.map(async (target) => {
+        searchedConnections.add(target.connection);
+        searchedTables.add(`${target.connection}.${target.table}`);
+        try {
+          return await this.searchColumn(target, filter.match);
+        } catch (err) {
+          console.warn(
+            `Search failed for ${target.connection}.${target.table}.${target.column}:`,
+            err,
+          );
+          return [] as Record<string, unknown>[];
+        }
+      }),
+    );
+    const allRows: Record<string, unknown>[] = perTarget.flat();
 
     // Sort by score descending
     allRows.sort((a, b) => (b.score as number) - (a.score as number));
@@ -251,53 +256,33 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
     const connector = this.connectors.get(target.connection);
     if (!connector) return [];
 
+    // Mongo: SQL doesn't apply — use a native aggregation pipeline.
+    if (target.dialect === 'mongo') {
+      return this.searchMongoColumn(connector, target, match);
+    }
+
+    // Postgres: try pg_trgm `similarity()` first; fall back to LIKE-only if
+    // the extension isn't installed.
+    if (target.dialect === 'postgresql') {
+      return this.searchPostgresColumn(connector, target, match);
+    }
+
+    // DuckDB and benchmark sqlite (which routes through the shared DuckDB
+    // instance — see shared-duckdb.ts) both support `jaro_winkler_similarity`.
+    const isDuckdbBacked = target.dialect === 'duckdb' || target.dialect === 'sqlite';
     const escapedMatch = match.replace(/'/g, "''");
     const source = `${target.table}.${target.column}`;
 
-    // Build search query based on dialect
-    let sql: string;
-    if (target.dialect === 'duckdb') {
-      // DuckDB has jaro_winkler_similarity
-      sql = `
-        SELECT
-          rowid as id,
-          "${target.column}" as matched_text,
-          '${source}' as source,
-          jaro_winkler_similarity("${target.column}", '${escapedMatch}') as score
-        FROM "${target.table}"
-        WHERE "${target.column}" IS NOT NULL
-          AND (
-            "${target.column}" ILIKE '%${escapedMatch}%'
-            OR jaro_winkler_similarity("${target.column}", '${escapedMatch}') > 0.7
-          )
-        ORDER BY score DESC
-        LIMIT 100
-      `;
-    } else {
-      // Generic: use LIKE
-      sql = `
-        SELECT
-          CAST(rowid AS VARCHAR) as id,
-          "${target.column}" as matched_text,
-          '${source}' as source,
-          CASE
-            WHEN LOWER("${target.column}") = LOWER('${escapedMatch}') THEN 1.0
-            WHEN LOWER("${target.column}") LIKE LOWER('%${escapedMatch}%') THEN 0.8
-            ELSE 0.5
-          END as score
-        FROM "${target.table}"
-        WHERE "${target.column}" IS NOT NULL
-          AND LOWER("${target.column}") LIKE LOWER('%${escapedMatch}%')
-        ORDER BY score DESC
-        LIMIT 100
-      `;
-    }
+    const sql = isDuckdbBacked
+      ? buildJaroWinklerSql(target, source, escapedMatch)
+      : buildGenericLikeSql(target, source, escapedMatch);
 
     try {
       const result = await connector.query(sql);
       return result.rows;
     } catch {
-      // Fallback: simpler query without rowid
+      // Fallback: simplest possible LIKE-only query without rowid (covers
+      // dialects where the original SQL had a quirk).
       const fallbackSql = `
         SELECT
           "${target.column}" as matched_text,
@@ -316,4 +301,138 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
       }
     }
   }
+
+  /**
+   * Mongo search: native aggregation pipeline. `$regex` with case-insensitive
+   * flag is the closest analog to lexical fuzzy match — Mongo has no built-in
+   * jaro_winkler / similarity. Special characters in the search term are
+   * regex-escaped. Output is projected to the standard
+   * `{id, matched_text, source, score}` shape so the union with SQL targets
+   * is uniform.
+   */
+  private async searchMongoColumn(
+    connector: NodeConnector,
+    target: SearchTarget,
+    match: string,
+  ): Promise<Record<string, unknown>[]> {
+    const escapedRegex = match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pipeline = [
+      { $match: { [target.column]: { $regex: escapedRegex, $options: 'i' } } },
+      {
+        $project: {
+          _id: 0,
+          id: { $toString: '$_id' },
+          matched_text: { $toString: `$${target.column}` },
+          source: { $literal: `${target.table}.${target.column}` },
+          score: { $literal: 1.0 },
+        },
+      },
+      { $limit: 100 },
+    ];
+    const queryStr = JSON.stringify({ collection: target.table, pipeline });
+    try {
+      const result = await connector.query(queryStr);
+      return result.rows;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Postgres search: try pg_trgm's `similarity()` (real fuzzy) + ILIKE; on
+   * any error (most commonly the extension not being installed), fall back to
+   * an ILIKE-only query so we still surface lexical matches.
+   */
+  private async searchPostgresColumn(
+    connector: NodeConnector,
+    target: SearchTarget,
+    match: string,
+  ): Promise<Record<string, unknown>[]> {
+    const escapedMatch = match.replace(/'/g, "''");
+    const source = `${target.table}.${target.column}`;
+    const schemaTable = `"${target.schema}"."${target.table}"`;
+
+    const fuzzySql = `
+      SELECT
+        ctid::text as id,
+        "${target.column}" as matched_text,
+        '${source}' as source,
+        similarity("${target.column}", '${escapedMatch}') as score
+      FROM ${schemaTable}
+      WHERE "${target.column}" IS NOT NULL
+        AND (
+          "${target.column}" ILIKE '%${escapedMatch}%'
+          OR similarity("${target.column}", '${escapedMatch}') > 0.3
+        )
+      ORDER BY score DESC
+      LIMIT 100
+    `;
+    try {
+      const result = await connector.query(fuzzySql);
+      return result.rows;
+    } catch {
+      // pg_trgm probably absent — try LIKE-only.
+      const likeSql = `
+        SELECT
+          ctid::text as id,
+          "${target.column}" as matched_text,
+          '${source}' as source,
+          CASE
+            WHEN LOWER("${target.column}") = LOWER('${escapedMatch}') THEN 1.0
+            WHEN "${target.column}" ILIKE '%${escapedMatch}%' THEN 0.8
+            ELSE 0.5
+          END as score
+        FROM ${schemaTable}
+        WHERE "${target.column}" IS NOT NULL
+          AND "${target.column}" ILIKE '%${escapedMatch}%'
+        ORDER BY score DESC
+        LIMIT 100
+      `;
+      try {
+        const result = await connector.query(likeSql);
+        return result.rows;
+      } catch {
+        return [];
+      }
+    }
+  }
+}
+
+// ─── Per-dialect SQL builders ─────────────────────────────────────────────
+
+function buildJaroWinklerSql(target: SearchTarget, source: string, escapedMatch: string): string {
+  return `
+    SELECT
+      rowid as id,
+      "${target.column}" as matched_text,
+      '${source}' as source,
+      jaro_winkler_similarity("${target.column}", '${escapedMatch}') as score
+    FROM "${target.table}"
+    WHERE "${target.column}" IS NOT NULL
+      AND (
+        "${target.column}" ILIKE '%${escapedMatch}%'
+        OR jaro_winkler_similarity("${target.column}", '${escapedMatch}') > 0.7
+      )
+    ORDER BY score DESC
+    LIMIT 100
+  `;
+}
+
+function buildGenericLikeSql(target: SearchTarget, source: string, escapedMatch: string): string {
+  return `
+    SELECT
+      CAST(rowid AS VARCHAR) as id,
+      "${target.column}" as matched_text,
+      '${source}' as source,
+      CASE
+        WHEN LOWER("${target.column}") = LOWER('${escapedMatch}') THEN 1.0
+        WHEN LOWER("${target.column}") LIKE LOWER('%${escapedMatch}%') THEN 0.8
+        ELSE 0.5
+      END as score
+    FROM "${target.table}"
+    WHERE "${target.column}" IS NOT NULL
+      AND LOWER("${target.column}") LIKE LOWER('%${escapedMatch}%')
+    ORDER BY score DESC
+    LIMIT 100
+  `;
 }

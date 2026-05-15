@@ -14,7 +14,7 @@ const fauxReg = registerFauxProvider({
   models: [{ id: 'stub-explore' }],
 });
 
-const mockQuery = vi.fn(async (): Promise<QueryResult> => ({
+const mockQuery = vi.fn(async (_sql?: string): Promise<QueryResult> => ({
   columns: ['id', 'text', 'source', 'score'],
   types: ['INTEGER', 'VARCHAR', 'VARCHAR', 'DOUBLE'],
   rows: [
@@ -396,6 +396,111 @@ describe('ExploreV2', () => {
     it('describes when to use it vs ExecuteQuery', () => {
       const desc = ExploreV2.schema.description;
       expect(desc).toContain('discovery');
+    });
+  });
+
+  // Per-dialect search-SQL dispatch. mockQuery is called many times during
+  // catalog build (profileDatabase) — we scan all calls for the distinctive
+  // search shape rather than asserting on a fixed call index.
+  describe('per-dialect search dispatch', () => {
+    const findCall = (predicate: (q: string) => boolean): string | undefined => {
+      const call = mockQuery.mock.calls.find((c) => typeof c[0] === 'string' && predicate(c[0]));
+      return call?.[0] as string | undefined;
+    };
+
+    it('uses jaro_winkler_similarity for sqlite (benchmark sqlite is DuckDB-attached)', async () => {
+      const orch = new Orchestrator([ExploreV2]);
+      const tool = new ExploreV2(
+        orch,
+        {
+          // catalog_db is sqlite in CTX; scope to one column for a single search call.
+          filter: { connection: 'catalog_db', table: 'products', columns: ['description'], match: 'solar' },
+        },
+        CTX,
+        'test-sqlite-fuzzy',
+      );
+      await tool.run();
+
+      const searchSql = findCall((q) => q.includes('jaro_winkler_similarity') && q.includes("'solar'"));
+      expect(searchSql).toBeDefined();
+    });
+
+    it('uses pg_trgm similarity() for postgresql, falls back to ILIKE on error', async () => {
+      const pgCtx: BenchmarkAnalystContext = {
+        connections: [
+          { name: 'pg_db', dialect: 'postgresql', description: 'PG', config: { host: 'localhost', port: 5432, database: 'd', username: 'u' } },
+        ],
+        contextDocs: '',
+      };
+
+      // First similarity()-bearing call rejects (pg_trgm "absent"); subsequent
+      // calls succeed. profileDatabase's pg_stats queries also run via mockQuery
+      // and may not contain 'similarity(' — only the search call does.
+      let rejected = false;
+      mockQuery.mockImplementation(async (sql?: string) => {
+        if (!rejected && typeof sql === 'string' && sql.includes('similarity(')) {
+          rejected = true;
+          throw new Error('function similarity(text, text) does not exist');
+        }
+        return {
+          columns: ['id', 'matched_text', 'source', 'score'],
+          types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'DOUBLE'],
+          rows: [{ id: '(0,1)', matched_text: 'solar panel array', source: 'products.description', score: 0.8 }],
+          finalQuery: '',
+        };
+      });
+
+      const orch = new Orchestrator([ExploreV2]);
+      const tool = new ExploreV2(
+        orch,
+        { filter: { connection: 'pg_db', table: 'products', columns: ['description'], match: 'solar' } },
+        pgCtx,
+        'test-pg-fuzzy',
+      );
+      await tool.run();
+
+      // 1. Tried similarity() first — guaranteed by the rejection path firing.
+      expect(rejected).toBe(true);
+      // 2. Fell back to LIKE-only and succeeded; the search reaches the row.
+      const fallbackSql = findCall((q) => q.includes('ILIKE') && q.includes("'solar'") && !q.includes('similarity('));
+      expect(fallbackSql).toBeDefined();
+    });
+
+    it('uses a native aggregation pipeline for mongo (not SQL)', async () => {
+      const mongoCtx: BenchmarkAnalystContext = {
+        connections: [
+          { name: 'mongo_db', dialect: 'mongo', description: 'M', config: { host: 'localhost', port: 27017, database: 'd' } },
+        ],
+        contextDocs: '',
+      };
+
+      const orch = new Orchestrator([ExploreV2]);
+      const tool = new ExploreV2(
+        orch,
+        { filter: { connection: 'mongo_db', table: 'products', columns: ['description'], match: 'solar' } },
+        mongoCtx,
+        'test-mongo-search',
+      );
+      await tool.run();
+
+      // The mongo search must produce a JSON pipeline string, never SQL.
+      const jsonCall = findCall((q) => {
+        try {
+          const parsed = JSON.parse(q);
+          return typeof parsed === 'object' && parsed && 'pipeline' in parsed;
+        } catch {
+          return false;
+        }
+      });
+      expect(jsonCall).toBeDefined();
+      const parsed = JSON.parse(jsonCall!);
+      expect(parsed.collection).toBe('products');
+      expect(parsed.pipeline[0]).toEqual({
+        $match: { description: { $regex: 'solar', $options: 'i' } },
+      });
+      // Output is projected to the standard search-result shape.
+      const project = parsed.pipeline.find((s: Record<string, unknown>) => '$project' in s);
+      expect(project).toBeDefined();
     });
   });
 });
