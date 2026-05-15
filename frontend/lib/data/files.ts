@@ -202,7 +202,10 @@ class FilesDataLayerClient implements IFilesDataLayer {
 
     const json = await res.json();
     if (dryRun) return json as DryRunSaveResult;
-    return { data: json.data } as BatchSaveFileResult;
+    return {
+      data: json.data,
+      ...(json.conflicts ? { conflicts: json.conflicts } : {}),
+    } as BatchSaveFileResult;
   }
 
   async deleteFile(id: number, user?: EffectiveUser): Promise<DeleteFileResult> {

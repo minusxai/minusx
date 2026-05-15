@@ -33,7 +33,11 @@ export const POST = withAuth(async (
     }
 
     const result = await batchSaveFiles(inputs, user);
-    return NextResponse.json({ success: true, data: result.data });
+    return NextResponse.json({
+      success: true,
+      data: result.data,
+      ...(result.conflicts ? { conflicts: result.conflicts } : {}),
+    });
   } catch (error) {
     return handleApiError(error);
   }

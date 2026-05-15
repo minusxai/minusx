@@ -121,10 +121,17 @@ export interface BatchSaveFileInput {
 }
 
 /**
- * Result for batch save operation
+ * Result for batch save operation.
+ *
+ * `data` is the list of successfully-saved files. `conflicts`, when present,
+ * lists files whose `expectedVersion` didn't match the server. The client
+ * resolves each conflict per-file via `publishFile`, which merges its local
+ * edits onto `currentFile.content` and retries against the server's latest
+ * name/path.
  */
 export interface BatchSaveFileResult {
   data: DbFile[];
+  conflicts?: Array<{ id: number; currentFile: DbFile }>;
 }
 
 /**
