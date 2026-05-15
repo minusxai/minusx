@@ -34,10 +34,8 @@ import {
 } from '@/agents/benchmark-analyst/double-check-benchmark';
 import {
   V2BenchmarkAnalystAgent,
-  SearchDBSchemaV2,
-  ExecuteQueryV2,
-  ExploreV2,
-  FetchHandleV2,
+  V2DoubleCheckBenchmarkAgent,
+  V2_DATA_TOOLS,
 } from '@/agents/benchmark-analyst/v2';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
@@ -131,9 +129,7 @@ class BenchmarkAnalystAgentForDoubleCheck extends BenchmarkAnalystAgent {
 class V2BenchmarkAnalystAgentForDoubleCheck extends V2BenchmarkAnalystAgent {
   static model = benchmarkModel;
 }
-class V2DoubleCheckAgent extends DoubleCheckBenchmarkAgent {
-  static primaryAgent = V2BenchmarkAnalystAgent;
-  static secondaryAgent = V2BenchmarkAnalystAgent;
+class V2DoubleCheckAgent extends V2DoubleCheckBenchmarkAgent {
   static model = benchmarkModel;
 }
 
@@ -148,15 +144,12 @@ const RootAgent = useV2
 const registrables = useV2
   ? doubleCheck
     ? [
-        SearchDBSchemaV2,
-        ExecuteQueryV2,
-        ExploreV2,
-        FetchHandleV2,
+        ...V2_DATA_TOOLS,
         V2BenchmarkAnalystAgentForDoubleCheck,
         CheckEquivalence,
         RootAgent,
       ]
-    : [SearchDBSchemaV2, ExecuteQueryV2, ExploreV2, FetchHandleV2, RootAgent]
+    : [...V2_DATA_TOOLS, RootAgent]
   : doubleCheck
     ? [
         ListDBConnections,

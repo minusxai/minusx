@@ -19,6 +19,7 @@ import {
   V2_REGISTRABLES,
   getRootAgentName,
   buildBenchmarkContextFromSavedLog,
+  isV2BenchmarkConversation,
 } from '@/lib/chat-orchestration-v2.server';
 import type { ConversationLog } from '@/orchestrator/types';
 
@@ -127,5 +128,93 @@ describe('buildBenchmarkContextFromSavedLog', () => {
 
   it('returns an empty context when the log has no root', () => {
     expect(buildBenchmarkContextFromSavedLog([] as unknown as ConversationLog)).toEqual({});
+  });
+});
+
+describe('isV2BenchmarkConversation', () => {
+  // V1 and V2 double-check share `schema.name = 'DoubleCheckBenchmarkAgent'`,
+  // so the root invocation name alone can't tell them apart. We detect V2 by
+  // scanning the log for V2-only markers — `V2BenchmarkAnalystAgent`
+  // sub-agent invocations or V2-exclusive tool calls (`Explore`, `fetchHandle`).
+
+  it('returns true when the log contains a V2 agent invocation', () => {
+    const log: ConversationLog = [
+      {
+        type: 'toolCall',
+        id: 'r1',
+        name: 'DoubleCheckBenchmarkAgent',
+        arguments: { userMessage: 'q' },
+        context: {},
+        parent_id: null,
+      },
+      {
+        type: 'toolCall',
+        id: 'sub',
+        name: 'V2BenchmarkAnalystAgent',
+        arguments: { userMessage: 'q' },
+        context: {},
+        parent_id: 'r1',
+      },
+    ] as unknown as ConversationLog;
+    expect(isV2BenchmarkConversation(log)).toBe(true);
+  });
+
+  it('returns true when the log contains a V2-only tool call (Explore / fetchHandle)', () => {
+    for (const v2Tool of ['Explore', 'fetchHandle']) {
+      const log: ConversationLog = [
+        {
+          type: 'toolCall',
+          id: 'r1',
+          name: 'V2BenchmarkAnalystAgent',
+          arguments: { userMessage: 'q' },
+          context: {},
+          parent_id: null,
+        },
+        {
+          type: 'toolCall',
+          id: 't1',
+          name: v2Tool,
+          arguments: {},
+          parent_id: 'r1',
+        },
+      ] as unknown as ConversationLog;
+      expect(isV2BenchmarkConversation(log)).toBe(true);
+    }
+  });
+
+  it('returns false for a V1-only log (BenchmarkAnalystAgent + Base* tools)', () => {
+    const log: ConversationLog = [
+      {
+        type: 'toolCall',
+        id: 'r1',
+        name: 'BenchmarkAnalystAgent',
+        arguments: { userMessage: 'q' },
+        context: {},
+        parent_id: null,
+      },
+      {
+        type: 'toolCall',
+        id: 't1',
+        name: 'ExecuteQuery',
+        arguments: {},
+        parent_id: 'r1',
+      },
+    ] as unknown as ConversationLog;
+    expect(isV2BenchmarkConversation(log)).toBe(false);
+  });
+
+  it('returns false for an empty log', () => {
+    expect(isV2BenchmarkConversation([] as unknown as ConversationLog)).toBe(false);
+  });
+});
+
+describe('V2_REGISTRABLES V2 benchmark coverage', () => {
+  it('registers every V2 entry point so saved V2 logs can be resumed', () => {
+    const names = V2_REGISTRABLES.map((r) => r.schema?.name);
+    // V2 chat continuation uses a different set (V2_BENCHMARK_REGISTRABLES);
+    // V2_REGISTRABLES is the production+V1-benchmark base. This test just
+    // pins the public surface for older logs.
+    expect(names).toContain('BenchmarkAnalystAgent');
+    expect(names).toContain('DoubleCheckBenchmarkAgent');
   });
 });
