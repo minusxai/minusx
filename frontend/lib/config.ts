@@ -58,6 +58,7 @@ interface EnvironmentConfig {
   DAB_TIMES_RUN: string | undefined;
   DAB_DOUBLE_CHECK: string | undefined;
   DAB_V2: string | undefined;
+  DAB_ROW_INDEX: string | undefined;
   MAX_LLM_CONCURRENCY: string | undefined;
   MAX_AGENTS_CONCURRENCY: string | undefined;
 }
@@ -141,6 +142,7 @@ const config: EnvironmentConfig = {
   DAB_TIMES_RUN: process.env.DAB_TIMES_RUN,
   DAB_DOUBLE_CHECK: process.env.DAB_DOUBLE_CHECK,
   DAB_V2: process.env.DAB_V2,
+  DAB_ROW_INDEX: process.env.DAB_ROW_INDEX,
   MAX_LLM_CONCURRENCY: process.env.MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
 };
@@ -212,5 +214,6 @@ export const DAB_QUESTION_TIMEOUT = config.DAB_QUESTION_TIMEOUT;
 export const DAB_TIMES_RUN = config.DAB_TIMES_RUN;
 export const DAB_DOUBLE_CHECK = config.DAB_DOUBLE_CHECK;
 export const DAB_V2 = config.DAB_V2;
+export const DAB_ROW_INDEX = config.DAB_ROW_INDEX;
 export const MAX_LLM_CONCURRENCY = config.MAX_LLM_CONCURRENCY;
 export const MAX_AGENTS_CONCURRENCY = config.MAX_AGENTS_CONCURRENCY;

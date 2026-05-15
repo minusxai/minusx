@@ -16,6 +16,7 @@ import {
   DAB_TIMES_RUN,
   DAB_DOUBLE_CHECK,
   DAB_V2,
+  DAB_ROW_INDEX,
   MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY,
   MX_API_BASE_URL,
@@ -198,6 +199,26 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 const timesRun = parsePositiveInt(DAB_TIMES_RUN, 1);
 
 const rerun = DAB_BENCH_RERUN === '1' || DAB_BENCH_RERUN === 'true';
+
+// Optional row filter: DAB_ROW_INDEX=1 runs only the 2nd question (0-based).
+// Supports comma-separated indices and ranges: DAB_ROW_INDEX=0,2,5-7
+const rowIndices: Set<number> | undefined = (() => {
+  if (!DAB_ROW_INDEX) return undefined;
+  // eslint-disable-next-line no-restricted-syntax -- CLI-only; not a request-scoped module
+  const indices = new Set<number>();
+  for (const part of DAB_ROW_INDEX.split(',')) {
+    const trimmed = part.trim();
+    const range = trimmed.match(/^(\d+)-(\d+)$/);
+    if (range) {
+      const [, lo, hi] = range;
+      for (let i = Number(lo); i <= Number(hi); i++) indices.add(i);
+    } else {
+      const n = Number(trimmed);
+      if (Number.isInteger(n) && n >= 0) indices.add(n);
+    }
+  }
+  return indices.size > 0 ? indices : undefined;
+})();
 const proxied = !!MX_API_BASE_URL;
 
 const agentsConcurrencyNote = MAX_AGENTS_CONCURRENCY
@@ -226,6 +247,9 @@ if (doubleCheck) {
 if (timesRun > 1) {
   console.log(`  timesRun: ${timesRun} (each row runs ${timesRun}× in parallel; output rows carry \`logs\`)`);
 }
+if (rowIndices) {
+  console.log(`  rowFilter: indices [${[...rowIndices].sort((a, b) => a - b).join(', ')}] (DAB_ROW_INDEX)`);
+}
 
 async function main() {
   const globalStart = Date.now();
@@ -245,6 +269,7 @@ async function main() {
         rerun,
         rowTimeoutMs: questionTimeoutSec * 1000,
         timesRun,
+        rowIndices,
       }),
     ),
   );
