@@ -233,13 +233,13 @@ describe('SearchDBSchemaV2', () => {
       expect(content.info).toBe(infoText);
     });
 
-    it('re-ranks the catalog-result preview when the prompt model returns rerankedIndices', async () => {
+    it('re-ranks the catalog-result preview when the prompt model returns rerankedIds', async () => {
       // The mock schema has 2 tables (users, orders). `SELECT * FROM tables
       // ORDER BY table_name` gives deterministic row order: [orders, users].
-      // rerankedIndices [1,0] → preview rows in [users, orders] order.
+      // rerankedIds [r1, r0] → preview rows in [users, orders] order.
       fauxReg.setResponses([
         fauxAssistantMessage(
-          '{"results":[{"rerankedIndices":[1,0]}],"info":"users first"}',
+          '{"results":[{"rerankedIds":["r1","r0"]}],"info":"users first"}',
           { stopReason: 'stop' },
         ),
       ]);

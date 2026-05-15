@@ -28,10 +28,10 @@ describe('runPromptPass', () => {
     fauxReg.setResponses([]);
   });
 
-  it('re-ranks a preview when the model returns valid rerankedIndices', async () => {
+  it('re-ranks a preview when the model returns valid rerankedIds', async () => {
     fauxReg.setResponses([
       fauxAssistantMessage(
-        '{"results":[{"rerankedIndices":[2,0,1]}],"info":"reordered by relevance"}',
+        '{"results":[{"rerankedIds":["r2","r0","r1"]}],"info":"reordered by relevance"}',
         { stopReason: 'stop' },
       ),
     ]);
@@ -39,15 +39,15 @@ describe('runPromptPass', () => {
     const { previews, info } = await run([{ label: 'q1', result: result(['alpha', 'beta', 'gamma']) }]);
 
     expect(info).toBe('reordered by relevance');
-    // Preview rows must now be in [gamma, alpha, beta] order.
+    // Preview rows must now be in [gamma, alpha, beta] order — r2, r0, r1.
     const p = previews[0]!;
     expect(p.indexOf('gamma')).toBeLessThan(p.indexOf('alpha'));
     expect(p.indexOf('alpha')).toBeLessThan(p.indexOf('beta'));
   });
 
-  it('filters a preview down to a subset of indices', async () => {
+  it('filters a preview down to a subset of ids', async () => {
     fauxReg.setResponses([
-      fauxAssistantMessage('{"results":[{"rerankedIndices":[1]}],"info":"only beta"}', { stopReason: 'stop' }),
+      fauxAssistantMessage('{"results":[{"rerankedIds":["r1"]}],"info":"only beta"}', { stopReason: 'stop' }),
     ]);
 
     const { previews } = await run([{ label: 'q1', result: result(['alpha', 'beta', 'gamma']) }]);
@@ -57,9 +57,34 @@ describe('runPromptPass', () => {
     expect(previews[0]).not.toContain('gamma');
   });
 
-  it('keeps original order when rerankedIndices are invalid (out of range)', async () => {
+  it('skips unknown ids individually and keeps the rest in the given order', async () => {
+    // r7 doesn't exist; r1 does — preview should contain just beta.
     fauxReg.setResponses([
-      fauxAssistantMessage('{"results":[{"rerankedIndices":[7,8]}],"info":"x"}', { stopReason: 'stop' }),
+      fauxAssistantMessage('{"results":[{"rerankedIds":["r7","r1"]}],"info":"partial"}', { stopReason: 'stop' }),
+    ]);
+
+    const { previews } = await run([{ label: 'q1', result: result(['alpha', 'beta']) }]);
+
+    expect(previews[0]).toContain('beta');
+    expect(previews[0]).not.toContain('alpha');
+  });
+
+  it('dedupes a repeated id within rerankedIds', async () => {
+    fauxReg.setResponses([
+      fauxAssistantMessage('{"results":[{"rerankedIds":["r1","r1","r0"]}],"info":"dedup"}', { stopReason: 'stop' }),
+    ]);
+
+    const { previews } = await run([{ label: 'q1', result: result(['alpha', 'beta']) }]);
+
+    const p = previews[0]!;
+    // beta should appear before alpha, and only once.
+    expect(p.indexOf('beta')).toBeLessThan(p.indexOf('alpha'));
+    expect(p.match(/beta/g)!.length).toBe(1);
+  });
+
+  it('keeps original order when rerankedIds are all unknown', async () => {
+    fauxReg.setResponses([
+      fauxAssistantMessage('{"results":[{"rerankedIds":["r7","r8"]}],"info":"x"}', { stopReason: 'stop' }),
     ]);
 
     const { previews } = await run([{ label: 'q1', result: result(['alpha', 'beta']) }]);
@@ -83,7 +108,7 @@ describe('runPromptPass', () => {
   it('tolerates ```json code fences around the response', async () => {
     fauxReg.setResponses([
       fauxAssistantMessage(
-        '```json\n{"results":[{"rerankedIndices":[1,0]}],"info":"fenced"}\n```',
+        '```json\n{"results":[{"rerankedIds":["r1","r0"]}],"info":"fenced"}\n```',
         { stopReason: 'stop' },
       ),
     ]);
@@ -97,7 +122,7 @@ describe('runPromptPass', () => {
   it('returns undefined preview for error entries and still summarizes the rest', async () => {
     fauxReg.setResponses([
       fauxAssistantMessage(
-        '{"results":[null,{"rerankedIndices":[0]}],"info":"one ok one failed"}',
+        '{"results":[null,{"rerankedIds":["r0"]}],"info":"one ok one failed"}',
         { stopReason: 'stop' },
       ),
     ]);

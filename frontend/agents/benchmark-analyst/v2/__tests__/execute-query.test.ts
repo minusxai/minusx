@@ -280,7 +280,7 @@ describe('ExecuteQueryV2', () => {
       expect(content.info).toBe('Summary: 2 results found.');
     });
 
-    it('re-ranks each preview when the prompt model returns rerankedIndices', async () => {
+    it('re-ranks each preview when the prompt model returns rerankedIds', async () => {
       mockQuery.mockResolvedValue({
         columns: ['name'],
         types: ['VARCHAR'],
@@ -289,7 +289,7 @@ describe('ExecuteQueryV2', () => {
       });
       fauxReg.setResponses([
         fauxAssistantMessage(
-          '{"results":[{"rerankedIndices":[2,0,1]}],"info":"ranked by relevance"}',
+          '{"results":[{"rerankedIds":["r2","r0","r1"]}],"info":"ranked by relevance"}',
           { stopReason: 'stop' },
         ),
       ]);
@@ -310,7 +310,7 @@ describe('ExecuteQueryV2', () => {
 
       expect(content.info).toBe('ranked by relevance');
       const preview = content.results[0].preview as string;
-      // Order in the preview reflects the model's rerankedIndices [2,0,1].
+      // Order in the preview reflects the model's rerankedIds [r2, r0, r1].
       expect(preview.indexOf('gamma')).toBeLessThan(preview.indexOf('alpha'));
       expect(preview.indexOf('alpha')).toBeLessThan(preview.indexOf('beta'));
     });

@@ -2,12 +2,14 @@
 // "Search when you don't know the table" — lexical matching with optional semantic re-ranking
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
+import type { DuckDBConnection } from '@duckdb/node-api';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
-import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
+import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
+import { getCatalogStore } from './catalog';
 import { runPromptPass } from './prompt-pass';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
@@ -84,7 +86,6 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
 
   private connectors = new Map<string, NodeConnector>();
   private dialects = new Map<string, string>();
-  private schemas = new Map<string, SchemaEntry[]>();
 
   private async initConnectors(): Promise<void> {
     for (const entry of this.context.connections ?? []) {
@@ -93,12 +94,6 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
       const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
       this.connectors.set(entry.name, c);
       this.dialects.set(entry.name, entry.dialect);
-      try {
-        const schema = await c.getSchema();
-        this.schemas.set(entry.name, schema);
-      } catch {
-        this.schemas.set(entry.name, []);
-      }
     }
   }
 
@@ -119,8 +114,11 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
       };
     }
 
-    // Find all searchable targets (text columns in scope)
-    const targets = this.findSearchTargets(filter);
+    // Resolve in-scope text columns by querying the catalog (shared with
+    // SearchDBSchema). Uses `column_stats.category` where available; falls
+    // back to a type-name heuristic for columns without stats.
+    const { conn: catalogConn } = await getCatalogStore(this.context.connections);
+    const targets = await this.findSearchTargets(filter, catalogConn);
 
     // Run searches
     const allRows: Record<string, unknown>[] = [];
@@ -153,11 +151,12 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
 
     const handle = storeHandle(result);
     const stats = computeResultStats(result, Math.min(result.rows.length, 100));
-    let preview = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
-    let info: string | undefined;
 
     // With a prompt, the lighter model re-ranks the search hits and writes one
-    // `info` summary (see prompt-pass.ts).
+    // `info` summary (see prompt-pass.ts). Skip the inline compress in that
+    // path — `runPromptPass` builds the preview from the (re-ranked) rows.
+    let preview: string;
+    let info: string | undefined;
     if (prompt && result.rows.length > 0) {
       const pass = await runPromptPass(
         [{ label: `Search: "${filter.match}"`, result }],
@@ -166,8 +165,10 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
         this.orchestrator,
         this.id,
       );
-      if (pass.previews[0] !== undefined) preview = pass.previews[0];
+      preview = pass.previews[0] ?? compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
       info = pass.info;
+    } else {
+      preview = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
     }
 
     const response: { results: QueryResultEntry[]; info?: string } = {
@@ -186,52 +187,61 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
     };
   }
 
-  private findSearchTargets(filter: {
-    connection?: string;
-    schema?: string;
-    table?: string;
-    columns?: string[];
-    match: string;
-  }): SearchTarget[] {
-    const targets: SearchTarget[] = [];
-    const TEXT_TYPES = new Set(['VARCHAR', 'TEXT', 'STRING', 'CHAR', 'NVARCHAR', 'NCHAR']);
-
-    for (const [connName, schemaEntries] of this.schemas) {
-      if (filter.connection && filter.connection !== connName) continue;
-
-      const dialect = this.dialects.get(connName) ?? 'duckdb';
-
-      for (const schemaEntry of schemaEntries) {
-        if (filter.schema && filter.schema !== schemaEntry.schema) continue;
-
-        for (const table of schemaEntry.tables) {
-          if (filter.table && filter.table !== table.table) continue;
-
-          for (const col of table.columns) {
-            // Check if text column
-            const isText = TEXT_TYPES.has(col.type.toUpperCase()) ||
-              col.type.toUpperCase().includes('VARCHAR') ||
-              col.type.toUpperCase().includes('TEXT') ||
-              col.type.toUpperCase().includes('CHAR');
-
-            if (!isText) continue;
-
-            // Check column filter
-            if (filter.columns && !filter.columns.includes(col.name)) continue;
-
-            targets.push({
-              connection: connName,
-              schema: schemaEntry.schema,
-              table: table.table,
-              column: col.name,
-              dialect,
-            });
-          }
-        }
-      }
+  private async findSearchTargets(
+    filter: {
+      connection?: string;
+      schema?: string;
+      table?: string;
+      columns?: string[];
+      match: string;
+    },
+    catalogConn: DuckDBConnection,
+  ): Promise<SearchTarget[]> {
+    const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
+    const where: string[] = [];
+    if (filter.connection) where.push(`c.connection_name = ${lit(filter.connection)}`);
+    if (filter.schema) where.push(`c.schema_name = ${lit(filter.schema)}`);
+    if (filter.table) where.push(`c.table_name = ${lit(filter.table)}`);
+    if (filter.columns && filter.columns.length > 0) {
+      where.push(`c.column_name IN (${filter.columns.map(lit).join(', ')})`);
     }
+    // Prefer the proper category classification from `column_stats`; fall back
+    // to a type-name heuristic when stats are absent (unprofiled connectors).
+    where.push(`(
+      cs.category IN ('text', 'categorical')
+      OR (cs.category IS NULL AND (
+        UPPER(c.data_type) LIKE '%VARCHAR%'
+        OR UPPER(c.data_type) LIKE '%TEXT%'
+        OR UPPER(c.data_type) LIKE '%CHAR%'
+        OR UPPER(c.data_type) LIKE '%STRING%'
+      ))
+    )`);
 
-    return targets;
+    const sql = `
+      SELECT c.connection_name, c.schema_name, c.table_name, c.column_name
+      FROM columns c
+      LEFT JOIN column_stats cs
+        ON cs.connection_name = c.connection_name
+        AND cs.schema_name = c.schema_name
+        AND cs.table_name = c.table_name
+        AND cs.column_name = c.column_name
+      WHERE ${where.join(' AND ')}
+    `;
+
+    const result = await catalogConn.run(sql);
+    const rows = (await result.getRowObjectsJS()) as Array<{
+      connection_name: string;
+      schema_name: string;
+      table_name: string;
+      column_name: string;
+    }>;
+    return rows.map((r) => ({
+      connection: r.connection_name,
+      schema: r.schema_name,
+      table: r.table_name,
+      column: r.column_name,
+      dialect: this.dialects.get(r.connection_name) ?? 'duckdb',
+    }));
   }
 
   private async searchColumn(

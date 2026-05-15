@@ -20,6 +20,15 @@ import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-au
 // the full result stays addressable via its handle.
 const PROMPT_ROW_CAP = 100;
 
+// Each row gets a short synthetic id (`r0`, `r1`, …) within its result set.
+// The model re-ranks by **id** (content reference) rather than positional
+// index — that means an unknown id skips just that row instead of rejecting
+// the whole rerank, duplicate ids dedupe naturally, and the model isn't asked
+// to count positions (a known LLM weak spot).
+function rowIdAt(index: number): string {
+  return `r${index}`;
+}
+
 export type PromptPassEntry =
   | { label: string; result: QueryResult }
   | { label: string; error: string };
@@ -32,14 +41,14 @@ export interface PromptPassResult {
   info: string;
 }
 
-const SYSTEM_PROMPT = `You are a data tool. You are given one or more query result sets (each row prefixed with its index) and a task.
+const SYSTEM_PROMPT = `You are a data tool. You are given one or more query result sets (each row prefixed with a short row id like "r0:", "r1:") and a task.
 
 Do BOTH of these:
-1. For each result set, optionally return "rerankedIndices": an array of row indices — a reordering and/or filtering of THAT set's rows, most relevant first, for the task. Use only indices shown for that set. Use null if no reordering helps. Never invent rows or values.
+1. For each result set, optionally return "rerankedIds": an array of row ids — a reordering and/or filtering of THAT set's rows, most relevant first, for the task. Use ONLY the row ids shown for that set (copy the literal strings, e.g. "r3"). Use null if no reordering helps. Never invent rows or values.
 2. Write a brief, factual "info" string answering the task across all result sets. Reference values/handles — do NOT paste row data back.
 
 Respond with ONLY a JSON object — no prose, no code fences:
-{"results":[{"rerankedIndices":[<int>,...] | null}, ...],"info":"<text>"}`;
+{"results":[{"rerankedIds":["<id>",...] | null}, ...],"info":"<text>"}`;
 
 function extractText(msg: AssistantMessage): string {
   return msg.content
@@ -54,8 +63,30 @@ function stripFences(text: string): string {
 }
 
 interface ParsedResponse {
-  results?: Array<{ rerankedIndices?: number[] | null } | null>;
+  results?: Array<{ rerankedIds?: unknown } | null>;
   info?: string;
+}
+
+/** Apply the model's id list to an entry's shown rows. Unknown ids and
+ *  duplicates are skipped per-row; an empty result keeps the original order. */
+function applyRerank(
+  shown: Record<string, unknown>[],
+  rerankIds: unknown,
+): Record<string, unknown>[] {
+  if (!Array.isArray(rerankIds) || rerankIds.length === 0) return shown;
+  const idMap = new Map<string, Record<string, unknown>>();
+  shown.forEach((row, idx) => idMap.set(rowIdAt(idx), row));
+  const seen = new Set<string>();
+  const picked: Record<string, unknown>[] = [];
+  for (const id of rerankIds) {
+    if (typeof id !== 'string' || seen.has(id)) continue;
+    const row = idMap.get(id);
+    if (row !== undefined) {
+      picked.push(row);
+      seen.add(id);
+    }
+  }
+  return picked.length > 0 ? picked : shown;
 }
 
 export async function runPromptPass(
@@ -65,12 +96,12 @@ export async function runPromptPass(
   orchestrator: Orchestrator,
   toolId: string,
 ): Promise<PromptPassResult> {
-  // Build the indexed view the model re-ranks against.
+  // Build the id-prefixed view the model re-ranks against.
   const sections = entries
     .map((e, i) => {
       if ('error' in e) return `## [${i}] ${e.label}\nERROR: ${e.error}`;
       const shown = e.result.rows.slice(0, PROMPT_ROW_CAP);
-      const indexed = shown.map((r, idx) => `${idx}: ${JSON.stringify(r)}`).join('\n');
+      const indexed = shown.map((r, idx) => `${rowIdAt(idx)}: ${JSON.stringify(r)}`).join('\n');
       const more =
         e.result.rows.length > shown.length
           ? ` (showing ${shown.length} of ${e.result.rows.length})`
@@ -100,14 +131,7 @@ export async function runPromptPass(
   const previews = entries.map((e, i) => {
     if ('error' in e) return undefined;
     const shown = e.result.rows.slice(0, PROMPT_ROW_CAP);
-    let rows = shown;
-    const rerank = parsed?.results?.[i]?.rerankedIndices;
-    if (Array.isArray(rerank) && rerank.length > 0) {
-      const valid = rerank.every(
-        (idx) => Number.isInteger(idx) && idx >= 0 && idx < shown.length,
-      );
-      if (valid) rows = rerank.map((idx) => shown[idx]);
-    }
+    const rows = applyRerank(shown, parsed?.results?.[i]?.rerankedIds);
     return compressQueryResult(
       { columns: e.result.columns, types: e.result.types, rows },
       TOOL_MAX_LIMIT_CHARS,

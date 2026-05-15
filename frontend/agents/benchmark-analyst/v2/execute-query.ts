@@ -12,6 +12,7 @@ import { interpolateRefs, interpolateMongoRefs } from './query-refs';
 import { runPromptPass, type PromptPassEntry } from './prompt-pass';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
+import { clampQueryTimeoutSeconds } from '../db-tools';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 
 const DEFAULT_INFO_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
@@ -31,6 +32,9 @@ const ExecuteQueryParams = Type.Object({
   }),
   prompt: Type.Optional(Type.String({ description: 'Optional: if provided, an LLM processes all results and returns a single info summary' })),
   sequential: Type.Optional(Type.Boolean({ description: 'If true, queries run sequentially and can reference earlier results via $label.column (default: false, parallel)' })),
+  timeout: Type.Optional(Type.Number({
+    description: 'Per-query timeout in seconds (default 60, max 300). Applies to every query in the batch. Set this to 180–300 UP FRONT for a query that will scan a large table (full-table aggregation, JSON extraction over all rows) — do not eat a 60s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
+  })),
 });
 
 interface QueryResultEntry {
@@ -56,10 +60,11 @@ export class ExecuteQueryV2 extends MXTool<
 
 FEATURES:
 - Cross-connection queries: specify different connections for each query
-- Handle references: results from earlier queries (or any stored handle) can be joined as tables: FROM handle_xyz
+- Handle references: results from earlier queries (or any stored handle) can be joined as tables: FROM handle_xyz (works for duckdb/sqlite connections)
 - Sequential mode (sequential=true): queries run in order, $label.column references expand to values from earlier results
 - Per-query errors: a failing query returns {error} in its slot without failing the batch
-- Prompt: if provided, an LLM processes all results and returns a single info summary
+- Prompt: if provided, the lighter model re-ranks each result's preview rows and returns a single cross-result info summary
+- Timeout (seconds, default 60, max 300): per-query cancellation budget; bump UP FRONT for queries that scan large tables — don't eat a default kill then retry
 
 SEQUENTIAL MODE:
 In sequential mode, the 2nd+ query MUST reference an earlier result via $label.column.
@@ -95,7 +100,8 @@ $label.column references expand to JSON arrays for use with $in.`,
   }
 
   async run(): Promise<ToolResponse<ExecuteQueryDetails>> {
-    const { queries, prompt, sequential = false } = this.parameters;
+    const { queries, prompt, sequential = false, timeout } = this.parameters;
+    const timeoutMs = clampQueryTimeoutSeconds(timeout) * 1000;
 
     await this.initConnectors();
 
@@ -166,7 +172,7 @@ $label.column references expand to JSON arrays for use with $in.`,
           ? interpolatedQuery
           : await enforceQueryLimit(qualifiedQuery, { dialect });
 
-        const result = await connector.query(finalQuery);
+        const result = await connector.query(finalQuery, undefined, timeoutMs);
 
         // Store under its label for sequential $label.column references
         if (spec.label) {
@@ -174,10 +180,14 @@ $label.column references expand to JSON arrays for use with $in.`,
         }
 
         const handle = storeHandle(result);
-        const compressed = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS);
         const stats = computeResultStats(result, Math.min(result.rows.length, 100));
+        // Skip the inline compress when a prompt is set — `runPromptPass`
+        // produces the re-ranked preview from the raw rows.
+        const preview = prompt
+          ? undefined
+          : compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
 
-        return { entry: { preview: compressed.data, handle, stats }, raw: result, label };
+        return { entry: { preview, handle, stats }, raw: result, label };
       } catch (err) {
         errorCount++;
         const msg = err instanceof Error ? err.message : String(err);

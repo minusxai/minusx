@@ -3,15 +3,13 @@
 
 import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
-import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
+import type { BenchmarkAnalystContext } from '../types';
 import type { QueryResult } from '@/lib/connections/base';
-import { buildCatalog, type CatalogTables, type CatalogTable, type CatalogConnector } from './catalog';
+import { getCatalogStore } from './catalog';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
 import { runPromptPass, type PromptPassEntry } from './prompt-pass';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
-import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 
 const DEFAULT_INFO_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
@@ -44,65 +42,6 @@ interface SearchDBSchemaDetails {
   queryCount: number;
 }
 
-// Process-wide catalog cache
-let catalogCache: CatalogTables | null = null;
-let catalogDb: DuckDBInstance | null = null;
-let catalogConn: DuckDBConnection | null = null;
-
-async function getOrBuildCatalog(
-  connections: ConnectionInfo[] | undefined,
-): Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> {
-  if (catalogCache && catalogConn) {
-    return { catalog: catalogCache, conn: catalogConn };
-  }
-
-  // Build connectors (paired with their dialect for profileDatabase dispatch)
-  const connectors = new Map<string, CatalogConnector>();
-  for (const entry of connections ?? []) {
-    if (!entry.config) continue;
-    const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
-    connectors.set(entry.name, { connector: c, dialect: entry.dialect });
-  }
-
-  // Build catalog
-  const catalog = await buildCatalog(connectors);
-  catalogCache = catalog;
-
-  // Create in-memory DuckDB for catalog queries
-  catalogDb = await DuckDBInstance.create(':memory:');
-  catalogConn = await catalogDb.connect();
-
-  // Create and populate catalog tables
-  for (const [tableName, tableData] of Object.entries(catalog) as [string, CatalogTable][]) {
-    if (tableData.rows.length === 0) {
-      // Still create the table for schema discovery
-      const colDefs = tableData.columns.map((col, i) => `"${col}" ${tableData.types[i]}`).join(', ');
-      await catalogConn.run(`CREATE TABLE ${tableName} (${colDefs})`);
-      continue;
-    }
-
-    const colDefs = tableData.columns.map((col, i) => `"${col}" ${tableData.types[i]}`).join(', ');
-    await catalogConn.run(`CREATE TABLE ${tableName} (${colDefs})`);
-
-    // Insert rows
-    const colNames = tableData.columns.map((c) => `"${c}"`).join(', ');
-    const valueRows = tableData.rows.map((row) => {
-      const vals = tableData.columns.map((col) => {
-        const v = row[col];
-        if (v == null) return 'NULL';
-        if (typeof v === 'number') return String(v);
-        if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
-        return `'${String(v).replace(/'/g, "''")}'`;
-      });
-      return `(${vals.join(', ')})`;
-    }).join(',\n');
-
-    await catalogConn.run(`INSERT INTO ${tableName} (${colNames}) VALUES ${valueRows}`);
-  }
-
-  return { catalog, conn: catalogConn };
-}
-
 export class SearchDBSchemaV2 extends MXTool<
   typeof SearchDBSchemaParams,
   BenchmarkAnalystContext,
@@ -133,8 +72,8 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
   async run(): Promise<ToolResponse<SearchDBSchemaDetails>> {
     const { queries, prompt, sequential = false } = this.parameters;
 
-    // Build catalog if needed
-    const { conn } = await getOrBuildCatalog(this.context.connections);
+    // Build catalog if needed (shared with Explore, cached process-wide)
+    const { conn } = await getCatalogStore(this.context.connections);
 
     // Execute queries
     type Collected = { entry: QueryResultEntry; raw: QueryResult | null; label: string };
@@ -157,10 +96,14 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
         const queryResult: QueryResult = { columns, types, rows, finalQuery: spec.query };
 
         const handle = storeHandle(queryResult);
-        const compressed = compressQueryResult(queryResult, TOOL_MAX_LIMIT_CHARS);
         const stats = computeResultStats(queryResult, Math.min(rows.length, 100));
+        // Skip the inline compress when a prompt is set — `runPromptPass`
+        // produces the re-ranked preview from the raw rows.
+        const preview = prompt
+          ? undefined
+          : compressQueryResult(queryResult, TOOL_MAX_LIMIT_CHARS).data;
 
-        return { entry: { preview: compressed.data, handle, stats }, raw: queryResult, label };
+        return { entry: { preview, handle, stats }, raw: queryResult, label };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { entry: { error: msg }, raw: null, label };
@@ -204,9 +147,5 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
   }
 }
 
-// Reset catalog cache (for testing)
-export function clearCatalogCache(): void {
-  catalogCache = null;
-  catalogConn = null;
-  catalogDb = null;
-}
+// `clearCatalogCache` lives in `catalog.ts` now (shared with Explore).
+export { clearCatalogCache } from './catalog';

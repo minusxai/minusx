@@ -110,6 +110,29 @@ describe('ExecuteQueryV2 — FROM handle_xyz (real handle tables)', () => {
     expect(stored?.rows).toEqual([{ id: 2 }, { id: 3 }]);
   });
 
+  it('honors the timeout param — a slow query is cancelled, returned as per-query error', async () => {
+    // `range(20_000_000_000)` would be a multi-second scan in DuckDB; a 1s
+    // timeout must interrupt it well before completion and surface a clean
+    // per-query error.
+    const tool = new ExecuteQueryV2(
+      undefined as never,
+      {
+        queries: [{ connection: 'products_db', query: 'SELECT count(*) AS c FROM range(20000000000)' }],
+        timeout: 1,
+      },
+      ctx(),
+      'test-timeout',
+    );
+    const start = Date.now();
+    const response = await tool.run();
+    const elapsedMs = Date.now() - start;
+
+    const content = JSON.parse((response.content[0] as TextContent).text);
+    expect(content.results[0].error).toBeDefined();
+    // Must not hang anywhere near the time the full scan would take.
+    expect(elapsedMs).toBeLessThan(15000);
+  }, 20000);
+
   it('errors clearly when a handle is referenced on a non-SQL connection', async () => {
     const h = storeHandle({
       columns: ['id'], types: ['BIGINT'], rows: [{ id: 1 }], finalQuery: '',

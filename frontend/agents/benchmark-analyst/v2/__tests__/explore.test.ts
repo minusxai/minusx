@@ -5,6 +5,7 @@ import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
 import { ExploreV2, setExploreModel } from '../explore';
 import { clearHandles } from '../handle-store';
+import { clearCatalogCache } from '../catalog';
 import type { QueryResult } from '@/lib/connections/base';
 
 const fauxReg = registerFauxProvider({
@@ -70,6 +71,7 @@ describe('ExploreV2', () => {
 
   beforeEach(async () => {
     await clearHandles();
+    clearCatalogCache();
     mockQuery.mockClear();
     fauxReg.setResponses([]);
   });
@@ -240,10 +242,11 @@ describe('ExploreV2', () => {
       expect(content.info).toContain('Re-ranked');
     });
 
-    it('reorders the search-result preview when the prompt model returns rerankedIndices', async () => {
-      // Scope to one text column so `searchColumn` is called once and the
-      // result has exactly the mockQuery rows (no union duplication).
-      mockQuery.mockResolvedValueOnce({
+    it('reorders the search-result preview when the prompt model returns rerankedIds', async () => {
+      // `mockResolvedValue` (not Once) so the catalog-build's profileDatabase
+      // queries and the `searchColumn` call all see the same shape.
+      // profileDatabase fails over to unenriched gracefully on shapeless data.
+      mockQuery.mockResolvedValue({
         columns: ['id', 'matched_text', 'source', 'score'],
         types: ['INTEGER', 'VARCHAR', 'VARCHAR', 'DOUBLE'],
         rows: [
@@ -254,7 +257,7 @@ describe('ExploreV2', () => {
       });
       fauxReg.setResponses([
         fauxAssistantMessage(
-          '{"results":[{"rerankedIndices":[1,0]}],"info":"reranked by relevance"}',
+          '{"results":[{"rerankedIds":["r1","r0"]}],"info":"reranked by relevance"}',
           { stopReason: 'stop' },
         ),
       ]);
@@ -275,7 +278,7 @@ describe('ExploreV2', () => {
 
       expect(content.info).toBe('reranked by relevance');
       const preview = content.results[0].preview as string;
-      // `[1,0]` puts the renewable row before the solar row.
+      // `[r1, r0]` puts the renewable row before the solar row.
       expect(preview.indexOf('renewable')).toBeLessThan(preview.indexOf('solar'));
     });
 

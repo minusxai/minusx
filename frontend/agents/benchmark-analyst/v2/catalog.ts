@@ -1,8 +1,15 @@
-// Catalog builder: creates the 6 synthetic catalog tables from connection schemas
-// Tables: connections, schemas, tables, columns, indexes, column_stats
+// Catalog builder + store: creates the 6 synthetic catalog tables from
+// connection schemas and exposes them as queryable DuckDB tables (SQL over
+// metadata, as opposed to SQL over data). Used by both SearchDBSchema (the
+// LLM-facing catalog SQL tool) and Explore (which queries `columns` /
+// `column_stats` to find searchable text columns).
 
+import 'server-only';
+import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import type { SchemaEntry, NodeConnector, QueryResult, ColumnMeta } from '@/lib/connections/base';
 import { profileDatabase } from '@/lib/connections/statistics-engine';
+import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
+import type { ConnectionInfo } from '../types';
 
 export interface CatalogTable {
   columns: string[];
@@ -171,6 +178,76 @@ export async function buildCatalog(
     },
   };
 }
+
+// ── Catalog store ──────────────────────────────────────────────────────────
+// Process-wide cache for the built catalog + the DuckDB connection that
+// holds it as queryable tables. Tests reset via `clearCatalogCache()`.
+
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+let catalogCache: CatalogTables | null = null;
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+let catalogDb: DuckDBInstance | null = null;
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+let catalogConn: DuckDBConnection | null = null;
+
+function escapeCatalogValue(v: unknown): string {
+  if (v == null) return 'NULL';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';
+  if (typeof v === 'bigint') return String(v);
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+/**
+ * Build (or return cached) the catalog plus a DuckDB connection over its
+ * tables. Both `SearchDBSchema` and `Explore` use this — they share the same
+ * `columns` / `column_stats` view of the schema.
+ */
+export async function getCatalogStore(
+  connections: ConnectionInfo[] | undefined,
+): Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> {
+  if (catalogCache && catalogConn) {
+    return { catalog: catalogCache, conn: catalogConn };
+  }
+
+  // Build connectors paired with their dialect for profileDatabase dispatch.
+  const connectors = new Map<string, CatalogConnector>();
+  for (const entry of connections ?? []) {
+    if (!entry.config) continue;
+    const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+    connectors.set(entry.name, { connector: c, dialect: entry.dialect });
+  }
+
+  const catalog = await buildCatalog(connectors);
+  catalogCache = catalog;
+
+  catalogDb = await DuckDBInstance.create(':memory:');
+  catalogConn = await catalogDb.connect();
+
+  for (const [tableName, tableData] of Object.entries(catalog) as [string, CatalogTable][]) {
+    const colDefs = tableData.columns
+      .map((col, i) => `"${col}" ${tableData.types[i]}`)
+      .join(', ');
+    await catalogConn.run(`CREATE TABLE ${tableName} (${colDefs})`);
+    if (tableData.rows.length === 0) continue;
+    const colNames = tableData.columns.map((c) => `"${c}"`).join(', ');
+    const valueRows = tableData.rows
+      .map((row) => `(${tableData.columns.map((col) => escapeCatalogValue(row[col])).join(', ')})`)
+      .join(',\n');
+    await catalogConn.run(`INSERT INTO ${tableName} (${colNames}) VALUES ${valueRows}`);
+  }
+
+  return { catalog, conn: catalogConn };
+}
+
+/** Drop the cached catalog (test/reset helper). */
+export function clearCatalogCache(): void {
+  catalogCache = null;
+  catalogConn = null;
+  catalogDb = null;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildColumnStatsRow(
   connName: string,
