@@ -683,4 +683,49 @@ describe('DoubleCheckBenchmarkAgent', () => {
     expect(findToolResult(orch.log, 'r1-check')).toBeDefined();
     expect(findToolResult(orch.log, 'r2-check')).toBeDefined();
   });
+
+  it('uses primaryAgent / secondaryAgent static fields for sub-agent dispatch', async () => {
+    // Custom analyst with a distinct schema.name. Renamed via a fresh
+    // schema literal — the orchestrator dispatches sub-agents by name, so
+    // overriding `primaryAgent`/`secondaryAgent` must drive both
+    // dispatched names and registry lookup.
+    class AlternateAnalyst extends BenchmarkAnalystAgent {
+      static override readonly schema = {
+        ...BenchmarkAnalystAgent.schema,
+        name: 'AlternateAnalyst',
+      };
+    }
+    class DoubleCheckAlt extends DoubleCheckBenchmarkAgent {
+      static primaryAgent = AlternateAnalyst;
+      static secondaryAgent = AlternateAnalyst;
+    }
+
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('EQUIVALENT', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator([
+      AlternateAnalyst,
+      CheckEquivalence,
+      DoubleCheckAlt,
+      // Tools the analyst would advertise — unused here (analyst stops on
+      // first turn) but kept so registry validation is happy.
+      ListDBConnections,
+      BaseSearchDBSchema,
+      BaseExecuteQuery,
+    ]);
+    const root = new DoubleCheckAlt(orch, { userMessage: 'q' }, CTX);
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    const result = await stream.result();
+
+    expect(result).not.toBeNull();
+    // The sub-agent toolCalls in the log must reference the overridden name.
+    const r1a1 = findToolCallInAssistantMsgs(orch.log, 'r1-agent1');
+    const r1a2 = findToolCallInAssistantMsgs(orch.log, 'r1-agent2');
+    expect((r1a1 as { name?: string }).name).toBe('AlternateAnalyst');
+    expect((r1a2 as { name?: string }).name).toBe('AlternateAnalyst');
+  });
 });

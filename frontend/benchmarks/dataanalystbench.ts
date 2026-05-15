@@ -95,10 +95,13 @@ const DATASETS = discoverDatasets(BASE);
 // These use a handle-based data model for better context management.
 //
 // DAB_DOUBLE_CHECK toggles cross-check mode: the root agent becomes a
-// `DoubleCheckBenchmarkAgent` that spawns two `BenchmarkAnalystAgent`
-// instances in parallel (dispatched as tool calls), judges via
-// `CheckEquivalence`, and retries once on disagreement. ~4× sub-agent
-// runs + 2 judge calls per row.
+// `DoubleCheckBenchmarkAgent` that spawns two analyst sub-agents in
+// parallel (dispatched as tool calls), judges via `CheckEquivalence`, and
+// retries on disagreement. ~4× sub-agent runs + 2 judge calls per row.
+// The sub-agent class is selected via `DoubleCheckBenchmarkAgent`'s
+// `primaryAgent`/`secondaryAgent` static fields — defaults to V1; the V2
+// subclass below overrides them. The two flags compose: `DAB_V2=1
+// DAB_DOUBLE_CHECK=1` runs double-check over V2 analysts.
 
 const useV2 = DAB_V2 === '1' || DAB_V2 === 'true';
 const doubleCheck = DAB_DOUBLE_CHECK === '1' || DAB_DOUBLE_CHECK === 'true';
@@ -117,23 +120,43 @@ class V2Agent extends V2BenchmarkAnalystAgent {
 class DoubleCheckAgent extends DoubleCheckBenchmarkAgent {
   static model = benchmarkModel;
 }
-// Sub-agent class registered in DoubleCheck mode: needs the configured
-// `benchmarkModel`, not the default fallback that `BenchmarkAnalystAgent`
-// resolves at module load (faux when ANALYST_AGENT_MODEL_CONFIG is unset).
-// The orchestrator looks up by `schema.name === 'BenchmarkAnalystAgent'`,
-// inherited from the parent — so this subclass IS what `DoubleCheckBenchmarkAgent`
-// invokes via `orch.invoke(BenchmarkAnalystAgent, …)`.
+// Sub-agent classes registered in DoubleCheck mode: each needs the
+// configured `benchmarkModel`, not the fallback the parent class resolves
+// at module load (faux when ANALYST_AGENT_MODEL_CONFIG is unset). The
+// orchestrator looks up by `schema.name` (inherited from the parent), so
+// these subclasses ARE what `DoubleCheckBenchmarkAgent` invokes by name.
 class BenchmarkAnalystAgentForDoubleCheck extends BenchmarkAnalystAgent {
   static model = benchmarkModel;
 }
+class V2BenchmarkAnalystAgentForDoubleCheck extends V2BenchmarkAnalystAgent {
+  static model = benchmarkModel;
+}
+class V2DoubleCheckAgent extends DoubleCheckBenchmarkAgent {
+  static primaryAgent = V2BenchmarkAnalystAgent;
+  static secondaryAgent = V2BenchmarkAnalystAgent;
+  static model = benchmarkModel;
+}
 
-// Select agent based on flags (V2 takes precedence; V2+DOUBLE_CHECK not yet supported)
-const RootAgent = useV2 ? V2Agent : (doubleCheck ? DoubleCheckAgent : SingleAgent);
+// Select agent based on flags. V2 and DOUBLE_CHECK compose:
+//   DAB_V2=1 DAB_DOUBLE_CHECK=1 → V2 analysts inside double-check controller.
+const RootAgent = useV2
+  ? (doubleCheck ? V2DoubleCheckAgent : V2Agent)
+  : (doubleCheck ? DoubleCheckAgent : SingleAgent);
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
 const registrables = useV2
-  ? [SearchDBSchemaV2, ExecuteQueryV2, ExploreV2, FetchHandleV2, RootAgent]
+  ? doubleCheck
+    ? [
+        SearchDBSchemaV2,
+        ExecuteQueryV2,
+        ExploreV2,
+        FetchHandleV2,
+        V2BenchmarkAnalystAgentForDoubleCheck,
+        CheckEquivalence,
+        RootAgent,
+      ]
+    : [SearchDBSchemaV2, ExecuteQueryV2, ExploreV2, FetchHandleV2, RootAgent]
   : doubleCheck
     ? [
         ListDBConnections,

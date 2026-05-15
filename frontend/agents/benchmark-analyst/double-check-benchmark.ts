@@ -130,6 +130,14 @@ const DoubleCheckBenchmarkAgentParams = Type.Object({
   userMessage: Type.String(),
 });
 
+/**
+ * Minimal shape for a sub-agent class: just `static schema.name`. Anything
+ * the orchestrator can dispatch by name fits — V1 (`BenchmarkAnalystAgent`),
+ * V2 (`V2BenchmarkAnalystAgent`), or future variants — without forcing TS
+ * variance reasoning over the parent's generic context parameter.
+ */
+export type AnalystAgentClass = { readonly schema: { name: string } };
+
 /** One toolCall slot for `_dispatchSlots` to dispatch (if not already done). */
 interface SlotSpec {
   name: string;
@@ -159,11 +167,32 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
   static readonly schema: Tool<typeof DoubleCheckBenchmarkAgentParams> = {
     name: 'DoubleCheckBenchmarkAgent',
     description:
-      'Runs two BenchmarkAnalystAgent instances in parallel; on disagreement, retries with cross-feedback for up to MAX_ROUNDS-1 more rounds; returns the consensus answer, or the last round\'s agent-1 answer if no consensus is reached.',
+      'Runs two analyst sub-agents (`primaryAgent` + `secondaryAgent`) in parallel; on disagreement, retries with cross-feedback for up to MAX_ROUNDS-1 more rounds; returns the consensus answer, or the last round\'s primary-agent answer if no consensus is reached.',
     parameters: DoubleCheckBenchmarkAgentParams,
   };
   // No LLM-driven tools — `run()` is hand-rolled.
   static readonly tools = [];
+
+  /**
+   * Sub-agent classes spawned in parallel each round. Both default to
+   * `BenchmarkAnalystAgent` (the V1 analyst). Subclass and override these
+   * to plug in a different analyst — e.g. `V2BenchmarkAnalystAgent` — or
+   * to run a cross-version cross-check (primary != secondary).
+   *
+   * Typed as `AnalystAgentClass` (minimal shape: a class with
+   * `static schema.name`) so the field accepts both V1 and V2 analyst
+   * classes without TS variance pain over `BenchmarkAnalystAgent`'s
+   * generic context param. The controller only reads `.schema.name`; the
+   * orchestrator's registrables resolve that name to a concrete class +
+   * model at dispatch time.
+   *
+   * On no consensus after MAX_ROUNDS, the `primaryAgent`'s last answer is
+   * returned as the best-effort candidate (the cross-check disagreement
+   * is still visible in the final `rN-check` toolResult).
+   */
+  static primaryAgent: AnalystAgentClass = BenchmarkAnalystAgent;
+  static secondaryAgent: AnalystAgentClass = BenchmarkAnalystAgent;
+
   // Inherits provider/model from `BenchmarkAnalystAgent` so the judge
   // and any future LLM calls use the same model as the analyst sub-agents.
   static model = BenchmarkAnalystAgent.model;
@@ -175,12 +204,15 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
 
   override async run(): Promise<AssistantMessage> {
     const { userMessage } = this.parameters;
+    const Ctor = this.constructor as typeof DoubleCheckBenchmarkAgent;
+    const primaryName = Ctor.primaryAgent.schema.name;
+    const secondaryName = Ctor.secondaryAgent.schema.name;
 
     // ── Round 1 — two analysts, no feedback, no history seeding ─────────
     const r1 = slotIds(1);
     await this._dispatchSlots([
-      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage }, id: r1.agent1 },
-      { name: BenchmarkAnalystAgent.schema.name, args: { userMessage }, id: r1.agent2 },
+      { name: primaryName, args: { userMessage }, id: r1.agent1 },
+      { name: secondaryName, args: { userMessage }, id: r1.agent2 },
     ]);
     let t1 = this._readAgentText(r1.agent1);
     let t2 = this._readAgentText(r1.agent2);
@@ -209,8 +241,8 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
 
       await this._dispatchSlots(
         [
-          { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb1 }, id: slots.agent1 },
-          { name: BenchmarkAnalystAgent.schema.name, args: { userMessage: fb2 }, id: slots.agent2 },
+          { name: primaryName, args: { userMessage: fb1 }, id: slots.agent1 },
+          { name: secondaryName, args: { userMessage: fb2 }, id: slots.agent2 },
         ],
         {
           [slots.agent1]: priorHistories1.flat(),
