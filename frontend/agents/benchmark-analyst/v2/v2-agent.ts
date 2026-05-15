@@ -1,7 +1,7 @@
 // V2BenchmarkAnalystAgent: the 4-tool V2 agent
 // Extends BenchmarkAnalystAgent but overrides tools and system prompt
 
-import { Type, type Tool, type TSchema } from '@mariozechner/pi-ai';
+import { Type, type Tool, type TSchema, type Message } from '@mariozechner/pi-ai';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';
 import { publicConnectionMetadata } from '../types';
@@ -10,7 +10,10 @@ import { ExecuteQueryV2 } from './execute-query';
 import { ExploreV2 } from './explore';
 import { FetchHandleV2 } from './fetch-handle';
 import { renderDialectHints, extractDialects } from './dialect-hints';
+import { clearSessionLabels } from './query-refs';
 import { getAnalystModel } from '@/agents/analyst/model-config';
+import type { Orchestrator } from '@/orchestrator/orchestrator';
+import type { ToolMessage } from '@/orchestrator/types';
 
 const FAUX_MODEL = fauxRegistration.getModel();
 
@@ -40,6 +43,21 @@ export class V2BenchmarkAnalystAgent extends BenchmarkAnalystAgent {
   ];
 
   static model = getAnalystModel() ?? FAUX_MODEL;
+
+  constructor(
+    orchestrator: Orchestrator,
+    parameters: { userMessage: string },
+    context: BenchmarkAnalystContext,
+    id?: string,
+    threadHistory?: Message[],
+    toolThread?: ToolMessage[],
+  ) {
+    super(orchestrator, parameters, context, id, threadHistory, toolThread);
+    // Per-agent-instantiation reset: clears `$label.col` session state so a
+    // new row (or a new DoubleCheck sub-agent) starts with no leaked labels
+    // from prior rows. Idempotent — safe to call repeatedly.
+    clearSessionLabels();
+  }
 
   protected getSystemPrompt(): string {
     const ToolCls = this.constructor as typeof V2BenchmarkAnalystAgent;
@@ -99,7 +117,7 @@ Pagination over a stored result. \`fetchHandle(handle="handle_abc", offset=100, 
 Every query returns \`{preview, handle, stats}\`. The handle points to the FULL result (not truncated). Three ways to consume it:
 1. **\`fetchHandle(handle, offset, length)\`** — read more rows out of the handle into your preview. Works for any handle.
 2. **\`FROM handle_xyz\` inside ExecuteQuery** — join/aggregate the handle as a SQL table. **Engine-specific**: only resolves on connections whose Cross-DB hint says handle tables work (in-engine shortcut, no inlining, scales).
-3. **\`sequential: true\` + \`$label.column\`** — interpolate the labeled column's values into a later query as a SQL list / JSON array. **Universal** cross-connection mechanism — works regardless of dialect. Prefer #2 when both ends are handle-capable; fall back to this for any other chain shape.
+3. **\`$label.column\` interpolation** — labels you set on any query persist for the rest of the agent run; later queries can reference them. Inside SQL, \`IN ($amy.id)\` expands to a literal list; inside a Mongo pipeline JSON, \`"$amy.id"\` expands to a JSON array. **Universal** cross-connection mechanism — works regardless of dialect, and works whether you put both queries in one ExecuteQuery call (with \`sequential: true\`) or split them across calls. Prefer #2 when both ends are handle-capable; fall back to this for any other chain shape.
 
 Per-dialect Cross-DB notes below tell you exactly which mechanism applies for each connection in your dataset.
 

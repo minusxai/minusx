@@ -189,6 +189,15 @@ let catalogCache: CatalogTables | null = null;
 let catalogDb: DuckDBInstance | null = null;
 // eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
 let catalogConn: DuckDBConnection | null = null;
+// Serialise concurrent builds. DoubleCheck spawns two sub-agents in
+// parallel; both may call SearchDBSchema before the cache is warm. Without
+// this lock both await `DuckDBInstance.create(':memory:')` independently,
+// race to assign the module-level `catalogConn`, then BOTH run the
+// CREATE TABLE loop on the surviving connection — the second loop dies with
+// "Table with name 'schemas' already exists!". Same pattern as
+// `getOrCreateShared` in shared-duckdb.ts.
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+let catalogPromise: Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> | null = null;
 
 function escapeCatalogValue(v: unknown): string {
   if (v == null) return 'NULL';
@@ -209,35 +218,44 @@ export async function getCatalogStore(
   if (catalogCache && catalogConn) {
     return { catalog: catalogCache, conn: catalogConn };
   }
+  if (catalogPromise) return catalogPromise;
 
-  // Build connectors paired with their dialect for profileDatabase dispatch.
-  const connectors = new Map<string, CatalogConnector>();
-  for (const entry of connections ?? []) {
-    if (!entry.config) continue;
-    const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
-    connectors.set(entry.name, { connector: c, dialect: entry.dialect });
-  }
+  catalogPromise = (async () => {
+    // Build connectors paired with their dialect for profileDatabase dispatch.
+    const connectors = new Map<string, CatalogConnector>();
+    for (const entry of connections ?? []) {
+      if (!entry.config) continue;
+      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+      connectors.set(entry.name, { connector: c, dialect: entry.dialect });
+    }
 
-  const catalog = await buildCatalog(connectors);
-  catalogCache = catalog;
+    const catalog = await buildCatalog(connectors);
+    const db = await DuckDBInstance.create(':memory:');
+    const conn = await db.connect();
 
-  catalogDb = await DuckDBInstance.create(':memory:');
-  catalogConn = await catalogDb.connect();
+    for (const [tableName, tableData] of Object.entries(catalog) as [string, CatalogTable][]) {
+      const colDefs = tableData.columns
+        .map((col, i) => `"${col}" ${tableData.types[i]}`)
+        .join(', ');
+      await conn.run(`CREATE TABLE ${tableName} (${colDefs})`);
+      if (tableData.rows.length === 0) continue;
+      const colNames = tableData.columns.map((c) => `"${c}"`).join(', ');
+      const valueRows = tableData.rows
+        .map((row) => `(${tableData.columns.map((col) => escapeCatalogValue(row[col])).join(', ')})`)
+        .join(',\n');
+      await conn.run(`INSERT INTO ${tableName} (${colNames}) VALUES ${valueRows}`);
+    }
 
-  for (const [tableName, tableData] of Object.entries(catalog) as [string, CatalogTable][]) {
-    const colDefs = tableData.columns
-      .map((col, i) => `"${col}" ${tableData.types[i]}`)
-      .join(', ');
-    await catalogConn.run(`CREATE TABLE ${tableName} (${colDefs})`);
-    if (tableData.rows.length === 0) continue;
-    const colNames = tableData.columns.map((c) => `"${c}"`).join(', ');
-    const valueRows = tableData.rows
-      .map((row) => `(${tableData.columns.map((col) => escapeCatalogValue(row[col])).join(', ')})`)
-      .join(',\n');
-    await catalogConn.run(`INSERT INTO ${tableName} (${colNames}) VALUES ${valueRows}`);
-  }
+    catalogCache = catalog;
+    catalogDb = db;
+    catalogConn = conn;
+    return { catalog, conn };
+  })().catch((err) => {
+    catalogPromise = null; // let next caller retry
+    throw err;
+  });
 
-  return { catalog, conn: catalogConn };
+  return catalogPromise;
 }
 
 /** Drop the cached catalog (test/reset helper). */
@@ -245,6 +263,7 @@ export function clearCatalogCache(): void {
   catalogCache = null;
   catalogConn = null;
   catalogDb = null;
+  catalogPromise = null;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

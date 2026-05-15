@@ -51,10 +51,15 @@ export const DIALECT_HINTS: Record<string, DialectHint> = {
 Common stages: $match, $group, $project, $sort, $limit, $lookup (joins), $unwind (array expansion).
 Use $expr for complex conditions. $facet for multiple aggregations in one query.
 Field references use $ prefix: "$fieldName", "$nested.field".`,
-    crossDb: `Handle tables do NOT apply (Mongo isn't SQL). To chain from a SQL connection into Mongo, use \`sequential: true\` + \`$label.column\` — the string \`"$label.col"\` inside the pipeline JSON expands to a real JSON array:
-  sequential: true
-  query1: {connection: "metadata_db", query: "SELECT article_id FROM article_metadata WHERE author='Amy Jones'", label: "amy"}
-  query2: {connection: "articles_db", query: '{"collection":"articles","pipeline":[{"$match":{"article_id":{"$in":"$amy.article_id"}}},{"$project":{"title":1,"description":1}}]}'}
+    crossDb: `Handle tables do NOT apply (Mongo isn't SQL). To chain from a SQL connection into Mongo, use \`$label.column\` — the string \`"$label.col"\` inside a mongo pipeline JSON expands to a real JSON array of the labeled column's values. **Labels persist across ExecuteQuery calls within an agent run**, so either pattern works:
+  (a) Both queries in ONE call (sequential: true) — fine.
+  (b) Labeling query in call 1, mongo reference in a SEPARATE call 2 — also fine. Most natural for "run SQL, see results, then go to mongo".
+
+Example (separate calls — the common case):
+  Call 1: ExecuteQuery({queries: [{connection: "metadata_db", query: "SELECT article_id FROM article_metadata WHERE author='Amy Jones'", label: "amy"}]})
+  Call 2: ExecuteQuery({queries: [{connection: "articles_db", query: '{"collection":"articles","pipeline":[{"$match":{"article_id":{"$in":"$amy.article_id"}}},{"$project":{"title":1,"description":1,"_id":0}}]}'}]})
+The "$amy.article_id" string in call 2's pipeline expands to the JSON array of article_ids labeled "amy" in call 1.
+
 NEVER paste long inline \`$in\` arrays — \`$label.col\` is exactly the way to avoid that.`,
   },
 };

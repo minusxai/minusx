@@ -6,7 +6,12 @@ import { type ToolResponse } from '@/orchestrator/types';
 import type { QueryResult } from '@/lib/connections/base';
 import { storeHandle, qualifyHandleRefs } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
-import { interpolateRefs, interpolateMongoRefs } from './query-refs';
+import {
+  interpolateRefs,
+  interpolateMongoRefs,
+  mergeWithSessionLabels,
+  recordSessionLabel,
+} from './query-refs';
 import { type PromptPassEntry } from './prompt-pass';
 import { V2DataTool, getLighterModel } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
@@ -127,13 +132,17 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
         }
       }
 
-      // Interpolate $label.column references (sequential mode)
-      let interpolatedQuery = spec.query;
-      if (sequential && labeledResults.size > 0) {
-        interpolatedQuery = isMongo
-          ? interpolateMongoRefs(spec.query, labeledResults)
-          : interpolateRefs(spec.query, labeledResults);
-      }
+      // Interpolate $label.column references. Per-call labels (set in
+      // sequential mode by earlier queries in this batch) merge with
+      // session-scoped labels from prior ExecuteQuery calls — so a chain
+      // started in a previous call (e.g. SQL → Mongo split across two tool
+      // calls) still resolves. Per-call wins on collision.
+      const availableLabels = mergeWithSessionLabels(labeledResults);
+      const interpolatedQuery = availableLabels.size > 0
+        ? (isMongo
+          ? interpolateMongoRefs(spec.query, availableLabels)
+          : interpolateRefs(spec.query, availableLabels))
+        : spec.query;
 
       try {
         // Qualify `FROM handle_xyz` references to the shared `memory` catalog
@@ -162,9 +171,12 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
 
         const result = await connector.query(finalQuery, undefined, timeoutMs);
 
-        // Store under its label for sequential $label.column references
+        // Store the labeled result both per-call (so a same-batch sequential
+        // query can ref it) and session-wide (so a *later* ExecuteQuery call
+        // can ref it too — the agent's natural mental model).
         if (spec.label) {
           labeledResults.set(spec.label, result.rows);
+          recordSessionLabel(spec.label, result.rows);
         }
 
         const handle = storeHandle(result);

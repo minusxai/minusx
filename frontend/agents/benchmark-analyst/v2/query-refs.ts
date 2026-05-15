@@ -1,5 +1,40 @@
-// Extracted from explore-dataset.ts — pure helpers for query reference interpolation
-// Used by both V1 ExploreDataset and V2 ExecuteQuery tools
+// Pure helpers for `$label.column` reference interpolation, plus a
+// process-lifetime session label store.
+//
+// Labels are scoped two ways:
+// 1. **In-call**: a labeled query's result is referenceable by the next
+//    `sequential: true` query in the SAME ExecuteQuery call. Held in a local
+//    Map the caller constructs.
+// 2. **Session**: labels also persist into a module-level store (`sessionLabels`)
+//    so a *later* ExecuteQuery call can still reference them. This matches the
+//    agent's natural mental model — "I labeled it last call, I can use it now"
+//    — and is the only way to chain SQL → Mongo across separate tool calls
+//    (handles don't apply to Mongo).
+// Both V1 ExploreDataset and V2 ExecuteQuery use the interpolation functions;
+// session labels are populated by ExecuteQuery on successful labeled queries.
+
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+const sessionLabels = new Map<string, Record<string, unknown>[]>();
+
+/** Record a label's rows in the session-wide store (per-call calls this on success). */
+export function recordSessionLabel(label: string, rows: Record<string, unknown>[]): void {
+  sessionLabels.set(label, rows);
+}
+
+/** Merge session labels into a per-call labeled-results map. Per-call labels
+ *  take precedence (so an in-batch label-redefine doesn't get shadowed). */
+export function mergeWithSessionLabels(
+  perCall: Map<string, Record<string, unknown>[]>,
+): Map<string, Record<string, unknown>[]> {
+  const merged = new Map(sessionLabels);
+  for (const [k, v] of perCall) merged.set(k, v);
+  return merged;
+}
+
+/** Clear the session-wide label store (test/reset helper). */
+export function clearSessionLabels(): void {
+  sessionLabels.clear();
+}
 
 /**
  * Replace `$label.column_name` references in a SQL query with actual values
