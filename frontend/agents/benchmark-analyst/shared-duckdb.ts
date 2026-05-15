@@ -294,6 +294,11 @@ class BenchmarkSharedDuckdb {
         await conn.run(`CREATE OR REPLACE TABLE ${tbl} (placeholder VARCHAR)`);
         return;
       }
+      // No defensive dedup here: if the source query produced duplicate
+      // column names, let DuckDB's native error propagate. The caller
+      // (`storeHandle`) catches it and surfaces a `handle_error` to the
+      // agent, who then sees an actionable message rather than a silently
+      // renamed column appearing in their handle.
       const colDefs = result.columns
         .map((col, i) => `${quoteIdent(col)} ${mapTypeToDuckDb(result.types?.[i])}`)
         .join(', ');

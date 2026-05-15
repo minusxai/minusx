@@ -31,6 +31,8 @@ interface QueryResultEntry {
   handle?: string;
   stats?: ResultStats;
   error?: string;
+  /** See ExecuteQueryV2 — set when the result can't be registered as a SQL table. */
+  handle_error?: string;
 }
 
 interface ExploreDetails {
@@ -132,7 +134,7 @@ Examples:
       finalQuery: filter.match ? `EXPLORE match="${filter.match}"` : `EXPLORE (sampling, no match filter)`,
     };
 
-    const handle = storeHandle(result);
+    const stored = await storeHandle(result);
     const stats = computeResultStats(result, Math.min(result.rows.length, 100));
 
     // With a prompt, the lighter model re-ranks the search hits and writes one
@@ -152,8 +154,11 @@ Examples:
       preview = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
     }
 
+    const entry: QueryResultEntry = stored.error
+      ? { preview, stats, handle_error: stored.error }
+      : { preview, handle: stored.handleId, stats };
     const response: { results: QueryResultEntry[]; info?: string } = {
-      results: [{ preview, handle, stats }],
+      results: [entry],
       ...(info !== undefined ? { info } : {}),
     };
 

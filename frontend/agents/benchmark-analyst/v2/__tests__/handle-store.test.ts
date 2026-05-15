@@ -15,7 +15,7 @@ describe('HandleStore', () => {
   });
 
   describe('storeHandle / fetchHandle', () => {
-    it('stores a query result and returns a unique handle ID', () => {
+    it('stores a query result and returns a unique handle ID', async () => {
       const result: QueryResult = {
         columns: ['id', 'name'],
         types: ['INTEGER', 'VARCHAR'],
@@ -23,13 +23,14 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const handle = storeHandle(result);
+      const stored = await storeHandle(result);
 
-      expect(handle).toMatch(/^handle_/);
-      expect(fetchHandle(handle)).toEqual(result);
+      expect(stored.handleId).toMatch(/^handle_/);
+      expect(stored.error).toBeUndefined();
+      expect(fetchHandle(stored.handleId)).toEqual(result);
     });
 
-    it('generates unique handle IDs for each store call', () => {
+    it('generates unique handle IDs for each store call', async () => {
       const result: QueryResult = {
         columns: ['x'],
         types: ['INT'],
@@ -37,20 +38,20 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const h1 = storeHandle(result);
-      const h2 = storeHandle(result);
-      const h3 = storeHandle(result);
+      const h1 = await storeHandle(result);
+      const h2 = await storeHandle(result);
+      const h3 = await storeHandle(result);
 
-      expect(h1).not.toBe(h2);
-      expect(h2).not.toBe(h3);
-      expect(h1).not.toBe(h3);
+      expect(h1.handleId).not.toBe(h2.handleId);
+      expect(h2.handleId).not.toBe(h3.handleId);
+      expect(h1.handleId).not.toBe(h3.handleId);
     });
 
     it('returns undefined for unknown handle', () => {
       expect(fetchHandle('handle_unknown')).toBeUndefined();
     });
 
-    it('stores result with empty rows', () => {
+    it('stores result with empty rows', async () => {
       const result: QueryResult = {
         columns: ['id'],
         types: ['INT'],
@@ -58,8 +59,9 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const handle = storeHandle(result);
-      expect(fetchHandle(handle)).toEqual(result);
+      const stored = await storeHandle(result);
+      expect(stored.error).toBeUndefined();
+      expect(fetchHandle(stored.handleId)).toEqual(result);
     });
   });
 
@@ -72,21 +74,21 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const h1 = storeHandle(result);
-      const h2 = storeHandle(result);
+      const h1 = await storeHandle(result);
+      const h2 = await storeHandle(result);
 
-      expect(fetchHandle(h1)).toBeDefined();
-      expect(fetchHandle(h2)).toBeDefined();
+      expect(fetchHandle(h1.handleId)).toBeDefined();
+      expect(fetchHandle(h2.handleId)).toBeDefined();
 
       await clearHandles();
 
-      expect(fetchHandle(h1)).toBeUndefined();
-      expect(fetchHandle(h2)).toBeUndefined();
+      expect(fetchHandle(h1.handleId)).toBeUndefined();
+      expect(fetchHandle(h2.handleId)).toBeUndefined();
     });
   });
 
   describe('getHandleTable', () => {
-    it('returns the DuckDB table name for a handle', () => {
+    it('returns the DuckDB table name for a handle', async () => {
       const result: QueryResult = {
         columns: ['id'],
         types: ['INT'],
@@ -94,10 +96,10 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const handle = storeHandle(result);
-      const tableName = getHandleTable(handle);
+      const stored = await storeHandle(result);
+      const tableName = getHandleTable(stored.handleId);
 
-      expect(tableName).toBe(handle);
+      expect(tableName).toBe(stored.handleId);
     });
 
     it('returns undefined for unknown handle', () => {
@@ -118,10 +120,10 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const handle = storeHandle(result);
+      const { handleId } = await storeHandle(result);
 
       const queryResult = await queryHandle(
-        `SELECT id, value FROM ${handle} WHERE value > 100 ORDER BY value`,
+        `SELECT id, value FROM ${handleId} WHERE value > 100 ORDER BY value`,
       );
 
       expect(queryResult.rows).toEqual([
@@ -142,16 +144,72 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const handle = storeHandle(result);
+      const { handleId } = await storeHandle(result);
 
       const queryResult = await queryHandle(
-        `SELECT category, SUM(amount) as total FROM ${handle} GROUP BY category ORDER BY category`,
+        `SELECT category, SUM(amount) as total FROM ${handleId} GROUP BY category ORDER BY category`,
       );
 
       expect(queryResult.rows).toEqual([
         { category: 'A', total: 30 },
         { category: 'B', total: 30 },
       ]);
+    });
+
+    // When the source query produces duplicate column names (e.g.
+    // `SELECT MIN(a) AS min, MIN(b) AS min`), DuckDB's CREATE TABLE
+    // rejects the registration. We don't try to rename or recover —
+    // instead, `storeHandle` returns `{ handleId, error }`. The agent
+    // gets an actionable error message and can fix the source query if
+    // they need the handle for SQL joins. The raw rows remain accessible
+    // via `fetchHandle` so the data isn't lost.
+    it('returns an error (not a crash) when source columns collide', async () => {
+      const result: QueryResult = {
+        columns: ['min', 'max', 'min'],
+        types: ['INTEGER', 'INTEGER', 'INTEGER'],
+        rows: [{ min: 7, max: 99 }],
+        finalQuery: '',
+      };
+
+      const stored = await storeHandle(result);
+
+      expect(stored.handleId).toMatch(/^handle_/);
+      expect(stored.error).toBeDefined();
+      // The DuckDB error mentions "min" (the colliding column name).
+      expect(stored.error!).toMatch(/min/i);
+    });
+
+    it('still stores raw rows in the handle map even when registration fails', async () => {
+      const result: QueryResult = {
+        columns: ['min', 'min'],
+        types: ['INTEGER', 'INTEGER'],
+        rows: [{ min: 42 }],
+        finalQuery: '',
+      };
+
+      const stored = await storeHandle(result);
+      expect(stored.error).toBeDefined();
+      // Raw rows still accessible via fetchHandle — no data lost
+      const fetched = fetchHandle(stored.handleId);
+      expect(fetched).toEqual(result);
+    });
+
+    it('reports the error message verbatim when querying the un-registered handle fails', async () => {
+      // `FROM handle_xyz` against a handle that never registered should
+      // surface DuckDB's "table doesn't exist" — agent has been told it
+      // wasn't registered (via handle_error), so this is the expected
+      // downstream consequence.
+      const result: QueryResult = {
+        columns: ['x', 'x'],
+        types: ['INTEGER', 'INTEGER'],
+        rows: [{ x: 1 }],
+        finalQuery: '',
+      };
+
+      const stored = await storeHandle(result);
+      expect(stored.error).toBeDefined();
+      await expect(queryHandle(`SELECT * FROM ${stored.handleId}`))
+        .rejects.toThrow(/does not exist/i);
     });
 
     it('supports joining multiple handles', async () => {
@@ -174,8 +232,8 @@ describe('HandleStore', () => {
         finalQuery: '',
       };
 
-      const ordersHandle = storeHandle(orders);
-      const productsHandle = storeHandle(products);
+      const ordersHandle = (await storeHandle(orders)).handleId;
+      const productsHandle = (await storeHandle(products)).handleId;
 
       const queryResult = await queryHandle(
         `SELECT o.order_id, p.name, o.qty

@@ -20,11 +20,6 @@ import {
 const handles = new Map<string, QueryResult>();
 let handleCounter = 0;
 
-// In-flight `registerHandleTable` promises, so `qualifyHandleRefs` /
-// `clearHandles` can wait for a handle's table to exist before using it.
-// eslint-disable-next-line no-restricted-syntax
-const pendingRegistrations = new Map<string, Promise<void>>();
-
 // Handle-ID shape: `handle_<base36 timestamp>_<base36 counter>`.
 const HANDLE_ID_RE = /\bhandle_[0-9a-z]+_[0-9a-z]+\b/gi;
 
@@ -35,25 +30,40 @@ function generateHandleId(): string {
   return `handle_${timestamp}_${counter}`;
 }
 
+export interface StoreHandleResult {
+  handleId: string;
+  /**
+   * Present when DuckDB couldn't register the result as a SQL table
+   * (most often: source query returned duplicate column names; could also
+   * be a type-mapping issue, value too large, etc.). The raw rows are
+   * still kept in the handle map — accessible via `fetchHandle` — but
+   * `FROM <handleId>` will fail because the table doesn't exist. Callers
+   * surface this verbatim to the agent so they can fix the source query
+   * (e.g. give the duplicate column distinct aliases) if they need the
+   * handle for in-engine joins.
+   */
+  error?: string;
+}
+
 /**
- * Store a query result and return a unique handle ID. The result is also
- * registered (asynchronously) as a queryable table in the shared DuckDB
- * instance's `memory` catalog.
+ * Store a query result, register it as a queryable DuckDB table, and
+ * return `{ handleId, error? }`. The handle ID is always returned (the
+ * row data is always stored in the handle map, so `fetchHandle` works
+ * either way). `error` is present iff the DuckDB CREATE/INSERT failed —
+ * surface it to the agent so they have an actionable signal instead of a
+ * silent "table doesn't exist" later.
  */
-export function storeHandle(result: QueryResult): string {
+export async function storeHandle(result: QueryResult): Promise<StoreHandleResult> {
   const handleId = generateHandleId();
   handles.set(handleId, result);
 
-  const registration = sharedRegisterHandleTable(handleId, result)
-    .catch((err) => {
-      console.error(`Failed to register handle ${handleId} as a DuckDB table:`, err);
-    })
-    .finally(() => {
-      pendingRegistrations.delete(handleId);
-    });
-  pendingRegistrations.set(handleId, registration);
-
-  return handleId;
+  try {
+    await sharedRegisterHandleTable(handleId, result);
+    return { handleId };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { handleId, error: msg };
+  }
 }
 
 /** Fetch a stored query result by handle ID. */
@@ -71,13 +81,6 @@ export function getHandleTable(handleId: string): string | undefined {
   return handles.has(handleId) ? handleId : undefined;
 }
 
-/** Wait for all in-flight handle-table registrations to complete. */
-export async function awaitHandleRegistrations(): Promise<void> {
-  if (pendingRegistrations.size > 0) {
-    await Promise.all(pendingRegistrations.values());
-  }
-}
-
 /**
  * Rewrite bare handle identifiers in a SQL string to their fully-qualified
  * `memory.main."handle_xyz"` form, so the query resolves the handle table
@@ -85,10 +88,10 @@ export async function awaitHandleRegistrations(): Promise<void> {
  * *known* handles are rewritten — an unknown `handle_*`-looking token is left
  * untouched (it'll surface a normal "table not found" error).
  *
- * Awaits pending registrations when at least one handle is referenced, so the
- * tables exist before the caller runs the query. Returns the rewritten SQL
- * plus the list of handles actually referenced (callers guard non-SQL
- * connections off a non-empty list).
+ * `storeHandle` now awaits registration, so by the time any handle id is
+ * present in `handles` the table either exists or its registration has
+ * already failed (and `storeHandle`'s caller surfaced the error). No
+ * pending-registration wait needed here.
  */
 export async function qualifyHandleRefs(
   sql: string,
@@ -99,9 +102,6 @@ export async function qualifyHandleRefs(
     referenced.add(match);
     return `memory.main."${match}"`;
   });
-  if (referenced.size > 0) {
-    await awaitHandleRegistrations();
-  }
   return { sql: rewritten, referencedHandles: [...referenced] };
 }
 
@@ -113,8 +113,6 @@ export async function queryHandle(sql: string): Promise<QueryResult> {
 
 /** Clear all stored handles and drop their DuckDB tables (test/reset helper). */
 export async function clearHandles(): Promise<void> {
-  await awaitHandleRegistrations();
-  pendingRegistrations.clear();
   handles.clear();
   handleCounter = 0;
   await dropHandleTables();

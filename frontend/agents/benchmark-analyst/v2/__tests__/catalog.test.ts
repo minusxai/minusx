@@ -1,7 +1,13 @@
 // Tests for buildCatalog: creates the 6 synthetic catalog tables from connection schemas
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SchemaEntry, NodeConnector, QueryResult } from '@/lib/connections/base';
-import { buildCatalog, type CatalogTables, type CatalogConnector } from '../catalog';
+import {
+  buildCatalog,
+  getCatalogStore,
+  clearCatalogCache,
+  type CatalogTables,
+  type CatalogConnector,
+} from '../catalog';
 
 const mockEntry = (
   name: string,
@@ -242,5 +248,50 @@ describe('buildCatalog', () => {
 
       expect(catalog.indexes.rows).toHaveLength(0);
     });
+  });
+});
+
+// `getCatalogStore` owns the cache + DuckDB-instance lifecycle. The keyed
+// cache lets DoubleCheck sub-agents share the same catalog *contents* but
+// hold independent stores — needed so per-slot sample tables (next step)
+// can differ without per-query filtering. Tested directly here so the
+// per-key semantics are pinned regardless of which tool calls in.
+describe('getCatalogStore — keyed cache', () => {
+  beforeEach(() => {
+    clearCatalogCache();
+  });
+  afterEach(() => {
+    clearCatalogCache();
+  });
+
+  it('returns the same store for the same key (cache hit)', async () => {
+    const a1 = await getCatalogStore(undefined, 'agent-a');
+    const a2 = await getCatalogStore(undefined, 'agent-a');
+    expect(a2.conn).toBe(a1.conn);
+  });
+
+  it('returns different stores for different keys (independent DuckDB connections)', async () => {
+    const a = await getCatalogStore(undefined, 'agent-a');
+    const b = await getCatalogStore(undefined, 'agent-b');
+    expect(b.conn).not.toBe(a.conn);
+  });
+
+  it("defaults to the 'default' key when none is passed", async () => {
+    const implicit = await getCatalogStore(undefined);
+    const explicit = await getCatalogStore(undefined, 'default');
+    expect(implicit.conn).toBe(explicit.conn);
+  });
+
+  it("'default' is its own slot — distinct from 'agent-a' / 'agent-b'", async () => {
+    const def = await getCatalogStore(undefined);
+    const a = await getCatalogStore(undefined, 'agent-a');
+    expect(a.conn).not.toBe(def.conn);
+  });
+
+  it('clearCatalogCache drops every key', async () => {
+    const before = await getCatalogStore(undefined, 'agent-a');
+    clearCatalogCache();
+    const after = await getCatalogStore(undefined, 'agent-a');
+    expect(after.conn).not.toBe(before.conn);
   });
 });

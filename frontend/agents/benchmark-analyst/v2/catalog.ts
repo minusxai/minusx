@@ -180,24 +180,20 @@ export async function buildCatalog(
 }
 
 // ── Catalog store ──────────────────────────────────────────────────────────
-// Process-wide cache for the built catalog + the DuckDB connection that
-// holds it as queryable tables. Tests reset via `clearCatalogCache()`.
+// Per-key cache of built catalogs. `cacheKey` selects which catalog
+// instance a caller reads — single-agent runs use `'default'`; DoubleCheck
+// sub-agents pass `'agent-a'` / `'agent-b'` so per-slot sample tables can
+// differ without per-query filtering. Each key owns an independent DuckDB
+// instance (catalog tables are small; cost is negligible).
+//
+// The `Map<key, Promise<...>>` doubles as the build-race lock that
+// previously lived in a separate `catalogPromise` singleton: concurrent
+// callers for the same key share one in-flight promise instead of racing
+// `DuckDBInstance.create(':memory:')` and clobbering each other's
+// CREATE TABLE.
 
 // eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
-let catalogCache: CatalogTables | null = null;
-// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
-let catalogDb: DuckDBInstance | null = null;
-// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
-let catalogConn: DuckDBConnection | null = null;
-// Serialise concurrent builds. DoubleCheck spawns two sub-agents in
-// parallel; both may call SearchDBSchema before the cache is warm. Without
-// this lock both await `DuckDBInstance.create(':memory:')` independently,
-// race to assign the module-level `catalogConn`, then BOTH run the
-// CREATE TABLE loop on the surviving connection — the second loop dies with
-// "Table with name 'schemas' already exists!". Same pattern as
-// `getOrCreateShared` in shared-duckdb.ts.
-// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
-let catalogPromise: Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> | null = null;
+const catalogStores = new Map<string, Promise<{ catalog: CatalogTables; conn: DuckDBConnection }>>();
 
 function escapeCatalogValue(v: unknown): string {
   if (v == null) return 'NULL';
@@ -210,17 +206,17 @@ function escapeCatalogValue(v: unknown): string {
 /**
  * Build (or return cached) the catalog plus a DuckDB connection over its
  * tables. Both `SearchDBSchema` and `Explore` use this — they share the same
- * `columns` / `column_stats` view of the schema.
+ * `columns` / `column_stats` view of the schema. `cacheKey` selects which
+ * per-slot instance to use; defaults to `'default'` for single-agent runs.
  */
 export async function getCatalogStore(
   connections: ConnectionInfo[] | undefined,
+  cacheKey: string = 'default',
 ): Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> {
-  if (catalogCache && catalogConn) {
-    return { catalog: catalogCache, conn: catalogConn };
-  }
-  if (catalogPromise) return catalogPromise;
+  const existing = catalogStores.get(cacheKey);
+  if (existing) return existing;
 
-  catalogPromise = (async () => {
+  const built = (async () => {
     // Build connectors paired with their dialect for profileDatabase dispatch.
     const connectors = new Map<string, CatalogConnector>();
     for (const entry of connections ?? []) {
@@ -246,24 +242,22 @@ export async function getCatalogStore(
       await conn.run(`INSERT INTO ${tableName} (${colNames}) VALUES ${valueRows}`);
     }
 
-    catalogCache = catalog;
-    catalogDb = db;
-    catalogConn = conn;
+    // Keep the DuckDBInstance binding alive — `conn` references it.
+    void db;
+
     return { catalog, conn };
   })().catch((err) => {
-    catalogPromise = null; // let next caller retry
+    catalogStores.delete(cacheKey); // let next caller retry
     throw err;
   });
 
-  return catalogPromise;
+  catalogStores.set(cacheKey, built);
+  return built;
 }
 
-/** Drop the cached catalog (test/reset helper). */
+/** Drop every cached catalog (test/reset helper). */
 export function clearCatalogCache(): void {
-  catalogCache = null;
-  catalogConn = null;
-  catalogDb = null;
-  catalogPromise = null;
+  catalogStores.clear();
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

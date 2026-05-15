@@ -205,6 +205,72 @@ describe('ExecuteQueryV2', () => {
   // connector so the handle actually resolves as a table. A mocked connector
   // here can't verify it (mockQuery ignores the SQL).
 
+  describe('duplicate column names — surfaces handle_error instead of renaming', () => {
+    // When the agent issues `SELECT MIN(a) AS min, MIN(b) AS min`, the
+    // connector returns `columns: ['min', 'min']`. DuckDB rejects that as
+    // a CREATE TABLE. We don't auto-rename — the agent gets:
+    //   - preview & stats: still populated (data isn't lost)
+    //   - handle: omitted
+    //   - handle_error: DuckDB's error message verbatim
+    // The agent then knows to fix their aliases if they need handle joins.
+
+    it('surfaces handle_error and omits handle when source columns collide', async () => {
+      mockQuery.mockResolvedValueOnce({
+        columns: ['min', 'max', 'min'],
+        types: ['INTEGER', 'INTEGER', 'INTEGER'],
+        rows: [{ min: 7, max: 99 }],
+        finalQuery: '',
+      });
+
+      const orch = new Orchestrator([ExecuteQueryV2]);
+      const tool = new ExecuteQueryV2(
+        orch,
+        { queries: [{ connection: 'orders_db', query: 'SELECT MIN(a) AS min, MAX(a) AS max, MIN(b) AS min FROM t' }] },
+        CTX,
+        'test-dup-handle-error',
+      );
+
+      const response = await tool.run();
+      expect(response.isError).toBe(false);
+      const content = JSON.parse((response.content[0] as TextContent).text);
+      const entry = content.results[0];
+
+      // No handle (registration failed) — but data is still there.
+      expect(entry.handle).toBeUndefined();
+      expect(entry.preview).toBeDefined();
+      expect(entry.stats).toBeDefined();
+      // handle_error mentions the offending column.
+      expect(entry.handle_error).toBeDefined();
+      expect(entry.handle_error).toMatch(/min/i);
+    });
+
+    it("preview shows the agent's original column names (no silent renames)", async () => {
+      mockQuery.mockResolvedValueOnce({
+        columns: ['min', 'max', 'min'],
+        types: ['INTEGER', 'INTEGER', 'INTEGER'],
+        rows: [{ min: 7, max: 99 }],
+        finalQuery: '',
+      });
+
+      const orch = new Orchestrator([ExecuteQueryV2]);
+      const tool = new ExecuteQueryV2(
+        orch,
+        { queries: [{ connection: 'orders_db', query: 'SELECT MIN(a) AS min, MAX(a) AS max, MIN(b) AS min FROM t' }] },
+        CTX,
+        'test-dup-preview-original',
+      );
+
+      const response = await tool.run();
+      const content = JSON.parse((response.content[0] as TextContent).text);
+      const preview: string = content.results[0].preview;
+
+      // The preview reflects the source query's actual column names —
+      // 'min' appears twice (no `min_2` rename was synthesised).
+      expect(preview).toMatch(/min/);
+      expect(preview).not.toMatch(/min_2/);
+    });
+  });
+
   describe('per-query errors', () => {
     it('returns error in result slot without failing entire batch', async () => {
       mockQuery

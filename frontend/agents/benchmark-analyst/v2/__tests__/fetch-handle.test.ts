@@ -13,8 +13,8 @@ const CTX: BenchmarkAnalystContext = {
 };
 
 describe('FetchHandleV2', () => {
-  beforeEach(() => {
-    clearHandles();
+  beforeEach(async () => {
+    await clearHandles();
   });
 
   describe('basic pagination', () => {
@@ -25,7 +25,7 @@ describe('FetchHandleV2', () => {
         rows: Array.from({ length: 100 }, (_, i) => ({ id: i, value: i * 10 })),
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(
@@ -51,7 +51,7 @@ describe('FetchHandleV2', () => {
         rows: Array.from({ length: 200 }, (_, i) => ({ id: i })),
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(
@@ -75,7 +75,7 @@ describe('FetchHandleV2', () => {
         rows: [{ id: 1 }, { id: 2 }, { id: 3 }],
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(
@@ -99,7 +99,7 @@ describe('FetchHandleV2', () => {
         rows: [{ id: 1 }],
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(
@@ -129,7 +129,7 @@ describe('FetchHandleV2', () => {
         ],
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(
@@ -174,7 +174,7 @@ describe('FetchHandleV2', () => {
         rows: [{ id: 1 }],
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(
@@ -198,7 +198,7 @@ describe('FetchHandleV2', () => {
         rows: [{ id: 1 }],
         finalQuery: '',
       };
-      const handle = storeHandle(result);
+      const { handleId: handle } = await storeHandle(result);
 
       const orch = new Orchestrator([FetchHandleV2]);
       const tool = new FetchHandleV2(

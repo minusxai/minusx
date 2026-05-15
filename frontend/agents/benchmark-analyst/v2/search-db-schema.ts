@@ -33,6 +33,9 @@ interface QueryResultEntry {
   handle?: string;
   stats?: ResultStats;
   error?: string;
+  /** See ExecuteQueryV2 — set when the result can't be registered as a
+   *  SQL table (e.g. catalog query with duplicate aliases). */
+  handle_error?: string;
 }
 
 interface SearchDBSchemaDetails {
@@ -90,7 +93,7 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
         const rows = await result.getRowObjectsJS() as Record<string, unknown>[];
         const queryResult: QueryResult = { columns, types, rows, finalQuery: spec.query };
 
-        const handle = storeHandle(queryResult);
+        const stored = await storeHandle(queryResult);
         const stats = computeResultStats(queryResult, Math.min(rows.length, 100));
         // Skip the inline compress when a prompt is set — `runPromptPass`
         // produces the re-ranked preview from the raw rows.
@@ -98,7 +101,10 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
           ? undefined
           : compressQueryResult(queryResult, previewMaxChars).data;
 
-        return { entry: { preview, handle, stats }, raw: queryResult, label };
+        const entry: QueryResultEntry = stored.error
+          ? { preview, stats, handle_error: stored.error }
+          : { preview, handle: stored.handleId, stats };
+        return { entry, raw: queryResult, label };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { entry: { error: msg }, raw: null, label };

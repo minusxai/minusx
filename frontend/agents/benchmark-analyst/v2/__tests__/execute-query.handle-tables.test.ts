@@ -53,7 +53,7 @@ describe('ExecuteQueryV2 — FROM handle_xyz (real handle tables)', () => {
       rows: [{ id: 2 }, { id: 4 }],
       finalQuery: '',
     };
-    const idHandle = storeHandle(idHandleResult);
+    const { handleId: idHandle } = await storeHandle(idHandleResult);
 
     const tool = new ExecuteQueryV2(
       undefined as never,
@@ -89,7 +89,7 @@ describe('ExecuteQueryV2 — FROM handle_xyz (real handle tables)', () => {
       rows: [{ id: 1, amount: 10 }, { id: 2, amount: 30 }, { id: 3, amount: 20 }],
       finalQuery: '',
     };
-    const h = storeHandle(handleResult);
+    const { handleId: h } = await storeHandle(handleResult);
 
     const tool = new ExecuteQueryV2(
       undefined as never,
@@ -134,7 +134,7 @@ describe('ExecuteQueryV2 — FROM handle_xyz (real handle tables)', () => {
   }, 20000);
 
   it('errors clearly when a handle is referenced on a non-SQL connection', async () => {
-    const h = storeHandle({
+    const { handleId: h } = await storeHandle({
       columns: ['id'], types: ['BIGINT'], rows: [{ id: 1 }], finalQuery: '',
     });
 

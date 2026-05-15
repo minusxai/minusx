@@ -16,11 +16,7 @@ import type { NodeConnector } from '@/lib/connections/base';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 import { TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import {
-  buildPromptPassContext,
-  parsePromptPassResponse,
-  buildPromptPassPreviews,
-  pickPromptPassInfo,
-  extractText,
+  runPromptPassFree,
   type PromptPassEntry,
   type PromptPassResult,
 } from './prompt-pass';
@@ -58,7 +54,9 @@ export abstract class V2DataTool<P extends TSchema, D = unknown>
   /**
    * Lighter-model "+prompt" pass. Reads `this.context` for grounding
    * (`contextDocs`, `originalMessage`), `this.orchestrator` for the LLM
-   * call, and `this.id` for log parenthood — no per-call plumbing.
+   * call, and `this.id` for log parenthood — no per-call plumbing. Thin
+   * wrapper over the orchestrator-free `runPromptPassFree`; the catalog
+   * builder uses the same helper with its own stateless `callLLM`.
    */
   protected async runPromptPass(
     entries: PromptPassEntry[],
@@ -66,14 +64,13 @@ export abstract class V2DataTool<P extends TSchema, D = unknown>
     model: Model<Api>,
     maxChars: number = TOOL_MAX_LIMIT_CHARS,
   ): Promise<PromptPassResult> {
-    const llmCtx = buildPromptPassContext(entries, prompt, this.context);
-    const text = extractText(
-      await this.orchestrator.callLLM(model, llmCtx, this.id, { maxTokens: 4096 }),
+    return runPromptPassFree(
+      entries,
+      prompt,
+      model,
+      this.context,
+      (m, ctx) => this.orchestrator.callLLM(m, ctx, this.id, { maxTokens: 4096 }),
+      maxChars,
     );
-    const parsed = parsePromptPassResponse(text);
-    return {
-      previews: buildPromptPassPreviews(entries, parsed, maxChars),
-      info: pickPromptPassInfo(parsed, text),
-    };
   }
 }

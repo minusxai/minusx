@@ -44,6 +44,16 @@ interface QueryResultEntry {
   handle?: string;
   stats?: ResultStats;
   error?: string;
+  /**
+   * Set when the result couldn't be registered as a queryable DuckDB
+   * table (most often: source query returned duplicate column names; also
+   * type-mapping issues, oversized values, etc.). When present, `handle`
+   * is omitted — `FROM <handle>` won't work — but `preview` and `stats`
+   * are still populated so the agent has the data. The agent can fix
+   * their source query (e.g. give a duplicate column a distinct alias)
+   * and re-run if they need handle-based joins.
+   */
+  handle_error?: string;
 }
 
 interface ExecuteQueryDetails {
@@ -61,6 +71,7 @@ FEATURES:
 - Handle references (FROM handle_xyz): in-engine join — **only works when the query's connection is duckdb or benchmark-sqlite** (both share one in-memory DuckDB instance where handle tables live). Scales to handles of any size with no inlining.
 - Sequential mode (sequential=true): queries run in order, $label.column references in later queries expand into the SQL/JSON as a literal list/JSON array. The **universal** cross-connection mechanism — works SQL→SQL across engines, SQL→Mongo, etc. Prefer FROM handle_xyz when both ends are duckdb/sqlite.
 - Per-query errors: a failing query returns {error} in its slot without failing the batch
+- Per-query handle errors: if the result can't be stored as a SQL table (e.g. your source query produced duplicate output column names like \`SELECT MIN(a) AS min, MIN(b) AS min\`), the slot contains {preview, stats, handle_error} — you still get the data, but \`FROM <handle>\` won't work. Give the duplicate columns distinct aliases and re-run if you need handle-based joins.
 - Prompt: if provided, the lighter model re-ranks each result's preview rows and returns a single cross-result info summary
 - Timeout (seconds, default 60, max 300): per-query cancellation budget; bump UP FRONT for queries that scan large tables — don't eat a default kill then retry
 
@@ -179,7 +190,12 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
           recordSessionLabel(spec.label, result.rows);
         }
 
-        const handle = storeHandle(result);
+        // storeHandle awaits the DuckDB registration. If the result can't
+        // be made into a SQL table (most commonly: source query returned
+        // duplicate column names), we surface the error verbatim as
+        // `handle_error` and omit `handle` — preview & stats still ship
+        // so the agent has the data and a clear next step (fix aliases).
+        const stored = await storeHandle(result);
         const stats = computeResultStats(result, Math.min(result.rows.length, 100));
         // Skip the inline compress when a prompt is set — `runPromptPass`
         // produces the re-ranked preview from the raw rows.
@@ -187,7 +203,10 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
           ? undefined
           : compressQueryResult(result, previewMaxChars).data;
 
-        return { entry: { preview, handle, stats }, raw: result, label };
+        const entry: QueryResultEntry = stored.error
+          ? { preview, stats, handle_error: stored.error }
+          : { preview, handle: stored.handleId, stats };
+        return { entry, raw: result, label };
       } catch (err) {
         errorCount++;
         const msg = err instanceof Error ? err.message : String(err);

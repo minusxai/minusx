@@ -10,6 +10,12 @@ import 'server-only';
 import type { AssistantMessage, Context, TextContent } from '@mariozechner/pi-ai';
 import type { QueryResult } from '@/lib/connections/base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import type { Api, Model } from '@/lib/llm/get-model';
+
+/** Stateless LLM-call shape `runPromptPassFree` accepts. The tool-based path
+ *  binds `Orchestrator.callLLM` here; the catalog-build path uses a thinner
+ *  wrapper (no per-agent telemetry plumbing). */
+export type PromptPassCallLLM = (model: Model<Api>, context: Context) => Promise<AssistantMessage>;
 
 // Rows shown to the prompt model per result. The model re-ranks within these;
 // the full result stays addressable via its handle.
@@ -163,4 +169,27 @@ export function buildPromptPassPreviews(
 /** Pick `info` from a parsed response, falling back to the raw text on parse failure. */
 export function pickPromptPassInfo(parsed: ParsedResponse | null, rawText: string): string {
   return parsed && typeof parsed.info === 'string' ? parsed.info : rawText;
+}
+
+/**
+ * Orchestrator-free prompt pass: bundles the pure pieces with a stateless
+ * `callLLM`. Used directly by catalog build (no agent context to read
+ * `this.orchestrator` off) and indirectly by `V2DataTool.runPromptPass`
+ * (which binds `Orchestrator.callLLM` and forwards).
+ */
+export async function runPromptPassFree(
+  entries: PromptPassEntry[],
+  prompt: string,
+  model: Model<Api>,
+  context: PromptPassContext,
+  callLLM: PromptPassCallLLM,
+  maxChars: number = TOOL_MAX_LIMIT_CHARS,
+): Promise<PromptPassResult> {
+  const llmCtx = buildPromptPassContext(entries, prompt, context);
+  const text = extractText(await callLLM(model, llmCtx));
+  const parsed = parsePromptPassResponse(text);
+  return {
+    previews: buildPromptPassPreviews(entries, parsed, maxChars),
+    info: pickPromptPassInfo(parsed, text),
+  };
 }
