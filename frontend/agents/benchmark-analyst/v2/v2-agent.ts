@@ -59,7 +59,7 @@ Query the schema catalog using SQL. Catalog tables:
 - tables: connection_name, schema_name, table_name, row_count
 - columns: connection_name, schema_name, table_name, column_name, data_type
 - indexes: connection_name, schema_name, table_name, index_name, columns, is_unique
-- column_stats: connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, top_values
+- column_stats: connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, min_date, max_date, top_values
 
 Example: SELECT * FROM columns WHERE table_name = 'orders'
 

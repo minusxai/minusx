@@ -1,13 +1,14 @@
 // ExploreV2: Cross-table discovery search
 // "Search when you don't know the table" — lexical matching with optional semantic re-ranking
 
-import { Type, type Tool, type AssistantMessage, type Context, type TextContent } from '@mariozechner/pi-ai';
+import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
+import { runPromptPass } from './prompt-pass';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
 
@@ -151,26 +152,28 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
     };
 
     const handle = storeHandle(result);
-    const compressed = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS);
     const stats = computeResultStats(result, Math.min(result.rows.length, 100));
+    let preview = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
+    let info: string | undefined;
+
+    // With a prompt, the lighter model re-ranks the search hits and writes one
+    // `info` summary (see prompt-pass.ts).
+    if (prompt && result.rows.length > 0) {
+      const pass = await runPromptPass(
+        [{ label: `Search: "${filter.match}"`, result }],
+        prompt,
+        exploreModel,
+        this.orchestrator,
+        this.id,
+      );
+      if (pass.previews[0] !== undefined) preview = pass.previews[0];
+      info = pass.info;
+    }
 
     const response: { results: QueryResultEntry[]; info?: string } = {
-      results: [{ preview: compressed.data, handle, stats }],
+      results: [{ preview, handle, stats }],
+      ...(info !== undefined ? { info } : {}),
     };
-
-    // If prompt provided, call LLM for re-ranking
-    if (prompt && result.rows.length > 0) {
-      const ctx: Context = {
-        systemPrompt: 'You are a data tool. Re-rank or filter the search results based on the user\'s criteria. Return a brief summary of the most relevant findings. Do not re-emit all the data — reference row IDs or summarize patterns.',
-        messages: [
-          { role: 'user', content: `Search results for "${filter.match}":\n${compressed.data}\n\n## Task\n${prompt}`, timestamp: Date.now() },
-        ],
-        tools: [],
-      };
-
-      const msg = await this.orchestrator.callLLM(exploreModel, ctx, this.id, { maxTokens: 4096 });
-      response.info = extractText(msg);
-    }
 
     return {
       content: [{ type: 'text', text: JSON.stringify(response) }],
@@ -303,12 +306,4 @@ If prompt is provided, an LLM re-ranks results semantically (e.g., "rank by rele
       }
     }
   }
-}
-
-function extractText(msg: AssistantMessage): string {
-  return msg.content
-    .filter((c): c is TextContent => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n')
-    .trim();
 }

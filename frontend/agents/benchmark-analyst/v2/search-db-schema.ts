@@ -1,14 +1,15 @@
 // SearchDBSchemaV2: SQL queries against the synthetic catalog
 // Catalog tables: connections, schemas, tables, columns, indexes, column_stats
 
-import { Type, type Tool, type AssistantMessage, type Context, type TextContent } from '@mariozechner/pi-ai';
+import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
-import type { NodeConnector, QueryResult } from '@/lib/connections/base';
-import { buildCatalog, type CatalogTables, type CatalogTable } from './catalog';
+import type { QueryResult } from '@/lib/connections/base';
+import { buildCatalog, type CatalogTables, type CatalogTable, type CatalogConnector } from './catalog';
 import { storeHandle } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
+import { runPromptPass, type PromptPassEntry } from './prompt-pass';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
@@ -55,12 +56,12 @@ async function getOrBuildCatalog(
     return { catalog: catalogCache, conn: catalogConn };
   }
 
-  // Build connectors
-  const connectors = new Map<string, NodeConnector>();
+  // Build connectors (paired with their dialect for profileDatabase dispatch)
+  const connectors = new Map<string, CatalogConnector>();
   for (const entry of connections ?? []) {
     if (!entry.config) continue;
     const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
-    connectors.set(entry.name, c);
+    connectors.set(entry.name, { connector: c, dialect: entry.dialect });
   }
 
   // Build catalog
@@ -117,7 +118,7 @@ CATALOG TABLES:
 - tables: connection_name, schema_name, table_name, row_count
 - columns: connection_name, schema_name, table_name, column_name, data_type
 - indexes: connection_name, schema_name, table_name, index_name, columns, is_unique
-- column_stats: connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, min_length, max_length, avg_length, top_values
+- column_stats: connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, min_date, max_date, top_values
 
 EXAMPLES:
 - List all tables: SELECT * FROM tables
@@ -136,9 +137,13 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
     const { conn } = await getOrBuildCatalog(this.context.connections);
 
     // Execute queries
-    const results: QueryResultEntry[] = [];
+    type Collected = { entry: QueryResultEntry; raw: QueryResult | null; label: string };
 
-    const executeQuery = async (spec: { query: string; label?: string }): Promise<QueryResultEntry> => {
+    const executeQuery = async (
+      spec: { query: string; label?: string },
+      index: number,
+    ): Promise<Collected> => {
+      const label = spec.label ?? `Query ${index + 1}`;
       try {
         const result = await conn.run(spec.query);
         const cc = result.columnCount;
@@ -155,45 +160,40 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
         const compressed = compressQueryResult(queryResult, TOOL_MAX_LIMIT_CHARS);
         const stats = computeResultStats(queryResult, Math.min(rows.length, 100));
 
-        return { preview: compressed.data, handle, stats };
+        return { entry: { preview: compressed.data, handle, stats }, raw: queryResult, label };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return { error: msg };
+        return { entry: { error: msg }, raw: null, label };
       }
     };
 
+    const collected: Collected[] = [];
     if (sequential) {
-      for (const spec of queries) {
-        results.push(await executeQuery(spec));
+      for (let i = 0; i < queries.length; i++) {
+        collected.push(await executeQuery(queries[i], i));
       }
     } else {
-      const promises = queries.map((spec) => executeQuery(spec));
-      results.push(...await Promise.all(promises));
+      collected.push(...await Promise.all(queries.map((spec, i) => executeQuery(spec, i))));
     }
 
-    // Build response
+    const results: QueryResultEntry[] = collected.map((c) => c.entry);
     const response: { results: QueryResultEntry[]; info?: string } = { results };
 
-    // If prompt provided, call LLM for summary
+    // With a prompt, the lighter model re-ranks each preview's rows and writes
+    // one cross-result `info` summary (see prompt-pass.ts).
     if (prompt) {
-      const previewsText = results
-        .map((r, i) => {
-          const label = queries[i].label ?? `Query ${i + 1}`;
-          if (r.error) return `## ${label}\nERROR: ${r.error}`;
-          return `## ${label}\n${r.preview}`;
-        })
-        .join('\n\n');
-
-      const ctx: Context = {
-        systemPrompt: 'You are a data tool. Summarize the catalog query results concisely. Focus on answering the user\'s question. Be factual and brief.',
-        messages: [
-          { role: 'user', content: `${previewsText}\n\n## Task\n${prompt}`, timestamp: Date.now() },
-        ],
-        tools: [],
-      };
-
-      const msg = await this.orchestrator.callLLM(infoModel, ctx, this.id, { maxTokens: 4096 });
-      response.info = extractText(msg);
+      const entries: PromptPassEntry[] = collected.map((c) =>
+        c.raw
+          ? { label: c.label, result: c.raw }
+          : { label: c.label, error: c.entry.error ?? 'query failed' },
+      );
+      const { previews, info } = await runPromptPass(
+        entries, prompt, infoModel, this.orchestrator, this.id,
+      );
+      previews.forEach((p, i) => {
+        if (p !== undefined) results[i].preview = p;
+      });
+      response.info = info;
     }
 
     return {
@@ -202,14 +202,6 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
       details: { catalogBuilt: true, queryCount: queries.length },
     };
   }
-}
-
-function extractText(msg: AssistantMessage): string {
-  return msg.content
-    .filter((c): c is TextContent => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n')
-    .trim();
 }
 
 // Reset catalog cache (for testing)

@@ -19,12 +19,20 @@ export interface CatalogTables {
   column_stats: CatalogTable;
 }
 
+/** A connector plus its dialect — the dialect drives `profileDatabase` dispatch. */
+export interface CatalogConnector {
+  connector: NodeConnector;
+  dialect: string;
+}
+
 /**
  * Build the synthetic catalog from all connectors.
- * Each connector's schema is fetched and optionally enriched via profileDatabase.
+ * Each connector's schema is fetched and optionally enriched via profileDatabase
+ * using that connection's real dialect (so e.g. Mongo connections pass through
+ * rather than having DuckDB-style profiling SQL run against them).
  */
 export async function buildCatalog(
-  connectors: Map<string, NodeConnector>,
+  connectors: Map<string, CatalogConnector>,
 ): Promise<CatalogTables> {
   const connectionsRows: Record<string, unknown>[] = [];
   const schemasRows: Record<string, unknown>[] = [];
@@ -33,7 +41,7 @@ export async function buildCatalog(
   const indexesRows: Record<string, unknown>[] = [];
   const columnStatsRows: Record<string, unknown>[] = [];
 
-  for (const [connName, connector] of connectors) {
+  for (const [connName, { connector, dialect }] of connectors) {
     connectionsRows.push({ connection_name: connName });
 
     let schema: SchemaEntry[];
@@ -53,8 +61,11 @@ export async function buildCatalog(
 
     if (needsEnrichment) {
       try {
+        // `profileDatabase` dispatches on the connector type — pass the real
+        // dialect so SQL profiling strategies only run against SQL connectors
+        // (Mongo etc. fall through to pass-through, no failed queries).
         const profile = await profileDatabase(
-          'duckdb', // Default to duckdb profiling strategy
+          dialect,
           schema,
           async (sql) => connector.query(sql),
         );

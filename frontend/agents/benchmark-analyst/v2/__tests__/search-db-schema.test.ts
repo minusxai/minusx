@@ -12,7 +12,11 @@ const fauxReg = registerFauxProvider({
   models: [{ id: 'stub-v2' }],
 });
 
-vi.mock('../../shared-duckdb', () => ({
+// Partial mock: only the connector factory is faked — the handle-table
+// helpers stay real so `storeHandle` / `clearHandles` exercise the real
+// shared DuckDB instance.
+vi.mock('../../shared-duckdb', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../shared-duckdb')>()),
   getOrCreateBenchmarkConnector: vi.fn(async () => ({
     getSchema: vi.fn(async () => [
       {
@@ -227,6 +231,36 @@ describe('SearchDBSchemaV2', () => {
       expect(response.isError).toBe(false);
       const content = JSON.parse((response.content[0] as TextContent).text);
       expect(content.info).toBe(infoText);
+    });
+
+    it('re-ranks the catalog-result preview when the prompt model returns rerankedIndices', async () => {
+      // The mock schema has 2 tables (users, orders). `SELECT * FROM tables
+      // ORDER BY table_name` gives deterministic row order: [orders, users].
+      // rerankedIndices [1,0] → preview rows in [users, orders] order.
+      fauxReg.setResponses([
+        fauxAssistantMessage(
+          '{"results":[{"rerankedIndices":[1,0]}],"info":"users first"}',
+          { stopReason: 'stop' },
+        ),
+      ]);
+
+      const orch = new Orchestrator([SearchDBSchemaV2]);
+      const tool = new SearchDBSchemaV2(
+        orch,
+        {
+          queries: [{ query: 'SELECT table_name FROM tables ORDER BY table_name' }],
+          prompt: 'rank by interest',
+        },
+        CTX,
+        'test-prompt-rerank',
+      );
+
+      const response = await tool.run();
+      const content = JSON.parse((response.content[0] as TextContent).text);
+
+      expect(content.info).toBe('users first');
+      const preview = content.results[0].preview as string;
+      expect(preview.indexOf('users')).toBeLessThan(preview.indexOf('orders'));
     });
 
     it('omits info when no prompt is provided', async () => {

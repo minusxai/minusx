@@ -20,7 +20,12 @@ const mockQuery = vi.fn(async (): Promise<QueryResult> => ({
   finalQuery: '',
 }));
 
-vi.mock('../../shared-duckdb', () => ({
+// Partial mock: only the connector factory is faked — the handle-table
+// helpers stay real so `storeHandle` / `clearHandles` exercise the real
+// shared DuckDB instance. (Real `FROM handle_xyz` joins against live data are
+// covered by execute-query.handle-tables.test.ts, which uses a real connector.)
+vi.mock('../../shared-duckdb', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../shared-duckdb')>()),
   getOrCreateBenchmarkConnector: vi.fn(async () => ({
     query: mockQuery,
     getSchema: vi.fn(async () => []),
@@ -194,40 +199,10 @@ describe('ExecuteQueryV2', () => {
     });
   });
 
-  describe('FROM handle_xyz (handles as queryable tables)', () => {
-    it('allows querying against stored handles', async () => {
-      const existingResult: QueryResult = {
-        columns: ['id', 'value'],
-        types: ['INT', 'INT'],
-        rows: [{ id: 1, value: 100 }, { id: 2, value: 200 }],
-        finalQuery: '',
-      };
-      const existingHandle = storeHandle(existingResult);
-
-      mockQuery.mockResolvedValueOnce({
-        columns: ['id'],
-        types: ['INT'],
-        rows: [{ id: 1 }],
-        finalQuery: '',
-      });
-
-      const orch = new Orchestrator([ExecuteQueryV2]);
-      const tool = new ExecuteQueryV2(
-        orch,
-        {
-          queries: [
-            { connection: 'orders_db', query: `SELECT o.id FROM orders o JOIN ${existingHandle} h ON o.id = h.id` },
-          ],
-        },
-        CTX,
-        'test-handle-join',
-      );
-
-      const response = await tool.run();
-
-      expect(response.isError).toBe(false);
-    });
-  });
+  // Real `FROM handle_xyz` join coverage lives in
+  // execute-query.handle-tables.test.ts — that test uses a real sqlite
+  // connector so the handle actually resolves as a table. A mocked connector
+  // here can't verify it (mockQuery ignores the SQL).
 
   describe('per-query errors', () => {
     it('returns error in result slot without failing entire batch', async () => {
@@ -303,6 +278,41 @@ describe('ExecuteQueryV2', () => {
       expect(response.isError).toBe(false);
       const content = JSON.parse((response.content[0] as TextContent).text);
       expect(content.info).toBe('Summary: 2 results found.');
+    });
+
+    it('re-ranks each preview when the prompt model returns rerankedIndices', async () => {
+      mockQuery.mockResolvedValue({
+        columns: ['name'],
+        types: ['VARCHAR'],
+        rows: [{ name: 'alpha' }, { name: 'beta' }, { name: 'gamma' }],
+        finalQuery: '',
+      });
+      fauxReg.setResponses([
+        fauxAssistantMessage(
+          '{"results":[{"rerankedIndices":[2,0,1]}],"info":"ranked by relevance"}',
+          { stopReason: 'stop' },
+        ),
+      ]);
+
+      const orch = new Orchestrator([ExecuteQueryV2]);
+      const tool = new ExecuteQueryV2(
+        orch,
+        {
+          queries: [{ connection: 'orders_db', query: 'SELECT name FROM t', label: 'q' }],
+          prompt: 'rank them',
+        },
+        CTX,
+        'test-prompt-rerank',
+      );
+
+      const response = await tool.run();
+      const content = JSON.parse((response.content[0] as TextContent).text);
+
+      expect(content.info).toBe('ranked by relevance');
+      const preview = content.results[0].preview as string;
+      // Order in the preview reflects the model's rerankedIndices [2,0,1].
+      expect(preview.indexOf('gamma')).toBeLessThan(preview.indexOf('alpha'));
+      expect(preview.indexOf('alpha')).toBeLessThan(preview.indexOf('beta'));
     });
   });
 

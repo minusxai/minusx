@@ -23,7 +23,11 @@ const mockQuery = vi.fn(async (): Promise<QueryResult> => ({
   finalQuery: '',
 }));
 
-vi.mock('../../shared-duckdb', () => ({
+// Partial mock: only the connector factory is faked — the handle-table
+// helpers (registerHandleTable/queryHandleTables/dropHandleTables) stay real
+// so `storeHandle` / `clearHandles` exercise the real shared DuckDB instance.
+vi.mock('../../shared-duckdb', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../shared-duckdb')>()),
   getOrCreateBenchmarkConnector: vi.fn(async () => ({
     query: mockQuery,
     getSchema: vi.fn(async () => [
@@ -234,6 +238,45 @@ describe('ExploreV2', () => {
       expect(response.isError).toBe(false);
       const content = JSON.parse((response.content[0] as TextContent).text);
       expect(content.info).toContain('Re-ranked');
+    });
+
+    it('reorders the search-result preview when the prompt model returns rerankedIndices', async () => {
+      // Scope to one text column so `searchColumn` is called once and the
+      // result has exactly the mockQuery rows (no union duplication).
+      mockQuery.mockResolvedValueOnce({
+        columns: ['id', 'matched_text', 'source', 'score'],
+        types: ['INTEGER', 'VARCHAR', 'VARCHAR', 'DOUBLE'],
+        rows: [
+          { id: 1, matched_text: 'solar-cell research', source: 'products.description', score: 0.95 },
+          { id: 2, matched_text: 'renewable wind farm', source: 'products.description', score: 0.90 },
+        ],
+        finalQuery: '',
+      });
+      fauxReg.setResponses([
+        fauxAssistantMessage(
+          '{"results":[{"rerankedIndices":[1,0]}],"info":"reranked by relevance"}',
+          { stopReason: 'stop' },
+        ),
+      ]);
+
+      const orch = new Orchestrator([ExploreV2]);
+      const tool = new ExploreV2(
+        orch,
+        {
+          filter: { connection: 'main_db', table: 'products', columns: ['description'], match: 'energy' },
+          prompt: 'Rank by relevance to wind energy.',
+        },
+        CTX,
+        'test-rerank-rows',
+      );
+
+      const response = await tool.run();
+      const content = JSON.parse((response.content[0] as TextContent).text);
+
+      expect(content.info).toBe('reranked by relevance');
+      const preview = content.results[0].preview as string;
+      // `[1,0]` puts the renewable row before the solar row.
+      expect(preview.indexOf('renewable')).toBeLessThan(preview.indexOf('solar'));
     });
 
     it('skips LLM call when no prompt provided', async () => {

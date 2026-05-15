@@ -1,14 +1,15 @@
 // ExecuteQueryV2: SQL/Mongo queries against data connections
 // Supports cross-connection queries, sequential label interpolation, handles-as-tables
 
-import { Type, type Tool, type AssistantMessage, type Context, type TextContent } from '@mariozechner/pi-ai';
+import { Type, type Tool } from '@mariozechner/pi-ai';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
-import { storeHandle, fetchHandle, queryHandle } from './handle-store';
+import { storeHandle, qualifyHandleRefs } from './handle-store';
 import { computeResultStats, type ResultStats } from './result-stats';
 import { interpolateRefs, interpolateMongoRefs } from './query-refs';
+import { runPromptPass, type PromptPassEntry } from './prompt-pass';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getModel, type Api, type Model } from '@/lib/llm/get-model';
@@ -98,17 +99,23 @@ $label.column references expand to JSON arrays for use with $in.`,
 
     await this.initConnectors();
 
-    const results: QueryResultEntry[] = [];
     const labeledResults = new Map<string, Record<string, unknown>[]>();
     let errorCount = 0;
+
+    type Collected = { entry: QueryResultEntry; raw: QueryResult | null; label: string };
 
     const executeQuery = async (
       spec: { connection: string; query: string; label?: string },
       index: number,
-    ): Promise<QueryResultEntry> => {
+    ): Promise<Collected> => {
+      const label = spec.label ?? `Query ${index + 1}`;
       const connector = this.connectors.get(spec.connection);
       if (!connector) {
-        return { error: `Connection '${spec.connection}' not found. Available: ${Array.from(this.connectors.keys()).join(', ')}` };
+        return {
+          entry: { error: `Connection '${spec.connection}' not found. Available: ${Array.from(this.connectors.keys()).join(', ')}` },
+          raw: null,
+          label,
+        };
       }
 
       const dialect = this.dialects.get(spec.connection) ?? 'duckdb';
@@ -118,11 +125,15 @@ $label.column references expand to JSON arrays for use with $in.`,
       if (sequential && index > 0) {
         const hasRef = /\$[a-zA-Z_]\w*\.\w+/.test(spec.query);
         if (!hasRef) {
-          return { error: `Query ${index + 1} must reference an earlier result via $label.column in sequential mode. Example: WHERE id IN ($prev.id)` };
+          return {
+            entry: { error: `Query ${index + 1} must reference an earlier result via $label.column in sequential mode. Example: WHERE id IN ($prev.id)` },
+            raw: null,
+            label,
+          };
         }
       }
 
-      // Interpolate references
+      // Interpolate $label.column references (sequential mode)
       let interpolatedQuery = spec.query;
       if (sequential && labeledResults.size > 0) {
         interpolatedQuery = isMongo
@@ -130,19 +141,34 @@ $label.column references expand to JSON arrays for use with $in.`,
           : interpolateRefs(spec.query, labeledResults);
       }
 
-      // Check for handle table references and expand them
-      // Handle references like FROM handle_xyz are handled by the connector via handle tables
-      // For now, we rely on the query containing handle references that the connector resolves
-
       try {
-        // Enforce query limit (skip for Mongo)
+        // Qualify `FROM handle_xyz` references to the shared `memory` catalog
+        // so they resolve as real tables (handle tables and the ATTACHed
+        // dataset catalogs share one DuckDB instance). Handle tables are a
+        // SQL-only feature — guard non-SQL connections.
+        const { sql: qualifiedQuery, referencedHandles } =
+          await qualifyHandleRefs(interpolatedQuery);
+        if (
+          referencedHandles.length > 0 &&
+          dialect !== 'duckdb' && dialect !== 'sqlite'
+        ) {
+          return {
+            entry: {
+              error: `Handle table references (FROM handle_xyz) require a duckdb or sqlite connection; '${spec.connection}' is ${dialect}. Re-run the query on a SQL connection, or read the handle with fetchHandle.`,
+            },
+            raw: null,
+            label,
+          };
+        }
+
+        // Enforce query limit (skip for Mongo — caps live in MongoConnector)
         const finalQuery = isMongo
           ? interpolatedQuery
-          : await enforceQueryLimit(interpolatedQuery, { dialect });
+          : await enforceQueryLimit(qualifiedQuery, { dialect });
 
         const result = await connector.query(finalQuery);
 
-        // Store with label if provided
+        // Store under its label for sequential $label.column references
         if (spec.label) {
           labeledResults.set(spec.label, result.rows);
         }
@@ -151,46 +177,41 @@ $label.column references expand to JSON arrays for use with $in.`,
         const compressed = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS);
         const stats = computeResultStats(result, Math.min(result.rows.length, 100));
 
-        return { preview: compressed.data, handle, stats };
+        return { entry: { preview: compressed.data, handle, stats }, raw: result, label };
       } catch (err) {
         errorCount++;
         const msg = err instanceof Error ? err.message : String(err);
-        return { error: msg };
+        return { entry: { error: msg }, raw: null, label };
       }
     };
 
+    const collected: Collected[] = [];
     if (sequential) {
       for (let i = 0; i < queries.length; i++) {
-        results.push(await executeQuery(queries[i], i));
+        collected.push(await executeQuery(queries[i], i));
       }
     } else {
-      const promises = queries.map((spec, i) => executeQuery(spec, i));
-      results.push(...await Promise.all(promises));
+      collected.push(...await Promise.all(queries.map((spec, i) => executeQuery(spec, i))));
     }
 
-    // Build response
+    const results: QueryResultEntry[] = collected.map((c) => c.entry);
     const response: { results: QueryResultEntry[]; info?: string } = { results };
 
-    // If prompt provided, call LLM for summary
+    // With a prompt, the lighter model re-ranks each preview's rows and writes
+    // one cross-result `info` summary (see prompt-pass.ts).
     if (prompt) {
-      const previewsText = results
-        .map((r, i) => {
-          const label = queries[i].label ?? `Query ${i + 1}`;
-          if (r.error) return `## ${label}\nERROR: ${r.error}`;
-          return `## ${label}\n${r.preview}\nStats: ${JSON.stringify(r.stats)}`;
-        })
-        .join('\n\n');
-
-      const ctx: Context = {
-        systemPrompt: 'You are a data tool. Analyze the query results and answer the user\'s question concisely. Be factual and brief. Do not re-emit row data — summarize or reference handles instead.',
-        messages: [
-          { role: 'user', content: `${previewsText}\n\n## Task\n${prompt}`, timestamp: Date.now() },
-        ],
-        tools: [],
-      };
-
-      const msg = await this.orchestrator.callLLM(infoModel, ctx, this.id, { maxTokens: 4096 });
-      response.info = extractText(msg);
+      const entries: PromptPassEntry[] = collected.map((c) =>
+        c.raw
+          ? { label: c.label, result: c.raw }
+          : { label: c.label, error: c.entry.error ?? 'query failed' },
+      );
+      const { previews, info } = await runPromptPass(
+        entries, prompt, infoModel, this.orchestrator, this.id,
+      );
+      previews.forEach((p, i) => {
+        if (p !== undefined) results[i].preview = p;
+      });
+      response.info = info;
     }
 
     return {
@@ -199,12 +220,4 @@ $label.column references expand to JSON arrays for use with $in.`,
       details: { queryCount: queries.length, errors: errorCount },
     };
   }
-}
-
-function extractText(msg: AssistantMessage): string {
-  return msg.content
-    .filter((c): c is TextContent => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n')
-    .trim();
 }

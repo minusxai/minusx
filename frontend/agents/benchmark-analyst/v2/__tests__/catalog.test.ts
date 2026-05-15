@@ -1,17 +1,20 @@
 // Tests for buildCatalog: creates the 6 synthetic catalog tables from connection schemas
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SchemaEntry, NodeConnector, QueryResult } from '@/lib/connections/base';
-import { buildCatalog, type CatalogTables } from '../catalog';
+import { buildCatalog, type CatalogTables, type CatalogConnector } from '../catalog';
 
-const mockConnector = (
+const mockEntry = (
   name: string,
   schema: SchemaEntry[],
-): NodeConnector =>
-  ({
+  dialect = 'duckdb',
+): CatalogConnector => ({
+  connector: ({
     name,
     getSchema: vi.fn(async () => schema),
     query: vi.fn(async () => ({ columns: [], types: [], rows: [], finalQuery: '' })),
-  }) as unknown as NodeConnector;
+  }) as unknown as NodeConnector,
+  dialect,
+});
 
 const SIMPLE_SCHEMA: SchemaEntry[] = [
   {
@@ -44,7 +47,7 @@ const SIMPLE_SCHEMA: SchemaEntry[] = [
 describe('buildCatalog', () => {
   describe('table structure', () => {
     it('produces all 6 catalog tables', async () => {
-      const connectors = new Map([['db1', mockConnector('db1', SIMPLE_SCHEMA)]]);
+      const connectors = new Map([['db1', mockEntry('db1', SIMPLE_SCHEMA)]]);
 
       const catalog = await buildCatalog(connectors);
 
@@ -58,8 +61,8 @@ describe('buildCatalog', () => {
 
     it('connections table has one row per connector', async () => {
       const connectors = new Map([
-        ['db1', mockConnector('db1', SIMPLE_SCHEMA)],
-        ['db2', mockConnector('db2', [])],
+        ['db1', mockEntry('db1', SIMPLE_SCHEMA)],
+        ['db2', mockEntry('db2', [])],
       ]);
 
       const catalog = await buildCatalog(connectors);
@@ -71,8 +74,8 @@ describe('buildCatalog', () => {
     it('schemas table has one row per schema across all connections', async () => {
       const schema2: SchemaEntry[] = [{ schema: 'analytics', tables: [] }];
       const connectors = new Map([
-        ['db1', mockConnector('db1', SIMPLE_SCHEMA)],
-        ['db2', mockConnector('db2', schema2)],
+        ['db1', mockEntry('db1', SIMPLE_SCHEMA)],
+        ['db2', mockEntry('db2', schema2)],
       ]);
 
       const catalog = await buildCatalog(connectors);
@@ -83,7 +86,7 @@ describe('buildCatalog', () => {
     });
 
     it('tables table has one row per table with row_count if available', async () => {
-      const connectors = new Map([['db1', mockConnector('db1', SIMPLE_SCHEMA)]]);
+      const connectors = new Map([['db1', mockEntry('db1', SIMPLE_SCHEMA)]]);
 
       const catalog = await buildCatalog(connectors);
 
@@ -94,7 +97,7 @@ describe('buildCatalog', () => {
     });
 
     it('columns table has one row per column with type', async () => {
-      const connectors = new Map([['db1', mockConnector('db1', SIMPLE_SCHEMA)]]);
+      const connectors = new Map([['db1', mockEntry('db1', SIMPLE_SCHEMA)]]);
 
       const catalog = await buildCatalog(connectors);
 
@@ -106,7 +109,7 @@ describe('buildCatalog', () => {
     });
 
     it('indexes table has one row per index', async () => {
-      const connectors = new Map([['db1', mockConnector('db1', SIMPLE_SCHEMA)]]);
+      const connectors = new Map([['db1', mockEntry('db1', SIMPLE_SCHEMA)]]);
 
       const catalog = await buildCatalog(connectors);
 
@@ -117,7 +120,7 @@ describe('buildCatalog', () => {
     });
 
     it('column_stats table contains stats from column meta', async () => {
-      const connectors = new Map([['db1', mockConnector('db1', SIMPLE_SCHEMA)]]);
+      const connectors = new Map([['db1', mockEntry('db1', SIMPLE_SCHEMA)]]);
 
       const catalog = await buildCatalog(connectors);
 
@@ -171,11 +174,37 @@ describe('buildCatalog', () => {
         }),
       } as unknown as NodeConnector;
 
-      const connectors = new Map([['bare_db', connector]]);
+      const connectors = new Map<string, CatalogConnector>([
+        ['bare_db', { connector, dialect: 'duckdb' }],
+      ]);
 
       const catalog = await buildCatalog(connectors);
 
       expect(catalog.column_stats.rows.length).toBeGreaterThan(0);
+    });
+
+    it('uses the connection dialect for profiling — no profiling SQL on a non-SQL (mongo) connection', async () => {
+      const bareSchema: SchemaEntry[] = [
+        {
+          schema: 'main',
+          tables: [{ table: 'docs', columns: [{ name: 'id', type: 'INTEGER' }] }],
+        },
+      ];
+      const query = vi.fn(async () => ({ columns: [], types: [], rows: [], finalQuery: '' }));
+      const connector = {
+        name: 'mongo_db',
+        getSchema: vi.fn(async () => bareSchema),
+        query,
+      } as unknown as NodeConnector;
+
+      // dialect 'mongo' → profileDatabase falls through to pass-through; it must
+      // NOT run DuckDB-style profiling SQL against the mongo connector.
+      const connectors = new Map<string, CatalogConnector>([
+        ['mongo_db', { connector, dialect: 'mongo' }],
+      ]);
+      await buildCatalog(connectors);
+
+      expect(query).not.toHaveBeenCalled();
     });
   });
 
@@ -189,7 +218,7 @@ describe('buildCatalog', () => {
     });
 
     it('handles connector with empty schema', async () => {
-      const connectors = new Map([['empty', mockConnector('empty', [])]]);
+      const connectors = new Map([['empty', mockEntry('empty', [])]]);
 
       const catalog = await buildCatalog(connectors);
 
@@ -207,7 +236,7 @@ describe('buildCatalog', () => {
           ],
         },
       ];
-      const connectors = new Map([['db', mockConnector('db', schemaNoIndexes)]]);
+      const connectors = new Map([['db', mockEntry('db', schemaNoIndexes)]]);
 
       const catalog = await buildCatalog(connectors);
 
