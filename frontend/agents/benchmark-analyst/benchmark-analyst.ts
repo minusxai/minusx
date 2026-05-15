@@ -95,6 +95,7 @@ ${JSON.stringify(visibleConnections)}
 ## Response Format [EXTREMELY IMPORTANT]:
 - This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.
 - Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary.
+- If any specific names, terms are asked, use *exact* and *full* names; DO NOT get lazy and use abbreviations or short forms. The eval function does exact string match mostly.
 - Format:
     TL;DR: <your concise answer to the question, based on the data and your analysis>
     Analysis: <a concise analysis at the top presenting all important info first, followed by reasoning of how you arrived at the answer.>
