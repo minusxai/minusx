@@ -90,6 +90,10 @@ export interface BenchmarkRunConfig {
    *  the whole row is dropped and retried on the next invocation.
    *  Default 1 (emits `log`). */
   timesRun?: number;
+  /** Optional set of 0-based row indices to run. When set, only rows
+   *  whose index is in this set are executed; all others are skipped.
+   *  Useful for debugging a single question: `DAB_ROW_INDEX=3`. */
+  rowIndices?: Set<number>;
 }
 
 export interface BenchmarkResult {
@@ -297,9 +301,11 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
   const timesRun = Math.max(1, Math.floor(config.timesRun ?? 1));
   const total = inputRows.length;
+  const rowIndices = config.rowIndices;
   const remainingRows = inputRows
     .map((row, i) => ({ row, i }))
-    .filter(({ i }) => !completedIndices.has(i));
+    .filter(({ i }) => !completedIndices.has(i))
+    .filter(({ i }) => !rowIndices || rowIndices.has(i));
   const skipped = total - remainingRows.length;
 
   const resumeNote = config.rerun
@@ -308,7 +314,8 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       ? `${c.dim}resume: skipping ${skipped}/${total} already-done${c.reset}`
       : null;
   const timesRunNote = timesRun > 1 ? `, timesRun=${timesRun}` : '';
-  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${total} rows${timesRunNote}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
+  const rowCountNote = rowIndices ? `${remainingRows.length}/${total} rows (filtered)` : `${total} rows`;
+  console.log(`\n  ${c.bold}${label}${c.reset}  ${c.dim}${rowCountNote}${timesRunNote}${c.reset}${resumeNote ? `  ${resumeNote}` : ''}`);
   console.log(`  ${c.dim}${outputPath}${c.reset}\n`);
 
   // Tracking
