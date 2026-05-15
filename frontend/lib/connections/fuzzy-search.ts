@@ -27,7 +27,8 @@ export interface FuzzyMatchResult {
 
 interface FuzzyMatchParams {
   table: string;
-  column: string;
+  /** Columns to search. All are searched in a single query with OR conditions. */
+  columns: string[];
   searchTerm: string;
   schema?: string;
   limit?: number;
@@ -41,7 +42,7 @@ type RawFuzzyMatchResult = Omit<FuzzyMatchResult, 'allEmpty'>;
 /** Params after defaults are applied (limit resolved, schema still optional). */
 interface ResolvedParams {
   table: string;
-  column: string;
+  columns: string[];
   searchTerm: string;
   schema?: string;
   limit: number;
@@ -65,13 +66,16 @@ function escapeLiteral(value: string): string {
   return value.replace(/'/g, "''").slice(0, 200);
 }
 
-/** Extract matches from query result rows, including any extra returnColumns. */
-function rowsToMatches(rows: Record<string, unknown>[], returnColumns: string[] = []): FuzzyMatchMatch[] {
+/** Extract matches from query result rows, including searched columns and extra returnColumns. */
+function rowsToMatches(rows: Record<string, unknown>[], columns: string[], returnColumns: string[] = []): FuzzyMatchMatch[] {
   return rows.map(r => {
     const match: FuzzyMatchMatch = {
-      value: String(r['value'] ?? ''),
+      value: String(r['value'] ?? r[columns[0]] ?? ''),
       similarity: Number(r['similarity'] ?? 1),
     };
+    for (const col of columns) {
+      match[col] = r[col] ?? null;
+    }
     for (const col of returnColumns) {
       match[col] = r[col] ?? null;
     }
@@ -85,19 +89,35 @@ function extraSelectCols(returnColumns: string[], quoteFn: (name: string) => str
   return ', ' + returnColumns.map(c => quoteFn(c)).join(', ');
 }
 
+/** Build SELECT fragment for all searched columns. */
+function searchedSelectCols(columns: string[], quoteFn: (name: string) => string = escapeIdent): string {
+  return columns.map(c => quoteFn(c)).join(', ');
+}
+
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
 
 async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
-  const col = escapeIdent(p.column);
-  const castCol = `CAST(${col} AS VARCHAR)`;
   const extra = extraSelectCols(p.returnColumns);
-  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
+  const searched = searchedSelectCols(p.columns);
+  const fromTable = qualifiedTable(p.schema, p.table);
+  const term = escapeLiteral(p.searchTerm);
+
+  // Per-column similarity expressions
+  const simExprs = p.columns.map(col => {
+    const castCol = `CAST(${escapeIdent(col)} AS VARCHAR)`;
+    return `jaro_winkler_similarity(lower(${castCol}), lower('${term}'))`;
+  });
+  const greatestSim = simExprs.length === 1 ? simExprs[0] : `GREATEST(${simExprs.join(', ')})`;
+
+  // WHERE: any column exceeds threshold
+  const whereConditions = p.columns.map((col, i) =>
+    `(${escapeIdent(col)} IS NOT NULL AND ${simExprs[i]} > 0.8)`,
+  );
+
   const sql = `
-    SELECT ${distinct}${castCol} AS value,
-           jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity${extra}
-    FROM ${qualifiedTable(p.schema, p.table)}
-    WHERE ${col} IS NOT NULL
-      AND jaro_winkler_similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.8
+    SELECT ${searched}, ${greatestSim} AS similarity${extra}
+    FROM ${fromTable}
+    WHERE ${whereConditions.join('\n      OR ')}
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
@@ -107,7 +127,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   ]);
   return {
     results: [
-      { matches: rowsToMatches(jaroResult.rows, p.returnColumns), method: 'jaro_winkler', query: sql.trim() },
+      { matches: rowsToMatches(jaroResult.rows, p.columns, p.returnColumns), method: 'jaro_winkler', query: sql.trim() },
       substringEntry,
     ],
     searchTerm: p.searchTerm,
@@ -115,16 +135,25 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
 }
 
 async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
-  const col = escapeIdent(p.column);
-  const castCol = `CAST(${col} AS TEXT)`;
   const extra = extraSelectCols(p.returnColumns);
-  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
+  const searched = searchedSelectCols(p.columns);
+  const fromTable = qualifiedTable(p.schema, p.table);
+  const term = escapeLiteral(p.searchTerm);
+
+  const simExprs = p.columns.map(col => {
+    const castCol = `CAST(${escapeIdent(col)} AS TEXT)`;
+    return `similarity(lower(${castCol}), lower('${term}'))`;
+  });
+  const greatestSim = simExprs.length === 1 ? simExprs[0] : `GREATEST(${simExprs.join(', ')})`;
+
+  const whereConditions = p.columns.map((col, i) =>
+    `(${escapeIdent(col)} IS NOT NULL AND ${simExprs[i]} > 0.3)`,
+  );
+
   const trigramSql = `
-    SELECT ${distinct}${castCol} AS value,
-           similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) AS similarity${extra}
-    FROM ${qualifiedTable(p.schema, p.table)}
-    WHERE ${col} IS NOT NULL
-      AND similarity(lower(${castCol}), lower('${escapeLiteral(p.searchTerm)}')) > 0.3
+    SELECT ${searched}, ${greatestSim} AS similarity${extra}
+    FROM ${fromTable}
+    WHERE ${whereConditions.join('\n      OR ')}
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
@@ -133,7 +162,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   let trigramEntry: FuzzyMatchResultEntry | null = null;
   try {
     const trigramResult = await queryFn(trigramSql);
-    trigramEntry = { matches: rowsToMatches(trigramResult.rows, p.returnColumns), method: 'trigram', query: trigramSql.trim() };
+    trigramEntry = { matches: rowsToMatches(trigramResult.rows, p.columns, p.returnColumns), method: 'trigram', query: trigramSql.trim() };
   } catch {
     // pg_trgm not available — skip trigram
   }
@@ -145,14 +174,24 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
 async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const maxDist = Math.max(Math.floor(p.searchTerm.length / 3), 3);
   const extra = extraSelectCols(p.returnColumns);
-  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
+  const searched = searchedSelectCols(p.columns);
+  const fromTable = qualifiedTable(p.schema, p.table);
+  const term = escapeLiteral(p.searchTerm);
+
+  const simExprs = p.columns.map(col =>
+    `1.0 - CAST(levenshtein_distance(lower(CAST(${escapeIdent(col)} AS VARCHAR)), lower('${term}')) AS DOUBLE)
+                 / GREATEST(length(${escapeIdent(col)}), length('${term}'), 1)`,
+  );
+  const greatestSim = simExprs.length === 1 ? simExprs[0] : `GREATEST(${simExprs.join(', ')})`;
+
+  const whereConditions = p.columns.map(col =>
+    `(${escapeIdent(col)} IS NOT NULL AND levenshtein_distance(lower(CAST(${escapeIdent(col)} AS VARCHAR)), lower('${term}')) <= ${maxDist})`,
+  );
+
   const sql = `
-    SELECT ${distinct}${escapeIdent(p.column)} AS value,
-           1.0 - CAST(levenshtein_distance(lower(CAST(${escapeIdent(p.column)} AS VARCHAR)), lower('${escapeLiteral(p.searchTerm)}')) AS DOUBLE)
-                 / GREATEST(length(${escapeIdent(p.column)}), length('${escapeLiteral(p.searchTerm)}'), 1) AS similarity${extra}
-    FROM ${qualifiedTable(p.schema, p.table)}
-    WHERE ${escapeIdent(p.column)} IS NOT NULL
-      AND levenshtein_distance(lower(CAST(${escapeIdent(p.column)} AS VARCHAR)), lower('${escapeLiteral(p.searchTerm)}')) <= ${maxDist}
+    SELECT ${searched}, ${greatestSim} AS similarity${extra}
+    FROM ${fromTable}
+    WHERE ${whereConditions.join('\n      OR ')}
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
@@ -162,7 +201,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   ]);
   return {
     results: [
-      { matches: rowsToMatches(levenResult.rows, p.returnColumns), method: 'levenshtein', query: sql.trim() },
+      { matches: rowsToMatches(levenResult.rows, p.columns, p.returnColumns), method: 'levenshtein', query: sql.trim() },
       substringEntry,
     ],
     searchTerm: p.searchTerm,
@@ -177,36 +216,41 @@ async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: Q
     : escapeIdent;
 
   const term = escapeLiteral(p.searchTerm).toLowerCase();
-  // Split into words and join with % for flexible matching
   const words = term.split(/\s+/).filter(Boolean);
   const wordPattern = words.length > 1 ? `'%${words.join('%')}%'` : null;
 
-  const conditions = [`LOWER(${q(p.column)}) LIKE '%${term}%'`];
-  if (wordPattern) {
-    conditions.push(`LOWER(${q(p.column)}) LIKE ${wordPattern}`);
-  }
-  // Add per-word matching so partial matches (e.g. "green" from "green energy") are found
-  if (words.length > 1) {
-    for (const word of words) {
-      conditions.push(`LOWER(${q(p.column)}) LIKE '%${word}%'`);
+  // Build OR conditions across all columns
+  const conditions: string[] = [];
+  for (const column of p.columns) {
+    conditions.push(`LOWER(${q(column)}) LIKE '%${term}%'`);
+    if (wordPattern) {
+      conditions.push(`LOWER(${q(column)}) LIKE ${wordPattern}`);
+    }
+    if (words.length > 1) {
+      for (const word of words) {
+        conditions.push(`LOWER(${q(column)}) LIKE '%${word}%'`);
+      }
     }
   }
 
+  // Similarity = best match across columns (ratio of search term length to column value length)
   const termLen = term.length;
-  const lenExpr = `LENGTH(${q(p.column)})`;
+  const simExprs = p.columns.map(column =>
+    `${termLen}.0 / (CASE WHEN LENGTH(${q(column)}) > 0 THEN LENGTH(${q(column)}) ELSE 1 END)`,
+  );
+  const greatestSim = simExprs.length === 1 ? simExprs[0] : `GREATEST(${simExprs.join(', ')})`;
+
+  const searched = searchedSelectCols(p.columns, q);
   const extra = extraSelectCols(p.returnColumns, q);
-  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
   const sql = `
-    SELECT ${distinct}${q(p.column)} AS value,
-           ${termLen}.0 / (CASE WHEN ${lenExpr} > 0 THEN ${lenExpr} ELSE 1 END) AS similarity${extra}
+    SELECT ${searched}, ${greatestSim} AS similarity${extra}
     FROM ${qualifiedTable(p.schema, p.table, q)}
-    WHERE ${q(p.column)} IS NOT NULL
-      AND (${conditions.join(' OR ')})
+    WHERE (${conditions.join(' OR ')})
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
-  return { matches: rowsToMatches(result.rows, p.returnColumns), method: 'substring', query: sql.trim() };
+  return { matches: rowsToMatches(result.rows, p.columns, p.returnColumns), method: 'substring', query: sql.trim() };
 }
 
 /** Escape a string for literal use inside a MongoDB `$regex`. */
@@ -224,27 +268,29 @@ function escapeRegex(value: string): string {
  * `p.table` is the collection name.
  */
 async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
-  const extraProject: Record<string, unknown> = { _id: 0, value: '$_id', similarity: { $literal: 1 } };
-  for (const col of p.returnColumns) {
-    extraProject[col] = `$${col}`;
+  // Build $or match across all columns
+  const orConditions = p.columns.map(column => ({
+    [column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' },
+  }));
+  const matchStage = { $match: orConditions.length === 1 ? orConditions[0] : { $or: orConditions } };
+
+  const projectFields: Record<string, unknown> = { _id: 0, similarity: { $literal: 1 } };
+  for (const col of p.columns) {
+    projectFields[col] = `$${col}`;
   }
-  // When returnColumns requested, skip $group to preserve per-document columns
-  const pipeline = p.returnColumns.length > 0
-    ? [
-        { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
-        { $limit: p.limit },
-        { $project: { _id: 0, value: `$${p.column}`, similarity: { $literal: 1 }, ...Object.fromEntries(p.returnColumns.map(c => [c, `$${c}`])) } },
-      ]
-    : [
-        { $match: { [p.column]: { $regex: escapeRegex(p.searchTerm), $options: 'i' } } },
-        { $group: { _id: `$${p.column}` } },
-        { $limit: p.limit },
-        { $project: { _id: 0, value: '$_id', similarity: { $literal: 1 } } },
-      ];
+  for (const col of p.returnColumns) {
+    projectFields[col] = `$${col}`;
+  }
+
+  const pipeline = [
+    matchStage,
+    { $limit: p.limit },
+    { $project: projectFields },
+  ];
   const query = JSON.stringify({ collection: p.table, pipeline });
   const result = await queryFn(query);
   return {
-    results: [{ matches: rowsToMatches(result.rows, p.returnColumns), method: 'substring', query }],
+    results: [{ matches: rowsToMatches(result.rows, p.columns, p.returnColumns), method: 'substring', query }],
     searchTerm: p.searchTerm,
   };
 }
@@ -253,20 +299,22 @@ async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   const term = escapeLiteral(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
   const extra = extraSelectCols(p.returnColumns, q);
-  const distinct = p.returnColumns.length > 0 ? '' : 'DISTINCT ';
+  const searched = searchedSelectCols(p.columns, q);
+  const fromTable = qualifiedTable(p.schema, p.table, q);
+
+  const whereConditions = p.columns.map(column =>
+    `(${q(column)} IS NOT NULL AND (CONTAINS_SUBSTR(${q(column)}, '${term}') OR LOWER(${q(column)}) LIKE '%${term.toLowerCase()}%'))`,
+  );
 
   const sql = `
-    SELECT ${distinct}${q(p.column)} AS value, 1.0 AS similarity${extra}
-    FROM ${qualifiedTable(p.schema, p.table, q)}
-    WHERE ${q(p.column)} IS NOT NULL
-      AND (CONTAINS_SUBSTR(${q(p.column)}, '${term}')
-           OR LOWER(${q(p.column)}) LIKE '%${term.toLowerCase()}%')
-    ORDER BY ${q(p.column)}
+    SELECT ${searched}, 1.0 AS similarity${extra}
+    FROM ${fromTable}
+    WHERE ${whereConditions.join('\n      OR ')}
     LIMIT ${p.limit}
   `;
   const result = await queryFn(sql);
   return {
-    results: [{ matches: rowsToMatches(result.rows, p.returnColumns), method: 'substring', query: sql.trim() }],
+    results: [{ matches: rowsToMatches(result.rows, p.columns, p.returnColumns), method: 'substring', query: sql.trim() }],
     searchTerm: p.searchTerm,
   };
 }

@@ -356,10 +356,10 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
 const FuzzyMatchParams = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
   table: Type.String({ description: 'Table name to search' }),
-  column: Type.String({ description: 'Text column to search in' }),
+  columns: Type.Array(Type.String(), { description: 'Text/categorical columns to search in. Searches all columns and returns matches grouped by column.' }),
   search_term: Type.String({ description: 'Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases.' }),
   schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
-  limit: Type.Optional(Type.Number({ description: 'Max results to return (default: 10)' })),
+  limit: Type.Optional(Type.Number({ description: 'Max results to return per column (default: 10)' })),
   semantic_expansion: Type.Optional(Type.Boolean({ description: 'Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only.' })),
   return_columns: Type.Optional(Type.Array(Type.String(), { description: 'Additional columns to include in each match result for identification (e.g. ["name", "category", "product_subcategory"]). Without this, only the matched column value and similarity score are returned.' })),
 });
@@ -367,7 +367,7 @@ const FuzzyMatchParams = Type.Object({
 export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalystContext> {
   static readonly schema: Tool<typeof FuzzyMatchParams> = {
     name: 'FuzzyMatch',
-    description: 'Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). Use 1-3 short, specific keywords. Returns similarity-based and substring matches. Use return_columns to include identifying columns (e.g. name, category, product_subcategory) in results — without it, only the matched column value and similarity are returned. When semantic_expansion is enabled (default: true), if no lexical matches are found, the tool automatically finds semantically similar terms in the column and fuzzy-matches those too.',
+    description: 'Match a known term against stored values in one or more text/categorical columns (typo/casing/spacing correction). Use 1-3 short, specific keywords. Searches all specified columns and returns matches grouped by column. Use return_columns to include identifying columns (e.g. name, category) in results. When semantic_expansion is enabled (default: true), if no lexical matches are found for a column, it automatically finds semantically similar terms and retries.',
     parameters: FuzzyMatchParams,
   };
 
@@ -377,11 +377,10 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
   async run(): Promise<ToolResponse> {
     await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
 
-    const { connection, table, column, search_term, schema: schemaName, limit, semantic_expansion, return_columns } = this.parameters;
+    const { connection, table, columns, search_term, schema: schemaName, limit, semantic_expansion, return_columns } = this.parameters;
     const dialect = this.dialects.get(connection) ?? 'duckdb';
     const returnColumns = return_columns ?? [];
 
-    // Validate column category
     const connector = this.connectors.get(connection);
     if (!connector) {
       return {
@@ -390,17 +389,23 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
       };
     }
 
+    // Validate column categories — FuzzyMatch only works on text/categorical columns
     const schemas = await cachedConnectorSchema(connection, connector);
     const targetSchema = schemas.find((s) => s.schema === (schemaName ?? 'main'));
     const targetTable = targetSchema?.tables?.find((t) => t.table === table);
-    const targetColumn = targetTable?.columns?.find((c) => c.name === column);
-    const category = (targetColumn as any)?.meta?.category as string | undefined;
-
-    if (category && category !== 'text' && category !== 'categorical') {
+    const invalidColumns: string[] = [];
+    for (const col of columns) {
+      const targetColumn = targetTable?.columns?.find((c) => c.name === col);
+      const category = (targetColumn as any)?.meta?.category as string | undefined;
+      if (category && category !== 'text' && category !== 'categorical') {
+        invalidColumns.push(`"${col}" (${category})`);
+      }
+    }
+    if (invalidColumns.length > 0) {
       return {
         content: [{ type: 'text', text: JSON.stringify({
           success: false,
-          error: `FuzzyMatch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
+          error: `FuzzyMatch is only for text or categorical columns. Invalid columns: ${invalidColumns.join(', ')}. Use exact filters (=, >, <, BETWEEN) for these columns instead.`,
         }) }],
         isError: true,
       };
@@ -410,17 +415,17 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
 
     try {
       const result = await fuzzyMatch(dialect, queryFn, {
-        table, column, searchTerm: search_term, schema: schemaName, limit, returnColumns,
+        table, columns, searchTerm: search_term, schema: schemaName, limit, returnColumns,
       });
 
-      // Semantic expansion: when lexical matching returns nothing on a non-categorical
-      // column, automatically find semantically similar terms and fuzzy-match those.
+      // Semantic expansion: when lexical matching returns nothing,
+      // automatically find semantically similar terms and fuzzy-match those.
       const shouldExpand = semantic_expansion !== false && result.allEmpty;
       if (shouldExpand) {
-        const expandedTerms = await this.getSemanticTerms(connection, table, column, search_term, schemaName);
+        const expandedTerms = await this.getSemanticTerms(connection, table, columns, search_term, schemaName);
         if (expandedTerms.length > 0) {
           const combinedSearch = expandedTerms.join(' ');
-          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, column, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
+          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, columns, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
           return {
             content: [{ type: 'text', text: JSON.stringify({
               searchTerm: search_term,
@@ -447,28 +452,34 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
   }
 
   /**
-   * Use ExploreDataset to find semantically similar terms in the column.
+   * Use ExploreDataset to find semantically similar terms across columns.
    * Returns a list of individual terms (empty array on failure).
    */
   private async getSemanticTerms(
     connection: string,
     table: string,
-    column: string,
+    columns: string[],
     searchTerm: string,
     schemaName?: string,
   ): Promise<string[]> {
     const q = (name: string) => `"${name.replace(/"/g, '""')}"`;
     const qualTable = schemaName ? `${q(schemaName)}.${q(table)}` : q(table);
 
+    // Sample distinct values from all searched columns
+    const columnUnions = columns.map(col =>
+      `SELECT DISTINCT ${q(col)} AS value FROM ${qualTable} WHERE ${q(col)} IS NOT NULL LIMIT 500`,
+    );
+    const query = columnUnions.length === 1 ? columnUnions[0] + ' LIMIT 1000' : `${columnUnions.join(' UNION ALL ')} LIMIT 1000`;
+
     const explore = new ExploreDataset(
       this.orchestrator,
       {
         queries: [{
           connection,
-          query: `SELECT DISTINCT ${q(column)} AS value FROM ${qualTable} WHERE ${q(column)} IS NOT NULL LIMIT 1000`,
+          query,
           label: 'values',
         }],
-        prompt: `The user searched for "${searchTerm}" but no lexical matches were found in column "${column}". Identify which terms from the column are semantically related to "${searchTerm}" — they may be synonyms, plural or misspelt words, or different terminology. Return ONLY the terms, one per line (each term is just 1-2 words max), no bullets, no numbering, no extra text.`,
+        prompt: `The user searched for "${searchTerm}" but no lexical matches were found in columns [${columns.join(', ')}]. Identify which terms from the data are semantically related to "${searchTerm}" — they may be synonyms, plural or misspelt words, or different terminology. Return ONLY the terms, one per line (each term is just 1-2 words max), no bullets, no numbering, no extra text.`,
       },
       this.context,
       this.id,
