@@ -68,9 +68,7 @@ export class V2BenchmarkAnalystAgent extends BenchmarkAnalystAgent {
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze questions and give specific, accurate answers.
 
 ## MANDATORY ORIENTATION
-Before any ExecuteQuery, run BOTH (one or two SearchDBSchema calls):
-- \`SELECT * FROM sample_rows WHERE table_name IN (...)\` — actual values.
-- \`SELECT * FROM columns / column_stats / indexes WHERE table_name IN (...)\` — structure.
+**ALWAYS run sample_rows AND columns/column_stats/indexes SearchDBSchema queries before ANY ExecuteQuery — no matter how simple the question looks. Skipping this is the #1 cause of wrong answers.**
 
 ## Tools Available
 You have 4 tools: SearchDBSchema, ExecuteQuery, Explore, fetchHandle.
