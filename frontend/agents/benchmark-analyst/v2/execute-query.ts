@@ -5,7 +5,7 @@ import { Type, type Tool } from '@mariozechner/pi-ai';
 import { type ToolResponse } from '@/orchestrator/types';
 import type { QueryResult } from '@/lib/connections/base';
 import { storeHandle, qualifyHandleRefs } from './handle-store';
-import { computeResultStats, type ResultStats } from './result-stats';
+import { computeResultStats } from './result-stats';
 import {
   interpolateRefs,
   interpolateMongoRefs,
@@ -17,6 +17,7 @@ import { V2DataTool, getLighterModel } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { clampQueryTimeoutSeconds } from '../db-tools';
+import type { ResultEntry } from '../result-shapes';
 
 const QuerySpec = Type.Object({
   connection: Type.String({ description: 'Database connection name' }),
@@ -38,23 +39,6 @@ const ExecuteQueryParams = Type.Object({
     description: 'Max characters of inline preview rows per result (default ~10,000). Increase up front (e.g. 30000–50000) only when you genuinely need to see more rows inline in this call. Otherwise prefer the default + `fetchHandle` for pagination.',
   })),
 });
-
-interface QueryResultEntry {
-  preview?: string;
-  handle?: string;
-  stats?: ResultStats;
-  error?: string;
-  /**
-   * Set when the result couldn't be registered as a queryable DuckDB
-   * table (most often: source query returned duplicate column names; also
-   * type-mapping issues, oversized values, etc.). When present, `handle`
-   * is omitted — `FROM <handle>` won't work — but `preview` and `stats`
-   * are still populated so the agent has the data. The agent can fix
-   * their source query (e.g. give a duplicate column a distinct alias)
-   * and re-run if they need handle-based joins.
-   */
-  handle_error?: string;
-}
 
 interface ExecuteQueryDetails {
   queryCount: number;
@@ -112,7 +96,7 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
     const labeledResults = new Map<string, Record<string, unknown>[]>();
     let errorCount = 0;
 
-    type Collected = { entry: QueryResultEntry; raw: QueryResult | null; label: string };
+    type Collected = { entry: ResultEntry; raw: QueryResult | null; label: string };
 
     const executeQuery = async (
       spec: { connection: string; query: string; label?: string },
@@ -203,7 +187,7 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
           ? undefined
           : compressQueryResult(result, previewMaxChars).data;
 
-        const entry: QueryResultEntry = stored.error
+        const entry: ResultEntry = stored.error
           ? { preview, stats, handle_error: stored.error }
           : { preview, handle: stored.handleId, stats };
         return { entry, raw: result, label };
@@ -223,8 +207,8 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
       collected.push(...await Promise.all(queries.map((spec, i) => executeQuery(spec, i))));
     }
 
-    const results: QueryResultEntry[] = collected.map((c) => c.entry);
-    const response: { results: QueryResultEntry[]; info?: string } = { results };
+    const results: ResultEntry[] = collected.map((c) => c.entry);
+    const response: { results: ResultEntry[]; info?: string } = { results };
 
     // With a prompt, the lighter model re-ranks each preview's rows and writes
     // one cross-result `info` summary (see prompt-pass.ts).

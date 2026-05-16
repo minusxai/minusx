@@ -6,10 +6,11 @@ import type { DuckDBConnection } from '@duckdb/node-api';
 import { type ToolResponse } from '@/orchestrator/types';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import { storeHandle } from './handle-store';
-import { computeResultStats, type ResultStats } from './result-stats';
+import { computeResultStats } from './result-stats';
 import { getCatalogStore } from './catalog';
 import { V2DataTool, getLighterModel } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import type { ResultEntry } from '../result-shapes';
 
 const ExploreFilter = Type.Object({
   connection: Type.Optional(Type.String({ description: 'Limit search to this connection' })),
@@ -26,14 +27,6 @@ const ExploreParams = Type.Object({
   prompt: Type.Optional(Type.String({ description: 'Optional: if provided, an LLM re-ranks/filters results semantically' })),
 });
 
-interface QueryResultEntry {
-  preview?: string;
-  handle?: string;
-  stats?: ResultStats;
-  error?: string;
-  /** See ExecuteQueryV2 — set when the result can't be registered as a SQL table. */
-  handle_error?: string;
-}
 
 interface ExploreDetails {
   connectionsSearched: number;
@@ -162,10 +155,10 @@ Examples:
       preview = compressQueryResult(result, TOOL_MAX_LIMIT_CHARS).data;
     }
 
-    const entry: QueryResultEntry = stored.error
+    const entry: ResultEntry = stored.error
       ? { preview, stats, handle_error: stored.error }
       : { preview, handle: stored.handleId, stats };
-    const response: { results: QueryResultEntry[]; info?: string } = {
+    const response: { results: ResultEntry[]; info?: string } = {
       results: [entry],
       ...(info !== undefined ? { info } : {}),
     };
