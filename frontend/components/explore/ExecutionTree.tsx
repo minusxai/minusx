@@ -207,9 +207,9 @@ interface ExecutionTreeProps {
 }
 
 const ZOOM_LEVELS = [
-  { label: '1x', pxPerSec: 3 },
-  { label: '2x', pxPerSec: 6 },
-  { label: '4x', pxPerSec: 12 },
+  { label: '1x', pxPerSec: 6 },
+  { label: '2x', pxPerSec: 12 },
+  { label: '4x', pxPerSec: 24 },
 ] as const;
 
 export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
@@ -285,14 +285,17 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
   const totalMs = globalEnd - globalStart;
   if (totalMs <= 0) return null;
 
-  // Round time markers to nice intervals (30s, 60s, etc.)
-  const niceStep = totalMs > 300000 ? 60000 : totalMs > 120000 ? 30000 : totalMs > 60000 ? 15000 : totalMs > 20000 ? 10000 : 5000;
-  const markers: number[] = [];
-  for (let t = 0; t <= totalMs; t += niceStep) markers.push(t);
-
   // Chart width scales with zoom level
   const pxPerSec = ZOOM_LEVELS[zoomIdx].pxPerSec;
-  const chartMinW = Math.max((totalMs / 1000) * pxPerSec, 600);
+  const chartMinW = (totalMs / 1000) * pxPerSec;
+
+  // Pick time marker step so labels are ~60px apart minimum
+  const MIN_LABEL_GAP_PX = 100;
+  const minStepSec = MIN_LABEL_GAP_PX / pxPerSec;
+  const NICE_STEPS = [5, 10, 15, 30, 60, 120, 300, 600];
+  const niceStepSec = NICE_STEPS.find(s => s >= minStepSec) ?? 600;
+  const markers: number[] = [];
+  for (let t = 0; t <= totalMs; t += niceStepSec * 1000) markers.push(t);
 
   // Count actual tool calls (exclude TalkToUser/agent calls) for display
   const actualToolCallCount = toolCalls.filter(tc => {
@@ -368,7 +371,7 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
 
         {/* Gantt chart — scrollable */}
         <Box px={3} py={2} overflowX="auto">
-          <Box style={{ minWidth: `${chartMinW}px` }}>
+          <Box style={{ width: `${chartMinW}px` }}>
           {/* Time axis */}
           <HStack gap={0} position="relative" h="14px" mb={1} ml="130px">
             {markers.map((ms, i) => (
@@ -438,7 +441,9 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
                       const completeTs = tc.created_at ? Date.parse(tc.created_at) : dispatchTs;
                       const tcLeftPct = ((dispatchTs - globalStart) / totalMs) * 100;
                       const tcDur = Math.max(completeTs - dispatchTs, 0);
-                      const tcWidthPct = Math.max((tcDur / totalMs) * 100, 0.8); // min width so it's visible
+                      // Min visible width = 2 seconds worth of pixels
+                      const minWidthPct = (1000 / totalMs) * 100;
+                      const tcWidthPct = Math.max((tcDur / totalMs) * 100, minWidthPct);
                       // Vertical position: stack by index within the group
                       const topPx = 1 + tci * (SQ + SQ_GAP);
 
