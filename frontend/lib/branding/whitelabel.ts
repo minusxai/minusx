@@ -127,11 +127,15 @@ export function mergeConfig(
   return {
     branding: {
       ...defaults.branding,
-      ...(overrides.branding || {})
+      ...Object.fromEntries(
+        Object.entries(overrides.branding || {}).filter(([, v]) => v !== '')
+      ),
     },
     links: {
       ...defaults.links,
-      ...(overrides.links || {})
+      ...Object.fromEntries(
+        Object.entries(overrides.links || {}).filter(([, v]) => v !== '')
+      ),
     },
     messaging: overrides.messaging ?? defaults.messaging,
     channels: overrides.channels ?? defaults.channels,
