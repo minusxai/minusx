@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { HStack, Box, Text } from '@chakra-ui/react';
+import { HStack, Box, Text, VStack } from '@chakra-ui/react';
 import { Button } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
-import { LuTerminal, LuCheck, LuX } from 'react-icons/lu';
+import { LuTerminal, LuCheck, LuX, LuGitFork } from 'react-icons/lu';
 import ToolCallListModal from './ToolCallListModal';
 import ToolInspectModal from './ToolInspectModal';
 import type { MessageWithFlags } from './message/messageHelpers';
@@ -67,6 +67,96 @@ export function buildBranchColorMap(messages: Array<{ parent_id?: string }>): Ma
   return map;
 }
 
+/** Shorten a parent_id for display (e.g. "r1-agent1" → "agent1") */
+export function shortBranchLabel(parentId: string): string {
+  // Take last segment after the last dash, or last 8 chars
+  const parts = parentId.split('-');
+  return parts.length > 1 ? parts[parts.length - 1] : parentId.slice(-8);
+}
+
+type ToolCallMsg = FlatToolCall & MessageWithFlags;
+
+/** A segment in the debug bar: either trunk tools or a branched group */
+type DebugBarSegment =
+  | { kind: 'trunk'; groups: ToolCallMsg[][] }
+  | { kind: 'branches'; branches: Array<{ parentId: string; color: string; groups: ToolCallMsg[][] }> };
+
+/** Group tool calls by run_id */
+function groupByRunId(calls: ToolCallMsg[]): ToolCallMsg[][] {
+  const groups: ToolCallMsg[][] = [];
+  let current: ToolCallMsg[] = [];
+  let currentRunId: string | undefined;
+  for (const msg of calls) {
+    const runId = (msg as any).run_id;
+    if (runId !== currentRunId && current.length > 0) {
+      groups.push(current);
+      current = [];
+    }
+    currentRunId = runId;
+    current.push(msg);
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
+/** Build segments: trunk items stay flat; consecutive branched items get grouped by branch */
+function buildDebugBarSegments(
+  toolCalls: ToolCallMsg[],
+  branchColorMap: Map<string, string>,
+): DebugBarSegment[] {
+  if (branchColorMap.size < 2) {
+    // No branching — everything is trunk
+    return [{ kind: 'trunk', groups: groupByRunId(toolCalls) }];
+  }
+
+  const segments: DebugBarSegment[] = [];
+  let trunkBuffer: ToolCallMsg[] = [];
+  let branchBuffer: ToolCallMsg[] = [];
+
+  const flushTrunk = () => {
+    if (trunkBuffer.length > 0) {
+      segments.push({ kind: 'trunk', groups: groupByRunId(trunkBuffer) });
+      trunkBuffer = [];
+    }
+  };
+
+  const flushBranches = () => {
+    if (branchBuffer.length > 0) {
+      // Group by parent_id
+      const byParent = new Map<string, ToolCallMsg[]>();
+      for (const msg of branchBuffer) {
+        const pid = (msg as any).parent_id as string;
+        const arr = byParent.get(pid) ?? [];
+        arr.push(msg);
+        byParent.set(pid, arr);
+      }
+      const branches = Array.from(byParent.entries()).map(([parentId, calls]) => ({
+        parentId,
+        color: branchColorMap.get(parentId) ?? '#888',
+        groups: groupByRunId(calls),
+      }));
+      segments.push({ kind: 'branches', branches });
+      branchBuffer = [];
+    }
+  };
+
+  for (const msg of toolCalls) {
+    const pid = (msg as any).parent_id as string | undefined;
+    const isBranched = pid && branchColorMap.has(pid);
+    if (isBranched) {
+      flushTrunk();
+      branchBuffer.push(msg);
+    } else {
+      flushBranches();
+      trunkBuffer.push(msg);
+    }
+  }
+  flushTrunk();
+  flushBranches();
+
+  return segments;
+}
+
 function toInspectTuple(msg: FlatToolCall): ToolCallTuple {
   let args: Record<string, any> = {};
   try {
@@ -89,12 +179,54 @@ function toInspectTuple(msg: FlatToolCall): ToolCallTuple {
   return [toolCall, toolMessage];
 }
 
+/** Render a single tool call square */
+function ToolSquare({ msg, onClick }: { msg: ToolCallMsg; onClick: () => void }) {
+  const name = msg.function.name;
+  const hasError = typeof msg.content === 'string' && msg.content.includes('"success":false');
+  const color = getToolColor(name);
+
+  return (
+    <Tooltip content={name} positioning={{ placement: 'bottom' }}>
+      <Box
+        w="20px"
+        h="20px"
+        bg={color}
+        cursor="pointer"
+        _hover={{ opacity: 1, transform: 'scale(1.15)' }}
+        transition="all 0.1s"
+        opacity={0.75}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        onClick={onClick}
+        borderRadius="2px"
+      >
+        {hasError
+          ? <LuX size={9} color="white" />
+          : <LuCheck size={9} color="white" />
+        }
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** Render a run_id group of tool squares */
+function RunGroup({ group, onInspect }: { group: ToolCallMsg[]; onInspect: (msg: ToolCallMsg) => void }) {
+  return (
+    <HStack gap="2px" border="1px solid" borderColor="border.emphasized" borderRadius="sm" p="2px">
+      {group.map((msg, idx) => (
+        <ToolSquare key={`${msg.tool_call_id}-${idx}`} msg={msg} onClick={() => onInspect(msg)} />
+      ))}
+    </HStack>
+  );
+}
+
 export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
   const [showToolInspector, setShowToolInspector] = useState(false);
   const [inspecting, setInspecting] = useState<ToolCallTuple | null>(null);
 
   const toolCalls = useMemo(
-    () => messages.filter((m): m is FlatToolCall & MessageWithFlags => m.role === 'tool'),
+    () => messages.filter((m): m is ToolCallMsg => m.role === 'tool'),
     [messages],
   );
 
@@ -105,105 +237,117 @@ export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
 
   const hasBranches = branchColorMap.size > 1;
 
+  const segments = useMemo(
+    () => buildDebugBarSegments(toolCalls, branchColorMap),
+    [toolCalls, branchColorMap],
+  );
+
+  const handleInspect = (msg: ToolCallMsg) => setInspecting(toInspectTuple(msg));
+
   if (messages.length === 0) return null;
 
   return (
     <>
-      <HStack gap={2} px={3} py={1.5} mx={2} mt={1} bg="bg.canvas" border="1px solid" borderColor="border.muted" borderRadius="md" alignItems="flex-start">
-        <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
-          <Button
-            onClick={() => setShowToolInspector(true)}
-            size="xs"
-            variant="outline"
-            borderColor="border.muted"
-            flexShrink={0}
-          >
-            <LuTerminal />
-          </Button>
-        </Tooltip>
-        <Box flexShrink={0}>
-          <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider">
-            {toolCalls.length} tool calls
-          </Text>
-          <Text fontSize="2xs" color="fg.subtle" letterSpacing="wider">
-            {new Set(toolCalls.map(m => (m as any).run_id)).size} LLM turns
-          </Text>
-        </Box>
-
-        {/* Minimap: colored blocks grouped by run_id (same assistant message) */}
-        {toolCalls.length > 0 && (
-          <Box flex={1} minW={0} display="flex" flexWrap="wrap" gap="6px">
-            {(() => {
-              // Group tool calls by run_id
-              const groups: (typeof toolCalls)[] = [];
-              let currentGroup: typeof toolCalls = [];
-              let currentRunId: string | undefined;
-              for (const msg of toolCalls) {
-                const runId = (msg as any).run_id;
-                if (runId !== currentRunId && currentGroup.length > 0) {
-                  groups.push(currentGroup);
-                  currentGroup = [];
-                }
-                currentRunId = runId;
-                currentGroup.push(msg);
-              }
-              if (currentGroup.length > 0) groups.push(currentGroup);
-
-              return groups.map((group, gi) => (
-                <HStack key={gi} gap={0.5} border="1px solid" borderColor="border.emphasized" borderRadius="sm" p={0.5}>
-                  {group.map((msg, idx) => {
-                    const name = msg.function.name;
-                    const hasError = typeof msg.content === 'string' && msg.content.includes('"success":false');
-                    const color = getToolColor(name);
-                    const parentId = (msg as any).parent_id as string | undefined;
-                    const branchColor = parentId ? branchColorMap.get(parentId) : undefined;
-
-                    return (
-                      <Tooltip key={`${msg.tool_call_id}-${idx}`} content={`${name}${hasBranches && parentId ? ` [${parentId}]` : ''}`} positioning={{ placement: 'bottom' }}>
-                        <Box
-                          w="24px"
-                          h="48px"
-                          cursor="pointer"
-                          _hover={{ opacity: 1, transform: 'scaleY(1.1)' }}
-                          transition="all 0.1s"
-                          opacity={0.7}
-                          display="flex"
-                          flexDirection="column"
-                          borderRadius="xs"
-                          overflow="hidden"
-                          onClick={() => setInspecting(toInspectTuple(msg))}
-                        >
-                          {/* Main tool color block */}
-                          <Box
-                            flex={1}
-                            bg={color}
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            {hasError
-                              ? <LuX size={10} color="white" />
-                              : <LuCheck size={10} color="white" />
-                            }
-                          </Box>
-                          {/* Branch color underline */}
-                          {hasBranches && (
-                            <Box
-                              h="4px"
-                              flexShrink={0}
-                              bg={branchColor ?? 'transparent'}
-                            />
-                          )}
-                        </Box>
-                      </Tooltip>
-                    );
-                  })}
-                </HStack>
-              ));
-            })()}
+      <Box px={3} py={1.5} mx={2} mt={1} bg="bg.canvas" border="1px solid" borderColor="border.muted" borderRadius="md">
+        <HStack gap={2} alignItems="flex-start" mb={hasBranches ? 1 : 0}>
+          <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
+            <Button
+              onClick={() => setShowToolInspector(true)}
+              size="xs"
+              variant="outline"
+              borderColor="border.muted"
+              flexShrink={0}
+            >
+              <LuTerminal />
+            </Button>
+          </Tooltip>
+          <Box flexShrink={0}>
+            <Text fontSize="2xs" color="fg.subtle" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider">
+              {toolCalls.length} tool calls
+            </Text>
+            <Text fontSize="2xs" color="fg.subtle" letterSpacing="wider">
+              {new Set(toolCalls.map(m => (m as any).run_id)).size} LLM turns
+            </Text>
           </Box>
+
+          {/* Non-branched: simple flat layout */}
+          {!hasBranches && toolCalls.length > 0 && (
+            <Box flex={1} minW={0} display="flex" flexWrap="wrap" gap="4px" alignItems="center">
+              {segments[0]?.kind === 'trunk' && segments[0].groups.map((group, gi) => (
+                <RunGroup key={gi} group={group} onInspect={handleInspect} />
+              ))}
+            </Box>
+          )}
+        </HStack>
+
+        {/* Branched: structured layout with fork/merge */}
+        {hasBranches && toolCalls.length > 0 && (
+          <VStack gap={0} align="stretch" mt={1}>
+            {segments.map((seg, si) => {
+              if (seg.kind === 'trunk') {
+                return (
+                  <Box key={si} display="flex" flexWrap="wrap" gap="4px" alignItems="center" py={1}>
+                    {seg.groups.map((group, gi) => (
+                      <RunGroup key={gi} group={group} onInspect={handleInspect} />
+                    ))}
+                  </Box>
+                );
+              }
+
+              // Branched segment — render each branch as a lane
+              return (
+                <Box key={si} position="relative" py={1}>
+                  {/* Fork indicator */}
+                  <HStack gap={1} mb={1.5} align="center">
+                    <LuGitFork size={10} color="#666" style={{ transform: 'rotate(180deg)' }} />
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">
+                      {seg.branches.length} parallel branches
+                    </Text>
+                  </HStack>
+
+                  <VStack gap={1} align="stretch" pl={2}>
+                    {seg.branches.map((branch) => (
+                      <Box
+                        key={branch.parentId}
+                        borderLeft="3px solid"
+                        borderColor={branch.color}
+                        pl={2}
+                        py={1}
+                        borderRadius="0 4px 4px 0"
+                        bg={`${branch.color}08`}
+                      >
+                        <Text
+                          fontSize="2xs"
+                          fontFamily="mono"
+                          fontWeight="600"
+                          color={branch.color}
+                          mb={1}
+                          letterSpacing="0.02em"
+                        >
+                          {shortBranchLabel(branch.parentId)}
+                        </Text>
+                        <Box display="flex" flexWrap="wrap" gap="4px" alignItems="center">
+                          {branch.groups.map((group, gi) => (
+                            <RunGroup key={gi} group={group} onInspect={handleInspect} />
+                          ))}
+                        </Box>
+                      </Box>
+                    ))}
+                  </VStack>
+
+                  {/* Merge indicator */}
+                  <HStack gap={1} mt={1.5} align="center">
+                    <LuGitFork size={10} color="#666" />
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">
+                      merge
+                    </Text>
+                  </HStack>
+                </Box>
+              );
+            })}
+          </VStack>
         )}
-      </HStack>
+      </Box>
 
       <ToolCallListModal
         messages={messages}

@@ -27,7 +27,6 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
 import Markdown from '../Markdown';
 import type { QueryResult } from '@/lib/types';
-import { buildBranchColorMap } from './ToolDebugBar';
 
 interface AgentTurnContainerProps {
   turn: Turn;
@@ -69,7 +68,6 @@ interface TimelineNode {
   count: number;
   messages: MessageWithFlags[];
   webSearchResults?: WebSearchResult[];  // Only set for synthetic web search nodes
-  parentIds: Set<string>;  // Distinct parent_ids in this node's messages (for branch visualization)
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -246,23 +244,6 @@ function extractWebSearchResults(msg: MessageWithFlags): WebSearchResult[] | nul
 
 // ─── Build timeline from messages ──────────────────────────────────
 
-/** Extract parent_id from a message (if present) */
-function getMsgParentId(msg: MessageWithFlags): string | undefined {
-  return (msg as any).parent_id as string | undefined;
-}
-
-/** Add a message's parent_id to a node's parentIds set */
-function trackParent(node: TimelineNode, msg: MessageWithFlags) {
-  const pid = getMsgParentId(msg);
-  if (pid) node.parentIds.add(pid);
-}
-
-/** Create a fresh parentIds set from a single message */
-function parentIdsFrom(msg: MessageWithFlags): Set<string> {
-  const pid = getMsgParentId(msg);
-  return pid ? new Set([pid]) : new Set();
-}
-
 function buildTimeline(
   agentMessages: MessageWithFlags[],
 ): { timeline: TimelineNode[]; lastChatMessage: MessageWithFlags | null } {
@@ -279,9 +260,8 @@ function buildTimeline(
         if (last && last.type === 'tool' && last.label === config.chipLabel) {
           last.messages.push(msg);
           last.count++;
-          trackParent(last, msg);
         } else {
-          nodes.push({ type: 'tool', icon: config.chipIcon, label: config.chipLabel, labelPlural: config.chipLabelPlural, verb: config.timelineVerb, count: 1, messages: [msg], parentIds: parentIdsFrom(msg) });
+          nodes.push({ type: 'tool', icon: config.chipIcon, label: config.chipLabel, labelPlural: config.chipLabelPlural, verb: config.timelineVerb, count: 1, messages: [msg] });
         }
       }
       continue;
@@ -300,7 +280,6 @@ function buildTimeline(
           type: 'tool', icon: wsConfig.chipIcon, label: wsConfig.chipLabel,
           labelPlural: wsConfig.chipLabelPlural, verb: wsConfig.timelineVerb,
           count: webResults.length, messages: [msg], webSearchResults: webResults,
-          parentIds: parentIdsFrom(msg),
         });
       }
 
@@ -309,18 +288,16 @@ function buildTimeline(
       if (last && last.type === 'agent') {
         last.messages.push(msg);
         last.count++;
-        trackParent(last, msg);
       } else {
-        nodes.push({ type: 'agent', icon: LuBrain, label: 'thought', labelPlural: 'thoughts', verb: 'Thinking', count: 1, messages: [msg], parentIds: parentIdsFrom(msg) });
+        nodes.push({ type: 'agent', icon: LuBrain, label: 'thought', labelPlural: 'thoughts', verb: 'Thinking', count: 1, messages: [msg] });
       }
     } else if (toolName === ToolNames.EXECUTE_QUERY) {
       const last = nodes[nodes.length - 1];
       if (last && last.type === 'query') {
         last.messages.push(msg);
         last.count++;
-        trackParent(last, msg);
       } else {
-        nodes.push({ type: 'query', icon: LuDatabase, label: 'query', labelPlural: 'queries', verb: 'Querying', count: 1, messages: [msg], parentIds: parentIdsFrom(msg) });
+        nodes.push({ type: 'query', icon: LuDatabase, label: 'query', labelPlural: 'queries', verb: 'Querying', count: 1, messages: [msg] });
       }
     } else {
       const config = getToolConfig(toolName);
@@ -329,9 +306,8 @@ function buildTimeline(
       if (last && last.type === 'tool' && last.label === key) {
         last.messages.push(msg);
         last.count++;
-        trackParent(last, msg);
       } else {
-        nodes.push({ type: 'tool', icon: config.chipIcon, label: config.chipLabel, labelPlural: config.chipLabelPlural, verb: config.timelineVerb, count: 1, messages: [msg], parentIds: parentIdsFrom(msg) });
+        nodes.push({ type: 'tool', icon: config.chipIcon, label: config.chipLabel, labelPlural: config.chipLabelPlural, verb: config.timelineVerb, count: 1, messages: [msg] });
       }
     }
   }
@@ -391,13 +367,6 @@ export default function AgentTurnContainer({
     () => buildTimeline(turn.agentMessages),
     [turn.agentMessages],
   );
-
-  // Build branch color map from all messages in this turn
-  const branchColorMap = useMemo(
-    () => buildBranchColorMap(turn.agentMessages as Array<{ parent_id?: string }>),
-    [turn.agentMessages],
-  );
-  const hasBranches = branchColorMap.size > 1;
 
   // Default: most recent non-agent node. User can click to override.
   const mostRecentWorkIdx = useMemo(() => {
@@ -704,19 +673,6 @@ export default function AgentTurnContainer({
                             {node.count}
                           </Box>
                         )}
-                        {/* Branch color dots (compact) */}
-                        {hasBranches && node.parentIds.size > 0 && (
-                          <HStack gap={0.5} flexShrink={0}>
-                            {Array.from(node.parentIds).map(pid => (
-                              <Box
-                                key={pid}
-                                w="5px" h="5px" borderRadius="full"
-                                bg={branchColorMap.get(pid) ?? 'fg.subtle'}
-                                title={pid}
-                              />
-                            ))}
-                          </HStack>
-                        )}
                       </Box>
                       {!isLast && (
                         <Text color="border.default" fontSize="xs" flexShrink={0} lineHeight={1}>›</Text>
@@ -818,19 +774,6 @@ export default function AgentTurnContainer({
                         >
                           {node.count}
                         </Box>
-                      )}
-                      {/* Branch color dots */}
-                      {hasBranches && node.parentIds.size > 0 && (
-                        <HStack gap={0.5} flexShrink={0}>
-                          {Array.from(node.parentIds).map(pid => (
-                            <Box
-                              key={pid}
-                              w="6px" h="6px" borderRadius="full"
-                              bg={branchColorMap.get(pid) ?? 'fg.subtle'}
-                              title={pid}
-                            />
-                          ))}
-                        </HStack>
                       )}
                     </Box>
                   );
