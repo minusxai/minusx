@@ -104,6 +104,7 @@ Examples:
       this.context.connections,
       this.catalogKey(),
       this.buildSampleConfig(),
+      this.context.datasetKey,
     );
     const targets = await this.findSearchTargets(filter, catalogConn);
 

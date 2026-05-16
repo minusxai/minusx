@@ -61,10 +61,13 @@ export abstract class V2DataTool<P extends TSchema, D = unknown>
 
   /** Lazily build a NodeConnector per `this.context.connections[*]`. Idempotent. */
   protected async ensureConnectors(): Promise<void> {
+    const datasetKey = this.context.datasetKey;
     for (const entry of this.context.connections ?? []) {
       if (!entry.config) continue;
       if (this.connectors.has(entry.name)) continue;
-      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+      const c = await getOrCreateBenchmarkConnector(
+        entry.name, entry.dialect, entry.config, { datasetKey },
+      );
       this.connectors.set(entry.name, c);
       this.dialects.set(entry.name, entry.dialect);
     }

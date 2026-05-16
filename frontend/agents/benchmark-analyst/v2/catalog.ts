@@ -350,8 +350,13 @@ export async function getCatalogStore(
   connections: ConnectionInfo[] | undefined,
   cacheKey: string = 'default',
   sampleConfig?: SampleConfig,
+  datasetKey?: string,
 ): Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> {
-  const existing = catalogStores.get(cacheKey);
+  // Compose the cache key with the dataset namespace so two parallel
+  // benchmark datasets each get their own per-slot catalog instance
+  // (matches the shared-duckdb ATTACH namespacing).
+  const composedKey = datasetKey ? `${datasetKey}::${cacheKey}` : cacheKey;
+  const existing = catalogStores.get(composedKey);
   if (existing) return existing;
 
   const built = (async () => {
@@ -359,7 +364,9 @@ export async function getCatalogStore(
     const connectors = new Map<string, CatalogConnector>();
     for (const entry of connections ?? []) {
       if (!entry.config) continue;
-      const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+      const c = await getOrCreateBenchmarkConnector(
+        entry.name, entry.dialect, entry.config, { datasetKey },
+      );
       connectors.set(entry.name, { connector: c, dialect: entry.dialect });
     }
 
@@ -385,11 +392,11 @@ export async function getCatalogStore(
 
     return { catalog, conn };
   })().catch((err) => {
-    catalogStores.delete(cacheKey); // let next caller retry
+    catalogStores.delete(composedKey); // let next caller retry
     throw err;
   });
 
-  catalogStores.set(cacheKey, built);
+  catalogStores.set(composedKey, built);
   return built;
 }
 

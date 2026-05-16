@@ -25,11 +25,14 @@ async function buildConnectorsFromContext(
   connections: ConnectionInfo[] | undefined,
   connectors: Map<string, NodeConnector>,
   dialects?: Map<string, string>,
+  datasetKey?: string,
 ): Promise<void> {
   for (const entry of connections ?? []) {
     if (!entry.config) continue;
     if (connectors.has(entry.name)) continue;
-    const c = await getOrCreateBenchmarkConnector(entry.name, entry.dialect, entry.config);
+    const c = await getOrCreateBenchmarkConnector(
+      entry.name, entry.dialect, entry.config, { datasetKey },
+    );
     connectors.set(entry.name, c);
     dialects?.set(entry.name, entry.dialect);
   }
@@ -125,7 +128,9 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
    * so their `run()` always falls through to `_loadSchemaFallback`.
    */
   protected async _initialiseConnectors(): Promise<void> {
-    await buildConnectorsFromContext(this.context.connections, this.connectors);
+    await buildConnectorsFromContext(
+      this.context.connections, this.connectors, undefined, this.context.datasetKey,
+    );
   }
 
   /**
@@ -263,7 +268,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   protected dialects = new Map<string, string>();
 
   protected async _initialiseConnectors(): Promise<void> {
-    await buildConnectorsFromContext(this.context.connections, this.connectors, this.dialects);
+    await buildConnectorsFromContext(
+      this.context.connections, this.connectors, this.dialects, this.context.datasetKey,
+    );
   }
 
   /**

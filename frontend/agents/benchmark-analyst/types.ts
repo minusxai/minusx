@@ -74,6 +74,17 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * catalog store.
    */
   catalogKey?: string;
+  /**
+   * Per-dataset namespace for the shared DuckDB instance's ATTACH aliases.
+   * Two benchmark datasets running in parallel may declare a connection
+   * with the same logical name (e.g. `metadata_database`) pointing at
+   * different physical files; the dataset-keyed namespace lets both
+   * attach to the process-wide DuckDB instance without collision. The
+   * runner stamps this with the dataset's input-file basename per row.
+   * Single-dataset / non-parallel callers leave it `undefined` and fall
+   * back to the bare connection name.
+   */
+  datasetKey?: string;
 }
 
 /**

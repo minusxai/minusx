@@ -11,6 +11,11 @@ import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 
 let tmpDir: string;
 let sqlitePath: string;
+// Second SQLite file with a different schema, addressed by the SAME logical
+// connection name as the primary one — simulates two benchmark datasets in
+// parallel that both call their database `bench_metadata` but point at
+// different physical files.
+let sqlitePathDatasetB: string;
 
 beforeAll(() => {
   tmpDir = mkdtempSync(path.join(tmpdir(), 'bench-shared-'));
@@ -25,6 +30,15 @@ beforeAll(() => {
     INSERT INTO publicationinfo VALUES (3, 'INITECH', 'US', '2022-03-30');
   `);
   db.close();
+
+  sqlitePathDatasetB = path.join(tmpDir, 'recipes.sqlite');
+  const dbB = new RealDatabase(sqlitePathDatasetB);
+  dbB.exec(`
+    CREATE TABLE recipes (id INTEGER PRIMARY KEY, name TEXT);
+    INSERT INTO recipes VALUES (1, 'tacos');
+    INSERT INTO recipes VALUES (2, 'pasta');
+  `);
+  dbB.close();
 });
 
 afterAll(() => {
@@ -47,6 +61,51 @@ describe('getOrCreateBenchmarkConnector → getSchema', () => {
       { name: 'idx_assignee', columns: ['assignee'], unique: false },
       { name: 'idx_country_date', columns: ['country', 'filing_date'], unique: false },
     ]);
+  });
+
+  // Regression for the parallel-datasets ATTACH collision:
+  //   `Benchmark shared DuckDB alias 'metadata_database' is already attached
+  //    to '/path/to/A.db'; cannot re-attach to '/path/to/B.db'.`
+  // Two benchmark datasets dispatch in parallel (per main's runner) and both
+  // declare a connection named `metadata_database` for different files. The
+  // shared DuckDB instance is process-wide — but the ATTACH alias namespace
+  // should be per-`datasetKey` so the second dataset doesn't blow up.
+  it('isolates same-name connections across datasets via `datasetKey`', async () => {
+    const aConn = await getOrCreateBenchmarkConnector(
+      'bench_metadata', 'sqlite', { file_path: sqlitePath },
+      { datasetKey: 'dataset-a' },
+    );
+    const bConn = await getOrCreateBenchmarkConnector(
+      'bench_metadata', 'sqlite', { file_path: sqlitePathDatasetB },
+      { datasetKey: 'dataset-b' },
+    );
+
+    // Each connector resolves to its OWN underlying SQLite file. If the
+    // ATTACH was globally shared, dataset-b would either error here or
+    // return rows from dataset-a's schema.
+    const a = await aConn.query('SELECT count(*) AS c FROM publicationinfo');
+    const b = await bConn.query('SELECT count(*) AS c FROM recipes');
+    expect(a.rows[0].c).toBe(3);
+    expect(b.rows[0].c).toBe(2);
+  });
+
+  it('reuses the cached connector when called twice with the same name + datasetKey', async () => {
+    // Re-call must NOT re-attach (idempotency invariant within a dataset).
+    // If the namespacing was wrong this could throw with the alias-collision
+    // error against itself.
+    const c1 = await getOrCreateBenchmarkConnector(
+      'bench_dup', 'sqlite', { file_path: sqlitePath },
+      { datasetKey: 'dataset-c' },
+    );
+    const c2 = await getOrCreateBenchmarkConnector(
+      'bench_dup', 'sqlite', { file_path: sqlitePath },
+      { datasetKey: 'dataset-c' },
+    );
+    // Same display name — agent's view of the connection is unchanged.
+    const r1 = await c1.query('SELECT count(*) AS c FROM publicationinfo');
+    const r2 = await c2.query('SELECT count(*) AS c FROM publicationinfo');
+    expect(r1.rows[0].c).toBe(3);
+    expect(r2.rows[0].c).toBe(3);
   });
 
   it('serves many concurrent queries correctly through the bounded connection pool', async () => {

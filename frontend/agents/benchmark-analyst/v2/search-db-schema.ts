@@ -78,6 +78,7 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
       this.context.connections,
       this.catalogKey(),
       this.buildSampleConfig(),
+      this.context.datasetKey,
     );
 
     // Execute queries

@@ -376,18 +376,26 @@ async function getOrCreateShared(): Promise<BenchmarkSharedDuckdb> {
 }
 
 /**
- * NodeConnector implementation that routes to the shared DuckDBInstance
- * keyed by `name`. Looks identical to `DuckDbConnector` /
- * `SqliteConnector` from the caller's perspective.
+ * NodeConnector implementation that routes to the shared DuckDBInstance.
+ * The agent-facing `name` (e.g. `metadata_database`) is stored on the
+ * base class via `super(name, {})`; the ATTACH alias actually used inside
+ * the shared instance is `internalName` (e.g. `__ds_agnews__metadata_database`).
+ * That namespacing keeps two benchmark datasets running in parallel from
+ * colliding on the same logical connection name pointing at different
+ * physical files.
  */
 class BenchmarkSharedDuckdbConnector extends NodeConnector {
-  constructor(name: string, private readonly shared: BenchmarkSharedDuckdb) {
+  constructor(
+    name: string,
+    private readonly internalName: string,
+    private readonly shared: BenchmarkSharedDuckdb,
+  ) {
     super(name, {});
   }
 
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {
     try {
-      await this.shared.query(this.name, 'SELECT 1');
+      await this.shared.query(this.internalName, 'SELECT 1');
       if (includeSchema) {
         const schemas = await this.getSchema();
         return { success: true, message: 'Connection successful', schema: { schemas } };
@@ -404,12 +412,21 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
     _params?: Record<string, string | number>,
     timeoutMs?: number,
   ): Promise<QueryResult> {
-    return this.shared.query(this.name, sql, timeoutMs);
+    return this.shared.query(this.internalName, sql, timeoutMs);
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    return this.shared.getSchema(this.name);
+    return this.shared.getSchema(this.internalName);
   }
+}
+
+/**
+ * Compose the dataset-scoped ATTACH alias from the agent-facing connection
+ * name plus an optional dataset key. With no key, the alias is the bare
+ * name (preserving the original behaviour for non-parallel callers).
+ */
+function internalAttachName(name: string, datasetKey?: string): string {
+  return datasetKey ? `__ds_${datasetKey}__${name}` : name;
 }
 
 /**
@@ -426,10 +443,21 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
  * dataset files ATTACHed is preserved across tool calls (one thread
  * pool, one buffer cache).
  */
+export interface BenchmarkConnectorOptions {
+  /**
+   * Dataset-scoped namespace for the ATTACH alias inside the shared
+   * DuckDB instance. The agent-facing connection name stays unchanged;
+   * only the internal alias is prefixed. Pass `undefined` (single-dataset
+   * runs / legacy callers) to keep the bare name.
+   */
+  datasetKey?: string;
+}
+
 export async function getOrCreateBenchmarkConnector(
   name: string,
   dialect: string,
   config: Record<string, unknown>,
+  opts?: BenchmarkConnectorOptions,
 ): Promise<NodeConnector> {
   if (isAttachable(dialect)) {
     const filePath = (config as { file_path?: unknown }).file_path;
@@ -438,8 +466,9 @@ export async function getOrCreateBenchmarkConnector(
     }
     const absPath = resolveDuckDbFilePath(filePath);
     const shared = await getOrCreateShared();
-    await shared.ensureAttached([{ name, dialect, absPath }]);
-    return new BenchmarkSharedDuckdbConnector(name, shared);
+    const internalName = internalAttachName(name, opts?.datasetKey);
+    await shared.ensureAttached([{ name: internalName, dialect, absPath }]);
+    return new BenchmarkSharedDuckdbConnector(name, internalName, shared);
   }
   const conn = getNodeConnector(name, dialect, config);
   if (!conn) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
