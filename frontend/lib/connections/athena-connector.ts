@@ -82,9 +82,11 @@ export class AthenaConnector extends NodeConnectorBase {
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
     const client = this.getAthenaClient();
 
-    // Substitute :paramName → ? (positional), collect values in order
+    // Substitute :paramName → ? (Athena positional), collect values in
+    // order. Negative lookbehind skips the second `:` of `::cast`
+    // operators (Athena/Trino support PostgreSQL casts).
     const paramValues: string[] = [];
-    const athenaSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+    const athenaSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
       const val = params?.[key];
       paramValues.push(val != null ? String(val) : 'NULL');
       return '?';

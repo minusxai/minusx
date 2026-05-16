@@ -7,6 +7,7 @@ import { collectDuckDbIndexes } from './duckdb-indexes';
 import { runDuckDbWithTimeout } from './duckdb-query';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+import { namedToPositional } from './named-to-positional';
 
 const SKIP_SCHEMAS = immutableSet(['information_schema', 'pg_catalog']);
 
@@ -65,12 +66,9 @@ export class SqliteConnector extends NodeConnector {
     timeoutMs?: number,
   ): Promise<QueryResult> {
     return withSqliteViaDuckdbConnection(this.absPath, async (conn) => {
-      // Replace named params (:name) with positional $N (DuckDB syntax)
-      const paramValues: unknown[] = [];
-      const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-        paramValues.push(params?.[key] ?? null);
-        return `$${paramValues.length}`;
-      });
+      // Replace named params (:name) with positional $N (DuckDB syntax).
+      // The shared helper's negative-lookbehind protects `::cast` operators.
+      const { sql: positionalSql, values: paramValues } = namedToPositional(sql, params);
 
       const finalQuery = inlineSqlParams(sql, params);
 
