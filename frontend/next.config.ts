@@ -37,6 +37,10 @@ const nextConfig: NextConfig = {
     '@duckdb/node-bindings-linux-arm64', '@duckdb/node-bindings-linux-x64',
     '@duckdb/node-bindings-win32-arm64', '@duckdb/node-bindings-win32-x64',
     '@resvg/resvg-js', '@electric-sql/pglite',
+    'nodejs-polars', 'nodejs-polars-darwin-arm64', 'nodejs-polars-darwin-x64',
+    'nodejs-polars-linux-arm64-gnu', 'nodejs-polars-linux-x64-gnu',
+    'nodejs-polars-win32-x64-msvc',
+    'simple-statistics',
   ],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.
