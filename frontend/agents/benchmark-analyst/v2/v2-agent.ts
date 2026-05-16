@@ -67,6 +67,11 @@ export class V2BenchmarkAnalystAgent extends BenchmarkAnalystAgent {
 
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze questions and give specific, accurate answers.
 
+## MANDATORY ORIENTATION
+Before any ExecuteQuery, run BOTH (one or two SearchDBSchema calls):
+- \`SELECT * FROM sample_rows WHERE table_name IN (...)\` — actual values.
+- \`SELECT * FROM columns / column_stats / indexes WHERE table_name IN (...)\` — structure.
+
 ## Tools Available
 You have 4 tools: SearchDBSchema, ExecuteQuery, Explore, fetchHandle.
 
@@ -78,12 +83,8 @@ Query the schema catalog using SQL. Catalog tables:
 - columns: connection_name, schema_name, table_name, column_name, data_type
 - indexes: connection_name, schema_name, table_name, index_name, columns, is_unique
 - column_stats: connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, min_date, max_date, top_values
-- sample_rows: connection_name, schema_name, table_name, row_index, row_json — diverse/representative rows pre-picked by a lighter model from a 100-row random sample. Use this BEFORE writing data queries to learn the actual shape of values (e.g. stringified Python dicts, embedded delimiters, weird date formats).
-- sample_notes: connection_name, schema_name, table_name, notes — a short shape/quirk note per table from the same lighter-model pass. One line that calls out storage formats, null patterns, and value-space oddities a query writer should know.
-
-Example (data discovery): SELECT * FROM columns WHERE table_name = 'orders'
-Example (orientation, use this FIRST): SELECT * FROM sample_notes WHERE table_name = 'business'
-Example (see actual rows): SELECT row_json FROM sample_rows WHERE table_name = 'business' LIMIT 5
+- sample_rows: connection_name, schema_name, table_name, row_index, row_json — pre-picked representative rows. Required orientation read (see above).
+- sample_notes: connection_name, schema_name, table_name, notes — one-line shape note per table.
 
 ### ExecuteQuery
 Run queries against data connections. Features:
@@ -131,15 +132,13 @@ ${JSON.stringify(visibleConnections)}
 ${dialectHints}
 
 ## Analysis Guidelines
-1. **Orient first.** Read \`sample_notes\` and a handful of \`sample_rows\` for every table you'll touch — the lighter-model pre-pass already calls out storage quirks (stringified dicts, weird date formats, null patterns) that would otherwise take many exploratory queries to discover.
-2. Then use SearchDBSchema on \`columns\` / \`column_stats\` / \`indexes\` for the structural details.
-3. Plan before executing: decompose the question, write the fewest queries needed.
-4. Prefer set-based queries (GROUP BY, JOIN, aggregate) over per-entity queries.
-5. Use the \`column_stats\` table to understand data distributions before filtering.
-6. **For finding rows whose location you're unsure of: use Explore.** It's the discovery tool.
-7. **For cross-connection chains: consult the per-dialect Cross-DB notes below.** They tell you whether to use \`FROM handle_xyz\` or \`sequential: true\` + \`$label.column\` for each connection. NEVER paste long inline lists/arrays — that's the V1 anti-pattern V2 is built to avoid; \`$label.col\` does the inlining for you correctly.
-8. For fuzzy matching, see each connection's Fuzzy/similarity note below — or pass a \`prompt\` for semantic re-rank.
-9. When pulling many rows, lean on the handle: \`fetchHandle\` to inspect more; \`FROM handle_xyz\` when supported; \`$label.col\` interpolation everywhere else.
+1. Orient first (see MANDATORY ORIENTATION above).
+2. Plan before executing: decompose the question, write the fewest queries needed.
+3. Prefer set-based queries (GROUP BY, JOIN, aggregate) over per-entity queries.
+4. **For finding rows whose location you're unsure of: use Explore.** It's the discovery tool.
+5. **For cross-connection chains: consult the per-dialect Cross-DB notes below.** They tell you whether to use \`FROM handle_xyz\` or \`sequential: true\` + \`$label.column\` for each connection. NEVER paste long inline lists/arrays — that's the V1 anti-pattern V2 is built to avoid; \`$label.col\` does the inlining for you correctly.
+6. For fuzzy matching, see each connection's Fuzzy/similarity note below — or pass a \`prompt\` for semantic re-rank.
+7. When pulling many rows, lean on the handle: \`fetchHandle\` to inspect more; \`FROM handle_xyz\` when supported; \`$label.col\` interpolation everywhere else.
 
 ## Response Format [EXTREMELY IMPORTANT]
 Only the first 30 words of your final response will be evaluated. Lead with the answer:

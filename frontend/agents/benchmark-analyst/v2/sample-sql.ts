@@ -1,20 +1,24 @@
-// Per-dialect random-row sampling for catalog build. Uses each engine's
-// native sampling syntax so we don't full-scan multi-GB tables just to pick
-// 100 rows. Pure: returns the raw query string (or stringified Mongo
-// pipeline JSON) — the catalog builder hands it to `connector.query`.
+// Per-dialect random-row sampling for catalog build. Returns a query
+// string (or stringified Mongo pipeline JSON) that fetches up to N random
+// rows for a table. Pure: the catalog builder hands the output to
+// `connector.query`.
 //
-// Strategies:
+// Strategies are chosen so that **a table with K < N rows still returns
+// min(K, N) rows**, not zero. Earlier versions used percentage-based
+// samplers (`TABLESAMPLE BERNOULLI(1)`, `TABLESAMPLE SYSTEM (1 PERCENT)`)
+// which silently returned 0–1 rows on small tables and silently degraded
+// the lighter-model orientation pass (it had nothing to look at).
+//
 // - duckdb / sqlite (benchmark-sqlite routes through DuckDB):
 //     SELECT * FROM "<table>" USING SAMPLE <n> ROWS
-//   `USING SAMPLE n ROWS` is DuckDB's reservoir sampler — bounded memory,
-//   doesn't full-scan, deterministic-ish under a fixed seed.
-// - postgresql: TABLESAMPLE BERNOULLI(1) LIMIT n
-//   Reads ~1% of pages and stops at n rows. Cheaper than ORDER BY RANDOM().
-// - bigquery: TABLESAMPLE SYSTEM (1 PERCENT) LIMIT n
-//   Block-level sampler; lowest-cost option there.
-// - mongo: {$sample: {size: n}} as the first pipeline stage
-//   Uses storage-engine $sampleFromRandomCursor when n < 5% of collection.
-// - fallback: ORDER BY RANDOM() LIMIT n (correct but slow on large tables)
+//   DuckDB's `USING SAMPLE n ROWS` is a reservoir sampler — bounded
+//   memory AND returns min(K, N) for K < N. Already-correct.
+// - postgresql / bigquery / fallback: `ORDER BY RANDOM() LIMIT n`
+//   (`ORDER BY RAND()` for BigQuery — different keyword). Slow on huge
+//   tables (full sort), but benchmark tables are small and the engine
+//   short-circuits LIMIT. Correctness > speed here.
+// - mongo: `{$sample: {size: n}}` — already correct for any collection
+//   size (returns min(count, n)).
 //
 // Identifier escaping is conservative — we quote every identifier even
 // though most are simple — matches how the rest of catalog.ts builds SQL.
@@ -40,12 +44,13 @@ export function buildSampleSql(
       return `SELECT * FROM ${qualifiedSql} USING SAMPLE ${n} ROWS`;
 
     case 'postgresql':
-      return `SELECT * FROM ${qualifiedSql} TABLESAMPLE BERNOULLI(1) LIMIT ${n}`;
+      return `SELECT * FROM ${qualifiedSql} ORDER BY RANDOM() LIMIT ${n}`;
 
     case 'bigquery': {
       // BigQuery uses backticks and dotted dataset.table syntax (no quotes).
+      // BigQuery's random function is RAND() (not RANDOM()).
       const ref = schema ? `\`${schema}.${table}\`` : `\`${table}\``;
-      return `SELECT * FROM ${ref} TABLESAMPLE SYSTEM (1 PERCENT) LIMIT ${n}`;
+      return `SELECT * FROM ${ref} ORDER BY RAND() LIMIT ${n}`;
     }
 
     case 'mongo':

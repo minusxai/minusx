@@ -19,15 +19,23 @@ describe('buildSampleSql', () => {
     );
   });
 
-  it('uses TABLESAMPLE BERNOULLI for postgresql', () => {
+  // Postgres: was `TABLESAMPLE BERNOULLI(1) LIMIT N`. That's a 1%
+  // sample, which on small tables (typical of benchmark datasets — many
+  // <100 rows) returns 0 or 1 row. Switched to `ORDER BY RANDOM()
+  // LIMIT N` — always returns up to N rows regardless of table size.
+  // Slower on huge tables (full sort) but fine for benchmark scale.
+  it('uses ORDER BY RANDOM() LIMIT for postgresql (handles small tables)', () => {
     expect(buildSampleSql('postgresql', 'public', 'users', 100)).toBe(
-      'SELECT * FROM "public"."users" TABLESAMPLE BERNOULLI(1) LIMIT 100',
+      'SELECT * FROM "public"."users" ORDER BY RANDOM() LIMIT 100',
     );
   });
 
-  it('uses TABLESAMPLE SYSTEM with backticks for bigquery', () => {
+  // BigQuery: same story — `TABLESAMPLE SYSTEM (1 PERCENT)` is
+  // block-level sampling that fails for small tables. `ORDER BY RAND()`
+  // is BigQuery's idiomatic random-sample (RAND() not RANDOM()).
+  it('uses ORDER BY RAND() LIMIT for bigquery (handles small tables)', () => {
     expect(buildSampleSql('bigquery', 'mydataset', 'events', 100)).toBe(
-      'SELECT * FROM `mydataset.events` TABLESAMPLE SYSTEM (1 PERCENT) LIMIT 100',
+      'SELECT * FROM `mydataset.events` ORDER BY RAND() LIMIT 100',
     );
   });
 
