@@ -12,10 +12,10 @@ import type { ConversationLog } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
-import ToolDebugBar from '@/components/explore/ToolDebugBar';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import Markdown from '@/components/Markdown';
 import ExecutionTree from '@/components/explore/ExecutionTree';
+import ToolDebugBar from '@/components/explore/ToolDebugBar';
 import type { ConversationLogEntry } from '@/lib/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -221,12 +221,9 @@ function LogViewer({ log, piLog }: { log: ConversationLogEntry[]; piLog?: unknow
     );
   }
 
-  const hasExecutionTree = !!piLog;
-
   return (
     <VStack gap={0} align="stretch" width="100%">
-      {piLog && <ExecutionTree piLog={piLog} messages={messages} />}
-      {!hasExecutionTree && <ToolDebugBar messages={messages} />}
+      {piLog ? <ExecutionTree piLog={piLog} messages={messages} /> : <ToolDebugBar messages={messages} />}
       {turns.map((turn, i) => (
         <AgentTurnContainer
           key={i}
