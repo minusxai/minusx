@@ -14,6 +14,15 @@ import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
 import { ExploreDataset } from './explore-dataset';
+import {
+  interpolateRefs,
+  interpolateMongoRefs,
+  mergeWithSessionLabels,
+  recordSessionLabel,
+} from './v2/query-refs';
+import { storeHandle, qualifyHandleRefs } from './v2/handle-store';
+import { computeResultStats } from './v2/result-stats';
+import type { ResultEntry } from './result-shapes';
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -513,4 +522,226 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
     }
   }
 
+}
+
+// ─── ChainedExecuteQuery (V1 benchmark) ───────────────────────────────────
+//
+// The V1 benchmark agent's ExecuteQuery, ported from V2's primitives.
+// Distinct from `BaseExecuteQuery` (kept untouched for production), this
+// variant:
+//   - takes `queries: [{connection, query, label?}]` instead of one query
+//   - is ALWAYS sequential — runs the queries in order as a pipeline
+//   - REQUIRES queries[1..n] to reference an earlier label via $label.col
+//   - returns ONLY the final query's `{preview, handle, stats}` (single, not
+//     an array) — intermediate queries are setup, not output
+//   - on any error (validation, execution, interpolation) returns `{error}`
+//     and aborts (whole-batch fail) — no partial results
+//   - supports all V2's cross-DB primitives: SQL→Mongo $label.column,
+//     `FROM handle_xyz` via the shared DuckDB, session-scoped labels
+//     persisting across calls
+//
+// Internals reused as-is from V2: `interpolateRefs` / `interpolateMongoRefs`
+// (./v2/query-refs.ts), `storeHandle` / `qualifyHandleRefs`
+// (./v2/handle-store.ts), `computeResultStats` (./v2/result-stats.ts).
+
+const ChainedQuerySpec = Type.Object({
+  connection: Type.String({ description: 'Database connection name' }),
+  query: Type.String({
+    description: 'SQL query, OR for Mongo connections a JSON {"collection":"...","pipeline":[...]} string. Use $label.column to reference rows from an earlier query in this pipeline (or from a previous ExecuteQuery call).',
+  }),
+  label: Type.Optional(Type.String({
+    description: 'Optional name for this query\'s rows. Later queries can reference them as $label.column. Labels persist across calls in the same session.',
+  })),
+});
+
+const ChainedExecuteQueryParams = Type.Object({
+  queries: Type.Array(ChainedQuerySpec, {
+    description: 'Pipeline of queries to run sequentially. The 2nd+ query MUST contain a $label.column reference to an earlier query (in this call OR a previous one).',
+    minItems: 1,
+  }),
+  timeout: Type.Optional(Type.Number({
+    description: 'Per-query timeout in seconds (default 60, max 300). Set up front (180–300) for big-scan queries — don\'t retry on a default-kill.',
+  })),
+  maxChars: Type.Optional(Type.Number({
+    description: 'Max characters of inline preview rows (default ~10,000). Increase only if you genuinely need to see more rows inline; otherwise use fetchHandle for pagination.',
+  })),
+});
+
+interface ChainedExecuteQueryDetails extends Record<string, unknown> {
+  success: boolean;
+  queryCount: number;
+  error?: string;
+  finalQuery?: string;
+}
+
+const CHAINED_EXECUTE_QUERY_DESCRIPTION = `Run a pipeline of queries against your data connections. The pipeline returns ONE result — the final query's output as {preview, handle, stats}.
+
+PIPELINE SEMANTICS:
+- Queries run sequentially in the order given.
+- The 2nd+ query MUST reference an earlier query's label via $label.column. The reference inlines the earlier rows' column values: in SQL it becomes a literal comma-separated list (e.g. WHERE id IN ($top.product_id) → WHERE id IN (4233, 5281, 10838)); inside a Mongo pipeline JSON it becomes a real JSON array (e.g. {"$in": "$top.product_id"} → {"$in": [4233, 5281, 10838]}). Universal cross-DB chaining — works SQL→SQL across engines, SQL→Mongo, Mongo→SQL.
+- Labels persist across ExecuteQuery calls in the same session. If query 1 of call A labels its rows "top", query 1 of call B can reference $top.column.
+- Whole-batch fail: if any query in the pipeline errors (validation, execution, interpolation), the call returns {error} and aborts. Independent queries should be issued as SEPARATE ExecuteQuery tool calls — the orchestrator dispatches parallel tool calls in parallel automatically.
+
+HANDLES (returned with every successful result):
+- The agent gets a handle ID for the final query's output. Use fetchHandle({handle, offset, length}) to paginate through more rows.
+- For SQL connections, you can JOIN handles back as tables: FROM handle_xyz works whenever the query's connection is DuckDB or sqlite. For Mongo/Postgres connections, handle tables don't exist in those engines — use $label.column for chaining instead.
+- A built-in connection named "_scratch" is always available — a DuckDB connection routing to the in-memory catalog where handle tables live. Use _scratch when your dataset has no other DuckDB/sqlite connection and you want to JOIN a handle: ExecuteQuery({queries: [{connection: "_scratch", query: "SELECT count(*) FROM handle_abc WHERE ..."}]}).
+
+MONGO: queries against a Mongo connection are JSON strings of the form {"collection":"...","pipeline":[stages]}. Common stages: $match, $group, $project, $sort, $limit, $lookup, $unwind. Cross-DB chains use $label.column inside the JSON — the interpolator emits a JSON array.
+
+TIMEOUT (default 60s, max 300s): per-query budget. Bump UP FRONT for large-scan queries; don't eat a default-kill and retry.
+
+MAXCHARS (default ~10,000): caps inline preview text. Use fetchHandle for pagination over a handle rather than raising maxChars.`;
+
+const CHAINED_EXECUTE_QUERY_SCHEMA: Tool<typeof ChainedExecuteQueryParams> = {
+  name: 'ExecuteQuery',
+  description: CHAINED_EXECUTE_QUERY_DESCRIPTION,
+  parameters: ChainedExecuteQueryParams,
+};
+
+/**
+ * V1 benchmark ExecuteQuery — chained-pipeline variant.
+ *
+ * Distinct class from `BaseExecuteQuery` (which production extends in
+ * `db-tools.server.ts`). V1 benchmark registers THIS class instead.
+ */
+export class ChainedExecuteQuery extends MXTool<
+  typeof ChainedExecuteQueryParams,
+  BenchmarkAnalystContext,
+  ChainedExecuteQueryDetails
+> {
+  static readonly schema: Tool<TSchema> = CHAINED_EXECUTE_QUERY_SCHEMA;
+
+  protected connectors = new Map<string, NodeConnector>();
+  protected dialects = new Map<string, string>();
+
+  protected async _initialiseConnectors(): Promise<void> {
+    await buildConnectorsFromContext(
+      this.context.connections, this.connectors, this.dialects, this.context.datasetKey,
+    );
+    // Always make the built-in `_scratch` DuckDB available — gives the
+    // agent a place to run `FROM handle_xyz` JOINs even in datasets that
+    // declare only Mongo / Postgres source connections.
+    if (!this.connectors.has('_scratch')) {
+      const scratch = await getOrCreateBenchmarkConnector('_scratch', 'duckdb', {});
+      this.connectors.set('_scratch', scratch);
+      this.dialects.set('_scratch', 'duckdb');
+    }
+  }
+
+  async run(): Promise<ToolResponse<ChainedExecuteQueryDetails>> {
+    const { queries, timeout, maxChars } = this.parameters;
+    const previewMaxChars = Math.min(maxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
+    const timeoutMs = clampQueryTimeoutSeconds(timeout) * 1000;
+
+    // Validation: at least one query.
+    if (!Array.isArray(queries) || queries.length === 0) {
+      return errorResponse('ExecuteQuery requires at least one query in `queries`.', queries?.length ?? 0);
+    }
+
+    // Validation: 2nd+ queries must reference an earlier label via $label.col.
+    const LABEL_REF_RE = /\$[a-zA-Z_]\w*\.\w+/;
+    for (let i = 1; i < queries.length; i++) {
+      if (!LABEL_REF_RE.test(queries[i].query)) {
+        return errorResponse(
+          `Query #${i + 1} in this pipeline does not reference an earlier label via $label.column. ExecuteQuery is always sequential — every query after the first must chain off a labeled earlier result. If your queries are independent, issue them as separate ExecuteQuery tool calls in parallel.`,
+          queries.length,
+        );
+      }
+    }
+
+    await this._initialiseConnectors();
+
+    const labeledResults = new Map<string, Record<string, unknown>[]>();
+    let lastResult: QueryResult | null = null;
+
+    for (let i = 0; i < queries.length; i++) {
+      const spec = queries[i];
+      const connector = this.connectors.get(spec.connection);
+      if (!connector) {
+        return errorResponse(
+          `Connection '${spec.connection}' not found. Available: ${[...this.connectors.keys()].join(', ')}`,
+          queries.length,
+        );
+      }
+      const dialect = this.dialects.get(spec.connection) ?? 'duckdb';
+      const isMongo = dialect === 'mongo';
+
+      // Interpolate $label.col against per-call labels (set by earlier
+      // queries in this batch) merged with session-scoped labels (set by
+      // previous ExecuteQuery calls in the same agent run).
+      const availableLabels = mergeWithSessionLabels(labeledResults);
+      const interpolated = availableLabels.size > 0
+        ? (isMongo
+          ? interpolateMongoRefs(spec.query, availableLabels)
+          : interpolateRefs(spec.query, availableLabels))
+        : spec.query;
+
+      let finalQuery: string;
+      try {
+        // For SQL queries, rewrite `FROM handle_xyz` → `memory.main."handle_xyz"`
+        // so the reference resolves to the shared-DuckDB handle table. Block
+        // handle refs on Mongo (handles are SQL tables; can't query from Mongo).
+        if (isMongo) {
+          finalQuery = interpolated;
+        } else {
+          const { sql, referencedHandles } = await qualifyHandleRefs(interpolated);
+          if (referencedHandles.length > 0 && dialect !== 'duckdb' && dialect !== 'sqlite') {
+            return errorResponse(
+              `Query #${i + 1} references handle table(s) (${referencedHandles.join(', ')}) on a '${dialect}' connection. Handle tables live in the shared DuckDB — use a duckdb/sqlite connection (or "_scratch") to JOIN them.`,
+              queries.length,
+            );
+          }
+          finalQuery = await enforceQueryLimit(sql, { dialect });
+        }
+      } catch (err) {
+        return errorResponse(
+          `Query #${i + 1} failed before execution: ${err instanceof Error ? err.message : String(err)}`,
+          queries.length,
+        );
+      }
+
+      let result: QueryResult;
+      try {
+        result = await connector.query(finalQuery, undefined, timeoutMs);
+      } catch (err) {
+        return errorResponse(
+          `Query #${i + 1} failed: ${err instanceof Error ? err.message : String(err)}`,
+          queries.length,
+        );
+      }
+
+      if (spec.label) {
+        labeledResults.set(spec.label, result.rows);
+        recordSessionLabel(spec.label, result.rows);
+      }
+      lastResult = result;
+    }
+
+    // Whole pipeline succeeded — return the FINAL query's result only.
+    if (!lastResult) {
+      return errorResponse('Pipeline produced no result (internal error).', queries.length);
+    }
+
+    const stored = await storeHandle(lastResult);
+    const stats = computeResultStats(lastResult, Math.min(lastResult.rows.length, 100));
+    const compressed = compressQueryResult(lastResult, previewMaxChars);
+    const entry: ResultEntry = stored.error
+      ? { preview: compressed.data, stats, handle_error: stored.error }
+      : { preview: compressed.data, handle: stored.handleId, stats };
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify(entry) }],
+      isError: false,
+      details: { success: true, queryCount: queries.length, finalQuery: lastResult.finalQuery },
+    };
+
+    function errorResponse(msg: string, qCount: number): ToolResponse<ChainedExecuteQueryDetails> {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: msg }) }],
+        isError: true,
+        details: { success: false, queryCount: qCount, error: msg },
+      };
+    }
+  }
 }
