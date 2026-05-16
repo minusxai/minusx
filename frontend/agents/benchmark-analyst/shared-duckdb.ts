@@ -51,6 +51,31 @@ function quoteLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+// ── V2 handle-table helpers ────────────────────────────────────────────────
+// Map an arbitrary source type string to a DuckDB column type for handle
+// tables. Best-effort: anything unrecognised becomes VARCHAR.
+function mapTypeToDuckDb(type: string | undefined): string {
+  const upper = (type ?? 'VARCHAR').toUpperCase();
+  if (upper.includes('INT')) return 'BIGINT';
+  if (
+    upper.includes('DOUBLE') || upper.includes('FLOAT') ||
+    upper.includes('DECIMAL') || upper.includes('NUMERIC') || upper.includes('REAL')
+  ) return 'DOUBLE';
+  if (upper.includes('BOOL')) return 'BOOLEAN';
+  if (upper === 'DATE') return 'DATE';
+  if (upper.includes('TIMESTAMP') || upper.includes('DATETIME')) return 'TIMESTAMP';
+  return 'VARCHAR';
+}
+
+// Escape a JS value for inline use in a DuckDB INSERT ... VALUES.
+function escapeSqlValue(v: unknown): string {
+  if (v == null) return 'NULL';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';
+  if (typeof v === 'bigint') return String(v);
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
 interface AttachedEntry {
   name: string;
   dialect: AttachableDialect;
@@ -251,6 +276,80 @@ class BenchmarkSharedDuckdb {
       }));
     });
   }
+
+  // ── V2 handle tables ─────────────────────────────────────────────────────
+  // V2's handle store registers query results as tables in this instance's
+  // in-memory `memory` catalog. Co-locating them with the ATTACHed dataset
+  // catalogs is what lets `ExecuteQuery` join `FROM handle_xyz` against live
+  // connection data — they're all one DuckDBInstance. Fully-qualified
+  // `memory.main.<id>` names so they resolve regardless of the connection's
+  // current `USE` catalog.
+
+  /** Register (or replace) a query result as a queryable `memory.main` table. */
+  async registerHandleTable(handleId: string, result: QueryResult): Promise<void> {
+    const conn = await this.acquireConnection();
+    try {
+      const tbl = `memory.main.${quoteIdent(handleId)}`;
+      if (result.columns.length === 0) {
+        await conn.run(`CREATE OR REPLACE TABLE ${tbl} (placeholder VARCHAR)`);
+        return;
+      }
+      // No defensive dedup here: if the source query produced duplicate
+      // column names, let DuckDB's native error propagate. The caller
+      // (`storeHandle`) catches it and surfaces a `handle_error` to the
+      // agent, who then sees an actionable message rather than a silently
+      // renamed column appearing in their handle.
+      const colDefs = result.columns
+        .map((col, i) => `${quoteIdent(col)} ${mapTypeToDuckDb(result.types?.[i])}`)
+        .join(', ');
+      await conn.run(`CREATE OR REPLACE TABLE ${tbl} (${colDefs})`);
+      if (result.rows.length > 0) {
+        const colNames = result.columns.map(quoteIdent).join(', ');
+        const valueRows = result.rows
+          .map((row) => `(${result.columns.map((c) => escapeSqlValue(row[c])).join(', ')})`)
+          .join(', ');
+        await conn.run(`INSERT INTO ${tbl} (${colNames}) VALUES ${valueRows}`);
+      }
+    } finally {
+      this.releaseConnection(conn);
+    }
+  }
+
+  /** Run SQL against the `memory` catalog (handle tables). */
+  async queryMemory(sql: string): Promise<QueryResult> {
+    const conn = await this.acquireConnection();
+    try {
+      await conn.run('USE memory');
+      const result = await conn.run(sql);
+      const cc = result.columnCount;
+      const columns: string[] = [];
+      const types: string[] = [];
+      for (let i = 0; i < cc; i++) {
+        columns.push(result.columnName(i));
+        types.push(result.columnType(i).toString());
+      }
+      const rows = makeJsonSafe(await result.getRowObjectsJS() as Record<string, unknown>[]);
+      return { columns, types, rows, finalQuery: sql };
+    } finally {
+      this.releaseConnection(conn);
+    }
+  }
+
+  /** Drop every handle table from the `memory` catalog. */
+  async dropHandleTables(): Promise<void> {
+    const conn = await this.acquireConnection();
+    try {
+      const result = await conn.run(
+        "SELECT table_name FROM information_schema.tables WHERE table_catalog = 'memory' AND table_schema = 'main'",
+      );
+      const rows = await result.getRowObjectsJS() as Array<{ table_name: string }>;
+      for (const row of rows) {
+        await conn.run(`DROP TABLE IF EXISTS memory.main.${quoteIdent(row.table_name)}`);
+      }
+    } finally {
+      this.releaseConnection(conn);
+    }
+  }
 }
 
 // Process-wide singleton. Lazily initialised on first call. The init
@@ -277,18 +376,26 @@ async function getOrCreateShared(): Promise<BenchmarkSharedDuckdb> {
 }
 
 /**
- * NodeConnector implementation that routes to the shared DuckDBInstance
- * keyed by `name`. Looks identical to `DuckDbConnector` /
- * `SqliteConnector` from the caller's perspective.
+ * NodeConnector implementation that routes to the shared DuckDBInstance.
+ * The agent-facing `name` (e.g. `metadata_database`) is stored on the
+ * base class via `super(name, {})`; the ATTACH alias actually used inside
+ * the shared instance is `internalName` (e.g. `__ds_agnews__metadata_database`).
+ * That namespacing keeps two benchmark datasets running in parallel from
+ * colliding on the same logical connection name pointing at different
+ * physical files.
  */
 class BenchmarkSharedDuckdbConnector extends NodeConnector {
-  constructor(name: string, private readonly shared: BenchmarkSharedDuckdb) {
+  constructor(
+    name: string,
+    private readonly internalName: string,
+    private readonly shared: BenchmarkSharedDuckdb,
+  ) {
     super(name, {});
   }
 
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {
     try {
-      await this.shared.query(this.name, 'SELECT 1');
+      await this.shared.query(this.internalName, 'SELECT 1');
       if (includeSchema) {
         const schemas = await this.getSchema();
         return { success: true, message: 'Connection successful', schema: { schemas } };
@@ -305,12 +412,21 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
     _params?: Record<string, string | number>,
     timeoutMs?: number,
   ): Promise<QueryResult> {
-    return this.shared.query(this.name, sql, timeoutMs);
+    return this.shared.query(this.internalName, sql, timeoutMs);
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    return this.shared.getSchema(this.name);
+    return this.shared.getSchema(this.internalName);
   }
+}
+
+/**
+ * Compose the dataset-scoped ATTACH alias from the agent-facing connection
+ * name plus an optional dataset key. With no key, the alias is the bare
+ * name (preserving the original behaviour for non-parallel callers).
+ */
+function internalAttachName(name: string, datasetKey?: string): string {
+  return datasetKey ? `__ds_${datasetKey}__${name}` : name;
 }
 
 /**
@@ -327,10 +443,21 @@ class BenchmarkSharedDuckdbConnector extends NodeConnector {
  * dataset files ATTACHed is preserved across tool calls (one thread
  * pool, one buffer cache).
  */
+export interface BenchmarkConnectorOptions {
+  /**
+   * Dataset-scoped namespace for the ATTACH alias inside the shared
+   * DuckDB instance. The agent-facing connection name stays unchanged;
+   * only the internal alias is prefixed. Pass `undefined` (single-dataset
+   * runs / legacy callers) to keep the bare name.
+   */
+  datasetKey?: string;
+}
+
 export async function getOrCreateBenchmarkConnector(
   name: string,
   dialect: string,
   config: Record<string, unknown>,
+  opts?: BenchmarkConnectorOptions,
 ): Promise<NodeConnector> {
   if (isAttachable(dialect)) {
     const filePath = (config as { file_path?: unknown }).file_path;
@@ -339,10 +466,31 @@ export async function getOrCreateBenchmarkConnector(
     }
     const absPath = resolveDuckDbFilePath(filePath);
     const shared = await getOrCreateShared();
-    await shared.ensureAttached([{ name, dialect, absPath }]);
-    return new BenchmarkSharedDuckdbConnector(name, shared);
+    const internalName = internalAttachName(name, opts?.datasetKey);
+    await shared.ensureAttached([{ name: internalName, dialect, absPath }]);
+    return new BenchmarkSharedDuckdbConnector(name, internalName, shared);
   }
   const conn = getNodeConnector(name, dialect, config);
   if (!conn) throw new Error(`Unknown dialect '${dialect}' for connection '${name}'`);
   return conn;
+}
+
+// ── V2 handle-table API ────────────────────────────────────────────────────
+// Thin module-level wrappers over the shared instance, used by
+// `v2/handle-store.ts`. Co-locating handle tables in the shared instance is
+// what makes `ExecuteQuery`'s `FROM handle_xyz` joins against live data work.
+
+/** Register a query result as a queryable `memory.main` handle table. */
+export async function registerHandleTable(handleId: string, result: QueryResult): Promise<void> {
+  return (await getOrCreateShared()).registerHandleTable(handleId, result);
+}
+
+/** Run SQL directly against the registered handle tables. */
+export async function queryHandleTables(sql: string): Promise<QueryResult> {
+  return (await getOrCreateShared()).queryMemory(sql);
+}
+
+/** Drop every registered handle table (used by `clearHandles`). */
+export async function dropHandleTables(): Promise<void> {
+  return (await getOrCreateShared()).dropHandleTables();
 }

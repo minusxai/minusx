@@ -15,6 +15,7 @@ import {
   DAB_QUESTION_TIMEOUT,
   DAB_TIMES_RUN,
   DAB_DOUBLE_CHECK,
+  DAB_V2,
   MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY,
   MX_API_BASE_URL,
@@ -31,6 +32,11 @@ import {
   DoubleCheckBenchmarkAgent,
   CheckEquivalence,
 } from '@/agents/benchmark-analyst/double-check-benchmark';
+import {
+  V2BenchmarkAnalystAgent,
+  V2DoubleCheckBenchmarkAgent,
+  V2_DATA_TOOLS,
+} from '@/agents/benchmark-analyst/v2';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
 // ── Config ────────────────────────────────────────────────────
@@ -82,52 +88,80 @@ const DATASETS = discoverDatasets(BASE);
 
 // ── Agent (customize the model here; tools + prompt come from BenchmarkAnalystAgent) ──
 //
+// DAB_V2 toggles the V2 4-tool agent: `V2BenchmarkAnalystAgent` with
+// `SearchDBSchemaV2`, `ExecuteQueryV2`, `ExploreV2`, `FetchHandleV2`.
+// These use a handle-based data model for better context management.
+//
 // DAB_DOUBLE_CHECK toggles cross-check mode: the root agent becomes a
-// `DoubleCheckBenchmarkAgent` that spawns two `BenchmarkAnalystAgent`
-// instances in parallel (dispatched as tool calls), judges via
-// `CheckEquivalence`, and retries once on disagreement. ~4× sub-agent
-// runs + 2 judge calls per row.
+// `DoubleCheckBenchmarkAgent` that spawns two analyst sub-agents in
+// parallel (dispatched as tool calls), judges via `CheckEquivalence`, and
+// retries on disagreement. ~4× sub-agent runs + 2 judge calls per row.
+// The sub-agent class is selected via `DoubleCheckBenchmarkAgent`'s
+// `primaryAgent`/`secondaryAgent` static fields — defaults to V1; the V2
+// subclass below overrides them. The two flags compose: `DAB_V2=1
+// DAB_DOUBLE_CHECK=1` runs double-check over V2 analysts.
 
+const useV2 = DAB_V2 === '1' || DAB_V2 === 'true';
 const doubleCheck = DAB_DOUBLE_CHECK === '1' || DAB_DOUBLE_CHECK === 'true';
 const benchmarkModel = getModel(
   CONFIG.model.provider as never,
   CONFIG.model.model as never,
 );
 
-// Two parallel Agent subclasses — TypeScript can't infer `static schema`
-// through a conditional `extends`, so we declare both and pick one.
+// Agent subclasses with the configured model
 class SingleAgent extends BenchmarkAnalystAgent {
+  static model = benchmarkModel;
+}
+class V2Agent extends V2BenchmarkAnalystAgent {
   static model = benchmarkModel;
 }
 class DoubleCheckAgent extends DoubleCheckBenchmarkAgent {
   static model = benchmarkModel;
 }
-// Sub-agent class registered in DoubleCheck mode: needs the configured
-// `benchmarkModel`, not the default fallback that `BenchmarkAnalystAgent`
-// resolves at module load (faux when ANALYST_AGENT_MODEL_CONFIG is unset).
-// The orchestrator looks up by `schema.name === 'BenchmarkAnalystAgent'`,
-// inherited from the parent — so this subclass IS what `DoubleCheckBenchmarkAgent`
-// invokes via `orch.invoke(BenchmarkAnalystAgent, …)`.
+// Sub-agent classes registered in DoubleCheck mode: each needs the
+// configured `benchmarkModel`, not the fallback the parent class resolves
+// at module load (faux when ANALYST_AGENT_MODEL_CONFIG is unset). The
+// orchestrator looks up by `schema.name` (inherited from the parent), so
+// these subclasses ARE what `DoubleCheckBenchmarkAgent` invokes by name.
 class BenchmarkAnalystAgentForDoubleCheck extends BenchmarkAnalystAgent {
   static model = benchmarkModel;
 }
+class V2BenchmarkAnalystAgentForDoubleCheck extends V2BenchmarkAnalystAgent {
+  static model = benchmarkModel;
+}
+class V2DoubleCheckAgent extends V2DoubleCheckBenchmarkAgent {
+  static model = benchmarkModel;
+}
 
-const RootAgent = doubleCheck ? DoubleCheckAgent : SingleAgent;
+// Select agent based on flags. V2 and DOUBLE_CHECK compose:
+//   DAB_V2=1 DAB_DOUBLE_CHECK=1 → V2 analysts inside double-check controller.
+const RootAgent = useV2
+  ? (doubleCheck ? V2DoubleCheckAgent : V2Agent)
+  : (doubleCheck ? DoubleCheckAgent : SingleAgent);
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-const registrables = doubleCheck
-  ? [
-      ListDBConnections,
-      BaseSearchDBSchema,
-      BaseExecuteQuery,
-      BenchmarkAnalystAgentForDoubleCheck,
-      CheckEquivalence,
-      RootAgent,
-      FuzzyMatch,
-      ExploreDataset,
-    ]
-  : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzyMatch, ExploreDataset];
+const registrables = useV2
+  ? doubleCheck
+    ? [
+        ...V2_DATA_TOOLS,
+        V2BenchmarkAnalystAgentForDoubleCheck,
+        CheckEquivalence,
+        RootAgent,
+      ]
+    : [...V2_DATA_TOOLS, RootAgent]
+  : doubleCheck
+    ? [
+        ListDBConnections,
+        BaseSearchDBSchema,
+        BaseExecuteQuery,
+        BenchmarkAnalystAgentForDoubleCheck,
+        CheckEquivalence,
+        RootAgent,
+        FuzzyMatch,
+        ExploreDataset,
+      ]
+    : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzyMatch, ExploreDataset];
 
 // Default per-question timeout (seconds). Override via DAB_QUESTION_TIMEOUT.
 // A row that hits its timeout is cancelled and dropped from the output
@@ -183,6 +217,9 @@ console.log(
 console.log(
   `  timeout: question=${questionTimeoutSec}s (armed after agent-slot acquisition; override via DAB_QUESTION_TIMEOUT)`,
 );
+if (useV2) {
+  console.log(`  v2: ON (4-tool agent: SearchDBSchema, ExecuteQuery, Explore, fetchHandle; handle-based data model)`);
+}
 if (doubleCheck) {
   console.log(`  doubleCheck: ON (each row runs 2 analysts in parallel + 1 judge call; retry once on disagreement ⇒ ~4× LLM cost)`);
 }

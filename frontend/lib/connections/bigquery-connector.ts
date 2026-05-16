@@ -97,9 +97,11 @@ export class BigQueryConnector extends NodeConnectorBase {
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
-    // Substitute :paramName → @paramName (BigQuery named params), collect param values
+    // Substitute :paramName → @paramName (BigQuery named params). Negative
+    // lookbehind skips the second `:` of `::cast` operators (BigQuery uses
+    // CAST() rather than `::`, but legacy SQL queries can still contain it).
     const queryParams: Record<string, string | number | null> = {};
-    const bqSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+    const bqSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
       queryParams[key] = params?.[key] ?? null;
       return `@${key}`;
     });

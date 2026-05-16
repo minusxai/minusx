@@ -51,6 +51,40 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * so the LLM knows what the data means without re-deriving it.
    */
   contextDocs?: string;
+  /**
+   * The user's ORIGINAL question for this row. Carried in the context so
+   * tool helpers (e.g. `runPromptPass`) can read it directly without each
+   * tool plumbing it through arg-by-arg. Distinct from per-round agent
+   * userMessages (in DoubleCheck mode, round-2 sub-agents see a feedback
+   * prompt as their `parameters.userMessage`; `context.originalMessage`
+   * stays the original throughout). Populated by the benchmark runner;
+   * production paths leave it `undefined`.
+   */
+  originalMessage?: string;
+  /**
+   * Per-sub-agent catalog cache key. Each cache key holds an independent
+   * catalog DuckDB instance — the schema tables (connections / schemas /
+   * tables / columns / indexes / column_stats) come out identical, but
+   * the lighter-model-picked `sample_rows` / `sample_notes` can differ
+   * per key. `DoubleCheckBenchmarkAgent` sets this to `'agent-a'` /
+   * `'agent-b'` per sub-agent so the two sub-agents see different sample
+   * rows + different shape notes (forcing input-level diversity and
+   * making same-misinterpretation convergence less likely). Single-agent
+   * runs leave it `undefined` and fall through to `'default'` inside the
+   * catalog store.
+   */
+  catalogKey?: string;
+  /**
+   * Per-dataset namespace for the shared DuckDB instance's ATTACH aliases.
+   * Two benchmark datasets running in parallel may declare a connection
+   * with the same logical name (e.g. `metadata_database`) pointing at
+   * different physical files; the dataset-keyed namespace lets both
+   * attach to the process-wide DuckDB instance without collision. The
+   * runner stamps this with the dataset's input-file basename per row.
+   * Single-dataset / non-parallel callers leave it `undefined` and fall
+   * back to the bare connection name.
+   */
+  datasetKey?: string;
 }
 
 /**

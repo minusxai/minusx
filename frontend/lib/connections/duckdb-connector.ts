@@ -8,6 +8,7 @@ import { collectDuckDbIndexes } from './duckdb-indexes';
 import { runDuckDbWithTimeout } from './duckdb-query';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+import { namedToPositional } from './named-to-positional';
 
 const SKIP_SCHEMAS = immutableSet(['system', 'temp']);
 
@@ -81,12 +82,9 @@ export class DuckDbConnector extends NodeConnector {
   ): Promise<QueryResult> {
     return withDuckDbConnection(this.absPath, 'READ_ONLY', async (conn) => {
       // Replace named params (:name) with positional $1, $2, ... (DuckDB
-      // prepared-statement syntax). The engine receives this + paramValues.
-      const paramValues: unknown[] = [];
-      const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-        paramValues.push(params?.[key] ?? null);
-        return `$${paramValues.length}`;
-      });
+      // prepared-statement syntax). The shared helper's negative-lookbehind
+      // protects `::cast` operators (DuckDB supports PostgreSQL casts).
+      const { sql: positionalSql, values: paramValues } = namedToPositional(sql, params);
 
       const finalQuery = inlineSqlParams(sql, params);
 

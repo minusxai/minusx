@@ -683,4 +683,88 @@ describe('DoubleCheckBenchmarkAgent', () => {
     expect(findToolResult(orch.log, 'r1-check')).toBeDefined();
     expect(findToolResult(orch.log, 'r2-check')).toBeDefined();
   });
+
+  it('uses primaryAgent / secondaryAgent static fields for sub-agent dispatch', async () => {
+    // Custom analyst with a distinct schema.name. Renamed via a fresh
+    // schema literal — the orchestrator dispatches sub-agents by name, so
+    // overriding `primaryAgent`/`secondaryAgent` must drive both
+    // dispatched names and registry lookup.
+    class AlternateAnalyst extends BenchmarkAnalystAgent {
+      static override readonly schema = {
+        ...BenchmarkAnalystAgent.schema,
+        name: 'AlternateAnalyst',
+      };
+    }
+    class DoubleCheckAlt extends DoubleCheckBenchmarkAgent {
+      static primaryAgent = AlternateAnalyst;
+      static secondaryAgent = AlternateAnalyst;
+    }
+
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('EQUIVALENT', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator([
+      AlternateAnalyst,
+      CheckEquivalence,
+      DoubleCheckAlt,
+      // Tools the analyst would advertise — unused here (analyst stops on
+      // first turn) but kept so registry validation is happy.
+      ListDBConnections,
+      BaseSearchDBSchema,
+      BaseExecuteQuery,
+    ]);
+    const root = new DoubleCheckAlt(orch, { userMessage: 'q' }, CTX);
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    const result = await stream.result();
+
+    expect(result).not.toBeNull();
+    // The sub-agent toolCalls in the log must reference the overridden name.
+    const r1a1 = findToolCallInAssistantMsgs(orch.log, 'r1-agent1');
+    const r1a2 = findToolCallInAssistantMsgs(orch.log, 'r1-agent2');
+    expect((r1a1 as { name?: string }).name).toBe('AlternateAnalyst');
+    expect((r1a2 as { name?: string }).name).toBe('AlternateAnalyst');
+  });
+
+  // Each analyst sub-agent should land on a distinct catalog cache key
+  // (`agent-a` / `agent-b`) so their `sample_rows` / `sample_notes` are
+  // picked from different lighter-model passes — input-level diversity
+  // that helps the two sub-agents avoid converging on the same data-shape
+  // misreading. Surface via dispatch's `contextOverridesByToolCallId` so
+  // each sub-tool's resolved context carries its slot id.
+  it('routes sub-agents to distinct catalogKey slots via context overrides', async () => {
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('TL;DR: 42', { stopReason: 'stop' }),
+      fauxAssistantMessage('EQUIVALENT', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const dispatchSpy = vi.spyOn(orch, 'dispatch');
+    const root = new DoubleCheckBenchmarkAgent(orch, { userMessage: 'q' }, CTX);
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    await stream.result();
+
+    // Find the round-1 analyst dispatch (the message that carries both
+    // r1-agent1 and r1-agent2 toolCalls).
+    const r1Dispatch = dispatchSpy.mock.calls.find((args) => {
+      const ids = (args[0].content as { type: string; id?: string }[])
+        .filter((c) => c.type === 'toolCall')
+        .map((c) => c.id);
+      return ids.includes('r1-agent1') && ids.includes('r1-agent2');
+    });
+    expect(r1Dispatch).toBeDefined();
+
+    const opts = r1Dispatch![2] as
+      | { contextOverridesByToolCallId?: Record<string, Record<string, unknown>> }
+      | undefined;
+    expect(opts).toBeDefined();
+    expect(opts!.contextOverridesByToolCallId).toBeDefined();
+    expect(opts!.contextOverridesByToolCallId!['r1-agent1']).toEqual({ catalogKey: 'agent-a' });
+    expect(opts!.contextOverridesByToolCallId!['r1-agent2']).toEqual({ catalogKey: 'agent-b' });
+  });
 });

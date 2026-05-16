@@ -3,6 +3,7 @@ import type { NodeConnector, QueryResult, SchemaEntry, TableIndex, TestConnectio
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { getOrCreatePgPool } from './pg-registry';
+import { namedToPositional } from './named-to-positional';
 
 const PG_OID_TO_TYPE: Record<number, string> = {
   16:   'boolean',
@@ -44,16 +45,9 @@ export class PostgresConnector extends NodeConnectorBase {
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
     const pool = getOrCreatePgPool(this.config);
 
-    // Substitute :paramName → $N (positional), reusing index for repeated names
-    const paramValues: unknown[] = [];
-    const seenParams: Record<string, number> = {};
-    const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-      if (!(key in seenParams)) {
-        paramValues.push(params?.[key] ?? null);
-        seenParams[key] = paramValues.length;
-      }
-      return `$${seenParams[key]}`;
-    });
+    // Substitute :paramName → $N (positional); negative lookbehind in
+    // `namedToPositional` leaves `::cast` operators intact.
+    const { sql: positionalSql, values: paramValues } = namedToPositional(sql, params);
 
     const finalQuery = inlineSqlParams(sql, params);
 

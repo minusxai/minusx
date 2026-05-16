@@ -34,6 +34,11 @@ import {
   DoubleCheckBenchmarkAgent,
   CheckEquivalence,
 } from '@/agents/benchmark-analyst/double-check-benchmark';
+import {
+  V2BenchmarkAnalystAgent,
+  V2DoubleCheckBenchmarkAgent,
+  V2_DATA_TOOLS,
+} from '@/agents/benchmark-analyst/v2';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import {
   loadBenchmarkConnectionsFromEnv,
@@ -62,6 +67,7 @@ import type {
   ConversationFileContent,
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /**
  * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
@@ -106,6 +112,41 @@ const BENCHMARK_TOOL_SWAPS: Record<string, RegistrableClass> = {
   ExecuteQuery: BaseExecuteQuery,
   SearchDBSchema: BaseSearchDBSchema,
 };
+
+/**
+ * V2 benchmark registrables. The V2 agent has a different toolset (4
+ * primitives, handle-based) so a swap-on-name approach doesn't cover it —
+ * we replace the whole array. Both the single-agent (`V2BenchmarkAnalystAgent`)
+ * and double-check (`V2DoubleCheckBenchmarkAgent`) entry points are
+ * registered alongside `CheckEquivalence` so resume + new-message paths
+ * both work, regardless of whether the saved log was a V2 single or V2
+ * double-check run.
+ */
+const V2_BENCHMARK_REGISTRABLES: RegistrableClass[] = [
+  ...V2_DATA_TOOLS,
+  V2BenchmarkAnalystAgent,
+  V2DoubleCheckBenchmarkAgent,
+  CheckEquivalence,
+];
+
+/**
+ * V1 and V2 double-check both inherit `schema.name = 'DoubleCheckBenchmarkAgent'`,
+ * so the root name alone can't tell them apart. We treat the conversation as
+ * V2 when the saved log contains any entry whose `name` is a V2-only marker —
+ * the agent class name `V2BenchmarkAnalystAgent`, or one of the V2-exclusive
+ * tool names (`Explore`, `fetchHandle`).
+ */
+const V2_AGENT_MARKERS = immutableSet(['V2BenchmarkAnalystAgent', 'Explore', 'fetchHandle']);
+
+export function isV2BenchmarkConversation(log: ConversationLog): boolean {
+  for (const entry of log) {
+    const e = entry as { type?: string; name?: string };
+    if ((e.type === 'toolCall' || e.type === 'toolResult') && e.name && V2_AGENT_MARKERS.has(e.name)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function toolName(cls: RegistrableClass): string {
   return (cls as { schema?: { name?: string } }).schema?.name ?? '';
@@ -249,13 +290,19 @@ async function setupOrchestration(
   // production `runQuery`/`loadConnectionSchema` path.
   const rootName = getRootAgentName(savedLog);
   const isBenchmarkRoot = rootName === 'BenchmarkAnalystAgent' || rootName === 'DoubleCheckBenchmarkAgent';
+  // V1 and V2 double-check share the root name `DoubleCheckBenchmarkAgent`;
+  // disambiguate by scanning the log for V2-only markers (V2 agent name or
+  // V2-exclusive tools).
+  const isV2Bench = isBenchmarkRoot && isV2BenchmarkConversation(savedLog);
 
-  // Benchmark conversations get the `Base*` tool variants (build connectors
-  // from ctx.connections[*].config); production conversations get the
-  // default registrables (route via runQuery / loadConnectionSchema).
-  const registrables = isBenchmarkRoot
-    ? withSwaps(V2_REGISTRABLES, BENCHMARK_TOOL_SWAPS)
-    : V2_REGISTRABLES;
+  // V2 benchmark conversations get the V2 toolset + V2 agent classes; V1
+  // benchmark conversations get the `Base*` tool swaps on the production
+  // registrables; production conversations get the default registrables.
+  const registrables = isV2Bench
+    ? V2_BENCHMARK_REGISTRABLES
+    : isBenchmarkRoot
+      ? withSwaps(V2_REGISTRABLES, BENCHMARK_TOOL_SWAPS)
+      : V2_REGISTRABLES;
   const orch = new Orchestrator(registrables, [...savedLog]);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
@@ -308,7 +355,8 @@ async function setupOrchestration(
         connections: fullConnections.length > 0 ? fullConnections : baseBenchCtx.connections,
         effectiveUser: user,
       };
-      const agent = new BenchmarkAnalystAgent(orch, { userMessage: body.user_message }, benchCtx);
+      const BenchAgent = isV2Bench ? V2BenchmarkAnalystAgent : BenchmarkAnalystAgent;
+      const agent = new BenchAgent(orch, { userMessage: body.user_message }, benchCtx);
       return {
         conversationId,
         expectedLogIndex,

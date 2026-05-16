@@ -280,7 +280,17 @@ export class Orchestrator {
   async dispatch(
     message: AssistantMessage,
     parent: MXAgent,
-    opts?: { threadHistoryByToolCallId?: Record<string, Message[]> },
+    opts?: {
+      threadHistoryByToolCallId?: Record<string, Message[]>;
+      /**
+       * Per-toolCall context overrides. The merged context (parent's
+       * context spread, then the override's fields on top) is passed to
+       * the sub-tool/agent's constructor — so e.g. DoubleCheck can route
+       * its two analyst sub-agents to different `catalogKey` slots
+       * without each sub-agent needing its own schema name.
+       */
+      contextOverridesByToolCallId?: Record<string, Record<string, unknown>>;
+    },
   ): Promise<void> {
     this.log.push({ ...message, parent_id: parent.id });
     parent.toolThread.push(message);
@@ -331,10 +341,14 @@ export class Orchestrator {
           return;
         }
 
+        const ctxOverride = opts?.contextOverridesByToolCallId?.[tc.id];
+        const effectiveContext = ctxOverride
+          ? { ...(parent.context as Record<string, unknown>), ...ctxOverride } as AgentContext
+          : parent.context;
         const instance = this.instantiate(
           Cls,
           validation.value as Record<string, unknown>,
-          parent.context,
+          effectiveContext,
           tc.id,
           opts?.threadHistoryByToolCallId?.[tc.id],
         );

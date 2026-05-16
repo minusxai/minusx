@@ -4,6 +4,10 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import { getModules } from '@/lib/modules/registry';
 import { NodeConnector, QueryResult, SchemaEntry, TestConnectionResult } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+// Shared `:name → $N` helper. Originally inlined here; extracted when the
+// same code was needed by Postgres / DuckDB / SQLite after the `::cast`
+// regression in the catalog-build pg_stats query.
+import { namedToPositional } from './named-to-positional';
 
 const WRITE_OPERATIONS = immutableSet(['insert', 'update', 'delete', 'create', 'drop', 'alter', 'truncate', 'merge', 'replace']);
 
@@ -22,22 +26,6 @@ async function assertReadOnly(sql: string): Promise<void> {
     if (WRITE_OPERATIONS.has(rootKey))
       throw new Error(`internal_db is read-only: ${rootKey} statements are not permitted`);
   }
-}
-
-function namedToPositional(
-  sql: string,
-  params?: Record<string, string | number>
-): { sql: string; values: unknown[] } {
-  const values: unknown[] = [];
-  const seen: Record<string, number> = {};
-  const positional = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
-    if (!(key in seen)) {
-      values.push(params?.[key] ?? null);
-      seen[key] = values.length;
-    }
-    return `$${seen[key]}`;
-  });
-  return { sql: positional, values };
 }
 
 export class InternalDbConnector extends NodeConnector {
