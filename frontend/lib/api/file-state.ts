@@ -603,15 +603,18 @@ export async function publishFile(
       updatedFile = result.data;
     } catch (firstError) {
       if (!(firstError instanceof ConflictError)) throw firstError;
-      // 409: server has a newer version (e.g. schema cache write).
-      // Merge our edits on top of the server's latest content and retry once.
+      // 409: server has a newer version. The conflict can be a content edit
+      // OR a move (which now bumps version). Either way, take the server's
+      // latest name/path on retry — we'd rather lose a local rename than
+      // silently re-write a stale path. Overlay only the user's content edits
+      // (persistableChanges) on top of the server's latest content.
       const serverFile = firstError.currentFile;
       getStore().dispatch(setFile({ file: serverFile }));
       const retryContent = { ...serverFile.content, ...fileState.persistableChanges } as typeof saveContent;
       const result = await FilesAPI.saveFile(
         fileId,
-        fileData.name,
-        fileData.path,
+        serverFile.name,
+        serverFile.path,
         retryContent,
         references,
         undefined,
@@ -681,14 +684,29 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
       path: f.metadataChanges?.path || f.path,
       content: merged,
       references: extractReferencesFromContent(merged as any, f.type as FileType),
+      // Optimistic-concurrency guard: if any other tab moved or edited this
+      // file in the meantime, the server's version no longer matches and we
+      // get a conflict instead of silently re-writing stale metadata.
+      expectedVersion: f.version,
     };
   });
 
-  const { data: saved } = await FilesAPI.batchSaveFiles(toSave as any);
+  const { data: saved, conflicts = [] } = await FilesAPI.batchSaveFiles(toSave as any);
   for (const file of saved) {
     getStore().dispatch(setFile({ file }));
     getStore().dispatch(clearEdits(file.id));
     getStore().dispatch(clearMetadataEdits(file.id));
+  }
+
+  // Resolve conflicts per-file via publishFile. We do NOT dispatch setFile for
+  // c.currentFile here — that would wipe the user's persistableChanges from
+  // Redux. Instead let publishFile re-attempt with the (stale) expectedVersion;
+  // the server will return ConflictError; publishFile's own catch path then
+  // captures persistableChanges locally before dispatching setFile, overlays
+  // them on serverFile.content, and retries against serverFile.name/path.
+  for (const c of conflicts) {
+    void c; // currentFile re-fetched implicitly via publishFile's retry path
+    await publishFile({ fileId: c.id });
   }
 
   return {};

@@ -277,8 +277,10 @@ export class DocumentDB {
   }
 
   static async updateMetadata(id: number, name: string, path: string): Promise<boolean> {
+    // version++ so any other tab holding a stale snapshot gets a ConflictError
+    // on its next save (rather than silently re-writing the old path).
     const result = await getModules().db.exec(
-      'UPDATE files SET name = $1, path = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+      'UPDATE files SET name = $1, path = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
       [name, path, id]
     );
     return result.rowCount > 0;
@@ -307,6 +309,7 @@ export class DocumentDB {
            WHEN id = $1 THEN $3
            ELSE $3 || substr(path, length($4) + 1)
          END,
+         version = version + 1,
          updated_at = CURRENT_TIMESTAMP
        WHERE id IN (${placeholders})`,
       [folderId, newName, newPath, oldPath, ...allIds]

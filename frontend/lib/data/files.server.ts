@@ -813,11 +813,26 @@ class FilesDataLayerServer implements IFilesDataLayer {
       return DocumentDB.batchSave(inputs, true);
     }
     const results: DbFile[] = [];
+    const conflicts: Array<{ id: number; currentFile: DbFile }> = [];
     for (const input of inputs) {
-      const result = await this.saveFile(input.id, input.name, input.path, input.content, input.references, user, input.editId, input.expectedVersion);
-      results.push(result.data);
+      try {
+        const result = await this.saveFile(input.id, input.name, input.path, input.content, input.references, user, input.editId, input.expectedVersion);
+        results.push(result.data);
+      } catch (err) {
+        // Best-effort batch: conflicts don't abort the loop. The client will
+        // resolve each conflicted file individually via publishFile (which
+        // merges local edits onto the server's latest file and retries).
+        // Any other error (auth, validation, etc.) still propagates.
+        if (err instanceof ConflictError) {
+          conflicts.push({ id: input.id, currentFile: err.currentFile });
+          continue;
+        }
+        throw err;
+      }
     }
-    return { data: results };
+    return conflicts.length > 0
+      ? { data: results, conflicts }
+      : { data: results };
   }
 
   async deleteFile(id: number, user: EffectiveUser): Promise<DeleteFileResult> {
