@@ -23,12 +23,12 @@ import {
 } from '@/lib/config';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
-  ListDBConnections,
-  BaseSearchDBSchema,
-  BaseExecuteQuery,
-  FuzzyMatch
+  CatalogSearchDBSchema,
+  ChainedExecuteQuery,
+  FuzzyMatch,
 } from '@/agents/benchmark-analyst/db-tools';
 import { ExploreDataset } from '@/agents/benchmark-analyst/explore-dataset';
+import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
 import {
   DoubleCheckBenchmarkAgent,
   CheckEquivalence,
@@ -153,16 +153,16 @@ const registrables = useV2
     : [...V2_DATA_TOOLS, RootAgent]
   : doubleCheck
     ? [
-        ListDBConnections,
-        BaseSearchDBSchema,
-        BaseExecuteQuery,
+        CatalogSearchDBSchema,
+        ChainedExecuteQuery,
+        FetchHandleV2,
         BenchmarkAnalystAgentForDoubleCheck,
         CheckEquivalence,
         RootAgent,
         FuzzyMatch,
         ExploreDataset,
       ]
-    : [ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, RootAgent, FuzzyMatch, ExploreDataset];
+    : [CatalogSearchDBSchema, ChainedExecuteQuery, FetchHandleV2, RootAgent, FuzzyMatch, ExploreDataset];
 
 // Default per-question timeout (seconds). Override via DAB_QUESTION_TIMEOUT.
 // A row that hits its timeout is cancelled and dropped from the output

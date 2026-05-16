@@ -517,6 +517,114 @@ describe('ChainedExecuteQuery — MongoDB native aggregation', () => {
     const matchStage = pipeline.find((s) => '$match' in s) as { $match: { item_id: { $in: unknown[] } } };
     expect(matchStage.$match.item_id.$in).toEqual([1, 2, 3]);
 
-    rmSync(tmpDir, { recursive: true, force: true });
+    // Don't rmSync tmpDir — shared-duckdb keeps it ATTACHed for the rest
+    // of the run. OS cleans up tmp eventually.
+  });
+});
+
+// ─── CatalogSearchDBSchema — catalog-SQL ──────────────────────────────────
+
+describe('CatalogSearchDBSchema', () => {
+  let tmpDir: string;
+  let sqlitePath: string;
+
+  beforeAll(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'db-tools-catalog-'));
+    sqlitePath = path.join(tmpDir, 'cat.sqlite');
+    const db = new RealDatabase(sqlitePath);
+    db.exec(`
+      CREATE TABLE customers (id INTEGER, email TEXT);
+      INSERT INTO customers VALUES (1, 'a@x.com'), (2, 'b@x.com');
+      CREATE TABLE orders (order_id INTEGER, customer_id INTEGER, total REAL);
+      INSERT INTO orders VALUES (101, 1, 10.5), (102, 2, 20.0);
+    `);
+    db.close();
+  });
+
+  afterAll(() => {}); // tmpDir cleaned up by OS — deleting it here breaks subsequent tests.
+
+  beforeEach(async () => {
+    await clearHandles();
+    clearSessionLabels();
+  });
+
+  const ctx = (): BenchmarkAnalystContext => ({
+    datasetKey: 'test-catalog',
+    connections: [{ name: 'shop', dialect: 'sqlite', config: { file_path: sqlitePath } }],
+  });
+
+  // Import inside the test to avoid hoisting issues with the file order
+  // (CatalogSearchDBSchema is in the same db-tools.ts module).
+
+  it('returns rows from the `columns` catalog table for SQL queries', async () => {
+    const { CatalogSearchDBSchema } = await import('../db-tools');
+    const tool = new CatalogSearchDBSchema(
+      undefined as never,
+      { queries: [{ query: "SELECT * FROM columns WHERE table_name = 'customers' ORDER BY column_name" }] },
+      ctx(),
+    );
+    const res = await tool.run();
+    expect(res.isError).toBe(false);
+    const payload = JSON.parse((res.content[0] as { text: string }).text);
+    expect(payload.results).toHaveLength(1);
+    const preview = payload.results[0].preview as string;
+    expect(preview).toContain('email');
+    expect(preview).toContain('id');
+    expect(payload.results[0].handle).toMatch(/^handle_/);
+  });
+
+  it('returns multiple result slots for batched queries', async () => {
+    const { CatalogSearchDBSchema } = await import('../db-tools');
+    const tool = new CatalogSearchDBSchema(
+      undefined as never,
+      {
+        queries: [
+          { query: "SELECT * FROM tables WHERE table_name = 'customers'" },
+          { query: "SELECT * FROM columns WHERE table_name = 'orders'" },
+        ],
+      },
+      ctx(),
+    );
+    const res = await tool.run();
+    expect(res.isError).toBe(false);
+    const payload = JSON.parse((res.content[0] as { text: string }).text);
+    expect(payload.results).toHaveLength(2);
+    expect(payload.results[0].preview).toContain('customers');
+    expect(payload.results[1].preview).toContain('order_id');
+  });
+
+  it('per-query errors sit in their slot, do not abort the batch', async () => {
+    const { CatalogSearchDBSchema } = await import('../db-tools');
+    const tool = new CatalogSearchDBSchema(
+      undefined as never,
+      {
+        queries: [
+          { query: "SELECT * FROM tables" },         // OK
+          { query: "SELECT * FROM nonexistent_catalog_table" }, // bad SQL
+          { query: "SELECT * FROM columns LIMIT 1" }, // OK
+        ],
+      },
+      ctx(),
+    );
+    const res = await tool.run();
+    expect(res.isError).toBe(false);
+    const payload = JSON.parse((res.content[0] as { text: string }).text);
+    expect(payload.results).toHaveLength(3);
+    expect(payload.results[0].preview).toBeDefined();
+    expect(payload.results[1].error).toBeDefined();
+    expect(payload.results[2].preview).toBeDefined();
+  });
+
+  it('rejects an empty queries array', async () => {
+    const { CatalogSearchDBSchema } = await import('../db-tools');
+    const tool = new CatalogSearchDBSchema(
+      undefined as never,
+      { queries: [] as never },
+      ctx(),
+    );
+    const res = await tool.run();
+    expect(res.isError).toBe(true);
+    const payload = JSON.parse((res.content[0] as { text: string }).text);
+    expect(payload.error).toMatch(/at least one query/i);
   });
 });

@@ -6,8 +6,10 @@ import {
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
-import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery, FuzzyMatch } from './db-tools';
+import { CatalogSearchDBSchema, ChainedExecuteQuery, FuzzyMatch } from './db-tools';
 import { ExploreDataset } from './explore-dataset';
+import { FetchHandleV2 } from './v2/fetch-handle';
+import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
 
 export const fauxRegistration = registerFauxProvider({
@@ -41,9 +43,9 @@ export class BenchmarkAnalystAgent<
     parameters: BenchmarkAnalystAgentParams,
   };
   static readonly tools: Tool<TSchema>[] = [
-    ListDBConnections.schema,
-    BaseSearchDBSchema.schema,
-    BaseExecuteQuery.schema,
+    CatalogSearchDBSchema.schema,
+    ChainedExecuteQuery.schema,
+    FetchHandleV2.schema,
     FuzzyMatch.schema,
     ExploreDataset.schema,
   ];
@@ -53,6 +55,8 @@ export class BenchmarkAnalystAgent<
     const ToolCls = this.constructor as typeof BenchmarkAnalystAgent;
     const toolNames = ToolCls.tools.map((t) => `\`${t.name}\``).join(', ');
     const visibleConnections = publicConnectionMetadata(this.context.connections);
+    const dialects = extractDialects(this.context.connections ?? []);
+    const dialectHints = renderDialectHints(dialects);
 
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
 You have access to the following tools: ${toolNames}.
@@ -60,11 +64,13 @@ You have access to the following tools: ${toolNames}.
 Connections available to you:
 ${JSON.stringify(visibleConnections)}
 
+${dialectHints}
+
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
   - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc).
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
-  - Execute queries with the ExecuteQuery tool. For a SQL connection, write SQL in that database's dialect. For a MongoDB connection (dialect "mongo"), write a native aggregation pipeline as a JSON string: {"collection": "<name>", "pipeline": [<stages>]} — you have full Mongo aggregation power, not SQL. Check each connection's "dialect" field above. Fix any syntax errors and try again until you get a valid response.
+  - Execute queries with the ExecuteQuery tool. For each connection, see its "dialect" field above and the per-dialect notes below for syntax + cross-DB chaining details. Fix any syntax errors and try again until you get a valid response.
 
   ### FuzzyMatch — lexical matching with semantic fallback
   - FuzzyMatch matches a known term against stored values (typo/casing/spacing correction). It is NOT a search tool — it requires you to already know approximately what the value looks like.

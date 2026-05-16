@@ -22,6 +22,7 @@ import {
 } from './v2/query-refs';
 import { storeHandle, qualifyHandleRefs } from './v2/handle-store';
 import { computeResultStats } from './v2/result-stats';
+import { getCatalogStore } from './v2/catalog';
 import type { ResultEntry } from './result-shapes';
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
@@ -522,6 +523,133 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
     }
   }
 
+}
+
+// ─── CatalogSearchDBSchema (V1 benchmark) ─────────────────────────────────
+//
+// V1 benchmark's SearchDBSchema, ported from V2's primitives. Distinct
+// from `BaseSearchDBSchema` (kept untouched for production).
+//
+// The agent writes SQL against a synthetic in-memory catalog spanning
+// every connection in `ctx.connections`. Catalog tables:
+//   connections, schemas, tables, columns, indexes, column_stats
+// (No `sample_rows` / `sample_notes` — V1 explicitly excludes sampling.)
+//
+// Each query in the batch is independent. Per-query failures sit in
+// their slot — the whole-batch-fail rule applies to ChainedExecuteQuery
+// (pipeline) but NOT to SearchDBSchema (independent reads).
+
+const CatalogQuerySpec = Type.Object({
+  query: Type.String({ description: 'SQL query against the synthetic catalog' }),
+});
+
+const CatalogSearchDBSchemaParams = Type.Object({
+  queries: Type.Array(CatalogQuerySpec, {
+    description: 'One or more SQL queries against the catalog tables (connections, schemas, tables, columns, indexes, column_stats). Independent reads — failures don\'t cascade.',
+    minItems: 1,
+  }),
+  maxChars: Type.Optional(Type.Number({
+    description: 'Max characters of inline preview rows per result (default ~10,000). Use fetchHandle to paginate large results.',
+  })),
+});
+
+interface CatalogSearchDBSchemaDetails extends Record<string, unknown> {
+  queryCount: number;
+}
+
+const CATALOG_SEARCH_DB_SCHEMA_DESCRIPTION = `Query the synthetic schema catalog using SQL. The catalog is a small set of tables built from your connections' real schemas — query it to discover tables, columns, indexes, and statistics across ALL your connections at once.
+
+CATALOG TABLES:
+- connections(connection_name)
+- schemas(connection_name, schema_name)
+- tables(connection_name, schema_name, table_name, row_count)
+- columns(connection_name, schema_name, table_name, column_name, data_type)
+- indexes(connection_name, schema_name, table_name, index_name, columns, is_unique)
+- column_stats(connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, min_date, max_date, top_values)
+
+EXAMPLES:
+- List every table: SELECT * FROM tables
+- Find columns whose name contains 'user': SELECT * FROM columns WHERE column_name LIKE '%user%'
+- Find categorical columns: SELECT * FROM column_stats WHERE category = 'categorical'
+- Tables with at least one index: SELECT DISTINCT connection_name, table_name FROM indexes
+
+Each result is returned as {preview, handle, stats}. Per-query failures appear as {error} in the slot — independent reads, the rest of the batch still runs.`;
+
+const CATALOG_SEARCH_DB_SCHEMA_SCHEMA: Tool<typeof CatalogSearchDBSchemaParams> = {
+  name: 'SearchDBSchema',
+  description: CATALOG_SEARCH_DB_SCHEMA_DESCRIPTION,
+  parameters: CatalogSearchDBSchemaParams,
+};
+
+/**
+ * V1 benchmark SearchDBSchema — catalog-SQL variant.
+ */
+export class CatalogSearchDBSchema extends MXTool<
+  typeof CatalogSearchDBSchemaParams,
+  BenchmarkAnalystContext,
+  CatalogSearchDBSchemaDetails
+> {
+  static readonly schema: Tool<TSchema> = CATALOG_SEARCH_DB_SCHEMA_SCHEMA;
+
+  async run(): Promise<ToolResponse<CatalogSearchDBSchemaDetails>> {
+    const { queries, maxChars } = this.parameters;
+    const previewMaxChars = Math.min(maxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
+
+    if (!Array.isArray(queries) || queries.length === 0) {
+      const err = 'SearchDBSchema requires at least one query in `queries`.';
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ error: err }) }],
+        isError: true,
+        details: { queryCount: 0 },
+      };
+    }
+
+    // Build the catalog once (cached per datasetKey/catalogKey). V1 omits
+    // sampling, so `sampleConfig` is undefined — sample_rows / sample_notes
+    // tables stay empty in the catalog (not surfaced in the tool description).
+    const { conn } = await getCatalogStore(
+      this.context.connections,
+      'default',                 // V1 has no catalogKey (DoubleCheck slot) yet
+      undefined,                  // no sampling
+      this.context.datasetKey,
+    );
+
+    type ResultSlot = ResultEntry;
+    const results: ResultSlot[] = [];
+
+    // Independent queries — failures sit in their slot, don't abort the batch.
+    for (const spec of queries) {
+      try {
+        const result = await conn.run(spec.query);
+        const cc = result.columnCount;
+        const columns: string[] = [];
+        const types: string[] = [];
+        for (let i = 0; i < cc; i++) {
+          columns.push(result.columnName(i));
+          types.push(result.columnType(i).toString());
+        }
+        const rows = await result.getRowObjectsJS() as Record<string, unknown>[];
+        const queryResult: QueryResult = { columns, types, rows, finalQuery: spec.query };
+
+        const stored = await storeHandle(queryResult);
+        const stats = computeResultStats(queryResult, Math.min(rows.length, 100));
+        const preview = compressQueryResult(queryResult, previewMaxChars).data;
+        results.push(
+          stored.error
+            ? { preview, stats, handle_error: stored.error }
+            : { preview, handle: stored.handleId, stats },
+        );
+      } catch (err) {
+        results.push({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ results }) }],
+      isError: false,
+      details: { queryCount: queries.length },
+    };
+  }
 }
 
 // ─── ChainedExecuteQuery (V1 benchmark) ───────────────────────────────────
