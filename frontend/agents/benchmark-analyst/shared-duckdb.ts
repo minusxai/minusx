@@ -201,11 +201,46 @@ class BenchmarkSharedDuckdb {
     return this.attached.has(name);
   }
 
+  /**
+   * Detach every ATTACHed alias. Tests call this between batches when
+   * they're about to remove the underlying tmp files — without it,
+   * DuckDB's later integrity checks (on the next ATTACH on the pooled
+   * connection) error with "Unable to open database" on the now-deleted
+   * file. Not for production paths — the singleton's full lifetime is
+   * the benchmark process.
+   */
+  async detachAll(): Promise<void> {
+    const work = this.chain.then(async () => {
+      if (this.attached.size === 0) return;
+      const conn = await this.acquireConnection();
+      try {
+        for (const name of [...this.attached.keys()]) {
+          try {
+            await conn.run(`DETACH ${quoteIdent(name)}`);
+          } catch {
+            // Best-effort: a corrupt/missing file may make DETACH fail,
+            // but we still want to clear our map so subsequent ATTACHes
+            // proceed cleanly.
+          }
+          this.attached.delete(name);
+        }
+      } finally {
+        this.releaseConnection(conn);
+      }
+    });
+    this.chain = work.catch(() => undefined);
+    return work;
+  }
+
   private async withConnection<T>(
     name: string,
     fn: (conn: DuckDBConnection) => Promise<T>,
   ): Promise<T> {
-    if (!this.attached.has(name)) {
+    // `memory` is DuckDB's built-in in-memory catalog — always available,
+    // never ATTACHed. Handle tables live in `memory.main` (see
+    // `registerHandleTable`), so the `_scratch` connector routes queries
+    // here. Skip the attached-check for this special name.
+    if (name !== 'memory' && !this.attached.has(name)) {
       throw new Error(`'${name}' is not attached to the shared DuckDB instance`);
     }
     const conn = await this.acquireConnection();
@@ -453,12 +488,30 @@ export interface BenchmarkConnectorOptions {
   datasetKey?: string;
 }
 
+/**
+ * Reserved name for the built-in DuckDB scratch connection that routes to
+ * the shared instance's `memory` catalog. Used by V1 + V2 to give the
+ * agent a DuckDB connection in any dataset (even pure Mongo/Postgres) so
+ * `FROM handle_xyz` works universally — handle tables live in
+ * `memory.main`, accessible only via a DuckDB connection.
+ *
+ * No ATTACH, no file_path, no datasetKey namespacing — it's just a thin
+ * BenchmarkSharedDuckdbConnector pointing at `memory`.
+ */
+export const SCRATCH_CONNECTION_NAME = '_scratch';
+
 export async function getOrCreateBenchmarkConnector(
   name: string,
   dialect: string,
   config: Record<string, unknown>,
   opts?: BenchmarkConnectorOptions,
 ): Promise<NodeConnector> {
+  if (name === SCRATCH_CONNECTION_NAME) {
+    // Built-in scratch connection: skip ATTACH, route to `memory`.
+    // datasetKey is intentionally ignored — this connection is universal.
+    const shared = await getOrCreateShared();
+    return new BenchmarkSharedDuckdbConnector(name, 'memory', shared);
+  }
   if (isAttachable(dialect)) {
     const filePath = (config as { file_path?: unknown }).file_path;
     if (typeof filePath !== 'string') {
@@ -493,4 +546,13 @@ export async function queryHandleTables(sql: string): Promise<QueryResult> {
 /** Drop every registered handle table (used by `clearHandles`). */
 export async function dropHandleTables(): Promise<void> {
   return (await getOrCreateShared()).dropHandleTables();
+}
+
+/**
+ * Test helper: detach every ATTACHed sqlite/duckdb alias from the shared
+ * instance. Call before removing tmp database files so DuckDB doesn't
+ * fail on subsequent operations probing the now-deleted file.
+ */
+export async function detachAllBenchmarkAttachments(): Promise<void> {
+  return (await getOrCreateShared()).detachAll();
 }

@@ -27,7 +27,8 @@ import {
   LoadSkillFrontend,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
-import { ListDBConnections, BaseSearchDBSchema, BaseExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
+import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
+import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
@@ -81,7 +82,6 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
  * `ctx.connections[*].config`.
  */
 export const V2_REGISTRABLES: RegistrableClass[] = [
-  ListDBConnections,
   SearchDBSchema,
   ExecuteQuery,
   ReadFiles,
@@ -101,16 +101,20 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   BenchmarkAnalystAgent,
   DoubleCheckBenchmarkAgent,
   CheckEquivalence,
+  // The new V1 chained tools — registered so saved V1 benchmark logs
+  // resume against the post-port behavior. FetchHandleV2 is shared with V2.
+  FetchHandleV2,
 ];
 
 /**
  * For each registrable whose `schema.name` matches, swap in the override
- * class. Used to register the benchmark `Base*` tool variants in place of
- * the production ones when the conversation root is `BenchmarkAnalystAgent`.
+ * class. Used to register the V1-benchmark tool variants in place of
+ * production ones when the conversation root is `BenchmarkAnalystAgent`.
+ * (Both classes use `schema.name = 'ExecuteQuery' / 'SearchDBSchema'`.)
  */
 const BENCHMARK_TOOL_SWAPS: Record<string, RegistrableClass> = {
-  ExecuteQuery: BaseExecuteQuery,
-  SearchDBSchema: BaseSearchDBSchema,
+  ExecuteQuery: ChainedExecuteQuery,
+  SearchDBSchema: CatalogSearchDBSchema,
 };
 
 /**

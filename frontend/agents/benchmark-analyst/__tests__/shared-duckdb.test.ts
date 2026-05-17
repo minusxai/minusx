@@ -89,6 +89,48 @@ describe('getOrCreateBenchmarkConnector → getSchema', () => {
     expect(b.rows[0].c).toBe(2);
   });
 
+  // The `_scratch` connector gives the agent a DuckDB connection in any
+  // dataset, even those with only Mongo/Postgres source connections.
+  // Routes queries to the shared instance's built-in `memory` catalog
+  // (where handle tables live), so `FROM handle_xyz` works universally.
+  // No ATTACH, no file_path, no datasetKey namespacing.
+  describe('_scratch built-in connector', () => {
+    it('returns a connector that runs queries against the shared `memory` catalog', async () => {
+      const conn = await getOrCreateBenchmarkConnector('_scratch', 'duckdb', {});
+      const result = await conn.query('SELECT 42 AS x');
+      expect(result.rows[0].x).toBe(42);
+    });
+
+    it('can query handle tables registered in the shared `memory` catalog', async () => {
+      // Register a handle. handle tables live in memory.main; the _scratch
+      // connector should see them since it routes to `memory`.
+      const { storeHandle } = await import('../v2/handle-store');
+      const stored = await storeHandle({
+        columns: ['id', 'name'],
+        types: ['INTEGER', 'VARCHAR'],
+        rows: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }],
+        finalQuery: '',
+      });
+      expect(stored.error).toBeUndefined();
+
+      const conn = await getOrCreateBenchmarkConnector('_scratch', 'duckdb', {});
+      // Reference the handle table directly. memory.main is the default
+      // catalog for the _scratch connection.
+      const result = await conn.query(`SELECT count(*) AS c FROM "${stored.handleId}"`);
+      expect(result.rows[0].c).toBe(2);
+    });
+
+    it('is independent of datasetKey (returns shared connector regardless)', async () => {
+      // _scratch should NOT be namespaced — it always routes to `memory`.
+      const a = await getOrCreateBenchmarkConnector('_scratch', 'duckdb', {}, { datasetKey: 'ds-a' });
+      const b = await getOrCreateBenchmarkConnector('_scratch', 'duckdb', {}, { datasetKey: 'ds-b' });
+      const ra = await a.query('SELECT 1 AS x');
+      const rb = await b.query('SELECT 1 AS x');
+      expect(ra.rows[0].x).toBe(1);
+      expect(rb.rows[0].x).toBe(1);
+    });
+  });
+
   it('reuses the cached connector when called twice with the same name + datasetKey', async () => {
     // Re-call must NOT re-attach (idempotency invariant within a dataset).
     // If the namespacing was wrong this could throw with the alias-collision
