@@ -193,6 +193,15 @@ function formatCost(cost: number): string {
 
 type ToolCallMsg = FlatToolCall & MessageWithFlags;
 
+interface ToolCallInterval {
+  tc: ToolCallMsg;
+  startTs: number;
+  endTs: number;
+  durationMs: number;
+  displayDurationMs: number;
+  lane: number;
+}
+
 function toInspectTuple(msg: FlatToolCall): ToolCallTuple {
   let args: Record<string, any> = {};
   try {
@@ -247,6 +256,16 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
     return map;
   }, [piLog]);
 
+  const completionTimes = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of piLog as PiLogEntry[]) {
+      if (entry.role === 'toolResult' && entry.toolCallId && entry.timestamp) {
+        map.set(entry.toolCallId, entry.timestamp);
+      }
+    }
+    return map;
+  }, [piLog]);
+
   // Group tool calls by parent_id for placement in Gantt rows
   const toolCallsByParent = useMemo(() => {
     const map = new Map<string, ToolCallMsg[]>();
@@ -262,22 +281,41 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
 
   const BAR_H = 12; // fixed height per tool call bar
 
-  // Pre-compute per-row: group tool calls by dispatch time
+  // Pre-compute per-row: build tool intervals and pack overlapping bars into lanes
   const rowData = useMemo(() => rows.map((row) => {
     const rowToolCalls = toolCallsByParent.get(row.id) ?? [];
-    const byTs = new Map<number, ToolCallMsg[]>();
+    const pendingIntervals: Array<Omit<ToolCallInterval, 'lane'>> = [];
+
     for (const tc of rowToolCalls) {
-      const ts = dispatchTimes.get(tc.tool_call_id) ?? (tc.created_at ? Date.parse(tc.created_at) : 0);
-      const arr = byTs.get(ts) ?? [];
-      arr.push(tc);
-      byTs.set(ts, arr);
+      const fallbackTs = tc.created_at ? Date.parse(tc.created_at) : NaN;
+      const startTs = dispatchTimes.get(tc.tool_call_id) ?? fallbackTs;
+      if (!Number.isFinite(startTs)) continue;
+
+      const rawEndTs = completionTimes.get(tc.tool_call_id) ?? fallbackTs;
+      const endTs = Number.isFinite(rawEndTs) ? Math.max(rawEndTs, startTs) : startTs;
+      const durationMs = endTs - startTs;
+      const displayDurationMs = Math.max(durationMs, 1000);
+
+      pendingIntervals.push({ tc, startTs, endTs, durationMs, displayDurationMs });
     }
-    const groups = Array.from(byTs.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([ts, calls]) => ({ ts, calls }));
-    const maxParallel = groups.reduce((m, g) => Math.max(m, g.calls.length), 1);
-    return { row, rowToolCalls, groups, maxParallel };
-  }), [rows, toolCallsByParent, dispatchTimes]);
+
+    const laneEnds: number[] = [];
+    const intervals = pendingIntervals
+      .sort((a, b) => a.startTs - b.startTs || a.endTs - b.endTs)
+      .map((interval): ToolCallInterval => {
+        const displayEndTs = interval.startTs + interval.displayDurationMs;
+        let lane = laneEnds.findIndex(endTs => endTs <= interval.startTs);
+        if (lane === -1) {
+          lane = laneEnds.length;
+          laneEnds.push(displayEndTs);
+        } else {
+          laneEnds[lane] = displayEndTs;
+        }
+        return { ...interval, lane };
+      });
+
+    return { row, rowToolCalls, intervals, laneCount: Math.max(laneEnds.length, 1) };
+  }), [rows, toolCallsByParent, dispatchTimes, completionTimes]);
 
   // Early returns after all hooks
   if (rows.length < 2) return null;
@@ -388,7 +426,7 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
           </HStack>
 
           {/* Rows */}
-          {rowData.filter(d => d.groups.some(g => g.calls.length > 0)).map(({ row, groups, maxParallel }) => {
+          {rowData.filter(d => d.intervals.length > 0).map(({ row, intervals, laneCount }) => {
             const leftPct = ((row.startTs - globalStart) / totalMs) * 100;
             const widthPct = Math.max((row.durationMs / totalMs) * 100, 0.5);
 
@@ -415,7 +453,7 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
                 {/* Bar area */}
                 <Box flex={1} position="relative" py="1px">
                   {/* Spacer to give height for absolute children */}
-                  <Box h={`${maxParallel * BAR_H + (maxParallel - 1)}px`} />
+                  <Box h={`${laneCount * BAR_H + (laneCount - 1)}px`} />
                   {/* Grid lines */}
                   {markers.map((ms, i) => (
                     <Box key={i} position="absolute" left={`${(ms / totalMs) * 100}%`} top={0} bottom={0} w="1px" bg="border.default" opacity={0.3} />
@@ -431,60 +469,47 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
                     borderRadius="3px"
                   />
 
-                  {/* Tool call bars — flex column, each bar fixed height, stacked */}
-                  {groups.map((group) => {
-                    if (!group.ts) return null;
-                    const dispatchTs = group.ts;
-                    const groupLeftPct = ((dispatchTs - globalStart) / totalMs) * 100;
+                  {/* Tool call bars */}
+                  {intervals.map((interval, idx) => {
+                    const { tc, startTs, durationMs, displayDurationMs, lane } = interval;
+                    const name = tc.function.name;
+                    const hasError = typeof tc.content === 'string' && tc.content.includes('"success":false');
+                    const toolColor = getToolColor(name);
+                    const left = ((startTs - globalStart) / totalMs) * 100;
+                    const widthPx = (displayDurationMs / 1000) * pxPerSec;
 
                     return (
-                      <Box
-                        key={group.ts}
-                        position="absolute"
-                        left={`${groupLeftPct}%`}
-                        top="1px"
-                        display="flex" flexDirection="column" gap="1px" zIndex={1}
-                      >
-                        {group.calls.map((tc, tci) => {
-                          const name = tc.function.name;
-                          const hasError = typeof tc.content === 'string' && tc.content.includes('"success":false');
-                          const toolColor = getToolColor(name);
-                          const completeTs = tc.created_at ? Date.parse(tc.created_at) : dispatchTs;
-                          const tcDur = Math.max(completeTs - dispatchTs, 0);
-                          // Width in pixels: actual duration, min 1s worth
-                          const tcWidthPx = Math.max(tcDur, 1000) / 1000 * pxPerSec;
-
-                          return (
-                            <Tooltip key={`${tc.tool_call_id}-${tci}`} content={`${name} — ${formatMs(tcDur)}${group.calls.length > 1 ? ` (${group.calls.length} parallel)` : ''}`} positioning={{ placement: 'top' }}>
-                              <Box
-                                w={`${tcWidthPx}px`}
-                                h={`${BAR_H}px`}
-                                bg={toolColor}
-                                opacity={0.8}
-                                cursor="pointer"
-                                _hover={{ opacity: 1 }}
-                                transition="all 0.1s"
-                                borderRadius="xs"
-                                onClick={() => setInspecting(toInspectTuple(tc))}
-                                overflow="hidden"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
-                              >
-                                {hasError && (
-                                  <Box
-                                    w="10px" h="10px" borderRadius="full"
-                                    bg="white" display="flex" alignItems="center" justifyContent="center"
-                                    flexShrink={0}
-                                  >
-                                    <LuX size={7} color="#e74c3c" strokeWidth={5} />
-                                  </Box>
-                                )}
-                              </Box>
-                            </Tooltip>
-                          );
-                        })}
-                      </Box>
+                      <Tooltip key={`${tc.tool_call_id}-${idx}`} content={`${name} — ${formatMs(durationMs)}${laneCount > 1 ? ` (${laneCount} lanes)` : ''}`} positioning={{ placement: 'top' }}>
+                        <Box
+                          position="absolute"
+                          left={`${left}%`}
+                          top={`${lane * (BAR_H + 1) + 1}px`}
+                          w={`${widthPx}px`}
+                          h={`${BAR_H}px`}
+                          bg={toolColor}
+                          opacity={0.8}
+                          cursor="pointer"
+                          _hover={{ opacity: 1 }}
+                          transition="all 0.1s"
+                          borderRadius="xs"
+                          onClick={() => setInspecting(toInspectTuple(tc))}
+                          overflow="hidden"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          zIndex={1}
+                        >
+                          {hasError && (
+                            <Box
+                              w="10px" h="10px" borderRadius="full"
+                              bg="white" display="flex" alignItems="center" justifyContent="center"
+                              flexShrink={0}
+                            >
+                              <LuX size={7} color="#e74c3c" strokeWidth={5} />
+                            </Box>
+                          )}
+                        </Box>
+                      </Tooltip>
                     );
                   })}
 
