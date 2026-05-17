@@ -228,9 +228,13 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   // row-atomic persistence (so resume re-does them), but their partial
   // `orch.log`s are the only window into *what* the agent was grinding on
   // — captured here for offline analysis. Diagnostic only; never read back.
+  // Per-run timestamp suffix so restarts don't clobber the prior run's
+  // diagnostic dump (critical when every row times out and no output rows
+  // survive to debug from).
+  const runStamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{3}Z$/, 'Z');
   const timeoutsPath = path.join(
     path.dirname(inputPath),
-    path.basename(inputPath).replace('input', 'timeouts'),
+    path.basename(inputPath).replace('input', `timeouts_${runStamp}`),
   );
 
   const label = config.label ?? path.basename(inputPath).replace(/_input\.jsonl$/, '');
@@ -295,9 +299,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     writeFileSync(outputPath, '');
   }
 
-  // Always start the timeouts sidecar empty — it's per-run diagnostic
-  // data, not resume state. An empty file means "no timeouts this run".
-  writeFileSync(timeoutsPath, '');
+  // Timeouts sidecar is per-run (timestamped filename). No truncation here
+  // — appendFileSync below creates it lazily when the first timeout fires,
+  // so a clean run leaves no file at all rather than an empty one.
 
   const timesRun = Math.max(1, Math.floor(config.timesRun ?? 1));
   const total = inputRows.length;
