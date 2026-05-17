@@ -19,6 +19,7 @@ import {
   interpolateMongoRefs,
   mergeWithSessionLabels,
   recordSessionLabel,
+  findUnresolvedMongoLabelRefs,
 } from './v2/query-refs';
 import { storeHandle, qualifyHandleRefs } from './v2/handle-store';
 import { computeResultStats } from './v2/result-stats';
@@ -715,7 +716,7 @@ HANDLES (returned with every successful result):
 - For SQL connections, you can JOIN handles back as tables: FROM handle_xyz works whenever the query's connection is DuckDB or sqlite. For Mongo/Postgres connections, handle tables don't exist in those engines — use $label.column for chaining instead.
 - A built-in connection named "_scratch" is always available — a DuckDB connection routing to the in-memory catalog where handle tables live. Use _scratch when your dataset has no other DuckDB/sqlite connection and you want to JOIN a handle: ExecuteQuery({queries: [{connection: "_scratch", query: "SELECT count(*) FROM handle_abc WHERE ..."}]}).
 
-MONGO: queries against a Mongo connection are JSON strings of the form {"collection":"...","pipeline":[stages]}. Common stages: $match, $group, $project, $sort, $limit, $lookup, $unwind. Cross-DB chains use $label.column inside the JSON — the interpolator emits a JSON array.
+MONGO: queries against a Mongo connection are JSON strings of the form {"collection":"...","pipeline":[stages]}. Common stages: $match, $group, $project, $sort, $limit, $lookup, $unwind. Cross-DB chains use $label.column inside the JSON — the interpolator emits a JSON array. Heads-up: if you put "$x.y" inside $in/$nin and x isn't a defined label (this batch OR a previous call), the tool returns an explicit "unknown label" error listing the labels you DO have — much easier to act on than MongoDB's raw "$in needs an array" message.
 
 TIMEOUT (default 60s, max 300s): per-query budget. Bump UP FRONT for large-scan queries; don't eat a default-kill and retry.
 
@@ -799,6 +800,21 @@ export class ChainedExecuteQuery extends MXTool<
       // queries in this batch) merged with session-scoped labels (set by
       // previous ExecuteQuery calls in the same agent run).
       const availableLabels = mergeWithSessionLabels(labeledResults);
+
+      // Preflight: on Mongo, catch `$in: "$x.y"` references to unknown
+      // labels BEFORE we send to the engine — its raw error ("$in needs
+      // an array") doesn't mention the missing label.
+      if (isMongo) {
+        const unknown = findUnresolvedMongoLabelRefs(spec.query, availableLabels);
+        if (unknown.length > 0) {
+          const knownList = [...availableLabels.keys()].join(', ') || '(none)';
+          return errorResponse(
+            `Query #${i + 1} (Mongo) references label(s) [${unknown.join(', ')}] inside $in/$nin, but no such label is defined. Available labels in this session: [${knownList}]. Either earlier-label one of the queries in this batch (or a prior call) with that name, or fix the typo.`,
+            queries.length,
+          );
+        }
+      }
+
       const interpolated = availableLabels.size > 0
         ? (isMongo
           ? interpolateMongoRefs(spec.query, availableLabels)

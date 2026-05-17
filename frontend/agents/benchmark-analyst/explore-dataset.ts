@@ -12,12 +12,14 @@ import { type BenchmarkAnalystContext, type ConnectionInfo } from './types';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
+import { qualifyHandleRefs } from './v2/handle-store';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import { getModel } from '@/lib/llm/get-model';
 import type { Api, Model } from '@/lib/llm/get-model';
 import {
   interpolateRefs,
   interpolateMongoRefs,
+  findUnresolvedMongoLabelRefs,
   detectLowLimit,
 } from './v2/query-refs';
 
@@ -110,7 +112,7 @@ export class ExploreDataset extends MXTool<
       query 2: connection=prod_catalog, query="SELECT id, name, category FROM products WHERE id IN ($revenue.product_id)", label="products"
       prompt: "Group these products into 5 clusters based on their names and categories. Return a mapping of cluster_name → [product_ids]."
 
-      For a MongoDB connection, query is instead a JSON string {"collection": "...", "pipeline": [...]} (a native aggregation pipeline). $label.column references work inside it as quoted tokens, e.g. {"$match": {"id": {"$in": "$revenue.product_id"}}} expands to a JSON array of the referenced values.
+      For a MongoDB connection, query is instead a JSON string {"collection": "...", "pipeline": [...]} (a native aggregation pipeline). $label.column references work inside it as quoted tokens, e.g. {"$match": {"id": {"$in": "$revenue.product_id"}}} expands to a JSON array of the referenced values. If you put "$x.y" inside $in/$nin and x isn't a defined label, the tool returns an explicit "unknown label" error listing the labels you have — that's the right thing to fix first when you see "$in needs an array" surfaced from the engine.
       `,
     parameters: ExploreDatasetParams,
   };
@@ -123,6 +125,15 @@ export class ExploreDataset extends MXTool<
     await buildConnectorsFromContext(
       this.context.connections, this.connectors, this.dialects, this.context.datasetKey,
     );
+    // Always make the built-in `_scratch` DuckDB available — parity with
+    // ChainedExecuteQuery. The agent learns about it from the V1 prompt
+    // and uses it across BOTH tools to run `FROM handle_xyz` joins in
+    // datasets that have no other DuckDB/sqlite connection.
+    if (!this.connectors.has('_scratch')) {
+      const scratch = await getOrCreateBenchmarkConnector('_scratch', 'duckdb', {});
+      this.connectors.set('_scratch', scratch);
+      this.dialects.set('_scratch', 'duckdb');
+    }
 
     const { queries, prompt } = this.parameters;
 
@@ -166,6 +177,21 @@ export class ExploreDataset extends MXTool<
         };
       }
 
+      // Preflight: on Mongo, catch `$in: "$x.y"` references to unknown
+      // labels BEFORE we send to the engine — its raw error ("$in needs
+      // an array") doesn't mention the missing label.
+      if (isMongo) {
+        const unknown = findUnresolvedMongoLabelRefs(rawQuery, labeledResults);
+        if (unknown.length > 0) {
+          const knownList = [...labeledResults.keys()].join(', ') || '(none)';
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query ${i + 1} ("${label || connection}") references label(s) [${unknown.join(', ')}] inside $in/$nin, but no such label is defined. Available labels: [${knownList}]. Either set the label on an earlier query or fix the typo.` }) }],
+            isError: true,
+            details: { analysis: '', totalRowCount: 0, executedQueries },
+          };
+        }
+      }
+
       // Interpolate references to previous query results (e.g. $revenue.product_id)
       const interpolated = isMongo
         ? interpolateMongoRefs(rawQuery, labeledResults)
@@ -173,9 +199,27 @@ export class ExploreDataset extends MXTool<
 
       let result: QueryResult;
       try {
+        // For SQL queries, rewrite `FROM handle_xyz` → `memory.main."handle_xyz"`
+        // so the reference resolves to the shared-DuckDB handle table —
+        // parity with ChainedExecuteQuery. Block handle refs on non-SQL
+        // dialects (handles are SQL tables in the shared DuckDB).
+        let prepared: string;
+        if (isMongo) {
+          prepared = interpolated;
+        } else {
+          const { sql, referencedHandles } = await qualifyHandleRefs(interpolated);
+          if (referencedHandles.length > 0 && dialect !== 'duckdb' && dialect !== 'sqlite') {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query ${i + 1} (${connection}) references handle table(s) (${referencedHandles.join(', ')}) on a '${dialect}' connection. Handle tables live in the shared DuckDB — use a duckdb/sqlite connection (or "_scratch") to JOIN them.` }) }],
+              isError: true,
+              details: { analysis: '', totalRowCount: 0, executedQueries },
+            };
+          }
+          prepared = sql;
+        }
         // enforceQueryLimit is a SQL-AST parser — skip it for Mongo; the
         // connector's own enforceMongoLimit caps native pipelines.
-        const cappedQuery = isMongo ? interpolated : await enforceQueryLimit(interpolated, { dialect });
+        const cappedQuery = isMongo ? prepared : await enforceQueryLimit(prepared, { dialect });
         result = await connector.query(cappedQuery);
         executedQueries.push({ connection, finalQuery: result.finalQuery ?? cappedQuery, rowCount: result.rows.length });
       } catch (err) {

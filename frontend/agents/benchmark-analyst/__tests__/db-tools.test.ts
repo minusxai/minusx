@@ -473,6 +473,40 @@ describe('ChainedExecuteQuery — MongoDB native aggregation', () => {
     expect(payload.error).toMatch(/JSON parse failed/i);
   });
 
+  it('preflight: surfaces clear "unknown label" error before sending to Mongo', async () => {
+    // Regression for Yelp #3 ($in needs an array): the agent referenced
+    // `$biz_counts.business_id` (with `biz_counts` not defined anywhere)
+    // and got MongoDB's unhelpful "$in needs an array" error. Now the
+    // preflight catches it and tells the agent which labels exist.
+    const ctx: BenchmarkAnalystContext = {
+      datasetKey: 'test-preflight',
+      connections: [
+        { name: 'mongo', dialect: 'mongo', config: { host: 'localhost', port: 27017, database: 'd' } },
+      ],
+    };
+    const tool = new ChainedExecuteQuery(
+      undefined as never,
+      {
+        queries: [{
+          connection: 'mongo',
+          query: JSON.stringify({
+            collection: 'items',
+            pipeline: [{ $match: { item_id: { $in: '$nonexistent.business_id' } } }],
+          }),
+        }],
+      },
+      ctx,
+    );
+    const res = await tool.run();
+    expect(res.isError).toBe(true);
+    const payload = JSON.parse((res.content[0] as { text: string }).text);
+    // Error must name the offending label AND mention "Available labels".
+    expect(payload.error).toMatch(/nonexistent/);
+    expect(payload.error).toMatch(/Available labels/i);
+    // Critically: the raw MongoDB error must NOT have been surfaced.
+    expect(payload.error).not.toMatch(/\$in needs an array/i);
+  });
+
   it('interpolates $label.col as a JSON array in mongo pipelines (cross-DB chain)', async () => {
     // sqlite produces a list of ids; mongo's next query filters by that
     // list. Tests the SQL→Mongo chain: interpolateMongoRefs emits a real

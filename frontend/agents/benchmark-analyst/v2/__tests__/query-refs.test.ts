@@ -9,6 +9,7 @@ import {
   interpolateRefs,
   interpolateMongoRefs,
   detectLowLimit,
+  findUnresolvedMongoLabelRefs,
 } from '../query-refs';
 
 describe('interpolateRefs (SQL)', () => {
@@ -172,5 +173,57 @@ describe('detectLowLimit', () => {
     it('returns null for empty pipeline', () => {
       expect(detectLowLimit('{"collection":"c","pipeline":[]}', true)).toBeNull();
     });
+  });
+});
+
+// Preflight validation: catches the "$in needs an array" class of errors
+// where the agent referenced a label that doesn't exist (typo or invented
+// name), since `interpolateMongoRefs` silently leaves unknown `$x.y` patterns
+// alone (they look identical to real Mongo field paths like `$user.name`).
+// The check is scoped narrowly: only `$x.y` appearing as the VALUE of an
+// `$in` or `$nin` operator is flagged — that context unambiguously expects
+// an array, never a field path.
+describe('findUnresolvedMongoLabelRefs', () => {
+  const known = new Set(['biz_counts', 'users_2016']);
+
+  it('returns empty when no $in/$nin label refs in the pipeline', () => {
+    const sql = '{"collection":"c","pipeline":[{"$match":{"name":"alpha"}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual([]);
+  });
+
+  it('returns empty when $in value is a literal array (not a label ref)', () => {
+    const sql = '{"collection":"c","pipeline":[{"$match":{"id":{"$in":[1,2,3]}}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual([]);
+  });
+
+  it('returns empty when $in references a KNOWN label', () => {
+    const sql = '{"collection":"c","pipeline":[{"$match":{"id":{"$in":"$biz_counts.id"}}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual([]);
+  });
+
+  it('flags an unknown label used inside $in', () => {
+    const sql = '{"collection":"c","pipeline":[{"$match":{"id":{"$in":"$business_ids_with_counts.business_id"}}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual(['business_ids_with_counts']);
+  });
+
+  it('flags an unknown label used inside $nin', () => {
+    const sql = '{"collection":"c","pipeline":[{"$match":{"id":{"$nin":"$missing.id"}}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual(['missing']);
+  });
+
+  it('deduplicates repeated unknown labels', () => {
+    const sql = '{"collection":"c","pipeline":[{"$match":{"$or":[{"a":{"$in":"$x.a"}},{"b":{"$in":"$x.b"}}]}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual(['x']);
+  });
+
+  it('ignores real Mongo field-path uses ($attributes.foo inside $project)', () => {
+    // `$attributes.BusinessParking` is a valid Mongo field path in $project,
+    // NOT a label ref. The helper only flags $in/$nin contexts.
+    const sql = '{"collection":"c","pipeline":[{"$project":{"x":"$attributes.foo"}}]}';
+    expect(findUnresolvedMongoLabelRefs(sql, known)).toEqual([]);
+  });
+
+  it('returns empty on un-parseable input (no crashes, leave error to the engine)', () => {
+    expect(findUnresolvedMongoLabelRefs('not a json string', known)).toEqual([]);
   });
 });

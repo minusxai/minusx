@@ -98,6 +98,57 @@ export function interpolateMongoRefs(
 }
 
 /**
+ * Find `$label.col` references inside a Mongo pipeline JSON that the
+ * agent intended as label-substitutions but couldn't be resolved (because
+ * the label wasn't in `availableLabels`).
+ *
+ * Scoped narrowly to `$in` / `$nin` operator values: that context
+ * unambiguously expects an array, so `"$x.y"` there is a label ref, not
+ * a Mongo field path. Other `$x.y` uses (e.g. inside `$project`) are
+ * legitimately Mongo field paths and we leave them alone.
+ *
+ * Returns the deduped list of unknown label names — empty when none. The
+ * caller surfaces a clear error before sending to MongoDB, since the raw
+ * engine error ("$in needs an array") doesn't mention the missing label.
+ *
+ * Returns `[]` on un-parseable input so the engine sees its own error
+ * rather than us double-reporting.
+ */
+export function findUnresolvedMongoLabelRefs(
+  rawQuery: string,
+  availableLabels: Set<string> | Map<string, unknown>,
+): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawQuery);
+  } catch {
+    return [];
+  }
+  const has = (k: string) =>
+    availableLabels instanceof Set ? availableLabels.has(k) : availableLabels.has(k);
+  const unknown = new Set<string>();
+  const LABEL_REF_RE = /^\$([a-zA-Z_]\w*)\.(\w+)$/;
+  function walk(node: unknown): void {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (node && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node)) {
+        if ((k === '$in' || k === '$nin') && typeof v === 'string') {
+          const m = v.match(LABEL_REF_RE);
+          if (m && !has(m[1])) unknown.add(m[1]);
+        } else {
+          walk(v);
+        }
+      }
+    }
+  }
+  walk(parsed);
+  return [...unknown];
+}
+
+/**
  * Detect an artificially small result cap. SQL: a `LIMIT n` clause with
  * `n < 1000`. Mongo: a terminal `{$limit:n}` pipeline stage with `n < 1000`.
  * Returns the offending limit, or `null` if none (and `null` on un-parseable

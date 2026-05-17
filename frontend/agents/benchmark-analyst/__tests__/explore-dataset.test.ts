@@ -24,7 +24,10 @@ const defaultRows = () => ({
 });
 const mockQuery = vi.fn(async (_query?: string) => defaultRows());
 
-vi.mock('../shared-duckdb', () => ({
+// Partial mock — keep handle-table helpers real so storeHandle /
+// qualifyHandleRefs work end-to-end in the parity tests below.
+vi.mock('../shared-duckdb', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../shared-duckdb')>()),
   getOrCreateBenchmarkConnector: vi.fn(async () => ({
     query: mockQuery,
     getSchema: vi.fn(async () => []),
@@ -202,6 +205,70 @@ describe('ExploreDataset', () => {
     expect(ctx.systemPrompt).toContain(docs);
 
     callLLMSpy.mockRestore();
+  });
+
+  // Parity with ChainedExecuteQuery: the V1 agent learns about `_scratch`
+  // and `FROM handle_xyz` from the new tool descriptions and uses BOTH
+  // tools interchangeably. ExploreDataset must support the same primitives.
+  describe('parity with ChainedExecuteQuery (_scratch + handles)', () => {
+    it('auto-injects the _scratch DuckDB connection — agent can use it without listing it in ctx', async () => {
+      // Faux LLM response so the tool's lighter-model pass succeeds.
+      fauxRegistration.setResponses([
+        fauxAssistantMessage('analysis', { stopReason: 'stop' }),
+      ]);
+      const orch = new Orchestrator(REGISTRABLES);
+      const tool = new ExploreDataset(
+        orch,
+        {
+          // _scratch is NOT in ctx.connections, but ExploreDataset must
+          // make it available — same as ChainedExecuteQuery does.
+          queries: [{ connection: '_scratch', query: 'SELECT 1', label: 'q' }],
+          prompt: 'just confirm a row was returned',
+        },
+        { connections: [], contextDocs: '' },
+        'test-scratch-parity',
+      );
+      const result = await tool.run();
+      const content = JSON.parse((result.content[0] as TextContent).text);
+      const err = (content.error ?? '') as string;
+      expect(err).not.toMatch(/Connection '_scratch' not found/i);
+    });
+
+    it('rewrites FROM handle_xyz via qualifyHandleRefs before sending to the connector', async () => {
+      const { storeHandle } = await import('../v2/handle-store');
+      const stored = await storeHandle({
+        columns: ['id'],
+        types: ['INTEGER'],
+        rows: [{ id: 1 }],
+        finalQuery: '',
+      });
+      expect(stored.error).toBeUndefined();
+      const handleId = stored.handleId;
+
+      mockQuery.mockClear();
+      fauxRegistration.setResponses([
+        fauxAssistantMessage('analysis', { stopReason: 'stop' }),
+      ]);
+      const orch = new Orchestrator(REGISTRABLES);
+      const tool = new ExploreDataset(
+        orch,
+        {
+          queries: [{
+            connection: 'orders_db',
+            query: `SELECT count(*) AS c FROM ${handleId}`,
+            label: 'q',
+          }],
+          prompt: 'confirm',
+        },
+        CTX,
+        'test-handle-qual',
+      );
+      await tool.run();
+
+      expect(mockQuery).toHaveBeenCalled();
+      const sentSql = mockQuery.mock.calls[0][0] as string;
+      expect(sentSql).toContain(`memory.main."${handleId}"`);
+    });
   });
 
   it('returns error when connection is not found', async () => {
