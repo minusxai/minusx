@@ -7,10 +7,15 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { LuGitFork, LuClock, LuTerminal, LuX } from 'react-icons/lu';
 import ToolCallListModal from './ToolCallListModal';
 import ToolInspectModal from './ToolInspectModal';
-import { shortBranchLabel } from './ToolDebugBar';
 import type { MessageWithFlags } from './message/messageHelpers';
 import type { CompletedToolCall as ToolCallTuple, ToolCall, ToolMessage } from '@/lib/types';
 import type { CompletedToolCall as FlatToolCall } from '@/store/chatSlice';
+
+/** Shorten a parent_id for display (e.g. "r1-agent1" → "agent1") */
+function shortBranchLabel(parentId: string): string {
+  const parts = parentId.split('-');
+  return parts.length > 1 ? parts[parts.length - 1] : parentId.slice(-8);
+}
 
 // ─── Types for PI log entries ────────────────────────────────────────────
 
@@ -255,11 +260,9 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
     return map;
   }, [toolCalls]);
 
-  const SQ = 14;  // square size in px
-  const SQ_GAP = 1; // vertical gap between stacked squares
+  const BAR_H = 12; // fixed height per tool call bar
 
-  // Pre-compute per-row: group tool calls by dispatch time, find max parallel count
-  // (must be before early returns to satisfy React hooks rules)
+  // Pre-compute per-row: group tool calls by dispatch time
   const rowData = useMemo(() => rows.map((row) => {
     const rowToolCalls = toolCallsByParent.get(row.id) ?? [];
     const byTs = new Map<number, ToolCallMsg[]>();
@@ -273,8 +276,7 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
       .sort(([a], [b]) => a - b)
       .map(([ts, calls]) => ({ ts, calls }));
     const maxParallel = groups.reduce((m, g) => Math.max(m, g.calls.length), 1);
-    const rowH = maxParallel * SQ + (maxParallel - 1) * SQ_GAP + 2; // 1px padding top+bottom
-    return { row, rowToolCalls, groups, maxParallel, rowH };
+    return { row, rowToolCalls, groups, maxParallel };
   }), [rows, toolCallsByParent, dispatchTimes]);
 
   // Early returns after all hooks
@@ -386,12 +388,12 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
           </HStack>
 
           {/* Rows */}
-          {rowData.map(({ row, groups, rowH }) => {
+          {rowData.filter(d => d.groups.some(g => g.calls.length > 0)).map(({ row, groups, maxParallel }) => {
             const leftPct = ((row.startTs - globalStart) / totalMs) * 100;
             const widthPct = Math.max((row.durationMs / totalMs) * 100, 0.5);
 
             return (
-              <HStack key={row.id} gap={0} h={`${rowH}px`} my="1px" align="stretch">
+              <HStack key={row.id} gap={0} my="3px" align="stretch" bg="bg.subtle" borderRadius="sm">
                 {/* Label with short ID + stats */}
                 <Box
                   w="130px" flexShrink={0} pr={2} textAlign="right"
@@ -411,10 +413,12 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
                 </Box>
 
                 {/* Bar area */}
-                <Box flex={1} position="relative" bg="bg.subtle" borderRadius="sm">
+                <Box flex={1} position="relative" py="1px">
+                  {/* Spacer to give height for absolute children */}
+                  <Box h={`${maxParallel * BAR_H + (maxParallel - 1)}px`} />
                   {/* Grid lines */}
                   {markers.map((ms, i) => (
-                    <Box key={i} position="absolute" left={`${(ms / totalMs) * 100}%`} top={0} h="100%" w="1px" bg="border.default" opacity={0.3} />
+                    <Box key={i} position="absolute" left={`${(ms / totalMs) * 100}%`} top={0} bottom={0} w="1px" bg="border.default" opacity={0.3} />
                   ))}
 
                   {/* Background bar */}
@@ -422,86 +426,68 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
                     position="absolute"
                     left={`${leftPct}%`}
                     w={`${widthPct}%`}
-                    h="100%"
+                    top={0} bottom={0}
                     bg={`${row.color}15`}
                     borderRadius="3px"
                   />
 
-                  {/* Tool call duration bars — each bar spans dispatch → completion.
-                      Parallel calls (same dispatch time) stack vertically. */}
+                  {/* Tool call bars — flex column, each bar fixed height, stacked */}
                   {groups.map((group) => {
                     if (!group.ts) return null;
+                    const dispatchTs = group.ts;
+                    const groupLeftPct = ((dispatchTs - globalStart) / totalMs) * 100;
 
-                    return group.calls.map((tc, tci) => {
-                      const name = tc.function.name;
-                      const hasError = typeof tc.content === 'string' && tc.content.includes('"success":false');
-                      const toolColor = getToolColor(name);
+                    return (
+                      <Box
+                        key={group.ts}
+                        position="absolute"
+                        left={`${groupLeftPct}%`}
+                        top="1px"
+                        display="flex" flexDirection="column" gap="1px" zIndex={1}
+                      >
+                        {group.calls.map((tc, tci) => {
+                          const name = tc.function.name;
+                          const hasError = typeof tc.content === 'string' && tc.content.includes('"success":false');
+                          const toolColor = getToolColor(name);
+                          const completeTs = tc.created_at ? Date.parse(tc.created_at) : dispatchTs;
+                          const tcDur = Math.max(completeTs - dispatchTs, 0);
+                          // Width in pixels: actual duration, min 1s worth
+                          const tcWidthPx = Math.max(tcDur, 1000) / 1000 * pxPerSec;
 
-                      const dispatchTs = group.ts;
-                      const completeTs = tc.created_at ? Date.parse(tc.created_at) : dispatchTs;
-                      const tcLeftPct = ((dispatchTs - globalStart) / totalMs) * 100;
-                      const tcDur = Math.max(completeTs - dispatchTs, 0);
-                      // Min visible width = 2 seconds worth of pixels
-                      const minWidthPct = (1000 / totalMs) * 100;
-                      const tcWidthPct = Math.max((tcDur / totalMs) * 100, minWidthPct);
-                      // Vertical position: stack by index within the group
-                      const topPx = 1 + tci * (SQ + SQ_GAP);
-
-                      return (
-                        <Tooltip key={`${tc.tool_call_id}-${tci}`} content={`${name} — ${formatMs(tcDur)}${group.calls.length > 1 ? ` (${group.calls.length} parallel)` : ''}`} positioning={{ placement: 'top' }}>
-                          <Box
-                            position="absolute"
-                            left={`${tcLeftPct}%`}
-                            top={`${topPx}px`}
-                            w={`${tcWidthPct}%`}
-                            h={`${SQ}px`}
-                            bg={toolColor}
-                            opacity={0.8}
-                            cursor="pointer"
-                            _hover={{ opacity: 1 }}
-                            transition="all 0.1s"
-                            borderRadius="xs"
-                            onClick={() => setInspecting(toInspectTuple(tc))}
-                            zIndex={1}
-                            overflow="hidden"
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            {hasError && (
+                          return (
+                            <Tooltip key={`${tc.tool_call_id}-${tci}`} content={`${name} — ${formatMs(tcDur)}${group.calls.length > 1 ? ` (${group.calls.length} parallel)` : ''}`} positioning={{ placement: 'top' }}>
                               <Box
-                                w="10px" h="10px" borderRadius="full"
-                                bg="white" display="flex" alignItems="center" justifyContent="center"
-                                flexShrink={0}
+                                w={`${tcWidthPx}px`}
+                                h={`${BAR_H}px`}
+                                bg={toolColor}
+                                opacity={0.8}
+                                cursor="pointer"
+                                _hover={{ opacity: 1 }}
+                                transition="all 0.1s"
+                                borderRadius="xs"
+                                onClick={() => setInspecting(toInspectTuple(tc))}
+                                overflow="hidden"
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="center"
                               >
-                                <LuX size={7} color="#e74c3c" strokeWidth={5} />
+                                {hasError && (
+                                  <Box
+                                    w="10px" h="10px" borderRadius="full"
+                                    bg="white" display="flex" alignItems="center" justifyContent="center"
+                                    flexShrink={0}
+                                  >
+                                    <LuX size={7} color="#e74c3c" strokeWidth={5} />
+                                  </Box>
+                                )}
                               </Box>
-                            )}
-                          </Box>
-                        </Tooltip>
-                      );
-                    });
+                            </Tooltip>
+                          );
+                        })}
+                      </Box>
+                    );
                   })}
 
-                  {/* Duration label for rows without tool calls */}
-                  {groups.length === 0 && (
-                    <Box
-                      position="absolute"
-                      left={`${leftPct}%`}
-                      h="100%"
-                      display="flex"
-                      alignItems="center"
-                      pl="8px"
-                      gap="4px"
-                    >
-                      <Box w="5px" h="5px" borderRadius="full" flexShrink={0}
-                        bg={row.status === 'error' ? '#e74c3c' : row.status === 'success' ? '#2ecc71' : '#f1c40f'}
-                      />
-                      <Text fontSize="2xs" fontFamily="mono" color={row.color} fontWeight="500" whiteSpace="nowrap">
-                        {formatMs(row.durationMs)}
-                      </Text>
-                    </Box>
-                  )}
                 </Box>
               </HStack>
             );
