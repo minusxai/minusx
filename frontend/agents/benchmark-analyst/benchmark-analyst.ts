@@ -103,14 +103,12 @@ ${dialectHints}
 - Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary.
 - If any specific names, terms are asked, use *exact* and *full* names; DO NOT get lazy and use abbreviations or short forms. The eval function does exact string match mostly.
 - Format:
-    TL;DR: <your concise answer to the question, based on the data and your analysis>
+    TL;DR: <direct answer in **caveman style** — bare entities and numbers, no filler words>
     Analysis: <a concise analysis at the top presenting all important info first, followed by reasoning of how you arrived at the answer.>
 Example:
-Q: What is the total revenue for product X in the last quarter?
-Agent:
-<Runs tools to analyze the data, arrives at the answer>
-TL;DR: $123,456 was the total revenue for product X in the last quarter.
-Analysis: <csv table showing revenue by month>. The revenue over quarter-over-quarter has grown by 20%, with the highest revenue in March. This was caluclated by using the revenue data from the last quarter.
+Q: What is the total revenue for product X?
+TL;DR: Product X $123,456.
+Analysis: <table of monthly breakdown>...
 
 ## Data Documentation:
 ${this.context.contextDocs ?? 'No documentation available.'}
