@@ -12,9 +12,10 @@ import type { ConversationLog } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import { groupIntoTurns } from '@/components/explore/message/groupIntoTurns';
 import AgentTurnContainer from '@/components/explore/AgentTurnContainer';
-import ToolDebugBar from '@/components/explore/ToolDebugBar';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import Markdown from '@/components/Markdown';
+import ExecutionTree from '@/components/explore/ExecutionTree';
+import ToolDebugBar from '@/components/explore/ToolDebugBar';
 import type { ConversationLogEntry } from '@/lib/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -118,8 +119,16 @@ function extractStats(row: BenchmarkRow): RunStats {
   let maxToolName: string | null = null;
   // toolCallId -> timestamp of the assistant message that emitted it
   const assistantTsByToolCallId = new Map<string, number>();
+  // Track min/max timestamps to compute execution span
+  let minTs = Infinity, maxTs = -Infinity;
 
   for (const entry of row.log as any[]) {
+    // Track timestamps for execution span
+    if (entry.timestamp && typeof entry.timestamp === 'number') {
+      if (entry.timestamp < minTs) minTs = entry.timestamp;
+      if (entry.timestamp > maxTs) maxTs = entry.timestamp;
+    }
+
     if (entry.role === 'assistant') {
       if (entry.usage) {
         llmCalls++;
@@ -133,7 +142,11 @@ function extractStats(row: BenchmarkRow): RunStats {
       }
     }
     if (entry.role === 'toolResult') {
-      toolCalls++;
+      // Count actual tool calls (exclude agent completions and meta-tools)
+      const tn = entry.toolName ?? '';
+      if (!tn.includes('Agent') && tn !== 'TalkToUser' && tn !== 'CheckEquivalence') {
+        toolCalls++;
+      }
       const start = assistantTsByToolCallId.get(entry.toolCallId);
       if (start && entry.timestamp) {
         const dur = entry.timestamp - start;
@@ -152,7 +165,9 @@ function extractStats(row: BenchmarkRow): RunStats {
     }
     if (entry._type === 'task_result') toolCalls++;
   }
-  return { duration_ms: row.duration_ms, totalCost, totalTokens, llmCalls, toolCalls, maxToolMs, maxToolName, error: row.error };
+  // Use execution span from timestamps if available, fall back to runner's duration_ms
+  const executionMs = (minTs < Infinity && maxTs > -Infinity) ? (maxTs - minTs) : row.duration_ms;
+  return { duration_ms: executionMs, totalCost, totalTokens, llmCalls, toolCalls, maxToolMs, maxToolName, error: row.error };
 }
 
 function aggregateStats(rows: BenchmarkRow[]): { total: RunStats; perRow: RunStats[] } {
@@ -193,7 +208,7 @@ function formatDuration(ms: number): string {
 
 // ── Conversation viewer ───────────────────────────────────────────────────
 
-function LogViewer({ log }: { log: ConversationLogEntry[] }) {
+function LogViewer({ log, piLog }: { log: ConversationLogEntry[]; piLog?: unknown[] }) {
   const [showThinking, setShowThinking] = useState(false);
   const messages = parseLogToMessages(log);
   const turns = groupIntoTurns(messages);
@@ -208,7 +223,7 @@ function LogViewer({ log }: { log: ConversationLogEntry[] }) {
 
   return (
     <VStack gap={0} align="stretch" width="100%">
-      <ToolDebugBar messages={messages} />
+      {piLog ? <ExecutionTree piLog={piLog} messages={messages} /> : <ToolDebugBar messages={messages} />}
       {turns.map((turn, i) => (
         <AgentTurnContainer
           key={i}
@@ -637,14 +652,20 @@ export default function BenchmarkPage() {
   // For benchmark rows or single-conversation files.
   const activeRowIndex = selectedRow ?? 0;
   let currentLog: ConversationLogEntry[] | null = null;
+  let currentPiLog: unknown[] | undefined;
   if (parsed.kind === 'conversation') {
     currentLog = parsed.log;
   } else {
     const row = parsed.rows[activeRowIndex];
     if (row) {
-      currentLog = isProductionLog(row.log as unknown[])
-        ? (row.log as unknown as ConversationLogEntry[])
-        : piLogToLegacy(row.log as ConversationLog);
+      const rawLog = row.log as unknown[];
+      currentLog = isProductionLog(rawLog)
+        ? (rawLog as unknown as ConversationLogEntry[])
+        : piLogToLegacy(rawLog as ConversationLog);
+      // Pass raw PI log for ExecutionTree (only if it's PI format)
+      if (!isProductionLog(rawLog)) {
+        currentPiLog = rawLog;
+      }
     }
   }
 
@@ -836,7 +857,7 @@ export default function BenchmarkPage() {
       {/* Conversation content */}
       <Box flex={1} overflowY="auto">
         <Box maxW="960px" mx="auto" px={4} py={4}>
-          {currentLog && <LogViewer log={currentLog} />}
+          {currentLog && <LogViewer log={currentLog} piLog={currentPiLog} />}
 
           {continuablePiLog && (
             <VStack gap={2} pt={6} pb={2}>

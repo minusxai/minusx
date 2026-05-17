@@ -104,7 +104,8 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
           name: task.agent,
           arguments: JSON.stringify(task.args)
         },
-        created_at: entry.created_at
+        created_at: entry.created_at,
+        ...(task._parent_unique_id ? { parent_id: task._parent_unique_id } : {}),
       };
       // Restore persisted UI details (e.g. queryResult with rows for ExecuteQuery)
       if (entry.details) {
