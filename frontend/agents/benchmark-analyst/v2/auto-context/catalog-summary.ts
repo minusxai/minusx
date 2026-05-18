@@ -122,6 +122,13 @@ export function makeFetchTableSample(
 
 // ─── Markdown serialisation (what the agent reads as its userMessage) ────────
 
+/** Soft cap on the rendered catalog summary handed to AutoContextAgent's
+ *  LLM. Picked well under typical model context windows (incl. system
+ *  prompt + tool definitions + response space) so we don't blow the
+ *  context. The renderer degrades gracefully when the catalog wouldn't
+ *  fit at full fidelity. */
+export const DEFAULT_CATALOG_SUMMARY_MAX_CHARS = 80_000;
+
 function metaCell(m: ColumnMeta | undefined): string {
   if (!m) return '';
   const bits: string[] = [];
@@ -135,32 +142,82 @@ function metaCell(m: ColumnMeta | undefined): string {
   return bits.join('; ');
 }
 
-/**
- * Render the catalog summary as a single markdown blob the agent will see
- * as its userMessage. Escape pipes + newlines so the table layout stays
- * intact when a column has surprising values.
- */
-export function renderCatalogSummary(summary: CatalogSummary): string {
-  const lines: string[] = [];
-  const mdEscape = (s: string): string =>
-    s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-  for (const t of summary.tables) {
-    lines.push(
-      `## ${t.connection}.${t.schema}.${t.table}${t.rowCount !== undefined ? ` (${t.rowCount} rows)` : ''}`,
-      '',
-      '| column | type | stats |',
-      '|---|---|---|',
-    );
-    for (const c of t.columns) {
-      lines.push(`| ${c.name} | ${c.type} | ${mdEscape(metaCell(c.meta))} |`);
-    }
-    if (t.samples.length > 0) {
-      lines.push('', 'Sample rows:');
-      for (const r of t.samples) lines.push(`- ${JSON.stringify(truncateRow(r))}`);
-    }
-    lines.push('');
+type MdEscape = (s: string) => string;
+
+function renderTableSchemaAndStats(t: CatalogSummaryTable, mdEscape: MdEscape): string {
+  const lines: string[] = [
+    `## ${t.connection}.${t.schema}.${t.table}${t.rowCount !== undefined ? ` (${t.rowCount} rows)` : ''}`,
+    '',
+    '| column | type | stats |',
+    '|---|---|---|',
+  ];
+  for (const c of t.columns) {
+    lines.push(`| ${c.name} | ${c.type} | ${mdEscape(metaCell(c.meta))} |`);
   }
   return lines.join('\n');
+}
+
+function renderTableFull(t: CatalogSummaryTable, mdEscape: MdEscape): string {
+  const head = renderTableSchemaAndStats(t, mdEscape);
+  if (t.samples.length === 0) return head;
+  const tail: string[] = ['', 'Sample rows:'];
+  for (const r of t.samples) tail.push(`- ${JSON.stringify(truncateRow(r))}`);
+  return `${head}\n${tail.join('\n')}`;
+}
+
+/**
+ * Render the catalog summary as a single markdown blob the agent reads as
+ * its userMessage. Bounded by `maxChars` with graceful degradation:
+ *
+ *   1. First pass: every table rendered with schema + stats + samples.
+ *      Trailing tables are dropped if the running total would exceed the
+ *      budget.
+ *   2. If that didn't fit every table, re-pass dropping `Sample rows:`
+ *      everywhere. Trailing tables still drop if needed.
+ *
+ * The second pass exists for wide datasets (e.g. tables with many big
+ * text columns) where the per-table sample row JSON dominates the
+ * rendered size. Trading off some sample fidelity to keep every table
+ * visible is usually the right call — the agent can probe samples via
+ * `ExecuteQuery` if it needs them, but it can't discover a table that
+ * never appeared in its userMessage.
+ *
+ * Escapes pipes + newlines so the table layout stays intact when a
+ * column has surprising values.
+ */
+export function renderCatalogSummary(
+  summary: CatalogSummary,
+  maxChars: number = DEFAULT_CATALOG_SUMMARY_MAX_CHARS,
+): string {
+  const mdEscape: MdEscape = (s) =>
+    s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  const sep = '\n\n';
+
+  const render = (blockFor: (t: CatalogSummaryTable) => string): { text: string; coveredAll: boolean } => {
+    const blocks: string[] = [];
+    let total = 0;
+    let coveredAll = true;
+    for (const t of summary.tables) {
+      const block = blockFor(t);
+      const cost = block.length + (blocks.length > 0 ? sep.length : 0);
+      if (total + cost > maxChars) {
+        coveredAll = false;
+        break;
+      }
+      blocks.push(block);
+      total += cost;
+    }
+    return { text: blocks.join(sep), coveredAll };
+  };
+
+  // Pass 1: full detail (schema + stats + samples) for every table.
+  const fullPass = render((t) => renderTableFull(t, mdEscape));
+  if (fullPass.coveredAll) return fullPass.text;
+
+  // Pass 2: drop sample rows everywhere; trade sample fidelity for
+  // coverage of every table.
+  const compactPass = render((t) => renderTableSchemaAndStats(t, mdEscape));
+  return compactPass.text;
 }
 
 /** Convenience: catalog → flat schema + stats + rowCounts (no fetch). */
