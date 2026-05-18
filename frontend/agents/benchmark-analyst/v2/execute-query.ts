@@ -33,7 +33,7 @@ const ExecuteQueryParams = Type.Object({
   prompt: Type.Optional(Type.String({ description: 'Optional: if provided, an LLM processes all results and returns a single info summary' })),
   sequential: Type.Optional(Type.Boolean({ description: 'If true, queries run sequentially and can reference earlier results via $label.column (default: false, parallel)' })),
   timeout: Type.Optional(Type.Number({
-    description: 'Per-query timeout in seconds (default 60, max 300). Applies to every query in the batch. Set this to 180–300 UP FRONT for a query that will scan a large table (full-table aggregation, JSON extraction over all rows) — do not eat a 60s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
+    description: 'Per-query timeout in seconds (default 30, max 150). Applies to every query in the batch. Set this to 90–150 UP FRONT for a query that will scan a large table (full-table aggregation, JSON extraction over all rows) — do not eat a 30s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
   })),
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of inline preview rows per result (default ~10,000). Increase up front (e.g. 30000–50000) only when you genuinely need to see more rows inline in this call. Otherwise prefer the default + `fetchHandle` for pagination.',
@@ -57,7 +57,7 @@ FEATURES:
 - Per-query errors: a failing query returns {error} in its slot without failing the batch
 - Per-query handle errors: if the result can't be stored as a SQL table (e.g. your source query produced duplicate output column names like \`SELECT MIN(a) AS min, MIN(b) AS min\`), the slot contains {preview, stats, handle_error} — you still get the data, but \`FROM <handle>\` won't work. Give the duplicate columns distinct aliases and re-run if you need handle-based joins.
 - Prompt: if provided, the lighter model re-ranks each result's preview rows and returns a single cross-result info summary
-- Timeout (seconds, default 60, max 300): per-query cancellation budget; bump UP FRONT for queries that scan large tables — don't eat a default kill then retry
+- Timeout (seconds, default 30, max 150): per-query cancellation budget; bump UP FRONT for queries that scan large tables — don't eat a default kill then retry
 
 SEQUENTIAL MODE:
 In sequential mode (sequential=true), the 2nd+ query MUST reference an earlier result via $label.column. Works for SQL AND Mongo.

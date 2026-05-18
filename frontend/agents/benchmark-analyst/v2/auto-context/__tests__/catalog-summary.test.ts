@@ -64,4 +64,48 @@ describe('renderCatalogSummary', () => {
     expect(out).toContain('## db.public.users\n');
     expect(out).not.toMatch(/users \(\d+ rows\)/);
   });
+
+  it('drops Sample rows everywhere when full render would exceed maxChars (compact pass)', async () => {
+    // Two tables, each with a sample row containing a long value. The
+    // first pass (with samples) exceeds the budget; the compact pass
+    // (without samples) fits and keeps both tables visible.
+    const colA = col('a', 'data', 'VARCHAR');
+    const colB = col('b', 'data', 'VARCHAR');
+    const sampleData = 'x'.repeat(2000);
+    const sampleFn = async () => [{ data: sampleData }];
+    const summary = await buildCatalogSummary([colA, colB], new Map(), new Map(), sampleFn);
+    // Budget: enough for schema/stats of both tables but too small for
+    // even one sample row (~2K chars).
+    const out = renderCatalogSummary(summary, 400);
+    expect(out).toContain('## db.public.a');
+    expect(out).toContain('## db.public.b');
+    expect(out).not.toContain('Sample rows:');
+    // Agent must know the summary was bounded — explicit note up top.
+    expect(out).toMatch(/^> Note:.*bounded/m);
+    expect(out).toMatch(/Sample rows have been omitted.*ExecuteQuery/i);
+  });
+
+  it('drops trailing tables when even compact pass exceeds maxChars', async () => {
+    // 5 tables, budget tight enough that compact rendering of all 5
+    // still overflows — trailing ones get dropped.
+    const cols = Array.from({ length: 5 }, (_, i) => col(`t${i}`, 'c1', 'VARCHAR'));
+    const summary = await buildCatalogSummary(cols, new Map(), new Map(), async () => []);
+    const out = renderCatalogSummary(summary, 150);
+    expect(out).toContain('## db.public.t0');
+    // Should NOT contain t4 — budget too tight.
+    expect(out).not.toContain('## db.public.t4');
+    // Note lists the omitted tables by id + points at SearchDBSchema.
+    expect(out).toMatch(/summary covers \d+ of 5 tables/);
+    expect(out).toContain('`db.public.t4`');
+    expect(out).toMatch(/SearchDBSchema/);
+  });
+
+  it('returns the full render when everything fits within maxChars', async () => {
+    const c = col('users', 'id');
+    const summary = await buildCatalogSummary([c], new Map(), new Map(), async () => [{ id: 1 }]);
+    const out = renderCatalogSummary(summary, 100_000);
+    // Sample rows present (full pass succeeded).
+    expect(out).toContain('Sample rows:');
+    expect(out).toContain('"id":1');
+  });
 });

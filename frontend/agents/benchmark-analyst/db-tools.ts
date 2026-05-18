@@ -203,7 +203,7 @@ const EXECUTE_QUERY_BASE_FIELDS = {
 const ExecuteQueryParams = Type.Object({
   ...EXECUTE_QUERY_BASE_FIELDS,
   timeout: Type.Optional(Type.Number({
-    description: 'Query timeout in seconds (default 60, max 300). Set this to 180-300 UP FRONT for a query that will scan a large table (full-table aggregation, citation/graph traversal, JSON extraction over all rows) — do not eat a 60s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
+    description: 'Query timeout in seconds (default 30, max 150). Set this to 90-150 UP FRONT for a query that will scan a large table (full-table aggregation, citation/graph traversal, JSON extraction over all rows) — do not eat a 30s kill and then retry. For ordinary queries leave it at the default and rewrite anything that times out (add filters, use an indexed column, avoid leading-wildcard LIKE).',
   })),
 });
 
@@ -217,9 +217,9 @@ const ExecuteQueryParams = Type.Object({
 export const ExecuteQueryParamsNoTimeout = Type.Object(EXECUTE_QUERY_BASE_FIELDS);
 
 /** Default query timeout when the agent doesn't specify one. */
-export const DEFAULT_QUERY_TIMEOUT_SEC = 60;
+export const DEFAULT_QUERY_TIMEOUT_SEC = 30;
 /** Hard ceiling on the agent-supplied query timeout. */
-export const MAX_QUERY_TIMEOUT_SEC = 300;
+export const MAX_QUERY_TIMEOUT_SEC = 150;
 
 /**
  * Clamp the agent-supplied `timeout` (seconds) into `[1, MAX_QUERY_TIMEOUT_SEC]`,
@@ -247,7 +247,7 @@ export const EXECUTE_QUERY_DESCRIPTION =
   'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect: for SQL connectors it is SQL; for a MongoDB connection it is a JSON string `{"collection": "...", "pipeline": [...aggregation stages]}` — a native aggregation pipeline, not SQL. A default row cap of 1000 is applied when the query has none, and an explicit cap above 10000 is reduced to 10000 (SQL: `LIMIT`; Mongo: a trailing `$limit` stage) — use COUNT/SUM/GROUP BY (Mongo: `$count`/`$group`) for cardinality questions and LIMIT/OFFSET (Mongo: `$limit`/`$skip`) to page through large results. Before querying a table/collection, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzySearch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (the query as actually run). Increase maxChars (up to 100,000) to see more rows in the text response.';
 
 const EXECUTE_QUERY_TIMEOUT_NOTE =
-  ' A query that exceeds its `timeout` (default 60s, max 300s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout.';
+  ' A query that exceeds its `timeout` (default 30s, max 150s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout.';
 
 const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
   name: 'ExecuteQuery',
@@ -689,7 +689,7 @@ const ChainedExecuteQueryParams = Type.Object({
     minItems: 1,
   }),
   timeout: Type.Optional(Type.Number({
-    description: 'Per-query timeout in seconds (default 60, max 300). Set up front (180–300) for big-scan queries — don\'t retry on a default-kill.',
+    description: 'Per-query timeout in seconds (default 30, max 150). Set up front (90–150) for big-scan queries — don\'t retry on a default-kill.',
   })),
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of inline preview rows (default ~10,000). Increase only if you genuinely need to see more rows inline; otherwise use fetchHandle for pagination.',
@@ -718,7 +718,7 @@ HANDLES (returned with every successful result):
 
 MONGO: queries against a Mongo connection are JSON strings of the form {"collection":"...","pipeline":[stages]}. Common stages: $match, $group, $project, $sort, $limit, $lookup, $unwind. Cross-DB chains use $label.column inside the JSON — the interpolator emits a JSON array. Heads-up: if you put "$x.y" inside $in/$nin and x isn't a defined label (this batch OR a previous call), the tool returns an explicit "unknown label" error listing the labels you DO have — much easier to act on than MongoDB's raw "$in needs an array" message.
 
-TIMEOUT (default 60s, max 300s): per-query budget. Bump UP FRONT for large-scan queries; don't eat a default-kill and retry.
+TIMEOUT (default 30s, max 150s): per-query budget. Bump UP FRONT for large-scan queries; don't eat a default-kill and retry.
 
 MAXCHARS (default ~10,000): caps inline preview text. Use fetchHandle for pagination over a handle rather than raising maxChars.`;
 

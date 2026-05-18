@@ -122,6 +122,13 @@ export function makeFetchTableSample(
 
 // ─── Markdown serialisation (what the agent reads as its userMessage) ────────
 
+/** Soft cap on the rendered catalog summary handed to AutoContextAgent's
+ *  LLM. Picked well under typical model context windows (incl. system
+ *  prompt + tool definitions + response space) so we don't blow the
+ *  context. The renderer degrades gracefully when the catalog wouldn't
+ *  fit at full fidelity. */
+export const DEFAULT_CATALOG_SUMMARY_MAX_CHARS = 80_000;
+
 function metaCell(m: ColumnMeta | undefined): string {
   if (!m) return '';
   const bits: string[] = [];
@@ -135,32 +142,98 @@ function metaCell(m: ColumnMeta | undefined): string {
   return bits.join('; ');
 }
 
-/**
- * Render the catalog summary as a single markdown blob the agent will see
- * as its userMessage. Escape pipes + newlines so the table layout stays
- * intact when a column has surprising values.
- */
-export function renderCatalogSummary(summary: CatalogSummary): string {
-  const lines: string[] = [];
-  const mdEscape = (s: string): string =>
-    s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-  for (const t of summary.tables) {
-    lines.push(
-      `## ${t.connection}.${t.schema}.${t.table}${t.rowCount !== undefined ? ` (${t.rowCount} rows)` : ''}`,
-      '',
-      '| column | type | stats |',
-      '|---|---|---|',
-    );
-    for (const c of t.columns) {
-      lines.push(`| ${c.name} | ${c.type} | ${mdEscape(metaCell(c.meta))} |`);
-    }
-    if (t.samples.length > 0) {
-      lines.push('', 'Sample rows:');
-      for (const r of t.samples) lines.push(`- ${JSON.stringify(truncateRow(r))}`);
-    }
-    lines.push('');
+type MdEscape = (s: string) => string;
+
+function renderTableSchemaAndStats(t: CatalogSummaryTable, mdEscape: MdEscape): string {
+  const lines: string[] = [
+    `## ${t.connection}.${t.schema}.${t.table}${t.rowCount !== undefined ? ` (${t.rowCount} rows)` : ''}`,
+    '',
+    '| column | type | stats |',
+    '|---|---|---|',
+  ];
+  for (const c of t.columns) {
+    lines.push(`| ${c.name} | ${c.type} | ${mdEscape(metaCell(c.meta))} |`);
   }
   return lines.join('\n');
+}
+
+function renderTableFull(t: CatalogSummaryTable, mdEscape: MdEscape): string {
+  const head = renderTableSchemaAndStats(t, mdEscape);
+  if (t.samples.length === 0) return head;
+  const tail: string[] = ['', 'Sample rows:'];
+  for (const r of t.samples) tail.push(`- ${JSON.stringify(truncateRow(r))}`);
+  return `${head}\n${tail.join('\n')}`;
+}
+
+/**
+ * Render the catalog summary as a single markdown blob the agent reads as
+ * its userMessage. Bounded by `maxChars` with graceful degradation:
+ *
+ *   1. First pass: every table rendered with schema + stats + samples.
+ *      Trailing tables are dropped if the running total would exceed the
+ *      budget.
+ *   2. If that didn't fit every table, re-pass dropping `Sample rows:`
+ *      everywhere. Trailing tables still drop if needed.
+ *
+ * When degradation kicks in, a `> Note:` block is prepended explaining
+ * what was dropped and pointing the agent at the right tools to fetch
+ * the missing detail (`ExecuteQuery` for samples, `SearchDBSchema` for
+ * omitted tables). Without this the agent silently treats the summary
+ * as authoritative and may never probe for samples or discover the
+ * tables that didn't make the cut.
+ *
+ * Escapes pipes + newlines so the table layout stays intact when a
+ * column has surprising values.
+ */
+export function renderCatalogSummary(
+  summary: CatalogSummary,
+  maxChars: number = DEFAULT_CATALOG_SUMMARY_MAX_CHARS,
+): string {
+  const mdEscape: MdEscape = (s) =>
+    s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  const sep = '\n\n';
+
+  const render = (blockFor: (t: CatalogSummaryTable) => string): {
+    blocks: string[]; coveredCount: number; coveredAll: boolean;
+  } => {
+    const blocks: string[] = [];
+    let total = 0;
+    let coveredAll = true;
+    for (const t of summary.tables) {
+      const block = blockFor(t);
+      const cost = block.length + (blocks.length > 0 ? sep.length : 0);
+      if (total + cost > maxChars) {
+        coveredAll = false;
+        break;
+      }
+      blocks.push(block);
+      total += cost;
+    }
+    return { blocks, coveredCount: blocks.length, coveredAll };
+  };
+
+  // Pass 1: full detail (schema + stats + samples) for every table.
+  const fullPass = render((t) => renderTableFull(t, mdEscape));
+  if (fullPass.coveredAll) return fullPass.blocks.join(sep);
+
+  // Pass 2: drop sample rows everywhere; trade sample fidelity for
+  // coverage of every table.
+  const compactPass = render((t) => renderTableSchemaAndStats(t, mdEscape));
+
+  const totalTables = summary.tables.length;
+  const noteLines: string[] = ['> Note: This catalog summary was bounded to fit the agent\'s context window.'];
+  // Always true at this point: full pass dropped samples (otherwise we
+  // wouldn't have reached pass 2). Tell the agent samples are missing.
+  noteLines.push('> Sample rows have been omitted from every table. Run `ExecuteQuery` with a small `SELECT * FROM <table> LIMIT N` if you need to inspect actual values.');
+  if (!compactPass.coveredAll) {
+    const omitted = summary.tables.slice(compactPass.coveredCount).map(tableId);
+    const list = omitted.slice(0, 30).map((id) => `\`${id}\``).join(', ');
+    const more = omitted.length > 30 ? ` (and ${omitted.length - 30} more)` : '';
+    noteLines.push(
+      `> The summary covers ${compactPass.coveredCount} of ${totalTables} tables. Omitted: ${list}${more}. Use \`SearchDBSchema\` to inspect any of them.`,
+    );
+  }
+  return `${noteLines.join('\n')}\n\n${compactPass.blocks.join(sep)}`;
 }
 
 /** Convenience: catalog → flat schema + stats + rowCounts (no fetch). */
