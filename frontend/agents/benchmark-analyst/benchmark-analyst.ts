@@ -3,8 +3,6 @@ import {
   registerFauxProvider,
   type AssistantMessage,
   type Tool,
-  type TextContent,
-  type ImageContent,
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
@@ -58,7 +56,9 @@ export class BenchmarkAnalystAgent<
   /**
    * Markdown produced by the AutoContext step — verified joins, per-column
    * notes, sample rows, and example queries. Computed once at the start of
-   * `run()` and injected ahead of the user's question in `buildUserContent`.
+   * `run()` and appended to the system prompt (so Anthropic's prompt-cache
+   * automatically reuses the block across rows of the same dataset within
+   * its 5-min TTL — pi-ai marks the system prompt with `cache_control`).
    */
   protected autoContextBlock?: string;
 
@@ -85,26 +85,18 @@ export class BenchmarkAnalystAgent<
             cacheKey: ctx.catalogKey,
           },
         );
-      } catch {
+      } catch (e) {
         // AutoContext is best-effort orientation. Failures (DB blip,
         // LLM error) must not abort the run — fall back to no block.
+        // We log the error so silent failures (which yield agents
+        // running without any AutoContext) are diagnosable from the
+        // benchmark stderr without re-running with verbose tracing.
+        const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
+        console.error(`[BenchmarkAnalystAgent] AutoContext build failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${msg}`);
         this.autoContextBlock = undefined;
       }
     }
     return super.run();
-  }
-
-  protected buildUserContent(): (TextContent | ImageContent)[] {
-    const raw = (this.parameters as { userMessage: string | (TextContent | ImageContent)[] }).userMessage;
-    const blocks: (TextContent | ImageContent)[] = [];
-    if (this.autoContextBlock) {
-      blocks.push({ type: 'text', text: `<AutoContext>\n${this.autoContextBlock}\n</AutoContext>` });
-    }
-    blocks.push(
-      typeof raw === 'string' ? { type: 'text', text: `<Question>${raw}</Question>` } : raw[0],
-    );
-    if (typeof raw !== 'string') blocks.push(...raw.slice(1));
-    return blocks;
   }
 
   protected getSystemPrompt(): string {
@@ -168,6 +160,8 @@ Analysis: <table of monthly breakdown>...
 
 ## Data Documentation:
 ${this.context.contextDocs ?? 'No documentation available.'}
+
+${this.autoContextBlock ? `## Auto-discovered context (computed from the actual data — joins, per-column notes, sample rows, example queries):\n${this.autoContextBlock}` : ''}
 `;
   }
 }

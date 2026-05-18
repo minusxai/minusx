@@ -55,10 +55,15 @@ function renderTable(t: AnnotatedTable): string {
 
   if (t.tableNote) lines.push('', t.tableNote);
 
-  // Columns table — kept terse to bound token cost.
+  // Columns table — kept terse to bound token cost. Escape order matters:
+  // backslashes first (so we don't double-escape our own escapes), then
+  // pipes (which would otherwise break the markdown row), then newlines
+  // (which would split a single note across multiple table rows).
+  const mdEscape = (s: string): string =>
+    s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
   lines.push('', '| column | type | stats | note |', '|---|---|---|---|');
   for (const c of t.columns) {
-    lines.push(`| ${c.name} | ${c.type} | ${metaCell(c.meta)} | ${(c.note ?? '').replace(/\|/g, '\\|')} |`);
+    lines.push(`| ${c.name} | ${c.type} | ${metaCell(c.meta)} | ${mdEscape(c.note ?? '')} |`);
   }
 
   if (t.joins.length > 0) {

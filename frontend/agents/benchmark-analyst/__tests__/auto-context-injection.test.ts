@@ -1,8 +1,11 @@
 /**
  * Tests that BenchmarkAnalystAgent runs `buildAutoContext` before its
- * first LLM call and injects the returned markdown into the first user
- * message. Also verifies the cached result is used across multiple LLM
- * calls in the same run (buildAutoContext should be invoked only once).
+ * first LLM call and appends the returned markdown to its system prompt.
+ *
+ * The block lives in the system prompt (NOT the user message) so that
+ * Anthropic's prompt-cache reuses it across rows of the same dataset
+ * within the 5-min TTL — pi-ai marks the system prompt with
+ * `cache_control` automatically. The user message stays question-only.
  *
  * The actual AutoContext build is mocked here; correctness of the
  * underlying stages is covered in v2/auto-context/__tests__/.
@@ -39,7 +42,7 @@ describe('BenchmarkAnalystAgent auto-context injection', () => {
       .mockResolvedValue(`## auto-context ${AUTO_CONTEXT_MARKER}`);
   });
 
-  it('injects the AutoContext block into the first user message', async () => {
+  it('appends the AutoContext block to the SYSTEM PROMPT (not the user message) for cross-row cache reuse', async () => {
     fauxRegistration.setResponses([
       fauxAssistantMessage('TL;DR: done\nAnalysis: trivial.', { stopReason: 'stop' }),
     ]);
@@ -47,13 +50,14 @@ describe('BenchmarkAnalystAgent auto-context injection', () => {
     const orch = new Orchestrator(REGISTRABLES);
     const root = new BenchmarkAnalystAgent(orch, { userMessage: 'tell me about it' }, CTX);
 
-    // Spy on callLLM to capture the first context it receives.
-    let capturedFirstUserContent: unknown = null;
+    let capturedSystem: string | null | undefined = null;
+    let capturedUserContent: unknown = null;
     const origCall = orch.callLLM.bind(orch);
     orch.callLLM = async (m, c: Context, id, opts) => {
-      if (capturedFirstUserContent === null) {
+      if (capturedSystem === null) {
+        capturedSystem = c.systemPrompt;
         const userMsg = c.messages.find((msg) => msg.role === 'user');
-        capturedFirstUserContent = userMsg?.content ?? null;
+        capturedUserContent = userMsg?.content ?? null;
       }
       return origCall(m, c, id, opts);
     };
@@ -63,19 +67,20 @@ describe('BenchmarkAnalystAgent auto-context injection', () => {
     await stream.result();
 
     expect(buildSpy).toHaveBeenCalled();
-    expect(Array.isArray(capturedFirstUserContent)).toBe(true);
-    const blocks = (capturedFirstUserContent as TextContent[]).map((b) => b.text);
-    expect(blocks.some((t) => t.includes(AUTO_CONTEXT_MARKER))).toBe(true);
-    expect(blocks.some((t) => t.includes('tell me about it'))).toBe(true);
-    // AutoContext must precede the question.
-    const autoIdx = blocks.findIndex((t) => t.includes(AUTO_CONTEXT_MARKER));
-    const questionIdx = blocks.findIndex((t) => t.includes('tell me about it'));
-    expect(autoIdx).toBeLessThan(questionIdx);
+
+    // 1. AutoContext marker MUST appear in the system prompt.
+    expect(capturedSystem).toContain(AUTO_CONTEXT_MARKER);
+
+    // 2. User message MUST NOT carry the AutoContext block — it's just the question.
+    const userBlocks = (capturedUserContent as TextContent[] | string);
+    const userText = typeof userBlocks === 'string'
+      ? userBlocks
+      : userBlocks.map((b) => b.text).join('\n');
+    expect(userText).toContain('tell me about it');
+    expect(userText).not.toContain(AUTO_CONTEXT_MARKER);
   });
 
   it('calls buildAutoContext exactly once per agent run (across multiple LLM iterations)', async () => {
-    // Two scripted responses: first uses an unknown tool to force a 2nd iter;
-    // we instead just send a text + stop to keep the test minimal.
     fauxRegistration.setResponses([
       fauxAssistantMessage('TL;DR: x', { stopReason: 'stop' }),
     ]);
@@ -110,5 +115,30 @@ describe('BenchmarkAnalystAgent auto-context injection', () => {
     expect(llmContext.originalMessage).toBe('find the thing');
     const opts = args[3] as { userMessage?: string };
     expect(opts.userMessage).toBe('find the thing');
+  });
+
+  it('keeps the system prompt clean (no AutoContext section) when buildAutoContext throws', async () => {
+    buildSpy.mockRejectedValue(new Error('simulated build failure'));
+    fauxRegistration.setResponses([
+      fauxAssistantMessage('TL;DR: x', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const root = new BenchmarkAnalystAgent(orch, { userMessage: 'hi' }, CTX);
+
+    let capturedSystem: string | null | undefined = null;
+    const origCall = orch.callLLM.bind(orch);
+    orch.callLLM = async (m, c: Context, id, opts) => {
+      if (capturedSystem === null) capturedSystem = c.systemPrompt;
+      return origCall(m, c, id, opts);
+    };
+
+    const stream = orch.run(root);
+    for await (const _ev of stream) { /* drain */ }
+    await stream.result();
+
+    expect(capturedSystem).not.toContain(AUTO_CONTEXT_MARKER);
+    // Doesn't appear at all — not even the "Auto-discovered context" header.
+    expect(capturedSystem).not.toContain('Auto-discovered context');
   });
 });
