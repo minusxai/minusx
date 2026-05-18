@@ -11,6 +11,7 @@ import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
+import { snapshotRecentAutoContexts } from '@/agents/benchmark-analyst/v2/auto-context';
 import type { ConversationLog } from '@/orchestrator/types';
 import { createSemaphore, parseConcurrencyLimit } from '@/orchestrator/concurrency';
 
@@ -121,6 +122,14 @@ export interface BenchmarkResult {
   connections?: BenchmarkConnectionEntry[];
   /** Short git commit hash at the time of the benchmark run. */
   git_commit?: string;
+  /** Per-slot AutoContext markdown blocks for this dataset, captured at
+   *  agent-build time. The benchmark viewer renders these so reviewers
+   *  can see exactly what joins / notes / example queries the LLM saw
+   *  before answering. Keys are `BenchmarkAnalystContext.catalogKey`
+   *  values: `default` for single-agent runs, `agent-a` / `agent-b` for
+   *  DoubleCheck. Absent / empty when AutoContext didn't fire (e.g. when
+   *  this row's context lacked `datasetKey`, or the build threw). */
+  auto_context?: Record<string, string>;
 }
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────
@@ -584,6 +593,14 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     if (firstError) errors++;
     state.status = firstError ? 'error' : 'done';
 
+    // Snapshot the AutoContext blocks recorded by sub-agents during this
+    // row's runs. Same block content per (dataset, slot) is reused across
+    // every row in the dataset (the rshipsStore cache hits) — including
+    // it per row in the output JSONL is intentional so the /benchmark
+    // viewer can show "what AutoContext did this row's agent see?"
+    // without cross-row indexing. Empty when AutoContext didn't fire.
+    const autoContext = snapshotRecentAutoContexts(label);
+
     const result: BenchmarkResult = {
       input_index: rowIdx,
       input: state.row,
@@ -594,6 +611,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       error: firstError,
       connections: entries,
       git_commit: GIT_COMMIT,
+      ...(Object.keys(autoContext).length > 0 ? { auto_context: autoContext } : {}),
     };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 

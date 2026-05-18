@@ -41,6 +41,11 @@ interface BenchmarkRow {
   connections?: BenchmarkConnectionEntry[];
   benchmark?: string;
   git_commit?: string;
+  /** Per-slot AutoContext markdown blocks captured at agent-build time
+   *  (keys: `default` for single-agent, `agent-a` / `agent-b` for
+   *  DoubleCheck). Surfaces the joins + per-column notes + example
+   *  queries the LLM saw, separately from the conversation log. */
+  auto_context?: Record<string, string>;
 }
 
 type ParsedFile =

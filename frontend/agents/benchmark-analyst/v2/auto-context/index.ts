@@ -253,6 +253,40 @@ export async function buildAutoContextFromCatalog(
 
 // ─── Top-level: read catalog + build context (the agent's entry) ─────────────
 
+// ─── Recent-block registry ───────────────────────────────────────────────────
+//
+// Lightweight side-channel for the benchmark runner: when an agent
+// builds (or hits the cache for) its AutoContext block, it pushes the
+// content here keyed by `${datasetKey}::${slot}`. The runner snapshots
+// the registry per-dataset when persisting a row, so the resulting
+// `BenchmarkResult.auto_context` field can render in the benchmark
+// viewer without rummaging through `orch.log` or the system prompt
+// (which isn't logged).
+
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton, holds latest AutoContext per (datasetKey, slot)
+const recentAutoContextBlocks = new Map<string, string>();
+
+export function recordRecentAutoContext(datasetKey: string, slot: string, block: string): void {
+  recentAutoContextBlocks.set(`${datasetKey}::${slot}`, block);
+}
+
+/** Snapshot every recorded block whose datasetKey matches. Returns
+ *  `{ slot → markdown }`. Empty object when nothing has been recorded
+ *  for that dataset (e.g. AutoContext disabled or build failed). */
+export function snapshotRecentAutoContexts(datasetKey: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const prefix = `${datasetKey}::`;
+  for (const [key, value] of recentAutoContextBlocks.entries()) {
+    if (key.startsWith(prefix)) out[key.slice(prefix.length)] = value;
+  }
+  return out;
+}
+
+/** Drop every recorded block (test/reset helper). */
+export function clearRecentAutoContexts(): void {
+  recentAutoContextBlocks.clear();
+}
+
 /** Top-level entry called by `BenchmarkAnalystAgent.run()`. Builds (or
  *  reads from process-wide cache) the catalog for the agent's
  *  `ctx.connections`, then renders the AutoContext block. */

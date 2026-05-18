@@ -12,7 +12,7 @@ import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
-import { buildAutoContext } from './v2/auto-context';
+import { buildAutoContext, recordRecentAutoContext } from './v2/auto-context';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -94,6 +94,12 @@ export class BenchmarkAnalystAgent<
         const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
         console.error(`[BenchmarkAnalystAgent] AutoContext build failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${msg}`);
         this.autoContextBlock = undefined;
+      }
+      // Record into the process-wide registry so the benchmark runner
+      // can surface the block per-row in its JSONL output (renders in
+      // the benchmark viewer). Keyed by (datasetKey, slot).
+      if (this.autoContextBlock) {
+        recordRecentAutoContext(ctx.datasetKey, ctx.catalogKey ?? 'default', this.autoContextBlock);
       }
     }
     return super.run();
