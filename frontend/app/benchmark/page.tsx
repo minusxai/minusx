@@ -518,6 +518,41 @@ export default function BenchmarkPage() {
     return { columns, types, rows };
   }, [parsed, stats, isBenchmark]);
 
+  // ── Aggregate metrics by dataset ──
+  const datasetMetrics = useMemo(() => {
+    if (!isBenchmark) return null;
+    const hasEvals = parsed.rows.some(r => r.eval);
+    if (!hasEvals) return null;
+
+    // Group by dataset
+    const byDataset = new Map<string, { total: number; passed: number }>();
+    for (const row of parsed.rows) {
+      const ds = row.benchmark ?? '(no dataset)';
+      const entry = byDataset.get(ds) ?? { total: 0, passed: 0 };
+      if (row.eval) {
+        entry.total++;
+        if (row.eval.pass) entry.passed++;
+      }
+      byDataset.set(ds, entry);
+    }
+
+    const datasets = Array.from(byDataset.entries()).map(([name, { total, passed }]) => ({
+      name,
+      total,
+      passed,
+      pct: total > 0 ? Math.round((passed / total) * 1000) / 10 : 0,
+    }));
+
+    const overallTotal = datasets.reduce((s, d) => s + d.total, 0);
+    const overallPassed = datasets.reduce((s, d) => s + d.passed, 0);
+    const overallPct = overallTotal > 0 ? Math.round((overallPassed / overallTotal) * 1000) / 10 : 0;
+    const stratifiedPct = datasets.length > 0
+      ? Math.round(datasets.reduce((s, d) => s + d.pct, 0) / datasets.length * 10) / 10
+      : 0;
+
+    return { datasets, overallPct, stratifiedPct, overallPassed, overallTotal };
+  }, [parsed, isBenchmark]);
+
   // Not loaded — show upload screen
   if (!parsed) {
     return <UploadScreen onDrop={handleDrop} onInputChange={handleInputChange} />;
@@ -625,6 +660,43 @@ export default function BenchmarkPage() {
             )}
           </HStack>
         </Box>
+
+        {/* Aggregate metrics table */}
+        {datasetMetrics && datasetMetrics.datasets.length > 0 && (
+          <Box px={8} py={4} borderBottom="1px solid" borderColor="border.muted" flexShrink={0}>
+            <HStack gap={6} mb={3} align="baseline">
+              <HStack gap={2} align="baseline">
+                <Text fontSize="xs" fontWeight="medium" color="fg.muted">Overall Pass %</Text>
+                <Text fontSize="lg" fontWeight="bold" fontFamily="mono"
+                  color={datasetMetrics.overallPct >= 70 ? 'accent.success' : datasetMetrics.overallPct >= 40 ? 'accent.warning' : 'accent.danger'}
+                >
+                  {datasetMetrics.overallPct}%
+                </Text>
+              </HStack>
+              <HStack gap={2} align="baseline">
+                <Text fontSize="xs" fontWeight="medium" color="fg.muted">Stratified Pass %</Text>
+                <Text fontSize="lg" fontWeight="bold" fontFamily="mono"
+                  color={datasetMetrics.stratifiedPct >= 70 ? 'accent.success' : datasetMetrics.stratifiedPct >= 40 ? 'accent.warning' : 'accent.danger'}
+                >
+                  {datasetMetrics.stratifiedPct}%
+                </Text>
+              </HStack>
+            </HStack>
+            <Box h="200px">
+              <TableV2
+                columns={['Dataset', 'Attempts', 'Passed', 'Pass %']}
+                types={['VARCHAR', 'INTEGER', 'INTEGER', 'DOUBLE']}
+                rows={datasetMetrics.datasets.map(d => ({
+                  'Dataset': d.name,
+                  'Attempts': d.total,
+                  'Passed': d.passed,
+                  'Pass %': d.pct,
+                }))}
+                initialSorting={[{ id: 'Dataset', desc: false }]}
+              />
+            </Box>
+          </Box>
+        )}
 
         {/* Results table */}
         <Box flex={1} overflow="hidden">
