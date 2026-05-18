@@ -584,6 +584,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     if (firstError) errors++;
     state.status = firstError ? 'error' : 'done';
 
+    // AutoContext's tool calls already live in the conversation log under
+    // the `AutoContextAgent` invocation — the benchmark viewer renders
+    // them as a normal sub-agent. No separate per-row snapshot needed.
     const result: BenchmarkResult = {
       input_index: rowIdx,
       input: state.row,

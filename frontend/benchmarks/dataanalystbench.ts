@@ -38,6 +38,7 @@ import {
   V2DoubleCheckBenchmarkAgent,
   V2_DATA_TOOLS,
 } from '@/agents/benchmark-analyst/v2';
+import { AutoContextAgent } from '@/agents/benchmark-analyst/v2/auto-context';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
 // ── Config ────────────────────────────────────────────────────
@@ -142,6 +143,12 @@ const RootAgent = useV2
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
+// AutoContextAgent is spawned by BenchmarkAnalystAgent (and its V2 /
+// DoubleCheck variants) at the start of every benchmark row, so every
+// registrables list must include it. The agent emits its payload as
+// tagged text in its final response — no separate finisher tool.
+const AUTO_CONTEXT_REGISTRABLES = [AutoContextAgent];
+
 const registrables = useV2
   ? doubleCheck
     ? [
@@ -149,8 +156,9 @@ const registrables = useV2
         V2BenchmarkAnalystAgentForDoubleCheck,
         CheckEquivalence,
         RootAgent,
+        ...AUTO_CONTEXT_REGISTRABLES,
       ]
-    : [...V2_DATA_TOOLS, RootAgent]
+    : [...V2_DATA_TOOLS, RootAgent, ...AUTO_CONTEXT_REGISTRABLES]
   : doubleCheck
     ? [
         CatalogSearchDBSchema,
@@ -161,8 +169,17 @@ const registrables = useV2
         RootAgent,
         FuzzyMatch,
         ExploreDataset,
+        ...AUTO_CONTEXT_REGISTRABLES,
       ]
-    : [CatalogSearchDBSchema, ChainedExecuteQuery, FetchHandleV2, RootAgent, FuzzyMatch, ExploreDataset];
+    : [
+        CatalogSearchDBSchema,
+        ChainedExecuteQuery,
+        FetchHandleV2,
+        RootAgent,
+        FuzzyMatch,
+        ExploreDataset,
+        ...AUTO_CONTEXT_REGISTRABLES,
+      ];
 
 // Default per-question timeout (seconds). Override via DAB_QUESTION_TIMEOUT.
 // A row that hits its timeout is cancelled and dropped from the output

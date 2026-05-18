@@ -198,7 +198,7 @@ describe('buildCatalog', () => {
       expect(catalog.column_stats.rows.length).toBeGreaterThan(0);
     });
 
-    it('uses the connection dialect for profiling — no profiling SQL on a non-SQL (mongo) connection', async () => {
+    it('uses the connection dialect for profiling — mongo uses a native $sample pipeline, never SQL', async () => {
       const bareSchema: SchemaEntry[] = [
         {
           schema: 'main',
@@ -212,14 +212,18 @@ describe('buildCatalog', () => {
         query,
       } as unknown as NodeConnector;
 
-      // dialect 'mongo' → profileDatabase falls through to pass-through; it must
-      // NOT run DuckDB-style profiling SQL against the mongo connector.
+      // dialect 'mongo' → profileMongo issues one $sample aggregation pipeline
+      // per collection. No SQL must appear on the mongo connector.
       const connectors = new Map<string, CatalogConnector>([
         ['mongo_db', { connector, dialect: 'mongo' }],
       ]);
       await buildCatalog(connectors);
 
-      expect(query).not.toHaveBeenCalled();
+      expect(query).toHaveBeenCalledTimes(1);
+      const arg = (query as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+      const parsed = JSON.parse(arg);
+      expect(parsed.collection).toBe('docs');
+      expect(parsed.pipeline[0].$sample).toBeDefined();
     });
   });
 

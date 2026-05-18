@@ -19,6 +19,7 @@ import {
   buildPromptPassPreviews,
   parsePromptPassResponse,
   pickPromptPassInfo,
+  runPromptPassFree,
   type PromptPassEntry,
 } from '../prompt-pass';
 
@@ -115,6 +116,69 @@ describe('buildPromptPassUserContent', () => {
     );
     expect(content).toMatch(/r0: \{"name":"alpha"\}/);
     expect(content).toMatch(/r1: \{"name":"beta"\}/);
+  });
+});
+
+describe('runPromptPassFree skipUserMessage', () => {
+  // Stub call shape: capture the inbound user-message content text so we
+  // can inspect grounding sections without depending on the full Context type.
+  const captureCallLLM = () => {
+    const userContents: string[] = [];
+    const fn: typeof Orchestrator.prototype.callLLM extends infer T ? T : never =
+      undefined as never;
+    void fn;
+    const callLLM = async (_model: Model<Api>, context: { messages: Array<{ content: unknown }> }) => {
+      const first = context.messages[0]?.content;
+      userContents.push(typeof first === 'string' ? first : JSON.stringify(first));
+      return fauxAssistantMessage('{"results":[],"info":"x"}');
+    };
+    return { callLLM: callLLM as unknown as Parameters<typeof runPromptPassFree>[4], userContents };
+  };
+  const stubModel = fauxReg.getModel();
+
+  it('includes the original question by default', async () => {
+    const { callLLM, userContents } = captureCallLLM();
+    await runPromptPassFree(
+      [{ label: 'q1', result: result(['a']) }],
+      'task',
+      stubModel,
+      { contextDocs: 'docs', originalMessage: 'leak-me' },
+      callLLM,
+    );
+    expect(userContents[0]).toContain('## Original question');
+    expect(userContents[0]).toContain('leak-me');
+  });
+
+  it('strips originalMessage when skipUserMessage is true', async () => {
+    const { callLLM, userContents } = captureCallLLM();
+    await runPromptPassFree(
+      [{ label: 'q1', result: result(['a']) }],
+      'task',
+      stubModel,
+      { contextDocs: 'docs', originalMessage: 'leak-me' },
+      callLLM,
+      { skipUserMessage: true },
+    );
+    expect(userContents[0]).not.toContain('## Original question');
+    expect(userContents[0]).not.toContain('leak-me');
+    // Docs still flow through — only originalMessage is dropped.
+    expect(userContents[0]).toContain('## Data Documentation');
+  });
+
+  it('accepts maxChars positional and opts trailing simultaneously', async () => {
+    const { callLLM } = captureCallLLM();
+    // Should not throw — verifies the dual-shape signature is backward-compat.
+    await expect(
+      runPromptPassFree(
+        [{ label: 'q1', result: result(['a']) }],
+        'task',
+        stubModel,
+        { originalMessage: 'q' },
+        callLLM,
+        500,
+        { skipUserMessage: true },
+      ),
+    ).resolves.toBeDefined();
   });
 });
 

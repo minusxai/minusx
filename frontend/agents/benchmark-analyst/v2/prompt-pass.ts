@@ -171,11 +171,26 @@ export function pickPromptPassInfo(parsed: ParsedResponse | null, rawText: strin
   return parsed && typeof parsed.info === 'string' ? parsed.info : rawText;
 }
 
+/** Optional behavioural knobs for `runPromptPassFree`. */
+export interface RunPromptPassOpts {
+  maxChars?: number;
+  /** When true, drop `originalMessage` from the prompt context before
+   *  building the user content. Required for any pass whose result is
+   *  cached and reused across questions — if the user's first question
+   *  leaks into the prompt, the cached output gets question-biased and
+   *  is wrong for later questions hitting the same cache slot. */
+  skipUserMessage?: boolean;
+}
+
 /**
  * Orchestrator-free prompt pass: bundles the pure pieces with a stateless
  * `callLLM`. Used directly by catalog build (no agent context to read
  * `this.orchestrator` off) and indirectly by `V2DataTool.runPromptPass`
  * (which binds `Orchestrator.callLLM` and forwards).
+ *
+ * Accepts `maxChars` either as a positional 6th argument (legacy call
+ * sites) or via `opts.maxChars`. `opts.skipUserMessage` enables the
+ * cache-safe "no original question" mode.
  */
 export async function runPromptPassFree(
   entries: PromptPassEntry[],
@@ -183,9 +198,17 @@ export async function runPromptPassFree(
   model: Model<Api>,
   context: PromptPassContext,
   callLLM: PromptPassCallLLM,
-  maxChars: number = TOOL_MAX_LIMIT_CHARS,
+  maxCharsOrOpts: number | RunPromptPassOpts = TOOL_MAX_LIMIT_CHARS,
+  opts: RunPromptPassOpts = {},
 ): Promise<PromptPassResult> {
-  const llmCtx = buildPromptPassContext(entries, prompt, context);
+  const merged: RunPromptPassOpts = typeof maxCharsOrOpts === 'number'
+    ? { maxChars: maxCharsOrOpts, ...opts }
+    : { ...maxCharsOrOpts, ...opts };
+  const maxChars = merged.maxChars ?? TOOL_MAX_LIMIT_CHARS;
+  const effCtx: PromptPassContext = merged.skipUserMessage
+    ? { contextDocs: context.contextDocs }
+    : context;
+  const llmCtx = buildPromptPassContext(entries, prompt, effCtx);
   const text = extractText(await callLLM(model, llmCtx));
   const parsed = parsePromptPassResponse(text);
   return {

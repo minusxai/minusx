@@ -488,11 +488,15 @@ describe('ExploreV2', () => {
       );
       await tool.run();
 
-      // The mongo search must produce a JSON pipeline string, never SQL.
+      // The mongo search must produce a JSON pipeline with a $match stage,
+      // never SQL. The catalog build also issues a $sample pipeline against
+      // this collection for column profiling — filter to the $match call
+      // specifically so the assertion is robust to that.
       const jsonCall = findCall((q) => {
         try {
           const parsed = JSON.parse(q);
-          return typeof parsed === 'object' && parsed && 'pipeline' in parsed;
+          if (typeof parsed !== 'object' || !parsed || !Array.isArray(parsed.pipeline)) return false;
+          return parsed.pipeline.some((s: Record<string, unknown>) => '$match' in s);
         } catch {
           return false;
         }
@@ -500,7 +504,8 @@ describe('ExploreV2', () => {
       expect(jsonCall).toBeDefined();
       const parsed = JSON.parse(jsonCall!);
       expect(parsed.collection).toBe('products');
-      expect(parsed.pipeline[0]).toEqual({
+      const matchStage = parsed.pipeline.find((s: Record<string, unknown>) => '$match' in s);
+      expect(matchStage).toEqual({
         $match: { description: { $regex: 'solar', $options: 'i' } },
       });
       // Output is projected to the standard search-result shape.

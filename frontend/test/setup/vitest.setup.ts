@@ -6,6 +6,15 @@ import { vi } from 'vitest';
 import { registerModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';
 
+// Stub provider API keys with a sentinel that satisfies pi-ai's "key
+// exists" check but is guaranteed to fail authentication on any real
+// network call. Tests that faux-mock the LLM (the vast majority) never
+// consult these. Tests that accidentally trigger a real provider call
+// will get a 401 — a loud, traceable failure — instead of either
+// silently calling the dev's keys or crashing with "No API key".
+process.env.OPENAI_API_KEY = 'test-stub-no-real-calls';
+process.env.ANTHROPIC_API_KEY = 'test-stub-no-real-calls';
+
 // Clear backend URL env vars; tests must explicitly set their own
 delete process.env.NEXT_PUBLIC_BACKEND_URL;
 delete process.env.BACKEND_URL;
