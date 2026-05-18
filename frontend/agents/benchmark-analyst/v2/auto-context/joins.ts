@@ -14,6 +14,12 @@ export interface JoinDiscoveryOpts {
   /** Text columns with `nDistinct` at or below this are rejected as
    *  status-enum joins (low-card joins produce N×M cross-products). */
   minTextDistinct?: number;
+  /** Integer columns with `nDistinct` at or below this are rejected.
+   *  Integer columns with few distinct values (e.g. `is_open`, status
+   *  codes, counts ≤ ~100) overlap by chance across unrelated tables —
+   *  the typical false-positive shape. A real integer FK is usually a
+   *  surrogate-key column with thousands of distinct values. */
+  minIntegerDistinct?: number;
   /** Per-column sample size for the verify step (passed through to the
    *  caller-supplied fetcher; the helper itself doesn't fetch). */
   sampleSize?: number;
@@ -23,6 +29,7 @@ const DEFAULTS: Required<JoinDiscoveryOpts> = {
   overlapThreshold: 0.1,
   maxValueLength: 256,
   minTextDistinct: 5,
+  minIntegerDistinct: 100,
   sampleSize: 200,
 };
 
@@ -157,24 +164,32 @@ export function proposeJoinCandidates(
     for (let j = i + 1; j < usable.length; j++) {
       const a = usable[i];
       const b = usable[j];
-      // Same-column-of-same-table never qualifies.
+      // Skip same-table pairs entirely: within-table column overlap is
+      // almost never a meaningful join relationship (engagement columns
+      // like `useful`/`funny`/`cool` overlap by construction; pivot
+      // joins on the same table are anti-patterns).
       if (
         a.connection === b.connection &&
         a.schema === b.schema &&
-        a.table === b.table &&
-        a.column === b.column
+        a.table === b.table
       ) continue;
       if (!typesMatch(a.type, b.type)) continue;
 
-      // For text pairs only, require nDistinct > minTextDistinct on BOTH
-      // sides when stats are available. Missing stats → admit (default to
-      // candidate, verification step will catch low-signal pairs).
+      // Per-family cardinality floor when stats are available. Missing
+      // stats → admit (the overlap probe in `verifyJoin` is the safety
+      // net). Both sides must clear the threshold.
+      const ma = stats.get(metaKey(a));
+      const mb = stats.get(metaKey(b));
       if (isTextType(a.type)) {
-        const ma = stats.get(metaKey(a));
-        const mb = stats.get(metaKey(b));
         if (
           (ma?.nDistinct !== undefined && ma.nDistinct <= cfg.minTextDistinct) ||
           (mb?.nDistinct !== undefined && mb.nDistinct <= cfg.minTextDistinct)
+        ) continue;
+      } else {
+        // Integer / numeric family.
+        if (
+          (ma?.nDistinct !== undefined && ma.nDistinct <= cfg.minIntegerDistinct) ||
+          (mb?.nDistinct !== undefined && mb.nDistinct <= cfg.minIntegerDistinct)
         ) continue;
       }
 

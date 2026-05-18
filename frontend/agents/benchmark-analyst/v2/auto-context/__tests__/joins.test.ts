@@ -118,6 +118,34 @@ describe('proposeJoinCandidates', () => {
     expect(proposeJoinCandidates([usersId, usersId], new Map())).toHaveLength(0);
   });
 
+  it('skips ALL same-table joins (within-table column overlap is never a meaningful FK)', () => {
+    // Two distinct columns on the same table — engagement-counter shape.
+    const usefulCol = col('db', 'public', 'users', 'useful', 'INTEGER');
+    const funnyCol = col('db', 'public', 'users', 'funny', 'INTEGER');
+    expect(proposeJoinCandidates([usefulCol, funnyCol], new Map())).toHaveLength(0);
+  });
+
+  it('rejects integer-pairs with low nDistinct (status / count noise)', () => {
+    // Both sides have nDistinct=2 — booleans, status enums, etc.
+    const isOpen = col('db', 's', 'business', 'is_open', 'INTEGER');
+    const isActive = col('db', 's', 'review', 'is_active', 'INTEGER');
+    const stats = new Map<string, ColumnMeta>([
+      [metaKey(isOpen), { category: 'numeric', nDistinct: 2 }],
+      [metaKey(isActive), { category: 'numeric', nDistinct: 2 }],
+    ]);
+    expect(proposeJoinCandidates([isOpen, isActive], stats)).toHaveLength(0);
+  });
+
+  it('admits integer-pairs whose BOTH sides have nDistinct > 100 (real surrogate-key FK shape)', () => {
+    const userIdA = col('db', 's', 't1', 'user_id', 'INTEGER');
+    const userIdB = col('db', 's', 't2', 'user_id', 'INTEGER');
+    const stats = new Map<string, ColumnMeta>([
+      [metaKey(userIdA), { category: 'numeric', nDistinct: 5000 }],
+      [metaKey(userIdB), { category: 'numeric', nDistinct: 5000 }],
+    ]);
+    expect(proposeJoinCandidates([userIdA, userIdB], stats)).toHaveLength(1);
+  });
+
   it('canonicalises pairs (each pair appears once, not twice)', () => {
     const candidates = proposeJoinCandidates([usersId, ordersUid], new Map());
     expect(candidates).toHaveLength(1);
