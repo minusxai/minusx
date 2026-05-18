@@ -277,11 +277,19 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
 
 const JSON_AGENT_DB_PATH = getTestDbPath('json_agent_tests');
 
-(process.env.ANTHROPIC_API_KEY ? describe : describe.skip)('JSON Agent Tests', () => {
+// These tests make real Anthropic calls, so they need an actual key — not the
+// `test-stub-no-real-calls` sentinel that `test/setup/vitest.setup.ts` installs
+// so other suites can sanity-check "key exists" without burning real provider
+// budget. A truthy stub would let this suite run and 401 on every call.
+const STUB_API_KEY = 'test-stub-no-real-calls';
+const HAS_REAL_ANTHROPIC_KEY =
+  !!process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== STUB_API_KEY;
+
+(HAS_REAL_ANTHROPIC_KEY ? describe : describe.skip)('JSON Agent Tests', () => {
   // Guard: describe.skip still evaluates the callback body (to collect tests). Without
   // this return, setupMockFetch below would install a new fetch mock that overwrites the
   // one set up by the 'LLM Test Runner E2E' suite above, breaking its /mock/configure calls.
-  if (!process.env.ANTHROPIC_API_KEY) return;
+  if (!HAS_REAL_ANTHROPIC_KEY) return;
 
   beforeAll(async () => {
     await ensureMxfoodDataset();
