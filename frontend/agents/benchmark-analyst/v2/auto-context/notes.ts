@@ -8,6 +8,7 @@ import {
   type RunPromptPassOpts,
   extractText,
 } from '../prompt-pass';
+import { truncateRow } from './truncate';
 
 /** Shape of one verified join arc surfaced into a per-table note prompt. */
 export interface JoinForNote {
@@ -119,10 +120,13 @@ export function buildNotesUserContent(
     sections.push(`## Verified joins involving this table\n${joinLines.join('\n')}`);
   }
 
-  // Sample rows (compact JSON, capped to keep tokens bounded).
+  // Sample rows (compact JSON, capped to keep tokens bounded). Each
+  // string field is per-value-truncated so blob-heavy columns (README
+  // bodies, commit messages, full descriptions) can't single-handedly
+  // blow the LLM context window.
   const rowLines = input.samples
     .slice(0, 10)
-    .map((r, i) => `r${i}: ${JSON.stringify(r)}`)
+    .map((r, i) => `r${i}: ${JSON.stringify(truncateRow(r))}`)
     .join('\n');
   sections.push(`## Sample rows${input.samples.length > 10 ? ` (showing 10 of ${input.samples.length})` : ''}\n${rowLines || '(no rows)'}`);
 

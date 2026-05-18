@@ -3,6 +3,7 @@ import 'server-only';
 import type { ColumnMeta } from '@/lib/connections/base';
 import type { Example } from './examples';
 import type { JoinForNote } from './notes';
+import { truncateRow } from './truncate';
 
 /** Per-column data carried into the renderer — combines mechanical
  *  stats (from `ColumnMeta`) with the LLM-written note. */
@@ -75,7 +76,9 @@ function renderTable(t: AnnotatedTable): string {
 
   if (t.samples.length > 0) {
     lines.push('', 'Sample rows:');
-    for (const r of t.samples) lines.push(`- ${JSON.stringify(r)}`);
+    // Per-value truncation: keeps blob-heavy columns (README content,
+    // commit messages) from dominating the rendered block.
+    for (const r of t.samples) lines.push(`- ${JSON.stringify(truncateRow(r))}`);
   }
   return lines.join('\n');
 }
@@ -89,7 +92,7 @@ function renderExample(e: Example, i: number): string {
   lines.push(e.query);
   lines.push('```');
   lines.push('Result:');
-  for (const r of e.rows) lines.push(`- ${JSON.stringify(r)}`);
+  for (const r of e.rows) lines.push(`- ${JSON.stringify(truncateRow(r))}`);
   return lines.join('\n');
 }
 

@@ -9,6 +9,7 @@ import {
 } from '../prompt-pass';
 import type { JoinFinding } from './joins';
 import type { FlatColumn } from './schema';
+import { truncateValues } from './truncate';
 
 const SAMPLES_PER_SIDE = 6;
 
@@ -64,8 +65,10 @@ function renderCandidate(
   f: JoinFinding,
   samples: Map<string, unknown[]>,
 ): string {
-  const leftSamples = (samples.get(colKey(f.left)) ?? []).slice(0, SAMPLES_PER_SIDE);
-  const rightSamples = (samples.get(colKey(f.right)) ?? []).slice(0, SAMPLES_PER_SIDE);
+  // Truncate per-value so a candidate column carrying README blobs (or
+  // similarly large text) can't single-handedly blow the LLM context.
+  const leftSamples = truncateValues((samples.get(colKey(f.left)) ?? []).slice(0, SAMPLES_PER_SIDE));
+  const rightSamples = truncateValues((samples.get(colKey(f.right)) ?? []).slice(0, SAMPLES_PER_SIDE));
   return [
     `## [${index}] ${f.left.connection}.${f.left.schema}.${f.left.table}.${f.left.column} (${f.left.type})  ↔  ${f.right.connection}.${f.right.schema}.${f.right.table}.${f.right.column} (${f.right.type})`,
     `kind=${f.kind} overlap=${f.overlap.toFixed(2)}`,
