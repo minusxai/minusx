@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { AutoContextPayload } from '../finish-tool';
+import type { AutoContextPayload } from '../payload-shape';
 import { renderAutoContextPayload } from '../render';
 
 const PAYLOAD: AutoContextPayload = {

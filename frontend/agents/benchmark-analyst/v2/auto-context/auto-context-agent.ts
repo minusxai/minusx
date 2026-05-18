@@ -6,7 +6,6 @@ import { ChainedExecuteQuery } from '../../db-tools';
 import type { BenchmarkAnalystContext } from '../../types';
 import { publicConnectionMetadata } from '../../types';
 import { getLighterModel } from '../data-tool-base';
-import { FinishAutoContext } from './finish-tool';
 
 const AutoContextAgentParams = Type.Object({
   /** Catalog summary built by the parent (schema + stats + sample rows per
@@ -22,21 +21,55 @@ const AutoContextAgentParams = Type.Object({
 const AUTO_CONTEXT_SYSTEM_PROMPT_TEMPLATE = (
   connectionsJson: string,
   contextDocs: string | undefined,
-) => `You are AutoContextAgent. Your job is to produce an orientation block that downstream analysts will use to answer questions against the connections below — verified joins, per-column notes grounded in the actual data, and a few execution-validated example queries.
+) => `You are AutoContextAgent. Your job: produce an orientation block that downstream analysts will use to answer questions against the connections below — verified joins, per-column notes grounded in actual data, and a few execution-validated example queries.
 
-You receive the catalog summary as your user message: per-table column types, per-column stats (\`nDistinct\`, \`nullCount\`, \`top values\`, \`min/max\`), and a small sample of rows.
+Your user message is the catalog summary: per-table column types, per-column stats (\`nDistinct\`, \`nullCount\`, \`top values\`, \`min/max\`), and a small sample of rows.
 
-You have two tools:
-1. **ExecuteQuery** — run read-only SQL or Mongo queries against any listed connection. Use it to confirm joins (e.g. \`SELECT COUNT(*) FROM a JOIN b ON a.x = b.y\`, \`SELECT COUNT(DISTINCT col) FROM t WHERE col IN (...)\`) and to validate the result rows of any example query you plan to surface.
-2. **FinishAutoContext** — call exactly once at the end with your structured output.
+You have one tool:
+- **ExecuteQuery** — run read-only SQL or Mongo queries against any listed connection. Use it to confirm joins (\`SELECT COUNT(*) FROM a JOIN b ON a.x = b.y LIMIT 1\`, \`SELECT COUNT(DISTINCT a.x) FROM a WHERE a.x IN (SELECT b.y FROM b LIMIT N)\`) and to validate result rows of example queries.
 
 ## How to work
-- Read the catalog summary. Identify candidate joins from column names + stats: \`<table>_id\` ↔ \`<table>.id\`, shared identifier columns, sparse-subset inclusion (small dedup'd table inside a larger one). Skip obvious dead ends: low-uniqueness categorical columns, narrative text fields, status enums.
-- For each plausible join, run one ExecuteQuery probe to confirm or reject it. A simple \`SELECT COUNT(*) FROM a JOIN b ON a.x = b.y LIMIT 1\` (or \`SELECT COUNT(DISTINCT a.x) FROM a WHERE a.x IN (SELECT b.y FROM b LIMIT N)\` for sparse cases) is enough. Don't fabricate joins you didn't verify.
-- For each table, write one short tableNote describing what it represents + any data-shape quirks visible from samples (nested fields, encoded enums, format variants). For each column with a non-obvious shape (encoded JSON, comma-separated lists, prefixed IDs, units, NULL meaning), write a short note. Skip columns that need no commentary.
-- Propose up to 5 example queries that demonstrate the most useful joins or shapes. Run each via ExecuteQuery; include only those that succeed with at least one row. Trim large rows.
-- Budget: aim for **at most ~15 ExecuteQuery probes total** across the whole run. Stop probing once you have enough evidence.
-- When done, call **FinishAutoContext** exactly once with the structured payload. Do not write any prose response — your only output is that single tool call.
+1. Read the catalog summary. Identify candidate joins from column names + stats: \`<table>_id\` ↔ \`<table>.id\`, shared identifier columns, sparse-subset inclusion. Skip obvious dead ends: low-uniqueness categorical columns, narrative text, status enums.
+2. For each plausible join, run ONE ExecuteQuery probe to confirm. Don't list joins you didn't verify.
+3. For each table, write one short tableNote describing what it represents + data-shape quirks visible from samples (nested fields, encoded enums, format variants). Per-column notes: only where there's a non-obvious shape (encoded JSON, comma-separated lists, prefixed IDs, units, NULL meaning). Skip columns that need no commentary.
+4. Propose up to 5 example queries; run each via ExecuteQuery; include only those that succeed with at least one row.
+5. Budget: at most ~15 ExecuteQuery probes total. Stop probing once you have enough evidence.
+
+## Final response format — IMPORTANT
+When you're done probing, emit a SINGLE final response containing **only** this tag, with valid JSON inside. No prose before or after. No markdown code fences. No explanation.
+
+<AutoContext>
+{
+  "tables": [
+    {
+      "connection": "<conn-name>",
+      "schema": "<schema-name>",
+      "table": "<table-name>",
+      "tableNote": "one paragraph describing the table + quirks",
+      "columns": [
+        { "name": "<col>", "note": "short note on shape/format/units; empty string if no commentary" }
+      ],
+      "joins": [
+        { "fromColumn": "<col>", "toTable": "<table or conn.schema.table>", "toColumn": "<col>", "evidence": "COUNT(*) JOIN returned N rows" }
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "description": "one-line description",
+      "connection": "<conn-name>",
+      "query": "SELECT ...",
+      "rows": [ { "<col>": <value>, ... } ]
+    }
+  ]
+}
+</AutoContext>
+
+Strict rules:
+- The response MUST contain exactly one \`<AutoContext>...</AutoContext>\` block and nothing else.
+- The JSON MUST parse. Use valid JSON (double-quoted keys, no trailing commas, no comments).
+- Only include \`joins\` you validated via ExecuteQuery. Only include \`examples\` whose rows you actually observed via ExecuteQuery.
+- Cap each example's \`rows\` array at 5 entries.
 
 ## Connections available
 ${connectionsJson}
@@ -49,6 +82,12 @@ ${contextDocs ? `## Data documentation\n${contextDocs}` : ''}
  * Spawned by `BenchmarkAnalystAgent` via `orchestrator.dispatch()` once per
  * `(datasetKey, slot)`; result is cached at the parent layer and reused
  * across rows of the same dataset.
+ *
+ * The agent emits its structured output as plain text wrapped in
+ * `<AutoContext>{...json...}</AutoContext>` (not a finisher tool call) —
+ * lighter models are more reliable at producing tagged JSON than at
+ * triggering a designated tool. The parent parses the tag in
+ * `runAutoContextAgent`.
  */
 export class AutoContextAgent extends MXAgent<
   typeof AutoContextAgentParams,
@@ -56,12 +95,11 @@ export class AutoContextAgent extends MXAgent<
 > {
   static readonly schema: Tool<typeof AutoContextAgentParams> = {
     name: 'AutoContextAgent',
-    description: 'Orientation agent: validates joins, writes per-column notes, and proposes example queries. Returns a structured AutoContext payload via FinishAutoContext.',
+    description: 'Orientation agent: validates joins, writes per-column notes, and proposes example queries. Returns a structured AutoContext payload as tagged JSON in its final response.',
     parameters: AutoContextAgentParams,
   };
   static readonly tools: Tool<TSchema>[] = [
     ChainedExecuteQuery.schema,
-    FinishAutoContext.schema,
   ];
   // Re-read on every access so tests that swap the lighter model via
   // `setLighterModel` (and benchmark startup flips between provider stubs

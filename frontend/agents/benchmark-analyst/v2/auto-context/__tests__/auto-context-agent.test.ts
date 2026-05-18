@@ -3,15 +3,14 @@
  * threadHistory injection flow. The LLM is stubbed via fauxProvider; the
  * connectors + catalog are mocked so we don't hit a real DB.
  *
- * The test drives the AutoContextAgent through one ExecuteQuery probe
- * followed by FinishAutoContext, then asserts that the rendered pair
- * lands in the parent's `threadHistory` (not `toolThread`) and that a
- * second call hits the cache without re-dispatching.
+ * The agent emits its final payload as `<AutoContext>{...json...}</AutoContext>`
+ * tagged text (no finisher tool). We feed that as the agent's first
+ * stopReason='stop' response and assert that the rendered triple lands
+ * in the parent's `threadHistory`.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   fauxAssistantMessage,
-  fauxToolCall,
   registerFauxProvider,
   type AssistantMessage,
   type Tool,
@@ -23,9 +22,9 @@ import { MXAgent } from '@/orchestrator/types';
 import { Type } from '@mariozechner/pi-ai';
 import {
   AutoContextAgent,
-  FinishAutoContext,
   runAutoContextAgent,
   clearAutoContextCache,
+  type AutoContextPayload,
 } from '..';
 import {
   ChainedExecuteQuery,
@@ -41,10 +40,6 @@ const fauxReg = registerFauxProvider({
 });
 
 // ─── Mock the connector layer ────────────────────────────────────────────────
-//
-// The agent's catalog read + ExecuteQuery probes all flow through the same
-// `getOrCreateBenchmarkConnector` factory. We replace it with a fixed-schema
-// stub so the test stays hermetic.
 
 const mockQuery = vi.fn(async (_sql: string): Promise<QueryResult> => ({
   columns: ['n'], types: ['INTEGER'], rows: [{ n: 42 }], finalQuery: '<stub>',
@@ -68,8 +63,6 @@ vi.mock('../../../shared-duckdb', async (importOriginal) => ({
 }));
 
 // ─── Stub parent agent ───────────────────────────────────────────────────────
-// A no-op MXAgent used only to host `runAutoContextAgent`. It never runs its
-// own LLM loop in this test — we call `runAutoContextAgent` directly.
 
 const StubParentParams = Type.Object({ userMessage: Type.String() });
 
@@ -95,12 +88,11 @@ const CONNECTIONS = [{
 const REGISTRABLES = [
   StubParentAgent,
   AutoContextAgent,
-  FinishAutoContext,
   ChainedExecuteQuery,
   CatalogSearchDBSchema,
 ];
 
-const VALID_PAYLOAD = {
+const VALID_PAYLOAD: AutoContextPayload = {
   tables: [{
     connection: 'db',
     schema: 'public',
@@ -115,6 +107,13 @@ const VALID_PAYLOAD = {
   examples: [],
 };
 
+function taggedPayloadMessage(p: AutoContextPayload): AssistantMessage {
+  return fauxAssistantMessage(
+    `<AutoContext>${JSON.stringify(p)}</AutoContext>`,
+    { stopReason: 'stop' },
+  );
+}
+
 beforeEach(() => {
   setLighterModel(fauxReg.getModel());
   setSamplingEnabled(false);
@@ -124,25 +123,10 @@ beforeEach(() => {
   fauxReg.setResponses([]);
 });
 
-// Build a faux assistant message that emits a tool call (via pi-ai's
-// `fauxToolCall` helper, so the runtime serialisation matches what a real
-// provider would produce).
-function assistantToolCall(toolName: string, args: unknown): AssistantMessage {
-  return fauxAssistantMessage(
-    fauxToolCall(toolName, args as Record<string, unknown>),
-    { stopReason: 'toolUse' },
-  );
-}
-
 describe('runAutoContextAgent', () => {
-  it('dispatches the agent and splices the rendered (toolCall, toolResult) pair into parent.threadHistory', async () => {
-    // Sequence the LLM:
-    // 1. AutoContextAgent's first turn → call FinishAutoContext with payload
-    // 2. AutoContextAgent's second turn → stop
-    fauxReg.setResponses([
-      assistantToolCall(FinishAutoContext.schema.name, VALID_PAYLOAD),
-      fauxAssistantMessage('done', { stopReason: 'stop' }),
-    ]);
+  it('dispatches the agent and splices a rendered triple into parent.threadHistory', async () => {
+    // Agent's only LLM turn: emit the tagged payload + stop.
+    fauxReg.setResponses([taggedPayloadMessage(VALID_PAYLOAD)]);
 
     const orch = new Orchestrator(REGISTRABLES);
     const parent = new StubParentAgent(orch, { userMessage: 'q' }, {
@@ -157,30 +141,32 @@ describe('runAutoContextAgent', () => {
       contextDocs: 'docs',
     });
 
-    // The pair lives in threadHistory (not toolThread).
     expect(parent.toolThread).toHaveLength(0);
-    expect(parent.threadHistory).toHaveLength(2);
+    // [synthAssistant(toolCall), toolResult(rendered), assistant(ack)]
+    expect(parent.threadHistory).toHaveLength(3);
 
     const synthAssistant = parent.threadHistory[0] as AssistantMessage;
     expect(synthAssistant.role).toBe('assistant');
     const toolCall = synthAssistant.content.find((c) => c.type === 'toolCall');
-    expect(toolCall).toBeDefined();
     expect((toolCall as { name: string }).name).toBe(AutoContextAgent.schema.name);
 
-    const toolResult = parent.threadHistory[1] as { role: string; content: { type: string; text: string }[] };
+    const toolResult = parent.threadHistory[1] as {
+      role: string; content: { type: string; text: string }[];
+    };
     expect(toolResult.role).toBe('toolResult');
     const rendered = toolResult.content[0].text;
     expect(rendered).toContain('# Auto-discovered schema context');
     expect(rendered).toContain('## db.public.users');
     expect(rendered).toContain('a stub user table');
     expect(rendered).toContain('| id | primary key |');
+
+    const ack = parent.threadHistory[2] as AssistantMessage;
+    expect(ack.role).toBe('assistant');
+    expect((ack.content[0] as { text: string }).text).toMatch(/loaded/i);
   });
 
   it('caches per (datasetKey, slot) — second call with same key skips dispatch', async () => {
-    fauxReg.setResponses([
-      assistantToolCall(FinishAutoContext.schema.name, VALID_PAYLOAD),
-      fauxAssistantMessage('done', { stopReason: 'stop' }),
-    ]);
+    fauxReg.setResponses([taggedPayloadMessage(VALID_PAYLOAD)]);
 
     const orch = new Orchestrator(REGISTRABLES);
     const parent1 = new StubParentAgent(orch, { userMessage: 'q' }, {
@@ -193,11 +179,10 @@ describe('runAutoContextAgent', () => {
       datasetKey: 'd2',
       contextDocs: 'docs',
     });
-    expect(parent1.threadHistory).toHaveLength(2);
+    expect(parent1.threadHistory).toHaveLength(3);
 
-    // No new LLM responses queued — if the cache hit DOESN'T work, the
-    // second runAutoContextAgent would try to dispatch and run out of
-    // queued responses, failing.
+    // No new LLM responses queued — cache hit on the second call should
+    // skip the dispatch.
     const parent2 = new StubParentAgent(orch, { userMessage: 'q2' }, {
       connections: CONNECTIONS, contextDocs: 'docs', datasetKey: 'd2',
     });
@@ -208,23 +193,22 @@ describe('runAutoContextAgent', () => {
       datasetKey: 'd2',
       contextDocs: 'docs',
     });
-    expect(parent2.threadHistory).toHaveLength(2);
-    // Same cached payload → same rendered text. (toolCallId + timestamp
-    // differ between fresh injects, so compare just the rendered content.)
+    expect(parent2.threadHistory).toHaveLength(3);
+    // Same cached payload → same rendered text + same deterministic toolCallId.
     const text = (m: typeof parent1.threadHistory[number]) =>
       'role' in m && m.role === 'toolResult'
         ? (m.content[0] as { text: string }).text
         : '';
     expect(text(parent2.threadHistory[1])).toEqual(text(parent1.threadHistory[1]));
+    const idOf = (m: typeof parent1.threadHistory[number]) =>
+      'role' in m && m.role === 'toolResult' ? m.toolCallId : '';
+    expect(idOf(parent2.threadHistory[1])).toEqual(idOf(parent1.threadHistory[1]));
   });
 
   it('isolates cache slots per cacheKey (DoubleCheck primary vs secondary)', async () => {
-    // Both slots will dispatch — provide responses for both runs.
     fauxReg.setResponses([
-      assistantToolCall(FinishAutoContext.schema.name, VALID_PAYLOAD),
-      fauxAssistantMessage('done', { stopReason: 'stop' }),
-      assistantToolCall(FinishAutoContext.schema.name, VALID_PAYLOAD),
-      fauxAssistantMessage('done', { stopReason: 'stop' }),
+      taggedPayloadMessage(VALID_PAYLOAD),
+      taggedPayloadMessage(VALID_PAYLOAD),
     ]);
 
     const orch = new Orchestrator(REGISTRABLES);
@@ -251,14 +235,13 @@ describe('runAutoContextAgent', () => {
       contextDocs: 'docs',
     });
 
-    // Both got their own dispatch (response queue drained twice).
-    expect(p1.threadHistory).toHaveLength(2);
-    expect(p2.threadHistory).toHaveLength(2);
+    expect(p1.threadHistory).toHaveLength(3);
+    expect(p2.threadHistory).toHaveLength(3);
   });
 
-  it('throws (so the parent can catch + fall back) when the agent never calls FinishAutoContext', async () => {
+  it('throws with the agent final text when no <AutoContext> tag is emitted', async () => {
     fauxReg.setResponses([
-      fauxAssistantMessage('I refuse', { stopReason: 'stop' }),
+      fauxAssistantMessage('I refuse to comply.', { stopReason: 'stop' }),
     ]);
     const orch = new Orchestrator(REGISTRABLES);
     const parent = new StubParentAgent(orch, { userMessage: 'q' }, {
@@ -270,8 +253,56 @@ describe('runAutoContextAgent', () => {
       connections: CONNECTIONS,
       datasetKey: 'd4',
       contextDocs: 'docs',
-    })).rejects.toThrow(/FinishAutoContext/);
-    // Cache entry must have been removed on failure so a retry can re-dispatch.
-    // (Verified indirectly by the next test in this suite passing.)
+    })).rejects.toThrow(/reason=no-tag[\s\S]*I refuse to comply/);
+  });
+
+  it('throws with reason=bad-json when the tag is present but JSON is malformed', async () => {
+    fauxReg.setResponses([
+      fauxAssistantMessage(
+        '<AutoContext>{tables: not valid json}</AutoContext>',
+        { stopReason: 'stop' },
+      ),
+    ]);
+    const orch = new Orchestrator(REGISTRABLES);
+    const parent = new StubParentAgent(orch, { userMessage: 'q' }, {
+      connections: CONNECTIONS, contextDocs: 'docs', datasetKey: 'd5',
+    });
+    await expect(runAutoContextAgent({
+      orchestrator: orch,
+      parent: parent as unknown as MXAgent,
+      connections: CONNECTIONS,
+      datasetKey: 'd5',
+      contextDocs: 'docs',
+    })).rejects.toThrow(/reason=bad-json/);
+  });
+
+  it('skips dispatch entirely when parent.threadHistory already contains an AutoContextAgent invocation', async () => {
+    // Round 2 of DoubleCheck: parent inherits round 1's full history,
+    // which already contains the AutoContext toolCall + result. We should
+    // not re-dispatch.
+    fauxReg.setResponses([]); // no responses queued — if dispatch fires we crash.
+
+    const orch = new Orchestrator(REGISTRABLES);
+    const parent = new StubParentAgent(orch, { userMessage: 'q' }, {
+      connections: CONNECTIONS, contextDocs: 'docs', datasetKey: 'd6',
+    });
+    // Seed threadHistory as if from a prior round.
+    parent.threadHistory.push({
+      role: 'assistant',
+      content: [{ type: 'toolCall', id: 'prior', name: AutoContextAgent.schema.name, arguments: {} }],
+      api: 'controller' as never, provider: 'controller', model: 'controller',
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      stopReason: 'toolUse', timestamp: Date.now(),
+    });
+
+    // Should NOT throw and should NOT modify threadHistory beyond what we seeded.
+    await runAutoContextAgent({
+      orchestrator: orch,
+      parent: parent as unknown as MXAgent,
+      connections: CONNECTIONS,
+      datasetKey: 'd6',
+      contextDocs: 'docs',
+    });
+    expect(parent.threadHistory).toHaveLength(1);
   });
 });

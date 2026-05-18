@@ -2,13 +2,17 @@ import 'server-only';
 
 import type {
   AssistantMessage,
+  TextContent,
   ToolResultMessage,
 } from '@mariozechner/pi-ai';
 import type { NodeConnector } from '@/lib/connections/base';
 import type { Api, Model } from '@/lib/llm/get-model';
-import type { ConversationLogEntry, MXAgent } from '@/orchestrator/types';
+import type {
+  ConversationLogEntry,
+  MXAgent,
+  MXAgentDetails,
+} from '@/orchestrator/types';
 import type { Orchestrator } from '@/orchestrator/orchestrator';
-import { gen_id } from '@/orchestrator/utils';
 import { getOrCreateBenchmarkConnector } from '../../shared-duckdb';
 import type { ConnectionInfo } from '../../types';
 import { getCatalogStore } from '../catalog';
@@ -17,9 +21,8 @@ import { getLighterModel } from '../data-tool-base';
 import { AutoContextAgent } from './auto-context-agent';
 import {
   type AutoContextPayload,
-  FinishAutoContext,
-  type FinishAutoContextDetails,
-} from './finish-tool';
+  parseAutoContextPayload,
+} from './payload-shape';
 import {
   buildCatalogSummary,
   catalogProjection,
@@ -31,7 +34,11 @@ import { renderAutoContextPayload } from './render';
 import { type FlatColumn } from './schema';
 
 export { AutoContextAgent } from './auto-context-agent';
-export { FinishAutoContext, type AutoContextPayload } from './finish-tool';
+export {
+  type AutoContextPayload,
+  AutoContextPayloadSchema,
+  parseAutoContextPayload,
+} from './payload-shape';
 export { renderAutoContextPayload } from './render';
 
 const DEFAULT_MAX_CHARS = 100_000;
@@ -163,21 +170,74 @@ function buildRenderedResult(toolCallId: string, rendered: string): ToolResultMe
   };
 }
 
-/** Walk the orchestrator log looking for a `FinishAutoContext` toolResult
- *  emitted by the agent whose id is `agentId`. Returns null if the agent
- *  finished without calling it (which the caller treats as failure). */
-function findFinishAutoContextPayload(
-  log: ConversationLogEntry[],
-  agentId: string,
-): AutoContextPayload | null {
+/** Faux assistant ack appended after the rendered toolResult. Needed so
+ *  the message sequence alternates correctly when pi-ai converts to the
+ *  Anthropic API shape: a `toolResult` becomes a `user`-role tool_result
+ *  block, and the analyst's actual user question follows — without this
+ *  ack between them, Anthropic rejects two consecutive user messages. */
+function buildSynthAck(): AssistantMessage {
+  return {
+    role: 'assistant',
+    content: [{ type: 'text', text: 'Auto-context loaded.' }],
+    api: 'controller' as never,
+    provider: 'controller',
+    model: 'controller',
+    usage: {
+      input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'stop',
+    timestamp: Date.now(),
+  };
+}
+
+/** Walk the orchestrator log for the wrapped AutoContextAgent toolResult
+ *  (carries the sub-agent's final assistant message under
+ *  `details.assistantMessage`). The agent's final text contains the
+ *  `<AutoContext>{...}</AutoContext>` payload. Returns the parsed payload,
+ *  or an object describing why parsing failed so the caller can include
+ *  the agent's final text in its error message. */
+type ExtractResult =
+  | { ok: true; payload: AutoContextPayload }
+  | { ok: false; finalText: string; reason: 'no-tag' | 'bad-json' | 'no-wrapper' };
+
+function extractAgentPayload(log: ConversationLogEntry[], agentId: string): ExtractResult {
   for (const entry of log) {
     if (!('role' in entry) || entry.role !== 'toolResult') continue;
-    if (entry.parent_id !== agentId) continue;
-    if (entry.toolName !== FinishAutoContext.schema.name) continue;
-    const details = entry.details as FinishAutoContextDetails | undefined;
-    if (details?.type === 'auto_context') return details.payload;
+    if (entry.toolCallId !== agentId) continue;
+    if (entry.toolName !== AutoContextAgent.schema.name) continue;
+    const details = entry.details as MXAgentDetails | undefined;
+    if (details?.type !== 'mx_agent') continue;
+    const finalText = details.assistantMessage.content
+      .filter((c): c is TextContent => c.type === 'text')
+      .map((c) => c.text)
+      .join('\n');
+    const payload = parseAutoContextPayload(finalText);
+    if (payload) return { ok: true, payload };
+    return {
+      ok: false,
+      finalText,
+      reason: /<AutoContext>/i.test(finalText) ? 'bad-json' : 'no-tag',
+    };
   }
-  return null;
+  return { ok: false, finalText: '', reason: 'no-wrapper' };
+}
+
+/** Does the parent's thread state already contain an AutoContextAgent
+ *  invocation? True when DoubleCheck seeds a round-2 sub-agent with the
+ *  prior round's full history — re-injecting another AutoContext block
+ *  would duplicate content and collide on the deterministic toolCallId. */
+function alreadyHasAutoContext(parent: MXAgent): boolean {
+  const hasInAssistant = (msg: unknown): boolean => {
+    if (!msg || typeof msg !== 'object') return false;
+    const m = msg as { role?: string; content?: unknown };
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) return false;
+    return m.content.some((c) => {
+      const block = c as { type?: string; name?: string };
+      return block.type === 'toolCall' && block.name === AutoContextAgent.schema.name;
+    });
+  };
+  return parent.threadHistory.some(hasInAssistant) || parent.toolThread.some(hasInAssistant);
 }
 
 // ─── Top-level entry point ───────────────────────────────────────────────────
@@ -224,6 +284,12 @@ export async function runAutoContextAgent(opts: RunAutoContextOpts): Promise<voi
     maxChars = DEFAULT_MAX_CHARS,
   } = opts;
   const model = opts.model ?? getLighterModel();
+
+  // Skip when parent already has an AutoContext (e.g. DoubleCheck round-2
+  // sub-agents inherit round-1's full thread, which already carries the
+  // AutoContextAgent toolCall + result). Re-injecting would duplicate
+  // content and collide on the deterministic toolCallId.
+  if (alreadyHasAutoContext(parent)) return;
 
   // 1) Build the cached catalog + projections.
   const catalogCacheKey = `auto-${slot}`;
@@ -273,32 +339,40 @@ export async function runAutoContextAgent(opts: RunAutoContextOpts): Promise<voi
   );
   const catalogSummaryText = renderCatalogSummary(summary);
 
-  // 5) Cache lookup → dispatch on miss.
+  // 5) Cache lookup → dispatch on miss. The toolCallId we inject into
+  //    threadHistory is DETERMINISTIC per cache key: every row that
+  //    consumes the same cached payload uses the same id, so the
+  //    Anthropic API request bytes match across rows and prompt-cache
+  //    matches the prefix. Within a single benchmark row there's only
+  //    one AutoContextAgent invocation, so no collision risk in the log.
+  const injectedToolCallId = `autoctx_${cacheKey.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 56)}`;
+
   let payloadPromise = autoContextStore.get(cacheKey);
-  let toolCallId: string;
-  if (payloadPromise) {
-    // HIT: fresh toolCallId, no dispatch.
-    toolCallId = gen_id();
-  } else {
-    // MISS: dispatch the agent. The same toolCallId is reused later when
-    // we replace the in-toolThread pair with the rendered version in
-    // threadHistory — keeps the synthesised pair internally consistent.
-    toolCallId = gen_id();
-    const dispatchToolCallId = toolCallId;
+  if (!payloadPromise) {
+    // MISS: dispatch the agent under the deterministic id so the
+    // orchestrator's log entries (parent_id = AutoContextAgent's id)
+    // line up with the id we inject into threadHistory below.
     payloadPromise = (async () => {
-      const synthAssistant = buildSynthAssistant(dispatchToolCallId, catalogSummaryText);
+      const synthAssistant = buildSynthAssistant(injectedToolCallId, catalogSummaryText);
       await orchestrator.dispatch(synthAssistant, parent);
-      const payload = findFinishAutoContextPayload(orchestrator.log, dispatchToolCallId);
-      if (!payload) {
-        throw new Error('AutoContextAgent finished without calling FinishAutoContext');
+      const result = extractAgentPayload(orchestrator.log, injectedToolCallId);
+      if (!result.ok) {
+        // Surface the agent's final text so the parent's catch-and-log
+        // surfaces WHY the payload couldn't be extracted (missing tag /
+        // bad JSON / shape mismatch).
+        const snippet = result.finalText.slice(0, 1500);
+        throw new Error(
+          `AutoContextAgent produced no valid <AutoContext> payload (reason=${result.reason}). Final agent text:\n${snippet}`,
+        );
       }
-      return payload;
+      return result.payload;
     })().catch((err) => {
       autoContextStore.delete(cacheKey);
       throw err;
     });
     autoContextStore.set(cacheKey, payloadPromise);
   }
+  const toolCallId = injectedToolCallId;
 
   const payload = await payloadPromise;
   const rendered = renderAutoContextPayload(payload, maxChars);
@@ -321,10 +395,15 @@ export async function runAutoContextAgent(opts: RunAutoContextOpts): Promise<voi
     }
   }
 
-  // 7) Inject the rendered pair into threadHistory so MXAgent.buildMessages
-  //    places them BEFORE the user message.
+  // 7) Inject the rendered triple into threadHistory so MXAgent.buildMessages
+  //    places it BEFORE the user message. The trailing ack assistant turn
+  //    preserves Anthropic's user/assistant alternation requirement (a
+  //    toolResult converts to a user-role tool_result block; without the
+  //    ack, the next user message — the question — would be the second
+  //    consecutive user message and the API rejects).
   parent.threadHistory.push(
     buildSynthAssistant(toolCallId, catalogSummaryText),
     buildRenderedResult(toolCallId, rendered),
+    buildSynthAck(),
   );
 }

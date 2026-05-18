@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { AutoContextPayload } from './finish-tool';
+import type { AutoContextPayload } from './payload-shape';
 import { truncateRow } from './truncate';
 
 /** Pure markdown rendering of the agent's structured AutoContext payload.
