@@ -157,8 +157,15 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
     ORDER BY similarity DESC
     LIMIT ${p.limit}
   `;
-  // Run substring in parallel; attempt trigram separately so its failure doesn't cancel substring
-  const substringPromise = fuzzySubstring(queryFn, p);
+  // Run substring in parallel; attempt trigram separately so its failure
+  // doesn't cancel substring. CRITICAL: wrap substring's promise in a
+  // catch IMMEDIATELY (before any other await) — otherwise if it rejects
+  // during the `await queryFn(trigramSql)` below, Node sees an unattended
+  // rejection and (>= v15) terminates the process. We capture the
+  // rejection here and re-throw at the await point so the caller gets a
+  // normal error path.
+  const substringSettled: Promise<FuzzyMatchResultEntry | { __err: unknown }> =
+    fuzzySubstring(queryFn, p).catch((err: unknown) => ({ __err: err }));
   let trigramEntry: FuzzyMatchResultEntry | null = null;
   try {
     const trigramResult = await queryFn(trigramSql);
@@ -166,7 +173,11 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   } catch {
     // pg_trgm not available — skip trigram
   }
-  const substringEntry = await substringPromise;
+  const substringResult = await substringSettled;
+  if (substringResult && typeof substringResult === 'object' && '__err' in substringResult) {
+    throw substringResult.__err;
+  }
+  const substringEntry = substringResult as FuzzyMatchResultEntry;
   const results = trigramEntry ? [trigramEntry, substringEntry] : [substringEntry];
   return { results, searchTerm: p.searchTerm };
 }
