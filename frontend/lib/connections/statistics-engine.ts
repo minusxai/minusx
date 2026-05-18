@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SchemaEntry, SchemaColumn, ColumnMeta } from './base';
 import type { QueryResult } from './base';
+import { profileMongo } from './profile-mongo';
 
 // ─── Internal Classification ─────────────────────────────────────────────────
 
@@ -82,6 +83,9 @@ export async function profileDatabase(
       break;
     case 'sqlite':
       enrichedTables = await profileGeneric(allTables, countedQueryFn, 'double');
+      break;
+    case 'mongo':
+      enrichedTables = await profileMongo(allTables, countedQueryFn);
       break;
     default:
       // Unknown connector — return schema as-is without meta (no risky queries)

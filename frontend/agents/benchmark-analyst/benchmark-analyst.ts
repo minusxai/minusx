@@ -1,7 +1,10 @@
 import {
   Type,
   registerFauxProvider,
+  type AssistantMessage,
   type Tool,
+  type TextContent,
+  type ImageContent,
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
@@ -11,6 +14,7 @@ import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
+import { buildAutoContext } from './v2/auto-context';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -51,6 +55,51 @@ export class BenchmarkAnalystAgent<
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
+  /**
+   * Markdown produced by the AutoContext step — verified joins, per-column
+   * notes, sample rows, and example queries. Computed once at the start of
+   * `run()` and injected ahead of the user's question in `buildUserContent`.
+   */
+  protected autoContextBlock?: string;
+
+  async run(): Promise<AssistantMessage> {
+    const ctx = this.context;
+    // AutoContext is benchmark-only: production paths (RemoteAnalystAgent
+    // and friends) extend this class without a `datasetKey`, so they
+    // bypass the upfront orientation pass entirely. The runner at
+    // `frontend/benchmarks/runner.ts` always sets `datasetKey` on the
+    // context, so benchmark rows always trigger it.
+    if (ctx.datasetKey) {
+      const userMessage = (this.parameters as { userMessage: string }).userMessage;
+      try {
+        this.autoContextBlock = await buildAutoContext(
+          ctx.connections,
+          { contextDocs: ctx.contextDocs, originalMessage: userMessage },
+          (m, c) => this.orchestrator.callLLM(m, c, this.id, { maxTokens: 4096 }),
+          { datasetKey: ctx.datasetKey, userMessage },
+        );
+      } catch {
+        // AutoContext is best-effort orientation. Failures (DB blip,
+        // LLM error) must not abort the run — fall back to no block.
+        this.autoContextBlock = undefined;
+      }
+    }
+    return super.run();
+  }
+
+  protected buildUserContent(): (TextContent | ImageContent)[] {
+    const raw = (this.parameters as { userMessage: string | (TextContent | ImageContent)[] }).userMessage;
+    const blocks: (TextContent | ImageContent)[] = [];
+    if (this.autoContextBlock) {
+      blocks.push({ type: 'text', text: `<AutoContext>\n${this.autoContextBlock}\n</AutoContext>` });
+    }
+    blocks.push(
+      typeof raw === 'string' ? { type: 'text', text: `<Question>${raw}</Question>` } : raw[0],
+    );
+    if (typeof raw !== 'string') blocks.push(...raw.slice(1));
+    return blocks;
+  }
+
   protected getSystemPrompt(): string {
     const ToolCls = this.constructor as typeof BenchmarkAnalystAgent;
     const toolNames = ToolCls.tools.map((t) => `\`${t.name}\``).join(', ');
@@ -68,7 +117,7 @@ ${dialectHints}
 
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
-  - Search Database Schema tool to explore the structure of the databases (tables, columns, data types, etc).
+  - An <AutoContext> block precedes your question. It already contains the discovered schema, per-table notes, sample rows, verified cross-table joins, and a few demonstration queries. Read it first — only call SearchDBSchema when you need details AutoContext didn't surface (e.g. indexes or a column the filter step elided).
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For each connection, see its "dialect" field above and the per-dialect notes below for syntax + cross-DB chaining details. Fix any syntax errors and try again until you get a valid response.
 

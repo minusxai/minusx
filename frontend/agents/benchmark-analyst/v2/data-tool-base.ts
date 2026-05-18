@@ -31,7 +31,9 @@ const SAMPLE_PROMPTS = {
 } as const;
 
 // Shared lighter model for the "+prompt" passes across V2 data tools.
-// Defaults to Haiku; tests override via `setLighterModel`.
+// Default kept on Haiku because test envs (and any deploy without an
+// OPENAI_API_KEY) would fail at first call. Flip via `setLighterModel`
+// at startup (or in a wrapper) when running with OpenAI credentials.
 const DEFAULT_LIGHTER_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
 let lighterModel: Model<Api> = DEFAULT_LIGHTER_MODEL;
 export function setLighterModel(m: Model<Api>): void { lighterModel = m; }
