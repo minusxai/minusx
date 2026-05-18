@@ -7,6 +7,7 @@ import type { JoinForNote, TableNoteInput, TableNoteOutput } from './notes';
 import type { Example, GenerateExamplesOpts } from './examples';
 import type { AnnotatedTable, AnnotatedColumn } from './format';
 import { discoverJoins, type FetchSampleValues, type JoinFinding } from './joins';
+export type { JoinFinding };
 
 const DEFAULT_MAX_CHARS = 100_000;
 
@@ -40,6 +41,18 @@ export interface RshipsDeps {
     userMessage: string,
     llmContext: PromptPassContext,
   ) => Promise<Set<string>>;
+  /** LLM call: filter the mechanically-verified join candidates to those
+   *  the LLM judges semantically real, given names + types + sample values
+   *  + overlap stats. Mechanical filters catch obvious noise (status
+   *  enums, narrative text, etc.), but high-cardinality integer columns
+   *  whose values happen to overlap (e.g. `review.useful` vs
+   *  `user.funny`) survive the mechanical pass — the LLM is the right
+   *  tool to reject them. */
+  confirmJoins: (
+    candidates: JoinFinding[],
+    samplesByCol: Map<string, unknown[]>,
+    opts: RunPromptPassOpts,
+  ) => Promise<JoinFinding[]>;
 }
 
 export interface GetRshipsNStructureOpts {
@@ -203,7 +216,17 @@ export async function getRshipsNStructure(
       }),
     );
 
-    const findings = await discoverJoins(effectiveSchema, statsByCol, deps.fetchSampleValues);
+    const { findings: candidateJoins, samplesByCol } = await discoverJoins(
+      effectiveSchema, statsByCol, deps.fetchSampleValues,
+    );
+
+    // 3b) LLM filter — drop candidates that mechanical verification
+    //     admitted but the LLM judges semantically unrelated (high-card
+    //     integer coincidences, etc.). Failures here fall back to the
+    //     mechanical-only set (the helper itself is fail-open).
+    const findings = await deps.confirmJoins(candidateJoins, samplesByCol, {
+      skipUserMessage,
+    });
 
     // 4) Per-table notes (one LLM call each, run in parallel).
     const noteOpts: RunPromptPassOpts = { skipUserMessage };

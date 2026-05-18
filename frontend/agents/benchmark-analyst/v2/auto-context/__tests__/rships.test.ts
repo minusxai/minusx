@@ -34,6 +34,9 @@ const baseDeps = (overrides: Partial<RshipsDeps> = {}): RshipsDeps => ({
   })),
   generateExamples: vi.fn(async () => []),
   filterSchemaByQuestion: vi.fn(async () => new Set<string>()),
+  // Default: keep every candidate. Per-test overrides can model the LLM
+  // rejecting noise.
+  confirmJoins: vi.fn(async (candidates) => candidates),
   ...overrides,
 });
 
@@ -153,6 +156,30 @@ describe('getRshipsNStructure', () => {
     });
     expect(filterDeps.filterSchemaByQuestion).toHaveBeenCalledTimes(2);
     expect(filterDeps.generateTableNotes).toHaveBeenCalledTimes(2); // 1 table each
+  });
+
+  it('passes mechanically-verified joins through the LLM confirm step before notes/examples', async () => {
+    // Three mechanically-found joins; the LLM stub keeps only the middle one.
+    const fakeFindings = [
+      { left: schema[0], right: schema[1], overlap: 0.5, kind: 'direct' as const },
+      { left: schema[0], right: schema[2], overlap: 0.5, kind: 'direct' as const },
+      { left: schema[1], right: schema[2], overlap: 0.5, kind: 'direct' as const },
+    ];
+    const confirmSpy = vi.fn<RshipsDeps['confirmJoins']>(async () => [fakeFindings[1]]);
+    const deps = baseDeps({
+      // Force a non-empty `discoverJoins` outcome by returning consistent samples.
+      fetchSampleValues: vi.fn(async () => ['shared', 'shared', 'shared']),
+      confirmJoins: confirmSpy,
+    });
+
+    await getRshipsNStructure(schema, stats, rowCounts, dialects, deps, {
+      datasetKey: 'confirm-test', llmContext: {}, maxChars: 100_000,
+    });
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    // The LLM-confirmed set is what flows into examples (1 candidate → 1 seed).
+    const examplesCall = (deps.generateExamples as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(examplesCall[1]).toHaveLength(1);
   });
 
   it('separates cache slots by cacheKey (DoubleCheck primary vs secondary)', async () => {

@@ -247,20 +247,25 @@ export function verifyJoin(
 export type FetchSampleValues = (col: FlatColumn) => Promise<unknown[]>;
 
 /**
- * Propose → fetch (deduped) → verify, returning every verified join.
- * Samples are fetched exactly once per column even when the column
- * participates in multiple candidate pairs. Per-column fetch errors are
- * isolated — they invalidate joins involving that column but never
- * abort the whole pass.
+ * Propose → fetch (deduped) → verify, returning every verified join AND
+ * the per-column sample map used to verify them. Samples are fetched
+ * exactly once per column even when the column participates in multiple
+ * candidate pairs. Per-column fetch errors are isolated — they
+ * invalidate joins involving that column but never abort the whole pass.
+ *
+ * The sample map is returned so downstream stages (notably the LLM
+ * `confirmJoinsLLM` step) can show the same values to the model without
+ * re-fetching.
  */
 export async function discoverJoins(
   schema: FlatColumn[],
   stats: Map<string, ColumnMeta>,
   fetchSample: FetchSampleValues,
   opts: JoinDiscoveryOpts = {},
-): Promise<JoinFinding[]> {
+): Promise<{ findings: JoinFinding[]; samplesByCol: Map<string, unknown[]> }> {
+  const samplesByCol = new Map<string, unknown[]>();
   const candidates = proposeJoinCandidates(schema, stats, opts);
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) return { findings: [], samplesByCol };
 
   // Dedupe sample fetches per (connection, schema, table, column).
   const sampleCache = new Map<string, Promise<unknown[]>>();
@@ -268,7 +273,10 @@ export async function discoverJoins(
     const k = metaKey(c);
     let p = sampleCache.get(k);
     if (!p) {
-      p = fetchSample(c).catch(() => [] as unknown[]);
+      p = fetchSample(c).catch(() => [] as unknown[]).then((v) => {
+        samplesByCol.set(k, v);
+        return v;
+      });
       sampleCache.set(k, p);
     }
     return p;
@@ -281,5 +289,5 @@ export async function discoverJoins(
     const v = verifyJoin(a, b, sampleA, sampleB, opts);
     if (v) findings.push({ left: a, right: b, ...v });
   }
-  return findings;
+  return { findings, samplesByCol };
 }

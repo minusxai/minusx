@@ -18,6 +18,7 @@ import {
 } from './rships';
 import { generateTableNotes } from './notes';
 import { generateExamples } from './examples';
+import { confirmJoinsLLM } from './confirm-joins';
 import { renderAutoContext } from './format';
 import { fetchTableSample } from './samples';
 
@@ -229,6 +230,8 @@ export async function buildAutoContextFromCatalog(
       generateExamples(summary, findings, model, callLLM, llmContext, executeExampleQuery, runOpts),
     filterSchemaByQuestion: (s, msg, ctx) =>
       filterSchemaByQuestion(s, msg, ctx, model, callLLM),
+    confirmJoins: (candidates, samplesByCol, runOpts) =>
+      confirmJoinsLLM(candidates, samplesByCol, model, callLLM, llmContext, runOpts),
   };
 
   // Silence: schemaForConnection is reserved for future per-connection

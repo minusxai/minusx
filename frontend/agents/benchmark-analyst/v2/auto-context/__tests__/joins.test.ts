@@ -189,7 +189,7 @@ describe('verifyJoin', () => {
 });
 
 describe('discoverJoins', () => {
-  it('happy path — discovers a verified join', async () => {
+  it('happy path — discovers a verified join and returns samples used', async () => {
     const filesId = col('db', 'public', 'files', 'id', 'VARCHAR');
     const contentsId = col('db', 'public', 'contents', 'id', 'VARCHAR');
     const fetch = vi.fn(async (c: FlatColumn) => {
@@ -197,10 +197,13 @@ describe('discoverJoins', () => {
       return ['sha1', 'sha2'];
     });
 
-    const findings = await discoverJoins([filesId, contentsId], new Map(), fetch);
+    const { findings, samplesByCol } = await discoverJoins([filesId, contentsId], new Map(), fetch);
     expect(findings).toHaveLength(1);
     expect(findings[0].overlap).toBeGreaterThan(0.5);
     expect(findings[0].kind).toBe('direct');
+    // Samples are exposed for downstream stages (e.g. confirm-joins).
+    expect(samplesByCol.get('db.public.files.id')).toEqual(['sha1', 'sha2', 'sha3', 'sha4', 'sha5']);
+    expect(samplesByCol.get('db.public.contents.id')).toEqual(['sha1', 'sha2']);
   });
 
   it('deduplicates sample fetches per column', async () => {
@@ -220,7 +223,7 @@ describe('discoverJoins', () => {
       if (c.table === 't1') throw new Error('connection blip');
       return ['x'];
     });
-    const findings = await discoverJoins([a, b], new Map(), fetch);
+    const { findings } = await discoverJoins([a, b], new Map(), fetch);
     expect(findings).toHaveLength(0); // can't verify without samples
   });
 });
