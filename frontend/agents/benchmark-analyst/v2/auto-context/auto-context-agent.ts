@@ -105,6 +105,12 @@ export class AutoContextAgent extends MXAgent<
   // `setLighterModel` (and benchmark startup flips between provider stubs
   // and real providers) take effect without re-importing the class.
   static get model() { return getLighterModel(); }
+  // Bigger output cap — the structured `<AutoContext>{...}</AutoContext>`
+  // JSON payload can run >4K tokens for wide-schema datasets (each table
+  // contributes tableNote + per-column notes + joins + examples). Without
+  // this, the LLM hits the default max_tokens mid-JSON and `reason=bad-json`
+  // fires in extractAutoContextPayload.
+  static readonly callOptions = { maxTokens: 16384 };
 
   protected override getSystemPrompt(): string {
     const visibleConnections = publicConnectionMetadata(this.context.connections);
