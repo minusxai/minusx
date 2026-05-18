@@ -12,7 +12,7 @@ import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
-import { buildAutoContext, recordRecentAutoContext } from './v2/auto-context';
+import { runAutoContextAgent } from './v2/auto-context';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -53,15 +53,6 @@ export class BenchmarkAnalystAgent<
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
-  /**
-   * Markdown produced by the AutoContext step — verified joins, per-column
-   * notes, sample rows, and example queries. Computed once at the start of
-   * `run()` and appended to the system prompt (so Anthropic's prompt-cache
-   * automatically reuses the block across rows of the same dataset within
-   * its 5-min TTL — pi-ai marks the system prompt with `cache_control`).
-   */
-  protected autoContextBlock?: string;
-
   async run(): Promise<AssistantMessage> {
     const ctx = this.context;
     // AutoContext is benchmark-only: production paths (RemoteAnalystAgent
@@ -72,34 +63,25 @@ export class BenchmarkAnalystAgent<
     if (ctx.datasetKey) {
       const userMessage = (this.parameters as { userMessage: string }).userMessage;
       try {
-        this.autoContextBlock = await buildAutoContext(
-          ctx.connections,
-          { contextDocs: ctx.contextDocs, originalMessage: userMessage },
-          (m, c) => this.orchestrator.callLLM(m, c, this.id, { maxTokens: 4096 }),
-          {
-            datasetKey: ctx.datasetKey,
-            userMessage,
-            // DoubleCheck sets `ctx.catalogKey` to 'agent-a' / 'agent-b'
-            // per sub-agent so primary + secondary get isolated cache
-            // slots (matches the per-slot catalog cache pattern).
-            cacheKey: ctx.catalogKey,
-          },
-        );
+        await runAutoContextAgent({
+          orchestrator: this.orchestrator,
+          parent: this,
+          connections: ctx.connections,
+          datasetKey: ctx.datasetKey,
+          // DoubleCheck sets `ctx.catalogKey` to 'agent-a' / 'agent-b' per
+          // sub-agent so primary + secondary get isolated cache slots
+          // (matches the per-slot catalog cache pattern).
+          cacheKey: ctx.catalogKey,
+          userMessage,
+          contextDocs: ctx.contextDocs,
+        });
       } catch (e) {
-        // AutoContext is best-effort orientation. Failures (DB blip,
-        // LLM error) must not abort the run — fall back to no block.
-        // We log the error so silent failures (which yield agents
-        // running without any AutoContext) are diagnosable from the
-        // benchmark stderr without re-running with verbose tracing.
+        // Best-effort orientation. Failures (DB blip, LLM error, agent
+        // failed to call FinishAutoContext) must not abort the run —
+        // fall back to no injected pair. Surface in stderr so silent
+        // failures are diagnosable from the benchmark output.
         const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
-        console.error(`[BenchmarkAnalystAgent] AutoContext build failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${msg}`);
-        this.autoContextBlock = undefined;
-      }
-      // Record into the process-wide registry so the benchmark runner
-      // can surface the block per-row in its JSONL output (renders in
-      // the benchmark viewer). Keyed by (datasetKey, slot).
-      if (this.autoContextBlock) {
-        recordRecentAutoContext(ctx.datasetKey, ctx.catalogKey ?? 'default', this.autoContextBlock);
+        console.error(`[BenchmarkAnalystAgent] AutoContext failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${msg}`);
       }
     }
     return super.run();
@@ -122,7 +104,7 @@ ${dialectHints}
 
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
-  - An <AutoContext> block precedes your question. It already contains the discovered schema, per-table notes, sample rows, verified cross-table joins, and a few demonstration queries. Read it first — only call SearchDBSchema when you need details AutoContext didn't surface (e.g. indexes or a column the filter step elided).
+  - You may see a prior \`AutoContextAgent\` tool call in your conversation history. Its result contains discovered schema notes, verified cross-table joins, and demonstration queries — read it first and treat its findings as already-validated. Only call SearchDBSchema when you need details AutoContext didn't surface.
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For each connection, see its "dialect" field above and the per-dialect notes below for syntax + cross-DB chaining details. Fix any syntax errors and try again until you get a valid response.
 
@@ -166,8 +148,6 @@ Analysis: <table of monthly breakdown>...
 
 ## Data Documentation:
 ${this.context.contextDocs ?? 'No documentation available.'}
-
-${this.autoContextBlock ? `## Auto-discovered context (computed from the actual data — joins, per-column notes, sample rows, example queries):\n${this.autoContextBlock}` : ''}
 `;
   }
 }

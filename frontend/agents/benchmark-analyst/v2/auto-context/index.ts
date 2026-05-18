@@ -1,28 +1,47 @@
 import 'server-only';
 
-import type { ColumnMeta, NodeConnector } from '@/lib/connections/base';
+import type {
+  AssistantMessage,
+  ToolResultMessage,
+} from '@mariozechner/pi-ai';
+import type { NodeConnector } from '@/lib/connections/base';
 import type { Api, Model } from '@/lib/llm/get-model';
-import type { ConnectionInfo } from '../../types';
+import type { ConversationLogEntry, MXAgent } from '@/orchestrator/types';
+import type { Orchestrator } from '@/orchestrator/orchestrator';
+import { gen_id } from '@/orchestrator/utils';
 import { getOrCreateBenchmarkConnector } from '../../shared-duckdb';
-import { getCatalogStore, type CatalogTables } from '../catalog';
-import {
-  type PromptPassCallLLM,
-  type PromptPassContext,
-  extractText,
-} from '../prompt-pass';
+import type { ConnectionInfo } from '../../types';
+import { getCatalogStore } from '../catalog';
+import { type PromptPassCallLLM, extractText } from '../prompt-pass';
 import { getLighterModel } from '../data-tool-base';
-import { flattenCatalogColumns, type FlatColumn } from './schema';
+import { AutoContextAgent } from './auto-context-agent';
 import {
-  getRshipsNStructure,
-  type RshipsDeps,
-} from './rships';
-import { generateTableNotes } from './notes';
-import { generateExamples } from './examples';
-import { confirmJoinsLLM } from './confirm-joins';
-import { renderAutoContext } from './format';
-import { fetchTableSample } from './samples';
+  type AutoContextPayload,
+  FinishAutoContext,
+  type FinishAutoContextDetails,
+} from './finish-tool';
+import {
+  buildCatalogSummary,
+  catalogProjection,
+  makeFetchTableSample,
+  renderCatalogSummary,
+  type CatalogSummary,
+} from './catalog-summary';
+import { renderAutoContextPayload } from './render';
+import { type FlatColumn } from './schema';
+
+export { AutoContextAgent } from './auto-context-agent';
+export { FinishAutoContext, type AutoContextPayload } from './finish-tool';
+export { renderAutoContextPayload } from './render';
+
+const DEFAULT_MAX_CHARS = 100_000;
 
 // ─── Filter step: LLM picks relevant tables given a question ────────────────
+//
+// Used when the full catalog summary would exceed the agent's prompt budget.
+// The fingerprint of the returned table set goes into the cache key — two
+// questions whose filter resolves to the same set share an AutoContext
+// payload.
 
 const FILTER_SYSTEM_PROMPT = `You select tables from a database catalog that are relevant to a user's question.
 
@@ -41,8 +60,6 @@ function stripFences(text: string): string {
   return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 }
 
-/** Defensive parse of the filter LLM's JSON array. Returns an empty set on
- *  parse failure or non-array input. */
 export function parseFilterResponse(text: string): Set<string> {
   try {
     const raw = JSON.parse(stripFences(text));
@@ -53,7 +70,6 @@ export function parseFilterResponse(text: string): Set<string> {
   }
 }
 
-/** Render the schema in a terse table+columns form for the filter prompt. */
 function renderSchemaForFilter(schema: FlatColumn[]): string {
   const byTable = new Map<string, string[]>();
   for (const c of schema) {
@@ -65,17 +81,16 @@ function renderSchemaForFilter(schema: FlatColumn[]): string {
   return [...byTable.entries()].map(([id, cols]) => `${id} — ${cols.join(', ')}`).join('\n');
 }
 
-/** Ask the lighter model which tables are relevant to the user's question. */
 export async function filterSchemaByQuestion(
   schema: FlatColumn[],
   userMessage: string,
-  llmContext: PromptPassContext,
+  contextDocs: string | undefined,
   model: Model<Api>,
   callLLM: PromptPassCallLLM,
 ): Promise<Set<string>> {
   const userContent = [
     `## Original question\n${userMessage}`,
-    llmContext.contextDocs ? `## Data Documentation\n${llmContext.contextDocs}` : null,
+    contextDocs ? `## Data Documentation\n${contextDocs}` : null,
     `## Schema\n${renderSchemaForFilter(schema)}`,
     `## Task\nReturn JSON array of relevant table identifiers per the system rules.`,
   ].filter(Boolean).join('\n\n');
@@ -90,225 +105,155 @@ export async function filterSchemaByQuestion(
   return parseFilterResponse(text);
 }
 
-// ─── Catalog → stats + row counts maps ───────────────────────────────────────
-
-function buildStatsMap(catalog: CatalogTables): Map<string, ColumnMeta> {
-  const out = new Map<string, ColumnMeta>();
-  for (const r of catalog.column_stats.rows) {
-    const key = `${r.connection_name}.${r.schema_name}.${r.table_name}.${r.column_name}`;
-    const meta: ColumnMeta = {};
-    if (typeof r.category === 'string') meta.category = r.category as ColumnMeta['category'];
-    if (typeof r.n_distinct === 'number' || typeof r.n_distinct === 'bigint') meta.nDistinct = Number(r.n_distinct);
-    if (typeof r.null_count === 'number' || typeof r.null_count === 'bigint') meta.nullCount = Number(r.null_count);
-    if (r.min_value != null) meta.min = r.min_value as number | string;
-    if (r.max_value != null) meta.max = r.max_value as number | string;
-    if (typeof r.avg_value === 'number') meta.avg = r.avg_value;
-    if (typeof r.min_date === 'string') meta.minDate = r.min_date;
-    if (typeof r.max_date === 'string') meta.maxDate = r.max_date;
-    if (typeof r.top_values === 'string') {
-      try { meta.topValues = JSON.parse(r.top_values); } catch { /* ignore malformed */ }
-    }
-    out.set(key, meta);
-  }
-  return out;
+/** `estimateSchemaChars` from the prior pipeline — kept as the filter
+ *  trigger heuristic. */
+export function estimateSchemaChars(schema: FlatColumn[]): number {
+  return schema.reduce((sum, c) =>
+    sum +
+    c.connection.length + c.schema.length + c.table.length +
+    c.column.length + c.type.length + 8,
+    0,
+  );
 }
 
-function buildRowCountMap(catalog: CatalogTables): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const r of catalog.tables.rows) {
-    const id = `${r.connection_name}.${r.schema_name}.${r.table_name}`;
-    if (typeof r.row_count === 'number' || typeof r.row_count === 'bigint') {
-      out.set(id, Number(r.row_count));
-    }
-  }
-  return out;
+// ─── Cache ───────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line no-restricted-syntax -- server-only; process-wide cache of structured AutoContext payloads keyed by (datasetKey, slot, fingerprint)
+const autoContextStore = new Map<string, Promise<AutoContextPayload>>();
+
+export function clearAutoContextCache(): void {
+  autoContextStore.clear();
 }
 
-/** Look up the schema name from the catalog for a given connection. Mongo
- *  uses the database name, SQL connectors use 'main' / 'public' / etc. */
-function schemaForConnection(catalog: CatalogTables, connection: string): string {
-  for (const r of catalog.columns.rows) {
-    if (r.connection_name === connection) return String(r.schema_name);
-  }
-  return 'main';
+function fingerprint(ids: Iterable<string>): string {
+  return [...new Set(ids)].sort().join('|');
 }
 
-// ─── buildAutoContextFromCatalog: testable with a pre-built catalog ─────────
+// ─── Synthetic message builders ──────────────────────────────────────────────
 
-export interface BuildAutoContextOpts {
-  connectorsByName: Map<string, NodeConnector>;
-  dialectsByName: Map<string, string>;
+function buildSynthAssistant(toolCallId: string, catalogSummaryText: string): AssistantMessage {
+  return {
+    role: 'assistant',
+    content: [{
+      type: 'toolCall',
+      id: toolCallId,
+      name: AutoContextAgent.schema.name,
+      arguments: { userMessage: catalogSummaryText },
+    }],
+    api: 'controller' as never,
+    provider: 'controller',
+    model: 'controller',
+    usage: {
+      input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'toolUse',
+    timestamp: Date.now(),
+  };
+}
+
+function buildRenderedResult(toolCallId: string, rendered: string): ToolResultMessage {
+  return {
+    role: 'toolResult',
+    toolCallId,
+    toolName: AutoContextAgent.schema.name,
+    content: [{ type: 'text', text: rendered }],
+    isError: false,
+    timestamp: Date.now(),
+  };
+}
+
+/** Walk the orchestrator log looking for a `FinishAutoContext` toolResult
+ *  emitted by the agent whose id is `agentId`. Returns null if the agent
+ *  finished without calling it (which the caller treats as failure). */
+function findFinishAutoContextPayload(
+  log: ConversationLogEntry[],
+  agentId: string,
+): AutoContextPayload | null {
+  for (const entry of log) {
+    if (!('role' in entry) || entry.role !== 'toolResult') continue;
+    if (entry.parent_id !== agentId) continue;
+    if (entry.toolName !== FinishAutoContext.schema.name) continue;
+    const details = entry.details as FinishAutoContextDetails | undefined;
+    if (details?.type === 'auto_context') return details.payload;
+  }
+  return null;
+}
+
+// ─── Top-level entry point ───────────────────────────────────────────────────
+
+export interface RunAutoContextOpts {
+  orchestrator: Orchestrator;
+  parent: MXAgent;
+  connections: ConnectionInfo[] | undefined;
   datasetKey: string;
-  /** Per-slot discriminator (e.g. DoubleCheck's 'agent-a' / 'agent-b').
-   *  When set, the AutoContext cache key incorporates it so primary and
-   *  secondary sub-agents get isolated slots. Defaults to 'default'. */
+  /** Per-slot discriminator (DoubleCheck sets this to 'agent-a'/'agent-b'). */
   cacheKey?: string;
+  /** The user's question. Required to drive the filter step on huge schemas;
+   *  without it the agent only ever sees the unfiltered catalog summary. */
   userMessage?: string;
-  llmContext: PromptPassContext;
-  model: Model<Api>;
-  callLLM: PromptPassCallLLM;
+  /** Data documentation passed to the filter step. The agent itself reads
+   *  it off `parent.context.contextDocs` via its own system prompt. */
+  contextDocs?: string;
   maxChars?: number;
+  /** Override the default lighter model used for the filter step + the
+   *  AutoContextAgent's own LLM loop. */
+  model?: Model<Api>;
 }
 
 /**
- * Build the AutoContext markdown block from a pre-built catalog + the
- * orchestrator's `callLLM` hook. Splitting this from the catalog
- * fetch keeps the function testable without a live DuckDB instance.
+ * Top-level AutoContext entry point. Builds the agent's catalog summary,
+ * decides whether to filter (large schemas) or run unfiltered (small),
+ * dispatches `AutoContextAgent` via the orchestrator (cache miss) or
+ * synthesises the `(toolCall, toolResult)` pair from cache (hit), and
+ * splices the pair into `parent.threadHistory` so the parent's first LLM
+ * turn sees AutoContext as already-established prior tool use.
+ *
+ * Cache is per `(datasetKey, slot, filterFingerprint)`. The agent's
+ * `userMessage` is always question-agnostic, so cross-row reuse is safe.
  */
-export async function buildAutoContextFromCatalog(
-  catalog: CatalogTables,
-  opts: BuildAutoContextOpts,
-): Promise<string> {
-  const schema = flattenCatalogColumns(catalog);
-  const statsByCol = buildStatsMap(catalog);
-  const rowCountByTable = buildRowCountMap(catalog);
-  const { connectorsByName, dialectsByName, model, callLLM } = opts;
-  const llmContext = opts.llmContext;
-  const maxChars = opts.maxChars ?? 100_000;
+export async function runAutoContextAgent(opts: RunAutoContextOpts): Promise<void> {
+  const {
+    orchestrator,
+    parent,
+    connections,
+    datasetKey,
+    cacheKey: slot = 'default',
+    userMessage,
+    contextDocs,
+    maxChars = DEFAULT_MAX_CHARS,
+  } = opts;
+  const model = opts.model ?? getLighterModel();
 
-  // Per-column sample value fetcher — for join-overlap probes. Returns
-  // distinct values up to a small cap.
-  const fetchSampleValues = async (col: FlatColumn): Promise<unknown[]> => {
-    const conn = connectorsByName.get(col.connection);
-    if (!conn) return [];
-    const dialect = dialectsByName.get(col.connection) ?? 'duckdb';
-    try {
-      if (dialect === 'mongo') {
-        const query = JSON.stringify({
-          collection: col.table,
-          pipeline: [{ $group: { _id: `$${col.column}` } }, { $limit: 200 }],
-        });
-        const result = await conn.query(query);
-        return result.rows.map((r) => r._id);
-      }
-      // SQL-style: DISTINCT … LIMIT 200, dialect-quoted identifiers.
-      const q = dialect === 'bigquery' ? '`' : '"';
-      const sql = `SELECT DISTINCT ${q}${col.column}${q} AS v FROM ${q}${col.schema}${q}.${q}${col.table}${q} LIMIT 200`;
-      const result = await conn.query(sql);
-      return result.rows.map((r) => r.v);
-    } catch {
-      return [];
+  // 1) Build the cached catalog + projections.
+  const catalogCacheKey = `auto-${slot}`;
+  const { catalog } = await getCatalogStore(connections, catalogCacheKey, undefined, datasetKey);
+  const { schema, statsByCol, rowCountByTable } = catalogProjection(catalog);
+  if (schema.length === 0) return; // no connections → nothing to do
+
+  // 2) Filter-vs-full decision.
+  const callLLM: PromptPassCallLLM = (m, c) =>
+    orchestrator.callLLM(m, c, parent.id, { maxTokens: 4096 });
+
+  let effectiveSchema = schema;
+  let cacheSuffix: string;
+  if (estimateSchemaChars(schema) > maxChars && userMessage) {
+    const allowed = await filterSchemaByQuestion(schema, userMessage, contextDocs, model, callLLM);
+    if (allowed.size > 0) {
+      effectiveSchema = schema.filter(
+        (c) => allowed.has(`${c.connection}.${c.schema}.${c.table}`),
+      );
+      cacheSuffix = `f:${fingerprint(allowed)}`;
+    } else {
+      // Filter LLM returned nothing useful — fall back to unfiltered.
+      cacheSuffix = 'full';
     }
-  };
-
-  // Per-table row sample fetcher — reused for LLM notes prompting.
-  const fetchTableSampleHelper = async (
-    t: { connection: string; schema: string; table: string },
-  ): Promise<Record<string, unknown>[]> => {
-    const conn = connectorsByName.get(t.connection);
-    if (!conn) return [];
-    const dialect = dialectsByName.get(t.connection) ?? 'duckdb';
-    // Find which columns are high-cardinality text on this table — they
-    // benefit from length-stratified sampling.
-    const highCardTextCols: string[] = [];
-    const colsForTable = schema.filter(
-      (c) => c.connection === t.connection && c.schema === t.schema && c.table === t.table,
-    );
-    for (const c of colsForTable) {
-      const meta = statsByCol.get(`${t.connection}.${t.schema}.${t.table}.${c.column}`);
-      if (meta?.category === 'text' && (meta.nDistinct ?? 0) > 50) highCardTextCols.push(c.column);
-    }
-    return fetchTableSample(conn, t.schema, t.table, dialect, highCardTextCols);
-  };
-
-  // Connection-routed query executor for example validation.
-  const executeExampleQuery = async (
-    connection: string,
-    query: string,
-  ): Promise<{ columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery: string }> => {
-    const conn = connectorsByName.get(connection);
-    if (!conn) throw new Error(`unknown connection: ${connection}`);
-    return conn.query(query);
-  };
-
-  const deps: RshipsDeps = {
-    fetchSampleValues,
-    fetchTableSample: fetchTableSampleHelper,
-    generateTableNotes: (input, runOpts) =>
-      generateTableNotes(input, model, callLLM, llmContext, runOpts),
-    generateExamples: (summary, findings, runOpts) =>
-      generateExamples(summary, findings, model, callLLM, llmContext, executeExampleQuery, runOpts),
-    filterSchemaByQuestion: (s, msg, ctx) =>
-      filterSchemaByQuestion(s, msg, ctx, model, callLLM),
-    confirmJoins: (candidates, samplesByCol, runOpts) =>
-      confirmJoinsLLM(candidates, samplesByCol, model, callLLM, llmContext, runOpts),
-  };
-
-  // Silence: schemaForConnection is reserved for future per-connection
-  // namespace work but isn't used in the current renderer.
-  void schemaForConnection;
-
-  const result = await getRshipsNStructure(
-    schema, statsByCol, rowCountByTable, dialectsByName, deps,
-    {
-      datasetKey: opts.datasetKey,
-      cacheKey: opts.cacheKey,
-      userMessage: opts.userMessage,
-      llmContext,
-      maxChars,
-    },
-  );
-  return renderAutoContext(result, maxChars);
-}
-
-// ─── Top-level: read catalog + build context (the agent's entry) ─────────────
-
-// ─── Recent-block registry ───────────────────────────────────────────────────
-//
-// Lightweight side-channel for the benchmark runner: when an agent
-// builds (or hits the cache for) its AutoContext block, it pushes the
-// content here keyed by `${datasetKey}::${slot}`. The runner snapshots
-// the registry per-dataset when persisting a row, so the resulting
-// `BenchmarkResult.auto_context` field can render in the benchmark
-// viewer without rummaging through `orch.log` or the system prompt
-// (which isn't logged).
-
-// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton, holds latest AutoContext per (datasetKey, slot)
-const recentAutoContextBlocks = new Map<string, string>();
-
-export function recordRecentAutoContext(datasetKey: string, slot: string, block: string): void {
-  recentAutoContextBlocks.set(`${datasetKey}::${slot}`, block);
-}
-
-/** Snapshot every recorded block whose datasetKey matches. Returns
- *  `{ slot → markdown }`. Empty object when nothing has been recorded
- *  for that dataset (e.g. AutoContext disabled or build failed). */
-export function snapshotRecentAutoContexts(datasetKey: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  const prefix = `${datasetKey}::`;
-  for (const [key, value] of recentAutoContextBlocks.entries()) {
-    if (key.startsWith(prefix)) out[key.slice(prefix.length)] = value;
+  } else {
+    cacheSuffix = 'full';
   }
-  return out;
-}
+  const cacheKey = `${datasetKey}:${slot}:${cacheSuffix}`;
 
-/** Drop every recorded block (test/reset helper). */
-export function clearRecentAutoContexts(): void {
-  recentAutoContextBlocks.clear();
-}
-
-/** Top-level entry called by `BenchmarkAnalystAgent.run()`. Builds (or
- *  reads from process-wide cache) the catalog for the agent's
- *  `ctx.connections`, then renders the AutoContext block. */
-export async function buildAutoContext(
-  connections: ConnectionInfo[] | undefined,
-  llmContext: PromptPassContext,
-  callLLM: PromptPassCallLLM,
-  opts: {
-    datasetKey?: string;
-    /** Per-slot discriminator from DoubleCheck (`agent-a` / `agent-b`).
-     *  Threaded into both the V2 catalog cache key and the AutoContext
-     *  cache key, so primary + secondary sub-agents stay isolated. */
-    cacheKey?: string;
-    userMessage?: string;
-    maxChars?: number;
-    model?: Model<Api>;
-  } = {},
-): Promise<string> {
-  const datasetKey = opts.datasetKey ?? 'default';
-  const cacheKey = opts.cacheKey ?? 'default';
-
-  // Wire up real connectors via shared-duckdb (reuses the V2 pool).
+  // 3) Build the connector + dialect maps the agent's userMessage needs.
   const connectorsByName = new Map<string, NodeConnector>();
   const dialectsByName = new Map<string, string>();
   for (const entry of connections ?? []) {
@@ -320,24 +265,66 @@ export async function buildAutoContext(
     dialectsByName.set(entry.name, entry.dialect);
   }
 
-  // Read the cached catalog (built lazily if needed). No sample-table
-  // population — AutoContext fetches its own samples per the agent's
-  // dataset shape. We use a dedicated catalog cacheKey (`auto-${slot}`)
-  // so the AutoContext build never collides with V2 tools'
-  // sample-populated catalogs at 'default' / 'agent-a' / 'agent-b' —
-  // whichever ran first would otherwise poison the other's catalog.
-  const catalogKey = `auto-${cacheKey}`;
-  const { catalog } = await getCatalogStore(connections, catalogKey, undefined, datasetKey);
+  // 4) Catalog summary blob for the agent's userMessage. Question-agnostic
+  //    so the cache slot is safe to share across rows.
+  const fetchSample = makeFetchTableSample(effectiveSchema, statsByCol, connectorsByName, dialectsByName);
+  const summary: CatalogSummary = await buildCatalogSummary(
+    effectiveSchema, statsByCol, rowCountByTable, fetchSample,
+  );
+  const catalogSummaryText = renderCatalogSummary(summary);
 
-  return buildAutoContextFromCatalog(catalog, {
-    connectorsByName,
-    dialectsByName,
-    datasetKey,
-    cacheKey,
-    userMessage: opts.userMessage,
-    llmContext,
-    model: opts.model ?? getLighterModel(),
-    callLLM,
-    maxChars: opts.maxChars,
-  });
+  // 5) Cache lookup → dispatch on miss.
+  let payloadPromise = autoContextStore.get(cacheKey);
+  let toolCallId: string;
+  if (payloadPromise) {
+    // HIT: fresh toolCallId, no dispatch.
+    toolCallId = gen_id();
+  } else {
+    // MISS: dispatch the agent. The same toolCallId is reused later when
+    // we replace the in-toolThread pair with the rendered version in
+    // threadHistory — keeps the synthesised pair internally consistent.
+    toolCallId = gen_id();
+    const dispatchToolCallId = toolCallId;
+    payloadPromise = (async () => {
+      const synthAssistant = buildSynthAssistant(dispatchToolCallId, catalogSummaryText);
+      await orchestrator.dispatch(synthAssistant, parent);
+      const payload = findFinishAutoContextPayload(orchestrator.log, dispatchToolCallId);
+      if (!payload) {
+        throw new Error('AutoContextAgent finished without calling FinishAutoContext');
+      }
+      return payload;
+    })().catch((err) => {
+      autoContextStore.delete(cacheKey);
+      throw err;
+    });
+    autoContextStore.set(cacheKey, payloadPromise);
+  }
+
+  const payload = await payloadPromise;
+  const rendered = renderAutoContextPayload(payload, maxChars);
+
+  // 6) Splice the dispatch-pushed (synthAssistant, wrappedToolResult) pair
+  //    out of parent.toolThread (no-op on cache hit, since dispatch didn't
+  //    push anything). Log preserves the originals; we replace them in
+  //    threadHistory with the rendered version below.
+  for (let i = parent.toolThread.length - 1; i >= 0; i--) {
+    const e = parent.toolThread[i];
+    if ('role' in e && e.role === 'toolResult' && e.toolCallId === toolCallId) {
+      parent.toolThread.splice(i, 1);
+      continue;
+    }
+    if (
+      'role' in e && e.role === 'assistant'
+      && e.content.some((c) => c.type === 'toolCall' && c.id === toolCallId)
+    ) {
+      parent.toolThread.splice(i, 1);
+    }
+  }
+
+  // 7) Inject the rendered pair into threadHistory so MXAgent.buildMessages
+  //    places them BEFORE the user message.
+  parent.threadHistory.push(
+    buildSynthAssistant(toolCallId, catalogSummaryText),
+    buildRenderedResult(toolCallId, rendered),
+  );
 }
