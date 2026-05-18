@@ -80,6 +80,9 @@ describe('renderCatalogSummary', () => {
     expect(out).toContain('## db.public.a');
     expect(out).toContain('## db.public.b');
     expect(out).not.toContain('Sample rows:');
+    // Agent must know the summary was bounded — explicit note up top.
+    expect(out).toMatch(/^> Note:.*bounded/m);
+    expect(out).toMatch(/Sample rows have been omitted.*ExecuteQuery/i);
   });
 
   it('drops trailing tables when even compact pass exceeds maxChars', async () => {
@@ -91,6 +94,10 @@ describe('renderCatalogSummary', () => {
     expect(out).toContain('## db.public.t0');
     // Should NOT contain t4 — budget too tight.
     expect(out).not.toContain('## db.public.t4');
+    // Note lists the omitted tables by id + points at SearchDBSchema.
+    expect(out).toMatch(/summary covers \d+ of 5 tables/);
+    expect(out).toContain('`db.public.t4`');
+    expect(out).toMatch(/SearchDBSchema/);
   });
 
   it('returns the full render when everything fits within maxChars', async () => {

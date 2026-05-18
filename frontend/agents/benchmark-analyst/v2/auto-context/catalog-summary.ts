@@ -175,12 +175,12 @@ function renderTableFull(t: CatalogSummaryTable, mdEscape: MdEscape): string {
  *   2. If that didn't fit every table, re-pass dropping `Sample rows:`
  *      everywhere. Trailing tables still drop if needed.
  *
- * The second pass exists for wide datasets (e.g. tables with many big
- * text columns) where the per-table sample row JSON dominates the
- * rendered size. Trading off some sample fidelity to keep every table
- * visible is usually the right call — the agent can probe samples via
- * `ExecuteQuery` if it needs them, but it can't discover a table that
- * never appeared in its userMessage.
+ * When degradation kicks in, a `> Note:` block is prepended explaining
+ * what was dropped and pointing the agent at the right tools to fetch
+ * the missing detail (`ExecuteQuery` for samples, `SearchDBSchema` for
+ * omitted tables). Without this the agent silently treats the summary
+ * as authoritative and may never probe for samples or discover the
+ * tables that didn't make the cut.
  *
  * Escapes pipes + newlines so the table layout stays intact when a
  * column has surprising values.
@@ -193,7 +193,9 @@ export function renderCatalogSummary(
     s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
   const sep = '\n\n';
 
-  const render = (blockFor: (t: CatalogSummaryTable) => string): { text: string; coveredAll: boolean } => {
+  const render = (blockFor: (t: CatalogSummaryTable) => string): {
+    blocks: string[]; coveredCount: number; coveredAll: boolean;
+  } => {
     const blocks: string[] = [];
     let total = 0;
     let coveredAll = true;
@@ -207,17 +209,31 @@ export function renderCatalogSummary(
       blocks.push(block);
       total += cost;
     }
-    return { text: blocks.join(sep), coveredAll };
+    return { blocks, coveredCount: blocks.length, coveredAll };
   };
 
   // Pass 1: full detail (schema + stats + samples) for every table.
   const fullPass = render((t) => renderTableFull(t, mdEscape));
-  if (fullPass.coveredAll) return fullPass.text;
+  if (fullPass.coveredAll) return fullPass.blocks.join(sep);
 
   // Pass 2: drop sample rows everywhere; trade sample fidelity for
   // coverage of every table.
   const compactPass = render((t) => renderTableSchemaAndStats(t, mdEscape));
-  return compactPass.text;
+
+  const totalTables = summary.tables.length;
+  const noteLines: string[] = ['> Note: This catalog summary was bounded to fit the agent\'s context window.'];
+  // Always true at this point: full pass dropped samples (otherwise we
+  // wouldn't have reached pass 2). Tell the agent samples are missing.
+  noteLines.push('> Sample rows have been omitted from every table. Run `ExecuteQuery` with a small `SELECT * FROM <table> LIMIT N` if you need to inspect actual values.');
+  if (!compactPass.coveredAll) {
+    const omitted = summary.tables.slice(compactPass.coveredCount).map(tableId);
+    const list = omitted.slice(0, 30).map((id) => `\`${id}\``).join(', ');
+    const more = omitted.length > 30 ? ` (and ${omitted.length - 30} more)` : '';
+    noteLines.push(
+      `> The summary covers ${compactPass.coveredCount} of ${totalTables} tables. Omitted: ${list}${more}. Use \`SearchDBSchema\` to inspect any of them.`,
+    );
+  }
+  return `${noteLines.join('\n')}\n\n${compactPass.blocks.join(sep)}`;
 }
 
 /** Convenience: catalog → flat schema + stats + rowCounts (no fetch). */
