@@ -90,7 +90,7 @@ Run queries against data connections. Features:
 - Sequential mode (sequential=true): queries run in order; \`$label.column\` in a later query expands to the values from the earlier labeled result. Works for SQL AND Mongo. The **universal** chaining mechanism — see the per-dialect Cross-DB notes below for examples specific to each connection.
 - Handle tables (\`FROM handle_xyz\`): in-engine join — works only when the query's connection has a Cross-DB hint marking it as handle-table-capable (per-dialect; see below). Scales to handles of any size with no inlining.
 - Per-query errors: one failing query doesn't fail the batch.
-- Timeout (seconds, default 60, max 300): bump UP FRONT for large-scan queries.
+- Timeout (seconds, default 30, max 150): bump UP FRONT for large-scan queries.
 
 Sequential — SQL → SQL:
   query1: {connection: "sales", query: "SELECT product_id FROM orders ORDER BY revenue DESC LIMIT 100", label: "top"}
