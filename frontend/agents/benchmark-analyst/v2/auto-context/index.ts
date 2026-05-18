@@ -138,6 +138,10 @@ export interface BuildAutoContextOpts {
   connectorsByName: Map<string, NodeConnector>;
   dialectsByName: Map<string, string>;
   datasetKey: string;
+  /** Per-slot discriminator (e.g. DoubleCheck's 'agent-a' / 'agent-b').
+   *  When set, the AutoContext cache key incorporates it so primary and
+   *  secondary sub-agents get isolated slots. Defaults to 'default'. */
+  cacheKey?: string;
   userMessage?: string;
   llmContext: PromptPassContext;
   model: Model<Api>;
@@ -235,6 +239,7 @@ export async function buildAutoContextFromCatalog(
     schema, statsByCol, rowCountByTable, dialectsByName, deps,
     {
       datasetKey: opts.datasetKey,
+      cacheKey: opts.cacheKey,
       userMessage: opts.userMessage,
       llmContext,
       maxChars,
@@ -252,9 +257,19 @@ export async function buildAutoContext(
   connections: ConnectionInfo[] | undefined,
   llmContext: PromptPassContext,
   callLLM: PromptPassCallLLM,
-  opts: { datasetKey?: string; userMessage?: string; maxChars?: number; model?: Model<Api> } = {},
+  opts: {
+    datasetKey?: string;
+    /** Per-slot discriminator from DoubleCheck (`agent-a` / `agent-b`).
+     *  Threaded into both the V2 catalog cache key and the AutoContext
+     *  cache key, so primary + secondary sub-agents stay isolated. */
+    cacheKey?: string;
+    userMessage?: string;
+    maxChars?: number;
+    model?: Model<Api>;
+  } = {},
 ): Promise<string> {
   const datasetKey = opts.datasetKey ?? 'default';
+  const cacheKey = opts.cacheKey ?? 'default';
 
   // Wire up real connectors via shared-duckdb (reuses the V2 pool).
   const connectorsByName = new Map<string, NodeConnector>();
@@ -270,13 +285,18 @@ export async function buildAutoContext(
 
   // Read the cached catalog (built lazily if needed). No sample-table
   // population — AutoContext fetches its own samples per the agent's
-  // dataset shape.
-  const { catalog } = await getCatalogStore(connections, 'default', undefined, datasetKey);
+  // dataset shape. We use a dedicated catalog cacheKey (`auto-${slot}`)
+  // so the AutoContext build never collides with V2 tools'
+  // sample-populated catalogs at 'default' / 'agent-a' / 'agent-b' —
+  // whichever ran first would otherwise poison the other's catalog.
+  const catalogKey = `auto-${cacheKey}`;
+  const { catalog } = await getCatalogStore(connections, catalogKey, undefined, datasetKey);
 
   return buildAutoContextFromCatalog(catalog, {
     connectorsByName,
     dialectsByName,
     datasetKey,
+    cacheKey,
     userMessage: opts.userMessage,
     llmContext,
     model: opts.model ?? getLighterModel(),

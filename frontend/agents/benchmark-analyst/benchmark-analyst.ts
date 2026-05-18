@@ -76,7 +76,14 @@ export class BenchmarkAnalystAgent<
           ctx.connections,
           { contextDocs: ctx.contextDocs, originalMessage: userMessage },
           (m, c) => this.orchestrator.callLLM(m, c, this.id, { maxTokens: 4096 }),
-          { datasetKey: ctx.datasetKey, userMessage },
+          {
+            datasetKey: ctx.datasetKey,
+            userMessage,
+            // DoubleCheck sets `ctx.catalogKey` to 'agent-a' / 'agent-b'
+            // per sub-agent so primary + secondary get isolated cache
+            // slots (matches the per-slot catalog cache pattern).
+            cacheKey: ctx.catalogKey,
+          },
         );
       } catch {
         // AutoContext is best-effort orientation. Failures (DB blip,

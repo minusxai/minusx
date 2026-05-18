@@ -155,6 +155,18 @@ describe('getRshipsNStructure', () => {
     expect(filterDeps.generateTableNotes).toHaveBeenCalledTimes(2); // 1 table each
   });
 
+  it('separates cache slots by cacheKey (DoubleCheck primary vs secondary)', async () => {
+    const deps = baseDeps();
+    await getRshipsNStructure(schema, stats, rowCounts, dialects, deps, {
+      datasetKey: 'shared', cacheKey: 'agent-a', llmContext: {}, maxChars: 100_000,
+    });
+    await getRshipsNStructure(schema, stats, rowCounts, dialects, deps, {
+      datasetKey: 'shared', cacheKey: 'agent-b', llmContext: {}, maxChars: 100_000,
+    });
+    // Different cacheKey → two separate computations.
+    expect(deps.generateTableNotes).toHaveBeenCalledTimes(4); // 2 tables × 2 slots
+  });
+
   it('dedupes concurrent calls with the same cache key (in-flight promise reuse)', async () => {
     const deps = baseDeps();
     const [r1, r2] = await Promise.all([

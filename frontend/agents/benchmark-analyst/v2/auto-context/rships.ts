@@ -44,6 +44,11 @@ export interface RshipsDeps {
 
 export interface GetRshipsNStructureOpts {
   datasetKey: string;
+  /** Per-slot discriminator (DoubleCheck sets this to 'agent-a' /
+   *  'agent-b' for primary + secondary). Mixed into the cache key so
+   *  primary + secondary sub-agents get isolated cache slots. Defaults
+   *  to 'default' when not provided. */
+  cacheKey?: string;
   /** The user's current question. Required to drive the filter step when
    *  the schema doesn't fit. Omitting it forces the unfiltered path. */
   userMessage?: string;
@@ -154,6 +159,7 @@ export async function getRshipsNStructure(
   opts: GetRshipsNStructureOpts,
 ): Promise<RshipsNStructureResult> {
   const maxChars = opts.maxChars ?? DEFAULT_MAX_CHARS;
+  const slot = opts.cacheKey ?? 'default';
 
   // 1) Filter decision (schema-only estimate).
   const needsFilter = estimateSchemaChars(schema) > maxChars;
@@ -164,11 +170,11 @@ export async function getRshipsNStructure(
   if (needsFilter && opts.userMessage) {
     const allowed = await deps.filterSchemaByQuestion(schema, opts.userMessage, opts.llmContext);
     effectiveSchema = schema.filter((c) => allowed.has(tableId(c)));
-    cacheKey = `${opts.datasetKey}:f:${fingerprint(allowed)}`;
+    cacheKey = `${opts.datasetKey}:${slot}:f:${fingerprint(allowed)}`;
     skipUserMessage = false; // filtered branch — cache reflects the question
   } else {
     // Unfiltered (either schema fits, or no userMessage to drive a filter).
-    cacheKey = `${opts.datasetKey}:full`;
+    cacheKey = `${opts.datasetKey}:${slot}:full`;
     skipUserMessage = true; // unfiltered branch — cache is question-agnostic
   }
 
