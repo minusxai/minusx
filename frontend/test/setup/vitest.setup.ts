@@ -3,8 +3,16 @@
  * Mirrors what jest.setup.js + test/setup/jest.setup.ts did under Jest.
  */
 import { vi } from 'vitest';
+import { config as loadDotenv } from 'dotenv';
 import { registerModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';
+
+// Load frontend/.env so API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, …) and
+// the MX proxy creds (MX_API_KEY, MX_API_BASE_URL) are available to tests
+// that exercise real provider calls. Tests that intentionally mock the LLM
+// (faux providers, `setLighterModel`, `setSamplingEnabled(false)`) remain
+// unaffected — env vars are silently shadowed by their stubs.
+loadDotenv();
 
 // Clear backend URL env vars; tests must explicitly set their own
 delete process.env.NEXT_PUBLIC_BACKEND_URL;

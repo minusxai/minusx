@@ -31,10 +31,10 @@ const SAMPLE_PROMPTS = {
 } as const;
 
 // Shared lighter model for the "+prompt" passes across V2 data tools.
-// Default kept on Haiku because test envs (and any deploy without an
-// OPENAI_API_KEY) would fail at first call. Flip via `setLighterModel`
-// at startup (or in a wrapper) when running with OpenAI credentials.
-const DEFAULT_LIGHTER_MODEL = getModel('anthropic', 'claude-haiku-4-5-20251001');
+// Defaults to OpenAI gpt-5.4-mini; tests load OPENAI_API_KEY from
+// `frontend/.env` via the vitest setup file, and tests that don't want
+// real provider calls swap to faux via `setLighterModel`.
+const DEFAULT_LIGHTER_MODEL = getModel('openai', 'gpt-5.4-mini');
 let lighterModel: Model<Api> = DEFAULT_LIGHTER_MODEL;
 export function setLighterModel(m: Model<Api>): void { lighterModel = m; }
 export function getLighterModel(): Model<Api> { return lighterModel; }
