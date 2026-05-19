@@ -13,6 +13,7 @@ import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
+import { BenchmarkSqliteConnector } from './sqlite-native-connector';
 import { ExploreDataset } from './explore-dataset';
 import {
   interpolateRefs,
@@ -25,6 +26,20 @@ import { storeHandle, qualifyHandleRefs } from './v2/handle-store';
 import { computeResultStats } from './v2/result-stats';
 import { getCatalogStore } from './v2/catalog';
 import type { ResultEntry } from './result-shapes';
+
+/**
+ * Map a (connector, dialect) pair to the dialect string `fuzzyMatch`
+ * should use. The native `BenchmarkSqliteConnector` runs real SQLite —
+ * which doesn't have `jaro_winkler_similarity` / `levenshtein_distance`
+ * — so its fuzzy path is the substring-only `sqlite-native` branch.
+ * Every other connector passes its dialect through unchanged.
+ */
+export function benchmarkFuzzyDialect(
+  connector: NodeConnector,
+  dialect: string,
+): string {
+  return connector instanceof BenchmarkSqliteConnector ? 'sqlite-native' : dialect;
+}
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -432,7 +447,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
     const queryFn = async (sql: string) => connector.query(sql);
 
     try {
-      const result = await fuzzyMatch(dialect, queryFn, {
+      const result = await fuzzyMatch(benchmarkFuzzyDialect(connector, dialect), queryFn, {
         table, columns, searchTerm: search_term, schema: schemaName, limit, returnColumns,
       });
 
@@ -443,7 +458,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         const expandedTerms = await this.getSemanticTerms(connection, table, columns, search_term, schemaName);
         if (expandedTerms.length > 0) {
           const combinedSearch = expandedTerms.join(' ');
-          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, columns, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
+          const expandedResult = await fuzzyMatch(benchmarkFuzzyDialect(connector, dialect), queryFn, { table, columns, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
           return {
             content: [{ type: 'text', text: JSON.stringify({
               searchTerm: search_term,
@@ -713,8 +728,8 @@ PIPELINE SEMANTICS:
 
 HANDLES (returned with every successful result):
 - The agent gets a handle ID for the final query's output. Use fetchHandle({handle, offset, length}) to paginate through more rows.
-- For SQL connections, you can JOIN handles back as tables: FROM handle_xyz works whenever the query's connection is DuckDB or sqlite. For Mongo/Postgres connections, handle tables don't exist in those engines — use $label.column for chaining instead.
-- A built-in connection named "_scratch" is always available — a DuckDB connection routing to the in-memory catalog where handle tables live. Use _scratch when your dataset has no other DuckDB/sqlite connection and you want to JOIN a handle: ExecuteQuery({queries: [{connection: "_scratch", query: "SELECT count(*) FROM handle_abc WHERE ..."}]}).
+- For chaining across connections, always use $label.column — it works on every connection type uniformly. Some connection types additionally allow JOINing a handle back as a table inline (FROM handle_xyz); if that syntax is supported for a given connection, its per-dialect notes mention it. When unsure, prefer $label.column — it always works.
+- A built-in connection named "_scratch" is always available as a workspace for combining results across connections via handle joins. When chaining via $label.column is enough, you do not need _scratch.
 
 MONGO: queries against a Mongo connection are JSON strings of the form {"collection":"...","pipeline":[stages]}. Common stages: $match, $group, $project, $sort, $limit, $lookup, $unwind. Cross-DB chains use $label.column inside the JSON — the interpolator emits a JSON array. Heads-up: if you put "$x.y" inside $in/$nin and x isn't a defined label (this batch OR a previous call), the tool returns an explicit "unknown label" error listing the labels you DO have — much easier to act on than MongoDB's raw "$in needs an array" message.
 
@@ -830,9 +845,9 @@ export class ChainedExecuteQuery extends MXTool<
           finalQuery = interpolated;
         } else {
           const { sql, referencedHandles } = await qualifyHandleRefs(interpolated);
-          if (referencedHandles.length > 0 && dialect !== 'duckdb' && dialect !== 'sqlite') {
+          if (referencedHandles.length > 0 && dialect !== 'duckdb') {
             return errorResponse(
-              `Query #${i + 1} references handle table(s) (${referencedHandles.join(', ')}) on a '${dialect}' connection. Handle tables live in the shared DuckDB — use a duckdb/sqlite connection (or "_scratch") to JOIN them.`,
+              `Query #${i + 1} references labelled query result(s) (${referencedHandles.join(', ')}) on a '${dialect}' connection. To use a prior labelled result here, chain via \`sequential: true\` + \`$label.column\` instead of \`FROM handle_xyz\`.`,
               queries.length,
             );
           }

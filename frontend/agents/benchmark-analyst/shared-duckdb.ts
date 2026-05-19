@@ -1,16 +1,20 @@
 // Benchmark-only: one process-wide in-memory DuckDBInstance shared by
-// every sqlite/duckdb connection across every dataset. ATTACHes
-// cumulatively as `getOrCreateBenchmarkConnector` is called per
-// connection (typically from `BaseExecuteQuery._initialiseConnectors`),
-// so parallel datasets reuse the same instance (one thread pool, one
-// buffer cache) instead of each spawning their own.
+// every duckdb connection across every dataset. ATTACHes cumulatively
+// as `getOrCreateBenchmarkConnector` is called per connection (typically
+// from `BaseExecuteQuery._initialiseConnectors`), so parallel datasets
+// reuse the same instance (one thread pool, one buffer cache) instead
+// of each spawning their own.
+//
+// Note on sqlite: this module is duckdb-only. `dialect: 'sqlite'` is
+// intercepted by `getOrCreateBenchmarkConnector` earlier and routed to
+// `BenchmarkSqliteConnector` (real better-sqlite3) — it never reaches
+// the shared instance and is not ATTACHed.
 //
 // Scope: **benchmark only**. Production connectors still use one
-// DuckDBInstance per file (see `lib/connections/duckdb-registry.ts`
-// and `sqlite-via-duckdb-registry.ts`). The per-file isolation in
-// production is the multi-tenant boundary — a user's instance
-// physically can't see databases they don't have access to — and we
-// don't want to weaken it.
+// DuckDBInstance per file (see `lib/connections/duckdb-registry.ts`).
+// The per-file isolation in production is the multi-tenant boundary —
+// a user's instance physically can't see databases they don't have
+// access to — and we don't want to weaken it.
 //
 // Security: deliberately none. No `allowed_paths`, no
 // `enable_external_access = false`. The benchmark process is trusted
@@ -25,6 +29,32 @@ import { getNodeConnector } from '@/lib/connections';
 import { collectDuckDbIndexes } from '@/lib/connections/duckdb-indexes';
 import { runDuckDbWithTimeout } from '@/lib/connections/duckdb-query';
 import { NodeConnector, type SchemaEntry, type QueryResult, type TestConnectionResult } from '@/lib/connections/base';
+import { BenchmarkSqliteConnector } from './sqlite-native-connector';
+
+// Process-wide cache for native sqlite connectors. Keyed by
+// `${connectionName}\0${datasetKey ?? ''}` so two parallel datasets that
+// each declare a connection of the same name (pointing to different
+// files) get isolated handles — same isolation contract as the shared
+// DuckDB instance's ATTACH-alias namespacing for the duckdb path.
+// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process cache
+const nativeSqliteCache = new Map<string, BenchmarkSqliteConnector>();
+
+function nativeSqliteCacheKey(name: string, datasetKey?: string): string {
+  return `${name}\0${datasetKey ?? ''}`;
+}
+
+function getOrCreateNativeSqlite(
+  name: string,
+  config: Record<string, unknown>,
+  datasetKey?: string,
+): BenchmarkSqliteConnector {
+  const key = nativeSqliteCacheKey(name, datasetKey);
+  const cached = nativeSqliteCache.get(key);
+  if (cached) return cached;
+  const conn = new BenchmarkSqliteConnector(name, config);
+  nativeSqliteCache.set(key, conn);
+  return conn;
+}
 
 // Make rows JSON-safe (BigInt → Number where it fits; else string).
 // Same shape as the production connectors so the runner output JSONL
@@ -39,9 +69,12 @@ function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[
   }));
 }
 
-type AttachableDialect = 'sqlite' | 'duckdb';
+// Only duckdb dialects ATTACH into the shared instance. sqlite is
+// served by `BenchmarkSqliteConnector` (real better-sqlite3) and never
+// reaches this module.
+type AttachableDialect = 'duckdb';
 function isAttachable(dialect: string): dialect is AttachableDialect {
-  return dialect === 'sqlite' || dialect === 'duckdb';
+  return dialect === 'duckdb';
 }
 
 function quoteIdent(name: string): string {
@@ -88,7 +121,6 @@ interface AttachedEntry {
  */
 class BenchmarkSharedDuckdb {
   private readonly attached = new Map<string, AttachedEntry>();
-  private installedSqlite = false;
   // Serialise ATTACH calls. Multiple parallel datasets may call
   // `ensureAttached` concurrently; ATTACH modifies instance-wide state
   // and we must not interleave the ATTACH / map-update sequence across
@@ -179,16 +211,9 @@ class BenchmarkSharedDuckdb {
 
     const conn = await this.acquireConnection();
     try {
-      if (!this.installedSqlite && toAttach.some((e) => e.dialect === 'sqlite')) {
-        await conn.run('INSTALL sqlite');
-        await conn.run('LOAD sqlite');
-        this.installedSqlite = true;
-      }
-
       for (const e of toAttach) {
-        const typeClause = e.dialect === 'sqlite' ? ', TYPE SQLITE' : '';
         await conn.run(
-          `ATTACH ${quoteLiteral(e.absPath)} AS ${quoteIdent(e.name)} (READ_ONLY${typeClause})`,
+          `ATTACH ${quoteLiteral(e.absPath)} AS ${quoteIdent(e.name)} (READ_ONLY)`,
         );
         this.attached.set(e.name, e);
       }
@@ -297,8 +322,7 @@ class BenchmarkSharedDuckdb {
         tableMap.get(r.table_name)!.push({ name: r.column_name, type: r.data_type });
       }
 
-      // Indexes on the attached database (sqlite indexes surface through
-      // DuckDB's `duckdb_indexes()` — filtered to this catalog by `name`).
+      // Indexes on the attached database, filtered to this catalog by name.
       const indexMap = await collectDuckDbIndexes(conn, name);
 
       return Array.from(byTable.entries()).map(([schema, tables]) => ({
@@ -465,12 +489,15 @@ function internalAttachName(name: string, datasetKey?: string): string {
 }
 
 /**
- * Build a single benchmark NodeConnector for one connection. Idempotent
- * with respect to the shared DuckDBInstance: sqlite/duckdb entries route
- * through a process-wide singleton (`getOrCreateShared`) with idempotent
- * `ensureAttached`, so repeated calls for the same name are cheap and
- * safe. Other dialects (postgres, bigquery, …) fall through to
- * `getNodeConnector`.
+ * Build a single benchmark NodeConnector for one connection.
+ *
+ * Dispatch:
+ * - `dialect: 'sqlite'` → native `BenchmarkSqliteConnector` (real
+ *   better-sqlite3, cached process-wide by `(name, datasetKey)`).
+ * - `dialect: 'duckdb'` → shared DuckDBInstance via `ensureAttached`
+ *   (idempotent — repeated calls for the same name reuse the alias).
+ * - Other dialects (postgres, bigquery, mongo, …) fall through to
+ *   `getNodeConnector`.
  *
  * Used by `BaseExecuteQuery._initialiseConnectors` / `BaseSearchDBSchema._initialiseConnectors`
  * to lazily wire up connectors from `ctx.connections[*]` on each tool
@@ -511,6 +538,13 @@ export async function getOrCreateBenchmarkConnector(
     // datasetKey is intentionally ignored — this connection is universal.
     const shared = await getOrCreateShared();
     return new BenchmarkSharedDuckdbConnector(name, 'memory', shared);
+  }
+  if (dialect === 'sqlite') {
+    // Real SQLite via better-sqlite3 — no DuckDB anywhere in this path.
+    // Cached process-wide by (name, datasetKey) so repeated lookups in
+    // the same dataset share a handle, but parallel datasets that
+    // declare a connection of the same name stay isolated.
+    return getOrCreateNativeSqlite(name, config, opts?.datasetKey);
   }
   if (isAttachable(dialect)) {
     const filePath = (config as { file_path?: unknown }).file_path;

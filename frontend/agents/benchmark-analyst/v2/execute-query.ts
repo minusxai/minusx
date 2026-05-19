@@ -146,13 +146,10 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
         // SQL-only feature — guard non-SQL connections.
         const { sql: qualifiedQuery, referencedHandles } =
           await qualifyHandleRefs(interpolatedQuery);
-        if (
-          referencedHandles.length > 0 &&
-          dialect !== 'duckdb' && dialect !== 'sqlite'
-        ) {
+        if (referencedHandles.length > 0 && dialect !== 'duckdb') {
           return {
             entry: {
-              error: `Handle table references (FROM handle_xyz) require a duckdb or sqlite connection; '${spec.connection}' is ${dialect}. Re-run the query on a SQL connection, or read the handle with fetchHandle.`,
+              error: `Handle table references (FROM handle_xyz) require a duckdb connection; '${spec.connection}' is ${dialect}. Chain via \`sequential: true\` + \`$label.column\` instead, or read the handle with fetchHandle.`,
             },
             raw: null,
             label,

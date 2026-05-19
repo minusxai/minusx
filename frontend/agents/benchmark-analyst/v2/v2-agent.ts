@@ -101,7 +101,7 @@ For dialect-specific examples (SQL → Mongo, postgres chaining, etc.), see Cros
 ### Explore — REACH FOR THIS FIRST when you need to FIND something
 Cross-table discovery + lexical/fuzzy/semantic search. Use Explore when:
 - You're looking for ROWS matching a term/value, and you're not 100% sure which table/column has them
-- You want fuzzy matching across many text columns (per-dialect: jaro_winkler for SQL, $regex for Mongo)
+- You want fuzzy matching across many text columns (uses the right per-dialect approach — see Dialect-Specific Features below for the fuzzy functions available on each connector)
 - You want semantic matches over free-text (pass a \`prompt\` — the lighter model re-ranks results)
 
 Examples:
