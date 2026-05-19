@@ -1,12 +1,11 @@
 import 'server-only';
 import * as fs from 'fs';
-import Database from 'better-sqlite3';
+import { Worker } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import {
   NodeConnector,
   type SchemaEntry,
-  type SchemaTable,
-  type SchemaColumn,
-  type TableIndex,
   type QueryResult,
   type TestConnectionResult,
 } from '@/lib/connections/base';
@@ -14,36 +13,150 @@ import { resolveDuckDbFilePath } from '@/lib/connections/duckdb-connector';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
 /**
- * Benchmark sqlite connector. Runs queries directly against the SQLite
- * file via `better-sqlite3` — no DuckDB anywhere in the path. The agent
- * sees real SQLite semantics: native types from `PRAGMA table_info`,
- * native error messages, native function availability.
+ * Benchmark sqlite connector. Runs queries against the SQLite file via
+ * `better-sqlite3`, but routes each call through a pool of worker_threads
+ * so the main JS thread is never blocked on `stmt.all()`. Multiple
+ * sub-agents querying in parallel hit different workers — their
+ * synchronous native calls run on independent OS threads instead of
+ * serializing on the main event loop.
  *
- * Read-only. Lazy connection: the db handle is opened on first use and
- * kept open for the lifetime of the connector. Caller should `close()`
- * when done (the benchmark currently lets the process exit do that).
+ * Pool size: defaults to 4, override via `SQLITE_WORKER_POOL_SIZE`.
+ * One handle per worker — read-only SQLite tolerates multiple readers
+ * on the same file without contention.
  */
+const DEFAULT_POOL_SIZE = 4;
+
+function workerPoolSize(): number {
+  // eslint-disable-next-line no-restricted-syntax -- benchmark CLI knob, not a request-scoped module
+  const raw = process.env.SQLITE_WORKER_POOL_SIZE;
+  if (!raw) return DEFAULT_POOL_SIZE;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_POOL_SIZE;
+}
+
+interface PendingCall<T> {
+  resolve: (value: T) => void;
+  reject: (err: Error) => void;
+}
+
+interface QueryPayload {
+  columns: string[];
+  types: string[];
+  rows: Record<string, unknown>[];
+}
+
 export class BenchmarkSqliteConnector extends NodeConnector {
   private readonly absPath: string;
-  private db: Database.Database | null = null;
+  private workers: Worker[] | null = null;
+  private nextRequestId = 1;
+  private nextWorkerIdx = 0;
+  private readonly pending = new Map<number, PendingCall<unknown>>();
+  private initPromise: Promise<void> | null = null;
+  private closed = false;
 
   constructor(name: string, config: Record<string, unknown>) {
     super(name, config);
     this.absPath = resolveDuckDbFilePath(config.file_path as string);
   }
 
-  private open(): Database.Database {
-    if (!this.db) {
-      this.db = new Database(this.absPath, { readonly: true, fileMustExist: true });
-    }
-    return this.db;
+  // ── pool lifecycle ──────────────────────────────────────────────────────
+
+  private async ensureOpen(): Promise<void> {
+    if (this.closed) throw new Error(`Connector '${this.name}' is closed`);
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.spawnPool();
+    return this.initPromise;
   }
 
-  close(): void {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
+  private async spawnPool(): Promise<void> {
+    if (!fs.existsSync(this.absPath)) {
+      throw new Error(`File not found: ${this.absPath}`);
     }
+    const workerPath = join(dirname(fileURLToPath(import.meta.url)), 'sqlite-worker.cjs');
+    const n = workerPoolSize();
+    const readyPromises: Promise<void>[] = [];
+    const workers: Worker[] = [];
+
+    for (let i = 0; i < n; i++) {
+      const worker = new Worker(workerPath, { workerData: { dbPath: this.absPath } });
+      workers.push(worker);
+
+      const ready = new Promise<void>((resolve, reject) => {
+        const onMessage = (msg: { type?: string; error?: string }): void => {
+          if (msg?.type === 'ready') {
+            worker.off('message', onMessage);
+            resolve();
+          } else if (msg?.type === 'fatal') {
+            worker.off('message', onMessage);
+            reject(new Error(msg.error ?? 'worker fatal error'));
+          }
+        };
+        worker.on('message', onMessage);
+        worker.once('error', (err) => reject(err));
+        worker.once('exit', (code) => {
+          if (code !== 0) reject(new Error(`worker exited with code ${code} before ready`));
+        });
+      });
+      readyPromises.push(ready);
+    }
+
+    try {
+      await Promise.all(readyPromises);
+    } catch (err) {
+      // Tear down any workers that did come up if init failed.
+      for (const w of workers) w.terminate().catch(() => { /* ignore */ });
+      this.initPromise = null;
+      throw err;
+    }
+
+    // Now wire the main message handler for each worker — responses get
+    // routed to the correct pending Promise by request id.
+    for (const worker of workers) {
+      worker.on('message', (msg: { id?: number; ok?: boolean; value?: unknown; error?: string }) => {
+        if (msg == null || typeof msg.id !== 'number') return;
+        const pending = this.pending.get(msg.id);
+        if (!pending) return;
+        this.pending.delete(msg.id);
+        if (msg.ok) pending.resolve(msg.value);
+        else pending.reject(new Error(msg.error ?? 'sqlite worker error'));
+      });
+      worker.on('error', (err) => this.rejectAll(err));
+    }
+    this.workers = workers;
+  }
+
+  private rejectAll(err: Error): void {
+    for (const [, p] of this.pending) p.reject(err);
+    this.pending.clear();
+  }
+
+  /** Send a typed request to the next worker in round-robin order. */
+  private async dispatch<T>(message: { type: string; sql?: string; params?: Record<string, unknown> }): Promise<T> {
+    await this.ensureOpen();
+    const workers = this.workers!;
+    const worker = workers[this.nextWorkerIdx];
+    this.nextWorkerIdx = (this.nextWorkerIdx + 1) % workers.length;
+
+    const id = this.nextRequestId++;
+    return new Promise<T>((resolve, reject) => {
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      worker.postMessage({ id, ...message });
+    });
+  }
+
+  // ── public API (unchanged contract) ─────────────────────────────────────
+
+  close(): void {
+    if (!this.workers) {
+      this.closed = true;
+      return;
+    }
+    for (const w of this.workers) {
+      try { w.postMessage({ type: 'close' }); } catch { /* ignore */ }
+    }
+    this.workers = null;
+    this.initPromise = null;
+    this.closed = true;
   }
 
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {
@@ -51,7 +164,7 @@ export class BenchmarkSqliteConnector extends NodeConnector {
       return { success: false, message: `File not found: ${this.absPath}` };
     }
     try {
-      this.open().prepare('SELECT 1').get();
+      await this.dispatch<true>({ type: 'ping' });
       if (includeSchema) {
         const schemas = await this.getSchema();
         return { success: true, message: 'Connection successful', schema: { schemas } };
@@ -67,87 +180,23 @@ export class BenchmarkSqliteConnector extends NodeConnector {
     params?: Record<string, string | number>,
     _timeoutMs?: number,
   ): Promise<QueryResult> {
-    // _timeoutMs is intentionally unused: better-sqlite3 is synchronous,
-    // so honouring a timeout requires cross-thread `db.interrupt()` —
-    // tracked separately. Benchmark queries on the local fixtures
-    // finish well within typical row-level budgets without it.
-    const stmt = this.open().prepare(sql);
-    const rows = (params ? stmt.all(params as Record<string, unknown>) : stmt.all()) as Record<string, unknown>[];
-    const cols = stmt.columns();
+    // _timeoutMs is intentionally unused. better-sqlite3 is synchronous
+    // inside the worker; cancellation would need a cross-thread
+    // `db.interrupt()` plumb-through. Tracked separately.
+    const payload = await this.dispatch<QueryPayload>({
+      type: 'query',
+      sql,
+      params: params as Record<string, unknown> | undefined,
+    });
     return {
-      columns: cols.map((c) => c.name),
-      types: cols.map((c) => (c.type ?? '').toUpperCase()),
-      rows: makeJsonSafe(rows),
+      columns: payload.columns,
+      types: payload.types,
+      rows: payload.rows,
       finalQuery: inlineSqlParams(sql, params),
     };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    const db = this.open();
-    const tableNames = (db
-      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
-      .all() as Array<{ name: string }>).map((r) => r.name);
-
-    const tables: SchemaTable[] = tableNames.map((table) => ({
-      table,
-      columns: readColumns(db, table),
-      indexes: readIndexes(db, table),
-    }));
-    return [{ schema: 'main', tables }];
+    return this.dispatch<SchemaEntry[]>({ type: 'getSchema' });
   }
-}
-
-function readColumns(db: Database.Database, table: string): SchemaColumn[] {
-  const rows = db.prepare(`PRAGMA table_info(${quoteIdent(table)})`).all() as Array<{
-    name: string;
-    type: string;
-  }>;
-  return rows.map((c) => ({
-    name: c.name,
-    // SQLite's type-affinity allows the empty string (no declared type) —
-    // surface NUMERIC, which is what SQLite's own affinity rules would
-    // assign. Anything declared (even `MY_CUSTOM_TYPE`) is preserved.
-    type: (c.type || 'NUMERIC').toUpperCase(),
-  }));
-}
-
-function readIndexes(db: Database.Database, table: string): TableIndex[] {
-  const idxList = db.prepare(`PRAGMA index_list(${quoteIdent(table)})`).all() as Array<{
-    name: string;
-    unique: number;
-  }>;
-  // Sort by name for deterministic order — PRAGMA returns by `seq`, which
-  // varies with creation order and is unhelpful when the schema is
-  // surfaced to an LLM.
-  const sorted = [...idxList].sort((a, b) => a.name.localeCompare(b.name));
-  return sorted.map((ix) => {
-    const cols = db.prepare(`PRAGMA index_info(${quoteIdent(ix.name)})`).all() as Array<{
-      name: string | null;
-    }>;
-    return {
-      name: ix.name,
-      // Expression indexes have null column names; filter them out — the
-      // agent can't filter on an unnamed expression anyway.
-      columns: cols.map((c) => c.name).filter((n): n is string => typeof n === 'string'),
-      unique: ix.unique === 1,
-    };
-  });
-}
-
-function quoteIdent(id: string): string {
-  return `"${id.replace(/"/g, '""')}"`;
-}
-
-function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[] {
-  return JSON.parse(JSON.stringify(rows, (_, v) => {
-    if (typeof v === 'bigint') {
-      return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
-        ? Number(v)
-        : v.toString();
-    }
-    if (v instanceof Uint8Array) {
-      return Buffer.from(v).toString('base64');
-    }
-    return v;
-  }));
 }
