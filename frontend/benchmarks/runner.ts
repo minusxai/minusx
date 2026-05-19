@@ -13,6 +13,7 @@ import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connec
 import type { AutoContextAttempt, BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { ConversationLog } from '@/orchestrator/types';
 import { createSemaphore, parseConcurrencyLimit } from '@/orchestrator/concurrency';
+import { runAutoContextForSlot } from '@/agents/benchmark-analyst/v2/auto-context/auto-context';
 
 // Optional process-wide cap on concurrent agent runs (orchestrator
 // instances). Set via the `MAX_AGENTS_CONCURRENCY` env var (read once
@@ -94,6 +95,14 @@ export interface BenchmarkRunConfig {
    *  whose index is in this set are executed; all others are skipped.
    *  Useful for debugging a single question: `DAB_ROW_INDEX=3`. */
   rowIndices?: Set<number>;
+  /** Catalog slots to run auto-context for before agent dispatch.
+   *  Single-agent: `['default']`. DoubleCheck: `['agent-a', 'agent-b']`.
+   *  When omitted or empty, auto-context is skipped entirely. */
+  autoContextSlots?: string[];
+  /** When true, run only the auto-context pre-step and exit without
+   *  dispatching any agents. Useful for pre-warming the auto-context
+   *  cache or debugging auto-context in isolation. */
+  autoContextOnly?: boolean;
 }
 
 export interface BenchmarkResult {
@@ -122,7 +131,7 @@ export interface BenchmarkResult {
   /** Short git commit hash at the time of the benchmark run. */
   git_commit?: string;
   /** AutoContext orientation outcome for this row. Records each
-   *  `ensureAutoContext` attempt (one per sub-agent in DoubleCheck).
+   *  auto-context slot attempt from the runner's pre-step.
    *  `summary` aggregates across attempts:
    *    - 'ok'      → at least one attempt succeeded
    *    - 'failed'  → all attempts failed
@@ -410,6 +419,95 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       autoContextAttempts: [],
     };
     rowContexts.set(i, ctx);
+  }
+
+  // ── AutoContext pre-step ────────────────────────────────────────────────
+  // Run auto-context for each configured slot before dispatching agents.
+  // Results are cached to `_autoctx.jsonl` / `_autoctx_log.jsonl`; on
+  // subsequent runs, loaded from file unless CLEAR_AUTOCTX is set.
+  const autoContextSlots = config.autoContextSlots ?? [];
+  const autoContextBySlot: Record<string, string> = {};
+
+  if (autoContextSlots.length > 0 && remainingRows.length > 0) {
+    const autoctxPath = path.join(
+      path.dirname(inputPath),
+      path.basename(inputPath).replace('_input.jsonl', '_autoctx.jsonl'),
+    );
+    const autoctxLogPath = path.join(
+      path.dirname(inputPath),
+      path.basename(inputPath).replace('_input.jsonl', '_autoctx_log.jsonl'),
+    );
+    // eslint-disable-next-line no-restricted-syntax -- benchmark CLI env var
+    const clearAutoctx = !!process.env.CLEAR_AUTOCTX;
+    const allConnections = [...connectionsByName.values()];
+
+    if (!clearAutoctx && existsSync(autoctxPath)) {
+      // Load from cache
+      const lines = readFileSync(autoctxPath, 'utf-8').split('\n').filter((l) => l.trim());
+      for (const line of lines) {
+        const entry = JSON.parse(line) as { catalogKey: string; renderedText: string };
+        autoContextBySlot[entry.catalogKey] = entry.renderedText;
+      }
+      const slotList = Object.keys(autoContextBySlot).join(', ');
+      console.log(`  ${c.green}\u2713${c.reset} AutoContext  loaded from cache (${slotList})`);
+    } else {
+      // Run auto-context for each slot
+      for (const slot of autoContextSlots) {
+        const slotLabel = autoContextSlots.length > 1 ? ` ${c.dim}${slot}${c.reset}` : '';
+        process.stderr.write(`  ${c.cyan}\u21BB${c.reset} AutoContext${slotLabel}  running...`);
+        const t0 = Date.now();
+        try {
+          const result = await runAutoContextForSlot(
+            allConnections, label, slot, config.registrables,
+          );
+          autoContextBySlot[slot] = result.renderedText;
+          const dur = formatDuration(Date.now() - t0);
+          clearLine();
+          console.log(`  ${c.green}\u2713${c.reset} AutoContext${slotLabel}  done (${dur}, ${result.annotationCount} annotations)`);
+
+          // Append log
+          appendFileSync(autoctxLogPath, JSON.stringify({ catalogKey: slot, log: result.log }) + '\n');
+        } catch (e) {
+          const dur = formatDuration(Date.now() - t0);
+          const msg = e instanceof Error ? e.message : String(e);
+          clearLine();
+          console.log(`  ${c.red}\u2717${c.reset} AutoContext${slotLabel}  failed (${dur}): ${msg}`);
+        }
+      }
+      // Write results
+      if (Object.keys(autoContextBySlot).length > 0) {
+        const resultLines = Object.entries(autoContextBySlot)
+          .map(([catalogKey, renderedText]) => JSON.stringify({ catalogKey, renderedText }))
+          .join('\n');
+        writeFileSync(autoctxPath, resultLines + '\n', 'utf-8');
+        console.log(`  ${c.dim}\u2192 ${path.basename(autoctxPath)}${c.reset}`);
+      }
+    }
+    console.log();
+
+    // Stamp every row context with the auto-context results
+    for (const ctx of rowContexts.values()) {
+      ctx.autoContextBySlot = autoContextBySlot;
+      // For single-slot, also set the direct field for convenience
+      const slotKeys = Object.keys(autoContextBySlot);
+      if (slotKeys.length === 1) {
+        ctx.autoContextRendered = autoContextBySlot[slotKeys[0]];
+      }
+      // Record attempt status
+      for (const slot of autoContextSlots) {
+        ctx.autoContextAttempts!.push(
+          autoContextBySlot[slot]
+            ? { status: 'ok' }
+            : { status: 'failed', reason: 'auto-context pre-step did not produce a result' },
+        );
+      }
+    }
+
+    // Early exit: run only auto-context, skip agent dispatch.
+    if (config.autoContextOnly) {
+      console.log(`  ${c.dim}autoContextOnly: skipping agent dispatch${c.reset}\n`);
+      return { rows: 0, errors: 0, timeouts: 0, durationMs: Date.now() - startedAt };
+    }
   }
 
   // ── Single-run executor ────────────────────────────────────────────────

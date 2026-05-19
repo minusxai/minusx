@@ -25,13 +25,15 @@ import type { ColumnMeta, NodeConnector } from '@/lib/connections/base';
 import {
   MXAgent,
   MXTool,
+  type ConversationLog,
   type ConversationLogEntry,
+  type RegistrableClass,
   type ToolResponse,
 } from '@/orchestrator/types';
-import type { Orchestrator } from '@/orchestrator/orchestrator';
+import { Orchestrator } from '@/orchestrator/orchestrator';
 import { EMPTY_USAGE, gen_id } from '@/orchestrator/utils';
 import { ChainedExecuteQuery } from '../../db-tools';
-import type { BenchmarkAnalystContext } from '../../types';
+import type { BenchmarkAnalystContext, ConnectionInfo } from '../../types';
 import { publicConnectionMetadata } from '../../types';
 import { getOrCreateBenchmarkConnector } from '../../shared-duckdb';
 import { getCatalogStore } from '../catalog';
@@ -444,9 +446,9 @@ Call SubmitSchemaInfo exactly once with annotations:
 Rules:
 - Every \`id\` and \`join.to\` must be a short alphanumeric ID (^[gstc][0-9]+$) from the catalog input. The tool will reject other shapes.
 - An annotation may have \`description\`, \`join\`, both, or neither. Entries with neither are silently dropped.
+- Do not get carried away with tons of ExecuteQuery probes and annotations. Focus on the few that appear most interesting or non-obvious.
 
 ## Connections available
-
 ${connectionsJson}
 
 ${contextDocs ? `## Data documentation\n${contextDocs}` : ''}
@@ -746,13 +748,16 @@ function buildWrapperToolResult(
   toolCallId: string,
   state: CachedState,
 ): import('@mariozechner/pi-ai').ToolResultMessage {
-  const annCount = state.payload.annotations.length;
+  const idMap = assignCatalogIds(state.schema);
+  const rendered = renderGeneratedContext(
+    state.schema, idMap, state.statsByCol, state.rowCountByTable, state.payload,
+  );
   return {
     role: 'toolResult',
     toolCallId,
     toolName: AutoContextAgent.schema.name,
     content: [
-      { type: 'text', text: `AutoContext ready — ${annCount} annotation(s) for ${state.schema.length} column(s).` },
+      { type: 'text', text: rendered },
     ],
     isError: false,
     details: {
@@ -915,7 +920,13 @@ export async function ensureAutoContext(parent: MXAgent): Promise<void> {
   // dispatch's natural wrapper off, on hit dispatch never ran.
   const wrapperId = gen_id();
   parent.toolThread.push(buildSynthAssistant(wrapperId, '<cached AutoContext>'));
-  parent.toolThread.push(buildWrapperToolResult(wrapperId, state));
+  const wrapper = buildWrapperToolResult(wrapperId, state);
+  parent.toolThread.push(wrapper);
+
+  // Stash the rendered text on the context so the runner can persist it as
+  // `_autocontext.txt` for offline inspection.
+  const renderedText = (wrapper.content as Array<{ type: string; text: string }>)[0]?.text;
+  if (renderedText) ctx.autoContextRendered = renderedText;
 }
 
 /** Splice the (synth assistant, agent-wrapper toolResult) pair for `id` out
@@ -968,4 +979,89 @@ export function renderGeneratedContextFromToolThread(parent: MXAgent): string | 
     new Map(rowCountEntries),
     payload,
   );
+}
+
+// ─── Slice 10: Standalone auto-context runner ────────────────────────────────
+
+/** Result of running auto-context for a single slot. */
+export interface AutoContextRunResult {
+  catalogKey: string;
+  renderedText: string;
+  log: ConversationLog;
+  annotationCount: number;
+}
+
+/**
+ * Run AutoContextAgent as a standalone pre-step (outside any analyst agent).
+ * Creates its own Orchestrator, dispatches the agent, parses + verifies
+ * annotations, and returns the rendered markdown + conversation log.
+ *
+ * This is the entry point for the benchmark runner's auto-context pre-step.
+ * It reuses all existing machinery (catalog, parsing, join verification)
+ * but doesn't touch any parent agent's toolThread.
+ */
+export async function runAutoContextForSlot(
+  connections: ConnectionInfo[],
+  datasetKey: string,
+  catalogKey: string,
+  registrables: RegistrableClass[],
+): Promise<AutoContextRunResult> {
+  if (connections.length === 0) {
+    throw new Error('No connections provided for auto-context.');
+  }
+
+  // 1. Catalog read (cached at the catalog layer per dataset+slot).
+  const catalogCacheKey = `auto-${catalogKey}`;
+  const { catalog } = await getCatalogStore(connections, catalogCacheKey, undefined, datasetKey);
+  const { schema, statsByCol, rowCountByTable } = catalogProjection(catalog);
+  if (schema.length === 0) {
+    throw new Error('Empty schema — no columns to annotate.');
+  }
+
+  // 2. Prepare agent input.
+  const idMap = assignCatalogIds(schema);
+  const catalogText = renderCatalogForAgent(schema, idMap, statsByCol, rowCountByTable);
+
+  // 3. Run AutoContextAgent in its own Orchestrator.
+  const orch = new Orchestrator(registrables);
+  const ctx: BenchmarkAnalystContext = { connections, datasetKey, catalogKey };
+  const agent = new AutoContextAgent(orch, { userMessage: catalogText }, ctx);
+
+  const stream = orch.run(agent as unknown as MXAgent);
+  for await (const _ of stream) { /* drain */ }
+  await stream.result();
+
+  const log = orch.log as ConversationLog;
+
+  // 4. Parse annotations from the log. The agent is the root, so its tool
+  //    results have `parent_id === agent.id`.
+  const parsed = parseAnnotations(log as ConversationLogEntry[], agent.id, idMap);
+  if (!parsed) {
+    throw new Error('AutoContextAgent did not produce a SubmitSchemaInfo result.');
+  }
+
+  // 5. Build connectors for join verification.
+  const connectorsByName = new Map<string, NodeConnector>();
+  for (const entry of connections) {
+    if (!entry.config) continue;
+    const c = await getOrCreateBenchmarkConnector(
+      entry.name, entry.dialect, entry.config, { datasetKey },
+    );
+    connectorsByName.set(entry.name, c);
+  }
+  const verified = await verifyJoinsMechanically(
+    parsed,
+    idMap,
+    (from, to) => probeJoinUsingConnectors(connectorsByName, from, to),
+  );
+
+  // 6. Render final markdown.
+  const renderedText = renderGeneratedContext(schema, idMap, statsByCol, rowCountByTable, verified);
+
+  return {
+    catalogKey,
+    renderedText,
+    log,
+    annotationCount: verified.annotations.length,
+  };
 }

@@ -1,7 +1,6 @@
 import {
   Type,
   registerFauxProvider,
-  type AssistantMessage,
   type Tool,
   type TSchema,
 } from '@mariozechner/pi-ai';
@@ -13,10 +12,6 @@ import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
-import {
-  ensureAutoContext,
-  renderGeneratedContextFromToolThread,
-} from './v2/auto-context/auto-context';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -34,10 +29,10 @@ const BenchmarkAnalystAgentParams = Type.Object({
  * access, no AppState wrapping. Subclasses (e.g. RemoteAnalystAgent) extend
  * with file tools, app context, and a richer user-content shape.
  *
- * AutoContext orchestration lives in `v2/auto-context/auto-context.ts` —
- * this class is the thin integration point that calls `ensureAutoContext`
- * before the analyst's first LLM turn and `renderGeneratedContextFromToolThread`
- * when building the system prompt.
+ * AutoContext orchestration lives in `v2/auto-context/auto-context.ts`.
+ * The benchmark runner runs it as a pre-step via `runAutoContextForSlot`
+ * and passes the rendered markdown via `ctx.autoContextRendered` or
+ * `ctx.autoContextBySlot`. This class reads it in `getSystemPrompt()`.
  */
 export class BenchmarkAnalystAgent<
   TContext extends BenchmarkAnalystContext = BenchmarkAnalystContext,
@@ -57,44 +52,18 @@ export class BenchmarkAnalystAgent<
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
-  async run(): Promise<AssistantMessage> {
-    const ctx = this.context;
-    // AutoContext is benchmark-only: production paths (RemoteAnalystAgent
-    // and friends) extend this class without a `datasetKey`, so they
-    // bypass the upfront orientation pass entirely. `ensureAutoContext`
-    // returns immediately when `ctx.datasetKey` is unset.
-    if (!ctx.autoContextAttempts) ctx.autoContextAttempts = [];
-    if (ctx.datasetKey) {
-      const t0 = Date.now();
-      try {
-        await ensureAutoContext(this as unknown as MXAgent);
-        ctx.autoContextAttempts.push({ status: 'ok', durationMs: Date.now() - t0 });
-      } catch (e) {
-        // Best-effort orientation. Failures (DB blip, LLM error, agent
-        // produced no SubmitSchemaInfo result) must not abort the run —
-        // the analyst proceeds with no `<GeneratedContext>` block. We
-        // record the outcome on `ctx.autoContextAttempts` so the runner
-        // can write it into the persisted row, AND log to stderr.
-        const msg = e instanceof Error ? e.message : String(e);
-        ctx.autoContextAttempts.push({ status: 'failed', reason: msg, durationMs: Date.now() - t0 });
-        const detail = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
-        console.error(`[BenchmarkAnalystAgent] AutoContext failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${detail}`);
-      }
-    } else {
-      // Production / unset-datasetKey path — `ensureAutoContext` would
-      // return early. Record as skipped so the eval output is uniform.
-      ctx.autoContextAttempts.push({ status: 'skipped' });
-    }
-    return super.run();
-  }
-
   protected getSystemPrompt(): string {
     const ToolCls = this.constructor as typeof BenchmarkAnalystAgent;
     const toolNames = ToolCls.tools.map((t) => `\`${t.name}\``).join(', ');
     const visibleConnections = publicConnectionMetadata(this.context.connections);
     const dialects = extractDialects(this.context.connections ?? []);
     const dialectHints = renderDialectHints(dialects);
-    const generatedContext = renderGeneratedContextFromToolThread(this as unknown as MXAgent);
+    const MAX_AUTOCTX_CHARS = 30_000;
+    const rawGeneratedContext = this.context.autoContextRendered
+      ?? this.context.autoContextBySlot?.[this.context.catalogKey ?? 'default'];
+    const generatedContext = rawGeneratedContext && rawGeneratedContext.length > MAX_AUTOCTX_CHARS
+      ? rawGeneratedContext.slice(0, MAX_AUTOCTX_CHARS) + '\n\n... (truncated)'
+      : rawGeneratedContext;
 
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
 You have access to the following tools: ${toolNames}.
@@ -107,6 +76,7 @@ ${dialectHints}
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
   - Two context sections appear below: \`UserContext\` (authoritative human-written dataset documentation) and \`GeneratedContext\` (schema layout, descriptions for non-self-evident columns, and verified joins computed from the actual data). \`UserContext\` is authoritative for column meanings, business rules, and how to interpret the question. \`GeneratedContext\` is authoritative for what the data actually looks like (joins, encodings, format quirks). When they disagree on intent, prefer \`UserContext\`; when \`GeneratedContext\` reveals a quirk not mentioned in \`UserContext\`, use it. SearchDBSchema is only for details neither section surfaces.
+  - DO NOT use world-knowledge or assumptions about the data. Rely ENTIRELY on the provided data.
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For each connection, see its "dialect" field above and the per-dialect notes below for syntax + cross-DB chaining details. Fix any syntax errors and try again until you get a valid response.
 

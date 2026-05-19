@@ -17,6 +17,7 @@ import {
   DAB_DOUBLE_CHECK,
   DAB_V2,
   DAB_ROW_INDEX,
+  DAB_AUTOCTX_ONLY,
   MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY,
   MX_API_BASE_URL,
@@ -290,6 +291,8 @@ async function main() {
         rowTimeoutMs: questionTimeoutSec * 1000,
         timesRun,
         rowIndices,
+        autoContextSlots: doubleCheck ? ['agent-a', 'agent-b'] : ['default'],
+        autoContextOnly: DAB_AUTOCTX_ONLY === '1' || DAB_AUTOCTX_ONLY === 'true',
       }),
     ),
   );
