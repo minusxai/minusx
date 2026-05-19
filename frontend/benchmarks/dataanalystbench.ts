@@ -38,7 +38,7 @@ import {
   V2DoubleCheckBenchmarkAgent,
   V2_DATA_TOOLS,
 } from '@/agents/benchmark-analyst/v2';
-import { AutoContextAgent } from '@/agents/benchmark-analyst/v2/auto-context';
+import { AutoContextAgent, SubmitSchemaInfo } from '@/agents/benchmark-analyst/v2/auto-context';
 import { runBenchmark, logHeader, logSummary } from './runner';
 
 // ── Config ────────────────────────────────────────────────────
@@ -145,9 +145,9 @@ const RootAgent = useV2
 
 // AutoContextAgent is spawned by BenchmarkAnalystAgent (and its V2 /
 // DoubleCheck variants) at the start of every benchmark row, so every
-// registrables list must include it. The agent emits its payload as
-// tagged text in its final response — no separate finisher tool.
-const AUTO_CONTEXT_REGISTRABLES = [AutoContextAgent];
+// registrables list must include both it and the `SubmitSchemaInfo`
+// finisher tool it dispatches.
+const AUTO_CONTEXT_REGISTRABLES = [AutoContextAgent, SubmitSchemaInfo];
 
 const registrables = useV2
   ? doubleCheck
