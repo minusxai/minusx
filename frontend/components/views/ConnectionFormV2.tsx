@@ -426,13 +426,15 @@ export default function ConnectionFormV2({
           service_account_json: serviceAccountJson ? '***REDACTED***' : ''
         }
       : content.type === 'postgresql'
-      ? {
-          host: config.host || 'localhost',
-          port: config.port || 5432,
-          database: config.database || '',
-          username: config.username ? '***REDACTED***' : '',
-          password: config.password ? '***REDACTED***' : ''
-        }
+      ? (config.connection_string
+        ? { connection_string: '***REDACTED***' }
+        : {
+            host: config.host || 'localhost',
+            port: config.port || 5432,
+            database: config.database || '',
+            username: config.username ? '***REDACTED***' : '',
+            password: config.password ? '***REDACTED***' : ''
+          })
       : content.type === 'csv'
       ? {
           files: config.files || []
@@ -493,7 +495,11 @@ export default function ConnectionFormV2({
         return false;
       }
     } else if (content.type === 'postgresql') {
-      if (!config.database || !config.username) return false;
+      if (config.connection_string) {
+        if (!config.connection_string.trim()) return false;
+      } else {
+        if (!config.database || !config.username) return false;
+      }
     } else if (content.type === 'csv') {
       if (fileName !== 'static' && !config.files?.length) return false;
     } else if (content.type === 'google-sheets') {
@@ -719,13 +725,20 @@ export default function ConnectionFormV2({
         return;
       }
     } else if (content.type === 'postgresql') {
-      if (!config.database) {
-        setNameError('Database name is required');
-        return;
-      }
-      if (!config.username) {
-        setNameError('Username is required');
-        return;
+      if (config.connection_string) {
+        if (!config.connection_string.trim()) {
+          setNameError('Connection string is required');
+          return;
+        }
+      } else {
+        if (!config.database) {
+          setNameError('Database name is required');
+          return;
+        }
+        if (!config.username) {
+          setNameError('Username is required');
+          return;
+        }
       }
     } else if (content.type === 'csv' && fileName !== 'static') {
       // For non-static CSV connections, validate that files have been uploaded
