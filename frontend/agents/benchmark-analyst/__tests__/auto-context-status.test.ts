@@ -59,6 +59,47 @@ describe('BenchmarkAnalystAgent — AutoContext outcome on ctx.autoContextAttemp
     expect(ctx.autoContextAttempts![0].reason).toContain('catalog probe timed out');
   });
 
+  it('REGRESSION: without pre-init on the row ctx, sub-agent pushes do NOT propagate (the bug we are fixing)', async () => {
+    vi.spyOn(autoContextModule, 'ensureAutoContext').mockImplementation(async () => { /* ok */ });
+    // Row-level ctx: NOT pre-initialised (the broken pre-fix state).
+    const rowCtx: BenchmarkAnalystContext = {
+      datasetKey: 'd1', contextDocs: 'x',
+      connections: [{ name: 'c', dialect: 'sqlite', config: { file_path: '/x' } }],
+    };
+    // Orchestrator-style shallow merge with an override.
+    const subAgentCtx: BenchmarkAnalystContext = { ...rowCtx, catalogKey: 'agent-a' };
+    await runOnce(subAgentCtx);
+    // Sub-agent's lazy init created the array on ITS OWN object…
+    expect(subAgentCtx.autoContextAttempts).toHaveLength(1);
+    // …but the row's ctx never saw it. This is the silent-data-loss bug
+    // that surfaced as `"summary": "none"` on every row of the actual
+    // benchmark output. Runner's pre-init (added in the same commit)
+    // closes this by sharing one array reference across all sub-agents.
+    expect(rowCtx.autoContextAttempts).toBeUndefined();
+  });
+
+  it('sub-agent attempts propagate up when ctx.autoContextAttempts is pre-initialised on the row-level ctx (DoubleCheck shape)', async () => {
+    vi.spyOn(autoContextModule, 'ensureAutoContext').mockImplementation(async () => { /* ok */ });
+    // Row-level ctx: pre-initialised by the runner.
+    const rowCtx: BenchmarkAnalystContext = {
+      datasetKey: 'd1', contextDocs: 'x',
+      connections: [{ name: 'c', dialect: 'sqlite', config: { file_path: '/x' } }],
+      autoContextAttempts: [], // ← pre-init by runner so the array reference is shared
+    };
+    // Simulate the orchestrator's shallow-merge of a per-slot context
+    // override (e.g. DoubleCheck setting `catalogKey: 'agent-a'`):
+    //   const effectiveContext = { ...parent.context, ...ctxOverride };
+    // The override creates a new top-level object but the array reference
+    // is preserved — so a `push` inside the sub-agent must reach `rowCtx`.
+    const subAgentCtx: BenchmarkAnalystContext = { ...rowCtx, catalogKey: 'agent-a' };
+    await runOnce(subAgentCtx);
+    expect(rowCtx.autoContextAttempts).toHaveLength(1);
+    expect(rowCtx.autoContextAttempts![0].status).toBe('ok');
+    // The sub-agent's ctx is a different object, but its array refers to
+    // the same memory as the row's ctx — confirming the fix.
+    expect(subAgentCtx.autoContextAttempts).toBe(rowCtx.autoContextAttempts);
+  });
+
   it('records status:skipped when datasetKey is unset (production path)', async () => {
     const ensureSpy = vi.spyOn(autoContextModule, 'ensureAutoContext');
     const ctx: BenchmarkAnalystContext = {

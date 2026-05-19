@@ -371,6 +371,16 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       // key isolates them. `label` is the dataset's input.jsonl basename
       // — unique per dataset within a benchmark process.
       datasetKey: label,
+      // Pre-initialise the AutoContext attempts log on the row ctx so
+      // sub-agents' pushes propagate up. The orchestrator's context-
+      // override path shallow-merges `{...parentCtx, ...overrides}`,
+      // which preserves the array reference — but only if the array
+      // already exists. Without this pre-init, each sub-agent's lazy
+      // `ctx.autoContextAttempts = []` lands on its own (override) ctx
+      // object, never reaching the row-level ctx the runner reads at
+      // result-write time. (Surfaced as `"summary": "none"` on every
+      // row of GITHUB_REPOS output before this fix.)
+      autoContextAttempts: [],
     };
     rowContexts.set(i, ctx);
   }
