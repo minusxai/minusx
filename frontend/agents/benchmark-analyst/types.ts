@@ -85,6 +85,26 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * back to the bare connection name.
    */
   datasetKey?: string;
+  /**
+   * Per-row log of AutoContext outcomes. Each `ensureAutoContext` call
+   * (one per sub-agent in DoubleCheck) appends an entry. The benchmark
+   * runner reads this after the row completes and writes a top-level
+   * `autoContext` summary onto the persisted `BenchmarkResult` so we
+   * can distinguish "agent reasoning failed" from "AutoContext silently
+   * failed leaving the agent flying blind" in the eval output.
+   * Initialised lazily by the agent — `undefined` means no attempt yet.
+   */
+  autoContextAttempts?: AutoContextAttempt[];
+}
+
+export interface AutoContextAttempt {
+  /** 'ok' = ran and produced a verified payload; 'skipped' = no datasetKey
+   *  or no connections (production path); 'failed' = caught exception. */
+  status: 'ok' | 'failed' | 'skipped';
+  /** Caught error message when `status === 'failed'`. */
+  reason?: string;
+  /** Wall-clock duration of the attempt in ms. */
+  durationMs?: number;
 }
 
 /**

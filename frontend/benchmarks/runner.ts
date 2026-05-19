@@ -10,7 +10,7 @@ import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
-import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
+import type { AutoContextAttempt, BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { ConversationLog } from '@/orchestrator/types';
 import { createSemaphore, parseConcurrencyLimit } from '@/orchestrator/concurrency';
 
@@ -121,6 +121,28 @@ export interface BenchmarkResult {
   connections?: BenchmarkConnectionEntry[];
   /** Short git commit hash at the time of the benchmark run. */
   git_commit?: string;
+  /** AutoContext orientation outcome for this row. Records each
+   *  `ensureAutoContext` attempt (one per sub-agent in DoubleCheck).
+   *  `summary` aggregates across attempts:
+   *    - 'ok'      → at least one attempt succeeded
+   *    - 'failed'  → all attempts failed
+   *    - 'skipped' → all attempts skipped (production path / no datasetKey)
+   *    - 'none'    → no attempts recorded (legacy / unexpected)
+   *  Surfaced so the eval JSONL can distinguish "agent reasoning failed"
+   *  from "AutoContext silently failed and the agent ran blind". */
+  autoContext?: {
+    summary: 'ok' | 'failed' | 'skipped' | 'none';
+    attempts: AutoContextAttempt[];
+  };
+}
+
+function summariseAutoContext(attempts: AutoContextAttempt[] | undefined): BenchmarkResult['autoContext'] {
+  if (!attempts || attempts.length === 0) return { summary: 'none', attempts: [] };
+  const summary: 'ok' | 'failed' | 'skipped' =
+    attempts.some((a) => a.status === 'ok') ? 'ok'
+    : attempts.every((a) => a.status === 'skipped') ? 'skipped'
+    : 'failed';
+  return { summary, attempts };
 }
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────
@@ -586,7 +608,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
 
     // AutoContext's tool calls already live in the conversation log under
     // the `AutoContextAgent` invocation — the benchmark viewer renders
-    // them as a normal sub-agent. No separate per-row snapshot needed.
+    // them as a normal sub-agent. Top-level `autoContext` summary lets
+    // post-hoc analysis distinguish "AutoContext silently failed" from
+    // "agent reasoning was wrong" without scanning the log.
     const result: BenchmarkResult = {
       input_index: rowIdx,
       input: state.row,
@@ -597,6 +621,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       error: firstError,
       connections: entries,
       git_commit: GIT_COMMIT,
+      autoContext: summariseAutoContext(ctx.autoContextAttempts),
     };
     appendFileSync(outputPath, JSON.stringify(result) + '\n');
 

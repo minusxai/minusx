@@ -479,43 +479,49 @@ async function profileBigQuery(tables: TableEntry[], queryFn: QueryFn): Promise<
 // ─── Generic SQL Strategy ────────────────────────────────────────────────────
 
 async function profileGeneric(tables: TableEntry[], queryFn: QueryFn, quoteStyle: QuoteStyle): Promise<EnrichedTable[]> {
-  const results: EnrichedTable[] = [];
+  // Tables are independent — profile them in parallel. The connector
+  // serializes its own work appropriately (worker pool for sqlite,
+  // single-connection serialization for postgres/duckdb/etc.), so
+  // dispatching all at once does not over-saturate.
+  const settled = await Promise.all(
+    tables.map(async ({ schema, table, columns }): Promise<EnrichedTable | null> => {
+      try {
+        const limitedCols = columns.slice(0, MAX_COLUMNS_GENERIC);
+        const parts: string[] = ['COUNT(*) AS _row_count'];
+        for (const col of limitedCols) {
+          const qc = qi(col.name, quoteStyle);
+          parts.push(`COUNT(DISTINCT ${qc}) AS ${qi(`dist_${col.name}`, quoteStyle)}`);
+          parts.push(`SUM(CASE WHEN ${qc} IS NULL THEN 1 ELSE 0 END) AS ${qi(`null_${col.name}`, quoteStyle)}`);
+        }
 
-  for (const { schema, table, columns } of tables) {
-    try {
-      const limitedCols = columns.slice(0, MAX_COLUMNS_GENERIC);
-      const parts: string[] = ['COUNT(*) AS _row_count'];
-      for (const col of limitedCols) {
-        const qc = qi(col.name, quoteStyle);
-        parts.push(`COUNT(DISTINCT ${qc}) AS ${qi(`dist_${col.name}`, quoteStyle)}`);
-        parts.push(`SUM(CASE WHEN ${qc} IS NULL THEN 1 ELSE 0 END) AS ${qi(`null_${col.name}`, quoteStyle)}`);
+        const aggResult = await queryFn(`SELECT ${parts.join(', ')} FROM ${qualifiedTable(schema, table, quoteStyle)}`);
+        const aggRow = aggResult.rows[0] ?? {};
+        const rowCount = Number(aggRow._row_count ?? 0);
+
+        const categoricals: string[] = [];
+        const enrichedCols: SchemaColumn[] = [];
+
+        for (const col of limitedCols) {
+          const nDistinct = Math.min(Number(aggRow[`dist_${col.name}`] ?? 0), rowCount);
+          const nullCount = Number(aggRow[`null_${col.name}`] ?? 0);
+          const classification = classifyColumn(col.type, nDistinct, rowCount);
+
+          enrichedCols.push(buildColumn(col, classification, { nullCount, nDistinct }));
+          if (classification === 'categorical') categoricals.push(col.name);
+        }
+
+        if (categoricals.length > 0) {
+          await fetchTopValues(categoricals, schema, table, rowCount, enrichedCols, queryFn, quoteStyle);
+        }
+
+        return { schema, table, columns: enrichedCols };
+      } catch {
+        return null; // skip table on error — same semantics as before
       }
+    }),
+  );
 
-      const aggResult = await queryFn(`SELECT ${parts.join(', ')} FROM ${qualifiedTable(schema, table, quoteStyle)}`);
-      const aggRow = aggResult.rows[0] ?? {};
-      const rowCount = Number(aggRow._row_count ?? 0);
-
-      const categoricals: string[] = [];
-      const enrichedCols: SchemaColumn[] = [];
-
-      for (const col of limitedCols) {
-        const nDistinct = Math.min(Number(aggRow[`dist_${col.name}`] ?? 0), rowCount);
-        const nullCount = Number(aggRow[`null_${col.name}`] ?? 0);
-        const classification = classifyColumn(col.type, nDistinct, rowCount);
-
-        enrichedCols.push(buildColumn(col, classification, { nullCount, nDistinct }));
-        if (classification === 'categorical') categoricals.push(col.name);
-      }
-
-      if (categoricals.length > 0) {
-        await fetchTopValues(categoricals, schema, table, rowCount, enrichedCols, queryFn, quoteStyle);
-      }
-
-      results.push({ schema, table, columns: enrichedCols });
-    } catch { /* skip table */ }
-  }
-
-  return results;
+  return settled.filter((t): t is EnrichedTable => t !== null);
 }
 
 // ─── Shared Helpers ──────────────────────────────────────────────────────────
@@ -524,7 +530,9 @@ async function fetchTopValues(
   categoricals: string[], schema: string, table: string, rowCount: number,
   columns: SchemaColumn[], queryFn: QueryFn, quoteStyle: QuoteStyle,
 ): Promise<void> {
-  for (const colName of categoricals) {
+  // Each column's top-values query is independent — run them in
+  // parallel. The connector serializes its own work where required.
+  await Promise.all(categoricals.map(async (colName) => {
     try {
       const qc = qi(colName, quoteStyle);
       const result = await queryFn(
@@ -539,7 +547,7 @@ async function fetchTopValues(
         }));
       }
     } catch { /* skip */ }
-  }
+  }));
 }
 
 function parsePgArray(valsStr: string, freqsStr: string, rowCount: number): ColumnMeta['topValues'] {

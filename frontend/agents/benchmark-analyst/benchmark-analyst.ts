@@ -61,17 +61,27 @@ export class BenchmarkAnalystAgent<
     // and friends) extend this class without a `datasetKey`, so they
     // bypass the upfront orientation pass entirely. `ensureAutoContext`
     // returns immediately when `ctx.datasetKey` is unset.
+    if (!ctx.autoContextAttempts) ctx.autoContextAttempts = [];
     if (ctx.datasetKey) {
+      const t0 = Date.now();
       try {
         await ensureAutoContext(this as unknown as MXAgent);
+        ctx.autoContextAttempts.push({ status: 'ok', durationMs: Date.now() - t0 });
       } catch (e) {
         // Best-effort orientation. Failures (DB blip, LLM error, agent
         // produced no SubmitSchemaInfo result) must not abort the run —
-        // the analyst proceeds with no `<GeneratedContext>` block. Surface
-        // in stderr so silent failures are diagnosable.
-        const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
-        console.error(`[BenchmarkAnalystAgent] AutoContext failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${msg}`);
+        // the analyst proceeds with no `<GeneratedContext>` block. We
+        // record the outcome on `ctx.autoContextAttempts` so the runner
+        // can write it into the persisted row, AND log to stderr.
+        const msg = e instanceof Error ? e.message : String(e);
+        ctx.autoContextAttempts.push({ status: 'failed', reason: msg, durationMs: Date.now() - t0 });
+        const detail = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
+        console.error(`[BenchmarkAnalystAgent] AutoContext failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${detail}`);
       }
+    } else {
+      // Production / unset-datasetKey path — `ensureAutoContext` would
+      // return early. Record as skipped so the eval output is uniform.
+      ctx.autoContextAttempts.push({ status: 'skipped' });
     }
     return super.run();
   }
