@@ -3,38 +3,19 @@ import {
   registerFauxProvider,
   type AssistantMessage,
   type Tool,
-  type ToolResultMessage,
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
-import type { NodeConnector } from '@/lib/connections/base';
-import { gen_id } from '@/orchestrator/utils';
 import { getAnalystModel } from '@/agents/analyst/model-config';
 import { CatalogSearchDBSchema, ChainedExecuteQuery, FuzzyMatch } from './db-tools';
 import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
-import { getOrCreateBenchmarkConnector } from './shared-duckdb';
-import { getCatalogStore } from './v2/catalog';
-import { getLighterModel } from './v2/data-tool-base';
-import type { PromptPassCallLLM } from './v2/prompt-pass';
 import {
-  AUTO_CONTEXT_MAX_CHARS,
-  AutoContextAgent,
-  autoContextStore,
-  buildAutoContextCacheHitWrapper,
-  buildAutoContextSynthAssistant,
-  buildCatalogSummary,
-  catalogProjection,
-  estimateSchemaChars,
-  extractAutoContextPayload,
-  filterSchemaByQuestion,
-  fingerprint,
-  makeFetchTableSample,
-  renderAutoContextPayload,
-  renderCatalogSummary,
-} from './v2/auto-context';
+  ensureAutoContext,
+  renderGeneratedContextFromToolThread,
+} from './v2/auto-context/auto-context';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -52,11 +33,10 @@ const BenchmarkAnalystAgentParams = Type.Object({
  * access, no AppState wrapping. Subclasses (e.g. RemoteAnalystAgent) extend
  * with file tools, app context, and a richer user-content shape.
  *
- * Uses the `Base*` tool variants (`BaseSearchDBSchema`, `BaseExecuteQuery`)
- * which build NodeConnectors from `context.connections[*].config` at
- * `run()`-time and route queries directly to them. Production analyst
- * subclasses swap to the production tool variants (same `schema.name`,
- * different `run()`).
+ * AutoContext orchestration lives in `v2/auto-context/auto-context.ts` —
+ * this class is the thin integration point that calls `ensureAutoContext`
+ * before the analyst's first LLM turn and `renderGeneratedContextFromToolThread`
+ * when building the system prompt.
  */
 export class BenchmarkAnalystAgent<
   TContext extends BenchmarkAnalystContext = BenchmarkAnalystContext,
@@ -79,159 +59,21 @@ export class BenchmarkAnalystAgent<
     const ctx = this.context;
     // AutoContext is benchmark-only: production paths (RemoteAnalystAgent
     // and friends) extend this class without a `datasetKey`, so they
-    // bypass the upfront orientation pass entirely. The runner at
-    // `frontend/benchmarks/runner.ts` always sets `datasetKey` on the
-    // context, so benchmark rows always trigger it.
+    // bypass the upfront orientation pass entirely. `ensureAutoContext`
+    // returns immediately when `ctx.datasetKey` is unset.
     if (ctx.datasetKey) {
       try {
-        await this.ensureAutoContext();
+        await ensureAutoContext(this as unknown as MXAgent);
       } catch (e) {
         // Best-effort orientation. Failures (DB blip, LLM error, agent
-        // produced no valid <AutoContext> payload) must not abort the
-        // run. Surface in stderr so silent failures are diagnosable.
+        // produced no SubmitSchemaInfo result) must not abort the run —
+        // the analyst proceeds with no `<GeneratedContext>` block. Surface
+        // in stderr so silent failures are diagnosable.
         const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
         console.error(`[BenchmarkAnalystAgent] AutoContext failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${msg}`);
       }
     }
     return super.run();
-  }
-
-  /**
-   * Make sure `this.toolThread` carries an `AutoContextAgent` wrapper that
-   * `getSystemPrompt()` can read. Two paths:
-   *
-   * - Cache miss: builds the catalog summary, then
-   *   `this.orchestrator.dispatch(synth, this)`. The orchestrator pushes
-   *   the synth `assistant{toolCall}` and the wrapped `toolResult` onto
-   *   `this.toolThread` automatically. We then extract the parsed payload
-   *   for the cache.
-   * - Cache hit: skips the dispatch. We manually push a synthetic
-   *   `(assistant, toolResult)` pair onto `this.toolThread` carrying the
-   *   cached payload — `getSystemPrompt()` finds it the same way as on a
-   *   cache-miss row.
-   *
-   * Cache key: `${datasetKey}:${slot}:${suffix}` where slot is
-   * `ctx.catalogKey` (DoubleCheck uses `agent-a` / `agent-b` for slot
-   * isolation across the two sub-analysts) and suffix is `'full'` for
-   * the small-schema path or `'f:' + fingerprint(allowedTableIds)` when
-   * the per-question filter step fires.
-   */
-  protected async ensureAutoContext(): Promise<void> {
-    const ctx = this.context;
-    const userMessage = (this.parameters as { userMessage: string }).userMessage;
-    const slot = ctx.catalogKey ?? 'default';
-
-    // 1) Project the catalog. The catalog itself is cached at the catalog
-    //    layer per `(datasetKey, catalogCacheKey)`; we read it cheap.
-    const catalogCacheKey = `auto-${slot}`;
-    const { catalog } = await getCatalogStore(ctx.connections, catalogCacheKey, undefined, ctx.datasetKey!);
-    const { schema, statsByCol, rowCountByTable } = catalogProjection(catalog);
-    if (schema.length === 0) return undefined;
-
-    // 2) Filter step (per-question) when the schema exceeds budget.
-    const callLLM: PromptPassCallLLM = (m, c) =>
-      this.orchestrator.callLLM(m, c, this.id, { maxTokens: 4096 });
-    const model = getLighterModel();
-
-    let effectiveSchema = schema;
-    let cacheSuffix: string;
-    if (estimateSchemaChars(schema) > AUTO_CONTEXT_MAX_CHARS && userMessage) {
-      const allowed = await filterSchemaByQuestion(schema, userMessage, ctx.contextDocs, model, callLLM);
-      if (allowed.size > 0) {
-        effectiveSchema = schema.filter(
-          (c) => allowed.has(`${c.connection}.${c.schema}.${c.table}`),
-        );
-        cacheSuffix = `f:${fingerprint(allowed)}`;
-      } else {
-        cacheSuffix = 'full';
-      }
-    } else {
-      cacheSuffix = 'full';
-    }
-    const cacheKey = `${ctx.datasetKey}:${slot}:${cacheSuffix}`;
-
-    // 3) Cache lookup. CRITICAL: between `.get()` and `.set()` there must
-    //    be NO awaits — otherwise two parallel rows for the same dataset
-    //    both miss, both dispatch, and we waste an agent run. All the
-    //    heavy lifting (connectors, catalog summary, dispatch) happens
-    //    inside the in-flight Promise we insert into the cache before
-    //    any of those awaits. Concurrent rows that hit `.get()` after
-    //    the insert see the in-flight Promise and share its result.
-    const dispatchId = gen_id();
-    let payloadPromise = autoContextStore.get(cacheKey);
-    const wasCacheMiss = !payloadPromise;
-    if (wasCacheMiss) {
-      payloadPromise = (async () => {
-        // Build connectors + catalog summary INSIDE the Promise.
-        const connectorsByName = new Map<string, NodeConnector>();
-        const dialectsByName = new Map<string, string>();
-        for (const entry of ctx.connections ?? []) {
-          if (!entry.config) continue;
-          const c = await getOrCreateBenchmarkConnector(
-            entry.name, entry.dialect, entry.config, { datasetKey: ctx.datasetKey },
-          );
-          connectorsByName.set(entry.name, c);
-          dialectsByName.set(entry.name, entry.dialect);
-        }
-        const fetchSample = makeFetchTableSample(effectiveSchema, statsByCol, connectorsByName, dialectsByName);
-        const summary = await buildCatalogSummary(
-          effectiveSchema, statsByCol, rowCountByTable, fetchSample,
-        );
-        const catalogSummaryText = renderCatalogSummary(summary);
-
-        const synth = buildAutoContextSynthAssistant(dispatchId, catalogSummaryText);
-        await this.orchestrator.dispatch(synth, this);
-        // Wrapper is now in this.toolThread (the orchestrator pushed the
-        // synth + wrapped toolResult pair onto it during dispatch).
-        const wrapper = this.toolThread.find(
-          (m) => 'role' in m && m.role === 'toolResult' && m.toolCallId === dispatchId,
-        ) as ToolResultMessage | undefined;
-        const result = extractAutoContextPayload(wrapper);
-        if (!result.ok) {
-          throw new Error(
-            `AutoContextAgent produced no valid <AutoContext> payload (reason=${result.reason}). Final agent text:\n${result.finalText.slice(0, 1500)}`,
-          );
-        }
-        return result.payload;
-      })().catch((err) => {
-        autoContextStore.delete(cacheKey);
-        throw err;
-      });
-      // Synchronous set — race-locks against concurrent rows.
-      autoContextStore.set(cacheKey, payloadPromise);
-    }
-
-    // After the miss-branch insert above (or because of an existing
-    // entry), payloadPromise is guaranteed defined.
-    const payload = await payloadPromise!;
-
-    if (!wasCacheMiss) {
-      // Cache hit: dispatch ran on whichever agent populated the cache
-      // (a different row, possibly still in flight). This row's
-      // toolThread is empty of AutoContext — synthesize the (synth,
-      // wrapper) pair and push so `getSystemPrompt()` finds it the same
-      // way it would on a cache-miss row.
-      this.toolThread.push(
-        buildAutoContextSynthAssistant(dispatchId, '<cached AutoContext>'),
-        buildAutoContextCacheHitWrapper(dispatchId, payload),
-      );
-    }
-  }
-
-  /** Render the AutoContext block from the `AutoContextAgent` toolResult
-   *  currently in `this.toolThread`, if any. `ensureAutoContext()` is
-   *  responsible for making sure that wrapper is present (either via
-   *  dispatch on cache miss, or by synthesizing + pushing on cache hit). */
-  protected renderGeneratedContext(): string | undefined {
-    const wrapper = this.toolThread.find(
-      (m) =>
-        'role' in m
-        && m.role === 'toolResult'
-        && m.toolName === AutoContextAgent.schema.name,
-    ) as ToolResultMessage | undefined;
-    const r = extractAutoContextPayload(wrapper);
-    if (!r.ok) return undefined;
-    return renderAutoContextPayload(r.payload, AUTO_CONTEXT_MAX_CHARS);
   }
 
   protected getSystemPrompt(): string {
@@ -240,7 +82,7 @@ export class BenchmarkAnalystAgent<
     const visibleConnections = publicConnectionMetadata(this.context.connections);
     const dialects = extractDialects(this.context.connections ?? []);
     const dialectHints = renderDialectHints(dialects);
-    const generatedContext = this.renderGeneratedContext();
+    const generatedContext = renderGeneratedContextFromToolThread(this as unknown as MXAgent);
 
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
 You have access to the following tools: ${toolNames}.
@@ -252,7 +94,7 @@ ${dialectHints}
 
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
-  - Two context sections appear below: \`UserContext\` (authoritative human-written dataset documentation) and \`GeneratedContext\` (schema notes, verified joins, sample rows, and example queries computed from the actual data). \`UserContext\` is authoritative for column meanings, business rules, and how to interpret the question. \`GeneratedContext\` is authoritative for what the data actually looks like (joins, encodings, format quirks). When they disagree on intent, prefer \`UserContext\`; when \`GeneratedContext\` reveals a quirk not mentioned in \`UserContext\`, use it. SearchDBSchema is only for details neither section surfaces.
+  - Two context sections appear below: \`UserContext\` (authoritative human-written dataset documentation) and \`GeneratedContext\` (schema layout, descriptions for non-self-evident columns, and verified joins computed from the actual data). \`UserContext\` is authoritative for column meanings, business rules, and how to interpret the question. \`GeneratedContext\` is authoritative for what the data actually looks like (joins, encodings, format quirks). When they disagree on intent, prefer \`UserContext\`; when \`GeneratedContext\` reveals a quirk not mentioned in \`UserContext\`, use it. SearchDBSchema is only for details neither section surfaces.
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For each connection, see its "dialect" field above and the per-dialect notes below for syntax + cross-DB chaining details. Fix any syntax errors and try again until you get a valid response.
 

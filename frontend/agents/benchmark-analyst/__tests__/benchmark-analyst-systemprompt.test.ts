@@ -5,21 +5,18 @@
  *     the rendered output under `<GeneratedContext>`
  *   - omits `<GeneratedContext>` when no wrapper is in `this.toolThread`
  *
- * `ensureAutoContext()` is mocked here to push a synthetic wrapper into
- * `this.toolThread` (the cache-hit code path). Real dispatch + cache logic
- * is covered in `v2/auto-context/__tests__/`.
+ * The module-level `ensureAutoContext` is spied here to push a synthetic
+ * wrapper onto `this.toolThread` (mimicking the cache-hit path). Real
+ * dispatch + cache + verification logic is covered in
+ * `v2/auto-context/__tests__/auto-context.integration.test.ts`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fauxAssistantMessage, type Context, type TextContent } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import { MXAgent } from '@/orchestrator/types';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';
-import {
-  buildAutoContextCacheHitWrapper,
-  buildAutoContextSynthAssistant,
-  type AutoContextPayload,
-} from '../v2/auto-context';
-import { gen_id } from '@/orchestrator/utils';
+import * as autoContextModule from '../v2/auto-context/auto-context';
 
 const REGISTRABLES = [BenchmarkAnalystAgent];
 
@@ -32,36 +29,44 @@ const CTX: BenchmarkAnalystContext = {
 };
 
 const AUTO_CTX_MARKER = 'AUTOCTX_MARKER';
-const STUB_PAYLOAD: AutoContextPayload = {
-  tables: [{
-    connection: 'test_db',
-    schema: 'public',
-    table: 'tbl_with_marker',
-    tableNote: AUTO_CTX_MARKER,
-    columns: [],
-    joins: [],
-  }],
-  examples: [],
-};
+
+// Manually craft the wrapper details so the test doesn't depend on the
+// dispatch + verification flow (covered elsewhere).
+function pushSyntheticWrapper(parent: MXAgent): void {
+  const wrapper = {
+    role: 'toolResult' as const,
+    toolCallId: 'autoctx-stub',
+    toolName: autoContextModule.AutoContextAgent.schema.name,
+    content: [{ type: 'text' as const, text: 'stub' }],
+    isError: false,
+    details: {
+      type: 'auto_context_render_state',
+      schema: [
+        { connection: 'test_db', schema: 'public', table: 'tbl_with_marker', column: 'col_a', type: 'VARCHAR' },
+      ],
+      statsEntries: [],
+      rowCountEntries: [],
+      payload: {
+        annotations: [
+          // Description targeting the table id ("t0" — only one table in the schema).
+          { id: 't0', description: AUTO_CTX_MARKER },
+        ],
+      },
+    },
+    timestamp: Date.now(),
+  };
+  parent.toolThread.push(wrapper);
+}
 
 describe('BenchmarkAnalystAgent system prompt', () => {
   let runSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    // Mock `ensureAutoContext` to push a synthetic wrapper into
-    // `this.toolThread` — same shape `getSystemPrompt()` would see on a
-    // cache-hit row in production. This bypasses the real
-    // dispatch + cache + connector machinery (covered separately in
-    // v2/auto-context/__tests__/).
     runSpy = vi
-      .spyOn(BenchmarkAnalystAgent.prototype as unknown as { ensureAutoContext: () => Promise<void> }, 'ensureAutoContext')
-      .mockImplementation(async function (this: BenchmarkAnalystAgent) {
-        const id = gen_id();
-        this.toolThread.push(
-          buildAutoContextSynthAssistant(id, '<stub>'),
-          buildAutoContextCacheHitWrapper(id, STUB_PAYLOAD),
-        );
+      .spyOn(autoContextModule, 'ensureAutoContext')
+      .mockImplementation(async (parent) => {
+        pushSyntheticWrapper(parent);
       });
   });
 
@@ -108,7 +113,6 @@ describe('BenchmarkAnalystAgent system prompt', () => {
   });
 
   it('omits <GeneratedContext> when ensureAutoContext does not push a wrapper to toolThread', async () => {
-    // Override the default mock: no wrapper pushed at all.
     runSpy.mockImplementation(async () => { /* no-op */ });
     const { systemPrompt } = await captureFirstSystemPromptAndUser();
     expect(systemPrompt).not.toContain('<GeneratedContext>');
