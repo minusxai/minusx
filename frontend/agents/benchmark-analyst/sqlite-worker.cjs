@@ -6,7 +6,7 @@
 // Plain `.cjs` because the frontend package is ESM (`"type": "module"`)
 // but better-sqlite3 only exports CJS. Avoiding the loader gymnastics.
 
-const { parentPort, workerData } = require('node:worker_threads');
+const { parentPort, workerData } = require('worker_threads');
 const Database = require('better-sqlite3');
 
 if (!parentPort) throw new Error('sqlite-worker must be run inside a worker_thread');

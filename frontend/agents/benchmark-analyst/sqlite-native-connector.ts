@@ -1,8 +1,8 @@
 import 'server-only';
 import * as fs from 'fs';
-import { Worker } from 'node:worker_threads';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import {
   NodeConnector,
   type SchemaEntry,
@@ -11,6 +11,25 @@ import {
 } from '@/lib/connections/base';
 import { resolveDuckDbFilePath } from '@/lib/connections/duckdb-connector';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+
+// Load `worker_threads` at runtime. Next.js's Node File Tracer (NFT)
+// panics on ANY syntactic reference to `'worker_threads'` — static
+// import, dynamic `await import(...)`, even `createRequire('worker_threads')`
+// — because at emit time it can't resolve the string into a filesystem
+// path for the `.nft.json` manifest. We defeat the static scanner by
+// computing the module name at runtime from a join, so the literal
+// `'worker_threads'` never appears as a syntactic argument to `require`
+// or `import`.
+//
+// Type-only imports are erased at compile time so they don't reach NFT.
+type WorkerCtor = typeof import('worker_threads').Worker;
+type WorkerInstance = InstanceType<WorkerCtor>;
+
+const nodeRequire = createRequire(import.meta.url);
+function loadWorkerCtor(): WorkerCtor {
+  const moduleName = ['worker', 'threads'].join('_');
+  return (nodeRequire(moduleName) as typeof import('worker_threads')).Worker;
+}
 
 /**
  * Benchmark sqlite connector. Runs queries against the SQLite file via
@@ -47,7 +66,7 @@ interface QueryPayload {
 
 export class BenchmarkSqliteConnector extends NodeConnector {
   private readonly absPath: string;
-  private workers: Worker[] | null = null;
+  private workers: WorkerInstance[] | null = null;
   private nextRequestId = 1;
   private nextWorkerIdx = 0;
   private readonly pending = new Map<number, PendingCall<unknown>>();
@@ -75,7 +94,8 @@ export class BenchmarkSqliteConnector extends NodeConnector {
     const workerPath = join(dirname(fileURLToPath(import.meta.url)), 'sqlite-worker.cjs');
     const n = workerPoolSize();
     const readyPromises: Promise<void>[] = [];
-    const workers: Worker[] = [];
+    const workers: WorkerInstance[] = [];
+    const Worker = loadWorkerCtor();
 
     for (let i = 0; i < n; i++) {
       const worker = new Worker(workerPath, { workerData: { dbPath: this.absPath } });
