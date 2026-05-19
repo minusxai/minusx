@@ -436,9 +436,9 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         table, columns, searchTerm: search_term, schema: schemaName, limit, returnColumns,
       });
 
-      // Semantic expansion: when lexical matching returns nothing,
-      // automatically find semantically similar terms and fuzzy-match those.
-      const shouldExpand = semantic_expansion !== false && result.allEmpty;
+      // Semantic expansion: find semantically similar terms and fuzzy-match
+      // those to augment results (catches synonyms, different vocabulary, etc.).
+      const shouldExpand = semantic_expansion !== false;
       if (shouldExpand) {
         const expandedTerms = await this.getSemanticTerms(connection, table, columns, search_term, schemaName);
         if (expandedTerms.length > 0) {
@@ -448,7 +448,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
             content: [{ type: 'text', text: JSON.stringify({
               searchTerm: search_term,
               results: result.results,
-              note: `No matches found for "${search_term}". Expanding search with semantically similar terms.`,
+              note: result.allEmpty ? `No matches found for "${search_term}". Focus on the semantically similar terms.` : undefined,
               expandedTerms: expandedTerms,
               expandedResults: expandedResult.results,
             }) }],

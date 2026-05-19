@@ -8,6 +8,7 @@ import {
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
 import { CatalogSearchDBSchema, ChainedExecuteQuery, FuzzyMatch } from './db-tools';
+import { SubmitAnswer } from './submit-answer';
 import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
@@ -52,6 +53,7 @@ export class BenchmarkAnalystAgent<
     FetchHandleV2.schema,
     FuzzyMatch.schema,
     ExploreDataset.schema,
+    SubmitAnswer.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
 
@@ -135,16 +137,16 @@ ${dialectHints}
   | Entity resolution, dedup, clustering | ExploreDataset |
 
 ## Response Format [EXTREMELY IMPORTANT]:
-- This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.
-- Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary.
-- If any specific names, terms are asked, use *exact* and *full* names; DO NOT get lazy and use abbreviations or short forms. The eval function does exact string match mostly.
-- Format:
-    TL;DR: <direct answer in **caveman style** — bare entities and numbers, no filler words>
-    Analysis: <a concise analysis at the top presenting all important info first, followed by reasoning of how you arrived at the answer.>
+- Before ending, you MUST call \`SubmitAnswer\` with a compact answer string formatted for the eval validator.
+- The eval function receives the \`SubmitAnswer\` string verbatim and scans it for specific names, numbers, and their proximity. Format rules:
+  - Put names/entities IMMEDIATELY adjacent to their values (no filler words between). Example: \`Product X $123,456\` not \`Product X has a revenue of $123,456\`.
+  - For lists of items, put each on its own line (like a markdown table).
+  - Use *exact* and *full* names from the data; DO NOT get lazy and abbreviate anything (names, days of week, months, etc.). The eval does exact/fuzzy string matching.
+  - Include all requested data points — the validator checks each one - every questionPart needs to be answered.
 Example:
 Q: What is the total revenue for product X?
-TL;DR: Product X $123,456.
-Analysis: <table of monthly breakdown>...
+<Tools calls, reasoning, and analysis>
+SubmitAnswer: "Product X | $123,456"
 
 <UserContext>
 ${this.context.contextDocs ?? 'No documentation available.'}

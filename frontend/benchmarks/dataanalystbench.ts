@@ -27,6 +27,7 @@ import {
   ChainedExecuteQuery,
   FuzzyMatch,
 } from '@/agents/benchmark-analyst/db-tools';
+import { SubmitAnswer } from '@/agents/benchmark-analyst/submit-answer';
 import { ExploreDataset } from '@/agents/benchmark-analyst/explore-dataset';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
 import {
@@ -169,6 +170,7 @@ const registrables = useV2
         RootAgent,
         FuzzyMatch,
         ExploreDataset,
+        SubmitAnswer,
         ...AUTO_CONTEXT_REGISTRABLES,
       ]
     : [
@@ -178,6 +180,7 @@ const registrables = useV2
         RootAgent,
         FuzzyMatch,
         ExploreDataset,
+        SubmitAnswer,
         ...AUTO_CONTEXT_REGISTRABLES,
       ];
 

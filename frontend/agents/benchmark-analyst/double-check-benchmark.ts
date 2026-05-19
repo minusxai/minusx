@@ -349,8 +349,16 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
     );
   }
 
-  /** Read a sub-agent slot's final text (from `details.assistantMessage`). */
+  /**
+   * Read a sub-agent slot's answer. Prefers the `SubmitAnswer` tool result
+   * (compact, eval-optimised string) over the verbose `assistantMessage`
+   * text. Falls back to the assistant message when no `SubmitAnswer` was
+   * called (e.g. V2 agents that don't have the tool yet).
+   */
   private _readAgentText(slotId: string): string {
+    const submitted = this._readSubmittedAnswer(slotId);
+    if (submitted) return submitted;
+
     const r = this._findResult(slotId);
     if (!r) throw new Error(`DoubleCheckBenchmarkAgent: no result for slot '${slotId}'`);
     const details = r.details as MXAgentDetails | undefined;
@@ -358,6 +366,41 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
       throw new Error(`DoubleCheckBenchmarkAgent: slot '${slotId}' is not an MXAgent result`);
     }
     return extractText(details.assistantMessage);
+  }
+
+  /**
+   * Scan the orchestrator log for a `SubmitAnswer` tool result under the
+   * given sub-agent slot. Returns the submitted answer string, or
+   * `undefined` if the sub-agent never called `SubmitAnswer`.
+   *
+   * The log is flat: each entry has `parent_id`. Tool calls dispatched by
+   * a sub-agent have `parent_id === slotId`. We find the `AssistantMessage`
+   * entries under `slotId`, look for `SubmitAnswer` tool calls in them,
+   * then find the matching `ToolResultMessage` and extract `details.answer`.
+   */
+  private _readSubmittedAnswer(slotId: string): string | undefined {
+    const log = this.orchestrator.log;
+    // Find SubmitAnswer toolCall ids under this sub-agent.
+    const submitCallIds: string[] = [];
+    for (const e of log) {
+      if (e.parent_id !== slotId) continue;
+      if (!('role' in e) || e.role !== 'assistant') continue;
+      for (const block of (e as AssistantMessage).content) {
+        if (block.type === 'toolCall' && block.name === 'SubmitAnswer') {
+          submitCallIds.push(block.id);
+        }
+      }
+    }
+    if (submitCallIds.length === 0) return undefined;
+    // Take the LAST SubmitAnswer call (the agent may revise its answer).
+    const lastCallId = submitCallIds[submitCallIds.length - 1];
+    for (const e of log) {
+      if (!('role' in e) || e.role !== 'toolResult') continue;
+      if ((e as ToolResultMessage).toolCallId !== lastCallId) continue;
+      const details = (e as ToolResultMessage).details as { answer?: string } | undefined;
+      if (details?.answer) return details.answer;
+    }
+    return undefined;
   }
 
   /** Read a `CheckEquivalence` slot's verdict. */
