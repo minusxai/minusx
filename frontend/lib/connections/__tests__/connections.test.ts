@@ -1068,6 +1068,20 @@ describe('PostgresConnector pool lifecycle', () => {
       expect.objectContaining({ host: 'localhost', port: 5432 })
     );
   });
+
+  it('uses connectionString when connection_string is provided', async () => {
+    const mockQuery = vi.fn().mockResolvedValue({ rows: [], fields: [] });
+    makeMockPool(mockQuery);
+
+    const connStr = 'postgresql://admin:secret@db.example.com:5433/mydb?sslmode=disable';
+    await new PostgresConnector('test', {
+      connection_string: connStr,
+    }).testConnection();
+
+    expect(MockPool).toHaveBeenCalledWith({
+      connectionString: connStr,
+    });
+  });
 });
 
 describe('getNodeConnector() factory', () => {

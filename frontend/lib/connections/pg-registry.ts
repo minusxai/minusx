@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 const registry = new Map<string, Pool>();
 
 function poolKey(config: Record<string, any>): string {
+  if (config.connection_string) return config.connection_string;
   const host = config.host ?? 'localhost';
   const port = String(config.port ?? 5432);
   const database = config.database ?? '';
@@ -19,14 +20,16 @@ export function getOrCreatePgPool(config: Record<string, any>): Pool {
   const key = poolKey(config);
   if (registry.has(key)) return registry.get(key)!;
 
-  const pool = new Pool({
-    host: config.host ?? 'localhost',
-    port: Number(config.port ?? 5432),
-    database: config.database,
-    user: config.username,
-    password: config.password ?? undefined,
-    ssl: config.ssl ?? { rejectUnauthorized: false },
-  });
+  const pool = config.connection_string
+    ? new Pool({ connectionString: config.connection_string })
+    : new Pool({
+        host: config.host ?? 'localhost',
+        port: Number(config.port ?? 5432),
+        database: config.database,
+        user: config.username,
+        password: config.password ?? undefined,
+        ssl: config.ssl ?? { rejectUnauthorized: false },
+      });
   registry.set(key, pool);
   return pool;
 }
