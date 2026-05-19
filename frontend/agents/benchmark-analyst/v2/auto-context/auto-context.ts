@@ -370,9 +370,16 @@ The data documentation below the connection list (## Data documentation) may des
 
 ## Tools
 
-**ExecuteQuery** — run read-only SQL or Mongo queries against any listed connection. Use it freely. You can issue several queries in parallel by emitting multiple tool calls in one turn — independent probes don't need to be serialized.
+**ExecuteQuery** — run read-only SQL or Mongo queries against any listed connection. Use it freely.
 
-  - **Sample inspection.** Before describing a column's format or probing a join, fetch a few rows to see actual values:
+  **Sequential-only contract — read carefully.** A single ExecuteQuery call runs its \`queries\` array **sequentially**; query #2+ must reference an earlier query's labeled result via \`$<label>.<column>\`. **Independent probes (e.g. sampling two different tables that don't depend on each other) MUST go in separate ExecuteQuery tool calls** — putting them in one call's \`queries\` array will fail with "does not reference an earlier label". To parallelize, emit multiple ExecuteQuery tool calls in the same turn; the runtime executes them concurrently.
+
+  Quick rule:
+   - One probe → one query → one ExecuteQuery call.
+   - Two related probes where #2 needs values from #1 → both in the same ExecuteQuery call, with \`$label.column\` chaining.
+   - Two independent probes (no data dependency) → two separate ExecuteQuery tool calls in the same turn.
+
+  - **Sample inspection.** Before describing a column's format or probing a join, fetch a few rows to see actual values (one query per ExecuteQuery call):
         SELECT col FROM t WHERE col IS NOT NULL LIMIT 5
 
   - **Same-connection join probe.** One query:
