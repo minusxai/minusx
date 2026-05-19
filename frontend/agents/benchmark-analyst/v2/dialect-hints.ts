@@ -23,14 +23,13 @@ export const DIALECT_HINTS: Record<string, DialectHint> = {
     dialect: 'duckdb',
     fuzzyFunctions: 'jaro_winkler_similarity(), levenshtein(), jaccard()',
     additionalInfo: `DuckDB supports SUMMARIZE <table> for quick column stats. Use QUALIFY for window function filtering. Supports list/struct types natively.`,
-    crossDb: `Handle tables WORK here — \`FROM handle_xyz JOIN realtable ...\` is the right pattern. Both duckdb and benchmark-sqlite share one in-memory DuckDB instance, so handles can be joined across either.`,
+    crossDb: `Handle tables WORK here — \`FROM handle_xyz JOIN realtable ...\` is the right pattern, since duckdb queries run against the same in-memory engine where handles are registered. For non-duckdb connections, chain via \`sequential: true\` + \`$label.column\` instead.`,
   },
   sqlite: {
     dialect: 'sqlite',
-    // Benchmark sqlite is DuckDB-attached, so DuckDB SQL functions work here.
-    fuzzyFunctions: 'jaro_winkler_similarity() (benchmark sqlite routes through DuckDB), LIKE/ILIKE for substring',
-    additionalInfo: `SQLite uses || for string concatenation. Date functions: date(), datetime(), strftime().`,
-    crossDb: `Handle tables WORK here — \`FROM handle_xyz JOIN realtable ...\`. Benchmark sqlite shares the same in-memory DuckDB instance as duckdb connections, so handles can be joined across either.`,
+    fuzzyFunctions: 'LIKE (case-insensitive for ASCII) and GLOB (case-sensitive, shell-style wildcards) for pattern matching; instr() / substr() for substrings. No built-in fuzzy/similarity functions — use the FuzzyMatch tool for that.',
+    additionalInfo: `String concat: \`||\`. JSON parsing (built-in JSON1): \`json_each(arr)\` iterates an array, \`json_extract(val, '$.path')\` reads a field, \`json_array_length(arr)\`. Dates are stored as TEXT — parse with \`date()\` / \`datetime()\` / \`strftime('%Y', col)\`; extract a year as INT with \`CAST(strftime('%Y', col) AS INTEGER)\`. Math: \`POW(x, y)\`, \`ABS\`, \`ROUND\`. Sequence generation: \`WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n < 100) SELECT * FROM seq\`. Free-text pattern matching: combine \`substr\` + \`instr\` + \`GLOB\`; for case-insensitive substring use \`LIKE '%term%'\`.`,
+    crossDb: `To chain into a sqlite connection from another connection, use \`sequential: true\` + \`$label.column\` — the referenced values inline as a SQL literal list (e.g. \`WHERE id IN ($amy.article_id)\` → \`WHERE id IN (192, 2161, ...)\`).`,
   },
   postgresql: {
     dialect: 'postgresql',

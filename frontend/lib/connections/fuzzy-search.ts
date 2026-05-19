@@ -96,6 +96,18 @@ function searchedSelectCols(columns: string[], quoteFn: (name: string) => string
 
 // ─── Per-Connector Strategies ────────────────────────────────────────────────
 
+/**
+ * Native SQLite fuzzy: substring matching via LOWER + LIKE only. No
+ * `jaro_winkler_similarity`, no `levenshtein_distance` — those are
+ * DuckDB-only and the benchmark `BenchmarkSqliteConnector` runs real
+ * SQLite. Lexical-only; the agent gets graded similarity from the
+ * length-ratio heuristic in `fuzzySubstring`.
+ */
+async function fuzzySqlite(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
+  const substringEntry = await fuzzySubstring(queryFn, p);
+  return { results: [substringEntry], searchTerm: p.searchTerm };
+}
+
 async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
@@ -351,7 +363,14 @@ export async function fuzzyMatch(
     case 'csv':
     case 'google-sheets':
     case 'sqlite':
+      // Production sqlite is routed through DuckDB-via-ATTACH, so the
+      // DuckDB fuzzy path (jaro_winkler + substring) applies.
       raw = await fuzzyDuckDb(queryFn, p);
+      break;
+    case 'sqlite-native':
+      // Benchmark `BenchmarkSqliteConnector` (real better-sqlite3) —
+      // substring-only because real SQLite has no fuzzy primitives.
+      raw = await fuzzySqlite(queryFn, p);
       break;
     case 'postgresql':
       raw = await fuzzyPostgres(queryFn, p);

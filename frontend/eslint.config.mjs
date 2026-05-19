@@ -75,6 +75,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // postinstall-generated third-party WASM worker bundles (not project code)
     "public/duckdb/**",
+    // Plain-CJS worker entry points (run inside worker_threads). The
+    // next/eslint config injects React rules into all JS — these workers
+    // have no React surface, so we skip them rather than carry the plugin.
+    "**/*.cjs",
   ]),
   {
     plugins: {

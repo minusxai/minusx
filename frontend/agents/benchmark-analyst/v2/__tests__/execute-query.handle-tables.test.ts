@@ -1,37 +1,48 @@
 // Real integration test for `FROM handle_xyz` — handles as queryable tables.
 //
 // Unlike execute-query.test.ts (which mocks the connector), this test uses a
-// REAL sqlite fixture + the REAL shared-DuckDB connector path, so it actually
+// REAL duckdb fixture + the REAL shared-DuckDB connector path, so it actually
 // verifies that a stored handle resolves as a table and joins against live
 // connection data. With the connector mocked you can never prove this — the
 // mock returns canned rows regardless of SQL.
+//
+// Note: handle tables only work on duckdb connections — they live in the
+// shared DuckDB instance, which sqlite (now real `better-sqlite3` per the
+// migration) doesn't share. Cross-connection chaining into sqlite uses
+// `$label.column`; see explore-dataset tests for that path.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import RealDatabase from 'better-sqlite3';
+import { DuckDBInstance } from '@duckdb/node-api';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import type { TextContent } from '@mariozechner/pi-ai';
 import { ExecuteQueryV2 } from '../execute-query';
 import { storeHandle, fetchHandle, clearHandles } from '../handle-store';
+import { detachAllBenchmarkAttachments } from '../../shared-duckdb';
 import type { QueryResult } from '@/lib/connections/base';
 import type { BenchmarkAnalystContext } from '../../types';
 
 describe('ExecuteQueryV2 — FROM handle_xyz (real handle tables)', () => {
   let tmpDir: string;
-  let sqlitePath: string;
+  let duckdbPath: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = mkdtempSync(path.join(tmpdir(), 'v2-handle-tables-'));
-    sqlitePath = path.join(tmpDir, 'products.sqlite');
-    const db = new RealDatabase(sqlitePath);
-    db.exec(`
-      CREATE TABLE products (id INTEGER, name TEXT);
-      INSERT INTO products VALUES (1, 'Alpha'), (2, 'Beta'), (3, 'Gamma'), (4, 'Delta');
-    `);
-    db.close();
+    duckdbPath = path.join(tmpDir, 'products.duckdb');
+    const inst = await DuckDBInstance.create(duckdbPath);
+    const conn = await inst.connect();
+    try {
+      await conn.run(`CREATE TABLE products (id INTEGER, name VARCHAR);`);
+      await conn.run(
+        `INSERT INTO products VALUES (1, 'Alpha'), (2, 'Beta'), (3, 'Gamma'), (4, 'Delta');`,
+      );
+    } finally {
+      conn.disconnectSync();
+    }
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await detachAllBenchmarkAttachments().catch(() => { /* may be uninit */ });
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -41,7 +52,7 @@ describe('ExecuteQueryV2 — FROM handle_xyz (real handle tables)', () => {
 
   const ctx = (): BenchmarkAnalystContext => ({
     connections: [
-      { name: 'products_db', dialect: 'sqlite', description: 'products', config: { file_path: sqlitePath } },
+      { name: 'products_db', dialect: 'duckdb', description: 'products', config: { file_path: duckdbPath } },
     ],
   });
 

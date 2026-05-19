@@ -49,7 +49,7 @@ export class ExploreV2 extends V2DataTool<typeof ExploreParams, ExploreDetails> 
 
 USE EXPLORE WHEN:
 - You need to find which rows mention a value, and you're not sure which table/column has it (e.g. "find all businesses with 'vegan' in any text field").
-- You want fuzzy matching across many text columns at once — Explore runs per-dialect search automatically (jaro_winkler for duckdb/sqlite, similarity() for postgres with pg_trgm, $regex for mongo, ILIKE elsewhere).
+- You want fuzzy matching across many text columns at once — Explore runs the right per-dialect search automatically (see each connection's per-dialect notes for which fuzzy functions are available).
 - You want semantic narrowing of lexical hits — pass a \`prompt\` and the lighter model re-ranks/filters by meaning ("rank by relevance to clean energy"). The re-rank is best-effort.
 - You want to SAMPLE / cluster / pick-diverse rows across text columns — omit \`match\` (no WHERE filter) and pass a \`prompt\` like "pick the 10 most diverse business names" or "cluster these articles by topic, return cluster labels in info".
 
@@ -61,7 +61,7 @@ FILTER:
 
 OUTPUT: {results: [{preview, handle, stats}], info?}. Each row is {id, matched_text, source, score} where \`source\` is "table.column" — tells you exactly where the hit came from. Use that to identify the right place, then ExecuteQuery to drill in.
 
-WORKS ACROSS DIALECTS: duckdb/sqlite (real fuzzy), postgres (pg_trgm similarity, falls back to ILIKE), mongo (native $regex aggregation pipeline), bigquery & others (generic LIKE).
+WORKS ACROSS DIALECTS: each connector uses its native lexical/fuzzy primitives — see the per-dialect hints for specifics.
 
 Examples:
 - Where does "amy jones" appear? \`{filter: {match: "amy jones"}}\`
