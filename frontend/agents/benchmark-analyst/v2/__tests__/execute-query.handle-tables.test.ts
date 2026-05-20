@@ -5,11 +5,6 @@
 // verifies that a stored handle resolves as a table and joins against live
 // connection data. With the connector mocked you can never prove this — the
 // mock returns canned rows regardless of SQL.
-//
-// Note: handle tables only work on duckdb connections — they live in the
-// shared DuckDB instance, which sqlite (now real `better-sqlite3` per the
-// migration) doesn't share. Cross-connection chaining into sqlite uses
-// `$label.column`; see explore-dataset tests for that path.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { mkdtempSync, rmSync } from 'fs';
