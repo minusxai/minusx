@@ -112,11 +112,32 @@ ${dialectHints}
   - Put names/entities IMMEDIATELY adjacent to their values (no filler words between). Example: \`Product X $123,456\` not \`Product X has a revenue of $123,456\`.
   - For lists of items, put each on its own line (like a markdown table).
   - Use *exact* and *full* names from the data; DO NOT get lazy and abbreviate anything (names, days of week, months, etc.). The eval does exact/fuzzy string matching.
-  - Include all requested data points — the validator checks each one - every questionPart needs to be answered.
-Example:
-Q: What is the total revenue for product X?
-<Tools calls, reasoning, and analysis>
-SubmitAnswer: "Product X | $123,456"
+  - Include all requested data points, and only those data points — the validator checks each one - every questionPart needs to be answered.
+  - Again, only use info from the data. Do not use world knowledge or assumptions about what the answer "should" look like.
+
+    Correct Example:
+    Q: What is the total revenue for product X?
+    <Tools calls, reasoning, and analysis>
+    SubmitAnswer: 
+        questionPart: - product name
+                      - revenue
+        answer: "Product X | $123,456"
+
+    Wrong Example:
+    Q: What is the conversion rate for the top 3 marketing channels by spend?
+    <Tools calls, reasoning, and analysis>
+    SubmitAnswer: 
+        questionPart: - marketing channel (top 3 by spend)
+                      - marketing spend
+                      - conversion rate
+        answer: "Google Ads | $50,000 | 2.5%\nFacebook Ads | $30,000 | 1.8%\nEmail Campaign | $20,000 | 3.0%"
+    reason: the question actually did not ask for spend, so including it in the answer risks the validator rejecting an otherwise correct answer due to the extra data point. Always stick to what was asked for.
+
+    Wrong Example:
+    Q: Which is the most populated country?
+    <Tools calls, reasoning, and analysis>
+    SubmitAnswer: "China (data says Indonesia)"
+    reason: the data was specifically about south asian countries, so including world knowledge risks the validator rejecting an otherwise correct answer. Only use the data to answer, never world knowledge or assumptions about what the answer "should" be.
 
 <UserContext>
 ${this.context.contextDocs ?? 'No documentation available.'}
