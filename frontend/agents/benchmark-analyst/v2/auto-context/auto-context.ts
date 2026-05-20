@@ -25,13 +25,15 @@ import type { ColumnMeta, NodeConnector } from '@/lib/connections/base';
 import {
   MXAgent,
   MXTool,
+  type ConversationLog,
   type ConversationLogEntry,
+  type RegistrableClass,
   type ToolResponse,
 } from '@/orchestrator/types';
-import type { Orchestrator } from '@/orchestrator/orchestrator';
+import { Orchestrator } from '@/orchestrator/orchestrator';
 import { EMPTY_USAGE, gen_id } from '@/orchestrator/utils';
 import { ChainedExecuteQuery } from '../../db-tools';
-import type { BenchmarkAnalystContext } from '../../types';
+import type { BenchmarkAnalystContext, ConnectionInfo } from '../../types';
 import { publicConnectionMetadata } from '../../types';
 import { getOrCreateBenchmarkConnector } from '../../shared-duckdb';
 import { getCatalogStore } from '../catalog';
@@ -142,17 +144,50 @@ function tableKey(t: { connection: string; schema: string; table: string }): str
   return `${t.connection}.${t.schema}.${t.table}`;
 }
 
-function renderStats(meta: ColumnMeta | undefined): string {
-  if (!meta) return '';
+/** How much per-column stat detail to emit. Used by the graded-degradation
+ *  renderers to shed the most expensive bits (top values) before the rest. */
+type StatsDetail = 'full' | 'no-top' | 'none';
+
+function renderStats(meta: ColumnMeta | undefined, detail: StatsDetail = 'full'): string {
+  if (!meta || detail === 'none') return '';
   const bits: string[] = [];
   if (meta.nDistinct !== undefined) bits.push(`nDistinct=${meta.nDistinct}`);
   if (meta.nullCount !== undefined && meta.nullCount > 0) bits.push(`nullCount=${meta.nullCount}`);
   if (meta.min !== undefined && meta.max !== undefined) bits.push(`min=${meta.min} max=${meta.max}`);
-  if (meta.topValues && meta.topValues.length > 0) {
+  if (detail === 'full' && meta.topValues && meta.topValues.length > 0) {
     const top = meta.topValues.slice(0, 3).map((t) => JSON.stringify(t.value)).join(', ');
     bits.push(`top=[${top}]`);
   }
   return bits.join(' ');
+}
+
+/**
+ * Greedily keep leading table blocks until the next would push past
+ * `maxChars`, then prepend a recovery note naming how many tables were
+ * dropped. Shared last-resort tier for both the catalog (agent input) and
+ * generated-context (analyst output) renderers, used only when even the
+ * leanest full render overflows. Always keeps at least the first block so
+ * the output is never empty. `sep` is the join string between blocks.
+ */
+function packBlocksWithNote(
+  blocks: string[],
+  totalTables: number,
+  maxChars: number,
+  sep: string,
+  buildNote: (kept: number, total: number) => string,
+): string {
+  const kept: string[] = [];
+  let total = 0;
+  for (const block of blocks) {
+    const cost = block.length + (kept.length > 0 ? sep.length : 0);
+    if (total + cost > maxChars) break;
+    kept.push(block);
+    total += cost;
+  }
+  if (kept.length === 0 && blocks.length > 0) kept.push(blocks[0]);
+  const body = kept.join(sep);
+  if (kept.length >= totalTables) return body;
+  return `${buildNote(kept.length, totalTables)}\n\n${body}`;
 }
 
 interface TableGroup {
@@ -176,33 +211,18 @@ function groupByTable(schema: FlatColumn[]): TableGroup[] {
   return [...map.values()];
 }
 
-/**
- * Render the catalog as a hierarchical ID-tagged blob the agent reads as
- * its userMessage. NO sample rows by design — the agent fetches them via
- * `ExecuteQuery` when it needs a closer look at a specific column.
- *
- * Bounded by `maxChars` with graceful degradation: trailing tables drop
- * when the running total would exceed budget. When degradation kicks in,
- * a `> Note:` block is prepended pointing the agent at the right tools
- * to recover what was dropped.
- */
-export function renderCatalogForAgent(
-  schema: FlatColumn[],
+/** One ID-tagged block per table (connection/schema headers emitted once,
+ *  on their first occurrence). `detail` controls per-column stat verbosity. */
+function buildCatalogBlocks(
+  tables: TableGroup[],
   idMap: IdMap,
   statsByCol: Map<string, ColumnMeta>,
   rowCountByTable: Map<string, number>,
-  maxChars: number = DEFAULT_CATALOG_RENDER_MAX_CHARS,
-): string {
-  const tables = groupByTable(schema);
-
-  // Build per-table blocks first; greedily pack until the budget would be
-  // exceeded. Track which connections/schemas were introduced so we don't
-  // duplicate their headers.
+  detail: StatsDetail,
+): string[] {
   const blocks: string[] = [];
   const seenConnections = new Set<string>();
   const seenSchemas = new Set<string>();
-  let total = 0;
-  let coveredAll = true;
 
   for (const t of tables) {
     const lines: string[] = [];
@@ -225,30 +245,49 @@ export function renderCatalogForAgent(
 
     for (const c of t.columns) {
       const cId = idMap.byPath(colKey(c))?.id ?? '?';
-      const stats = renderStats(statsByCol.get(colKey(c)));
+      const stats = renderStats(statsByCol.get(colKey(c)), detail);
       const statsSuffix = stats ? `  ${stats}` : '';
       lines.push(`      [${cId}] ${c.column}  ${c.type}${statsSuffix}`);
     }
+    blocks.push(lines.join('\n'));
+  }
+  return blocks;
+}
 
-    const block = lines.join('\n');
-    const cost = block.length + (blocks.length > 0 ? 1 : 0); // +1 for separator
-    if (total + cost > maxChars) {
-      coveredAll = false;
-      break;
-    }
-    blocks.push(block);
-    total += cost;
+const catalogBoundedNote = (kept: number, total: number): string => [
+  '> Note: This catalog was bounded to fit the agent\'s context window.',
+  `> The summary covers ${kept} of ${total} tables. ${total - kept} omitted from the bottom. Use \`SearchDBSchema\` or \`ExecuteQuery\` to inspect any of them.`,
+].join('\n');
+
+/**
+ * Render the catalog as a hierarchical ID-tagged blob the agent reads as
+ * its userMessage. NO sample rows by design — the agent fetches them via
+ * `ExecuteQuery` when it needs a closer look at a specific column.
+ *
+ * Graded degradation, coverage-first: the agent must SEE every table to
+ * annotate the whole schema, so when the full render overflows `maxChars`
+ * we shed stat detail globally (top values → all stats) before dropping
+ * any table. Only when the bare name+type skeleton of every table still
+ * overflows do we drop trailing tables and prepend a `> Note:` pointing the
+ * agent at the tools that recover them.
+ */
+export function renderCatalogForAgent(
+  schema: FlatColumn[],
+  idMap: IdMap,
+  statsByCol: Map<string, ColumnMeta>,
+  rowCountByTable: Map<string, number>,
+  maxChars: number = DEFAULT_CATALOG_RENDER_MAX_CHARS,
+): string {
+  const tables = groupByTable(schema);
+
+  for (const detail of ['full', 'no-top', 'none'] as const) {
+    const body = buildCatalogBlocks(tables, idMap, statsByCol, rowCountByTable, detail).join('\n');
+    if (body.length <= maxChars) return body;
   }
 
-  const body = blocks.join('\n');
-  if (coveredAll) return body;
-
-  const dropped = tables.length - blocks.length;
-  const note = [
-    '> Note: This catalog was bounded to fit the agent\'s context window.',
-    `> The summary covers ${blocks.length} of ${tables.length} tables. ${dropped} omitted from the bottom. Use \`SearchDBSchema\` or \`ExecuteQuery\` to inspect any of them.`,
-  ].join('\n');
-  return `${note}\n\n${body}`;
+  // Even the bare skeleton overflows — drop trailing tables, note the rest.
+  const skeleton = buildCatalogBlocks(tables, idMap, statsByCol, rowCountByTable, 'none');
+  return packBlocksWithNote(skeleton, tables.length, maxChars, '\n', catalogBoundedNote);
 }
 
 // ─── Slice 3: SubmitSchemaInfo tool ─────────────────────────────────────────
@@ -444,9 +483,9 @@ Call SubmitSchemaInfo exactly once with annotations:
 Rules:
 - Every \`id\` and \`join.to\` must be a short alphanumeric ID (^[gstc][0-9]+$) from the catalog input. The tool will reject other shapes.
 - An annotation may have \`description\`, \`join\`, both, or neither. Entries with neither are silently dropped.
+- Do not get carried away with tons of ExecuteQuery probes and annotations. Focus on the few that appear most interesting or non-obvious.
 
 ## Connections available
-
 ${connectionsJson}
 
 ${contextDocs ? `## Data documentation\n${contextDocs}` : ''}
@@ -629,19 +668,109 @@ function escapeMd(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
 
+/** Soft cap on the rendered `<GeneratedContext>` block injected into the
+ *  analyst's system prompt. Leaves room for the rest of the prompt + the
+ *  user message + chart attachments. */
+export const DEFAULT_GENERATED_CONTEXT_MAX_CHARS = 60_000;
+
+/** Output detail tiers, leanest last. `full` shows stats + every column;
+ *  `no-stats` drops the stats column; `essential` keeps only annotated
+ *  columns (collapsing the rest to a count) — the descriptions + verified
+ *  joins AutoContext spent an LLM call to produce are the last thing shed. */
+type OutputTier = 'full' | 'no-stats' | 'essential';
+
+interface ResolvedColumn {
+  column: string;
+  type: string;
+  desc: string;
+  joinCell: string;
+  annotated: boolean;
+}
+
+function resolveColumns(
+  t: TableGroup,
+  idMap: IdMap,
+  annById: Map<string, Annotation>,
+): ResolvedColumn[] {
+  return t.columns.map((c) => {
+    const cId = idMap.byPath(colKey(c))?.id;
+    const ann = cId ? annById.get(cId) : undefined;
+    const desc = ann?.description ? escapeMd(ann.description) : '';
+    let joinCell = '';
+    if (ann?.join) {
+      const target = idMap.byId(ann.join.to);
+      if (target && target.table && target.column) joinCell = `→ ${target.table}.${target.column}`;
+    }
+    return { column: c.column, type: c.type, desc, joinCell, annotated: Boolean(desc || joinCell) };
+  });
+}
+
+/** Render one table section at the requested tier. */
+function renderTableSection(
+  t: TableGroup,
+  idMap: IdMap,
+  statsByCol: Map<string, ColumnMeta>,
+  rowCountByTable: Map<string, number>,
+  annById: Map<string, Annotation>,
+  tier: OutputTier,
+): string {
+  const tablePath = `${t.connection}.${t.schema}.${t.table}`;
+  const tableId = idMap.byPath(tablePath)?.id;
+  const tableAnn = tableId ? annById.get(tableId) : undefined;
+  const rowCount = rowCountByTable.get(tablePath);
+  const headerSuffix = rowCount !== undefined ? ` (${rowCount} rows)` : '';
+  const headerDesc = tableAnn?.description ? ` — ${tableAnn.description}` : '';
+  const header = `## ${tablePath}${headerSuffix}${headerDesc}`;
+  const cols = resolveColumns(t, idMap, annById);
+
+  if (tier === 'essential') {
+    const annotated = cols.filter((c) => c.annotated);
+    const hidden = cols.length - annotated.length;
+    if (annotated.length === 0) {
+      return `${header}\n\n_${cols.length} columns — use \`SearchDBSchema\` to inspect._`;
+    }
+    const lines = [header, '', '| col | type | description | joins |', '|---|---|---|---|'];
+    for (const c of annotated) lines.push(`| ${c.column} | ${c.type} | ${c.desc} | ${c.joinCell} |`);
+    if (hidden > 0) lines.push(`| _+${hidden} more columns (use \`SearchDBSchema\`)_ | | | |`);
+    return lines.join('\n');
+  }
+
+  const includeStats = tier === 'full';
+  const lines = includeStats
+    ? [header, '', '| col | type | stats | description | joins |', '|---|---|---|---|---|']
+    : [header, '', '| col | type | description | joins |', '|---|---|---|---|'];
+  for (const c of cols) {
+    if (includeStats) {
+      const stats = renderStats(statsByCol.get(`${t.connection}.${t.schema}.${t.table}.${c.column}`));
+      lines.push(`| ${c.column} | ${c.type} | ${stats} | ${c.desc} | ${c.joinCell} |`);
+    } else {
+      lines.push(`| ${c.column} | ${c.type} | ${c.desc} | ${c.joinCell} |`);
+    }
+  }
+  return lines.join('\n');
+}
+
+const generatedBoundedNote = (kept: number, total: number): string => [
+  '> Note: This generated context was bounded to fit the analyst\'s context window.',
+  `> It covers ${kept} of ${total} tables; ${total - kept} omitted. Use \`SearchDBSchema\` to inspect them.`,
+].join('\n');
+
 /**
- * Merge the (verified) payload into the canonical catalog and render one
- * Markdown block. This is the final text the analyst sees in
- * `<GeneratedContext>`.
+ * Merge the (verified) payload into the canonical catalog and render the
+ * Markdown the analyst sees in `<GeneratedContext>`.
  *
  *   - Each table gets a `## <conn>.<schema>.<table> (N rows) — <tableDesc?>` header.
- *   - Each column is a row in a Markdown table with `col | type | stats |
- *     description | joins` columns, populated from `ColumnMeta` and the
- *     payload annotations indexed by id.
- *   - Verified joins are rendered as `→ <toTable>.<toColumn>`.
+ *   - Each column is a Markdown-table row with `col | type | stats |
+ *     description | joins`, populated from `ColumnMeta` and the payload
+ *     annotations. Verified joins render as `→ <toTable>.<toColumn>`.
  *
- * Returns the full block as a string (no surrounding tag — the caller wraps
- * it in `<GeneratedContext>`).
+ * Graded degradation, annotation-first: descriptions + verified joins are
+ * the irrecoverable value-add (the analyst can re-derive stats and column
+ * lists via SearchDBSchema/ExecuteQuery), so when the full render overflows
+ * `maxChars` we shed the stats column, then unannotated columns (collapsed
+ * to a count), then whole trailing tables with a recovery `> Note:`.
+ *
+ * Returns the block as a string (no surrounding tag — the caller wraps it).
  */
 export function renderGeneratedContext(
   schema: FlatColumn[],
@@ -649,45 +778,23 @@ export function renderGeneratedContext(
   statsByCol: Map<string, ColumnMeta>,
   rowCountByTable: Map<string, number>,
   payload: AutoContextPayload,
+  maxChars: number = DEFAULT_GENERATED_CONTEXT_MAX_CHARS,
 ): string {
   // Index annotations by id (last write wins on duplicate ids).
   const annById = new Map<string, Annotation>();
   for (const a of payload.annotations) annById.set(a.id, a);
 
   const tables = groupByTable(schema);
-  const sections: string[] = [];
+  const render = (tier: OutputTier): string[] =>
+    tables.map((t) => renderTableSection(t, idMap, statsByCol, rowCountByTable, annById, tier));
 
-  for (const t of tables) {
-    const tablePath = `${t.connection}.${t.schema}.${t.table}`;
-    const tableId = idMap.byPath(tablePath)?.id;
-    const tableAnn = tableId ? annById.get(tableId) : undefined;
-    const rowCount = rowCountByTable.get(tablePath);
-    const headerSuffix = rowCount !== undefined ? ` (${rowCount} rows)` : '';
-    const headerDesc = tableAnn?.description ? ` — ${tableAnn.description}` : '';
-    const lines: string[] = [`## ${tablePath}${headerSuffix}${headerDesc}`, ''];
-
-    lines.push('| col | type | stats | description | joins |');
-    lines.push('|---|---|---|---|---|');
-    for (const c of t.columns) {
-      const cPath = colKey(c);
-      const cId = idMap.byPath(cPath)?.id;
-      const ann = cId ? annById.get(cId) : undefined;
-      const stats = renderStats(statsByCol.get(cPath));
-      const desc = ann?.description ? escapeMd(ann.description) : '';
-      let joinCell = '';
-      if (ann?.join) {
-        const target = idMap.byId(ann.join.to);
-        if (target && target.table && target.column) {
-          joinCell = `→ ${target.table}.${target.column}`;
-        }
-      }
-      lines.push(`| ${c.column} | ${c.type} | ${stats} | ${desc} | ${joinCell} |`);
-    }
-
-    sections.push(lines.join('\n'));
+  for (const tier of ['full', 'no-stats', 'essential'] as const) {
+    const body = render(tier).join('\n\n');
+    if (body.length <= maxChars) return body;
   }
 
-  return sections.join('\n\n');
+  // Even the essential tier overflows — drop trailing tables, note the rest.
+  return packBlocksWithNote(render('essential'), tables.length, maxChars, '\n\n', generatedBoundedNote);
 }
 
 // ─── Slice 8: ensureAutoContext orchestration + cache ───────────────────────
@@ -746,13 +853,16 @@ function buildWrapperToolResult(
   toolCallId: string,
   state: CachedState,
 ): import('@mariozechner/pi-ai').ToolResultMessage {
-  const annCount = state.payload.annotations.length;
+  const idMap = assignCatalogIds(state.schema);
+  const rendered = renderGeneratedContext(
+    state.schema, idMap, state.statsByCol, state.rowCountByTable, state.payload,
+  );
   return {
     role: 'toolResult',
     toolCallId,
     toolName: AutoContextAgent.schema.name,
     content: [
-      { type: 'text', text: `AutoContext ready — ${annCount} annotation(s) for ${state.schema.length} column(s).` },
+      { type: 'text', text: rendered },
     ],
     isError: false,
     details: {
@@ -915,7 +1025,13 @@ export async function ensureAutoContext(parent: MXAgent): Promise<void> {
   // dispatch's natural wrapper off, on hit dispatch never ran.
   const wrapperId = gen_id();
   parent.toolThread.push(buildSynthAssistant(wrapperId, '<cached AutoContext>'));
-  parent.toolThread.push(buildWrapperToolResult(wrapperId, state));
+  const wrapper = buildWrapperToolResult(wrapperId, state);
+  parent.toolThread.push(wrapper);
+
+  // Stash the rendered text on the context so the runner can persist it as
+  // `_autocontext.txt` for offline inspection.
+  const renderedText = (wrapper.content as Array<{ type: string; text: string }>)[0]?.text;
+  if (renderedText) ctx.autoContextRendered = renderedText;
 }
 
 /** Splice the (synth assistant, agent-wrapper toolResult) pair for `id` out
@@ -968,4 +1084,92 @@ export function renderGeneratedContextFromToolThread(parent: MXAgent): string | 
     new Map(rowCountEntries),
     payload,
   );
+}
+
+// ─── Slice 10: Standalone auto-context runner ────────────────────────────────
+
+/** Result of running auto-context for a single slot. */
+export interface AutoContextRunResult {
+  catalogKey: string;
+  renderedText: string;
+  log: ConversationLog;
+  annotationCount: number;
+}
+
+/**
+ * Run AutoContextAgent as a standalone pre-step (outside any analyst agent).
+ * Creates its own Orchestrator, dispatches the agent, parses + verifies
+ * annotations, and returns the rendered markdown + conversation log.
+ *
+ * This is the entry point for the benchmark runner's auto-context pre-step.
+ * It reuses all existing machinery (catalog, parsing, join verification)
+ * but doesn't touch any parent agent's toolThread.
+ */
+export async function runAutoContextForSlot(
+  connections: ConnectionInfo[],
+  datasetKey: string,
+  catalogKey: string,
+  registrables: RegistrableClass[],
+  contextDocs?: string,
+): Promise<AutoContextRunResult> {
+  if (connections.length === 0) {
+    throw new Error('No connections provided for auto-context.');
+  }
+
+  // 1. Catalog read (cached at the catalog layer per dataset+slot).
+  const catalogCacheKey = `auto-${catalogKey}`;
+  const { catalog } = await getCatalogStore(connections, catalogCacheKey, undefined, datasetKey);
+  const { schema, statsByCol, rowCountByTable } = catalogProjection(catalog);
+  if (schema.length === 0) {
+    throw new Error('Empty schema — no columns to annotate.');
+  }
+
+  // 2. Prepare agent input.
+  const idMap = assignCatalogIds(schema);
+  const catalogText = renderCatalogForAgent(schema, idMap, statsByCol, rowCountByTable);
+
+  // 3. Run AutoContextAgent in its own Orchestrator. `contextDocs` carries
+  //    the dataset documentation (incl. HINTS), which the prompt instructs
+  //    the agent to read first — join semantics often live there.
+  const orch = new Orchestrator(registrables);
+  const ctx: BenchmarkAnalystContext = { connections, datasetKey, catalogKey, contextDocs };
+  const agent = new AutoContextAgent(orch, { userMessage: catalogText }, ctx);
+
+  const stream = orch.run(agent as unknown as MXAgent);
+  for await (const _ of stream) { /* drain */ }
+  await stream.result();
+
+  const log = orch.log as ConversationLog;
+
+  // 4. Parse annotations from the log. The agent is the root, so its tool
+  //    results have `parent_id === agent.id`.
+  const parsed = parseAnnotations(log as ConversationLogEntry[], agent.id, idMap);
+  if (!parsed) {
+    throw new Error('AutoContextAgent did not produce a SubmitSchemaInfo result.');
+  }
+
+  // 5. Build connectors for join verification.
+  const connectorsByName = new Map<string, NodeConnector>();
+  for (const entry of connections) {
+    if (!entry.config) continue;
+    const c = await getOrCreateBenchmarkConnector(
+      entry.name, entry.dialect, entry.config, { datasetKey },
+    );
+    connectorsByName.set(entry.name, c);
+  }
+  const verified = await verifyJoinsMechanically(
+    parsed,
+    idMap,
+    (from, to) => probeJoinUsingConnectors(connectorsByName, from, to),
+  );
+
+  // 6. Render final markdown.
+  const renderedText = renderGeneratedContext(schema, idMap, statsByCol, rowCountByTable, verified);
+
+  return {
+    catalogKey,
+    renderedText,
+    log,
+    annotationCount: verified.annotations.length,
+  };
 }

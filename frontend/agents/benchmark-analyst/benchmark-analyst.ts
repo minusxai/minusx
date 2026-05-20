@@ -1,21 +1,17 @@
 import {
   Type,
   registerFauxProvider,
-  type AssistantMessage,
   type Tool,
   type TSchema,
 } from '@mariozechner/pi-ai';
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
 import { CatalogSearchDBSchema, ChainedExecuteQuery, FuzzyMatch } from './db-tools';
+import { SubmitAnswer } from './submit-answer';
 import { ExploreDataset } from './explore-dataset';
 import { FetchHandleV2 } from './v2/fetch-handle';
 import { renderDialectHints, extractDialects } from './v2/dialect-hints';
 import { type BenchmarkAnalystContext, publicConnectionMetadata } from './types';
-import {
-  ensureAutoContext,
-  renderGeneratedContextFromToolThread,
-} from './v2/auto-context/auto-context';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-benchmark-analyst-api',
@@ -33,10 +29,10 @@ const BenchmarkAnalystAgentParams = Type.Object({
  * access, no AppState wrapping. Subclasses (e.g. RemoteAnalystAgent) extend
  * with file tools, app context, and a richer user-content shape.
  *
- * AutoContext orchestration lives in `v2/auto-context/auto-context.ts` —
- * this class is the thin integration point that calls `ensureAutoContext`
- * before the analyst's first LLM turn and `renderGeneratedContextFromToolThread`
- * when building the system prompt.
+ * AutoContext orchestration lives in `v2/auto-context/auto-context.ts`.
+ * The benchmark runner runs it as a pre-step via `runAutoContextForSlot`
+ * and passes the rendered markdown via `ctx.autoContextRendered` or
+ * `ctx.autoContextBySlot`. This class reads it in `getSystemPrompt()`.
  */
 export class BenchmarkAnalystAgent<
   TContext extends BenchmarkAnalystContext = BenchmarkAnalystContext,
@@ -52,39 +48,9 @@ export class BenchmarkAnalystAgent<
     FetchHandleV2.schema,
     FuzzyMatch.schema,
     ExploreDataset.schema,
+    SubmitAnswer.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
-
-  async run(): Promise<AssistantMessage> {
-    const ctx = this.context;
-    // AutoContext is benchmark-only: production paths (RemoteAnalystAgent
-    // and friends) extend this class without a `datasetKey`, so they
-    // bypass the upfront orientation pass entirely. `ensureAutoContext`
-    // returns immediately when `ctx.datasetKey` is unset.
-    if (!ctx.autoContextAttempts) ctx.autoContextAttempts = [];
-    if (ctx.datasetKey) {
-      const t0 = Date.now();
-      try {
-        await ensureAutoContext(this as unknown as MXAgent);
-        ctx.autoContextAttempts.push({ status: 'ok', durationMs: Date.now() - t0 });
-      } catch (e) {
-        // Best-effort orientation. Failures (DB blip, LLM error, agent
-        // produced no SubmitSchemaInfo result) must not abort the run —
-        // the analyst proceeds with no `<GeneratedContext>` block. We
-        // record the outcome on `ctx.autoContextAttempts` so the runner
-        // can write it into the persisted row, AND log to stderr.
-        const msg = e instanceof Error ? e.message : String(e);
-        ctx.autoContextAttempts.push({ status: 'failed', reason: msg, durationMs: Date.now() - t0 });
-        const detail = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
-        console.error(`[BenchmarkAnalystAgent] AutoContext failed (dataset=${ctx.datasetKey}, slot=${ctx.catalogKey ?? 'default'}): ${detail}`);
-      }
-    } else {
-      // Production / unset-datasetKey path — `ensureAutoContext` would
-      // return early. Record as skipped so the eval output is uniform.
-      ctx.autoContextAttempts.push({ status: 'skipped' });
-    }
-    return super.run();
-  }
 
   protected getSystemPrompt(): string {
     const ToolCls = this.constructor as typeof BenchmarkAnalystAgent;
@@ -92,7 +58,12 @@ export class BenchmarkAnalystAgent<
     const visibleConnections = publicConnectionMetadata(this.context.connections);
     const dialects = extractDialects(this.context.connections ?? []);
     const dialectHints = renderDialectHints(dialects);
-    const generatedContext = renderGeneratedContextFromToolThread(this as unknown as MXAgent);
+    const MAX_AUTOCTX_CHARS = 30_000;
+    const rawGeneratedContext = this.context.autoContextRendered
+      ?? this.context.autoContextBySlot?.[this.context.catalogKey ?? 'default'];
+    const generatedContext = rawGeneratedContext && rawGeneratedContext.length > MAX_AUTOCTX_CHARS
+      ? rawGeneratedContext.slice(0, MAX_AUTOCTX_CHARS) + '\n\n... (truncated)'
+      : rawGeneratedContext;
 
     return `You are ${ToolCls.schema.name}, an expert data analyst agent. Your task is to analyze the questions, and give very specific answers.
 You have access to the following tools: ${toolNames}.
@@ -134,17 +105,54 @@ ${dialectHints}
   | Found some hits but unsure if complete | FuzzyMatch → examine results → ExploreDataset |
   | Entity resolution, dedup, clustering | ExploreDataset |
 
+## Working with multiple connections/DBs:
+- As you know, each connection may have a different SQL dialect. And you cannot join across connections in a single query.
+- For multi-connection questions, start by breaking the question down into sub-questions that can be answered with one connection each.
+### "Joining" across connections:
+There are two techniques to combine data from multiple connections:
+1. chained queries: In ExecuteQuery, you can have 2 queries, where the second query can reference results from the first via $ syntax. This works effectively for WHERE ... IN ($label.column)
+2. join via handles: If you cannot do simple WHERE and need to join, you can always join via handles. 
+    Step 1: Write a query on Connection A that produces handle A
+    Step 2: Write a query on Connection B that produces handle B
+    Step 3: Write a query on "_scratch" connection that joins A and B via their handles
+
+## Common pitfalls:
+- Using world knowledge: DO NOT use world-knowledge or assumptions about the data. Rely ENTIRELY on the provided data. DO NOT ASSUME INFORMATION NOT IN THE DATA even if it is obvious or commonly known.
+- Avg of Averages: Never do avg of averages unless specifically asked. Avg always means avg of the whole population, not avg of subgroups.
+
+
 ## Response Format [EXTREMELY IMPORTANT]:
-- This is only applicable to the final answer you give at the end of your analysis, not to any intermediate reasoning or tool calls.
-- Only the first 30 words of your final response will be evaluated by an eval function, so make sure to put the most important information at the beginning that directly and fully answers the question. Lead with the answer, then explain (text, tables, etc.) if necessary.
-- If any specific names, terms are asked, use *exact* and *full* names; DO NOT get lazy and use abbreviations or short forms. The eval function does exact string match mostly.
-- Format:
-    TL;DR: <direct answer in **caveman style** — bare entities and numbers, no filler words>
-    Analysis: <a concise analysis at the top presenting all important info first, followed by reasoning of how you arrived at the answer.>
-Example:
-Q: What is the total revenue for product X?
-TL;DR: Product X $123,456.
-Analysis: <table of monthly breakdown>...
+- Before ending, you MUST call \`SubmitAnswer\` with a compact answer string formatted for the eval validator.
+- The eval function receives the \`SubmitAnswer\` string verbatim and scans it for specific names, numbers, and their proximity. Format rules:
+  - Put names/entities IMMEDIATELY adjacent to their values (no filler words between). Example: \`Product X $123,456\` not \`Product X has a revenue of $123,456\`.
+  - For lists of items, put each on its own line (like a markdown table).
+  - Use *exact* and *full* names from the data; DO NOT get lazy and abbreviate anything (names, days of week, months, etc.). The eval does exact/fuzzy string matching.
+  - Include all requested data points, and only those data points — the validator checks each one - every questionPart needs to be answered.
+  - Again, only use info from the data. Do not use world knowledge or assumptions about what the answer "should" look like.
+
+    Correct Example:
+    Q: What is the total revenue for product X?
+    <Tools calls, reasoning, and analysis>
+    SubmitAnswer: 
+        questionPart: - product name
+                      - revenue
+        answer: "Product X | $123,456"
+
+    Wrong Example:
+    Q: What is the conversion rate for the top 3 marketing channels by spend?
+    <Tools calls, reasoning, and analysis>
+    SubmitAnswer: 
+        questionPart: - marketing channel (top 3 by spend)
+                      - marketing spend
+                      - conversion rate
+        answer: "Google Ads | $50,000 | 2.5%\nFacebook Ads | $30,000 | 1.8%\nEmail Campaign | $20,000 | 3.0%"
+    reason: the question actually did not ask for spend, so including it in the answer risks the validator rejecting an otherwise correct answer due to the extra data point. Always stick to what was asked for.
+
+    Wrong Example:
+    Q: Which is the most populated country?
+    <Tools calls, reasoning, and analysis>
+    SubmitAnswer: "China (justification: even though there is no data about population fot China in the dataset, it is definitely the most populated)"
+    reason: the data was specifically about south asian countries, so including world knowledge risks the validator rejecting an otherwise correct answer. Only use the data to answer, never world knowledge or assumptions about what the answer "should" be. Here the correct answer was Indonesia.
 
 <UserContext>
 ${this.context.contextDocs ?? 'No documentation available.'}

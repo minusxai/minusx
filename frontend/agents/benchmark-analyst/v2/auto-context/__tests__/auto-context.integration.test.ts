@@ -1,6 +1,6 @@
 /**
- * Integration test for `ensureAutoContext`: dispatch → parse → verify →
- * cache → wrapper-in-toolThread. Connector layer is mocked; LLM is faux.
+ * Integration test for `runAutoContextForSlot`: dispatch → parse → verify →
+ * return result. Connector layer is mocked; LLM is faux.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
@@ -8,17 +8,11 @@ import {
   fauxToolCall,
   registerFauxProvider,
   type AssistantMessage,
-  type Tool,
-  type TSchema,
 } from '@mariozechner/pi-ai';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
-import { Orchestrator } from '@/orchestrator/orchestrator';
-import { MXAgent } from '@/orchestrator/types';
-import { Type } from '@mariozechner/pi-ai';
 import {
   AutoContextAgent,
-  clearAutoContextCache,
-  ensureAutoContext,
+  runAutoContextForSlot,
   SubmitSchemaInfo,
 } from '../auto-context';
 import { ChainedExecuteQuery, CatalogSearchDBSchema } from '../../../db-tools';
@@ -34,8 +28,6 @@ const fauxReg = registerFauxProvider({
 
 // ─── Connector mock — returns a fixed schema + non-zero JOIN counts ────────
 const mockQuery = vi.fn<(_sql: string) => Promise<QueryResult>>(async (sql) => {
-  // Default: JOIN probes return 1 row. DISTINCT probes return some values.
-  // SearchDBSchema and similar probes return empty.
   const lower = sql.toLowerCase();
   if (lower.includes('select distinct')) {
     return {
@@ -68,30 +60,12 @@ vi.mock('../../../shared-duckdb', async (importOriginal) => ({
   } as unknown as NodeConnector)),
 }));
 
-// ─── Stub parent agent (mimics BenchmarkAnalystAgent's context shape) ──────
-const StubParentParams = Type.Object({ userMessage: Type.String() });
-class StubParentAgent extends MXAgent<typeof StubParentParams, {
-  connections: typeof CONNECTIONS;
-  contextDocs?: string;
-  datasetKey?: string;
-  catalogKey?: string;
-}> {
-  static readonly schema: Tool<typeof StubParentParams> = {
-    name: 'StubParentAgent',
-    description: 'test stub',
-    parameters: StubParentParams,
-  };
-  static readonly tools: Tool<TSchema>[] = [];
-  static model = fauxReg.getModel();
-}
-
 const CONNECTIONS = [{
   name: 'db', dialect: 'duckdb', description: 'test',
   config: { file_path: '/tmp/stub.duckdb' },
 }];
 
 const REGISTRABLES = [
-  StubParentAgent,
   AutoContextAgent,
   SubmitSchemaInfo,
   ChainedExecuteQuery,
@@ -101,7 +75,6 @@ const REGISTRABLES = [
 beforeEach(() => {
   setLighterModel(fauxReg.getModel());
   setSamplingEnabled(false);
-  clearAutoContextCache();
   clearCatalogCache();
   mockQuery.mockClear();
   fauxReg.setResponses([]);
@@ -115,9 +88,8 @@ function submitMessage(annotations: unknown[]): AssistantMessage {
   );
 }
 
-describe('ensureAutoContext', () => {
-  it('dispatches the agent and pushes a wrapper with validated annotations onto parent.toolThread', async () => {
-    // Agent's first LLM turn calls SubmitSchemaInfo and stops.
+describe('runAutoContextForSlot', () => {
+  it('dispatches the agent and returns rendered text + log with validated annotations', async () => {
     fauxReg.setResponses([
       submitMessage([
         { id: 'c0', description: 'primary key' },
@@ -126,80 +98,99 @@ describe('ensureAutoContext', () => {
       fauxAssistantMessage('done', { stopReason: 'stop' }),
     ]);
 
-    const orch = new Orchestrator(REGISTRABLES);
-    const parent = new StubParentAgent(orch, { userMessage: 'q' }, {
-      connections: CONNECTIONS,
-      datasetKey: 'd1',
-    });
+    const result = await runAutoContextForSlot(CONNECTIONS, 'd1', 'default', REGISTRABLES);
 
-    await ensureAutoContext(parent as unknown as MXAgent);
-
-    // Wrapper sits in toolThread — getSystemPrompt reads it from there.
-    expect(parent.toolThread.length).toBeGreaterThan(0);
-    const wrapper = parent.toolThread.find(
-      (m) => 'role' in m && m.role === 'toolResult' && m.toolName === AutoContextAgent.schema.name,
-    );
-    expect(wrapper).toBeDefined();
+    expect(result.catalogKey).toBe('default');
+    expect(result.renderedText).toBeTruthy();
+    expect(result.log.length).toBeGreaterThan(0);
+    expect(result.annotationCount).toBeGreaterThanOrEqual(0);
   });
 
-  it('caches the result so a second call with the same dataset+slot skips dispatch', async () => {
-    // Only one set of responses queued; if cache misses, second call would
-    // run out of LLM responses.
+  it('isolates slots per catalogKey (agent-a vs agent-b)', async () => {
     fauxReg.setResponses([
-      submitMessage([{ id: 'c0', description: 'pk' }]),
-      fauxAssistantMessage('done', { stopReason: 'stop' }),
-    ]);
-
-    const orch = new Orchestrator(REGISTRABLES);
-    const parent1 = new StubParentAgent(orch, { userMessage: 'q1' }, {
-      connections: CONNECTIONS, datasetKey: 'd-cache', catalogKey: 'default',
-    });
-    await ensureAutoContext(parent1 as unknown as MXAgent);
-    expect(parent1.toolThread.length).toBeGreaterThan(0);
-
-    // Second parent with same dataset+slot.
-    const parent2 = new StubParentAgent(orch, { userMessage: 'q2' }, {
-      connections: CONNECTIONS, datasetKey: 'd-cache', catalogKey: 'default',
-    });
-    await ensureAutoContext(parent2 as unknown as MXAgent);
-    const wrapper2 = parent2.toolThread.find(
-      (m) => 'role' in m && m.role === 'toolResult' && m.toolName === AutoContextAgent.schema.name,
-    );
-    expect(wrapper2).toBeDefined();
-  });
-
-  it('isolates cache slots per ctx.catalogKey (primary vs secondary)', async () => {
-    fauxReg.setResponses([
-      submitMessage([{ id: 'c0', description: 'pk' }]),
+      submitMessage([{ id: 'c0', description: 'pk a' }]),
       fauxAssistantMessage('done', { stopReason: 'stop' }),
       submitMessage([{ id: 'c0', description: 'pk b' }]),
       fauxAssistantMessage('done', { stopReason: 'stop' }),
     ]);
 
-    const orch = new Orchestrator(REGISTRABLES);
-    const pA = new StubParentAgent(orch, { userMessage: 'q' }, {
-      connections: CONNECTIONS, datasetKey: 'd-slot', catalogKey: 'agent-a',
-    });
-    await ensureAutoContext(pA as unknown as MXAgent);
-    const pB = new StubParentAgent(orch, { userMessage: 'q' }, {
-      connections: CONNECTIONS, datasetKey: 'd-slot', catalogKey: 'agent-b',
-    });
-    await ensureAutoContext(pB as unknown as MXAgent);
-    expect(pA.toolThread.length).toBeGreaterThan(0);
-    expect(pB.toolThread.length).toBeGreaterThan(0);
+    const resultA = await runAutoContextForSlot(CONNECTIONS, 'd-slot', 'agent-a', REGISTRABLES);
+    const resultB = await runAutoContextForSlot(CONNECTIONS, 'd-slot', 'agent-b', REGISTRABLES);
+
+    expect(resultA.catalogKey).toBe('agent-a');
+    expect(resultB.catalogKey).toBe('agent-b');
+    expect(resultA.renderedText).toBeTruthy();
+    expect(resultB.renderedText).toBeTruthy();
   });
 
-  it('no-ops cleanly when there are no connections', async () => {
-    const orch = new Orchestrator(REGISTRABLES);
-    const parent = new StubParentAgent(orch, { userMessage: 'q' }, {
-      connections: [],
-      datasetKey: 'd-empty',
-    });
-    await ensureAutoContext(parent as unknown as MXAgent);
-    // No wrapper pushed; nothing to verify.
-    const wrapper = parent.toolThread.find(
-      (m) => 'role' in m && m.role === 'toolResult' && m.toolName === AutoContextAgent.schema.name,
+  it('throws when there are no connections', async () => {
+    await expect(
+      runAutoContextForSlot([], 'd-empty', 'default', REGISTRABLES),
+    ).rejects.toThrow('No connections');
+  });
+
+  /** Capture every system prompt the AutoContextAgent renders during a run. */
+  async function capturePrompts(
+    fn: () => Promise<unknown>,
+  ): Promise<string[]> {
+    const spy = vi.spyOn(
+      AutoContextAgent.prototype as unknown as { getSystemPrompt: () => string },
+      'getSystemPrompt',
     );
-    expect(wrapper).toBeUndefined();
+    try {
+      await fn();
+      return spy.mock.results
+        .filter((r) => r.type === 'return')
+        .map((r) => r.value as string);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('threads contextDocs into the AutoContextAgent system prompt (docs/HINTS reach the agent)', async () => {
+    fauxReg.setResponses([
+      submitMessage([{ id: 'c0', description: 'pk' }]),
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+    const docs = 'HINTS: business_id corresponds to business_ref. MARKER_DOCS_REACHED_AUTOCTX';
+
+    const prompts = await capturePrompts(() =>
+      runAutoContextForSlot(CONNECTIONS, 'd-docs', 'default', REGISTRABLES, docs),
+    );
+
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(prompts.some((p) => p.includes('MARKER_DOCS_REACHED_AUTOCTX'))).toBe(true);
+    // The injected block is `## Data documentation\n<docs>` — the trailing
+    // newline distinguishes it from the static instructional mention
+    // `(## Data documentation)` that's always in the prompt.
+    expect(prompts.some((p) => /## Data documentation\n/.test(p))).toBe(true);
+  });
+
+  it('omits the Data documentation block when no contextDocs is provided', async () => {
+    fauxReg.setResponses([
+      submitMessage([{ id: 'c0', description: 'pk' }]),
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+
+    const prompts = await capturePrompts(() =>
+      runAutoContextForSlot(CONNECTIONS, 'd-nodocs', 'default', REGISTRABLES),
+    );
+
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(prompts.every((p) => !/## Data documentation\n/.test(p))).toBe(true);
+  });
+
+  it('returns a log that contains the SubmitSchemaInfo tool result', async () => {
+    fauxReg.setResponses([
+      submitMessage([{ id: 'c0', description: 'pk' }]),
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+
+    const result = await runAutoContextForSlot(CONNECTIONS, 'd-log', 'default', REGISTRABLES);
+
+    const submitEntry = result.log.find(
+      (e) => 'role' in e && e.role === 'toolResult' && e.toolName === SubmitSchemaInfo.schema.name,
+    );
+    expect(submitEntry).toBeDefined();
   });
 });

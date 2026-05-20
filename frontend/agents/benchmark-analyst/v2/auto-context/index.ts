@@ -6,10 +6,8 @@
 export {
   AutoContextAgent,
   SubmitSchemaInfo,
-  ensureAutoContext,
-  renderGeneratedContextFromToolThread,
-  clearAutoContextCache,
+  runAutoContextForSlot,
+  type AutoContextRunResult,
   type AutoContextPayload,
   type Annotation,
-  type AutoContextWrapperDetails,
 } from './auto-context';

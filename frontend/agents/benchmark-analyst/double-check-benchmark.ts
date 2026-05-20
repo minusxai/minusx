@@ -228,6 +228,8 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
     );
     let t1 = this._readAgentText(r1.agent1);
     let t2 = this._readAgentText(r1.agent2);
+    let j1 = this._readAgentSubmission(r1.agent1)?.justification ?? '';
+    let j2 = this._readAgentSubmission(r1.agent2)?.justification ?? '';
 
     await this._dispatchSlots([{
       name: CheckEquivalence.schema.name,
@@ -248,8 +250,8 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
 
     for (let round = 2; round <= MAX_ROUNDS; round++) {
       const slots = slotIds(round);
-      const fb1 = buildFeedbackPrompt(userMessage, t1, t2);
-      const fb2 = buildFeedbackPrompt(userMessage, t2, t1);
+      const fb1 = buildFeedbackPrompt(userMessage, t1, t2, j1, j2);
+      const fb2 = buildFeedbackPrompt(userMessage, t2, t1, j2, j1);
 
       await this._dispatchSlots(
         [
@@ -270,6 +272,8 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
       );
       t1 = this._readAgentText(slots.agent1);
       t2 = this._readAgentText(slots.agent2);
+      j1 = this._readAgentSubmission(slots.agent1)?.justification ?? '';
+      j2 = this._readAgentSubmission(slots.agent2)?.justification ?? '';
 
       await this._dispatchSlots([{
         name: CheckEquivalence.schema.name,
@@ -349,8 +353,16 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
     );
   }
 
-  /** Read a sub-agent slot's final text (from `details.assistantMessage`). */
+  /**
+   * Read a sub-agent slot's answer. Prefers the `SubmitAnswer` tool result
+   * (compact, eval-optimised string) over the verbose `assistantMessage`
+   * text. Falls back to the assistant message when no `SubmitAnswer` was
+   * called (e.g. V2 agents that don't have the tool yet).
+   */
   private _readAgentText(slotId: string): string {
+    const submitted = this._readSubmittedAnswer(slotId);
+    if (submitted) return submitted.answer;
+
     const r = this._findResult(slotId);
     if (!r) throw new Error(`DoubleCheckBenchmarkAgent: no result for slot '${slotId}'`);
     const details = r.details as MXAgentDetails | undefined;
@@ -358,6 +370,50 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
       throw new Error(`DoubleCheckBenchmarkAgent: slot '${slotId}' is not an MXAgent result`);
     }
     return extractText(details.assistantMessage);
+  }
+
+  /**
+   * Read a sub-agent slot's answer and justification. Returns both fields
+   * from the last `SubmitAnswer` tool result, or `undefined` if the
+   * sub-agent never called `SubmitAnswer`.
+   */
+  private _readAgentSubmission(slotId: string): { answer: string; justification: string } | undefined {
+    return this._readSubmittedAnswer(slotId) ?? undefined;
+  }
+
+  /**
+   * Scan the orchestrator log for a `SubmitAnswer` tool result under the
+   * given sub-agent slot. Returns the submitted answer and justification,
+   * or `undefined` if the sub-agent never called `SubmitAnswer`.
+   *
+   * The log is flat: each entry has `parent_id`. Tool calls dispatched by
+   * a sub-agent have `parent_id === slotId`. We find the `AssistantMessage`
+   * entries under `slotId`, look for `SubmitAnswer` tool calls in them,
+   * then find the matching `ToolResultMessage` and extract details.
+   */
+  private _readSubmittedAnswer(slotId: string): { answer: string; justification: string } | undefined {
+    const log = this.orchestrator.log;
+    // Find SubmitAnswer toolCall ids under this sub-agent.
+    const submitCallIds: string[] = [];
+    for (const e of log) {
+      if (e.parent_id !== slotId) continue;
+      if (!('role' in e) || e.role !== 'assistant') continue;
+      for (const block of (e as AssistantMessage).content) {
+        if (block.type === 'toolCall' && block.name === 'SubmitAnswer') {
+          submitCallIds.push(block.id);
+        }
+      }
+    }
+    if (submitCallIds.length === 0) return undefined;
+    // Take the LAST SubmitAnswer call (the agent may revise its answer).
+    const lastCallId = submitCallIds[submitCallIds.length - 1];
+    for (const e of log) {
+      if (!('role' in e) || e.role !== 'toolResult') continue;
+      if ((e as ToolResultMessage).toolCallId !== lastCallId) continue;
+      const details = (e as ToolResultMessage).details as { answer?: string; justification?: string } | undefined;
+      if (details?.answer) return { answer: details.answer, justification: details.justification ?? '' };
+    }
+    return undefined;
   }
 
   /** Read a `CheckEquivalence` slot's verdict. */
@@ -383,15 +439,20 @@ function extractText(msg: AssistantMessage): string {
  * analyst's prior answer + the other analyst's prior answer; asks them
  * to reconsider and either restate or give a new final answer.
  */
-function buildFeedbackPrompt(originalQ: string, yourAnswer: string, otherAnswer: string): string {
-  return [
+function buildFeedbackPrompt(originalQ: string, yourAnswer: string, otherAnswer: string, yourJustification: string, otherJustification: string): string {
+  const lines = [
     `Original question: ${originalQ}`,
     '',
     `Your previous final answer was: "${yourAnswer}"`,
-    `Another analyst's answer was: "${otherAnswer}"`,
+  ];
+  if (yourJustification) lines.push(`Your justification: "${yourJustification}"`);
+  lines.push(`Another analyst's answer was: "${otherAnswer}"`);
+  if (otherJustification) lines.push(`Their justification: "${otherJustification}"`);
+  lines.push(
     '',
-    "If the other analyst's answer makes you reconsider, give a new final answer (TL;DR + Analysis as before at the top before anything else; Put all comparisons and justification at the bottom under a 'Justification' section). If you still agree with your previous answer, restate it.",
-  ].join('\n');
+    "If the other analyst's answer and justification make you reconsider, give a new final answer (TL;DR + Analysis as before at the top before anything else; Put all comparisons and justification at the bottom under a 'Justification' section). If you still agree with your previous answer, restate it.",
+  );
+  return lines.join('\n');
 }
 
 /**

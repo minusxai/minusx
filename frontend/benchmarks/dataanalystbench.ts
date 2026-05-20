@@ -17,6 +17,7 @@ import {
   DAB_DOUBLE_CHECK,
   DAB_V2,
   DAB_ROW_INDEX,
+  DAB_AUTOCTX_ONLY,
   MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY,
   MX_API_BASE_URL,
@@ -27,6 +28,7 @@ import {
   ChainedExecuteQuery,
   FuzzyMatch,
 } from '@/agents/benchmark-analyst/db-tools';
+import { SubmitAnswer } from '@/agents/benchmark-analyst/submit-answer';
 import { ExploreDataset } from '@/agents/benchmark-analyst/explore-dataset';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
 import {
@@ -169,6 +171,7 @@ const registrables = useV2
         RootAgent,
         FuzzyMatch,
         ExploreDataset,
+        SubmitAnswer,
         ...AUTO_CONTEXT_REGISTRABLES,
       ]
     : [
@@ -178,6 +181,7 @@ const registrables = useV2
         RootAgent,
         FuzzyMatch,
         ExploreDataset,
+        SubmitAnswer,
         ...AUTO_CONTEXT_REGISTRABLES,
       ];
 
@@ -287,6 +291,8 @@ async function main() {
         rowTimeoutMs: questionTimeoutSec * 1000,
         timesRun,
         rowIndices,
+        autoContextSlots: doubleCheck ? ['agent-a', 'agent-b'] : ['default'],
+        autoContextOnly: DAB_AUTOCTX_ONLY === '1' || DAB_AUTOCTX_ONLY === 'true',
       }),
     ),
   );

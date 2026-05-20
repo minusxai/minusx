@@ -1,24 +1,23 @@
 /**
  * Tests that `BenchmarkAnalystAgent`'s system prompt:
  *   - wraps `contextDocs` in `<UserContext>`
- *   - reads the `AutoContextAgent` wrapper from `this.toolThread` and embeds
- *     the rendered output under `<GeneratedContext>`
- *   - omits `<GeneratedContext>` when no wrapper is in `this.toolThread`
+ *   - reads `ctx.autoContextRendered` (or `ctx.autoContextBySlot`) and
+ *     embeds the rendered output under `<GeneratedContext>`
+ *   - omits `<GeneratedContext>` when neither field is set
  *
- * The module-level `ensureAutoContext` is spied here to push a synthetic
- * wrapper onto `this.toolThread` (mimicking the cache-hit path). Real
- * dispatch + cache + verification logic is covered in
- * `v2/auto-context/__tests__/auto-context.integration.test.ts`.
+ * AutoContext is now a standalone runner pre-step — the agent just reads
+ * from its context. Real dispatch + cache + verification logic is covered
+ * in `v2/auto-context/__tests__/auto-context.integration.test.ts`.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { fauxAssistantMessage, type Context, type TextContent } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import { MXAgent } from '@/orchestrator/types';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';
-import * as autoContextModule from '../v2/auto-context/auto-context';
 
 const REGISTRABLES = [BenchmarkAnalystAgent];
+
+const AUTO_CTX_MARKER = 'AUTOCTX_MARKER';
 
 const CTX: BenchmarkAnalystContext = {
   connections: [
@@ -26,59 +25,20 @@ const CTX: BenchmarkAnalystContext = {
   ],
   contextDocs: '## doc heading\nUserContext-payload-marker',
   datasetKey: 'test-dataset',
+  // Simulate the runner having pre-populated auto-context
+  autoContextRendered: `## test_db.public.tbl_with_marker — ${AUTO_CTX_MARKER}\n| col | type | stats | description | joins |\n|---|---|---|---|---|\n| col_a | VARCHAR | | | |`,
 };
 
-const AUTO_CTX_MARKER = 'AUTOCTX_MARKER';
-
-// Manually craft the wrapper details so the test doesn't depend on the
-// dispatch + verification flow (covered elsewhere).
-function pushSyntheticWrapper(parent: MXAgent): void {
-  const wrapper = {
-    role: 'toolResult' as const,
-    toolCallId: 'autoctx-stub',
-    toolName: autoContextModule.AutoContextAgent.schema.name,
-    content: [{ type: 'text' as const, text: 'stub' }],
-    isError: false,
-    details: {
-      type: 'auto_context_render_state',
-      schema: [
-        { connection: 'test_db', schema: 'public', table: 'tbl_with_marker', column: 'col_a', type: 'VARCHAR' },
-      ],
-      statsEntries: [],
-      rowCountEntries: [],
-      payload: {
-        annotations: [
-          // Description targeting the table id ("t0" — only one table in the schema).
-          { id: 't0', description: AUTO_CTX_MARKER },
-        ],
-      },
-    },
-    timestamp: Date.now(),
-  };
-  parent.toolThread.push(wrapper);
-}
-
 describe('BenchmarkAnalystAgent system prompt', () => {
-  let runSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    runSpy = vi
-      .spyOn(autoContextModule, 'ensureAutoContext')
-      .mockImplementation(async (parent) => {
-        pushSyntheticWrapper(parent);
-      });
-  });
-
-  async function captureFirstSystemPromptAndUser(): Promise<{
-    systemPrompt: string;
-    userContent: TextContent[] | string;
-  }> {
+  async function captureFirstSystemPromptAndUser(
+    ctxOverride?: Partial<BenchmarkAnalystContext>,
+  ): Promise<{ systemPrompt: string; userContent: TextContent[] | string }> {
     fauxRegistration.setResponses([
       fauxAssistantMessage('TL;DR: stub answer', { stopReason: 'stop' }),
     ]);
     const orch = new Orchestrator(REGISTRABLES);
-    const root = new BenchmarkAnalystAgent(orch, { userMessage: 'find the thing' }, CTX);
+    const ctx = ctxOverride ? { ...CTX, ...ctxOverride } : CTX;
+    const root = new BenchmarkAnalystAgent(orch, { userMessage: 'find the thing' }, ctx);
     let systemPrompt: string | undefined;
     let userContent: TextContent[] | string = '';
     const origCall = orch.callLLM.bind(orch);
@@ -96,9 +56,8 @@ describe('BenchmarkAnalystAgent system prompt', () => {
     return { systemPrompt: systemPrompt ?? '', userContent };
   }
 
-  it('reads the AutoContext wrapper from this.toolThread and embeds it under <GeneratedContext>', async () => {
+  it('reads autoContextRendered from context and embeds it under <GeneratedContext>', async () => {
     const { systemPrompt } = await captureFirstSystemPromptAndUser();
-    expect(runSpy).toHaveBeenCalledTimes(1);
 
     expect(systemPrompt).toMatch(/<UserContext>[\s\S]*UserContext-payload-marker[\s\S]*<\/UserContext>/);
     expect(systemPrompt).toMatch(new RegExp(`<GeneratedContext>[\\s\\S]*${AUTO_CTX_MARKER}[\\s\\S]*</GeneratedContext>`));
@@ -112,31 +71,22 @@ describe('BenchmarkAnalystAgent system prompt', () => {
     expect(systemPrompt).toMatch(/GeneratedContext/);
   });
 
-  it('omits <GeneratedContext> when ensureAutoContext does not push a wrapper to toolThread', async () => {
-    runSpy.mockImplementation(async () => { /* no-op */ });
-    const { systemPrompt } = await captureFirstSystemPromptAndUser();
+  it('omits <GeneratedContext> when autoContextRendered is not set', async () => {
+    const { systemPrompt } = await captureFirstSystemPromptAndUser({
+      autoContextRendered: undefined,
+      autoContextBySlot: undefined,
+    });
     expect(systemPrompt).not.toContain('<GeneratedContext>');
     expect(systemPrompt).toContain('<UserContext>');
   });
 
-  it('omits <GeneratedContext> when ensureAutoContext throws (best-effort orientation)', async () => {
-    runSpy.mockRejectedValue(new Error('simulated AutoContext failure'));
-    const { systemPrompt } = await captureFirstSystemPromptAndUser();
+  it('omits <GeneratedContext> for production path (no datasetKey, no auto-context)', async () => {
+    const { systemPrompt } = await captureFirstSystemPromptAndUser({
+      datasetKey: undefined,
+      autoContextRendered: undefined,
+      autoContextBySlot: undefined,
+    });
     expect(systemPrompt).not.toContain('<GeneratedContext>');
     expect(systemPrompt).toContain('<UserContext>');
-  });
-
-  it('skips ensureAutoContext entirely when ctx.datasetKey is unset (production path)', async () => {
-    fauxRegistration.setResponses([
-      fauxAssistantMessage('TL;DR: stub', { stopReason: 'stop' }),
-    ]);
-    const orch = new Orchestrator(REGISTRABLES);
-    const ctxNoDataset = { ...CTX };
-    delete ctxNoDataset.datasetKey;
-    const root = new BenchmarkAnalystAgent(orch, { userMessage: 'q' }, ctxNoDataset);
-    const stream = orch.run(root);
-    for await (const _ev of stream) { /* drain */ }
-    await stream.result();
-    expect(runSpy).not.toHaveBeenCalled();
   });
 });

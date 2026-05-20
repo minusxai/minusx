@@ -86,15 +86,24 @@ export interface BenchmarkAnalystContext extends AgentContext {
    */
   datasetKey?: string;
   /**
-   * Per-row log of AutoContext outcomes. Each `ensureAutoContext` call
-   * (one per sub-agent in DoubleCheck) appends an entry. The benchmark
-   * runner reads this after the row completes and writes a top-level
-   * `autoContext` summary onto the persisted `BenchmarkResult` so we
-   * can distinguish "agent reasoning failed" from "AutoContext silently
-   * failed leaving the agent flying blind" in the eval output.
-   * Initialised lazily by the agent — `undefined` means no attempt yet.
+   * Per-row log of AutoContext outcomes. The benchmark runner's auto-context
+   * pre-step populates this before agent dispatch. The runner reads it after
+   * the row completes and writes a top-level `autoContext` summary onto the
+   * persisted `BenchmarkResult`.
    */
   autoContextAttempts?: AutoContextAttempt[];
+  /**
+   * Rendered GeneratedContext markdown from the auto-context pre-step.
+   * Set by the runner for single-slot configs (convenience shortcut).
+   */
+  autoContextRendered?: string;
+  /**
+   * Per-slot rendered auto-context markdown. Keyed by `catalogKey`
+   * ('default', 'agent-a', 'agent-b'). The agent reads its own slot
+   * via `this.context.autoContextBySlot?.[this.context.catalogKey ?? 'default']`.
+   * Set by the runner's auto-context pre-step.
+   */
+  autoContextBySlot?: Record<string, string>;
 }
 
 export interface AutoContextAttempt {

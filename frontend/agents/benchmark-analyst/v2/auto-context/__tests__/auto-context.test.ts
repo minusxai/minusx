@@ -161,6 +161,52 @@ describe('renderCatalogForAgent', () => {
     expect(out).toContain('t0');
     expect(out).not.toContain('t7');
   });
+
+  // ── Graded degradation: shed stats before dropping any table ──────────
+  // The input's job is to let the agent SEE every table/column so it can
+  // annotate the whole schema. Dropping a table blinds the agent to it
+  // permanently, so stats (top values first, then the rest) are shed
+  // before any table is dropped.
+
+  const verboseStats = (schema: FlatColumn[]): Map<string, ColumnMeta> => {
+    const longTop = Array.from({ length: 5 }, (_, i) => ({
+      value: `TOPVAL_${'x'.repeat(40)}_${i}`, count: 1, fraction: 0.1,
+    }));
+    return new Map(schema.map((c) => [
+      colKey(c),
+      { category: 'text', nDistinct: 10, nullCount: 2, topValues: longTop } as ColumnMeta,
+    ]));
+  };
+
+  it('sheds top values before dropping tables — all tables kept, top values gone, nDistinct kept', () => {
+    const schema = ['t0', 't1', 't2'].map((t) => col('db', 's', t, 'c', 'VARCHAR'));
+    const idMap = assignCatalogIds(schema);
+    const stats = verboseStats(schema);
+    // Budget too small for full (verbose top values) but ample for the
+    // no-top render of all three tables.
+    const out = renderCatalogForAgent(schema, idMap, stats, new Map(), 300);
+    expect(out).toContain('t0');
+    expect(out).toContain('t1');
+    expect(out).toContain('t2');
+    expect(out).not.toContain('TOPVAL_');     // top values shed
+    expect(out).toContain('nDistinct=10');    // cheaper stats retained
+    expect(out).not.toMatch(/Note:/);         // no table dropped
+  });
+
+  it('sheds ALL stats before dropping tables when no-top still overflows', () => {
+    const schema = ['t0', 't1', 't2'].map((t) => col('db', 's', t, 'c', 'VARCHAR'));
+    const idMap = assignCatalogIds(schema);
+    const stats = verboseStats(schema);
+    // Budget fits the bare skeleton of all three but not the no-top stats.
+    const out = renderCatalogForAgent(schema, idMap, stats, new Map(), 130);
+    expect(out).toContain('t0');
+    expect(out).toContain('t1');
+    expect(out).toContain('t2');
+    expect(out).not.toContain('TOPVAL_');
+    expect(out).not.toContain('nDistinct');   // all stats shed
+    expect(out).toContain('VARCHAR');         // structure (names+types) kept
+    expect(out).not.toMatch(/Note:/);
+  });
 });
 
 describe('SubmitSchemaInfo tool', () => {
@@ -488,6 +534,63 @@ describe('renderGeneratedContext', () => {
     expect(out).toContain('12345');
     expect(out).toContain('nDistinct=4242');
     expect(out).toContain('nullCount=7');
+  });
+
+  // ── Graded degradation (output): annotations are the irrecoverable value ──
+  // Descriptions + verified joins are what AutoContext spent an LLM call to
+  // produce; the analyst can re-derive stats and column lists via
+  // SearchDBSchema/ExecuteQuery. So under budget pressure we shed stats,
+  // then unannotated columns, then whole tables — annotations survive last.
+
+  const bigSchema: FlatColumn[] = [
+    col('db', 'main', 'users', 'id'),
+    col('db', 'main', 'users', 'email', 'VARCHAR'),
+    ...Array.from({ length: 20 }, (_, i) => col('db', 'main', 'users', `f${i}`, 'VARCHAR')),
+    col('db', 'main', 'orders', 'user_id'),
+    col('db', 'main', 'logs', 'lg0', 'VARCHAR'),
+    col('db', 'main', 'logs', 'lg1', 'VARCHAR'),
+    col('db', 'main', 'logs', 'lg2', 'VARCHAR'),
+  ];
+  const bigIdMap = assignCatalogIds(bigSchema);
+  const verboseStats = (s: FlatColumn[]): Map<string, ColumnMeta> =>
+    new Map(s.map((c) => [
+      colKey(c),
+      {
+        category: 'text', nDistinct: 10, nullCount: 2,
+        topValues: Array.from({ length: 5 }, (_, i) => ({
+          value: `TOP_${'y'.repeat(40)}_${i}`, count: 1, fraction: 0.1,
+        })),
+      } as ColumnMeta,
+    ]));
+  const bigPayload = {
+    annotations: [
+      { id: bigIdMap.byPath('db.main.users.email')!.id, description: 'User email address' },
+      { id: bigIdMap.byPath('db.main.orders.user_id')!.id, join: { to: bigIdMap.byPath('db.main.users.id')!.id } },
+    ],
+  };
+
+  it('sheds the stats column first, keeping every column plus descriptions and joins', () => {
+    const out = renderGeneratedContext(bigSchema, bigIdMap, verboseStats(bigSchema), new Map(), bigPayload, 2500);
+    expect(out).toContain('User email address');
+    expect(out).toMatch(/user_id[^\n]*→[^\n]*users\.id/);
+    expect(out).not.toContain('nDistinct'); // stats column shed
+    expect(out).toContain('f19');           // every column still listed
+    expect(out).not.toMatch(/Note:/);
+  });
+
+  it('keeps only annotated columns and collapses the rest when no-stats still overflows', () => {
+    const out = renderGeneratedContext(bigSchema, bigIdMap, verboseStats(bigSchema), new Map(), bigPayload, 500);
+    expect(out).toContain('User email address');                 // annotated col kept
+    expect(out).toMatch(/user_id[^\n]*→[^\n]*users\.id/);         // verified join kept
+    expect(out).not.toContain('f19');                            // unannotated collapsed
+    expect(out).toContain('SearchDBSchema');                     // recovery hint
+    expect(out).not.toMatch(/Note:/);
+  });
+
+  it('drops trailing tables with a recovery note when even the essential tier overflows', () => {
+    const out = renderGeneratedContext(bigSchema, bigIdMap, verboseStats(bigSchema), new Map(), bigPayload, 120);
+    expect(out).toMatch(/Note:/);
+    expect(out).toContain('SearchDBSchema');
   });
 });
 

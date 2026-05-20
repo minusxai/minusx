@@ -83,6 +83,21 @@ export type StreamEvent =
   | (AssistantMessageEvent & { parent_id: string })
   | PendingToolEvent;
 
+// ── Activity tracking ────────────────────────────────────────────────────
+// Lightweight lifecycle events for observability (benchmark runner, etc.).
+// The orchestrator fires these via an optional callback; they carry no
+// payload beyond what's needed to render a one-line status.
+
+export type ActivityEvent =
+  | { phase: 'llm'; status: 'start' }
+  | { phase: 'llm'; status: 'end' }
+  | { phase: 'tool'; status: 'start'; name: string }
+  | { phase: 'tool'; status: 'end'; name: string }
+  | { phase: 'agent'; status: 'start'; name: string }
+  | { phase: 'agent'; status: 'end'; name: string };
+
+export type ActivityCallback = (event: ActivityEvent) => void;
+
 export class UserInputException extends Error {
   readonly toolCallIds: string[];
   constructor(ids: string | string[]) {

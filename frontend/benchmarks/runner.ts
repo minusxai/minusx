@@ -11,8 +11,9 @@ import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { MXAgent, RegistrableClass } from '@/orchestrator/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 import type { AutoContextAttempt, BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
-import type { ConversationLog } from '@/orchestrator/types';
+import type { ActivityEvent, ConversationLog } from '@/orchestrator/types';
 import { createSemaphore, parseConcurrencyLimit } from '@/orchestrator/concurrency';
+import { runAutoContextForSlot } from '@/agents/benchmark-analyst/v2/auto-context/auto-context';
 
 // Optional process-wide cap on concurrent agent runs (orchestrator
 // instances). Set via the `MAX_AGENTS_CONCURRENCY` env var (read once
@@ -94,6 +95,14 @@ export interface BenchmarkRunConfig {
    *  whose index is in this set are executed; all others are skipped.
    *  Useful for debugging a single question: `DAB_ROW_INDEX=3`. */
   rowIndices?: Set<number>;
+  /** Catalog slots to run auto-context for before agent dispatch.
+   *  Single-agent: `['default']`. DoubleCheck: `['agent-a', 'agent-b']`.
+   *  When omitted or empty, auto-context is skipped entirely. */
+  autoContextSlots?: string[];
+  /** When true, run only the auto-context pre-step and exit without
+   *  dispatching any agents. Useful for pre-warming the auto-context
+   *  cache or debugging auto-context in isolation. */
+  autoContextOnly?: boolean;
 }
 
 export interface BenchmarkResult {
@@ -122,7 +131,7 @@ export interface BenchmarkResult {
   /** Short git commit hash at the time of the benchmark run. */
   git_commit?: string;
   /** AutoContext orientation outcome for this row. Records each
-   *  `ensureAutoContext` attempt (one per sub-agent in DoubleCheck).
+   *  auto-context slot attempt from the runner's pre-step.
    *  `summary` aggregates across attempts:
    *    - 'ok'      → at least one attempt succeeded
    *    - 'failed'  → all attempts failed
@@ -190,9 +199,11 @@ function progressLine(done: number, total: number, running: number, errors: numb
   return `  ${bar} ${pctStr} ${c.dim}${done}/${total}${c.reset}${runStr}${errStr}  ${c.dim}${elapsed}${c.reset}`;
 }
 
-function renderProgress(done: number, total: number, running: number, errors: number, elapsedMs: number): void {
+function renderProgress(done: number, total: number, running: number, errors: number, elapsedMs: number, activity?: string): void {
   if (!isTTY) return;
-  process.stderr.write(`\r\x1b[K${progressLine(done, total, running, errors, elapsedMs)}`);
+  const line = progressLine(done, total, running, errors, elapsedMs);
+  const actStr = activity ? `  ${c.dim}│${c.reset} ${activity}` : '';
+  process.stderr.write(`\r\x1b[K${line}${actStr}`);
 }
 
 function clearLine(): void {
@@ -385,7 +396,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       connections: row.allowed_connections
         .map((name) => connectionsByName.get(name))
         .filter((c): c is ConnectionInfo => !!c),
-      contextDocs: [row.docs, row.additional_docs].filter(Boolean).join('\n\n') || undefined,
+      contextDocs: [row.docs, row.additional_docs,
+        "NOTE: Pay very close attention to the provided docs above (especially the HINTS). This is critical to understanding and solving the user question correctly."
+      ].filter(Boolean).join('\n\n') || undefined,
       // Carried so V2 tool helpers (e.g. `runPromptPass`) can read it
       // directly off the context — no need for tools to plumb it arg-by-arg.
       // Distinct from per-round agent userMessages (DoubleCheck rotates a
@@ -412,6 +425,100 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     rowContexts.set(i, ctx);
   }
 
+  // ── AutoContext pre-step ────────────────────────────────────────────────
+  // Run auto-context for each configured slot before dispatching agents.
+  // Results are cached to `_autoctx.jsonl` / `_autoctx_log.jsonl`; on
+  // subsequent runs, loaded from file unless CLEAR_AUTOCTX is set.
+  const autoContextSlots = config.autoContextSlots ?? [];
+  const autoContextBySlot: Record<string, string> = {};
+
+  if (autoContextSlots.length > 0 && remainingRows.length > 0) {
+    const autoctxPath = path.join(
+      path.dirname(inputPath),
+      path.basename(inputPath).replace('_input.jsonl', '_autoctx.jsonl'),
+    );
+    const autoctxLogPath = path.join(
+      path.dirname(inputPath),
+      path.basename(inputPath).replace('_input.jsonl', '_autoctx_log.jsonl'),
+    );
+    // eslint-disable-next-line no-restricted-syntax -- benchmark CLI env var
+    const clearAutoctx = !!process.env.CLEAR_AUTOCTX;
+    const allConnections = [...connectionsByName.values()];
+    // Dataset docs (docs + additional_docs + HINTS) are identical across all
+    // rows of a dataset, so any row's `contextDocs` is representative. The
+    // AutoContext pre-step is dataset-scoped, so feed it the same docs the
+    // analyst sees — the HINTS often spell out the joins it must verify.
+    const autoContextDocs = rowContexts.get(remainingRows[0].i)?.contextDocs;
+
+    if (!clearAutoctx && existsSync(autoctxPath)) {
+      // Load from cache
+      const lines = readFileSync(autoctxPath, 'utf-8').split('\n').filter((l) => l.trim());
+      for (const line of lines) {
+        const entry = JSON.parse(line) as { catalogKey: string; renderedText: string };
+        autoContextBySlot[entry.catalogKey] = entry.renderedText;
+      }
+      const slotList = Object.keys(autoContextBySlot).join(', ');
+      console.log(`  ${c.green}\u2713${c.reset} AutoContext  loaded from cache (${slotList})`);
+    } else {
+      // Run auto-context for each slot
+      for (const slot of autoContextSlots) {
+        const slotLabel = autoContextSlots.length > 1 ? ` ${c.dim}${slot}${c.reset}` : '';
+        process.stderr.write(`  ${c.cyan}\u21BB${c.reset} AutoContext${slotLabel}  running...`);
+        const t0 = Date.now();
+        try {
+          const result = await runAutoContextForSlot(
+            allConnections, label, slot, config.registrables, autoContextDocs,
+          );
+          autoContextBySlot[slot] = result.renderedText;
+          const dur = formatDuration(Date.now() - t0);
+          clearLine();
+          console.log(`  ${c.green}\u2713${c.reset} AutoContext${slotLabel}  done (${dur}, ${result.annotationCount} annotations)`);
+
+          // Append log
+          appendFileSync(autoctxLogPath, JSON.stringify({ catalogKey: slot, log: result.log }) + '\n');
+        } catch (e) {
+          const dur = formatDuration(Date.now() - t0);
+          const msg = e instanceof Error ? e.message : String(e);
+          clearLine();
+          console.log(`  ${c.red}\u2717${c.reset} AutoContext${slotLabel}  failed (${dur}): ${msg}`);
+        }
+      }
+      // Write results
+      if (Object.keys(autoContextBySlot).length > 0) {
+        const resultLines = Object.entries(autoContextBySlot)
+          .map(([catalogKey, renderedText]) => JSON.stringify({ catalogKey, renderedText }))
+          .join('\n');
+        writeFileSync(autoctxPath, resultLines + '\n', 'utf-8');
+        console.log(`  ${c.dim}\u2192 ${path.basename(autoctxPath)}${c.reset}`);
+      }
+    }
+    console.log();
+
+    // Stamp every row context with the auto-context results
+    for (const ctx of rowContexts.values()) {
+      ctx.autoContextBySlot = autoContextBySlot;
+      // For single-slot, also set the direct field for convenience
+      const slotKeys = Object.keys(autoContextBySlot);
+      if (slotKeys.length === 1) {
+        ctx.autoContextRendered = autoContextBySlot[slotKeys[0]];
+      }
+      // Record attempt status
+      for (const slot of autoContextSlots) {
+        ctx.autoContextAttempts!.push(
+          autoContextBySlot[slot]
+            ? { status: 'ok' }
+            : { status: 'failed', reason: 'auto-context pre-step did not produce a result' },
+        );
+      }
+    }
+
+    // Early exit: run only auto-context, skip agent dispatch.
+    if (config.autoContextOnly) {
+      console.log(`  ${c.dim}autoContextOnly: skipping agent dispatch${c.reset}\n`);
+      return { rows: 0, errors: 0, timeouts: 0, durationMs: Date.now() - startedAt };
+    }
+  }
+
   // ── Single-run executor ────────────────────────────────────────────────
 
   type RunOutcome =
@@ -429,9 +536,31 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     started: boolean;
     status: RowStatus;
     durationMs: number;
+    /** Counter-based activity tracking. Each key is a phase label
+     *  (e.g. 'llm', 'ExecuteQuery'), value is the number of concurrent
+     *  runs in that phase. Provides an accurate picture when multiple
+     *  runs per row are in flight simultaneously. */
+    activityCounts: Map<string, number>;
   }>();
   for (const { row, i } of remainingRows) {
-    rowState.set(i, { row, outcomes: [], startTime: 0, started: false, status: 'waiting', durationMs: 0 });
+    rowState.set(i, { row, outcomes: [], startTime: 0, started: false, status: 'waiting', durationMs: 0, activityCounts: new Map() });
+  }
+
+  /** Map an ActivityEvent to a display label. */
+  function activityKey(ev: ActivityEvent): string {
+    if (ev.phase === 'llm') return 'llm';
+    return ev.name;
+  }
+
+  /** Format a row's activity counters into a compact display string.
+   *  Examples: `llm`, `2×llm`, `2×llm 1×ExecuteQuery` */
+  function formatActivity(counts: Map<string, number>): string {
+    const parts: string[] = [];
+    for (const [label, count] of counts) {
+      if (count <= 0) continue;
+      parts.push(count > 1 ? `${count}×${label}` : label);
+    }
+    return parts.join(' ');
   }
 
   // ── Multi-progress display (per-row bars, timesRun > 1) ──────────────
@@ -451,6 +580,33 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     }
     process.stderr.write(`\x1b[${multiProgressHeight}A`);
     multiProgressHeight = 0;
+  }
+
+  // Terminal width for truncating lines to prevent wrapping artefacts.
+  const termWidth = process.stderr.columns ?? 120;
+
+  /** Strip ANSI escape sequences to measure visible character width. */
+  // eslint-disable-next-line no-control-regex
+  const ANSI_RE = /\x1b\[[0-9;]*m/g;
+  function visibleLength(s: string): number {
+    return s.replace(ANSI_RE, '').length;
+  }
+
+  /** Truncate a line to fit within `termWidth`, preserving ANSI codes
+   *  at the cut point so colors don't leak. */
+  function truncateLine(s: string): string {
+    if (visibleLength(s) <= termWidth) return s;
+    let vis = 0;
+    let i = 0;
+    while (i < s.length && vis < termWidth - 1) {
+      if (s[i] === '\x1b') {
+        const end = s.indexOf('m', i);
+        if (end !== -1) { i = end + 1; continue; }
+      }
+      vis++;
+      i++;
+    }
+    return s.slice(0, i) + c.reset + '\u2026';
   }
 
   function renderMultiProgress(): void {
@@ -478,7 +634,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       } else if (state.started) {
         const barFilled = Math.round((done / timesRun) * ROW_BAR_WIDTH);
         const bar = `${color}${'\u2588'.repeat(barFilled)}${c.gray}${'\u2591'.repeat(ROW_BAR_WIDTH - barFilled)}${c.reset}`;
-        lines.push(`  ${color}${idx}${c.reset}  ${bar}  ${done}/${timesRun}  ${c.dim}${msg}${c.reset}`);
+        const actStr = formatActivity(state.activityCounts);
+        const act = actStr ? `  ${c.yellow}${actStr}${c.reset}` : '';
+        lines.push(`  ${color}${idx}${c.reset}  ${bar}  ${done}/${timesRun}${act}  ${c.dim}${msg}${c.reset}`);
       } else {
         lines.push(`  ${c.dim}${idx}  ${'\u00B7'.repeat(ROW_BAR_WIDTH)}  0/${timesRun}  ${msg}${c.reset}`);
       }
@@ -493,8 +651,25 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     const toStr = timeouts > 0 ? `  ${c.yellow}${timeouts} timeout${c.reset}` : '';
     lines.push(`  ${c.dim}\u2500\u2500${c.reset}  ${c.bold}${pct}%${c.reset}  ${c.dim}${doneRuns}/${totalRuns} runs  ${completed}/${remainingRows.length} rows${c.reset}${errStr}${toStr}  ${c.dim}${elapsed}${c.reset}`);
 
-    process.stderr.write(lines.join('\n') + '\n');
-    multiProgressHeight = lines.length;
+    const truncated = lines.map(truncateLine);
+    process.stderr.write(truncated.join('\n') + '\n');
+    multiProgressHeight = truncated.length;
+  }
+
+  /** Build a compact activity summary for the single-progress bar.
+   *  Example: `#2 llm · #3 ExecuteSQL · #4 SearchSchema` */
+  function buildActivitySummary(): string | undefined {
+    const parts: string[] = [];
+    for (const { i } of remainingRows) {
+      const state = rowState.get(i)!;
+      if (state.started && state.status === 'running') {
+        const actStr = formatActivity(state.activityCounts);
+        if (actStr) {
+          parts.push(`${c.dim}#${i + 1}${c.reset}${c.yellow} ${actStr}${c.reset}`);
+        }
+      }
+    }
+    return parts.length > 0 ? parts.join(`${c.dim} · ${c.reset}`) : undefined;
   }
 
   // Helpers to abstract single-bar vs multi-progress rendering.
@@ -504,7 +679,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   }
   function redrawProgressDisplay(): void {
     if (useMultiProgress) renderMultiProgress();
-    else if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt);
+    else if (!config.quiet) renderProgress(completed, total, running, errors, Date.now() - startedAt, buildActivitySummary());
   }
 
   // Tick the progress display every 300ms. Disabled in quiet mode.
@@ -512,7 +687,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     ? setInterval(
         useMultiProgress
           ? () => renderMultiProgress()
-          : () => renderProgress(completed, total, running, errors, Date.now() - startedAt),
+          : () => renderProgress(completed, total, running, errors, Date.now() - startedAt, buildActivitySummary()),
         300,
       )
     : null;
@@ -541,8 +716,32 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     runIdx: number,
   ): Promise<RunOutcome> {
     await agentSemaphore.acquire();
+    // Acquired a slot — clear the waiting-slot counter for this run.
+    const state = rowState.get(rowIdx)!;
+    const ws = (state.activityCounts.get('waiting-slot') ?? 1) - 1;
+    if (ws <= 0) state.activityCounts.delete('waiting-slot');
+    else state.activityCounts.set('waiting-slot', ws);
 
     const orch = new Orchestrator(config.registrables);
+    // Wire activity tracking: increment/decrement counters so the
+    // progress display shows an accurate breakdown of what all
+    // concurrent runs for this row are doing right now.
+    orch.onActivity = (ev) => {
+      // Skip agent events — they're containers for llm/tool calls and
+      // would double-count (agent active + its inner llm active).
+      if (ev.phase === 'agent') return;
+      const rowSt = rowState.get(rowIdx);
+      if (!rowSt) return;
+      const key = activityKey(ev);
+      const counts = rowSt.activityCounts;
+      if (ev.status === 'start') {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      } else {
+        const n = (counts.get(key) ?? 1) - 1;
+        if (n <= 0) counts.delete(key);
+        else counts.set(key, n);
+      }
+    };
     const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
 
     ensureDebugDir();
@@ -672,6 +871,9 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       running++;
       redrawProgressDisplay();
     }
+    // Track this run as waiting for an agent concurrency slot.
+    // Decremented after agentSemaphore.acquire() returns.
+    state.activityCounts.set('waiting-slot', (state.activityCounts.get('waiting-slot') ?? 0) + 1);
 
     const outcome = await executeSingleRun(state.row, ctx, rowIdx, runIdx);
     state.outcomes.push(outcome);

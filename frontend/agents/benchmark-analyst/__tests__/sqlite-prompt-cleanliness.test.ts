@@ -6,13 +6,12 @@
  * that's an implementation detail the LLM never sees. These tests pin
  * the prompt purity so future edits don't reintroduce DuckDB-isms.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { fauxAssistantMessage } from '@mariozechner/pi-ai';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';
 import { renderDialectHints } from '../v2/dialect-hints';
-import * as autoContextModule from '../v2/auto-context/auto-context';
 
 const REGISTRABLES = [BenchmarkAnalystAgent];
 
@@ -66,10 +65,6 @@ function sqliteOnlyCtx(): BenchmarkAnalystContext {
 }
 
 describe('benchmark sqlite — prompt cleanliness (no DuckDB leakage)', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.spyOn(autoContextModule, 'ensureAutoContext').mockImplementation(async () => { /* no-op */ });
-  });
 
   it('rendered system prompt for a sqlite-only context contains zero DuckDB references', async () => {
     const prompt = await captureSystemPrompt(sqliteOnlyCtx());
