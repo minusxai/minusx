@@ -26,10 +26,15 @@ const SubmitAnswerParams = Type.Object({
     description:
       'Your final answer, formatted for the eval validator. Pack names immediately adjacent to their numbers/values (no filler words between them). For lists, put each item on its own line (like a markdown table). This exact string is what the eval function receives — make it compact and precise.',
   }),
+    justification: Type.String({
+    description:
+      '2-3 sentences justification for your answer, maybe mentioning methodology, assumptions, or uncertainties.',
+  }),
 });
 
 interface SubmitAnswerDetails extends Record<string, unknown> {
   answer: string;
+  justification: string;
 }
 
 export class SubmitAnswer extends MXTool<typeof SubmitAnswerParams, BenchmarkAnalystContext, SubmitAnswerDetails> {
@@ -41,11 +46,11 @@ export class SubmitAnswer extends MXTool<typeof SubmitAnswerParams, BenchmarkAna
   };
 
   async run(): Promise<ToolResponse<SubmitAnswerDetails>> {
-    const { answer } = this.parameters;
+    const { answer, justification } = this.parameters;
     return {
       content: [{ type: 'text', text: JSON.stringify({ submitted: true, answer }) }],
       isError: false,
-      details: { answer },
+      details: { answer, justification },
     };
   }
 }
