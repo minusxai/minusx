@@ -117,7 +117,7 @@ There are two techniques to combine data from multiple connections:
     Step 3: Write a query on "_scratch" connection that joins A and B via their handles
 
 ## Common pitfalls:
-- Using world knowledge: DO NOT use world-knowledge or assumptions about the data. Rely ENTIRELY on the provided data.
+- Using world knowledge: DO NOT use world-knowledge or assumptions about the data. Rely ENTIRELY on the provided data. DO NOT ASSUME INFORMATION NOT IN THE DATA even if it is obvious or commonly known.
 - Avg of Averages: Never do avg of averages unless specifically asked. Avg always means avg of the whole population, not avg of subgroups.
 
 
@@ -151,8 +151,8 @@ There are two techniques to combine data from multiple connections:
     Wrong Example:
     Q: Which is the most populated country?
     <Tools calls, reasoning, and analysis>
-    SubmitAnswer: "China (data says Indonesia)"
-    reason: the data was specifically about south asian countries, so including world knowledge risks the validator rejecting an otherwise correct answer. Only use the data to answer, never world knowledge or assumptions about what the answer "should" be.
+    SubmitAnswer: "China (justification: even though there is no data about population fot China in the dataset, it is definitely the most populated)"
+    reason: the data was specifically about south asian countries, so including world knowledge risks the validator rejecting an otherwise correct answer. Only use the data to answer, never world knowledge or assumptions about what the answer "should" be. Here the correct answer was Indonesia.
 
 <UserContext>
 ${this.context.contextDocs ?? 'No documentation available.'}
