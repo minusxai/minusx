@@ -444,6 +444,11 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     // eslint-disable-next-line no-restricted-syntax -- benchmark CLI env var
     const clearAutoctx = !!process.env.CLEAR_AUTOCTX;
     const allConnections = [...connectionsByName.values()];
+    // Dataset docs (docs + additional_docs + HINTS) are identical across all
+    // rows of a dataset, so any row's `contextDocs` is representative. The
+    // AutoContext pre-step is dataset-scoped, so feed it the same docs the
+    // analyst sees — the HINTS often spell out the joins it must verify.
+    const autoContextDocs = rowContexts.get(remainingRows[0].i)?.contextDocs;
 
     if (!clearAutoctx && existsSync(autoctxPath)) {
       // Load from cache
@@ -462,7 +467,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
         const t0 = Date.now();
         try {
           const result = await runAutoContextForSlot(
-            allConnections, label, slot, config.registrables,
+            allConnections, label, slot, config.registrables, autoContextDocs,
           );
           autoContextBySlot[slot] = result.renderedText;
           const dur = formatDuration(Date.now() - t0);

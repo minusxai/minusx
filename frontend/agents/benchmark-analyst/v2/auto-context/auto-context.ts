@@ -1110,6 +1110,7 @@ export async function runAutoContextForSlot(
   datasetKey: string,
   catalogKey: string,
   registrables: RegistrableClass[],
+  contextDocs?: string,
 ): Promise<AutoContextRunResult> {
   if (connections.length === 0) {
     throw new Error('No connections provided for auto-context.');
@@ -1127,9 +1128,11 @@ export async function runAutoContextForSlot(
   const idMap = assignCatalogIds(schema);
   const catalogText = renderCatalogForAgent(schema, idMap, statsByCol, rowCountByTable);
 
-  // 3. Run AutoContextAgent in its own Orchestrator.
+  // 3. Run AutoContextAgent in its own Orchestrator. `contextDocs` carries
+  //    the dataset documentation (incl. HINTS), which the prompt instructs
+  //    the agent to read first — join semantics often live there.
   const orch = new Orchestrator(registrables);
-  const ctx: BenchmarkAnalystContext = { connections, datasetKey, catalogKey };
+  const ctx: BenchmarkAnalystContext = { connections, datasetKey, catalogKey, contextDocs };
   const agent = new AutoContextAgent(orch, { userMessage: catalogText }, ctx);
 
   const stream = orch.run(agent as unknown as MXAgent);

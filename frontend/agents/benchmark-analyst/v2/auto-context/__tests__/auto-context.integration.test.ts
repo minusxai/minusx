@@ -129,6 +129,57 @@ describe('runAutoContextForSlot', () => {
     ).rejects.toThrow('No connections');
   });
 
+  /** Capture every system prompt the AutoContextAgent renders during a run. */
+  async function capturePrompts(
+    fn: () => Promise<unknown>,
+  ): Promise<string[]> {
+    const spy = vi.spyOn(
+      AutoContextAgent.prototype as unknown as { getSystemPrompt: () => string },
+      'getSystemPrompt',
+    );
+    try {
+      await fn();
+      return spy.mock.results
+        .filter((r) => r.type === 'return')
+        .map((r) => r.value as string);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('threads contextDocs into the AutoContextAgent system prompt (docs/HINTS reach the agent)', async () => {
+    fauxReg.setResponses([
+      submitMessage([{ id: 'c0', description: 'pk' }]),
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+    const docs = 'HINTS: business_id corresponds to business_ref. MARKER_DOCS_REACHED_AUTOCTX';
+
+    const prompts = await capturePrompts(() =>
+      runAutoContextForSlot(CONNECTIONS, 'd-docs', 'default', REGISTRABLES, docs),
+    );
+
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(prompts.some((p) => p.includes('MARKER_DOCS_REACHED_AUTOCTX'))).toBe(true);
+    // The injected block is `## Data documentation\n<docs>` — the trailing
+    // newline distinguishes it from the static instructional mention
+    // `(## Data documentation)` that's always in the prompt.
+    expect(prompts.some((p) => /## Data documentation\n/.test(p))).toBe(true);
+  });
+
+  it('omits the Data documentation block when no contextDocs is provided', async () => {
+    fauxReg.setResponses([
+      submitMessage([{ id: 'c0', description: 'pk' }]),
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+
+    const prompts = await capturePrompts(() =>
+      runAutoContextForSlot(CONNECTIONS, 'd-nodocs', 'default', REGISTRABLES),
+    );
+
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(prompts.every((p) => !/## Data documentation\n/.test(p))).toBe(true);
+  });
+
   it('returns a log that contains the SubmitSchemaInfo tool result', async () => {
     fauxReg.setResponses([
       submitMessage([{ id: 'c0', description: 'pk' }]),
