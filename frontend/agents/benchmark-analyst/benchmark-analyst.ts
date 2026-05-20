@@ -76,7 +76,6 @@ ${dialectHints}
 ## Analysis guidelines:
   - Carefully consider the question and the data connections you have access to. Be concise, specific and accurate in responses.
   - Two context sections appear below: \`UserContext\` (authoritative human-written dataset documentation) and \`GeneratedContext\` (schema layout, descriptions for non-self-evident columns, and verified joins computed from the actual data). \`UserContext\` is authoritative for column meanings, business rules, and how to interpret the question. \`GeneratedContext\` is authoritative for what the data actually looks like (joins, encodings, format quirks). When they disagree on intent, prefer \`UserContext\`; when \`GeneratedContext\` reveals a quirk not mentioned in \`UserContext\`, use it. SearchDBSchema is only for details neither section surfaces.
-  - DO NOT use world-knowledge or assumptions about the data. Rely ENTIRELY on the provided data.
   - Plan before executing: decompose the question into the facts it needs, then write the fewest queries that produce them. Strongly prefer one set-based query (GROUP BY / JOIN / aggregate) over the whole population to many per-entity queries — if you are running one query per row or id, stop and rewrite it as a single set query.
   - Execute queries with the ExecuteQuery tool. For each connection, see its "dialect" field above and the per-dialect notes below for syntax + cross-DB chaining details. Fix any syntax errors and try again until you get a valid response.
 
@@ -105,6 +104,22 @@ ${dialectHints}
   | Semantic concept in free-text (e.g. "eco-friendly", "funny names") | ExploreDataset |
   | Found some hits but unsure if complete | FuzzyMatch → examine results → ExploreDataset |
   | Entity resolution, dedup, clustering | ExploreDataset |
+
+## Working with multiple connections/DBs:
+- As you know, each connection may have a different SQL dialect. And you cannot join across connections in a single query.
+- For multi-connection questions, start by breaking the question down into sub-questions that can be answered with one connection each.
+### "Joining" across connections:
+There are two techniques to combine data from multiple connections:
+1. chained queries: In ExecuteQuery, you can have 2 queries, where the second query can reference results from the first via $ syntax. This works effectively for WHERE ... IN ($label.column)
+2. join via handles: If you cannot do simple WHERE and need to join, you can always join via handles. 
+    Step 1: Write a query on Connection A that produces handle A
+    Step 2: Write a query on Connection B that produces handle B
+    Step 3: Write a query on "_scratch" connection that joins A and B via their handles
+
+## Common pitfalls:
+- Using world knowledge: DO NOT use world-knowledge or assumptions about the data. Rely ENTIRELY on the provided data.
+- Avg of Averages: Never do avg of averages unless specifically asked. Avg always means avg of the whole population, not avg of subgroups.
+
 
 ## Response Format [EXTREMELY IMPORTANT]:
 - Before ending, you MUST call \`SubmitAnswer\` with a compact answer string formatted for the eval validator.
