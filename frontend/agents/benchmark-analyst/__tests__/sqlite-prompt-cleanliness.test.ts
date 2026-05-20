@@ -1,11 +1,10 @@
 /**
- * The benchmark `sqlite` connector is being migrated to a real `better-sqlite3`
- * runtime (no DuckDB underneath). For that to work, the agent must never
- * be told — directly or indirectly — that sqlite has any relation to DuckDB.
- *
- * These tests pin the agent-visible surface (system prompt, dialect hints,
- * tool descriptions) so future edits don't reintroduce DuckDB leaks for
- * sqlite contexts.
+ * The agent-visible surface (system prompt, dialect hints, tool descriptions)
+ * for sqlite contexts must read as pure SQLite — no mention of DuckDB,
+ * `jaro_winkler`, `UNNEST`, `REGEXP_EXTRACT`, etc. The benchmark runtime
+ * happens to route sqlite through DuckDB-via-ATTACH for stability, but
+ * that's an implementation detail the LLM never sees. These tests pin
+ * the prompt purity so future edits don't reintroduce DuckDB-isms.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fauxAssistantMessage } from '@mariozechner/pi-ai';

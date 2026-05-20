@@ -1,11 +1,7 @@
-// Exercises the benchmark connector factory against real temp SQLite
-// files. After the migration off DuckDB-via-ATTACH for sqlite,
-// `getOrCreateBenchmarkConnector('…', 'sqlite', …)` returns a
-// `BenchmarkSqliteConnector` (real better-sqlite3); duckdb dialects
-// continue to use the shared in-memory DuckDB instance. The contract
-// these tests assert (per-dataset isolation, idempotent cache reuse,
-// concurrent-query correctness, index introspection) holds across the
-// swap — that's what makes the migration safe.
+// Exercises the benchmark shared-DuckDB connector against a real temp
+// SQLite file attached READ_ONLY — the exact path the benchmark CLI uses
+// for sqlite/duckdb datasets. Verifies index introspection survives the
+// DuckDB-attached-SQLite hop (confirmed manually; locked in here).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import RealDatabase from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'fs';

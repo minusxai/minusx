@@ -13,7 +13,6 @@ import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
-import { BenchmarkSqliteConnector } from './sqlite-native-connector';
 import { ExploreDataset } from './explore-dataset';
 import {
   interpolateRefs,
@@ -26,20 +25,6 @@ import { storeHandle, qualifyHandleRefs } from './v2/handle-store';
 import { computeResultStats } from './v2/result-stats';
 import { getCatalogStore } from './v2/catalog';
 import type { ResultEntry } from './result-shapes';
-
-/**
- * Map a (connector, dialect) pair to the dialect string `fuzzyMatch`
- * should use. The native `BenchmarkSqliteConnector` runs real SQLite —
- * which doesn't have `jaro_winkler_similarity` / `levenshtein_distance`
- * — so its fuzzy path is the substring-only `sqlite-native` branch.
- * Every other connector passes its dialect through unchanged.
- */
-export function benchmarkFuzzyDialect(
-  connector: NodeConnector,
-  dialect: string,
-): string {
-  return connector instanceof BenchmarkSqliteConnector ? 'sqlite-native' : dialect;
-}
 
 // ─── Shared connector wiring ──────────────────────────────────────────────
 //
@@ -447,7 +432,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
     const queryFn = async (sql: string) => connector.query(sql);
 
     try {
-      const result = await fuzzyMatch(benchmarkFuzzyDialect(connector, dialect), queryFn, {
+      const result = await fuzzyMatch(dialect, queryFn, {
         table, columns, searchTerm: search_term, schema: schemaName, limit, returnColumns,
       });
 
@@ -458,7 +443,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, BenchmarkAnalyst
         const expandedTerms = await this.getSemanticTerms(connection, table, columns, search_term, schemaName);
         if (expandedTerms.length > 0) {
           const combinedSearch = expandedTerms.join(' ');
-          const expandedResult = await fuzzyMatch(benchmarkFuzzyDialect(connector, dialect), queryFn, { table, columns, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
+          const expandedResult = await fuzzyMatch(dialect, queryFn, { table, columns, searchTerm: combinedSearch, schema: schemaName, limit, returnColumns });
           return {
             content: [{ type: 'text', text: JSON.stringify({
               searchTerm: search_term,
@@ -845,7 +830,7 @@ export class ChainedExecuteQuery extends MXTool<
           finalQuery = interpolated;
         } else {
           const { sql, referencedHandles } = await qualifyHandleRefs(interpolated);
-          if (referencedHandles.length > 0 && dialect !== 'duckdb') {
+          if (referencedHandles.length > 0 && dialect !== 'duckdb' && dialect !== 'sqlite') {
             return errorResponse(
               `Query #${i + 1} references labelled query result(s) (${referencedHandles.join(', ')}) on a '${dialect}' connection. To use a prior labelled result here, chain via \`sequential: true\` + \`$label.column\` instead of \`FROM handle_xyz\`.`,
               queries.length,

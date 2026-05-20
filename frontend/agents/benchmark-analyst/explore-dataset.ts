@@ -208,7 +208,7 @@ export class ExploreDataset extends MXTool<
           prepared = interpolated;
         } else {
           const { sql, referencedHandles } = await qualifyHandleRefs(interpolated);
-          if (referencedHandles.length > 0 && dialect !== 'duckdb') {
+          if (referencedHandles.length > 0 && dialect !== 'duckdb' && dialect !== 'sqlite') {
             return {
               content: [{ type: 'text', text: JSON.stringify({ success: false, error: `Query ${i + 1} (${connection}) references labelled query result(s) (${referencedHandles.join(', ')}) on a '${dialect}' connection. To chain a prior labelled result here, use \`sequential: true\` + \`$label.column\` instead of \`FROM handle_xyz\`.` }) }],
               isError: true,
