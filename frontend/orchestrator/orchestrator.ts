@@ -23,6 +23,7 @@ import {
   type MXAgentDetails,
   type PendingToolCall,
   type RegistrableClass,
+  type ActivityCallback,
   type StreamEvent,
   type ToolMessage,
   type ToolResponse,
@@ -43,6 +44,10 @@ const llmSemaphore = createSemaphore(
 
 export class Orchestrator {
   log: ConversationLog;
+  /** Optional activity callback for observability. Fires on LLM, tool,
+   *  and sub-agent lifecycle events so callers (e.g. benchmark runner)
+   *  can render live status without parsing the stream. */
+  onActivity: ActivityCallback | null = null;
   protected stream: EventStream<StreamEvent, AssistantMessage | null> | null = null;
   protected controller: AbortController | null = null;
   protected readonly registrables: RegistrableClass[];
@@ -115,6 +120,7 @@ export class Orchestrator {
     // dispatching the request so queued calls don't materialize provider
     // sockets until they have a slot.
     await llmSemaphore.acquire();
+    this.onActivity?.({ phase: 'llm', status: 'start' });
     try {
       // Spread `callOptions` blindly into pi-ai's stream options. We treat it
       // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new pi-ai
@@ -158,6 +164,7 @@ export class Orchestrator {
       }
       return result;
     } finally {
+      this.onActivity?.({ phase: 'llm', status: 'end' });
       llmSemaphore.release();
     }
   }
@@ -357,11 +364,14 @@ export class Orchestrator {
           // Sub-agent: any UIE inside it has already emitted its own per-tool
           // pending events at the deepest level (this same code path, leaf
           // branch). The bubble-up shouldn't re-emit.
+          this.onActivity?.({ phase: 'agent', status: 'start', name: tc.name });
           const subFinal = await instance.run();
+          this.onActivity?.({ phase: 'agent', status: 'end', name: tc.name });
           this.appendAgentResult(subFinal, instance, parent);
           return;
         }
 
+        this.onActivity?.({ phase: 'tool', status: 'start', name: tc.name });
         try {
           const response = (await instance.run()) as ToolResponse;
           const trm: ToolResultMessage = {
@@ -375,8 +385,10 @@ export class Orchestrator {
           };
           this.log.push({ ...trm, parent_id: parent.id });
           parent.toolThread.push(trm);
+          this.onActivity?.({ phase: 'tool', status: 'end', name: tc.name });
         } catch (err) {
           if (err instanceof UserInputException) {
+            this.onActivity?.({ phase: 'tool', status: 'end', name: tc.name });
             // Frontend-bridge tool: emit a `pending` event and re-throw so
             // the orchestrator pauses for the bridge to fulfil this tool.
             this.stream?.push({
@@ -396,6 +408,7 @@ export class Orchestrator {
           // unmatched toolCall makes `getPendingToolCalls()` return the
           // failing tool, and the frontend then tries to bridge a
           // server-side tool ("Unknown client-side tool: ExecuteSQL").
+          this.onActivity?.({ phase: 'tool', status: 'end', name: tc.name });
           const errorMsg = err instanceof Error ? err.message : String(err);
           const errTrm: ToolResultMessage = {
             role: 'toolResult',
