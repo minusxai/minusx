@@ -4,7 +4,7 @@
 // Each benchmark file (e.g. dataanalystbench.ts) defines config + agent,
 // then calls runBenchmark() — this module does the rest.
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { Orchestrator } from '@/orchestrator/orchestrator';
@@ -197,6 +197,33 @@ function renderProgress(done: number, total: number, running: number, errors: nu
 
 function clearLine(): void {
   if (isTTY) process.stderr.write('\r\x1b[K');
+}
+
+/**
+ * Serialize an orchestrator-stream event for the per-run debug JSONL.
+ * Defensive against circular references (some orchestrator events carry
+ * back-pointers) and unserializable values — falls back to a placeholder
+ * rather than aborting the run. Each line stays compact: an object
+ * `{ts, rowIdx, runIdx, ev}` with the raw event nested as `ev`.
+ */
+function stringifyDebugEvent(payload: { ts: number; rowIdx: number; runIdx: number; ev: unknown }): string {
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(payload, (_key, v) => {
+      if (typeof v === 'bigint') return v.toString();
+      if (v instanceof Error) return { _error: v.message, stack: v.stack };
+      if (v && typeof v === 'object') {
+        if (seen.has(v as object)) return '[Circular]';
+        seen.add(v as object);
+      }
+      return v;
+    });
+  } catch (err) {
+    return JSON.stringify({
+      ts: payload.ts, rowIdx: payload.rowIdx, runIdx: payload.runIdx,
+      ev: { _unserializable: err instanceof Error ? err.message : String(err) },
+    });
+  }
 }
 
 function formatDuration(ms: number): string {
@@ -493,11 +520,47 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   // Render initial state for multi-progress.
   if (useMultiProgress) renderMultiProgress();
 
-  async function executeSingleRun(row: InputRow, ctx: BenchmarkAnalystContext): Promise<RunOutcome> {
+  // Debug-stream directory: one JSONL per (row, run-attempt) so a hang
+  // literally stops file growth — `tail -f` shows exactly where the
+  // orchestrator was when it stalled. Sibling of the output JSONL.
+  // Stable folder name per dataset (no per-run timestamp) so the same
+  // path is used across re-runs; the first write to each file truncates
+  // so stale data from prior runs doesn't bleed in.
+  const debugDir = path.join(path.dirname(outputPath), `debug_${label}`);
+  let debugDirEnsured = false;
+  function ensureDebugDir(): void {
+    if (debugDirEnsured) return;
+    try { mkdirSync(debugDir, { recursive: true }); } catch { /* ignore */ }
+    debugDirEnsured = true;
+  }
+
+  async function executeSingleRun(
+    row: InputRow,
+    ctx: BenchmarkAnalystContext,
+    rowIdx: number,
+    runIdx: number,
+  ): Promise<RunOutcome> {
     await agentSemaphore.acquire();
 
     const orch = new Orchestrator(config.registrables);
     const agent = new config.agentClass(orch, { userMessage: row.user_message }, ctx);
+
+    ensureDebugDir();
+    const debugPath = path.join(debugDir, `row${rowIdx}_run${runIdx}.jsonl`);
+    // First write truncates — re-runs of the same (row, runAttempt) cleanly
+    // replace the prior file rather than stacking events on stale content.
+    // All subsequent writes (events, end-marker) use `appendFileSync`.
+    try {
+      writeFileSync(debugPath, JSON.stringify({
+        _meta: 'debug-stream-header',
+        ts: Date.now(),
+        runStamp,
+        label,
+        rowIdx,
+        runIdx,
+        question: row.user_message,
+      }) + '\n');
+    } catch { /* diagnostic-only; don't abort the run */ }
 
     let runCancelled = false;
     const runTimeoutHandle = rowTimeoutMs > 0
@@ -507,15 +570,67 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       }, rowTimeoutMs)
       : null;
 
+    // Track how much of `orch.log` we've already flushed. The stream
+    // itself only yields completed assistant messages + pending events —
+    // it skips toolResults, sub-agent dispatches, LLM-call IDs, and
+    // everything else that lives in `orch.log`. So we snapshot the
+    // *log delta* on every yield (and once at end) to capture all of it.
+    let flushedLogLen = 0;
+    const flushLogDelta = (reason: string): void => {
+      const log = orch.log as unknown as Array<Record<string, unknown>>;
+      while (flushedLogLen < log.length) {
+        const entry = log[flushedLogLen];
+        const line = stringifyDebugEvent({
+          ts: Date.now(), rowIdx, runIdx,
+          ev: { _kind: 'log_entry', _idx: flushedLogLen, _flushReason: reason, ...entry },
+        });
+        try { appendFileSync(debugPath, line + '\n'); } catch { /* diagnostic-only */ }
+        flushedLogLen++;
+      }
+    };
+
     let error: string | undefined;
     try {
       const stream = orch.run(agent as unknown as MXAgent);
-      for await (const _ of stream) { /* drain */ }
+      for await (const ev of stream) {
+        // Flush any log entries that landed since the last yield
+        // (toolResults, sub-agent dispatches, etc.). Then record the
+        // yielded stream event itself, marked distinctly so it's easy
+        // to filter from the (richer) log entries.
+        flushLogDelta('pre-yield');
+        try {
+          const line = stringifyDebugEvent({
+            ts: Date.now(), rowIdx, runIdx,
+            ev: { _kind: 'stream_event', ...(ev as Record<string, unknown>) },
+          });
+          appendFileSync(debugPath, line + '\n');
+        } catch { /* diagnostic-only */ }
+      }
+      flushLogDelta('end');
       await stream.result();
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
+      try {
+        appendFileSync(debugPath, JSON.stringify({
+          _meta: 'debug-stream-error',
+          ts: Date.now(),
+          error,
+        }) + '\n');
+      } catch { /* ignore */ }
     } finally {
       if (runTimeoutHandle) clearTimeout(runTimeoutHandle);
+      // Final flush — capture any log entries written between the last
+      // yield and run completion (or error / cancel).
+      try { flushLogDelta('finalize'); } catch { /* ignore */ }
+      try {
+        appendFileSync(debugPath, JSON.stringify({
+          _meta: 'debug-stream-end',
+          ts: Date.now(),
+          cancelled: runCancelled,
+          error: error ?? null,
+          totalLogEntries: flushedLogLen,
+        }) + '\n');
+      } catch { /* ignore */ }
       agentSemaphore.release();
     }
 
@@ -538,15 +653,15 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   //     orchestrator runs and gates the per-row timeout.
   //   - `MAX_LLM_CONCURRENCY` (inside the Orchestrator) caps in-flight
   //     provider calls process-wide. Both default to "no cap".
-  interface RunTask { rowIdx: number }
+  interface RunTask { rowIdx: number; runIdx: number }
   const tasks: RunTask[] = [];
   for (let runIdx = 0; runIdx < timesRun; runIdx++) {
     for (const { i } of remainingRows) {
-      tasks.push({ rowIdx: i });
+      tasks.push({ rowIdx: i, runIdx });
     }
   }
 
-  await Promise.all(tasks.map(async ({ rowIdx }) => {
+  await Promise.all(tasks.map(async ({ rowIdx, runIdx }) => {
     const state = rowState.get(rowIdx)!;
     const ctx = rowContexts.get(rowIdx)!;
 
@@ -558,7 +673,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       redrawProgressDisplay();
     }
 
-    const outcome = await executeSingleRun(state.row, ctx);
+    const outcome = await executeSingleRun(state.row, ctx, rowIdx, runIdx);
     state.outcomes.push(outcome);
 
     // When all runs for this row complete, process and persist results.
