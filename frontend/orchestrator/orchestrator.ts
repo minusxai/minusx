@@ -1,17 +1,7 @@
 
 import { randomUUID } from 'crypto';
-import {
-  EventStream,
-  streamSimple,
-  type Api,
-  type AssistantMessage,
-  type Context,
-  type Message,
-  type Model,
-  type TextContent,
-  type ToolCall,
-  type ToolResultMessage,
-} from '@mariozechner/pi-ai';
+import { EventStream, streamSimple } from '@/orchestrator/llm';
+import type { Api, AssistantMessage, Context, Message, Model, TextContent, ToolCall, ToolResultMessage } from '@/orchestrator/llm';
 import {
   MXAgent,
   MXTool,
@@ -122,10 +112,10 @@ export class Orchestrator {
     await llmSemaphore.acquire();
     this.onActivity?.({ phase: 'llm', status: 'start' });
     try {
-      // Spread `callOptions` blindly into pi-ai's stream options. We treat it
-      // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new pi-ai
+      // Spread `callOptions` blindly into the model stream options. We treat it
+      // as an opaque blob (`SimpleStreamOptions`-shaped) so adding new stream
       // options (`thinkingBudgets`, `metadata`, …) never touches this code.
-      const piStream = streamSimple(model, context, {
+      const modelStream = streamSimple(model, context, {
         ...(callOptions ?? {}),
         headers: {
           ...((callOptions?.headers as Record<string, string> | undefined) ?? {}),
@@ -137,7 +127,7 @@ export class Orchestrator {
       let result: AssistantMessage | null = null;
       let errored = false;
       try {
-        for await (const ev of piStream) {
+        for await (const ev of modelStream) {
           this.stream?.push({ ...ev, parent_id: agentId });
           if (ev.type === 'done') result = ev.message;
           else if (ev.type === 'error') {
@@ -155,11 +145,11 @@ export class Orchestrator {
         }
       }
       if (!result) {
-        throw new Error(`callLLM: pi-ai stream ended without done/error event (agent=${agentId})`);
+        throw new Error(`callLLM: LLM stream ended without done/error event (agent=${agentId})`);
       }
       if (errored) {
         throw new Error(
-          `callLLM: pi-ai stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
+          `callLLM: LLM stream errored (agent=${agentId}, reason='${result.stopReason}'): ${result.errorMessage ?? ''}`,
         );
       }
       return result;

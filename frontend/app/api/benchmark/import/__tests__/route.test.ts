@@ -1,4 +1,4 @@
-// POST /api/benchmark/import — verifies that an imported pi-ai
+// POST /api/benchmark/import — verifies that an imported orchestrator
 // conversation log is persisted as a v=2 conversation file in the
 // documents DB so it can be opened at /explore/<fileId>?v=2 and continued
 // in the chat UI.
@@ -49,7 +49,7 @@ describe('POST /api/benchmark/import', () => {
     (getEffectiveUser as unknown as { mockResolvedValue: (v: EffectiveUser) => void }).mockResolvedValue(ADMIN);
   });
 
-  it('creates a v=2 conversation file from an imported pi-ai log', async () => {
+  it('creates a v=2 conversation file from an imported orchestrator log', async () => {
     const log: ConversationLog = [
       {
         type: 'toolCall',

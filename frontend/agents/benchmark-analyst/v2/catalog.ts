@@ -21,7 +21,7 @@ import {
   type PromptPassCallLLM,
   type PromptPassEntry,
 } from './prompt-pass';
-import type { Api, Model } from '@/lib/llm/get-model';
+import type { Api, Model } from '@/orchestrator/llm';
 
 export interface CatalogTable {
   columns: string[];

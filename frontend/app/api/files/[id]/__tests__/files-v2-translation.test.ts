@@ -1,4 +1,4 @@
-// /api/files/[id] — verifies that v=2 conversation files have their pi-ai
+// /api/files/[id] — verifies that v=2 conversation files have their orchestrator
 // `content.log` translated to legacy task-log shape on read, so the
 // frontend's `useConversation` + `parseLogToMessages` work unchanged. v=1
 // and non-conversation files pass through untranslated.
@@ -67,9 +67,9 @@ describe('GET /api/files/[id] — v=2 conversation translation', () => {
       [v1FileId, 'legacy', '/org/logs/conversations/1/legacy', 'conversation', JSON.stringify(v1Content), '[]', 1, now, now],
     );
 
-    // V=2 conversation — pi-ai shape on disk, meta.version=2.
+    // V=2 conversation — orchestrator log shape on disk, meta.version=2.
     const v2Content = {
-      metadata: { userId: '1', name: 'pi-ai', createdAt: now, updatedAt: now, logLength: 1 },
+      metadata: { userId: '1', name: 'orchestrator', createdAt: now, updatedAt: now, logLength: 1 },
       log: [
         {
           type: 'toolCall',
@@ -101,20 +101,20 @@ describe('GET /api/files/[id] — v=2 conversation translation', () => {
     expect(body.data.content.log[0].args?.user_message).toBe('legacy hello');
   });
 
-  it('v=2 file is translated: pi-ai entries → legacy task entries', async () => {
+  it('v=2 file is translated: orchestrator entries → legacy task entries', async () => {
     const res = await GET(makeGetRequest(v2FileId), {
       params: Promise.resolve({ id: String(v2FileId) }),
     } as never);
     expect(res.status).toBe(200);
     const body = (await res.json()) as FileGetResponse;
     // The first entry, after translation, is a legacy task with
-    // agent=AnalystAgent and args.user_message=<userMessage from pi-ai
+    // agent=AnalystAgent and args.user_message=<userMessage from orchestrator
     // arguments>.
     const log = body.data.content.log;
     expect(log[0]._type).toBe('task');
     expect(log[0].agent).toBe('AnalystAgent');
     expect(log[0].args?.user_message).toBe('v2 hello');
-    // No raw pi-ai shape leaks to the frontend.
+    // No raw orchestrator log shape leaks to the frontend.
     expect(log[0].type).toBeUndefined();
   });
 });

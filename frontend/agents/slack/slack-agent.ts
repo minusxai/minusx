@@ -1,8 +1,6 @@
-import {
-  Type,
-  registerFauxProvider,
-  type Tool,
-} from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAnalystModel } from '@/agents/analyst/model-config';

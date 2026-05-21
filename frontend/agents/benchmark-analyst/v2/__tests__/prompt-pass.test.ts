@@ -6,9 +6,11 @@
 // in `prompt-pass.ts` and are tested directly here. Integration of the LLM
 // call is tested through a minimal `V2DataTool` subclass.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Type, type Tool, fauxAssistantMessage, registerFauxProvider } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import { fauxAssistantMessage, registerFauxProvider } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import type { Api, Model } from '@/lib/llm/get-model';
+import type { Api, Model } from '@/orchestrator/llm';
 import type { QueryResult } from '@/lib/connections/base';
 import type { BenchmarkAnalystContext } from '../../types';
 import { V2DataTool } from '../data-tool-base';

@@ -1,4 +1,5 @@
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 

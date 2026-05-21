@@ -4,7 +4,9 @@
 // → server-only chain into NextAuth) live in `db-tools.server.ts` and
 // extend the `Base*` classes here.
 
-import { Type, type Tool, type TSchema } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';

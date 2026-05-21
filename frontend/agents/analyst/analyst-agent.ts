@@ -1,11 +1,7 @@
-import {
-  Type,
-  registerFauxProvider,
-  type ImageContent,
-  type TextContent,
-  type Tool,
-  type TSchema,
-} from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
+import type { ImageContent, TextContent, Tool } from '@/orchestrator/llm';
+import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { getAnalystModel } from './model-config';
 import { ReadFiles, SearchFiles } from './file-tools';

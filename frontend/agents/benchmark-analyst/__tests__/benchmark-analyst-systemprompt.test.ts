@@ -10,7 +10,8 @@
  * in `v2/auto-context/__tests__/auto-context.integration.test.ts`.
  */
 import { describe, it, expect } from 'vitest';
-import { fauxAssistantMessage, type Context, type TextContent } from '@mariozechner/pi-ai';
+import type { Context, TextContent } from '@/orchestrator/llm';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';

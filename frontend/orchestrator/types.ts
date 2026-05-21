@@ -1,19 +1,6 @@
 
-import {
-  type AssistantMessage,
-  type AssistantMessageEvent,
-  type Context,
-  type ImageContent,
-  type Message,
-  type Model,
-  type Static,
-  type TextContent,
-  type Tool,
-  type ToolCall,
-  type ToolResultMessage,
-  type TSchema,
-  type Api,
-} from '@mariozechner/pi-ai';
+import type { Static, TSchema } from 'typebox';
+import type { AssistantMessage, AssistantMessageEvent, Context, ImageContent, Message, Model, TextContent, Tool, ToolCall, ToolResultMessage, Api } from '@/orchestrator/llm';
 import type { Orchestrator } from './orchestrator';
 import { gen_id } from './utils';
 
@@ -144,7 +131,7 @@ export class MXAgent<
   static readonly type: string = 'Agent';
   static readonly model: Model<Api>;
   static readonly tools: Tool<TSchema>[] = [];
-  /** Call-time options spread blindly into pi-ai's `streamSimple` (matches
+  /** Call-time options spread blindly into `streamSimple` (matches
    *  `SimpleStreamOptions`: `reasoning`, `thinkingBudgets`, `metadata`,
    *  `maxRetryDelayMs`, …). Subclasses set this from env config; the
    *  orchestrator never inspects individual keys. */

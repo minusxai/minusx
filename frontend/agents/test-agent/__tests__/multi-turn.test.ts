@@ -1,4 +1,5 @@
-import { fauxAssistantMessage, type TextContent, type UserMessage } from '@mariozechner/pi-ai';
+import type { TextContent, UserMessage } from '@/orchestrator/llm';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AgentContext } from '@/orchestrator/types';
 import { EchoTool, PendingTool, NestedAgent, TestAgent, fauxRegistration } from '../test-agent';

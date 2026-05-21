@@ -1,10 +1,6 @@
-import {
-  fauxAssistantMessage,
-  fauxToolCall,
-  type FauxResponseStep,
-  type TextContent,
-  type ToolCall,
-} from '@mariozechner/pi-ai';
+import type { TextContent, ToolCall } from '@/orchestrator/llm';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
+import type { FauxResponseStep } from '@/orchestrator/llm/testing';
 import { Orchestrator } from './orchestrator';
 import type {
   AgentContext,

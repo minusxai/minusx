@@ -8,12 +8,13 @@
 // prompt-pass.ts so they can be tested in isolation.
 
 import 'server-only';
-import type { TSchema } from '@mariozechner/pi-ai';
+import type { TSchema } from 'typebox';
 import { MXTool } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext } from '../types';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { NodeConnector } from '@/lib/connections/base';
-import { getModel, type Api, type Model } from '@/lib/llm/get-model';
+import { getModel } from '@/orchestrator/llm';
+import type { Api, Model } from '@/orchestrator/llm';
 import { TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import {
   runPromptPassFree,

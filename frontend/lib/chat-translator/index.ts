@@ -1,11 +1,11 @@
-// Chat translator — pi-ai ↔ legacy task-log shape.
+// Chat translator — orchestrator ↔ legacy task-log shape.
 //
 // One module, three exports:
-//   piLogToLegacy           pi-ai ConversationLog            → ConversationLogEntry[]      (forward; file reads + done frame)
+//   piLogToLegacy           orchestrator ConversationLog            → ConversationLogEntry[]      (forward; file reads + done frame)
 //   piStreamEventToLegacy   StreamEvent                      → legacy SSE payload | null   (per-event mid-stream)
 //   legacyToolResultToPi    CompletedToolCallFromPython      → ToolResultMessage           (reverse; orchestrator resume)
 //
-// Lives at the backend boundary so the frontend never sees pi-ai shape.
+// Lives at the backend boundary so the frontend never sees orchestrator log shape.
 // All three functions are pure and deterministic.
 
 import type {
@@ -14,13 +14,7 @@ import type {
   AgentInvocation,
   StreamEvent,
 } from '@/orchestrator/types';
-import type {
-  AssistantMessage,
-  ToolResultMessage,
-  ToolCall as PiToolCall,
-  TextContent,
-  ThinkingContent,
-} from '@mariozechner/pi-ai';
+import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent } from '@/orchestrator/llm';
 import type {
   ConversationLogEntry as LegacyLogEntry,
   TaskLogEntry,
@@ -89,7 +83,7 @@ function deriveRunId(seed: string): string {
 // Constraint when adding entries: only server-side tools belong here.
 // Frontend tools (Clarify, Navigate, etc.) bridge through the UI and
 // round-trip back via `legacyToolResultToPi` — renaming them outbound
-// would create a `toolName` mismatch in the pi-ai log on the next turn.
+// would create a `toolName` mismatch in the orchestrator log on the next turn.
 // Server-side tools (extend `MXTool`, run in the orchestrator) never
 // round-trip.
 const V2_TO_V1_TOOL_NAME: Record<string, string> = {};
@@ -101,11 +95,11 @@ function v2ToV1ToolName(name: string): string {
 // ─── piLogToLegacy: forward ─────────────────────────────────────────
 
 /**
- * Forward translation: pi-ai ConversationLog → legacy ConversationLogEntry[].
+ * Forward translation: orchestrator ConversationLog → legacy ConversationLogEntry[].
  *
  * Used by the backend route handlers when responding to the frontend (which
- * expects legacy task-log shape). Walks the pi-ai log once, emits one or
- * more legacy entries per pi-ai entry per the rules documented in
+ * expects legacy task-log shape). Walks the orchestrator log once, emits one or
+ * more legacy entries per orchestrator entry per the rules documented in
  * `lib/chat-translator/index.ts` plan.
  */
 export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
@@ -158,7 +152,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
       const createdAt = tsFromTimestamp(entry.timestamp);
       const turnPrimaryTaskId: { id: string } = { id: '' };
 
-      // Build content_blocks in pi-ai content order (thinking first if
+      // Build content_blocks in orchestrator content order (thinking first if
       // present, then text). Frontend's `ContentDisplay` walks this array
       // and routes `type:'thinking'` blocks into the "Show Thinking" panel
       // and `type:'text'` blocks into the answer body — same behavior v=1
@@ -294,7 +288,7 @@ interface LegacyStreamingEvent {
 }
 
 /**
- * Per-event SSE translation. Returns null for pi-ai events that have no
+ * Per-event SSE translation. Returns null for orchestrator events that have no
  * legacy counterpart; the caller should skip those (they're internal
  * signals like text_start/end).
  */
@@ -359,8 +353,8 @@ export function isV2ConversationFile(file: {
 }
 
 /**
- * Translate a v=2 conversation file's `content.log` (pi-ai shape) into
- * legacy `ConversationLogEntry[]` so the frontend never sees pi-ai shape.
+ * Translate a v=2 conversation file's `content.log` (orchestrator log shape) into
+ * legacy `ConversationLogEntry[]` so the frontend never sees orchestrator log shape.
  * Mutates a shallow copy of `file` (preserves all other fields). v=1 files
  * (or non-conversation files) pass through unchanged.
  */
@@ -386,7 +380,7 @@ export function translateConversationForFrontend<T extends {
 
 /**
  * Reverse mapping for orchestrator `resume()` input. The frontend sends back
- * legacy `CompletedToolCallFromPython` shape; the orchestrator wants pi-ai
+ * legacy `CompletedToolCallFromPython` shape; the orchestrator wants orchestrator
  * `ToolResultMessage`. Single-direction, no information loss for the fields
  * the orchestrator actually reads.
  */

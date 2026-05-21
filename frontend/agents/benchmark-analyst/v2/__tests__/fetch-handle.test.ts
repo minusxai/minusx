@@ -1,6 +1,7 @@
 // Tests for fetchHandle tool: pagination over stored results
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fauxAssistantMessage, type TextContent } from '@mariozechner/pi-ai';
+import type { TextContent } from '@/orchestrator/llm';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
 import { FetchHandleV2 } from '../fetch-handle';

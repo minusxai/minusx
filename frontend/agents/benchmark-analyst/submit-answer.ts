@@ -13,7 +13,8 @@
 // is that the answer lives in a structured, extractable location in the
 // conversation log.
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext } from './types';
 

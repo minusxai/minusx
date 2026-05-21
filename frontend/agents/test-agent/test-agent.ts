@@ -1,10 +1,8 @@
 
-import {
-  Type,
-  registerFauxProvider,
-  type Tool,
-  type TSchema,
-} from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import {
   MXAgent,
   MXTool,
@@ -113,7 +111,7 @@ const TestAgentParams = Type.Object({
 export class TestAgent extends MXAgent<typeof TestAgentParams> {
   static readonly schema: Tool<typeof TestAgentParams> = {
     name: 'TestAgent',
-    description: 'Test agent. LLM calls go through pi-ai\'s faux provider.',
+    description: 'Test agent. LLM calls go through orchestrator\'s faux provider.',
     parameters: TestAgentParams,
   };
   static readonly tools: Tool<TSchema>[] = [

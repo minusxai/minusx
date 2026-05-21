@@ -7,7 +7,7 @@
 // e.g. `DAB_BENCH_DATASETS=agnews,yelp npm run benchmark:dab`.
 
 import { readdirSync, existsSync } from 'node:fs';
-import { getModel } from '@/lib/llm/get-model';
+import { getModel } from '@/orchestrator/llm';
 import {
   DAB_BENCH_BASE_DIR,
   DAB_BENCH_DATASETS,

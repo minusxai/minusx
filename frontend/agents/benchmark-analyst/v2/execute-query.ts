@@ -1,7 +1,8 @@
 // ExecuteQueryV2: SQL/Mongo queries against data connections
 // Supports cross-connection queries, sequential label interpolation, handles-as-tables
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { type ToolResponse } from '@/orchestrator/types';
 import type { QueryResult } from '@/lib/connections/base';
 import { storeHandle, qualifyHandleRefs } from './handle-store';

@@ -1,14 +1,15 @@
-import { getModel, type Api, type Model } from '@/lib/llm/get-model';
+import { getModel } from '@/orchestrator/llm';
+import type { Api, Model } from '@/orchestrator/llm';
 
 /**
  * Shape of `ANALYST_AGENT_MODEL_CONFIG` env JSON.
  *
- * Mirrors pi-ai's two-layer separation:
- *   - `provider` + `model`: model identity, passed to pi-ai's `getModel`.
+ * Mirrors a two-layer separation:
+ *   - `provider` + `model`: model identity, passed to the orchestrator's `getModel`.
  *   - `options`: call-time `SimpleStreamOptions` (e.g. `reasoning`,
  *     `thinkingBudgets`, `metadata`, `maxRetryDelayMs`). The orchestrator
- *     spreads this **blindly** into pi-ai's `streamSimple`/`callLLM` so
- *     adding a new pi-ai option requires zero code change here — just edit
+ *     spreads this **blindly** into the orchestrator's `streamSimple`/`callLLM` so
+ *     adding a new stream option requires zero code change here — just edit
  *     the env JSON.
  *
  * Example:
@@ -24,7 +25,7 @@ export interface AnalystModelConfig {
 /**
  * Returns the parsed analyst model config (or null if unset).
  *
- * The API key is read by pi-ai from the provider-specific env var
+ * The API key is read by the LLM client from the provider-specific env var
  * (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY) at call time — not part of this config.
  */
 export function getAnalystModelConfig(): AnalystModelConfig | null {
@@ -34,7 +35,7 @@ export function getAnalystModelConfig(): AnalystModelConfig | null {
   return JSON.parse(raw) as AnalystModelConfig;
 }
 
-/** Returns a typed pi-ai Model from `ANALYST_AGENT_MODEL_CONFIG`, or null. */
+/** Returns a typed Model from `ANALYST_AGENT_MODEL_CONFIG`, or null. */
 export function getAnalystModel(): Model<Api> | null {
   const cfg = getAnalystModelConfig();
   if (!cfg) return null;
@@ -43,7 +44,7 @@ export function getAnalystModel(): Model<Api> | null {
 
 /**
  * Returns the call-time options blob (or undefined). Spread directly into
- * pi-ai's stream options at call sites — no per-key knowledge needed.
+ * the orchestrator's stream options at call sites — no per-key knowledge needed.
  */
 export function getAnalystModelOptions(): Record<string, unknown> | undefined {
   return getAnalystModelConfig()?.options;

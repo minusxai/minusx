@@ -5,8 +5,9 @@
 // scenarios. A query is SQL for relational connections, or a native
 // `{collection, pipeline}` aggregation pipeline (JSON string) for MongoDB.
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
-import type { AssistantMessage, Context, TextContent } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import type { AssistantMessage, Context, TextContent } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { type BenchmarkAnalystContext, type ConnectionInfo } from './types';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
@@ -14,8 +15,8 @@ import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { getOrCreateBenchmarkConnector } from './shared-duckdb';
 import { qualifyHandleRefs } from './v2/handle-store';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
-import { getModel } from '@/lib/llm/get-model';
-import type { Api, Model } from '@/lib/llm/get-model';
+import { getModel } from '@/orchestrator/llm';
+import type { Api, Model } from '@/orchestrator/llm';
 import {
   interpolateRefs,
   interpolateMongoRefs,

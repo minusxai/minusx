@@ -1,4 +1,4 @@
-import { fauxAssistantMessage, fauxToolCall } from '@mariozechner/pi-ai';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AgentContext, StreamEvent } from '@/orchestrator/types';
 import { EchoTool, PendingTool, ErrorTool, NestedAgent, TestAgent, fauxRegistration } from '../test-agent';

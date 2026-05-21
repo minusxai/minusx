@@ -1,7 +1,9 @@
 // V2BenchmarkAnalystAgent: the 4-tool V2 agent
 // Extends BenchmarkAnalystAgent but overrides tools and system prompt
 
-import { Type, type Tool, type TSchema, type Message } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
+import type { Tool, Message } from '@/orchestrator/llm';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';
 import { publicConnectionMetadata } from '../types';

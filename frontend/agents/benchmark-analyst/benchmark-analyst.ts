@@ -1,9 +1,7 @@
-import {
-  Type,
-  registerFauxProvider,
-  type Tool,
-  type TSchema,
-} from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { MXAgent } from '@/orchestrator/types';
 import { getAnalystModel } from '@/agents/analyst/model-config';
 import { CatalogSearchDBSchema, ChainedExecuteQuery, FuzzyMatch } from './db-tools';

@@ -8,7 +8,8 @@
  * `<GeneratedContext>` block.
  */
 import { describe, it, expect } from 'vitest';
-import { fauxAssistantMessage, type Context } from '@mariozechner/pi-ai';
+import type { Context } from '@/orchestrator/llm';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';

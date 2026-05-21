@@ -7,7 +7,8 @@
 // `./db-tools` (Base classes only) and never reaches this file.
 
 import 'server-only';
-import type { Tool, TSchema } from '@mariozechner/pi-ai';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { runQuery } from '@/lib/connections/run-query';
 import { loadConnectionSchema } from '@/lib/connections/load-schema';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';

@@ -1,7 +1,8 @@
 // ExploreV2: Cross-table discovery search
 // "Search when you don't know the table" — lexical matching with optional semantic re-ranking
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import { type ToolResponse } from '@/orchestrator/types';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';

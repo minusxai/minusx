@@ -7,10 +7,10 @@
 // composes together.
 
 import 'server-only';
-import type { AssistantMessage, Context, TextContent } from '@mariozechner/pi-ai';
+import type { AssistantMessage, Context, TextContent } from '@/orchestrator/llm';
 import type { QueryResult } from '@/lib/connections/base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
-import type { Api, Model } from '@/lib/llm/get-model';
+import type { Api, Model } from '@/orchestrator/llm';
 
 /** Stateless LLM-call shape `runPromptPassFree` accepts. The tool-based path
  *  binds `Orchestrator.callLLM` here; the catalog-build path uses a thinner

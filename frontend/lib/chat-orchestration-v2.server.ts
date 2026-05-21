@@ -1,11 +1,11 @@
 // V=2 chat orchestration — server-side bridge between the legacy /api/chat
-// + /api/chat/stream routes and the pi-ai orchestrator. Translates inputs
-// (legacy ChatRequest → pi-ai message/resume) and outputs (pi-ai log +
+// + /api/chat/stream routes and the orchestrator. Translates inputs
+// (legacy ChatRequest → orchestrator message/resume) and outputs (orchestrator log +
 // stream events → legacy ChatResponse + streaming_event SSE frames) so the
 // frontend stays unchanged.
 //
 // The data-shape boundary lives entirely in this file plus
-// `lib/chat-translator/index.ts`. No frontend code knows about pi-ai.
+// `lib/chat-translator/index.ts`. No frontend code knows about the orchestrator log shape.
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
@@ -209,7 +209,7 @@ export async function validateV2Mode(
 }
 
 /**
- * Return the root invocation's agent name from a saved pi-ai conversation
+ * Return the root invocation's agent name from a saved orchestrator conversation
  * log, or undefined if the log has no root. The root is the first
  * AgentInvocation entry with `parent_id === null`. setupOrchestration uses
  * this to pick which agent class to instantiate for a new user-message
@@ -258,7 +258,7 @@ async function setupOrchestration(
 ): Promise<OrchestrationSetup> {
   const file = await FilesAPI.loadFile(conversationId, user);
   const content = file.data.content as unknown as ConversationFileContent | undefined;
-  // Pi-ai log lives at content.log (we persist pi-ai shape on disk).
+  // Orchestrator log lives at content.log (we persist orchestrator log shape on disk).
   const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
   const expectedLogIndex = savedLog.length;
 
@@ -395,7 +395,7 @@ async function setupOrchestration(
 }
 
 /**
- * Pull the first user message from a pi-ai log diff. Used to rename a
+ * Pull the first user message from a orchestrator log diff. Used to rename a
  * fresh v=2 conversation file from "New Conversation" → first message
  * preview. Returns null if no root invocation present.
  */
@@ -420,8 +420,8 @@ async function persistAndBuildLegacyResponse(
   const fullPiLog = orch.log;
   const piDiff: PiLogEntry[] = fullPiLog.slice(expectedLogIndex);
 
-  // Persist pi-ai entries via the legacy append (it works for any JSON-array
-  // log; the pi-ai entries are valid JSON). Forks if the log length doesn't
+  // Persist orchestrator entries via the legacy append (it works for any JSON-array
+  // log; the orchestrator entries are valid JSON). Forks if the log length doesn't
   // match expected, mirroring legacy semantics — and `meta.version` is
   // preserved across the fork (see `appendLogToConversation`).
   let finalConversationId = conversationId;
@@ -436,7 +436,7 @@ async function persistAndBuildLegacyResponse(
 
     // V=2-specific rename on the first turn — the legacy rename inside
     // `appendLogToConversation` looks for `_type:'task'` entries and won't
-    // find any in pi-ai diffs. Pull the user message off the root
+    // find any in orchestrator diffs. Pull the user message off the root
     // `AgentInvocation` and update name + path explicitly.
     if (expectedLogIndex === 0) {
       const firstMsg = firstUserMessageFromPiDiff(piDiff);
@@ -552,7 +552,7 @@ export async function runChatTurnV2(
  * `POST /api/chat/stream`.
  *
  * Frame types emitted:
- *   - `streaming_event` for each pi-ai stream event that maps to a legacy
+ *   - `streaming_event` for each orchestrator stream event that maps to a legacy
  *     event type (text_delta → StreamedContent, etc.).
  *   - `done` once at the end with the same payload `runChatTurnV2` returns.
  *   - `error` if orchestration throws.

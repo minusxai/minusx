@@ -14,13 +14,9 @@
  */
 import 'server-only';
 
-import {
-  Type,
-  type AssistantMessage,
-  type Static,
-  type Tool,
-  type TSchema,
-} from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Static, TSchema } from 'typebox';
+import type { AssistantMessage, Message, Tool, ToolResultMessage } from '@/orchestrator/llm';
 import type { ColumnMeta, NodeConnector } from '@/lib/connections/base';
 import {
   MXAgent,
@@ -852,7 +848,7 @@ function buildSynthAssistant(toolCallId: string, userMessage: string): Assistant
 function buildWrapperToolResult(
   toolCallId: string,
   state: CachedState,
-): import('@mariozechner/pi-ai').ToolResultMessage {
+): ToolResultMessage {
   const idMap = assignCatalogIds(state.schema);
   const rendered = renderGeneratedContext(
     state.schema, idMap, state.statsByCol, state.rowCountByTable, state.payload,
@@ -1037,7 +1033,7 @@ export async function ensureAutoContext(parent: MXAgent): Promise<void> {
 /** Splice the (synth assistant, agent-wrapper toolResult) pair for `id` out
  *  of the parent's toolThread. The orchestrator's `log` keeps the
  *  immutable trace; this just trims the runtime state. */
-function spliceDispatchPair(arr: import('@mariozechner/pi-ai').Message[], id: string): void {
+function spliceDispatchPair(arr: Message[], id: string): void {
   for (let i = arr.length - 1; i >= 0; i--) {
     const m = arr[i];
     if ('role' in m && m.role === 'toolResult' && m.toolCallId === id) {
@@ -1070,7 +1066,7 @@ export function renderGeneratedContextFromToolThread(parent: MXAgent): string | 
       'role' in m &&
       m.role === 'toolResult' &&
       m.toolName === AutoContextAgent.schema.name,
-  ) as import('@mariozechner/pi-ai').ToolResultMessage | undefined;
+  ) as ToolResultMessage | undefined;
   if (!wrapper) return undefined;
   const details = wrapper.details as AutoContextWrapperDetails | undefined;
   if (!details || details.type !== 'auto_context_render_state') return undefined;

@@ -1,4 +1,5 @@
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { searchFilesInFolder } from '@/lib/search/file-search';

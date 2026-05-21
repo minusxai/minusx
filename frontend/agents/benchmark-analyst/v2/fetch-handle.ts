@@ -1,7 +1,8 @@
 // FetchHandle tool: pagination over stored results
 // Ergonomic "more rows of what I already have" operation
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext } from '../types';
 import { fetchHandle } from './handle-store';

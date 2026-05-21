@@ -13,11 +13,8 @@ import {
   fauxRegistration,
 } from '../web-analyst';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import {
-  fauxAssistantMessage,
-  fauxToolCall,
-  type ToolResultMessage,
-} from '@mariozechner/pi-ai';
+import type { ToolResultMessage } from '@/orchestrator/llm';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 
 const ctx: RemoteAnalystContext = { userId: 'u', mode: 'org' };
 

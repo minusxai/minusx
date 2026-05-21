@@ -1,8 +1,6 @@
-import {
-  registerFauxProvider,
-  type Tool,
-  type TSchema,
-} from '@mariozechner/pi-ai';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
@@ -61,7 +59,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     LoadSkillFrontend.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
-  // Call-time pi-ai options (spread blindly into `streamSimple`). Default
+  // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box;
   // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
   static readonly callOptions = { reasoning: 'low', ...(getAnalystModelOptions() ?? {}) };

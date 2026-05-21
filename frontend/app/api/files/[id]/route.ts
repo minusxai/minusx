@@ -50,8 +50,8 @@ export const GET = withAuth(async (
 
         mode: user.mode,
       });
-      // v=2 conversations: translate pi-ai content.log → legacy task-log so
-      // the frontend never sees pi-ai shape. v=1 files pass through.
+      // v=2 conversations: translate orchestrator content.log → legacy task-log so
+      // the frontend never sees orchestrator log shape. v=1 files pass through.
       return successResponse(translateConversationForFrontend(result.data));
     }
 
