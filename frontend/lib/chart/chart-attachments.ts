@@ -100,13 +100,19 @@ export async function uploadChartOrEmbed(dataUrl: string): Promise<string> {
  * subsequent sends with unchanged data return the cached S3 URL instantly.
  *
  * Returns [] for non-chart pages (explore, folder, table, pivot).
+ * Returns [] when `disableAppStateImages` is set (server-side runtime opt-out,
+ * threaded from config via Redux) — skips all render + upload work.
  * Never throws — failure must never block the user from sending.
  */
 export async function buildChartAttachments(
   appState: AppState | null | undefined,
   queryResultsMap: Record<string, ReduxQueryResult>,
   colorMode: 'light' | 'dark',
+  disableAppStateImages = false,
 ): Promise<Attachment[]> {
+  // Runtime opt-out: skip rendering/uploading app-state chart images entirely.
+  if (disableAppStateImages) return [];
+
   const entries = extractChartEntries(appState, queryResultsMap);
   if (entries.length === 0) return [];
 

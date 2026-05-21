@@ -180,6 +180,24 @@ describe('cache invalidation on data refresh', () => {
   });
 });
 
+describe('disableAppStateImages flag', () => {
+  it('returns [] without rendering or uploading when the flag is on', async () => {
+    const result = await buildChartAttachments(makeAppState(), makeQueryResultsMap(), 'dark', true);
+
+    expect(result).toEqual([]);
+    expect(mockRenderCharts).not.toHaveBeenCalled();
+    expect(countUploadCalls()).toBe(0);
+  });
+
+  it('still renders and uploads when the flag is off (default)', async () => {
+    const result = await buildChartAttachments(makeAppState(), makeQueryResultsMap(), 'dark', false);
+
+    expect(result).toHaveLength(1);
+    expect(mockRenderCharts).toHaveBeenCalledTimes(1);
+    expect(countUploadCalls()).toBe(1);
+  });
+});
+
 describe('non-renderable pages', () => {
   it('returns [] for explore page (null appState)', async () => {
     const result = await buildChartAttachments(null, {}, 'dark');
