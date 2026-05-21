@@ -17,6 +17,8 @@ import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import { NextRequest } from 'next/server';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import type { Mock } from 'vitest';
 
 const TEST_DB_PATH = getTestDbPath('chat_v2_context_selection');
 
@@ -64,5 +66,24 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     const VIZ = 'zigzag_marker_viz';
     const prompt = await captureSystemPrompt({ allowed_viz_types: [VIZ] });
     expect(prompt).toContain(VIZ);
+  });
+
+  it('injects agent_args.schema (whitelisted tables) into the system prompt', async () => {
+    const prompt = await captureSystemPrompt({ schema: [{ schema: 's', tables: ['SchemaMarkerTbl_q1'] }] });
+    expect(prompt).toContain('SchemaMarkerTbl_q1');
+  });
+
+  it("injects the effective user's home_folder and role into the system prompt", async () => {
+    (getEffectiveUser as unknown as Mock).mockResolvedValueOnce({
+      userId: 1,
+      email: 'x@y.z',
+      name: 'X',
+      role: 'editor',
+      home_folder: '/org/HomeMarkerXYZ',
+      mode: 'org',
+    });
+    const prompt = await captureSystemPrompt({});
+    expect(prompt).toContain('HomeMarkerXYZ'); // resolved home folder
+    expect(prompt).toContain('User Role: editor'); // role slot
   });
 });

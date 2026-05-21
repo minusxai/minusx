@@ -62,14 +62,15 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       allowed_viz_types: this.context.allowedVizTypes?.length
         ? this.context.allowedVizTypes.join(', ')
         : 'all',
-      role: '',
-      schema: '',
+      role: this.context.role ?? '',
+      // Whitelisted table list (client-resolved), like Python's agent_args.schema.
+      schema: this.context.schema ? JSON.stringify(this.context.schema) : '',
       // Markdown context docs from the chat's bound `type: 'context'` file
       // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
       context: this.context.contextDocs ?? '',
       skills_catalog: '',
       connection_id: this.context.connectionId ?? '',
-      home_folder: '',
+      home_folder: this.context.homeFolder ?? '',
       preloaded_skills: '',
     });
   }

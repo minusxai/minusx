@@ -18,6 +18,12 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   effectiveUser?: EffectiveUser;
   /** Viz types the agent may use (client-resolved from config). Empty/undefined → "all". */
   allowedVizTypes?: string[];
+  /** Whitelisted schema (client-resolved); injected into the prompt like Python's agent_args.schema. */
+  schema?: { schema: string; tables: string[] }[];
+  /** Resolved home-folder path; injected into the prompt like Python's home_folder. */
+  homeFolder?: string;
+  /** User role (admin/editor/viewer); injected into the prompt like Python's role. */
+  role?: string;
 }
 
 // Backward-compat alias — pre-existing import sites use this name.

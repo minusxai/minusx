@@ -56,7 +56,7 @@ import {
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, truncateMessageForName, slugify } from '@/lib/conversations';
-import { resolvePath } from '@/lib/mode/path-resolver';
+import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import type {
   ChatRequest,
@@ -398,6 +398,9 @@ async function setupOrchestration(
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
       contextDocs: clientContext || serverArgs.context || undefined,
       allowedVizTypes: clientAllowedVizTypes,
+      schema: clientSchema,
+      homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
+      role: user.role,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {
