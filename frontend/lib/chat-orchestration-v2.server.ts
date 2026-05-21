@@ -24,6 +24,7 @@ import {
   Navigate,
   ClarifyFrontend,
   PublishAll,
+  LoadSkill,
   LoadSkillFrontend,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
@@ -46,6 +47,8 @@ import {
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import { getPageType } from '@/agents/analyst/skills';
+import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -91,6 +94,7 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   Navigate,
   ClarifyFrontend,
   PublishAll,
+  LoadSkill,
   LoadSkillFrontend,
   WebAnalystAgent,
   // Lets the orchestrator resume / reconstruct benchmark conversations
@@ -299,6 +303,21 @@ async function setupOrchestration(
     typeof (agentArgs as { agent_name?: unknown }).agent_name === 'string'
       ? (agentArgs as { agent_name: string }).agent_name
       : undefined;
+  // Skills: client sends agent_args.skills.{selected, user_catalog} and
+  // unrestricted_mode (matching Python). Page type is derived from
+  // agent_args.app_state for skill preloading — kept separate from the
+  // (intentionally null) <AppState> user-message block.
+  const clientSkills = (agentArgs as { skills?: unknown }).skills as
+    | { selected?: unknown; user_catalog?: unknown }
+    | undefined;
+  const selectedSkills = Array.isArray(clientSkills?.selected)
+    ? (clientSkills!.selected as AgentSkillSelection[])
+    : [];
+  const userSkillCatalog = Array.isArray(clientSkills?.user_catalog)
+    ? (clientSkills!.user_catalog as AgentUserSkillCatalogItem[])
+    : [];
+  const unrestrictedMode = (agentArgs as { unrestricted_mode?: unknown }).unrestricted_mode === true;
+  const pageType = getPageType((agentArgs as { app_state?: unknown }).app_state);
   const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
   for (const s of schemaForWhitelist) {
@@ -406,6 +425,10 @@ async function setupOrchestration(
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
       role: user.role,
       agentName: clientAgentName,
+      pageType,
+      selectedSkills,
+      userSkillCatalog,
+      unrestrictedMode,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {

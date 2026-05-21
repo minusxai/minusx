@@ -65,6 +65,47 @@ function resolveTemplates(text: string, templates: Record<string, unknown>): str
   return cur;
 }
 
+/** Skills that are preloaded implicitly and never offered in the LoadSkill catalog. */
+export const HIDDEN_SKILLS = new Set(['navigation_restricted', 'navigation_unrestricted']);
+
+const SKILL_PREFIX = 'skill_';
+
+/**
+ * List available skills as `name → description` (mirrors Python
+ * prompt_loader.list_skills). Skills are templates whose keys start with
+ * `skill_`; the prefix is stripped. With `skipHidden`, the nav skills in
+ * HIDDEN_SKILLS are excluded.
+ */
+export function listSkills(
+  yamlPath: string,
+  opts: { skipHidden?: boolean } = {},
+): Record<string, string> {
+  const { templates } = loadPrompts(yamlPath);
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(templates)) {
+    if (!key.startsWith(SKILL_PREFIX) || !value || typeof value !== 'object') continue;
+    const name = key.slice(SKILL_PREFIX.length);
+    if (opts.skipHidden && HIDDEN_SKILLS.has(name)) continue;
+    out[name] = String((value as Record<string, unknown>).description ?? '');
+  }
+  return out;
+}
+
+/**
+ * Resolve a skill's content by name (mirrors Python prompt_loader.get_skill).
+ * Returns the content with nested template refs resolved — but NOT variable-
+ * substituted, so `{{` JSON escapes stay literal (matching how preloaded skill
+ * content is injected). Returns null if the skill is missing or has no content.
+ */
+export function getSkill(yamlPath: string, name: string): string | null {
+  const { templates } = loadPrompts(yamlPath);
+  const template = templates[`${SKILL_PREFIX}${name}`];
+  if (!template || typeof template !== 'object') return null;
+  const content = (template as Record<string, unknown>).content;
+  if (typeof content !== 'string' || content === '') return null;
+  return resolveTemplates(content, templates);
+}
+
 export function pyFormat(text: string, vars: Record<string, unknown>): string {
   let out = '';
   let i = 0;

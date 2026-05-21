@@ -1,4 +1,5 @@
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 
 // Re-export so existing imports keep working.
@@ -26,6 +27,18 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   role?: string;
   /** Display/branding name the agent introduces itself as; like Python's agent_name. */
   agentName?: string;
+  /**
+   * Page type derived server-side from agent_args.app_state (via getPageType).
+   * Drives skill preloading. Kept separate from the (intentionally null)
+   * `<AppState>` user-message block, so populating it doesn't leak app_state.
+   */
+  pageType?: string | null;
+  /** Selected skills for this turn (agent_args.skills.selected). */
+  selectedSkills?: AgentSkillSelection[];
+  /** User-defined skill catalog (agent_args.skills.user_catalog). */
+  userSkillCatalog?: AgentUserSkillCatalogItem[];
+  /** Whether navigation is unrestricted (picks the navigation_unrestricted skill). */
+  unrestrictedMode?: boolean;
 }
 
 // Backward-compat alias — pre-existing import sites use this name.

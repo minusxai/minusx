@@ -2,7 +2,12 @@ import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { ImageContent, TextContent, Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
-import { renderPrompt } from '@/orchestrator/prompts';
+import { renderPrompt, getPromptsPath } from '@/orchestrator/prompts';
+import {
+  getPreloadedSkillNames,
+  buildSkillsCatalog,
+  buildPreloadedSkillsContent,
+} from './skills';
 import { getAnalystModel } from './model-config';
 import { ReadFiles, SearchFiles } from './file-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
@@ -59,6 +64,14 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
 
   protected getSystemPrompt(): string {
     const ctor = this.constructor as typeof RemoteAnalystAgent;
+    const yamlPath = getPromptsPath();
+    const selected = this.context.selectedSkills ?? [];
+    const userCatalog = this.context.userSkillCatalog ?? [];
+    const preloadedNames = getPreloadedSkillNames({
+      pageType: this.context.pageType ?? null,
+      selected,
+      unrestrictedMode: this.context.unrestrictedMode ?? false,
+    });
     return renderPrompt('default.system', {
       // Branding name the agent introduces itself as (Python: agent_args.agent_name, default "MinusX").
       agent_name: this.context.agentName ?? 'MinusX',
@@ -74,10 +87,23 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // Markdown context docs from the chat's bound `type: 'context'` file
       // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
       context: this.context.contextDocs ?? '',
-      skills_catalog: '',
+      // LoadSkill catalog: skills available to fetch on demand (system + user,
+      // minus already-preloaded). Matches Python's _build_skills_catalog.
+      skills_catalog: buildSkillsCatalog({
+        yamlPath,
+        preloaded: new Set(preloadedNames),
+        selected,
+        userCatalog,
+      }),
       connection_id: this.context.connectionId ?? '',
       home_folder: this.context.homeFolder ?? '',
-      preloaded_skills: '',
+      // Full content of page-relevant + selected skills, injected upfront.
+      // Matches Python's _build_preloaded_skills_content.
+      preloaded_skills: buildPreloadedSkillsContent({
+        yamlPath,
+        skillNames: preloadedNames,
+        selected,
+      }),
     });
   }
 

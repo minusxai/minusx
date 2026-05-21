@@ -1,6 +1,7 @@
 import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
+import { getSkill } from '@/orchestrator/prompts';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 
 // All tools below execute in the browser via the existing
@@ -205,6 +206,46 @@ export class LoadSkillFrontend extends MXTool<typeof LoadSkillFrontendParams, Re
 
   async run(): Promise<ToolResponse> {
     throw new UserInputException(this.id);
+  }
+}
+
+// ─── LoadSkill ────────────────────────────────────────────────────────────────
+// LLM-facing skill loader (matches Python tasks/agents/analyst/tools.py →
+// LoadSkill, and what the skill docstrings tell the model to call). System
+// skills resolve server-side from the shared prompts.yaml; unknown names are
+// user-defined Knowledge Base skills, resolved on the frontend via the
+// `registerFrontendTool('LoadSkill', ...)` handler in lib/api/tool-handlers.ts.
+const LoadSkillParams = Type.Object({
+  name: Type.String({
+    description: "Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name).",
+  }),
+});
+
+export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof LoadSkillParams> = {
+    name: 'LoadSkill',
+    description:
+      'Load detailed instructions for a system or user-defined skill. ' +
+      'Use `name` for both system skills and user-defined Knowledge Base skills.',
+    parameters: LoadSkillParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    const name = this.parameters.name;
+    if (!name) {
+      const error = 'LoadSkill requires a skill name';
+      return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
+    }
+    // System skills live in the shared prompts.yaml — resolve them here.
+    const content = getSkill(name);
+    if (content === null) {
+      // Not a system skill → user-defined; resolve on the frontend.
+      throw new UserInputException(this.id);
+    }
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ success: true, skill: name, content }) }],
+      isError: false,
+    };
   }
 }
 

@@ -13,7 +13,7 @@ import {
   Navigate,
   ClarifyFrontend,
   PublishAll,
-  LoadSkillFrontend,
+  LoadSkill,
 } from './web-tools';
 
 export {
@@ -23,6 +23,7 @@ export {
   Navigate,
   ClarifyFrontend,
   PublishAll,
+  LoadSkill,
   LoadSkillFrontend,
 } from './web-tools';
 
@@ -56,7 +57,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     Navigate.schema,
     ClarifyFrontend.schema,
     PublishAll.schema,
-    LoadSkillFrontend.schema,
+    LoadSkill.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
   // Call-time stream options (spread blindly into `streamSimple`). Default

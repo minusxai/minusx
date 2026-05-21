@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   clearPromptCache,
+  getSkill,
+  listSkills,
   loadPrompts,
   pyFormat,
   renderPrompt,
@@ -109,6 +111,86 @@ prompts:
 `);
     const out = renderPrompt(file, 'p', { user: 'sam' });
     expect(out).toContain('Example: {"name": "sam", "id": 1}.');
+    rmSync(path.dirname(file), { recursive: true });
+  });
+});
+
+// Mirrors Python prompt_loader.list_skills / get_skill: skills are templates
+// whose keys start with `skill_`; HIDDEN_SKILLS (the nav skills) are dropped
+// when skipHidden is set; get_skill resolves nested template refs but does NOT
+// run variable substitution (so `{{` JSON escapes stay literal — matching the
+// preloaded-skills injection path).
+const SKILLS_YAML = `
+templates:
+  shared: "SHARED_FRAGMENT"
+  skill_questions:
+    description: "How to work with question files"
+    content: |
+      Questions body uses {shared}.
+      Example {{"query": "SELECT 1"}}
+  skill_dashboards:
+    description: "How to work with dashboards"
+    content: "Dashboards body"
+  skill_navigation_restricted:
+    description: "restricted nav"
+    content: "Restricted nav body"
+  skill_navigation_unrestricted:
+    description: "unrestricted nav"
+    content: "Unrestricted nav body"
+  skill_empty:
+    description: "no content"
+    content: ""
+prompts:
+  p: "x"
+`;
+
+describe('listSkills', () => {
+  it('returns name → description for every skill_* template (prefix stripped)', () => {
+    const file = makeYaml(SKILLS_YAML);
+    expect(listSkills(file)).toEqual({
+      questions: 'How to work with question files',
+      dashboards: 'How to work with dashboards',
+      navigation_restricted: 'restricted nav',
+      navigation_unrestricted: 'unrestricted nav',
+      empty: 'no content',
+    });
+    rmSync(path.dirname(file), { recursive: true });
+  });
+
+  it('drops HIDDEN_SKILLS (nav skills) when skipHidden is set', () => {
+    const file = makeYaml(SKILLS_YAML);
+    const names = Object.keys(listSkills(file, { skipHidden: true }));
+    expect(names).toContain('questions');
+    expect(names).not.toContain('navigation_restricted');
+    expect(names).not.toContain('navigation_unrestricted');
+    rmSync(path.dirname(file), { recursive: true });
+  });
+});
+
+describe('getSkill', () => {
+  it('resolves nested template refs in skill content', () => {
+    const file = makeYaml(SKILLS_YAML);
+    const content = getSkill(file, 'questions');
+    expect(content).toContain('Questions body uses SHARED_FRAGMENT.');
+    rmSync(path.dirname(file), { recursive: true });
+  });
+
+  it('does NOT run variable substitution — {{ }} JSON escapes stay literal', () => {
+    const file = makeYaml(SKILLS_YAML);
+    const content = getSkill(file, 'questions');
+    expect(content).toContain('{{"query": "SELECT 1"}}');
+    rmSync(path.dirname(file), { recursive: true });
+  });
+
+  it('returns null for an unknown skill', () => {
+    const file = makeYaml(SKILLS_YAML);
+    expect(getSkill(file, 'does_not_exist')).toBeNull();
+    rmSync(path.dirname(file), { recursive: true });
+  });
+
+  it('returns null for a skill with empty content', () => {
+    const file = makeYaml(SKILLS_YAML);
+    expect(getSkill(file, 'empty')).toBeNull();
     rmSync(path.dirname(file), { recursive: true });
   });
 });

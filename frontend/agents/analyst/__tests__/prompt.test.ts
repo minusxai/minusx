@@ -31,6 +31,46 @@ describe('AnalystAgent system prompt', () => {
   });
 });
 
+describe('AnalystAgent skills rendering', () => {
+  it('preloads page-relevant skills + the restricted nav skill by default', () => {
+    const sp: string = newAgent({ pageType: 'question' }).getSystemPrompt();
+    expect(sp).toContain('## Instructions: Questions');
+    expect(sp).toContain('## Instructions: Navigation & Background File Rules');
+  });
+
+  it('falls back to the default skill set when no page type is set', () => {
+    const sp: string = newAgent().getSystemPrompt();
+    expect(sp).toContain('## Instructions: Questions');
+    expect(sp).toContain('## Instructions: Explore / Folder Page');
+  });
+
+  it('switches to the unrestricted nav skill when unrestrictedMode is set', () => {
+    const sp: string = newAgent({ unrestrictedMode: true }).getSystemPrompt();
+    expect(sp).toContain('## Instructions: Navigation & Background File Rules (Background Agent Mode)');
+  });
+
+  it('lists non-preloaded system skills in the LoadSkill catalog', () => {
+    // explore page preloads explore + nav; dashboards/alerts stay loadable.
+    const sp: string = newAgent({ pageType: 'explore' }).getSystemPrompt();
+    expect(sp).toContain('- `"dashboards"`');
+    expect(sp).toContain('- `"alerts"`');
+  });
+
+  it('preloads selected system skills and injects selected user-defined skills', () => {
+    const sp: string = newAgent({
+      pageType: 'explore',
+      selectedSkills: [
+        { type: 'system', name: 'alerts' },
+        { type: 'user', name: 'kb_thing', content: 'KB_CONTENT_MARKER_42' },
+      ],
+      userSkillCatalog: [{ name: 'kb_thing', description: 'a kb skill' }],
+    }).getSystemPrompt();
+    expect(sp).toContain('## Instructions: Alerts'); // selected system skill now preloaded
+    expect(sp).toContain('## Instructions: kb_thing (user-defined)');
+    expect(sp).toContain('KB_CONTENT_MARKER_42');
+  });
+});
+
 describe('AnalystAgent buildUserContent', () => {
   it('wraps the user message in <AppState>/<CurrentDate>/<Question> blocks', () => {
     const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });

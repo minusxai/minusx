@@ -1,6 +1,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderPrompt as renderFromFile } from './prompt-loader';
+import {
+  renderPrompt as renderFromFile,
+  listSkills as listSkillsFromFile,
+  getSkill as getSkillFromFile,
+} from './prompt-loader';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,4 +26,14 @@ export function renderPrompt(
   return renderFromFile(getPromptsPath(), promptId, vars);
 }
 
-export { loadPrompts, clearPromptCache, pyFormat } from './prompt-loader';
+export { loadPrompts, clearPromptCache, pyFormat, HIDDEN_SKILLS } from './prompt-loader';
+
+/** List skills from the active prompts.yaml (see prompt-loader.listSkills). */
+export function listSkills(opts: { skipHidden?: boolean } = {}): Record<string, string> {
+  return listSkillsFromFile(getPromptsPath(), opts);
+}
+
+/** Resolve a skill's content from the active prompts.yaml (see prompt-loader.getSkill). */
+export function getSkill(name: string): string | null {
+  return getSkillFromFile(getPromptsPath(), name);
+}

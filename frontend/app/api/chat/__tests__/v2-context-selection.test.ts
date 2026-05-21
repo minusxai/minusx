@@ -96,4 +96,38 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     const prompt = await captureSystemPrompt({});
     expect(prompt).toContain('maximum of 30 tool calls');
   });
+
+  it('preloads the page-relevant skill derived from agent_args.app_state', async () => {
+    const prompt = await captureSystemPrompt({
+      app_state: { type: 'file', state: { fileState: { type: 'dashboard' } } },
+    });
+    expect(prompt).toContain('## Instructions: Dashboards');
+  });
+
+  it('preloads selected system skills from agent_args.skills.selected', async () => {
+    const prompt = await captureSystemPrompt({
+      app_state: { type: 'explore' },
+      skills: { selected: [{ type: 'system', name: 'alerts' }], user_catalog: [] },
+    });
+    expect(prompt).toContain('## Instructions: Alerts');
+  });
+
+  it('injects selected user skills and uses the unrestricted nav skill', async () => {
+    const prompt = await captureSystemPrompt({
+      unrestricted_mode: true,
+      skills: {
+        selected: [{ type: 'user', name: 'kb_skill', content: 'USER_SKILL_BODY_MARKER' }],
+        user_catalog: [],
+      },
+    });
+    expect(prompt).toContain('## Instructions: Navigation & Background File Rules (Background Agent Mode)');
+    expect(prompt).toContain('USER_SKILL_BODY_MARKER');
+  });
+
+  it('lists user-defined skills from agent_args.skills.user_catalog in the LoadSkill catalog', async () => {
+    const prompt = await captureSystemPrompt({
+      skills: { selected: [], user_catalog: [{ name: 'CompanyKB_marker', description: 'company kb' }] },
+    });
+    expect(prompt).toContain('CompanyKB_marker');
+  });
 });
