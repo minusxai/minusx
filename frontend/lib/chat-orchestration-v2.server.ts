@@ -288,7 +288,13 @@ async function setupOrchestration(
   const clientSchema = Array.isArray((agentArgs as { schema?: unknown }).schema)
     ? (agentArgs as { schema: { schema: string; tables: string[] }[] }).schema
     : undefined;
-
+  const clientConnectionId =
+    typeof (agentArgs as { connection_id?: unknown }).connection_id === 'string'
+      ? (agentArgs as { connection_id: string }).connection_id
+      : undefined;
+  const clientAllowedVizTypes = Array.isArray((agentArgs as { allowed_viz_types?: unknown }).allowed_viz_types)
+    ? (agentArgs as { allowed_viz_types: string[] }).allowed_viz_types
+    : undefined;
   const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
   for (const s of schemaForWhitelist) {
@@ -388,9 +394,10 @@ async function setupOrchestration(
       userId: String(user.userId ?? user.email),
       mode: narrowedMode,
       effectiveUser: user,
-      connectionId: serverArgs.connection_id,
+      connectionId: clientConnectionId ?? serverArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
       contextDocs: clientContext || serverArgs.context || undefined,
+      allowedVizTypes: clientAllowedVizTypes,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {

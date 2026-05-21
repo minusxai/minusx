@@ -58,7 +58,10 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     return renderPrompt('default.system', {
       agent_name: 'AnalystAgent',
       max_steps: '40',
-      allowed_viz_types: '',
+      // Matches Python: comma-joined list, or "all" when unspecified.
+      allowed_viz_types: this.context.allowedVizTypes?.length
+        ? this.context.allowedVizTypes.join(', ')
+        : 'all',
       role: '',
       schema: '',
       // Markdown context docs from the chat's bound `type: 'context'` file

@@ -28,30 +28,41 @@ function makeRequest(url: string, body: Record<string, unknown>): NextRequest {
   });
 }
 
-describe('POST /api/chat?v=2 — honors the selected context', () => {
+describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, connection, viz types)', () => {
   setupTestDb(TEST_DB_PATH);
 
-  it("injects the client-resolved agent_args.context into the agent's system prompt", async () => {
-    const MARKER = 'SELECTED_CONTEXT_MARKER_7f3a';
-    let capturedSystemPrompt = '';
-
-    // Faux response factory: capture the system prompt the agent built, then reply.
+  // Run a v=2 turn with the given agent_args and return the system prompt the
+  // agent built (captured via a faux response factory).
+  async function captureSystemPrompt(agentArgs: Record<string, unknown>): Promise<string> {
+    let captured = '';
     webAnalystFaux.setResponses([
       (context) => {
-        capturedSystemPrompt = context.systemPrompt ?? '';
+        captured = context.systemPrompt ?? '';
         return fauxAssistantMessage('ok', { stopReason: 'stop' });
       },
     ]);
-
     const res = await chatPostHandler(
-      makeRequest('http://localhost/api/chat?v=2', {
-        user_message: 'What is in your context file?',
-        agent_args: { context: `# Knowledge Base\n${MARKER}` },
-      }),
+      makeRequest('http://localhost/api/chat?v=2', { user_message: 'hi', agent_args: agentArgs }),
     );
-
     expect(res.status).toBe(200);
-    // The client-sent context (and its marker) must appear in the system prompt.
-    expect(capturedSystemPrompt).toContain(MARKER);
+    return captured;
+  }
+
+  it("injects the client-resolved agent_args.context into the agent's system prompt", async () => {
+    const MARKER = 'SELECTED_CONTEXT_MARKER_7f3a';
+    const prompt = await captureSystemPrompt({ context: `# Knowledge Base\n${MARKER}` });
+    expect(prompt).toContain(MARKER);
+  });
+
+  it('injects the client-resolved agent_args.connection_id (not the server-re-resolved one)', async () => {
+    const CONN = 'client_conn_marker_9z';
+    const prompt = await captureSystemPrompt({ connection_id: CONN });
+    expect(prompt).toContain(CONN);
+  });
+
+  it('injects the client-resolved agent_args.allowed_viz_types into the system prompt', async () => {
+    const VIZ = 'zigzag_marker_viz';
+    const prompt = await captureSystemPrompt({ allowed_viz_types: [VIZ] });
+    expect(prompt).toContain(VIZ);
   });
 });

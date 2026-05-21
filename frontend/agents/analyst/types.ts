@@ -16,6 +16,8 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   connectionId?: string;
   appState?: unknown;
   effectiveUser?: EffectiveUser;
+  /** Viz types the agent may use (client-resolved from config). Empty/undefined → "all". */
+  allowedVizTypes?: string[];
 }
 
 // Backward-compat alias — pre-existing import sites use this name.
