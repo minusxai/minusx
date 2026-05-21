@@ -117,8 +117,18 @@ export async function getOrCreateSlackConversationId(
       metadata: { userId, name, createdAt: now, updatedAt: now, logLength: 0, source },
       log: [],
     };
+    // Store the full first message in file-level `meta` so the conversations
+    // listing can display it without loading content (mirrors createNewConversation).
+    const meta = userMessage ? { firstMessage: userMessage.trim() } : undefined;
     const result = await FilesAPI.createFile(
-      { name, path, type: 'conversation', content: initialContent as any, options: { createPath: true } },
+      {
+        name,
+        path,
+        type: 'conversation',
+        content: initialContent as any,
+        ...(meta ? { meta } : {}),
+        options: { createPath: true },
+      },
       user,
     );
     return result.data.id;

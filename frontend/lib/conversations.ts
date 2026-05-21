@@ -79,7 +79,11 @@ export async function createNewConversation(
     log: []
   };
 
+  // Store the full first message in file-level `meta` so the conversations
+  // listing can display it without ever loading content. Kept untruncated —
+  // `metadata.name` / the file name hold the 50-char display fallback.
   const meta: Record<string, unknown> = {
+    ...(firstUserMessage ? { firstMessage: firstUserMessage.trim() } : {}),
     ...(options?.version !== undefined ? { version: options.version } : {}),
     ...(options?.extraMeta ?? {}),
   };

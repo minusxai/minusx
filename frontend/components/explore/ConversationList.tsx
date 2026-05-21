@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Box, VStack, Text, Spinner, HStack, Icon } from '@chakra-ui/react';
-import { LuSlack } from 'react-icons/lu';
+import { Box, VStack, Text, Spinner } from '@chakra-ui/react';
 import { ConversationSummary } from '@/app/api/conversations/route';
-import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 
@@ -80,24 +78,6 @@ export function ConversationList({
   );
 }
 
-function getTypeColor(type: string): string {
-  if (type === 'slack') return 'accent.secondary';
-  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
-  return meta?.color || 'fg.muted';
-}
-
-function getTypeLabel(type: string): string {
-  if (type === 'slack') return 'Slack';
-  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
-  return meta?.label || type;
-}
-
-function getTypeIcon(type: string): React.ComponentType | null {
-  if (type === 'slack') return LuSlack;
-  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
-  return meta?.icon || null;
-}
-
 interface ConversationItemProps {
   conversation: ConversationSummary;
   isActive: boolean;
@@ -123,11 +103,6 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
     return date.toLocaleDateString();
   };
 
-  // Unified source label: Slack source takes priority, then page type
-  const sourceType = conversation.source?.type === 'slack' ? 'slack' : conversation.parentPageType;
-  const sourceColor = sourceType ? getTypeColor(sourceType) : undefined;
-  const sourceLabel = sourceType ? getTypeLabel(sourceType) : undefined;
-
   return (
     <Box
       px={3}
@@ -150,24 +125,9 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
         </Text>
 
         {/* Metadata Row */}
-        <HStack justify="space-between" fontSize="2xs" align="center" gap={2}>
-          {sourceLabel && sourceType && (
-            <HStack gap={1}>
-              {getTypeIcon(sourceType) && (
-                <Icon as={getTypeIcon(sourceType)!} boxSize="10px" color={sourceColor} />
-              )}
-              <Text
-                fontFamily="mono"
-                fontSize="2xs"
-                fontWeight="600"
-                color={sourceColor}
-              >
-                {sourceLabel}
-              </Text>
-            </HStack>
-          )}
-          <Text fontFamily="mono" color="fg.muted">{getRelativeTime(conversation.updatedAt)}</Text>
-        </HStack>
+        <Text fontFamily="mono" fontSize="2xs" color="fg.muted">
+          {getRelativeTime(conversation.updatedAt)}
+        </Text>
       </VStack>
     </Box>
   );
