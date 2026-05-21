@@ -42,6 +42,27 @@ export function truncateMessageForName(message: string): string {
   return cleaned.substring(0, 47) + '...';
 }
 
+/**
+ * Derive a readable display name from a conversation's raw file name.
+ *
+ * New conversations carry the full message in `meta.firstMessage`; older ones
+ * fall back to the file row name, which is `${timestamp}-${slug}.chat.json`.
+ * This strips the timestamp prefix + `.chat.json` suffix and un-slugifies the
+ * remainder (hyphens → spaces, capitalize first letter). Names that don't match
+ * that pattern (Slack/MCP threads, already-clean names) are returned unchanged.
+ *
+ * Note: the slug was lowercased, punctuation-stripped, and capped at 50 chars
+ * at creation time, so this restores legibility but not the original casing,
+ * punctuation, or full length — only `meta.firstMessage` carries those.
+ */
+export function displayNameFromFileName(fileName: string): string {
+  const match = fileName.match(/^\d+-(.+)\.chat\.json$/);
+  if (!match) return fileName;
+  const text = match[1].replace(/-+/g, ' ').trim();
+  if (!text) return fileName;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function buildConversationPath(user: EffectiveUser, name: string): { userId: string; fileName: string; path: string } {
   const userId = user.userId?.toString() || user.email;
   const slug = slugify(name);

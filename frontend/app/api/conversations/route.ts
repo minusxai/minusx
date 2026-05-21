@@ -4,6 +4,7 @@ import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile } from '@/lib/chat-translator';
+import { displayNameFromFileName } from '@/lib/conversations';
 
 /**
  * Conversation summary for listing.
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
       const meta = (fileInfo.meta ?? {}) as { firstMessage?: string };
       conversations.push({
         id: fileInfo.id,
-        name: meta.firstMessage || fileInfo.name,
+        name: meta.firstMessage || displayNameFromFileName(fileInfo.name),
         createdAt: fileInfo.created_at,
         updatedAt: fileInfo.updated_at,
       });

@@ -9,7 +9,7 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-import { createNewConversation } from '@/lib/conversations';
+import { createNewConversation, displayNameFromFileName } from '@/lib/conversations';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -58,5 +58,32 @@ describe('createNewConversation — writes meta.firstMessage', () => {
     const { fileId } = await createNewConversation(ADMIN);
     const meta = await readMeta(fileId);
     expect(meta?.firstMessage).toBeUndefined();
+  });
+});
+
+describe('displayNameFromFileName — readable fallback for old conversations', () => {
+  it('un-slugifies a raw chat filename (strips timestamp + extension, capitalizes)', () => {
+    expect(displayNameFromFileName('1777263995128-show-me-an-important-chart.chat.json'))
+      .toBe('Show me an important chart');
+  });
+
+  it('handles the default-named conversation', () => {
+    expect(displayNameFromFileName('1779324975926-conversation.chat.json')).toBe('Conversation');
+  });
+
+  it('leaves Slack thread names unchanged', () => {
+    expect(displayNameFromFileName('slack-C_TEST-2024-01-15')).toBe('slack-C_TEST-2024-01-15');
+  });
+
+  it('leaves MCP session names unchanged', () => {
+    expect(displayNameFromFileName('mcp-abc12345')).toBe('mcp-abc12345');
+  });
+
+  it('leaves an already-clean display name unchanged', () => {
+    expect(displayNameFromFileName('What is revenue?')).toBe('What is revenue?');
+  });
+
+  it('returns the original when the slug portion is empty', () => {
+    expect(displayNameFromFileName('1779324975926-.chat.json')).toBe('1779324975926-.chat.json');
   });
 });

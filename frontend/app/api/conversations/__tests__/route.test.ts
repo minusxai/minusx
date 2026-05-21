@@ -74,9 +74,10 @@ async function seedConversations(_dbPath: string): Promise<void> {
     meta?: object;
   }> = [
     {
-      // No meta.firstMessage → display name falls back to the file row `name`.
+      // Old conversation: no meta.firstMessage, and the row name is the raw
+      // `${timestamp}-${slug}.chat.json` filename → display name is un-slugified.
       id: next_id,
-      name: 'My first question',
+      name: '1705312800000-my-first-question.chat.json',
       path: '/org/logs/conversations/1/conv-regular-1',
       content: makeConvContent({ name: 'My first question', message: 'What is revenue?' }),
     },
@@ -163,8 +164,9 @@ describe('GET /api/conversations', () => {
     expect(withMeta!.name.length).toBeGreaterThan(50);
   });
 
-  it('falls back to the file name when meta.firstMessage is absent', async () => {
+  it('un-slugifies the file name when meta.firstMessage is absent (old conversations)', async () => {
     const { conversations } = await callGet();
+    // Raw row name '1705312800000-my-first-question.chat.json' → readable name.
     const regular = conversations.find(c => c.name === 'My first question');
     expect(regular).toBeDefined();
   });
