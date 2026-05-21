@@ -23,10 +23,49 @@ const EditFileParams = Type.Object({
   })),
 });
 
+// Description ported verbatim from the Python reference
+// (backend/tasks/agents/analyst/tools.py → EditFile docstring). Keep the two in
+// sync — the query↔parameters warning in particular prevents broken queries.
+const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes. Executes on the frontend with real Redux state.
+
+Search for each oldMatch in the FULL file JSON and replace with newMatch.
+The file JSON includes: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
+
+You can edit ANY field (name, path, or content) using this tool.
+
+Changes are applied sequentially in order — later entries can depend on earlier ones.
+All changes succeed or the batch fails: on failure the response includes \`succeededCount\`
+and \`failedIndex\` so you know exactly where to retry.
+
+On fail, you can retry with shortened oldMatch if applicable.
+
+Example — update query and viz in one call:
+EditFile(fileId=123, changes=[
+    {"oldMatch": '"query":"SELECT 1"', "newMatch": '"query":"SELECT id, name FROM users"'},
+    {"oldMatch": '"type":"table"', "newMatch": '"type":"bar"'}
+])
+
+CRITICAL — query + parameters must stay in sync:
+If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
+change to the parameters array in the same call. The frontend auto-syncs on user edit, but
+EditFile bypasses that — orphaned or missing parameters will cause query execution to fail.
+
+replaceAll behaviour (per change):
+- replaceAll=true (default): replace EVERY occurrence of oldMatch in the file JSON.
+  Use this when renaming a column/table that appears in multiple places (SELECT, WHERE, GROUP BY, etc.).
+- replaceAll=false: replace only if oldMatch is unique. If it appears more than once the
+  tool returns an error — add more surrounding context to oldMatch to make it unique, or
+  switch back to replaceAll=true if you really want all occurrences replaced.
+
+Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
+via the Publish All button. You do not need to call Navigate or PublishFile.
+
+String Matching: Use \`oldMatch\` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.`;
+
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
     name: 'EditFile',
-    description: 'Edit an existing file by applying one or more string replacements. Executes on the frontend with real Redux state.',
+    description: EDIT_FILE_DESCRIPTION,
     parameters: EditFileParams,
   };
 
