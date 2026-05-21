@@ -274,8 +274,24 @@ async function setupOrchestration(
     user,
     contextFileId != null ? { contextFileId } : undefined,
   );
+
+  // Prefer the client-resolved context + schema (the selected context the user
+  // picked in the UI), matching what the Python backend does — it uses
+  // agent_args.context / agent_args.schema verbatim. Server re-resolution
+  // (serverArgs) is only a fallback for requests that arrive without them.
+  // (Genuinely clientless callers — Slack, report jobs — call
+  // buildServerAgentArgs directly and never reach this chat path.)
+  const clientContext =
+    typeof (agentArgs as { context?: unknown }).context === 'string'
+      ? (agentArgs as { context: string }).context
+      : undefined;
+  const clientSchema = Array.isArray((agentArgs as { schema?: unknown }).schema)
+    ? (agentArgs as { schema: { schema: string; tables: string[] }[] }).schema
+    : undefined;
+
+  const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
-  for (const s of serverArgs.schema) {
+  for (const s of schemaForWhitelist) {
     for (const t of s.tables) {
       whitelistedTables.push(t);
       whitelistedTables.push(`${s.schema}.${t}`);
@@ -374,7 +390,7 @@ async function setupOrchestration(
       effectiveUser: user,
       connectionId: serverArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
-      contextDocs: serverArgs.context || undefined,
+      contextDocs: clientContext || serverArgs.context || undefined,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {
