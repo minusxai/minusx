@@ -56,8 +56,10 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
 
   protected getSystemPrompt(): string {
     return renderPrompt('default.system', {
-      agent_name: 'AnalystAgent',
-      max_steps: '40',
+      // Branding name the agent introduces itself as (Python: agent_args.agent_name, default "MinusX").
+      agent_name: this.context.agentName ?? 'MinusX',
+      // Matches Python's prompt value: MAX_STEPS_LOWER_LEVEL (35) − 5.
+      max_steps: '30',
       // Matches Python: comma-joined list, or "all" when unspecified.
       allowed_viz_types: this.context.allowedVizTypes?.length
         ? this.context.allowedVizTypes.join(', ')

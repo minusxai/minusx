@@ -20,7 +20,7 @@ describe('AnalystAgent system prompt', () => {
     const sp: string = newAgent().getSystemPrompt();
     expect(sp).toContain('## Application Structure');
     expect(sp).toContain('## Available Database Schema');
-    expect(sp).toContain('You have a maximum of 40 tool calls');
+    expect(sp).toContain('You have a maximum of 30 tool calls');
     expect(sp).toContain('conn-7');
   });
 });

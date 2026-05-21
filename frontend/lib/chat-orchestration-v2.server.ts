@@ -295,6 +295,10 @@ async function setupOrchestration(
   const clientAllowedVizTypes = Array.isArray((agentArgs as { allowed_viz_types?: unknown }).allowed_viz_types)
     ? (agentArgs as { allowed_viz_types: string[] }).allowed_viz_types
     : undefined;
+  const clientAgentName =
+    typeof (agentArgs as { agent_name?: unknown }).agent_name === 'string'
+      ? (agentArgs as { agent_name: string }).agent_name
+      : undefined;
   const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
   for (const s of schemaForWhitelist) {
@@ -401,6 +405,7 @@ async function setupOrchestration(
       schema: clientSchema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
       role: user.role,
+      agentName: clientAgentName,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {

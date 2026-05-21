@@ -24,6 +24,8 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   homeFolder?: string;
   /** User role (admin/editor/viewer); injected into the prompt like Python's role. */
   role?: string;
+  /** Display/branding name the agent introduces itself as; like Python's agent_name. */
+  agentName?: string;
 }
 
 // Backward-compat alias — pre-existing import sites use this name.

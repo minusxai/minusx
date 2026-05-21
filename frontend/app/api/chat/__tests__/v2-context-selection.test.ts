@@ -86,4 +86,14 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     expect(prompt).toContain('HomeMarkerXYZ'); // resolved home folder
     expect(prompt).toContain('User Role: editor'); // role slot
   });
+
+  it('uses the client-resolved agent_args.agent_name as the agent identity', async () => {
+    const prompt = await captureSystemPrompt({ agent_name: 'BrandMarkerZed' });
+    expect(prompt).toContain('You are BrandMarkerZed');
+  });
+
+  it('tells the agent the same max_steps as Python (30)', async () => {
+    const prompt = await captureSystemPrompt({});
+    expect(prompt).toContain('maximum of 30 tool calls');
+  });
 });
