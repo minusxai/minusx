@@ -1,10 +1,13 @@
 /**
  * GET /api/conversations — route integration test
  *
+ * The listing is metadata-only: it serves the sidebar / recents / conversations
+ * page from a single getFiles() call and NEVER loads per-conversation content.
  * Verifies that:
- * 1. Regular conversations appear in the listing
- * 2. Slack conversations (stored at /logs/conversations/{userId}/slack-*) appear
- *    with their `source` metadata, which is the fix for Bug #3 (sidebar visibility)
+ * 1. Seeded conversations appear in the listing
+ * 2. The display name comes from meta.firstMessage when present, else the file name
+ * 3. No per-conversation content load happens (no FilesAPI.loadFile calls)
+ * 4. The v=1 / v=2 strict filter still works (driven by meta.version, no content)
  */
 
 vi.mock('@/lib/database/db-config', () => ({
@@ -17,6 +20,7 @@ vi.mock('@/lib/database/db-config', () => ({
 import { GET } from '@/app/api/conversations/route';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
+import { FilesAPI } from '@/lib/data/files.server';
 import type { ConversationSummary } from '@/app/api/conversations/route';
 import type { ConversationFileContent } from '@/lib/types';
 
@@ -24,6 +28,9 @@ const TEST_DB_PATH = getTestDbPath('conversations_route');
 
 // Global mock provides: userId:1, mode:'org', role:'admin'
 // → conversationsPath = '/org/logs/conversations/1'
+
+const FULL_FIRST_MESSAGE =
+  'What is the full revenue breakdown by region for last quarter, including refunds?';
 
 function makeConvContent(opts: {
   name: string;
@@ -59,10 +66,18 @@ async function seedConversations(_dbPath: string): Promise<void> {
     [],
   );
 
-  const files: Array<{ id: number; name: string; path: string; content: object }> = [
+  const files: Array<{
+    id: number;
+    name: string;
+    path: string;
+    content: object;
+    meta?: object;
+  }> = [
     {
+      // Old conversation: no meta.firstMessage, and the row name is the raw
+      // `${timestamp}-${slug}.chat.json` filename → display name is un-slugified.
       id: next_id,
-      name: 'My first question',
+      name: '1705312800000-my-first-question.chat.json',
       path: '/org/logs/conversations/1/conv-regular-1',
       content: makeConvContent({ name: 'My first question', message: 'What is revenue?' }),
     },
@@ -82,16 +97,35 @@ async function seedConversations(_dbPath: string): Promise<void> {
         },
       }),
     },
+    {
+      // File row name is the raw (ugly) filename; meta.firstMessage holds the
+      // full, untruncated first message that should be displayed.
+      id: next_id + 2,
+      name: '1705312800000-revenue.chat.json',
+      path: '/org/logs/conversations/1/conv-with-meta',
+      content: makeConvContent({ name: 'ignored content name', message: FULL_FIRST_MESSAGE }),
+      meta: { firstMessage: FULL_FIRST_MESSAGE },
+    },
   ];
 
   for (const f of files) {
     await db.exec(
-      `INSERT INTO files (id, name, path, type, content, file_references, version, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [f.id, f.name, f.path, 'conversation', JSON.stringify(f.content), '[]', 1, now, now],
+      `INSERT INTO files (id, name, path, type, content, meta, file_references, version, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        f.id,
+        f.name,
+        f.path,
+        'conversation',
+        JSON.stringify(f.content),
+        f.meta ? JSON.stringify(f.meta) : null,
+        '[]',
+        1,
+        now,
+        now,
+      ],
     );
   }
-
 }
 
 // ── Test suite ────────────────────────────────────────────────────────────────
@@ -108,44 +142,42 @@ describe('GET /api/conversations', () => {
   it('returns 200 with the seeded conversations', async () => {
     const { status, conversations } = await callGet();
     expect(status).toBe(200);
-    expect(conversations.length).toBe(2);
+    expect(conversations.length).toBe(3);
   });
 
-  it('includes regular conversations with message preview', async () => {
+  it('does not load per-conversation content (metadata-only listing)', async () => {
+    const spy = vi.spyOn(FilesAPI, 'loadFile');
+    try {
+      const { conversations } = await callGet();
+      expect(conversations.length).toBe(3);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('uses meta.firstMessage as the display name when present', async () => {
     const { conversations } = await callGet();
+    const withMeta = conversations.find(c => c.name === FULL_FIRST_MESSAGE);
+    expect(withMeta).toBeDefined();
+    // Full message preserved — not truncated to the 50-char file name.
+    expect(withMeta!.name.length).toBeGreaterThan(50);
+  });
+
+  it('un-slugifies the file name when meta.firstMessage is absent (old conversations)', async () => {
+    const { conversations } = await callGet();
+    // Raw row name '1705312800000-my-first-question.chat.json' → readable name.
     const regular = conversations.find(c => c.name === 'My first question');
     expect(regular).toBeDefined();
-    expect(regular!.messageCount).toBe(1);
-    expect(regular!.lastMessage).toBeTruthy();
-    expect(regular!.source).toBeUndefined();
   });
 
-  it('includes Slack conversations with source metadata (Bug #3 fix)', async () => {
+  it('includes each conversation with id and timestamps', async () => {
     const { conversations } = await callGet();
-    const slack = conversations.find(c => c.name === 'slack-C_TEST-2024-01-15');
-    expect(slack).toBeDefined();
-    expect(slack!.source).toEqual({
-      type: 'slack',
-      teamId: 'T_TEAM',
-      channelId: 'C_TEST',
-      threadTs: '1705312800.000001',
-      channelName: 'general',
-    });
-    expect(slack!.messageCount).toBe(1);
-  });
-
-  it('Slack conversations are sorted alongside regular ones by updatedAt', async () => {
-    const { conversations } = await callGet();
-    // Both seeded with the same `now`, so order may vary — but both must be present
-    const names = conversations.map(c => c.name);
-    expect(names).toContain('My first question');
-    expect(names).toContain('slack-C_TEST-2024-01-15');
-  });
-
-  it('default URL (no ?v=2) returns only v=1 conversations (no meta.version)', async () => {
-    const { conversations } = await callGet();
-    // The seeded files have no meta.version → all classified as v=1.
-    expect(conversations.length).toBe(2);
+    for (const c of conversations) {
+      expect(typeof c.id).toBe('number');
+      expect(c.createdAt).toBeTruthy();
+      expect(c.updatedAt).toBeTruthy();
+    }
   });
 
   it('?v=2 returns only v=2 conversations (none seeded → empty)', async () => {
@@ -177,22 +209,13 @@ describe('GET /api/conversations — v=2 strict filter', () => {
     await db.exec(
       `INSERT INTO files (id, name, path, type, content, file_references, version, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [next_id, 'legacy', '/org/logs/conversations/1/legacy', 'conversation', JSON.stringify(v1Content), '[]', 1, now, now],
+      [next_id, 'legacy chat', '/org/logs/conversations/1/legacy', 'conversation', JSON.stringify(v1Content), '[]', 1, now, now],
     );
 
-    // V=2 conversation (meta.version=2; content.log is pi-ai shape)
+    // V=2 conversation (meta.version=2). Content is irrelevant to the listing now.
     const v2Content = {
       metadata: { userId: '1', name: 'pi-ai chat', createdAt: now, updatedAt: now, logLength: 1 },
-      log: [
-        {
-          type: 'toolCall',
-          id: 'root1',
-          name: 'WebAnalystAgent',
-          arguments: { userMessage: 'What is revenue?' },
-          context: {},
-          parent_id: null,
-        },
-      ],
+      log: [],
     };
     await db.exec(
       `INSERT INTO files (id, name, path, type, content, meta, file_references, version, created_at, updated_at)
@@ -203,7 +226,7 @@ describe('GET /api/conversations — v=2 strict filter', () => {
         '/org/logs/conversations/1/v2',
         'conversation',
         JSON.stringify(v2Content),
-        JSON.stringify({ version: 2 }),
+        JSON.stringify({ version: 2, firstMessage: 'What is revenue?' }),
         '[]',
         1,
         now,
@@ -219,24 +242,24 @@ describe('GET /api/conversations — v=2 strict filter', () => {
     const body = await res.json();
     const names = body.conversations.map((c: ConversationSummary) => c.name);
     expect(names).toContain('legacy chat');
-    expect(names).not.toContain('pi-ai chat');
+    expect(names).not.toContain('What is revenue?');
   });
 
-  it('?v=2 returns only v=2 conversations', async () => {
+  it('?v=2 returns only v=2 conversations, named from meta.firstMessage', async () => {
     const res = await GET(new Request('http://localhost/api/conversations?v=2'));
     const body = await res.json();
     const names = body.conversations.map((c: ConversationSummary) => c.name);
-    expect(names).toContain('pi-ai chat');
+    expect(names).toContain('What is revenue?');
     expect(names).not.toContain('legacy chat');
   });
 
-  it('?v=2 derives messageCount from pi-ai log via translator', async () => {
-    const res = await GET(new Request('http://localhost/api/conversations?v=2'));
-    const body = await res.json();
-    const v2Conv = body.conversations.find((c: ConversationSummary) => c.name === 'pi-ai chat');
-    expect(v2Conv).toBeDefined();
-    // Root invocation → 1 user message after translation.
-    expect(v2Conv!.messageCount).toBe(1);
-    expect(v2Conv!.lastMessage).toBe('What is revenue?');
+  it('?v=2 does not load content to classify or name conversations', async () => {
+    const spy = vi.spyOn(FilesAPI, 'loadFile');
+    try {
+      await GET(new Request('http://localhost/api/conversations?v=2'));
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

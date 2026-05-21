@@ -32,6 +32,7 @@ import { selectDatabase } from '@/lib/utils/database-selector';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectDevMode } from '@/store/uiSlice';
+import { selectDisableAppStateImages } from '@/store/configsSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolDebugBar from './ToolDebugBar';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
@@ -213,6 +214,7 @@ export default function ChatInterface({
   const devMode = useAppSelector(selectDevMode);
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+  const disableAppStateImages = useAppSelector(selectDisableAppStateImages);
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
   const unrestrictedMode = useAppSelector(selectUnrestrictedMode);
 
@@ -599,7 +601,7 @@ export default function ChatInterface({
     let allAttachments: Attachment[];
     let convId = conversationID;
     try {
-      const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
+      const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode, disableAppStateImages);
       allAttachments = [...attachments, ...fileAttachments];
 
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation

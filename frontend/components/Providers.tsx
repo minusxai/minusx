@@ -24,6 +24,7 @@ interface ProvidersProps {
     user: EffectiveUser | null;
     config: OrgConfig;  // Always present (from SSR or defaults)
     analyticsConfig?: AnalyticsConfig;
+    disableAppStateImages?: boolean;  // Server runtime env flag (DISABLE_APP_STATE_IMAGES)
   };
 }
 
@@ -36,6 +37,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       config: initialData?.config || DEFAULT_CONFIG,
       // eslint-disable-next-line react-hooks/purity
       loadedAt: initialData?.config ? Date.now() : null,
+      disableAppStateImages: initialData?.disableAppStateImages ?? false,
     },
 
     // Auth (if user present)

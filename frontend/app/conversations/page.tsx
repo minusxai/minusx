@@ -1,32 +1,13 @@
 'use client';
 
-import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Icon, Input, Button, Badge } from '@chakra-ui/react';
+import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Input, Button } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useMemo, useState } from 'react';
-import { LuSlack, LuSearch, LuPlus, LuMessageSquare } from 'react-icons/lu';
+import { useCallback, useMemo, useState } from 'react';
+import { LuSearch, LuPlus } from 'react-icons/lu';
 import { ConversationSummary } from '@/app/api/conversations/route';
-import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 import Breadcrumb from '@/components/Breadcrumb';
-
-function getTypeColor(type: string): string {
-  if (type === 'slack') return 'accent.secondary';
-  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
-  return meta?.color || 'fg.muted';
-}
-
-function getTypeLabel(type: string): string {
-  if (type === 'slack') return 'Slack';
-  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
-  return meta?.label || type;
-}
-
-function getTypeIcon(type: string): React.ComponentType | null {
-  if (type === 'slack') return LuSlack;
-  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
-  return meta?.icon || null;
-}
 
 function getRelativeTime(timestamp: string) {
   const date = new Date(timestamp);
@@ -44,10 +25,6 @@ function getRelativeTime(timestamp: string) {
 }
 
 function ConversationRow({ conversation, onClick }: { conversation: ConversationSummary; onClick: () => void }) {
-  const sourceType = conversation.source?.type === 'slack' ? 'slack' : conversation.parentPageType;
-  const sourceColor = sourceType ? getTypeColor(sourceType) : undefined;
-  const sourceLabel = sourceType ? getTypeLabel(sourceType) : undefined;
-
   return (
     <Box
       px={6}
@@ -59,31 +36,13 @@ function ConversationRow({ conversation, onClick }: { conversation: Conversation
       borderBottomWidth="1px"
       borderColor="border.muted"
     >
-      <HStack justify="space-between" align="center">
-        <HStack flex="1" gap={2} truncate>
-          <Text fontSize="sm" fontFamily="mono" truncate>
-            {conversation.name}
-          </Text>
-          <Badge variant="subtle" size="sm" fontFamily="mono" flexShrink={0}>
-            <LuMessageSquare size={11} />
-            {conversation.messageCount}
-          </Badge>
-        </HStack>
-        <HStack gap={3} flexShrink={0}>
-          {sourceLabel && sourceType && (
-            <HStack gap={1}>
-              {getTypeIcon(sourceType) && (
-                <Icon as={getTypeIcon(sourceType)!} boxSize="12px" color={sourceColor} />
-              )}
-              <Text fontSize="xs" fontFamily="mono" fontWeight="600" color={sourceColor}>
-                {sourceLabel}
-              </Text>
-            </HStack>
-          )}
-          <Text fontSize="xs" fontFamily="mono" color="fg.muted" minW="70px" textAlign="right">
-            {getRelativeTime(conversation.updatedAt)}
-          </Text>
-        </HStack>
+      <HStack justify="space-between" align="center" gap={3}>
+        <Text fontSize="sm" fontFamily="mono" truncate flex="1">
+          {conversation.name}
+        </Text>
+        <Text fontSize="xs" fontFamily="mono" color="fg.muted" minW="70px" textAlign="right" flexShrink={0}>
+          {getRelativeTime(conversation.updatedAt)}
+        </Text>
       </HStack>
     </Box>
   );
