@@ -53,13 +53,17 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     SearchFiles.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
+  // Hard cap on the agentic loop, enforced by MXAgent.run(). Matches Python's
+  // MAX_STEPS_LOWER_LEVEL (config.py); the prompt hint below is maxSteps − 5.
+  static readonly maxSteps = 35;
 
   protected getSystemPrompt(): string {
+    const ctor = this.constructor as typeof RemoteAnalystAgent;
     return renderPrompt('default.system', {
       // Branding name the agent introduces itself as (Python: agent_args.agent_name, default "MinusX").
       agent_name: this.context.agentName ?? 'MinusX',
-      // Matches Python's prompt value: MAX_STEPS_LOWER_LEVEL (35) − 5.
-      max_steps: '30',
+      // Prompt hint = maxSteps − 5 (matches Python: MAX_STEPS_LOWER_LEVEL − 5).
+      max_steps: String(ctor.maxSteps - 5),
       // Matches Python: comma-joined list, or "all" when unspecified.
       allowed_viz_types: this.context.allowedVizTypes?.length
         ? this.context.allowedVizTypes.join(', ')

@@ -1,4 +1,5 @@
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import type { MXAgent } from '@/orchestrator/types';
 import { AnalystAgent } from '../analyst-agent';
 import type { AnalystAgentContext } from '../types';
 
@@ -22,6 +23,11 @@ describe('AnalystAgent system prompt', () => {
     expect(sp).toContain('## Available Database Schema');
     expect(sp).toContain('You have a maximum of 30 tool calls');
     expect(sp).toContain('conn-7');
+  });
+
+  it('enforces the same hard step cap as Python (MAX_STEPS_LOWER_LEVEL = 35)', () => {
+    // The prompt hint (30) is maxSteps − 5; the loop hard-stops at maxSteps.
+    expect((AnalystAgent as unknown as typeof MXAgent).maxSteps).toBe(35);
   });
 });
 
