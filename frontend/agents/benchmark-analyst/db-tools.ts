@@ -4,7 +4,9 @@
 // → server-only chain into NextAuth) live in `db-tools.server.ts` and
 // extend the `Base*` classes here.
 
-import { Type, type Tool, type TSchema } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
@@ -94,7 +96,7 @@ export class ListDBConnections extends MXTool<typeof ListDBConnectionsParams, Be
 // ─── SearchDBSchema (Base) ────────────────────────────────────────────────
 
 const SearchDBSchemaParams = Type.Object({
-  connection: Type.String(),
+  connection_id: Type.String(),
   query: Type.Optional(Type.String({
     description: 'Search term. Empty / omitted → return full schema (no filter). String without `$` prefix → keyword match across schema/table/column names. String starting with `$` → JSONPath query (matches Python ExecuteQuery semantics).',
   })),
@@ -158,10 +160,10 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
     await this._initialiseConnectors();
 
     const query = this.parameters.query ?? '';
-    const local = this.connectors.get(this.parameters.connection);
+    const local = this.connectors.get(this.parameters.connection_id);
     const schemas: SchemaEntry[] = local
-      ? await cachedConnectorSchema(this.parameters.connection, local)
-      : await this._loadSchemaFallback(this.parameters.connection);
+      ? await cachedConnectorSchema(this.parameters.connection_id, local)
+      : await this._loadSchemaFallback(this.parameters.connection_id);
 
     // Per-run whitelist (set by chat-v2 from a context file) filters schemas
     // before they reach the LLM. Same logic as production tool-handlers.server.ts.
@@ -195,6 +197,12 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
 const EXECUTE_QUERY_BASE_FIELDS = {
   connectionId: Type.String(),
   query: Type.String(),
+  parameters: Type.Optional(Type.Record(Type.String(), Type.Unknown(), {
+    description: 'Query parameters as key-value pairs, substituted for `:name` placeholders in the SQL.',
+  })),
+  vizSettings: Type.Optional(Type.Unknown({
+    description: 'Optional chart settings to visualize the result (same shape as a question\'s vizSettings). Rendered in the UI; full-fidelity (never truncated).',
+  })),
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of the markdown table returned to the LLM (default 10,000, max 100,000). Increase only if you need to see more rows in text form. Use OFFSET in SQL to page through large results instead.',
   })),
@@ -303,6 +311,7 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
     await this._initialiseConnectors();
 
     const { connectionId, query: rawQuery } = this.parameters;
+    const queryParams = (this.parameters.parameters ?? {}) as Record<string, string | number>;
     const maxChars = Math.min(
       this.parameters.maxChars ?? TOOL_DEFAULT_LIMIT_CHARS,
       TOOL_MAX_LIMIT_CHARS,
@@ -322,9 +331,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
         const cappedQuery = dialect === 'mongo'
           ? rawQuery
           : await enforceQueryLimit(rawQuery, { dialect });
-        result = await local.query(cappedQuery, undefined, timeoutMs);
+        result = await local.query(cappedQuery, queryParams, timeoutMs);
       } else {
-        result = await this._executeFallback(connectionId, rawQuery, {});
+        result = await this._executeFallback(connectionId, rawQuery, queryParams);
       }
     } catch (err) {
       let errMsg = err instanceof Error ? err.message : String(err);

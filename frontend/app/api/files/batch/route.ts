@@ -39,8 +39,8 @@ export const POST = withAuth(async (
       });
     }
 
-    // v=2 conversations: translate pi-ai content.log → legacy task-log so
-    // the frontend never sees pi-ai shape. v=1 files pass through unchanged.
+    // v=2 conversations: translate orchestrator content.log → legacy task-log so
+    // the frontend never sees orchestrator log shape. v=1 files pass through unchanged.
     const translatedData = result.data.map(translateConversationForFrontend);
 
     if (include !== 'references') {

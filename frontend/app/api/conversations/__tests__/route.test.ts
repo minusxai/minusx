@@ -214,7 +214,7 @@ describe('GET /api/conversations — v=2 strict filter', () => {
 
     // V=2 conversation (meta.version=2). Content is irrelevant to the listing now.
     const v2Content = {
-      metadata: { userId: '1', name: 'pi-ai chat', createdAt: now, updatedAt: now, logLength: 1 },
+      metadata: { userId: '1', name: 'orchestrator chat', createdAt: now, updatedAt: now, logLength: 1 },
       log: [],
     };
     await db.exec(

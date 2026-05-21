@@ -111,14 +111,14 @@ export interface BenchmarkResult {
    *  `_output.jsonl` and matching on this field. */
   input_index: number;
   input: InputRow;
-  /** Raw pi-ai conversation log from a single run. Emitted when
+  /** Raw orchestrator conversation log from a single run. Emitted when
    *  `timesRun === 1` (default). Saved as-is so the output file can be
    *  imported as a v2 conversation (`meta.version: 2`, `content.log: <this>`)
    *  and continued in the chat UI. Display-time legacy conversion happens in
    *  the /benchmark viewer via `piLogToLegacy`. Mutually exclusive with
    *  `logs`. */
   log?: ConversationLog;
-  /** Array of raw pi-ai conversation logs, one per run. Emitted when
+  /** Array of raw orchestrator conversation logs, one per run. Emitted when
    *  `timesRun > 1`. Downstream eval scripts collapse this back to
    *  a single `log` (picking the first success or fanning out failures
    *  to separate rows). Mutually exclusive with `log`. */

@@ -1,6 +1,7 @@
 // Tests for ExecuteQueryV2: QuerySpec[], cross-connection, sequential labels, handles-as-tables
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
-import { fauxAssistantMessage, type TextContent, registerFauxProvider } from '@mariozechner/pi-ai';
+import type { TextContent } from '@/orchestrator/llm';
+import { fauxAssistantMessage, registerFauxProvider } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
 import { ExecuteQueryV2 } from '../execute-query';

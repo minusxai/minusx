@@ -37,7 +37,7 @@ describe('isV2ConversationFile', () => {
 
 describe('translateConversationForFrontend', () => {
   const piContent = {
-    metadata: { name: 'pi-ai', logLength: 1 },
+    metadata: { name: 'orchestrator', logLength: 1 },
     log: [
       {
         type: 'toolCall',
@@ -70,7 +70,7 @@ describe('translateConversationForFrontend', () => {
     expect(out).toBe(q);
   });
 
-  it('translates v=2 conversation file: pi-ai content.log → legacy task entries', () => {
+  it('translates v=2 conversation file: orchestrator content.log → legacy task entries', () => {
     const v2 = {
       type: 'conversation',
       meta: { version: 2 },

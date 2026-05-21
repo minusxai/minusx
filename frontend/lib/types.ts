@@ -1184,6 +1184,7 @@ export interface DisplayProps {
   markdownContext?: 'sidebar' | 'mainpage';
   readOnly?: boolean;
   viewMode?: ChatViewMode;
+  conversationID?: number;  // Owning conversation (for suggested-question clicks)
 }
 
 // ============================================================================

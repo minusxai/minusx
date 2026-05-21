@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode, conversationID }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -219,7 +219,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     my={1}
                 >
                     <Box px={3} py={1} aria-label="Thinking block">
-                        <Markdown context={markdownContext}>{block}</Markdown>
+                        <Markdown context={markdownContext} conversationID={conversationID}>{block}</Markdown>
                     </Box>
                 </GridItem>
             ))}
@@ -235,7 +235,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     colStart={1}
                 >
                     <Box px={3} py={1}>
-                        <Markdown context={markdownContext}>{legacyParsed.unparsed}</Markdown>
+                        <Markdown context={markdownContext} conversationID={conversationID}>{legacyParsed.unparsed}</Markdown>
                     </Box>
                 </GridItem>
             )}
@@ -248,7 +248,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     my={2}
                 >
                     <Box px={3} py={1} aria-label="Answer block">
-                        <Markdown context={markdownContext}>{block}</Markdown>
+                        <Markdown context={markdownContext} conversationID={conversationID}>{block}</Markdown>
                     </Box>
                 </GridItem>
             ))}

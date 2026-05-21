@@ -14,7 +14,7 @@ export interface ImportBenchmarkOptions {
 }
 
 /**
- * POST a benchmark run's pi-ai conversation log to /api/benchmark/import,
+ * POST a benchmark run's orchestrator conversation log to /api/benchmark/import,
  * which persists it as a v=2 conversation file in the documents DB and
  * returns the new fileId. The caller can then navigate to
  * `/explore/<fileId>?v=2` to continue the conversation in the chat UI.

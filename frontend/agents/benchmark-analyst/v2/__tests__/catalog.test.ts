@@ -1,6 +1,6 @@
 // Tests for buildCatalog: creates the 6 synthetic catalog tables from connection schemas
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fauxAssistantMessage, registerFauxProvider } from '@mariozechner/pi-ai';
+import { fauxAssistantMessage, registerFauxProvider } from '@/orchestrator/llm/testing';
 import type { SchemaEntry, NodeConnector, QueryResult } from '@/lib/connections/base';
 import type { ConnectionInfo } from '../../types';
 import {

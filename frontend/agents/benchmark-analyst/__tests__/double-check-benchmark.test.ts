@@ -1,4 +1,5 @@
-import { fauxAssistantMessage, type Message, type TextContent } from '@mariozechner/pi-ai';
+import type { Message, TextContent } from '@/orchestrator/llm';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLogEntry } from '@/orchestrator/types';
 import {
@@ -424,7 +425,7 @@ describe('DoubleCheckBenchmarkAgent', () => {
     expect(extractAssistantText(r2a2Hist)).toContain('TL;DR: 42');
     expect(extractAssistantText(r2a2Hist)).not.toContain('TL;DR: 41');
 
-    // No system prompt in the history — by pi-ai's `Message` type union
+    // No system prompt in the history — by the orchestrator's `Message` type union
     // (`user | assistant | toolResult`), there is no 'system' role. The
     // round-2 sub-agent's system prompt is built fresh by
     // `MXAgent.llm()` via `getSystemPrompt()`, not inherited.

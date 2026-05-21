@@ -21,6 +21,7 @@ import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { getNodeConnector } from '@/lib/connections';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
+import { executeFuzzyMatch, type FuzzyMatchToolArgs } from '@/lib/connections/fuzzy-match-tool';
 
 // ============================================================================
 // Tool Implementations
@@ -70,51 +71,11 @@ registerTool('SearchDBSchema', async (args, user) => {
 });
 
 /**
- * FuzzyMatch - Fuzzy match a search term against distinct values in a text column
+ * FuzzyMatch - Fuzzy match a search term against distinct values in a text column.
+ * Logic is shared with the v2 production FuzzyMatch tool via executeFuzzyMatch.
  */
 registerTool('FuzzyMatch', async (args, user) => {
-  const { connection_id, table, column, search_term, schema: schemaName, limit, return_columns } = args;
-
-  if (!connection_id || !table || !column || !search_term) {
-    throw new Error('connection_id, table, column, and search_term are required');
-  }
-
-  // Load connection with cached schema (same path as SearchDBSchema)
-  const connectionPath = resolvePath(user.mode, `/database/${connection_id}`);
-  const connectionFile = await FilesAPI.loadFileByPath(connectionPath, user);
-  const loadedConnection = await connectionLoader(connectionFile.data, user);
-  const content = loadedConnection.content as ConnectionContent;
-
-  // Validate column category — FuzzyMatch only works on text/categorical columns
-  const schemaData = (content.schema?.schemas ?? []) as any[];
-  const targetSchema = schemaData.find((s) => schemaName ? s.schema === schemaName : true);
-  const targetTable = targetSchema?.tables?.find((t: any) => t.table === table);
-  const targetColumn = targetTable?.columns?.find((c: any) => c.name === column);
-  const category = targetColumn?.meta?.category as string | undefined;
-
-  if (category && category !== 'text' && category !== 'categorical') {
-    return {
-      success: false,
-      error: `FuzzyMatch is only for text or categorical columns. Column "${column}" has category "${category}". Use exact filters (=, >, <, BETWEEN) for ${category} columns instead.`,
-    };
-  }
-
-  const connector = getNodeConnector(connection_id, content.type, content.config);
-  if (!connector) {
-    throw new Error(`No connector available for type: ${content.type}`);
-  }
-
-  const queryFn = (sql: string) => connector.query(sql);
-  const result = await fuzzyMatch(content.type, queryFn, {
-    table,
-    columns: [column],
-    searchTerm: search_term,
-    schema: schemaName,
-    limit,
-    returnColumns: return_columns ?? [],
-  });
-
-  return { success: true, ...result };
+  return executeFuzzyMatch(args as unknown as FuzzyMatchToolArgs, user);
 });
 
 /**

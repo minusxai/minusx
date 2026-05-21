@@ -1,7 +1,7 @@
 // Translator TDD spec — RED before any implementation exists.
 //
 // One module, three exports:
-//   piLogToLegacy     pi-ai ConversationLog        → ConversationLogEntry[]   (forward; file reads + done frame)
+//   piLogToLegacy     orchestrator ConversationLog        → ConversationLogEntry[]   (forward; file reads + done frame)
 //   piStreamEventToLegacy  StreamEvent             → legacy SSE payload | null (per-event mid-stream)
 //   legacyToolResultToPi   CompletedToolCallFromPython → ToolResultMessage     (reverse; orchestrator resume)
 
@@ -12,13 +12,7 @@ import type {
   AgentInvocation,
   StreamEvent,
 } from '@/orchestrator/types';
-import type {
-  AssistantMessage,
-  ToolResultMessage,
-  ToolCall as PiToolCall,
-  TextContent,
-  ThinkingContent,
-} from '@mariozechner/pi-ai';
+import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent } from '@/orchestrator/llm';
 import type {
   ConversationLogEntry as LegacyLogEntry,
   TaskLogEntry,
@@ -823,7 +817,7 @@ describe('piLogToLegacy — v=1 format compatibility', () => {
     expect(debugs[0].llmDebug[0].total_tokens).toBe(42);
   });
 
-  it('thinking content preserves signature when pi-ai provides one', () => {
+  it('thinking content preserves signature when orchestrator provides one', () => {
     const sig = 'opaque-signature-blob';
     const partial: AssistantMessage & { parent_id: string } = {
       role: 'assistant',
@@ -846,7 +840,7 @@ describe('piLogToLegacy — v=1 format compatibility', () => {
     expect(blocks[0]).toMatchObject({ type: 'thinking', thinking: 'hmm', signature: sig });
   });
 
-  it('multi-block ordering matches pi-ai content order (thinking, text, toolCall)', () => {
+  it('multi-block ordering matches orchestrator content order (thinking, text, toolCall)', () => {
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'do thing' }),
       assistantMessage({
@@ -865,7 +859,7 @@ describe('piLogToLegacy — v=1 format compatibility', () => {
     expect(tasks.map((t) => t.agent)).toEqual(['AnalystAgent', 'TalkToUser', 'EditFile']);
     const ttu = tasks[1];
     const blocks = (ttu.args as { content_blocks: Array<{ type: string }> }).content_blocks;
-    // thinking block first (pi-ai content order), then text — toolCall is its
+    // thinking block first (orchestrator content order), then text — toolCall is its
     // own task entry, not part of content_blocks.
     expect(blocks.map((b) => b.type)).toEqual(['thinking', 'text']);
   });

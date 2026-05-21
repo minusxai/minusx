@@ -211,9 +211,12 @@ function parseContentParts(text: string, queries?: Record<string, ReportQueryRes
 }
 
 // Suggested questions component — clickable chips that dispatch directly to Redux
-function SuggestedQuestionsBlock({ questions, markdownContext = 'mainpage' }: { questions: string[]; markdownContext?: 'sidebar' | 'mainpage' }) {
+function SuggestedQuestionsBlock({ questions, markdownContext = 'mainpage', conversationID: conversationIDProp }: { questions: string[]; markdownContext?: 'sidebar' | 'mainpage'; conversationID?: number }) {
   const dispatch = useAppDispatch();
-  const conversationID = useAppSelector(selectActiveConversation);
+  const activeConversationID = useAppSelector(selectActiveConversation);
+  // Prefer the conversation this block is rendered in; fall back to the active
+  // conversation only when no id was threaded down (non-chat Markdown usages).
+  const conversationID = conversationIDProp ?? activeConversationID;
 
   if (questions.length === 0) return null;
 
@@ -407,6 +410,7 @@ interface MarkdownProps {
   textColor?: string;
   fontSize?: string;  // Override base text font size (e.g. 'xs', 'sm')
   queries?: Record<string, ReportQueryResult>;  // Query results for {{query:id}} references
+  conversationID?: number;  // Conversation this content belongs to (for suggested-question clicks)
 }
 
 /**
@@ -422,7 +426,8 @@ export default function Markdown({
   textAlign = 'left',
   textColor,
   fontSize: fontSizeOverride,
-  queries
+  queries,
+  conversationID
 }: MarkdownProps) {
   const baseFontSize = fontSizeOverride ?? 'sm';
   const styles = {
@@ -788,7 +793,7 @@ export default function Markdown({
         })}
         {/* Suggested questions always render last */}
         {showSuggestedQuestions && suggestedQuestions.map((part, i) => (
-          <SuggestedQuestionsBlock key={`sq-${i}`} questions={part.questions} markdownContext={context} />
+          <SuggestedQuestionsBlock key={`sq-${i}`} questions={part.questions} markdownContext={context} conversationID={conversationID} />
         ))}
       </>
     );

@@ -257,7 +257,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
         gap={2}
         w="100%"
         >
-            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} toggleShowThinking={toggleShowThinking} markdownContext={markdownContext} readOnly={readOnly} viewMode={viewMode}/>
+            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} toggleShowThinking={toggleShowThinking} markdownContext={markdownContext} readOnly={readOnly} viewMode={viewMode} conversationID={conversationID}/>
         </Grid>
     )
   }

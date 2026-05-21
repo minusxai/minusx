@@ -195,10 +195,13 @@ registerFrontendTool('UserInputTool', async () => {
 });
 
 /**
- * LoadSkillFrontend - Resolve a user-defined Knowledge Base skill from
- * the active conversation's already-loaded context state.
+ * Resolve a user-defined Knowledge Base skill from the active conversation's
+ * already-loaded context state. Shared by two tool names:
+ *  - 'LoadSkillFrontend' — v1 (Python spawns it for user-defined skills)
+ *  - 'LoadSkill'         — v2 (the LoadSkill tool resolves system skills
+ *    server-side and pauses to here for user-defined skills)
  */
-registerFrontendTool('LoadSkillFrontend', async (args, context) => {
+const resolveUserSkillFrontend: FrontendToolHandler = async (args, context) => {
   const name = String(args.name ?? '');
 
   if (!name) {
@@ -267,7 +270,10 @@ registerFrontendTool('LoadSkillFrontend', async (args, context) => {
       message: `Loaded skill ${skill.name}`,
     }
   };
-});
+};
+
+registerFrontendTool('LoadSkillFrontend', resolveUserSkillFrontend);
+registerFrontendTool('LoadSkill', resolveUserSkillFrontend);
 
 /**
  * Navigate - Navigate user to a file, folder, or new file creation page

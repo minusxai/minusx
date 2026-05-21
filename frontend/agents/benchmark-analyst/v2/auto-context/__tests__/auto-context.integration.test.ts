@@ -3,12 +3,8 @@
  * return result. Connector layer is mocked; LLM is faux.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  fauxAssistantMessage,
-  fauxToolCall,
-  registerFauxProvider,
-  type AssistantMessage,
-} from '@mariozechner/pi-ai';
+import type { AssistantMessage } from '@/orchestrator/llm';
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@/orchestrator/llm/testing';
 import type { NodeConnector, QueryResult } from '@/lib/connections/base';
 import {
   AutoContextAgent,

@@ -1,19 +1,6 @@
 
-import {
-  type AssistantMessage,
-  type AssistantMessageEvent,
-  type Context,
-  type ImageContent,
-  type Message,
-  type Model,
-  type Static,
-  type TextContent,
-  type Tool,
-  type ToolCall,
-  type ToolResultMessage,
-  type TSchema,
-  type Api,
-} from '@mariozechner/pi-ai';
+import type { Static, TSchema } from 'typebox';
+import type { AssistantMessage, AssistantMessageEvent, Context, ImageContent, Message, Model, TextContent, Tool, ToolCall, ToolResultMessage, Api } from '@/orchestrator/llm';
 import type { Orchestrator } from './orchestrator';
 import { gen_id } from './utils';
 
@@ -144,7 +131,16 @@ export class MXAgent<
   static readonly type: string = 'Agent';
   static readonly model: Model<Api>;
   static readonly tools: Tool<TSchema>[] = [];
-  /** Call-time options spread blindly into pi-ai's `streamSimple` (matches
+  /**
+   * Hard cap on the agentic loop, counted in `toolThread` entries (assistant +
+   * tool-result messages), mirroring the Python backend's MAX_STEPS_LOWER_LEVEL.
+   * The loop stops with a "Maximum iterations (N) reached." reply at the cap,
+   * and tools are withheld once the thread reaches `maxSteps − 5` so the model
+   * is forced to give a final answer. Default `Infinity` = uncapped (concrete
+   * agents opt in by declaring a finite value).
+   */
+  static readonly maxSteps: number = Infinity;
+  /** Call-time options spread blindly into `streamSimple` (matches
    *  `SimpleStreamOptions`: `reasoning`, `thinkingBudgets`, `metadata`,
    *  `maxRetryDelayMs`, …). Subclasses set this from env config; the
    *  orchestrator never inspects individual keys. */
@@ -194,19 +190,38 @@ export class MXAgent<
 
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
+    // Soft cap (matches Python's _get_available_tools): once the thread reaches
+    // maxSteps − 5, withhold tools so the model must give a final answer.
+    const tools = this.toolThread.length >= ctor.maxSteps - 5 ? [] : ctor.tools;
     const context: Context = {
       systemPrompt: this.getSystemPrompt(),
       messages: this.buildMessages(),
-      tools: ctor.tools,
+      tools,
     };
     return this.orchestrator.callLLM(ctor.model, context, this.id, ctor.callOptions);
   }
 
   async run(): Promise<AssistantMessage> {
-    while (true) {
-      const msg = await this.llm();
-      if (msg.stopReason === 'stop') return msg;
-      await this.orchestrator.dispatch(msg, this as unknown as MXAgent);
+    const ctor = this.constructor as typeof MXAgent;
+    let lastMsg: AssistantMessage | undefined;
+    // Hard cap (matches Python's `while len(tool_thread) < MAX_STEPS`).
+    while (this.toolThread.length < ctor.maxSteps) {
+      lastMsg = await this.llm();
+      if (lastMsg.stopReason === 'stop') return lastMsg;
+      await this.orchestrator.dispatch(lastMsg, this as unknown as MXAgent);
     }
+    // Hit the cap. Reuse the last assistant message's provider metadata (api,
+    // usage, model, …) and replace its content, mirroring Python's terminal
+    // "Maximum iterations (N) reached." reply.
+    const template =
+      lastMsg ??
+      [...this.toolThread].reverse().find((m): m is AssistantMessage => m.role === 'assistant');
+    return {
+      ...(template as AssistantMessage),
+      content: [{ type: 'text', text: `Maximum iterations (${ctor.maxSteps}) reached.` }],
+      stopReason: 'stop',
+      errorMessage: undefined,
+      timestamp: Date.now(),
+    };
   }
 }

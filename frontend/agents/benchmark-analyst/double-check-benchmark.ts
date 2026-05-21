@@ -7,7 +7,7 @@
 // only LLM cost is inside the four sub-agent runs and the two judge
 // calls. Each step is dispatched via the orchestrator's normal
 // `dispatch()` (the same path the LLM-driven loop uses), so the log on
-// disk has the natural pi-ai shape (assistant turn → toolCall → toolResult,
+// disk has the natural orchestrator log shape (assistant turn → toolCall → toolResult,
 // all `parent_id`-chained).
 //
 // Resumability: every dispatched toolCall uses a deterministic slot id
@@ -17,16 +17,11 @@
 // that died mid-way picks up from the last completed slot instead of
 // re-burning prior sub-agent runs.
 import 'server-only';
-import { Type, type Tool } from '@mariozechner/pi-ai';
-import type {
-  AssistantMessage,
-  Context,
-  Message,
-  TextContent,
-  ToolResultMessage,
-} from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import type { AssistantMessage, Context, Message, TextContent, ToolResultMessage } from '@/orchestrator/llm';
 import { MXAgent, MXTool, type ToolResponse, type MXAgentDetails } from '@/orchestrator/types';
-import { getModel } from '@/lib/llm/get-model';
+import { getModel } from '@/orchestrator/llm';
 import { BenchmarkAnalystAgent } from './benchmark-analyst';
 import type { BenchmarkAnalystContext } from './types';
 

@@ -1,11 +1,11 @@
 // V=2 chat orchestration — server-side bridge between the legacy /api/chat
-// + /api/chat/stream routes and the pi-ai orchestrator. Translates inputs
-// (legacy ChatRequest → pi-ai message/resume) and outputs (pi-ai log +
+// + /api/chat/stream routes and the orchestrator. Translates inputs
+// (legacy ChatRequest → orchestrator message/resume) and outputs (orchestrator log +
 // stream events → legacy ChatResponse + streaming_event SSE frames) so the
 // frontend stays unchanged.
 //
 // The data-shape boundary lives entirely in this file plus
-// `lib/chat-translator/index.ts`. No frontend code knows about pi-ai.
+// `lib/chat-translator/index.ts`. No frontend code knows about the orchestrator log shape.
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
@@ -24,12 +24,12 @@ import {
   Navigate,
   ClarifyFrontend,
   PublishAll,
-  LoadSkillFrontend,
+  LoadSkill,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
-import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
+import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
   DoubleCheckBenchmarkAgent,
@@ -46,6 +46,9 @@ import {
   type BenchmarkConnectionEntry,
 } from '@/agents/benchmark-analyst/connection-source';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import { getPageType } from '@/agents/analyst/skills';
+import { normalizeAttachments } from '@/lib/chat/attachments.server';
+import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -56,7 +59,7 @@ import {
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, truncateMessageForName, slugify } from '@/lib/conversations';
-import { resolvePath } from '@/lib/mode/path-resolver';
+import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import type {
   ChatRequest,
@@ -84,6 +87,7 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 export const V2_REGISTRABLES: RegistrableClass[] = [
   SearchDBSchema,
   ExecuteQuery,
+  FuzzyMatch,
   ReadFiles,
   SearchFiles,
   EditFile,
@@ -91,7 +95,7 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   Navigate,
   ClarifyFrontend,
   PublishAll,
-  LoadSkillFrontend,
+  LoadSkill,
   WebAnalystAgent,
   // Lets the orchestrator resume / reconstruct benchmark conversations
   // (root invocation name is `'BenchmarkAnalystAgent'` for single-agent
@@ -209,7 +213,7 @@ export async function validateV2Mode(
 }
 
 /**
- * Return the root invocation's agent name from a saved pi-ai conversation
+ * Return the root invocation's agent name from a saved orchestrator conversation
  * log, or undefined if the log has no root. The root is the first
  * AgentInvocation entry with `parent_id === null`. setupOrchestration uses
  * this to pick which agent class to instantiate for a new user-message
@@ -258,7 +262,7 @@ async function setupOrchestration(
 ): Promise<OrchestrationSetup> {
   const file = await FilesAPI.loadFile(conversationId, user);
   const content = file.data.content as unknown as ConversationFileContent | undefined;
-  // Pi-ai log lives at content.log (we persist pi-ai shape on disk).
+  // Orchestrator log lives at content.log (we persist orchestrator log shape on disk).
   const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
   const expectedLogIndex = savedLog.length;
 
@@ -274,8 +278,53 @@ async function setupOrchestration(
     user,
     contextFileId != null ? { contextFileId } : undefined,
   );
+
+  // Prefer the client-resolved context + schema (the selected context the user
+  // picked in the UI), matching what the Python backend does — it uses
+  // agent_args.context / agent_args.schema verbatim. Server re-resolution
+  // (serverArgs) is only a fallback for requests that arrive without them.
+  // (Genuinely clientless callers — Slack, report jobs — call
+  // buildServerAgentArgs directly and never reach this chat path.)
+  const clientContext =
+    typeof (agentArgs as { context?: unknown }).context === 'string'
+      ? (agentArgs as { context: string }).context
+      : undefined;
+  const clientSchema = Array.isArray((agentArgs as { schema?: unknown }).schema)
+    ? (agentArgs as { schema: { schema: string; tables: string[] }[] }).schema
+    : undefined;
+  const clientConnectionId =
+    typeof (agentArgs as { connection_id?: unknown }).connection_id === 'string'
+      ? (agentArgs as { connection_id: string }).connection_id
+      : undefined;
+  const clientAllowedVizTypes = Array.isArray((agentArgs as { allowed_viz_types?: unknown }).allowed_viz_types)
+    ? (agentArgs as { allowed_viz_types: string[] }).allowed_viz_types
+    : undefined;
+  const clientAgentName =
+    typeof (agentArgs as { agent_name?: unknown }).agent_name === 'string'
+      ? (agentArgs as { agent_name: string }).agent_name
+      : undefined;
+  // Skills: client sends agent_args.skills.{selected, user_catalog} and
+  // unrestricted_mode (matching Python). Page type is derived from
+  // agent_args.app_state for skill preloading — kept separate from the
+  // (intentionally null) <AppState> user-message block.
+  const clientSkills = (agentArgs as { skills?: unknown }).skills as
+    | { selected?: unknown; user_catalog?: unknown }
+    | undefined;
+  const selectedSkills = Array.isArray(clientSkills?.selected)
+    ? (clientSkills!.selected as AgentSkillSelection[])
+    : [];
+  const userSkillCatalog = Array.isArray(clientSkills?.user_catalog)
+    ? (clientSkills!.user_catalog as AgentUserSkillCatalogItem[])
+    : [];
+  const unrestrictedMode = (agentArgs as { unrestricted_mode?: unknown }).unrestricted_mode === true;
+  const clientAppState = (agentArgs as { app_state?: unknown }).app_state;
+  const pageType = getPageType(clientAppState);
+  // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we
+  // just parse them; text passes through. Remote URLs are ignored (no fetch).
+  const attachments = normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
+  const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
-  for (const s of serverArgs.schema) {
+  for (const s of schemaForWhitelist) {
     for (const t of s.tables) {
       whitelistedTables.push(t);
       whitelistedTables.push(`${s.schema}.${t}`);
@@ -372,9 +421,20 @@ async function setupOrchestration(
       userId: String(user.userId ?? user.email),
       mode: narrowedMode,
       effectiveUser: user,
-      connectionId: serverArgs.connection_id,
+      connectionId: clientConnectionId ?? serverArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
-      contextDocs: serverArgs.context || undefined,
+      contextDocs: clientContext || serverArgs.context || undefined,
+      allowedVizTypes: clientAllowedVizTypes,
+      schema: clientSchema,
+      homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
+      role: user.role,
+      agentName: clientAgentName,
+      appState: clientAppState,
+      pageType,
+      selectedSkills,
+      userSkillCatalog,
+      unrestrictedMode,
+      attachments,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {
@@ -395,7 +455,7 @@ async function setupOrchestration(
 }
 
 /**
- * Pull the first user message from a pi-ai log diff. Used to rename a
+ * Pull the first user message from a orchestrator log diff. Used to rename a
  * fresh v=2 conversation file from "New Conversation" → first message
  * preview. Returns null if no root invocation present.
  */
@@ -420,8 +480,8 @@ async function persistAndBuildLegacyResponse(
   const fullPiLog = orch.log;
   const piDiff: PiLogEntry[] = fullPiLog.slice(expectedLogIndex);
 
-  // Persist pi-ai entries via the legacy append (it works for any JSON-array
-  // log; the pi-ai entries are valid JSON). Forks if the log length doesn't
+  // Persist orchestrator entries via the legacy append (it works for any JSON-array
+  // log; the orchestrator entries are valid JSON). Forks if the log length doesn't
   // match expected, mirroring legacy semantics — and `meta.version` is
   // preserved across the fork (see `appendLogToConversation`).
   let finalConversationId = conversationId;
@@ -436,7 +496,7 @@ async function persistAndBuildLegacyResponse(
 
     // V=2-specific rename on the first turn — the legacy rename inside
     // `appendLogToConversation` looks for `_type:'task'` entries and won't
-    // find any in pi-ai diffs. Pull the user message off the root
+    // find any in orchestrator diffs. Pull the user message off the root
     // `AgentInvocation` and update name + path explicitly.
     if (expectedLogIndex === 0) {
       const firstMsg = firstUserMessageFromPiDiff(piDiff);
@@ -552,7 +612,7 @@ export async function runChatTurnV2(
  * `POST /api/chat/stream`.
  *
  * Frame types emitted:
- *   - `streaming_event` for each pi-ai stream event that maps to a legacy
+ *   - `streaming_event` for each orchestrator stream event that maps to a legacy
  *     event type (text_delta → StreamedContent, etc.).
  *   - `done` once at the end with the same payload `runChatTurnV2` returns.
  *   - `error` if orchestration throws.

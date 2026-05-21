@@ -1,4 +1,5 @@
-import { fauxAssistantMessage, fauxToolCall, type TextContent, type ToolCall } from '@mariozechner/pi-ai';
+import type { TextContent, ToolCall } from '@/orchestrator/llm';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { AgentContext, StreamEvent } from '@/orchestrator/types';
 import { EchoTool, PendingTool, TestAgent, fauxRegistration } from '../test-agent';

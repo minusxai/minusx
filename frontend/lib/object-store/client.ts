@@ -18,7 +18,7 @@ export interface UploadResult {
 /** 50 MB client-side guard. */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
-function blobToDataUrl(blob: Blob): Promise<string> {
+export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve(reader.result as string);

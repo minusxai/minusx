@@ -12,7 +12,7 @@ import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connec
 /**
  * POST /api/benchmark/import
  *
- * Persist a benchmark run's pi-ai conversation log as a v=2 conversation
+ * Persist a benchmark run's orchestrator conversation log as a v=2 conversation
  * file in the documents DB so it can be opened at `/explore/<fileId>?v=2`
  * and continued in the chat UI.
  *
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     if (log.length > 0) {
       // appendLogToConversation accepts any JSON-array log; the v=2 path
-      // already uses it for pi-ai entries (chat-orchestration-v2.server.ts).
+      // already uses it for orchestrator entries (chat-orchestration-v2.server.ts).
       await appendLogToConversation(
         fileId,
         log as unknown as ConversationLogEntry[],

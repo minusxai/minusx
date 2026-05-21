@@ -1,6 +1,7 @@
 
 import { randomBytes } from 'crypto';
-import type { Api, AssistantMessage, Static, TSchema, Usage } from '@mariozechner/pi-ai';
+import type { Static, TSchema } from 'typebox';
+import type { Api, AssistantMessage, Usage } from '@/orchestrator/llm';
 import { Default, Errors, Check } from 'typebox/value';
 
 export function gen_id(): string {

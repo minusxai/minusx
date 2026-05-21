@@ -10,7 +10,7 @@ import { DuckDBInstance } from '@duckdb/node-api';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import type { TextContent } from '@mariozechner/pi-ai';
+import type { TextContent } from '@/orchestrator/llm';
 import { ExecuteQueryV2 } from '../execute-query';
 import { storeHandle, fetchHandle, clearHandles } from '../handle-store';
 import { detachAllBenchmarkAttachments } from '../../shared-duckdb';

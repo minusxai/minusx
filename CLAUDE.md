@@ -52,8 +52,11 @@ npm run dev                # Start dev server (http://localhost:3000)
 npm run validate           # Type check + lint (use this to validate code)
 npm run build              # Production build (slow, use only before deployment)
 npm run lint               # Run ESLint
-npm test                   # Run Jest tests (ALWAYS use this, not npx jest)
+npm test                   # Run all Vitest tests (node + ui + orchestrator projects)
 npm test -- <pattern>      # Run specific test files
+npm run test:main          # Run only the `node` project (integration/server tests)
+npm run test:ui            # Run only the `ui` project (jsdom *.ui.test.tsx tests)
+npm run test:orchestrator  # Run only the `orchestrator` project
 npm run import-db          # Initialize database if missing, skip if exists (safe default)
 npm run import-db -- --replace-db=y  # Force replace existing database
 npm run export-db          # Export database to STDOUT
@@ -63,7 +66,7 @@ npm run generate-types     # Regenerate frontend/lib/types.gen.ts from Pydantic 
 
 **IMPORTANT: Always use `npm run validate` to quickly verify code correctness. Do NOT use `npm run build` for validation - it's too slow and memory-intensive. Only run `npm run build` before deployment.**
 
-**IMPORTANT: Always use `npm test` (not `npx jest`) to run frontend tests. The `npm test` script includes `--experimental-vm-modules` which is required by PGLite's WASM runtime. Running `npx jest` directly will fail with module errors.**
+**IMPORTANT: Frontend tests run on Vitest (`npm test` → `vitest run`), configured via `frontend/vitest.config.ts` with three projects: `node` (integration/server tests, node env), `ui` (`*.ui.test.tsx` component tests, jsdom env), and `orchestrator` (the headless orchestrator/agents tree). Run a single project with `npm run test:main` / `test:ui` / `test:orchestrator`, or `npx vitest run --project=<name> <pattern>`. (The repo previously used Jest; that has been fully migrated to Vitest — there is no `jest.config.*` or `npx jest`.)**
 
 ### Backend (Python FastAPI)
 ```bash
@@ -600,7 +603,7 @@ See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts
 
 **Test Ports:** Tests use ports 8002-8006 (distinct from dev servers on 3000 and 8001). Always check for stale test processes before running tests.
 
-For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention with the JSDOM runner instead (`npx jest --config jest.config.ui.js`). See `components/__tests__/explore-chat.ui.test.tsx` for the reference pattern (Python backend, LLM mock server, Redux, async agent flow, `waitFor` assertions); see `components/__tests__/agent-creates-files.ui.test.tsx` for tool-execution patterns.
+For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` for the reference pattern (Python backend, LLM mock server, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
 
 **UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
 
@@ -623,10 +626,6 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 - Frontend-only fields (e.g. `queryResultId` on `QuestionContent`) go in `types.ts` as interface extensions, not in Pydantic
 - Pydantic `Optional[T]` generates `T | null` in TypeScript (not `T | undefined`) — fix call sites with `?? undefined` where needed
 - `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than the generated `DashboardContent`
-
-## Prompt Size Measurement
-
-After any change to agent prompts, tool docstrings, or field descriptions, measure the token impact with `cd frontend && MEASURE_PROMPT=1 npx jest promptMeasure --no-coverage --verbose`. This prints a full per-section breakdown of system prompt, user message, and tool schemas against a real dashboard app_state (baseline: ~17,226 tokens on 2026-04-13).
 
 ## Tool Schema Dual-Update Rule
 

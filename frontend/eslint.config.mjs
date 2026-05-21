@@ -21,13 +21,21 @@ const RESTRICT_ADAPTER_FACTORY = {
     "Allowed only in lib/modules/db/** and lib/database/**.",
 };
 
-const RESTRICT_PI_AI_GET_MODEL = {
+// pi-ai is isolated to orchestrator/llm/. Nothing else may import it — consumers
+// use the owned types + wrapped runtime from @/orchestrator/llm, faux/test
+// helpers from @/orchestrator/llm/testing, and typebox directly from "typebox".
+// See orchestrator/llm/Migration.md for the rationale.
+//
+// INVARIANT: every `no-restricted-imports` override below must include
+// RESTRICT_PI_AI, EXCEPT the orchestrator/llm/** carve-out (the one place pi-ai
+// is allowed). Flat config replaces this rule per file, so a block that omits it
+// silently reopens a hole.
+const RESTRICT_PI_AI = {
   name: "@mariozechner/pi-ai",
-  importNames: ["getModel"],
   message:
-    "Do not import getModel from @mariozechner/pi-ai directly. Use getModel from @/lib/llm/get-model instead — " +
-    "it routes all LLM calls through mx-llm-provider's /proxy endpoint for logging + auth injection. " +
-    "Bypassing it talks straight to the provider and skips mxllm.",
+    "Do not import @mariozechner/pi-ai directly. It is isolated to orchestrator/llm/. " +
+    "Import LLM types + runtime from @/orchestrator/llm (faux/test helpers from @/orchestrator/llm/testing), " +
+    "and import Type/TSchema/Static directly from 'typebox'.",
 };
 
 // Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
@@ -131,7 +139,7 @@ const eslintConfig = defineConfig([
           paths: [
             RESTRICT_DOCUMENTS_DB,
             RESTRICT_ADAPTER_FACTORY,
-            RESTRICT_PI_AI_GET_MODEL,
+            RESTRICT_PI_AI,
           ],
         },
       ],
@@ -186,21 +194,23 @@ const eslintConfig = defineConfig([
       "test/**",
     ],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
     },
   },
   // lib/modules/db/** — adapter allowed (it IS the module), DocumentDB still restricted.
+  // pi-ai stays banned (allowed only in orchestrator/llm/).
   {
     files: ["lib/modules/db/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_PI_AI] }],
     },
   },
-  // lib/database/** — database internals; both allowed (factory, adapter tests, etc.).
+  // lib/database/** — database internals; factory + adapter allowed. pi-ai still
+  // banned (allowed only in orchestrator/llm/).
   {
     files: ["lib/database/**"],
     rules: {
-      "no-restricted-imports": "off",
+      "no-restricted-imports": ["error", { paths: [RESTRICT_PI_AI] }],
     },
   },
   // scripts/** — DocumentDB allowed (scripts seed the DB), adapter still restricted.
@@ -208,15 +218,7 @@ const eslintConfig = defineConfig([
   {
     files: ["scripts/**"],
     rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI_GET_MODEL] }],
-    },
-  },
-  // lib/llm/get-model.ts — the one place that legitimately wraps pi-ai's getModel.
-  // It re-exports a proxy-aware getModel that everything else in the project must use.
-  {
-    files: ["lib/llm/get-model.ts"],
-    rules: {
-      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY] }],
+      "no-restricted-imports": ["error", { paths: [RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI] }],
     },
   },
 
@@ -230,6 +232,7 @@ const eslintConfig = defineConfig([
     ignores: ["orchestrator/**/__tests__/**"],
     rules: {
       "no-restricted-imports": ["error", {
+        paths: [RESTRICT_PI_AI],
         patterns: [
           {
             group: ["@/lib/**", "@/app/**", "@/store/**", "@/components/**", "@/agents/**"],
@@ -238,6 +241,18 @@ const eslintConfig = defineConfig([
           },
         ],
       }],
+    },
+  },
+  // orchestrator/llm/** — THE pi-ai isolation boundary. This is the only place
+  // allowed to import @mariozechner/pi-ai. It also bridges to deployment config
+  // (the MX proxy URL), so @/lib/config is permitted here (the app-agnostic
+  // pattern ban is intentionally not applied). Must come AFTER the orchestrator/**
+  // block so it wins (flat-config: last matching config replaces the rule).
+  // See orchestrator/llm/Migration.md for the rationale.
+  {
+    files: ["orchestrator/llm/**/*.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY] }],
     },
   },
 ]);

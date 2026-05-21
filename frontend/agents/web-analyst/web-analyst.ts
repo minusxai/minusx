@@ -1,11 +1,8 @@
-import {
-  registerFauxProvider,
-  type Tool,
-  type TSchema,
-} from '@mariozechner/pi-ai';
+import type { TSchema } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
+import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
-import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
+import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
@@ -15,7 +12,7 @@ import {
   Navigate,
   ClarifyFrontend,
   PublishAll,
-  LoadSkillFrontend,
+  LoadSkill,
 } from './web-tools';
 
 export {
@@ -25,7 +22,7 @@ export {
   Navigate,
   ClarifyFrontend,
   PublishAll,
-  LoadSkillFrontend,
+  LoadSkill,
 } from './web-tools';
 
 export const fauxRegistration = registerFauxProvider({
@@ -48,9 +45,9 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     parameters: RemoteAnalystAgent.schema.parameters,
   };
   static readonly tools: Tool<TSchema>[] = [
-    ListDBConnections.schema,
     SearchDBSchema.schema,
     ExecuteQuery.schema,
+    FuzzyMatch.schema,
     ReadFiles.schema,
     SearchFiles.schema,
     EditFile.schema,
@@ -58,10 +55,10 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     Navigate.schema,
     ClarifyFrontend.schema,
     PublishAll.schema,
-    LoadSkillFrontend.schema,
+    LoadSkill.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
-  // Call-time pi-ai options (spread blindly into `streamSimple`). Default
+  // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box;
   // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
   static readonly callOptions = { reasoning: 'low', ...(getAnalystModelOptions() ?? {}) };

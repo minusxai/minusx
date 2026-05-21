@@ -12,7 +12,8 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
-import { uploadFile } from '@/lib/object-store/client';
+import { uploadFile, blobToDataUrl } from '@/lib/object-store/client';
+import { getCurrentV } from '@/lib/navigation/url-utils';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -155,8 +156,12 @@ export default function ChatInput({
     if (file.type.startsWith('image/')) {
       setUploadingNames(prev => [...prev, file.name]);
       try {
-        const { publicUrl } = await uploadFile(file, () => {});
-        dispatch(addChatAttachment({ type: 'image', name: file.name, content: publicUrl, metadata: {} }));
+        // v2 chat sends base64 inline (pi has no remote-URL image support), so
+        // skip the S3 upload entirely; v1 uploads and references by URL.
+        const content = getCurrentV() === '2'
+          ? await blobToDataUrl(file)
+          : (await uploadFile(file, () => {})).publicUrl;
+        dispatch(addChatAttachment({ type: 'image', name: file.name, content, metadata: {} }));
       } catch (err: any) {
         toaster.create({ title: err.message || 'Failed to upload image', type: 'error' });
       } finally {

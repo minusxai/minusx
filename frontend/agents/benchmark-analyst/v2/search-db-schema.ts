@@ -1,7 +1,8 @@
 // SearchDBSchemaV2: SQL queries against the synthetic catalog
 // Catalog tables: connections, schemas, tables, columns, indexes, column_stats
 
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { type ToolResponse } from '@/orchestrator/types';
 import type { QueryResult } from '@/lib/connections/base';
 import { getCatalogStore } from './catalog';

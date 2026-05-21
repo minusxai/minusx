@@ -1,5 +1,7 @@
-import { Type, type Tool } from '@mariozechner/pi-ai';
+import { Type } from 'typebox';
+import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
+import { getSkill } from '@/orchestrator/prompts';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 
 // All tools below execute in the browser via the existing
@@ -22,10 +24,49 @@ const EditFileParams = Type.Object({
   })),
 });
 
+// Description ported verbatim from the Python reference
+// (backend/tasks/agents/analyst/tools.py → EditFile docstring). Keep the two in
+// sync — the query↔parameters warning in particular prevents broken queries.
+const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes. Executes on the frontend with real Redux state.
+
+Search for each oldMatch in the FULL file JSON and replace with newMatch.
+The file JSON includes: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
+
+You can edit ANY field (name, path, or content) using this tool.
+
+Changes are applied sequentially in order — later entries can depend on earlier ones.
+All changes succeed or the batch fails: on failure the response includes \`succeededCount\`
+and \`failedIndex\` so you know exactly where to retry.
+
+On fail, you can retry with shortened oldMatch if applicable.
+
+Example — update query and viz in one call:
+EditFile(fileId=123, changes=[
+    {"oldMatch": '"query":"SELECT 1"', "newMatch": '"query":"SELECT id, name FROM users"'},
+    {"oldMatch": '"type":"table"', "newMatch": '"type":"bar"'}
+])
+
+CRITICAL — query + parameters must stay in sync:
+If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
+change to the parameters array in the same call. The frontend auto-syncs on user edit, but
+EditFile bypasses that — orphaned or missing parameters will cause query execution to fail.
+
+replaceAll behaviour (per change):
+- replaceAll=true (default): replace EVERY occurrence of oldMatch in the file JSON.
+  Use this when renaming a column/table that appears in multiple places (SELECT, WHERE, GROUP BY, etc.).
+- replaceAll=false: replace only if oldMatch is unique. If it appears more than once the
+  tool returns an error — add more surrounding context to oldMatch to make it unique, or
+  switch back to replaceAll=true if you really want all occurrences replaced.
+
+Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
+via the Publish All button. You do not need to call Navigate or PublishFile.
+
+String Matching: Use \`oldMatch\` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.`;
+
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
     name: 'EditFile',
-    description: 'Edit an existing file by applying one or more string replacements. Executes on the frontend with real Redux state.',
+    description: EDIT_FILE_DESCRIPTION,
     parameters: EditFileParams,
   };
 
@@ -149,22 +190,43 @@ export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystCon
   }
 }
 
-// ─── LoadSkillFrontend ───────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('LoadSkillFrontend', ...)` at line 201
-// — handler reads `name` (the skill name to load from the active context).
-const LoadSkillFrontendParams = Type.Object({
-  name: Type.String({ description: 'Skill name to load from the user\'s active Knowledge Base context.' }),
+// ─── LoadSkill ────────────────────────────────────────────────────────────────
+// LLM-facing skill loader (matches Python tasks/agents/analyst/tools.py →
+// LoadSkill, and what the skill docstrings tell the model to call). System
+// skills resolve server-side from the shared prompts.yaml; unknown names are
+// user-defined Knowledge Base skills, resolved on the frontend via the
+// `registerFrontendTool('LoadSkill', ...)` handler in lib/api/tool-handlers.ts.
+const LoadSkillParams = Type.Object({
+  name: Type.String({
+    description: "Skill name to load (e.g., 'alerts', 'reports', or a user-defined skill name).",
+  }),
 });
 
-export class LoadSkillFrontend extends MXTool<typeof LoadSkillFrontendParams, RemoteAnalystContext> {
-  static readonly schema: Tool<typeof LoadSkillFrontendParams> = {
-    name: 'LoadSkillFrontend',
-    description: 'Load a user-defined skill (markdown content + description) from the active Knowledge Base context by name.',
-    parameters: LoadSkillFrontendParams,
+export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof LoadSkillParams> = {
+    name: 'LoadSkill',
+    description:
+      'Load detailed instructions for a system or user-defined skill. ' +
+      'Use `name` for both system skills and user-defined Knowledge Base skills.',
+    parameters: LoadSkillParams,
   };
 
   async run(): Promise<ToolResponse> {
-    throw new UserInputException(this.id);
+    const name = this.parameters.name;
+    if (!name) {
+      const error = 'LoadSkill requires a skill name';
+      return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
+    }
+    // System skills live in the shared prompts.yaml — resolve them here.
+    const content = getSkill(name);
+    if (content === null) {
+      // Not a system skill → user-defined; resolve on the frontend.
+      throw new UserInputException(this.id);
+    }
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ success: true, skill: name, content }) }],
+      isError: false,
+    };
   }
 }
 

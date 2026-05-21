@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 import { registerModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';
 
-// Stub provider API keys with a sentinel that satisfies pi-ai's "key
+// Stub provider API keys with a sentinel that satisfies orchestrator's "key
 // exists" check but is guaranteed to fail authentication on any real
 // network call. Tests that faux-mock the LLM (the vast majority) never
 // consult these. Tests that accidentally trigger a real provider call

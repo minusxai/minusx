@@ -34,7 +34,7 @@ vi.mock('@/lib/constants', async () => {
   return { ...actual, IS_TEST: false };
 });
 
-import { fauxAssistantMessage } from '@mariozechner/pi-ai';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { POST as chatStreamPostHandler } from '@/app/api/chat/stream/route';
 import {
@@ -198,7 +198,7 @@ describe('XHR-driven /api/chat/stream?v=2 — full streaming pipeline', () => {
     const conversationId = created.data.id;
 
     // Faux LLM: ONE assistant message with both thinking and text content
-    // blocks, stopReason=stop. Pi-ai will stream this as a sequence of
+    // blocks, stopReason=stop. The model will stream this as a sequence of
     // thinking_delta + text_delta events.
     webAnalystFaux.setResponses([
       fauxAssistantMessage(

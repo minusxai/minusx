@@ -670,6 +670,9 @@ export default function ChatInterface({
         connection_id: database?.databaseName || selectedDatabase || null,
         context_path: contextPath || null,
         context_version: contextVersion ?? null,
+        // v2 (server-authoritative) resolves the selected context from this id;
+        // without it the v2 server falls back to the home-folder context.
+        context_file_id: contextInfo.contextId ?? null,
         schema: simplifiedSchema,
         context: markdown || '',
         app_state: appState,

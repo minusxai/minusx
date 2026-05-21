@@ -7,7 +7,7 @@
  * the prompt purity so future edits don't reintroduce DuckDB-isms.
  */
 import { describe, it, expect } from 'vitest';
-import { fauxAssistantMessage } from '@mariozechner/pi-ai';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { BenchmarkAnalystAgent, fauxRegistration } from '../benchmark-analyst';
 import type { BenchmarkAnalystContext } from '../types';

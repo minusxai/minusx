@@ -1,4 +1,5 @@
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 
 // Re-export so existing imports keep working.
@@ -16,7 +17,40 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   connectionId?: string;
   appState?: unknown;
   effectiveUser?: EffectiveUser;
+  /** Viz types the agent may use (client-resolved from config). Empty/undefined → "all". */
+  allowedVizTypes?: string[];
+  /** Whitelisted schema (client-resolved); injected into the prompt like Python's agent_args.schema. */
+  schema?: { schema: string; tables: string[] }[];
+  /** Resolved home-folder path; injected into the prompt like Python's home_folder. */
+  homeFolder?: string;
+  /** User role (admin/editor/viewer); injected into the prompt like Python's role. */
+  role?: string;
+  /** Display/branding name the agent introduces itself as; like Python's agent_name. */
+  agentName?: string;
+  /**
+   * Page type derived server-side from agent_args.app_state (via getPageType).
+   * Drives skill preloading. Kept separate from the (intentionally null)
+   * `<AppState>` user-message block, so populating it doesn't leak app_state.
+   */
+  pageType?: string | null;
+  /** Selected skills for this turn (agent_args.skills.selected). */
+  selectedSkills?: AgentSkillSelection[];
+  /** User-defined skill catalog (agent_args.skills.user_catalog). */
+  userSkillCatalog?: AgentUserSkillCatalogItem[];
+  /** Whether navigation is unrestricted (picks the navigation_unrestricted skill). */
+  unrestrictedMode?: boolean;
+  /** User-message attachments (images pre-converted to base64, plus text), like Python's attachments. */
+  attachments?: AgentAttachment[];
 }
+
+/**
+ * A user-message attachment, normalized server-side for the LLM. Image content
+ * is pre-converted to base64 (pi has no remote-URL image support) so
+ * buildUserContent can stay synchronous. Mirrors Python's image/text split.
+ */
+export type AgentAttachment =
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'text'; name?: string; content: string; pages?: number };
 
 // Backward-compat alias — pre-existing import sites use this name.
 export type AnalystAgentContext = RemoteAnalystContext;
