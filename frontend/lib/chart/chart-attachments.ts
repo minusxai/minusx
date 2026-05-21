@@ -15,6 +15,7 @@
  */
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
+import { getCurrentV } from '@/lib/navigation/url-utils';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import type { AppState } from '@/lib/appState';
 import type { Attachment } from '@/lib/types';
@@ -116,14 +117,21 @@ export async function buildChartAttachments(
   const entries = extractChartEntries(appState, queryResultsMap);
   if (entries.length === 0) return [];
 
+  // v2 chat needs base64 (pi has no remote-URL image support), so don't upload —
+  // use the rendered base64 data URL directly. v1 still uploads (its LLM
+  // provider fetches the URL). Cache key is version-scoped so the two never mix.
+  const isV2 = getCurrentV() === '2';
+
   try {
     const attachments = await Promise.all(
       entries.map(async ({ queryResult, vizSettings, titleOverride, queryResultId, updatedAt }) => {
-        const cacheKey = buildChartCacheKey(queryResultId, updatedAt, vizSettings, titleOverride, colorMode);
+        const cacheKey =
+          (isV2 ? 'b64:' : 'url:') +
+          buildChartCacheKey(queryResultId, updatedAt, vizSettings, titleOverride, colorMode);
 
-        const cachedUrl = chartUrlCache.get(cacheKey);
-        if (cachedUrl) {
-          return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: cachedUrl, metadata: { auto: true } };
+        const cached = chartUrlCache.get(cacheKey);
+        if (cached) {
+          return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: cached, metadata: { auto: true } };
         }
 
         const [rendered] = await clientChartImageRenderer.renderCharts(
@@ -132,7 +140,7 @@ export async function buildChartAttachments(
         );
         if (!rendered) return null;
 
-        const imageContent = await uploadChartOrEmbed(rendered.dataUrl);
+        const imageContent = isV2 ? rendered.dataUrl : await uploadChartOrEmbed(rendered.dataUrl);
         chartUrlCache.set(cacheKey, imageContent);
         return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: imageContent, metadata: { auto: true } };
       })

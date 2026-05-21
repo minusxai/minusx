@@ -319,9 +319,9 @@ async function setupOrchestration(
   const unrestrictedMode = (agentArgs as { unrestricted_mode?: unknown }).unrestricted_mode === true;
   const clientAppState = (agentArgs as { app_state?: unknown }).app_state;
   const pageType = getPageType(clientAppState);
-  // Attachments: images converted to base64, text passed through (pi has no
-  // remote-URL image support, so chart S3 URLs are fetched + encoded here).
-  const attachments = await normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
+  // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we
+  // just parse them; text passes through. Remote URLs are ignored (no fetch).
+  const attachments = normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
   const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
   for (const s of schemaForWhitelist) {
