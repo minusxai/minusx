@@ -54,7 +54,7 @@ describe('SearchDBSchema', () => {
     mockLoadSchema.mockResolvedValue(fakeSchemas);
 
     const orch = new Orchestrator([]);
-    const tool = new SearchDBSchema(orch, { connection: 'main', query: 'users' }, ctx);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'users' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
@@ -75,7 +75,7 @@ describe('SearchDBSchema', () => {
     mockLoadSchema.mockResolvedValue(fakeSchemas);
 
     const orch = new Orchestrator([]);
-    const tool = new SearchDBSchema(orch, { connection: 'main', query: 'foobars' }, ctx);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'foobars' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
@@ -87,7 +87,7 @@ describe('SearchDBSchema', () => {
     mockLoadSchema.mockResolvedValue(fakeSchemas);
 
     const orch = new Orchestrator([]);
-    const tool = new SearchDBSchema(orch, { connection: 'main' }, ctx);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main' }, ctx);
     const res = await tool.run();
 
     expect(res.isError).toBe(false);
