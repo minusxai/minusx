@@ -50,6 +50,27 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     return captured;
   }
 
+  // Run a v=2 turn and return the LLM user-message content blocks the agent built.
+  async function captureUserMessage(
+    agentArgs: Record<string, unknown>,
+    userMessage = 'how many users?',
+  ): Promise<Array<{ type: string; text?: string; data?: string; mimeType?: string }>> {
+    let blocks: Array<{ type: string; text?: string; data?: string; mimeType?: string }> = [];
+    webAnalystFaux.setResponses([
+      (context) => {
+        const msgs = (context as { messages?: Array<{ role: string; content: unknown }> }).messages ?? [];
+        const lastUser = [...msgs].reverse().find((m) => m.role === 'user');
+        blocks = (lastUser?.content as typeof blocks) ?? [];
+        return fauxAssistantMessage('ok', { stopReason: 'stop' });
+      },
+    ]);
+    const res = await chatPostHandler(
+      makeRequest('http://localhost/api/chat?v=2', { user_message: userMessage, agent_args: agentArgs }),
+    );
+    expect(res.status).toBe(200);
+    return blocks;
+  }
+
   it("injects the client-resolved agent_args.context into the agent's system prompt", async () => {
     const MARKER = 'SELECTED_CONTEXT_MARKER_7f3a';
     const prompt = await captureSystemPrompt({ context: `# Knowledge Base\n${MARKER}` });
@@ -129,5 +150,26 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
       skills: { selected: [], user_catalog: [{ name: 'CompanyKB_marker', description: 'company kb' }] },
     });
     expect(prompt).toContain('CompanyKB_marker');
+  });
+
+  it('sends the goal as a raw text block (no <Question> wrapper), matching Python', async () => {
+    const blocks = await captureUserMessage({}, 'COUNT_USERS_GOAL');
+    const last = blocks[blocks.length - 1];
+    expect(last.type).toBe('text');
+    expect(last.text).toBe('COUNT_USERS_GOAL');
+  });
+
+  it('threads agent_args.attachments into the user message (image base64 + text block)', async () => {
+    const blocks = await captureUserMessage({
+      attachments: [
+        { type: 'image', name: 'chart.jpg', content: 'data:image/jpeg;base64,Q0hBUlQ=' },
+        { type: 'text', name: 'notes.txt', content: 'NOTES_BODY', metadata: { pages: 2 } },
+      ],
+    });
+    const image = blocks.find((b) => b.type === 'image');
+    expect(image?.data).toBe('Q0hBUlQ=');
+    expect(image?.mimeType).toBe('image/jpeg');
+    const contextBlock = blocks[0];
+    expect(contextBlock.text).toContain('<Attachment [notes.txt] (2 pages)>\nNOTES_BODY\n</Attachment>');
   });
 });

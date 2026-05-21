@@ -72,14 +72,15 @@ describe('AnalystAgent skills rendering', () => {
 });
 
 describe('AnalystAgent buildUserContent', () => {
-  it('wraps the user message in <AppState>/<CurrentDate>/<Question> blocks', () => {
+  it('emits <AppState>/<CurrentDate> context block then the RAW goal (matches Python)', () => {
     const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
     const content = agent.buildUserContent();
     expect(content).toHaveLength(2);
     expect(content[0].type).toBe('text');
     expect(content[0].text).toContain('<AppState>{"page":"explore","fileId":42}</AppState>');
     expect(content[0].text).toMatch(/<CurrentDate>\d{4}-\d{2}-\d{2}<\/CurrentDate>/);
-    expect(content[1].text).toBe('<Question>how many users?</Question>');
+    // Python sends the goal as a raw text block — no <Question> wrapper.
+    expect(content[1].text).toBe('how many users?');
   });
 
   it('emits null for AppState when context.appState is unset', () => {
@@ -87,7 +88,7 @@ describe('AnalystAgent buildUserContent', () => {
     expect(content[0].text).toContain('<AppState>null</AppState>');
   });
 
-  it('threads ImageContent items between AppState and Question blocks', () => {
+  it('threads ImageContent items between the context block and the raw goal', () => {
     const orch = new Orchestrator([AnalystAgent]);
     const userMessage = [
       { type: 'text' as const, text: 'see chart' },
@@ -99,6 +100,25 @@ describe('AnalystAgent buildUserContent', () => {
     expect(content).toHaveLength(3);
     expect(content[0].text).toContain('<AppState>');
     expect(content[1].type).toBe('image');
-    expect(content[2].text).toBe('<Question>see chart</Question>');
+    expect(content[2].text).toBe('see chart');
+  });
+
+  it('injects image attachments (base64) and text attachments from context (matches Python)', () => {
+    const agent = newAgent({
+      attachments: [
+        { type: 'image', data: 'CHARTB64', mimeType: 'image/jpeg' },
+        { type: 'text', name: 'notes.txt', content: 'ATTACH_BODY', pages: 3 },
+      ],
+    });
+    const content = agent.buildUserContent();
+    // text attachment appended to the context block as an <Attachment> XML block
+    expect(content[0].text).toContain('<Attachment [notes.txt] (3 pages)>\nATTACH_BODY\n</Attachment>');
+    // image attachment becomes an ImageContent block before the goal
+    const image = content.find((c: { type: string }) => c.type === 'image');
+    expect(image).toBeDefined();
+    expect(image.data).toBe('CHARTB64');
+    expect(image.mimeType).toBe('image/jpeg');
+    // goal is still the last block, raw
+    expect(content[content.length - 1].text).toBe('how many users?');
   });
 });

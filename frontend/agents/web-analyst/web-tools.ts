@@ -190,25 +190,6 @@ export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystCon
   }
 }
 
-// ─── LoadSkillFrontend ───────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('LoadSkillFrontend', ...)` at line 201
-// — handler reads `name` (the skill name to load from the active context).
-const LoadSkillFrontendParams = Type.Object({
-  name: Type.String({ description: 'Skill name to load from the user\'s active Knowledge Base context.' }),
-});
-
-export class LoadSkillFrontend extends MXTool<typeof LoadSkillFrontendParams, RemoteAnalystContext> {
-  static readonly schema: Tool<typeof LoadSkillFrontendParams> = {
-    name: 'LoadSkillFrontend',
-    description: 'Load a user-defined skill (markdown content + description) from the active Knowledge Base context by name.',
-    parameters: LoadSkillFrontendParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    throw new UserInputException(this.id);
-  }
-}
-
 // ─── LoadSkill ────────────────────────────────────────────────────────────────
 // LLM-facing skill loader (matches Python tasks/agents/analyst/tools.py →
 // LoadSkill, and what the skill docstrings tell the model to call). System

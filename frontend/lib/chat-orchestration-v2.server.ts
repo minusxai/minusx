@@ -25,12 +25,11 @@ import {
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
-  LoadSkillFrontend,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
-import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
+import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
   DoubleCheckBenchmarkAgent,
@@ -48,6 +47,7 @@ import {
 } from '@/agents/benchmark-analyst/connection-source';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { getPageType } from '@/agents/analyst/skills';
+import { normalizeAttachments } from '@/lib/chat/attachments.server';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
@@ -87,6 +87,7 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 export const V2_REGISTRABLES: RegistrableClass[] = [
   SearchDBSchema,
   ExecuteQuery,
+  FuzzyMatch,
   ReadFiles,
   SearchFiles,
   EditFile,
@@ -95,7 +96,6 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
-  LoadSkillFrontend,
   WebAnalystAgent,
   // Lets the orchestrator resume / reconstruct benchmark conversations
   // (root invocation name is `'BenchmarkAnalystAgent'` for single-agent
@@ -318,6 +318,9 @@ async function setupOrchestration(
     : [];
   const unrestrictedMode = (agentArgs as { unrestricted_mode?: unknown }).unrestricted_mode === true;
   const pageType = getPageType((agentArgs as { app_state?: unknown }).app_state);
+  // Attachments: images converted to base64, text passed through (pi has no
+  // remote-URL image support, so chart S3 URLs are fetched + encoded here).
+  const attachments = await normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
   const schemaForWhitelist = clientSchema ?? serverArgs.schema;
   const whitelistedTables: string[] = [];
   for (const s of schemaForWhitelist) {
@@ -429,6 +432,7 @@ async function setupOrchestration(
       selectedSkills,
       userSkillCatalog,
       unrestrictedMode,
+      attachments,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {

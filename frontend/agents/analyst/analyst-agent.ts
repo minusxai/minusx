@@ -16,7 +16,7 @@ import {
   SearchDBSchema,
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
-import type { RemoteAnalystContext } from './types';
+import type { RemoteAnalystContext, AgentAttachment } from './types';
 
 // Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
@@ -118,20 +118,41 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     const items: (TextContent | ImageContent)[] =
       typeof raw === 'string' ? [{ type: 'text', text: raw }] : raw;
 
-    const images = items.filter((c): c is ImageContent => c.type === 'image');
+    const msgImages = items.filter((c): c is ImageContent => c.type === 'image');
     const goal = items
       .filter((c): c is TextContent => c.type === 'text')
       .map((c) => c.text)
       .join('\n');
 
+    // Attachments (server-normalized): images → ImageContent (base64), text →
+    // <Attachment …> blocks appended to the context block. Mirrors Python's
+    // _get_image_content_blocks + _format_attachments.
+    const attachments = this.context.attachments ?? [];
+    const attachmentImages: ImageContent[] = attachments
+      .filter((a): a is Extract<AgentAttachment, { type: 'image' }> => a.type === 'image')
+      .map((a) => ({ type: 'image', data: a.data, mimeType: a.mimeType }));
+    const textAttachments = attachments
+      .filter((a): a is Extract<AgentAttachment, { type: 'text' }> => a.type === 'text')
+      .map((a) => {
+        const header = `[${a.name ?? 'attachment'}]` + (a.pages ? ` (${a.pages} pages)` : '');
+        return `<Attachment ${header}>\n${a.content}\n</Attachment>`;
+      })
+      .join('\n');
+
     const appStateJson =
       this.context.appState !== undefined ? JSON.stringify(this.context.appState) : 'null';
     const date = new Date().toISOString().slice(0, 10);
+    const contextText =
+      `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` +
+      (textAttachments ? `\n${textAttachments}` : '');
 
+    // Goal is a raw text block (no <Question> wrapper) — matches Python's
+    // _get_user_message, whose goal block is the bare text.
     return [
-      { type: 'text', text: `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` },
-      ...images,
-      { type: 'text', text: `<Question>${goal}</Question>` },
+      { type: 'text', text: contextText },
+      ...msgImages,
+      ...attachmentImages,
+      { type: 'text', text: goal },
     ];
   }
 }

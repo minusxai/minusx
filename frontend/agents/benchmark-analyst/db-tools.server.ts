@@ -7,12 +7,16 @@
 // `./db-tools` (Base classes only) and never reaches this file.
 
 import 'server-only';
+import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { runQuery } from '@/lib/connections/run-query';
 import { loadConnectionSchema } from '@/lib/connections/load-schema';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QueryResult, SchemaEntry } from '@/lib/connections/base';
+import { MXTool, type ToolResponse } from '@/orchestrator/types';
+import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import { executeFuzzyMatch } from '@/lib/connections/fuzzy-match-tool';
 import {
   BaseExecuteQuery,
   BaseSearchDBSchema,
@@ -78,5 +82,59 @@ export class SearchDBSchema extends BaseSearchDBSchema {
     const user = (this.context as { effectiveUser?: EffectiveUser }).effectiveUser;
     if (!user) return [];
     return loadConnectionSchema(connection, user);
+  }
+}
+
+/**
+ * Production FuzzyMatch tool. Schema mirrors Python's FuzzyMatch (tools.py);
+ * execution shares `executeFuzzyMatch` with the v1 Next.js handler so v1 and v2
+ * behave identically. `semantic_expansion` is advertised for schema parity but
+ * not acted on (matching the v1 handler, which runs a single fuzzy match).
+ */
+const FuzzyMatchParams = Type.Object({
+  connection_id: Type.String({ description: 'Database connection name' }),
+  table: Type.String({ description: 'Table name to search' }),
+  column: Type.String({ description: 'Text column to search in' }),
+  search_term: Type.String({ description: 'Short keyword(s) to fuzzy-match. Use 1-3 specific words, not full phrases.' }),
+  schema: Type.Optional(Type.String({ description: "Schema name (default: 'main')" })),
+  limit: Type.Optional(Type.Number({ description: 'Max results to return' })),
+  semantic_expansion: Type.Optional(Type.Boolean({ description: 'Automatically expand search using semantically similar terms found in the column (default: true). Set to false for pure lexical matching only.' })),
+  return_columns: Type.Optional(Type.Array(Type.String(), { description: "Additional columns to include in each match result for identification (e.g. ['name', 'id']). Without this, only the matched column value and similarity score are returned." })),
+});
+
+export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof FuzzyMatchParams> = {
+    name: 'FuzzyMatch',
+    description:
+      'Match a known term against stored values in a text or categorical column.\n\n' +
+      'Use 1-3 short, specific keywords. Returns similarity-based and substring matches. ' +
+      'Use return_columns to include identifying columns (e.g. name, id) in results — without it, ' +
+      'only the matched column value and similarity are returned. When semantic_expansion is enabled ' +
+      '(default: true), if no lexical matches are found, the tool automatically finds semantically ' +
+      'similar terms in the column and fuzzy-matches those too.\n\n' +
+      'Example: user says "Hello World" but column stores "HelloWooorld".',
+    parameters: FuzzyMatchParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    const user = this.context.effectiveUser;
+    if (!user) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'FuzzyMatch: missing effectiveUser on agent context.' }) }],
+        isError: true,
+      };
+    }
+    try {
+      const result = await executeFuzzyMatch({ ...this.parameters }, user);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result) }],
+        isError: result.success === false,
+      };
+    } catch (err) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: err instanceof Error ? err.message : String(err) }) }],
+        isError: true,
+      };
+    }
   }
 }

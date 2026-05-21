@@ -39,7 +39,18 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   userSkillCatalog?: AgentUserSkillCatalogItem[];
   /** Whether navigation is unrestricted (picks the navigation_unrestricted skill). */
   unrestrictedMode?: boolean;
+  /** User-message attachments (images pre-converted to base64, plus text), like Python's attachments. */
+  attachments?: AgentAttachment[];
 }
+
+/**
+ * A user-message attachment, normalized server-side for the LLM. Image content
+ * is pre-converted to base64 (pi has no remote-URL image support) so
+ * buildUserContent can stay synchronous. Mirrors Python's image/text split.
+ */
+export type AgentAttachment =
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'text'; name?: string; content: string; pages?: number };
 
 // Backward-compat alias — pre-existing import sites use this name.
 export type AnalystAgentContext = RemoteAnalystContext;

@@ -2,8 +2,7 @@ import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
-import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
+import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
@@ -24,7 +23,6 @@ export {
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
-  LoadSkillFrontend,
 } from './web-tools';
 
 export const fauxRegistration = registerFauxProvider({
@@ -47,9 +45,9 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     parameters: RemoteAnalystAgent.schema.parameters,
   };
   static readonly tools: Tool<TSchema>[] = [
-    ListDBConnections.schema,
     SearchDBSchema.schema,
     ExecuteQuery.schema,
+    FuzzyMatch.schema,
     ReadFiles.schema,
     SearchFiles.schema,
     EditFile.schema,
