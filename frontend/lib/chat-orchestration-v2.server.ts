@@ -317,7 +317,8 @@ async function setupOrchestration(
     ? (clientSkills!.user_catalog as AgentUserSkillCatalogItem[])
     : [];
   const unrestrictedMode = (agentArgs as { unrestricted_mode?: unknown }).unrestricted_mode === true;
-  const pageType = getPageType((agentArgs as { app_state?: unknown }).app_state);
+  const clientAppState = (agentArgs as { app_state?: unknown }).app_state;
+  const pageType = getPageType(clientAppState);
   // Attachments: images converted to base64, text passed through (pi has no
   // remote-URL image support, so chart S3 URLs are fetched + encoded here).
   const attachments = await normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
@@ -428,6 +429,7 @@ async function setupOrchestration(
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
       role: user.role,
       agentName: clientAgentName,
+      appState: clientAppState,
       pageType,
       selectedSkills,
       userSkillCatalog,

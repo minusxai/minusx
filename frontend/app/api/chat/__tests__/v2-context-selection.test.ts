@@ -152,6 +152,15 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     expect(prompt).toContain('CompanyKB_marker');
   });
 
+  it('injects agent_args.app_state into the <AppState> block (not null)', async () => {
+    const blocks = await captureUserMessage({
+      app_state: { type: 'file', state: { fileState: { id: 7, type: 'dashboard' } } },
+    });
+    const contextBlock = blocks[0];
+    expect(contextBlock.text).toContain('<AppState>{"type":"file"');
+    expect(contextBlock.text).not.toContain('<AppState>null</AppState>');
+  });
+
   it('sends the goal as a raw text block (no <Question> wrapper), matching Python', async () => {
     const blocks = await captureUserMessage({}, 'COUNT_USERS_GOAL');
     const last = blocks[blocks.length - 1];
