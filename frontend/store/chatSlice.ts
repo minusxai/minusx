@@ -91,6 +91,10 @@ export interface Conversation {
 
   // Mark the active conversation (only one conversation should have this set to true)
   active?: boolean;
+
+  // Conversation file version (from meta.version): 2 = v2 (JS engine), 1 = legacy v1.
+  // Set when loaded from DB; undefined for in-session-created chats (treated as v2).
+  version?: number;
 }
 
 interface ChatState {
