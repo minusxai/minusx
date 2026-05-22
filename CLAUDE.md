@@ -22,16 +22,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## ⚠️ DO NOT TOUCH: `frontend/orchestrator/` and `frontend/agents/`
+## V2 chat: `frontend/orchestrator/` and `frontend/agents/`
 
-These directories contain an in-progress headless TypeScript orchestrator that is **not yet wired into production**. No production code path imports from them; they are exercised only by their own tests under `frontend/orchestrator/__tests__/` and `frontend/agents/**/__tests__/`.
+These directories hold the headless TypeScript orchestrator and agent/tool definitions that power the **v2 chat path**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes invoke when a request carries `?v=2` (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`). The v1 (legacy) path (`lib/chat-orchestration.ts`) still exists and runs by default — the legacy → v2 migration is in progress (branch `feature/legacy-to-v2-chat`).
 
-**Rules:**
-- Do **not** edit files inside `frontend/orchestrator/` or `frontend/agents/` unless the user has explicitly asked you to work on the orchestrator/agents migration.
-- Do **not** import from these directories anywhere in `frontend/app/`, `frontend/lib/`, `frontend/store/`, or `frontend/components/` — that would break the "production is unaffected" invariant.
-- When refactoring shared code (e.g. `frontend/lib/`), don't drag the orchestrator/agents tree along — leave it stable until the migration plan resumes.
+**What's where:**
+- `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
+- `frontend/agents/` — agent + tool definitions (`analyst/`, `benchmark-analyst/`, `web-analyst/`, ...). Server-only tools live in `*.server.ts` variants; the `Base*` classes (no `server-only` import) are reused by the benchmark CLI.
+- Both trees have their own tests under `__tests__/` (the `orchestrator` Vitest project), plus integration coverage through the chat API routes.
 
-If a user request seems to require changes here (e.g. "wire up the new agent on the explore page"), pause and confirm with the user before proceeding — the migration is staged intentionally.
+**While the migration is in progress:** when changing shared code in `frontend/lib/`, keep both the v1 and v2 chat paths working.
 
 ---
 
@@ -39,7 +39,7 @@ If a user request seems to require changes here (e.g. "wire up the new agent on 
 
 MinusX is an agentic, file-system based BI Tool that combines:
 - **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux
-- **Backend**: Python FastAPI for query execution and data pipeline orchestration
+- **Backend**: Python FastAPI AI chat/agent orchestration engine (LLM calls, conversation log, tool/skill schemas)
 - **Storage**: PGLite (open-source) or Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
 - **Architecture**: Dual-database system with integer ID-based file access, hierarchical permissions, and mode-based file system isolation
 
@@ -57,10 +57,7 @@ npm test -- <pattern>      # Run specific test files
 npm run test:main          # Run only the `node` project (integration/server tests)
 npm run test:ui            # Run only the `ui` project (jsdom *.ui.test.tsx tests)
 npm run test:orchestrator  # Run only the `orchestrator` project
-npm run import-db          # Initialize database if missing, skip if exists (safe default)
-npm run import-db -- --replace-db=y  # Force replace existing database
-npm run export-db          # Export database to STDOUT
-npm run create-empty-db    # Create empty database
+npm run update-workspace-template  # Re-run migrations on the seed template after adding a migration
 npm run generate-types     # Regenerate frontend/lib/types.gen.ts from Pydantic models
 ```
 
@@ -78,37 +75,30 @@ uv run pytest          # Run tests
 
 **IMPORTANT: Always use `uv run ruff check .` to quickly verify Python code correctness before committing.**
 
-The backend runs at http://localhost:8001 and handles:
-- SQL query execution (`POST /api/execute-query`)
-- Connection management and pooling
+The backend runs at http://localhost:8001 and handles AI chat/agent orchestration:
+- Chat orchestration (`POST /api/chat`, `POST /api/chat/stream`, `POST /api/chat/close`)
+- Tool/skill schemas (`GET /api/tools/schema`, `GET /api/skills/system`)
+
+**Query execution does NOT live in the Python backend.** Analytics queries run on the Next.js side: `app/api/query/route.ts` → `lib/connections/run-query.ts` → Node.js connectors in `lib/connections/` (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Google Sheets).
 
 ### Database Management
 
-**Initialize from seed data:**
+The document DB is seeded **automatically at workspace/company registration** (`lib/modules/auth/index.ts`): it reads `lib/database/workspace-template.json`, substitutes template vars, runs `applyMigrations`, and atomically imports the result via `atomicImport`. There is no manual import/export step.
+
+**To change seed data:** edit `lib/database/workspace-template.json` directly.
+
+**After adding a migration**, refresh the template:
 ```bash
 cd frontend
-npm run import-db -- --replace-db=y
+npm run update-workspace-template   # re-runs migrations on the template; review with `git diff`
 ```
-Seeds the database from `lib/database/init-data.json` (includes sample questions and dashboards).
-
-**Export current database:**
-```bash
-cd frontend
-npm run export-db
-```
-Exports all documents to STDOUT for version control or sharing.
-
-**Typical workflow:**
-1. Export: `npm run export-db`
-2. Edit: Modify `lib/database/init-data.json`
-3. Re-initialize: `npm run import-db -- --replace-db=y`
 
 ### Database Migrations
 
 **Documents DB (PGLite/Postgres)** — uses a versioned migration framework:
 1. Increment `LATEST_DATA_VERSION` in `lib/database/constants.ts`
 2. Add a `MigrationEntry` to `MIGRATIONS` array in `lib/database/migrations.ts`
-3. Migration runs automatically on `npm run import-db`
+3. Run `npm run update-workspace-template` to bump the seed template; migrations then apply automatically at workspace registration
 
 **Analytics DuckDB** (`frontend/lib/analytics/file-analytics.db.ts`) — has no migration framework. `initSchema()` runs `CREATE TABLE/INDEX IF NOT EXISTS` once per process restart, which is a no-op on existing databases. To add new columns to an existing table, append `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` guards to `SCHEMA_SQL` after the relevant `CREATE TABLE` block. These guards are idempotent (no-op on fresh installs) and fire automatically on each server restart.
 
@@ -118,32 +108,11 @@ Exports all documents to STDOUT for version control or sharing.
 
 ### Dual-Database System
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Frontend                            │
-│                   (Next.js 16 + React 19)                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  PGLite (open-source) or Postgres (DATABASE_URL)            │
-│  ├─ Questions, Dashboards, Notebooks, Presentations         │
-│  ├─ Connections, Context, Users, Folders                    │
-│  └─ Accessed directly by Next.js server components          │
-│                                                             │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      │ API Calls
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Backend (Python FastAPI)                  │
-├─────────────────────────────────────────────────────────────┤
-│  ├─ Query Execution (SQLAlchemy)                            │
-│  ├─ Connection Pooling                                      │
-│  └─ Schema Introspection                                    │
-│                                                             │
-│  DuckDB / BigQuery / PostgreSQL                             │
-│  └─ Actual business data for analytics                      │
-└─────────────────────────────────────────────────────────────┘
-```
+**Frontend (Next.js)** owns two data planes:
+- **Document DB** — PGLite (open-source) or Postgres (`DATABASE_URL`): questions, dashboards, notebooks, connections, contexts, users, folders. Accessed directly by Next.js server components.
+- **Node.js query connectors** (`lib/connections/`) — execute analytics queries directly against DuckDB / BigQuery / PostgreSQL / SQLite / Athena / Mongo / CSV / Sheets.
+
+**Backend (Python FastAPI)** — AI chat/agent orchestration engine (LLM calls, append-only conversation log, tool/skill schemas). The frontend calls it for chat/orchestration only.
 
 ### Key Concepts
 
@@ -209,25 +178,14 @@ The configs system provides per-company configuration stored as database documen
 **Query Execution Flow**
 1. User edits SQL in QuestionViewer → Redux tracks state
 2. Execute query → `POST /api/query` (Next.js)
-3. Next.js fetches connection config from the document DB
-4. Forward to Python backend → `POST /api/execute-query`
-5. Python executes via SQLAlchemy with connection pooling
-6. Return QueryResult (columns, types, rows)
-7. Visualization updates with data
+3. Route resolves the named connection from the document DB and applies parameters (`applyNoneParams`)
+4. `runQuery` (`lib/connections/run-query.ts`) selects the Node.js connector via `getNodeConnector` and executes the query directly (DuckDB/BigQuery/PostgreSQL/...)
+5. Return QueryResult (columns, types, rows)
+6. Visualization updates with data
 
 **Schema Profiling & Statistics Enrichment**
 
-Connection schemas are enriched with column-level metadata (category classification, null counts, top values, min/max ranges) via `lib/connections/statistics-engine.ts`. The `profileDatabase(connectorType, schema, queryFn)` function dispatches to connector-specific strategies:
-
-| Connector | Strategy | Method |
-|-----------|----------|--------|
-| PostgreSQL | `pg_stats` + `pg_class` (2 queries total) | Batch row counts + stats from catalog tables |
-| DuckDB/CSV/Google Sheets | `SUMMARIZE` per table + top-value queries | DuckDB's built-in table summary |
-| BigQuery | `INFORMATION_SCHEMA.COLUMN_FIELD_PATHS` | Descriptions only (no table scans) |
-| SQLite | Generic SQL (`COUNT(DISTINCT ...)` per table) | Standard SQL aggregations |
-| Unknown | Pass-through | Schema returned without meta |
-
-Profiling runs during connection schema refresh in `lib/data/loaders/connection-loader.ts`. The enriched schema is cached in the connection document's content. The `ColumnMeta` interface (defined in `lib/connections/base.ts`) carries `category`, `nullCount`, `nDistinct`, `topValues`, `min/max/avg`, and `minDate/maxDate`.
+Connection schemas are enriched with column-level metadata (category, null counts, top values, min/max) via `lib/connections/statistics-engine.ts` → `profileDatabase(connectorType, schema, queryFn)`, which dispatches per connector (PostgreSQL via `pg_stats`/`pg_class`; DuckDB/CSV/Sheets via `SUMMARIZE`; BigQuery via `INFORMATION_SCHEMA`, descriptions only; SQLite via generic SQL; unknown → pass-through). Profiling runs during schema refresh in `lib/data/loaders/connection-loader.ts` and is cached in the connection document. The `ColumnMeta` interface lives in `lib/connections/base.ts`.
 
 **State Management**
 - Redux for page-level state (questions, dashboards)
@@ -237,52 +195,22 @@ Profiling runs during connection schema refresh in `lib/data/loaders/connection-
 
 ### Directory Structure
 
-```
-minusx/
-├── frontend/         # Next.js 16 application (React 19, Chakra UI, Redux)
-│   ├── app/         # Next.js App Router (pages, API routes)
-│   ├── components/  # React components
-│   ├── lib/         # Utilities, API clients, types
-│   └── store/       # Redux store and slices
-├── backend/         # Python FastAPI backend (query execution, connections)
-└── data/            # Database files (PGLite documents, DuckDB analytics)
-```
+- `frontend/` — Next.js 16 app (React 19, Chakra UI, Redux): `app/` (App Router pages + API routes), `components/`, `lib/` (utilities, API clients, types), `store/` (Redux slices).
+- `backend/` — Python FastAPI chat/agent orchestration engine.
+- `data/` — database files (PGLite documents, DuckDB analytics).
 
 ## Key Design Patterns
 
 ### Development Patterns & Best Practices
 
-**Custom Hooks for Data Loading**
-- Use specialized hooks to load and manage different file types
-- **`useFile(id)`** - Load any file by ID, handles loading states and caching
-- **`useFolder(path)`** - Load folder contents and metadata
-- **`useConversation(id)`** - Load conversation logs with message history
-- These hooks abstract Redux state management and API calls
-- Automatically handle loading, error states, and refetching logic
-
-**Code Smells to Avoid**
-- **Excessive `useEffect` usage** is a red flag
-  - Most data fetching should use custom hooks (useFile, useFolder, etc.)
-  - Avoid cascading effects that trigger other effects
-  - Prefer declarative patterns over imperative effect chains
-  - If you find yourself writing multiple interdependent useEffects, refactor
-- **Inline/dynamic imports** - ALWAYS import at the top of the file
-  - Inline imports like `const { foo } = await import('./bar')` are a code smell
-  - They indicate circular dependencies or poor module design
-  - Fix the architecture instead of using inline imports as a workaround
-  - ESLint rule `no-restricted-syntax` prevents inline imports
-- **Circular dependencies** - Design around them, don't inline import
-  - Circular dependencies indicate architectural issues
-  - Extract shared code to a separate module
-  - Use dependency inversion or other design patterns
-  - Never use inline imports to "fix" circular dependencies
-- **Direct Redux state mutation** - Always use slice actions
-- **Prop drilling** - Use Redux or context for deeply nested data
-- **Inline API calls in components** - Use custom hooks or listener middleware
-- **Explicit key enumeration** - Never manually re-list every field of a typed object when you can pass or spread the object directly. This causes change amplification: adding a new field to an interface requires hunting down every place keys were listed and updating them all, and you WILL miss some.
+**Code Smells to Avoid** (project-specific; ESLint enforces several)
+- **Inline/dynamic imports** — ALWAYS import at the top of the file. `const { foo } = await import('./bar')` signals a circular dependency or poor module design; fix the architecture (extract shared code) rather than working around it. Never use inline imports to "fix" circular deps. ESLint rule `no-restricted-syntax` enforces this.
+- **Direct Redux state mutation** — always use slice actions.
+- **Inline API calls / data fetching in components** — use the CORE hooks (`useFile`, `useFolder`, ...) or listener middleware; don't reach for cascading `useEffect` chains.
+- **Explicit key enumeration** — never manually re-list every field of a typed object when you can pass or spread it. This causes change amplification: add a field to the interface and you must hunt down every place keys were listed, and you WILL miss some.
   - Bad: `register({ userId: p.userId, email: p.email, role: p.role, ... })`
   - Good: `register({ ...properties })`
-  - The typed interface is the single source of truth. Pass it through; let the consumer spread or destructure as needed. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
+  - The typed interface is the single source of truth. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
 
 **Component Patterns**
 - **Container/View separation**: Containers (smart) connect to Redux, Views (dumb) are pure presentation
@@ -291,55 +219,21 @@ minusx/
 
 ### AI Orchestration & Tool Calling Architecture
 
-**Three-Tier System**
-The application uses a multi-tier architecture for AI-powered features:
+The Python backend is a **stateless** orchestration engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls** that execute across tiers; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (registry pattern); execution streams to the client via Server-Sent Events.
 
-1. **Next.js Frontend**: React UI, Redux state management, user interactions
-2. **Next.js Backend**: API routes, document database access, query coordination
-3. **Python Backend**: Stateless orchestration engine, LLM calls, database connections, query execution
+**Tools execute in the tier they need:**
+- **Python tools** — execute immediately (e.g. sending messages, data transforms).
+- **Next.js backend tools** — need the document DB or API access (querying data, searching schema, loading files).
+- **Frontend tools** — need Redux/UI state (modifying the current question, editing dashboard layout); executed automatically via Redux middleware, not manually.
 
-**Orchestration Pattern**
-- Python backend manages an **append-only conversation log** (immutable, forkable, time-travel capable)
-- Agents dispatch **tool calls** that execute across different tiers
-- Each tool call goes through: pending → execution → completed cycle
-- Job finishes when no pending tool calls remain
-
-**Multi-Tier Tool Execution**
-Tools can execute in three environments based on their requirements:
-
-- **Python Backend Tools**: Execute immediately (e.g., sending messages, data transformations)
-- **Next.js Backend Tools**: Require document database or API access (e.g., querying data, searching schema, loading files)
-- **Frontend Tools**: Require Redux state or UI updates (e.g., modifying current question, editing dashboard layout) - execute automatically via Redux middleware, not manually
-
-**Tool Call Flow**
+**Tool call flow:**
 ```
 User Input → Python (pending tools) → Next.js (execute some) → Frontend (execute rest)
          ← Python (resume)         ← Next.js (completed)   ← Frontend (completed)
 ```
+The Next.js backend auto-executes every tool it can, looping until it hits frontend-only tools, then returns those to the client; completed results flow back to Python to resume. **Mixed completion:** when a pass yields both completed and pending work, record completions *before* returning pending items — breaking early loses completed results.
 
-1. Python orchestrator returns pending tool calls to Next.js
-2. Next.js backend executes tools it can handle (database queries, file access)
-3. Next.js returns tools it can't execute to frontend
-4. Frontend executes remaining tools (UI updates via Redux)
-5. Completed tool results return to Python to resume orchestration
-6. Loop continues until no pending tools remain
-
-**AI Chat Integration**
-Conversational AI is integrated in three contexts:
-
-- **Explore Page**: Full-page chat interface for ad-hoc SQL analysis
-- **Question Page**: Sidebar chat with context of current SQL query, parameters, and results
-- **Dashboard Page**: Sidebar chat with context of dashboard assets and layout
-
-Each context sends relevant app state to the orchestrator, allowing the AI to understand and modify the current page.
-
-**Key Patterns**
-- **Stateless backend**: Python backend maintains no session state between requests
-- **Append-only log**: Conversations are immutable logs that can fork on concurrent edits
-- **Registry pattern**: Tools and agents register themselves for discoverability
-- **Streaming**: Real-time updates via Server-Sent Events during execution
-- **Automatic loop**: Next.js backend automatically executes tools until it encounters frontend-only tools
-- **Mixed completion**: When execution yields both completed and pending work, record completions first before returning pending items - breaking early loses completed results
+**AI chat contexts** (each sends relevant app state to the orchestrator): **Explore** (full-page chat for ad-hoc SQL), **Question** (sidebar with current query/params/results), **Dashboard** (sidebar with dashboard assets + layout).
 
 ### Chat Tool Display Architecture
 
@@ -420,15 +314,7 @@ The UI exposes a "Set to None / Clear None" toggle on each parameter input. None
 - `funnel`, `pie` - Categorical charts
 - `pivot` - Cross-tab pivot table with Rows/Columns/Values axes, per-value aggregation functions, heatmap, subtotals, and collapsible groups
 
-**VizSettings Interface**:
-```typescript
-interface VizSettings {
-  type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot';
-  xCols?: string[];      // Grouping columns (used by non-pivot chart types)
-  yCols?: string[];      // Value columns (aggregated with SUM, used by non-pivot chart types)
-  pivotConfig?: PivotConfig;  // Only used when type === 'pivot'
-}
-```
+`VizSettings` (in `lib/types.ts`) carries `type`, `xCols`/`yCols` (grouping/value columns for non-pivot types; values SUM-aggregated), and `pivotConfig` (pivot only).
 
 **Key Files**:
 - `components/plotx/ChartBuilder.tsx` - Main chart component with drag-drop axis selection
@@ -444,19 +330,12 @@ interface VizSettings {
 **Chart → LLM Image Pipeline** (`lib/chart/chart-attachments.ts`):
 On every message send from a question or dashboard page, `buildChartAttachments()` renders each chart off-screen via ECharts canvas, converts to JPEG (512px wide, 85% quality), uploads to S3 via presigned URL, and returns the public URL as an image attachment. Results are cached in-memory by `queryResultId|updatedAt|vizSettings|titleOverride|colorMode` — subsequent sends with unchanged data skip render+upload and reuse the cached S3 URL. These image attachments are sent to the LLM as content blocks between the app state block and the user message block.
 
-**Adding a New Viz Type**:
-1. Add type to `VizSettings.type` union in `lib/types.ts`
-2. Create renderer component in `components/plotx/` (receives `ChartProps`)
-3. Add case in `ChartBuilder.tsx` to render the component
-4. Add icon/option in `VizTypeSelector.tsx`
-5. Add type to condition in `QuestionVisualization.tsx`
-6. Add type to `handleVizTypeChange` in `QuestionViewV2.tsx`
-7. Export from `components/plotx/index.ts`
+**Adding a New Viz Type** — touch-points: add to the `VizSettings.type` union (`lib/types.ts`); add a renderer in `components/plotx/` (takes `ChartProps`) and export it from `components/plotx/index.ts`; wire it into `ChartBuilder.tsx`, `VizTypeSelector.tsx`, `QuestionVisualization.tsx`, and `handleVizTypeChange` in `QuestionViewV2.tsx`.
 
 ## Development Workflow
 
 ### Database Schema Changes
-Update `lib/database/postgres-schema.ts` (PGLite uses this schema), update `lib/types.ts`, add a migration entry, then re-initialize: `npm run import-db -- --replace-db=y`.
+Update `lib/database/postgres-schema.ts` (PGLite uses this schema), update `lib/types.ts`, add a migration entry, then run `npm run update-workspace-template` to refresh the seed template.
 
 ### Adding Next.js API Routes
 
@@ -477,9 +356,8 @@ export async function POST(req: NextRequest) {
 ### Adding Python Backend Endpoints
 1. Add route handler in `backend/main.py`
 2. Define Pydantic models for request/response
-3. Use `connection_manager` for database connections
-4. Add corresponding API client in `frontend/lib/api/`
-5. Update TypeScript types if needed
+3. Add corresponding API client in `frontend/lib/api/`
+4. Update TypeScript types if needed
 
 ## Important Technical Details
 
@@ -494,9 +372,8 @@ export async function POST(req: NextRequest) {
 
 ### Backend
 - **FastAPI** with uvicorn
-- **SQLAlchemy** for database operations
-- **DuckDB**, **BigQuery**, **PostgreSQL** connectors
-- **Connection pooling** for performance
+- **AI chat/agent orchestration**: LLM calls, append-only conversation log, tool/skill schemas
+- **No query execution / DB connectors** — analytics queries run in the Next.js Node.js connectors (`frontend/lib/connections/`), not here
 - **Path Resolution**: DuckDB file paths are resolved relative to `BASE_DUCKDB_DATA_PATH` environment variable
   - Absolute paths (starting with `/`) are used as-is
   - Relative paths are prepended with `BASE_DUCKDB_DATA_PATH`
@@ -558,14 +435,15 @@ export async function POST(req: NextRequest) {
 - `frontend/app/f/[id]/page.tsx` - File detail page route
 
 ### Frontend Other
-- `frontend/scripts/import-db.ts` - Database import/initialization script
+- `frontend/scripts/update-workspace-template.ts` - Re-runs migrations on the seed template (`workspace-template.json`)
+- `frontend/lib/database/import-export.ts` - Document import/export + `atomicImport` (seeds the DB at workspace registration)
 - `frontend/lib/auth/access-rules.ts` - Server-side permission helpers (canEditFileType, canDeleteFileType, etc.)
 - `frontend/lib/auth/access-rules.client.ts` - Client-side permission helpers (mirrors server functions)
 
 ### Backend
-- `backend/main.py` - FastAPI application with all endpoints
-- `backend/connection_manager.py` - Database connection pooling
-- `backend/connectors/` - Database connectors (DuckDB, BigQuery, PostgreSQL)
+- `backend/main.py` - FastAPI application (chat orchestration endpoints)
+- `backend/tasks/agents/` - Agents, tools, and skills (e.g. `analyst/`)
+- `frontend/lib/connections/` - Node.js query connectors (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Sheets) — **query execution lives here now, not in the Python backend**
 
 ### Writing New Tests
 
@@ -575,31 +453,7 @@ export async function POST(req: NextRequest) {
 - Use shared test utilities from `store/__tests__/test-utils.ts`
 - **Automatic tool execution**: Tests should observe automatic system behaviors (middleware, listeners) rather than manually simulating them - manual intervention interferes with production flow
 
-**Example:**
-```typescript
-import { waitFor, getTestDbPath } from './test-utils';
-import { withPythonBackend } from '@/test/harness/python-backend';
-import { setupMockFetch } from '@/test/harness/mock-fetch';
-import { setupTestDb } from '@/test/harness/test-db';
-import { POST as chatPostHandler } from '@/app/api/chat/route';
-
-describe('My New Feature', () => {
-  const { getPythonPort } = withPythonBackend();
-  const { getStore } = setupTestDb(getTestDbPath('my_feature'));
-  const mockFetch = setupMockFetch({ getPythonPort, chatPostHandler });
-
-  beforeEach(() => {
-    mockFetch.mockClear();
-  });
-
-  it('should test my feature', async () => {
-    const store = getStore();
-    // Your test here
-  });
-});
-```
-
-See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts` for complete examples.
+**Copy the setup from `store/__tests__/chatE2E.test.ts`** — it wires the standard harness (`withPythonBackend`, `setupTestDb` + `getTestDbPath`, `setupMockFetch` with the real `chatPostHandler`). See `store/__tests__/test-utils.ts` for available utilities.
 
 **Test Ports:** Tests use ports 8002-8006 (distinct from dev servers on 3000 and 8001). Always check for stale test processes before running tests.
 

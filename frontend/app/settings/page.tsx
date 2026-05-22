@@ -517,8 +517,8 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Experimental Flags',
-      title: 'Use new chat interface (beta)',
-      description: 'Switch from the legacy Conversations to the new Chats surface (TS-orchestrator, /api/chat/v2). Toggling reloads the page with `?v=2` added or removed — the URL is the only source of truth.',
+      title: 'Use new chat interface',
+      description: 'The new Chats surface (TS-orchestrator) is the default. Turn this off to use the legacy Python Conversations engine. Toggling reloads the page, adding `?v=1` (off) or clearing `v` (on) — the URL is the only source of truth.',
       control: (
         <SwitchControl
           checked={useChatV2}

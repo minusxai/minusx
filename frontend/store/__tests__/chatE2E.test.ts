@@ -54,6 +54,7 @@ describe('Chat API Tests', () => {
   // Single Python backend + mock fetch shared by all inner describe blocks
   const { getPythonPort } = withPythonBackend();
   const mockFetch = setupMockFetch({
+    chatVersion: 1, // legacy Python engine (v2 is now the default)
     getPythonPort,
     interceptors: [
       {
@@ -471,6 +472,7 @@ describe('LLM-Mocked Agent Suites', () => {
     withPythonBackend({ withLLMMock: true });
 
   const sharedLLMMockFetch = setupMockFetch({
+    chatVersion: 1, // legacy Python engine (v2 is now the default)
     getPythonPort: sharedPythonPort,
     getLLMMockPort,
     interceptors: [

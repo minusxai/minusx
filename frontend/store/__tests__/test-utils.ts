@@ -300,11 +300,15 @@ export function getTestDbPath(testName: string): string {
 // ============================================================================
 
 /**
- * Create a NextRequest for testing API routes.
+ * Create a NextRequest for testing the /api/chat route handler.
  * Simplifies the creation of test requests.
+ *
+ * Pinned to `?v=1` (the legacy Python engine): these handler tests drive the
+ * Python backend, and v2 (the JS orchestrator) is now the default engine
+ * (see DEFAULT_CHAT_VERSION).
  */
 export function createNextRequest(body: any) {
-  return new NextRequest('http://localhost:3000/api/chat', {
+  return new NextRequest('http://localhost:3000/api/chat?v=1', {
     method: 'POST',
     body: JSON.stringify(body)
   });

@@ -67,6 +67,15 @@ export interface MockFetchOptions {
   getLLMMockPort?: () => number;
   /** Additional custom interceptors for test-specific APIs (legacy - prefer interceptors array) */
   additionalInterceptors?: Array<(urlStr: string, init?: any, originalFetch?: typeof fetch) => Promise<Response | null>>;
+  /**
+   * Pin intercepted `/api/chat*` requests to a specific chat engine version by
+   * forcing `?v=<chatVersion>` onto the reconstructed request URL. v2 (the JS
+   * orchestrator) is the default engine (see DEFAULT_CHAT_VERSION), so suites
+   * that drive the legacy Python backend (`withPythonBackend`) set
+   * `chatVersion: 1` — otherwise the chat routes would default to v2 and run
+   * the orchestrator instead of the Python backend.
+   */
+  chatVersion?: 1 | 2;
 }
 
 /**
@@ -78,7 +87,7 @@ export interface MockFetchOptions {
  * ```
  */
 export function setupMockFetch(options: MockFetchOptions) {
-  const { getPythonPort, interceptors = [], getLLMMockPort, additionalInterceptors = [] } = options;
+  const { getPythonPort, interceptors = [], getLLMMockPort, additionalInterceptors = [], chatVersion } = options;
   let originalFetch: typeof fetch;
   let spy: MockInstance;
 
@@ -122,7 +131,17 @@ export function setupMockFetch(options: MockFetchOptions) {
           cleanPath = '/' + cleanPath;
         }
 
-        const fullUrl = `http://localhost:3000${cleanPath}`;
+        let fullUrl = `http://localhost:3000${cleanPath}`;
+
+        // Pin chat-route requests to the configured engine version. The route
+        // reconstruction drops the original query string, and v2 is the default
+        // engine, so Python-backend suites must force `?v=1` to reach the
+        // Python branch instead of the JS orchestrator.
+        if (chatVersion != null && cleanPath.startsWith('/api/chat')) {
+          const u = new URL(fullUrl);
+          u.searchParams.set('v', String(chatVersion));
+          fullUrl = u.toString();
+        }
 
         const request = new NextRequest(fullUrl, {
           method: init?.method || 'POST',

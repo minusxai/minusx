@@ -3,6 +3,7 @@ import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { isV2 } from '@/lib/chat-v2/chat-version';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import { displayNameFromFileName } from '@/lib/conversations';
 
@@ -42,11 +43,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get('limit');
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    // Mode listing:
-    //   ?v=2 → return ALL conversations; v=1 ones are tagged `legacy` (they fork
-    //          to v2 on continue, so users can see + resume old chats).
-    //   else → return ONLY v=1 conversations (the legacy surface).
-    const isV2 = searchParams.get('v') === '2';
+    // Mode listing (v2 is the default surface; see DEFAULT_CHAT_VERSION):
+    //   v=2 / default → return ALL conversations; v=1 ones are tagged `legacy`
+    //          (they fork to v2 on continue, so users can see + resume old chats).
+    //   ?v=1 → return ONLY v=1 conversations (the legacy Python surface).
+    const isV2Request = isV2(searchParams.get('v'));
 
     const user = await getEffectiveUser();
 
@@ -76,8 +77,9 @@ export async function GET(request: Request) {
 
     for (const fileInfo of filesResult.data) {
       const fileIsV2 = isV2ConversationFile(fileInfo);
-      // v1 mode shows only v1 files; v2 mode shows everything (v1 tagged legacy).
-      if (!isV2 && fileIsV2) continue;
+      // v1 (Python) surface shows only v1 files; v2 surface shows everything
+      // (v1 tagged legacy).
+      if (!isV2Request && fileIsV2) continue;
 
       const meta = (fileInfo.meta ?? {}) as { firstMessage?: string };
       conversations.push({
@@ -85,7 +87,7 @@ export async function GET(request: Request) {
         name: meta.firstMessage || displayNameFromFileName(fileInfo.name),
         createdAt: fileInfo.created_at,
         updatedAt: fileInfo.updated_at,
-        ...(isV2 && !fileIsV2 ? { legacy: true } : {}),
+        ...(isV2Request && !fileIsV2 ? { legacy: true } : {}),
       });
     }
 

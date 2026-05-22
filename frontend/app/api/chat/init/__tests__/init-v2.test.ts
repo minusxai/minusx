@@ -1,6 +1,8 @@
-// /api/chat/init route — verifies that `?v=2` writes `meta.version=2` on
-// the new conversation file, while default URL writes none. Both use the
-// same `type:'conversation'` file shape — only `meta.version` differs.
+// /api/chat/init route — verifies the new conversation file's `meta.version`
+// tracks the resolved chat version. v2 is the default, so a plain URL and
+// `?v=2` both write `meta.version=2`; only an explicit `?v=1` writes none
+// (legacy Python conversation). Both use the same `type:'conversation'` file
+// shape — only `meta.version` differs.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -38,14 +40,23 @@ async function getFileMeta(id: number): Promise<{ version?: number } | null> {
 describe('POST /api/chat/init', () => {
   setupTestDb(TEST_DB_PATH);
 
-  it('default URL → meta.version is NOT set (v=1 conversation)', async () => {
-    const res = await POST(makeRequest('http://localhost/api/chat/init', { firstMessage: 'hi' }));
+  it('?v=1 → meta.version is NOT set (legacy Python conversation)', async () => {
+    const res = await POST(makeRequest('http://localhost/api/chat/init?v=1', { firstMessage: 'hi' }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.conversationID).toBeGreaterThan(0);
     const meta = await getFileMeta(body.conversationID);
     // v=1 may have no meta at all, or meta without `version`.
     expect(meta?.version).toBeUndefined();
+  });
+
+  it('default URL → meta.version === 2 (v2 is the default)', async () => {
+    const res = await POST(makeRequest('http://localhost/api/chat/init', { firstMessage: 'hi default' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.conversationID).toBeGreaterThan(0);
+    const meta = await getFileMeta(body.conversationID);
+    expect(meta?.version).toBe(2);
   });
 
   it('?v=2 → meta.version === 2', async () => {

@@ -79,35 +79,38 @@ describe('getCurrentV', () => {
   });
 });
 
-describe('setVInUrl — toggle controller', () => {
+describe('setVInUrl — toggle controller (v2 is the default engine)', () => {
+  // `setVInUrl(true)` = use the new (v2) chat. v2 is the default, so it clears
+  // `v` (clean URL, like mode=org is omitted). `setVInUrl(false)` = opt into the
+  // legacy Python chat, which is the non-default → explicit `?v=1`.
   afterEach(() => setLocation('http://localhost:3000/'));
 
-  it('adds v=2 to the URL while preserving other params and pathname', () => {
-    setLocation('http://localhost:3000/settings?mode=tutorial&as_user=alice@example.com');
+  it('enabling v2 clears v (default) while preserving other params and pathname', () => {
+    setLocation('http://localhost:3000/settings?v=1&mode=tutorial&as_user=alice@example.com');
     const out = setVInUrl(true);
-    expect(out.split('?')[0]).toBe('/settings');
-    const parsed = new URLSearchParams(out.split('?')[1] ?? '');
-    expect(parsed.get('v')).toBe('2');
-    expect(parsed.get('mode')).toBe('tutorial');
-    expect(parsed.get('as_user')).toBe('alice@example.com');
-  });
-
-  it('removes v from the URL while preserving other params and pathname', () => {
-    setLocation('http://localhost:3000/settings?v=2&mode=tutorial');
-    const out = setVInUrl(false);
     expect(out.split('?')[0]).toBe('/settings');
     const parsed = new URLSearchParams(out.split('?')[1] ?? '');
     expect(parsed.get('v')).toBeNull();
     expect(parsed.get('mode')).toBe('tutorial');
+    expect(parsed.get('as_user')).toBe('alice@example.com');
   });
 
-  it('toggling on from a clean URL produces /settings?v=2', () => {
+  it('disabling v2 sets v=1 while preserving other params and pathname', () => {
+    setLocation('http://localhost:3000/settings?mode=tutorial');
+    const out = setVInUrl(false);
+    expect(out.split('?')[0]).toBe('/settings');
+    const parsed = new URLSearchParams(out.split('?')[1] ?? '');
+    expect(parsed.get('v')).toBe('1');
+    expect(parsed.get('mode')).toBe('tutorial');
+  });
+
+  it('toggling on from a clean URL stays clean (/settings)', () => {
     setLocation('http://localhost:3000/settings');
-    expect(setVInUrl(true)).toBe('/settings?v=2');
+    expect(setVInUrl(true)).toBe('/settings');
   });
 
-  it('toggling off from /settings?v=2 produces /settings', () => {
-    setLocation('http://localhost:3000/settings?v=2');
-    expect(setVInUrl(false)).toBe('/settings');
+  it('toggling off from a clean URL produces /settings?v=1', () => {
+    setLocation('http://localhost:3000/settings');
+    expect(setVInUrl(false)).toBe('/settings?v=1');
   });
 });

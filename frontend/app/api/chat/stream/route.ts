@@ -24,6 +24,7 @@ import {
   validateV2Mode,
   forkV1ConversationToV2,
 } from '@/lib/chat-orchestration-v2.server';
+import { isV2 } from '@/lib/chat-v2/chat-version';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import { FilesAPI } from '@/lib/data/files.server';
 import { createNewConversation } from '@/lib/conversations';
@@ -464,17 +465,18 @@ export async function POST(request: NextRequest) {
   // Ping flushes response headers to the client immediately.
   writer.write(encoder.encode(': ping\n\n'));
 
-  // V=2 branch: orchestrator + translator. Same SSE wire shape as legacy
-  // (`event: streaming_event` + `event: done`), so the frontend listener
-  // doesn't need to change.
-  const isV2 = request.nextUrl.searchParams.get('v') === '2';
+  // V=2 branch: orchestrator + translator (the default engine, entered unless
+  // `?v=1` is on the URL; see DEFAULT_CHAT_VERSION). Same SSE wire shape as
+  // legacy (`event: streaming_event` + `event: done`), so the frontend
+  // listener doesn't need to change.
+  const isV2Request = isV2(request.nextUrl.searchParams.get('v'));
 
   // Mode-mismatch guard for v=1: refuse to drive a v=2 conversation through
   // the Python backend. Emit BOTH an error frame and a done frame — the
   // legacy chatListener checks doneData before errorData, so an error frame
   // alone surfaces as "Stream ended without done event" instead of the real
   // error.
-  if (!isV2 && body.conversationID) {
+  if (!isV2Request && body.conversationID) {
     const file = await FilesAPI.loadFile(body.conversationID, user).catch(() => null);
     if (file && isV2ConversationFile(file.data)) {
       const errMsg = 'cannot continue v=2 conversation in v=1 mode';
@@ -507,7 +509,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const streamProcessor = isV2
+  const streamProcessor = isV2Request
     ? processStreamV2(writer, encoder, body, user)
     : processStream(writer, encoder, body, user, request.signal);
   streamProcessor.catch((err) => {

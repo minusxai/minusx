@@ -158,6 +158,7 @@ describe('Agent creates files via chat', () => {
   setupTestDb(getTestDbPath('agent_creates_files_ui'));
 
   const mockFetch = setupMockFetch({
+    chatVersion: 1, // legacy Python engine (v2 is now the default)
     getPythonPort: sharedPythonPort,
     getLLMMockPort: sharedLLMMockPort,
     interceptors: [
@@ -310,7 +311,10 @@ async function catchAllApiInterceptor(
   const method = (init?.method ?? 'GET').toUpperCase();
 
   if (urlStr.includes('/api/chat/init')) {
-    const req = new NextRequest(`${BASE}/api/chat/init`, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
+    // Pin to v=1 (legacy Python engine): v2 is now the default, but these
+    // suites drive the Python backend, so the created conversation must match
+    // the v=1 chat turns (else continuing it raises a mode-mismatch).
+    const req = new NextRequest(`${BASE}/api/chat/init?v=1`, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
     const res = await chatInitHandler(req);
     const data = await res.json();
     return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
@@ -359,6 +363,7 @@ describe('Explore page: submit question → agent responds → see answer → to
   global.fetch = realFetch;
 
   const exploreMockFetch = setupMockFetch({
+    chatVersion: 1, // legacy Python engine (v2 is now the default)
     getPythonPort: sharedPythonPort,
     getLLMMockPort: sharedLLMMockPort,
     interceptors: [
@@ -665,7 +670,8 @@ function makeRealApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) 
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      return call(chatPostHandler, `${BASE}/api/chat`, init);
+      // Pin to v=1 (legacy Python engine); v2 is now the default (see DEFAULT_CHAT_VERSION).
+      return call(chatPostHandler, `${BASE}/api/chat?v=1`, init);
     }
     if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
       return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
@@ -1527,7 +1533,8 @@ function makeViewerApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      return call(chatPostHandler, `${BASE}/api/chat`, init);
+      // Pin to v=1 (legacy Python engine); v2 is now the default (see DEFAULT_CHAT_VERSION).
+      return call(chatPostHandler, `${BASE}/api/chat?v=1`, init);
     }
     if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
       return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
