@@ -1,5 +1,6 @@
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';
+import { sqlArray } from '@/lib/database/adapter/types';
 import { FileEventType, insertFileEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
 import type { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
@@ -136,9 +137,9 @@ ORDER BY fe.file_id, fe.id DESC
 `;
 
     const [aggResult, createdByResult, lastEditedByResult] = await Promise.all([
-      db.exec<Record<string, unknown>>(BATCH_AGG_SQL, [fileIds]),
-      db.exec<Record<string, unknown>>(BATCH_CREATED_BY_SQL, [fileIds]),
-      db.exec<Record<string, unknown>>(BATCH_LAST_EDITED_BY_SQL, [fileIds]),
+      db.exec<Record<string, unknown>>(BATCH_AGG_SQL, [sqlArray(fileIds)]),
+      db.exec<Record<string, unknown>>(BATCH_CREATED_BY_SQL, [sqlArray(fileIds)]),
+      db.exec<Record<string, unknown>>(BATCH_LAST_EDITED_BY_SQL, [sqlArray(fileIds)]),
     ]);
 
     const createdByMap = new Map<number, string | null>();

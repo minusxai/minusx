@@ -8,7 +8,8 @@
 
 import { useState, useEffect } from 'react';
 import { Box, HStack, Text, Icon, IconButton, SimpleGrid, Button } from '@chakra-ui/react';
-import NextLink from 'next/link';
+// Param-preserving Link so tutorial links keep ?v=2 (and as_user/mode).
+import { Link as NextLink } from '@/components/ui/Link';
 import { useUsers } from '@/lib/hooks/useUsers';
 import {
   LuX,

@@ -7,6 +7,22 @@ export interface QueryResult<T = any> {
 }
 
 /**
+ * Marker wrapping an array param so adapters bind it as a NATIVE SQL array
+ * (Postgres `{...}`) — for `= ANY($1)` / `$1::int[]` — instead of JSON-stringifying
+ * it (which adapters do for plain arrays destined for JSONB columns). node-postgres
+ * and PGLite both reject a JSON-stringified `"[...]"` in an array context with
+ * "malformed array literal". Use `sqlArray(values)` at those call sites.
+ */
+export class SqlArray {
+  constructor(public readonly values: readonly unknown[]) {}
+}
+
+/** Wrap an array param for use in `= ANY($1)` / `$1::int[]` contexts. */
+export function sqlArray(values: readonly unknown[]): SqlArray {
+  return new SqlArray(values);
+}
+
+/**
  * Transaction context - uses same interface as adapter
  */
 export interface ITransactionContext {

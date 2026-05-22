@@ -16,7 +16,8 @@ import {
   LuUsers,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import NextLink from 'next/link';
+// Param-preserving Link so tutorial/getting-started links keep ?v=2 (and as_user/mode).
+import { Link as NextLink } from '@/components/ui/Link';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useContexts } from '@/lib/hooks/useContexts';

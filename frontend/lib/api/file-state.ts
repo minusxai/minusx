@@ -59,7 +59,10 @@ function hashString(str: string): number {
   return hash;
 }
 function pathToPlaceholderId(path: string): number {
-  return -(2_000_000_000 + (Math.abs(hashString(path)) % 1_000_000_000));
+  // Negative (virtual, no DB row) and kept within int4 range [-2^31, -1] so it
+  // never overflows an `integer` column if it reaches one. Must match
+  // store/filesSlice.ts:pathToVirtualId so the same path yields the same ID.
+  return -(1 + (Math.abs(hashString(path)) % 2_000_000_000));
 }
 
 export type {
