@@ -5,7 +5,6 @@
 
 import { DbFile, ConnectionContent, DatabaseSchema } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { getSchemaFromPython } from '@/lib/backend/python-backend.server';
 import { updateCachedSchema } from '@/lib/data/connections.server';
 import { CustomLoader } from './types';
 import { getNodeConnector } from '@/lib/connections';
@@ -53,14 +52,12 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
     return file;
   }
 
-  // Fetch fresh schema — use Node.js connector for DuckDB types, Python for everything else
+  // Fetch fresh schema via the Node.js connector for the connection's type.
   console.log(`[connectionLoader] Fetching fresh schema for ${file.name} (refresh=${options?.refresh}, stale=${isStale})`);
   let freshSchema: DatabaseSchema;
   try {
     const connector = getNodeConnector(file.name, content.type, content.config);
-    const result = connector
-      ? { schemas: await connector.getSchema() }
-      : await getSchemaFromPython(file.name, content.type, content.config);
+    const result = connector ? { schemas: await connector.getSchema() } : { schemas: [] };
 
     // Enrich schema with column metadata (descriptions, categories, top values, etc.)
     let enrichedSchemas = result.schemas;

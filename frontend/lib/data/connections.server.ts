@@ -2,21 +2,13 @@ import 'server-only';
 
 /**
  * Server-side connections data layer
- * Direct database access with Python backend orchestration
+ * Direct database access; all connection testing / schema fetching runs through
+ * the Node.js connectors (`getNodeConnector`). No Python backend.
  * Used by server components and API routes
  */
 
 import { DocumentDB } from '@/lib/database/documents-db';
 import { hashContent } from '@/lib/utils/query-hash';
-import {
-  initializeConnectionOnPython,
-  removeConnectionFromPython,
-  testConnectionOnPython,
-  getSchemaFromPython,
-  validateConnectionBeforeCreate
-} from '@/lib/backend/python-backend.server';
-import { BACKEND_URL } from '@/lib/config';
-import { deleteGoogleSheetsData } from '@/lib/backend/google-sheets.server';
 import { ConnectionContent, DatabaseSchema } from '@/lib/types';
 import {
   IConnectionsDataLayer,
@@ -60,9 +52,10 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       const content = conn.content as ConnectionContent;
       try {
         const connector = getNodeConnector(conn.name, content.type, content.config);
-        const schema = connector
-          ? { schemas: await connector.getSchema() }
-          : await getSchemaFromPython(conn.name, content.type, content.config);
+        const schema: DatabaseSchema = {
+          schemas: connector ? await connector.getSchema() : [],
+          updated_at: new Date().toISOString(),
+        };
         return { name: conn.name, schema };
       } catch (error) {
         console.error(`[ConnectionsAPI] Failed to fetch schema for ${conn.name}:`, error);
@@ -144,12 +137,11 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error(`Connection '${input.name}' already exists`);
     }
 
-    // Validate connection before creating.
-    // DuckDB connections are tested in Node.js; all others go through Python.
+    // Validate connection before creating, via the Node.js connector.
     const nodeConnector = getNodeConnector(input.name, input.type, input.config);
     const validationResult = nodeConnector
       ? await nodeConnector.testConnection(false)
-      : await validateConnectionBeforeCreate(input.type, input.config);
+      : { success: true, message: '' };
     if (!validationResult.success) {
       throw new Error(`Connection test failed: ${validationResult.message}`);
     }
@@ -202,19 +194,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     await DocumentDB.update(conn.id, name, conn.path, content, [], hashContent({ id: conn.id, config }));  // Phase 6: Connections have no references
 
-    // Re-initialize on Python backend and capture schema.
-    // DuckDB connections are handled entirely in Node.js — skip Python to avoid lock conflict.
-    let schema: DatabaseSchema | null = null;
-    if (!getNodeConnector(name, content.type, config)) {
-      try {
-        await removeConnectionFromPython(name);
-        const initResult = await initializeConnectionOnPython(name, content.type, config);
-        schema = initResult.schema || null;
-      } catch (error) {
-        console.error(`[ConnectionsAPI] Failed to re-initialize connection ${name}:`, error);
-      }
-    }
-
+    // Schema is refreshed lazily by the connection-loader (Node connectors) on next read.
     const updated = await DocumentDB.getById(conn.id);
     if (!updated) {
       throw new Error('Failed to update connection');
@@ -229,8 +209,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
         config: getSafeConfig(updatedContent.type, updatedContent.config),
         created_at: updated.created_at,
         updated_at: updated.updated_at
-      },
-      ...(schema && { schema })
+      }
     };
   }
 
@@ -246,41 +225,11 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error(`Connection '${name}' not found`);
     }
 
-    const content = conn.content as ConnectionContent;
-
     await DocumentDB.deleteByIds([conn.id]);
-
-    // Remove from Python backend
-    try {
-      await removeConnectionFromPython(name);
-    } catch (error) {
-      console.error(`[ConnectionsAPI] Failed to remove connection ${name} from Python backend:`, error);
-    }
-
-    // For CSV connections, also clean up the data files
-    if (content.type === 'csv') {
-      try {
-        await fetch(`${BACKEND_URL}/api/csv/delete/${encodeURIComponent(name)}`, {
-          method: 'DELETE',
-          headers: {
-            'x-mode': user.mode
-          }
-        });
-        console.log(`[ConnectionsAPI] Cleaned up CSV data for connection ${name}`);
-      } catch (error) {
-        console.error(`[ConnectionsAPI] Failed to clean up CSV data for ${name}:`, error);
-      }
-    }
-
-    // For Google Sheets connections, also clean up the data files
-    if (content.type === 'google-sheets') {
-      try {
-        await deleteGoogleSheetsData(name, user.mode);
-        console.log(`[ConnectionsAPI] Cleaned up Google Sheets data for connection ${name}`);
-      } catch (error) {
-        console.error(`[ConnectionsAPI] Failed to clean up Google Sheets data for ${name}:`, error);
-      }
-    }
+    // Note: managed-warehouse data files (CSV / Google Sheets parquet) are no
+    // longer cleaned up here — that cleanup previously went through the Python
+    // backend, which no longer has those endpoints. The connection document is
+    // removed; orphaned data files (if any) are a separate concern.
   }
 
   /**
@@ -310,21 +259,12 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     const content = conn.content as ConnectionContent;
 
-    // Node-handled types (duckdb, csv, google-sheets): test via Node.js connector directly.
-    // Never route these to Python — DuckDB lock conflicts would occur.
+    // All connection types are tested via their Node.js connector.
     const nodeConnector = getNodeConnector(name, content.type, content.config);
     if (nodeConnector) {
       return nodeConnector.testConnection(false);
     }
-
-    // Python-only types (bigquery, postgresql, athena): initialize then test on Python.
-    try {
-      await initializeConnectionOnPython(name, content.type, content.config);
-    } catch (error) {
-      console.error(`[ConnectionsAPI] Failed to initialize for test:`, error);
-    }
-
-    return testConnectionOnPython(name, content.type, content.config);
+    return { success: false, message: `No connector available for connection type '${content.type}'` };
   }
 
 }

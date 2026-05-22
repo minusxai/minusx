@@ -2,9 +2,9 @@
 // in the server-side `runQuery` / `loadConnectionSchema` chokepoints.
 //
 // Server-only: `runQuery` transitively imports `ConnectionsAPI` →
-// `python-backend.server` → `auth-helpers` → `next-auth`, none of which
-// load in a plain Node CLI process. The benchmark CLI imports
-// `./db-tools` (Base classes only) and never reaches this file.
+// `auth-helpers` → `next-auth`, none of which load in a plain Node CLI
+// process. The benchmark CLI imports `./db-tools` (Base classes only) and
+// never reaches this file.
 
 import 'server-only';
 import { Type } from 'typebox';

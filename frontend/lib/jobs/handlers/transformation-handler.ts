@@ -1,6 +1,5 @@
 import 'server-only';
 import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
-import { BACKEND_URL } from '@/lib/config';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQuery } from '@/lib/connections/run-query';
@@ -64,14 +63,11 @@ export const transformationJobHandler: JobHandler = {
           sql = `CREATE OR REPLACE VIEW "${schema}"."${view}" AS\n${question.query}`;
         }
 
-        // Execute DDL via Python backend
+        // Execute the CREATE VIEW DDL via the Node.js connector.
         try {
           await runQuery(question.connection_name, sql, {}, user);
         } catch (err) {
-          const raw = err instanceof Error ? err.message : String(err);
-          const error = raw === 'fetch failed'
-            ? `Could not reach Python backend (fetch failed). Is the backend running at ${BACKEND_URL}?`
-            : raw;
+          const error = err instanceof Error ? err.message : String(err);
           results.push({ questionId, questionName, schema, view, sql, status: 'error', error });
           continue;
         }
