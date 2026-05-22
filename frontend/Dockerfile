@@ -13,9 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and postinstall script (needed during npm ci)
+# Copy package files and postinstall inputs (needed during npm ci).
+# `patches/` MUST be present before `npm ci` so postinstall's patch-package
+# applies the pi-ai patch (web search + image-URL support). Without it,
+# patch-package silently finds no patches and ships an unpatched pi.
 COPY package*.json .npmrc ./
 COPY scripts/copy-duckdb-wasm.mjs ./scripts/copy-duckdb-wasm.mjs
+COPY patches ./patches
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --cache /root/.npm
