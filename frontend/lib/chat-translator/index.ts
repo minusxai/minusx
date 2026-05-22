@@ -159,6 +159,10 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
       // gets natively. Preserves `signature` on thinking blocks so the
       // signature is available for opaque continuations.
       const contentBlocks: Array<Record<string, unknown>> = [];
+      // Aggregated web-search citations across text blocks — surfaced at the
+      // top level of the TalkToUser result so `AgentTurnContainer` can enrich
+      // web_search results with cited_text (matches Python's response shape).
+      const allCitations: unknown[] = [];
       const blocks = Array.isArray(entry.content) ? entry.content : [];
       for (const block of blocks) {
         const t = (block as { type?: string }).type;
@@ -168,8 +172,18 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           if (tb.thinkingSignature) out.signature = tb.thinkingSignature;
           contentBlocks.push(out);
         } else if (t === 'text') {
-          const tb = block as { text?: string };
-          contentBlocks.push({ type: 'text', text: tb.text ?? '' });
+          const tb = block as { text?: string; citations?: unknown[] };
+          const out: Record<string, unknown> = { type: 'text', text: tb.text ?? '' };
+          if (Array.isArray(tb.citations) && tb.citations.length > 0) {
+            out.citations = tb.citations;
+            allCitations.push(...tb.citations);
+          }
+          contentBlocks.push(out);
+        } else if (t === 'web_search_tool_result') {
+          // Native Anthropic web-search results — rendered as the "Browsing"
+          // card in the timeline. Passed through unchanged (matches Python).
+          const wb = block as { tool_use_id?: string; content?: unknown };
+          contentBlocks.push({ type: 'web_search_tool_result', tool_use_id: wb.tool_use_id, content: wb.content });
         }
         // toolCall blocks become their own task entries below — not in
         // content_blocks (matches v=1 convention).
@@ -201,6 +215,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           result: JSON.stringify({
             success: entry.stopReason !== 'error',
             content_blocks: contentBlocks,
+            ...(allCitations.length > 0 ? { citations: allCitations } : {}),
           }),
           details: null as unknown as ToolCallDetails,
           created_at: createdAt,

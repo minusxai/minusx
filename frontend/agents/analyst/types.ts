@@ -41,15 +41,17 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   unrestrictedMode?: boolean;
   /** User-message attachments (images pre-converted to base64, plus text), like Python's attachments. */
   attachments?: AgentAttachment[];
+  /** Approximate user city — biases web-search results (Python's user_location). */
+  city?: string;
 }
 
 /**
  * A user-message attachment, normalized server-side for the LLM. Image content
- * is pre-converted to base64 (pi has no remote-URL image support) so
- * buildUserContent can stay synchronous. Mirrors Python's image/text split.
+ * is either base64 (`data` + `mimeType`) or a remote URL (`url`, loaded by
+ * Anthropic via the pi patch). Mirrors Python's image/text split.
  */
 export type AgentAttachment =
-  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'image'; data?: string; mimeType?: string; url?: string }
   | { type: 'text'; name?: string; content: string; pages?: number };
 
 // Backward-compat alias — pre-existing import sites use this name.

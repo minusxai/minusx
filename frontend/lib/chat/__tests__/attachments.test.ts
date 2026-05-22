@@ -19,13 +19,10 @@ describe('normalizeAttachments', () => {
     ).toEqual([{ type: 'text', name: 'doc.txt', content: 'BODY', pages: 4 }]);
   });
 
-  it('ignores remote http(s) URL images (never fetched — no SSRF)', () => {
+  it('passes a remote http(s) URL image through as a url image (no server fetch)', () => {
     expect(
-      normalizeAttachments([
-        { type: 'image', content: 'https://s3.example.com/chart.png' },
-        { type: 'image', content: 'http://169.254.169.254/latest/meta-data/' },
-      ]),
-    ).toEqual([]);
+      normalizeAttachments([{ type: 'image', content: 'https://store.example.com/chart.png' }]),
+    ).toEqual([{ type: 'image', url: 'https://store.example.com/chart.png' }]);
   });
 
   it('ignores unknown types and empty/invalid input', () => {

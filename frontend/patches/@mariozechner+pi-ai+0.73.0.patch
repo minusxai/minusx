@@ -1,0 +1,187 @@
+diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js b/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
+index 3f0cc9a..b15009b 100644
+--- a/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
++++ b/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
+@@ -86,13 +86,17 @@ function convertContentBlocks(content) {
+                 text: sanitizeSurrogates(block.text),
+             };
+         }
++        // [MX PATCH] Support remote image URLs (Anthropic url source) in addition
++        // to base64, so callers can pass a URL without a server-side fetch.
+         return {
+             type: "image",
+-            source: {
+-                type: "base64",
+-                media_type: block.mimeType,
+-                data: block.data,
+-            },
++            source: block.url
++                ? { type: "url", url: block.url }
++                : {
++                    type: "base64",
++                    media_type: block.mimeType,
++                    data: block.data,
++                },
+         };
+     });
+     // If only images (no text), add placeholder text block
+@@ -347,6 +351,7 @@ export const streamAnthropic = (model, context, options) => {
+                         const block = {
+                             type: "text",
+                             text: "",
++                            citations: [], // [MX PATCH] web-search citations accumulate here
+                             index: event.index,
+                         };
+                         output.content.push(block);
+@@ -387,6 +392,30 @@ export const streamAnthropic = (model, context, options) => {
+                         output.content.push(block);
+                         stream.push({ type: "toolcall_start", contentIndex: output.content.length - 1, partial: output });
+                     }
++                    // [MX PATCH] Web search (server tool). Keep server_tool_use
++                    // (with its streamed query) AND the web_search_tool_result so
++                    // the pairing can be re-sent on multi-turn — Anthropic
++                    // requires the server_tool_use that a web_search_tool_result
++                    // references. The chat-translator hides server_tool_use from
++                    // the UI; only web_search_tool_result + citations render.
++                    else if (event.content_block.type === "server_tool_use") {
++                        output.content.push({
++                            type: "server_tool_use",
++                            id: event.content_block.id,
++                            name: event.content_block.name,
++                            input: event.content_block.input ?? {},
++                            partialJson: "",
++                            index: event.index,
++                        });
++                    }
++                    else if (event.content_block.type === "web_search_tool_result") {
++                        output.content.push({
++                            type: "web_search_tool_result",
++                            tool_use_id: event.content_block.tool_use_id,
++                            content: event.content_block.content,
++                            index: event.index,
++                        });
++                    }
+                 }
+                 else if (event.type === "content_block_delta") {
+                     if (event.delta.type === "text_delta") {
+@@ -428,6 +457,12 @@ export const streamAnthropic = (model, context, options) => {
+                                 partial: output,
+                             });
+                         }
++                        // [MX PATCH] Accumulate the web-search query onto the
++                        // server_tool_use block so it can be re-sent on multi-turn.
++                        else if (block && block.type === "server_tool_use") {
++                            block.partialJson += event.delta.partial_json;
++                            block.input = parseStreamingJson(block.partialJson);
++                        }
+                     }
+                     else if (event.delta.type === "signature_delta") {
+                         const index = blocks.findIndex((b) => b.index === event.index);
+@@ -437,6 +472,14 @@ export const streamAnthropic = (model, context, options) => {
+                             block.thinkingSignature += event.delta.signature;
+                         }
+                     }
++                    // [MX PATCH] Web-search citations attach to the active text block.
++                    else if (event.delta.type === "citations_delta") {
++                        const index = blocks.findIndex((b) => b.index === event.index);
++                        const block = blocks[index];
++                        if (block && block.type === "text") {
++                            (block.citations = block.citations || []).push(event.delta.citation);
++                        }
++                    }
+                 }
+                 else if (event.type === "content_block_stop") {
+                     const index = blocks.findIndex((b) => b.index === event.index);
+@@ -471,6 +514,11 @@ export const streamAnthropic = (model, context, options) => {
+                                 partial: output,
+                             });
+                         }
++                        // [MX PATCH] Finalize the server_tool_use query.
++                        else if (block.type === "server_tool_use") {
++                            block.input = parseStreamingJson(block.partialJson);
++                            delete block.partialJson;
++                        }
+                     }
+                 }
+                 else if (event.type === "message_delta") {
+@@ -697,6 +745,19 @@ function buildParams(model, context, isOAuthToken, options) {
+     if (context.tools && context.tools.length > 0) {
+         params.tools = convertTools(context.tools, isOAuthToken, getAnthropicCompat(model).supportsEagerToolInputStreaming, cacheControl);
+     }
++    // [MX PATCH] Anthropic native web search (server-side tool). Enabled via
++    // options.webSearch (boolean or { maxUses, userLocation: { city } }).
++    if (options?.webSearch) {
++        const ws = options.webSearch;
++        const webSearchTool = { type: "web_search_20250305", name: "web_search" };
++        if (ws && typeof ws === "object") {
++            if (ws.maxUses != null)
++                webSearchTool.max_uses = ws.maxUses;
++            if (ws.userLocation && ws.userLocation.city)
++                webSearchTool.user_location = { type: "approximate", city: ws.userLocation.city };
++        }
++        params.tools = [...(params.tools ?? []), webSearchTool];
++    }
+     // Configure thinking mode: adaptive (Opus 4.6+ and Sonnet 4.6),
+     // budget-based (older models), or explicitly disabled.
+     if (model.reasoning) {
+@@ -772,13 +833,16 @@ function convertMessages(messages, model, isOAuthToken, cacheControl) {
+                         };
+                     }
+                     else {
++                        // [MX PATCH] Support remote image URLs (Anthropic url source).
+                         return {
+                             type: "image",
+-                            source: {
+-                                type: "base64",
+-                                media_type: item.mimeType,
+-                                data: item.data,
+-                            },
++                            source: item.url
++                                ? { type: "url", url: item.url }
++                                : {
++                                    type: "base64",
++                                    media_type: item.mimeType,
++                                    data: item.data,
++                                },
+                         };
+                     }
+                 });
+@@ -843,6 +907,24 @@ function convertMessages(messages, model, isOAuthToken, cacheControl) {
+                         input: block.arguments ?? {},
+                     });
+                 }
++                // [MX PATCH] Re-send the web-search pairing on multi-turn so the
++                // model retains the search results (and Anthropic accepts the
++                // web_search_tool_result, which references the server_tool_use).
++                else if (block.type === "server_tool_use") {
++                    blocks.push({
++                        type: "server_tool_use",
++                        id: block.id,
++                        name: block.name,
++                        input: block.input ?? {},
++                    });
++                }
++                else if (block.type === "web_search_tool_result") {
++                    blocks.push({
++                        type: "web_search_tool_result",
++                        tool_use_id: block.tool_use_id,
++                        content: block.content,
++                    });
++                }
+             }
+             if (blocks.length === 0)
+                 continue;
+diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js b/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js
+index 64c0447..43c89e3 100644
+--- a/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js
++++ b/node_modules/@mariozechner/pi-ai/dist/providers/simple-options.js
+@@ -14,6 +14,9 @@ export function buildBaseOptions(model, options, apiKey) {
+         maxRetries: options?.maxRetries,
+         maxRetryDelayMs: options?.maxRetryDelayMs,
+         metadata: options?.metadata,
++        // [MX PATCH] Forward web search through the simple-options path so the
++        // Anthropic provider's buildParams can inject the web_search tool.
++        webSearch: options?.webSearch,
+     };
+ }
+ export function clampReasoning(effort) {

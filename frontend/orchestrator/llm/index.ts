@@ -43,10 +43,41 @@ export type Model<TApi extends Api = Api> = PiModel<TApi>;
 
 // ─── Owned domain types (defined here; mirror pi's shapes across the seam) ───────
 
+/**
+ * A web-search citation attached to a text block (Anthropic-native shape, as
+ * surfaced by the pi web-search patch). The frontend renders these as source
+ * chips; matches the citation objects Python's chat produces.
+ */
+export interface Citation {
+  type: 'web_search_result_location';
+  url: string;
+  title?: string;
+  cited_text?: string;
+  encrypted_index?: string;
+}
+
 export interface TextContent {
   type: 'text';
   text: string;
   textSignature?: string;
+  /** Web-search citations for this text span (present only when web search ran). */
+  citations?: Citation[];
+}
+
+/** A single web search result inside a web_search_tool_result block. */
+export interface WebSearchResult {
+  type: 'web_search_result';
+  url: string;
+  title?: string;
+  page_age?: string;
+  encrypted_content?: string;
+}
+
+/** Server-side web-search results block (Anthropic-native shape). */
+export interface WebSearchToolResultContent {
+  type: 'web_search_tool_result';
+  tool_use_id: string;
+  content: WebSearchResult[];
 }
 
 export interface ThinkingContent {
@@ -56,10 +87,16 @@ export interface ThinkingContent {
   redacted?: boolean;
 }
 
+/**
+ * An image content block. Exactly one of `data` (base64) or `url` is set.
+ * `url` is sent to Anthropic as a `source:{type:"url"}` (supported via the pi
+ * patch); `data` as base64. `mimeType` is required for base64.
+ */
 export interface ImageContent {
   type: 'image';
-  data: string;
-  mimeType: string;
+  data?: string;
+  url?: string;
+  mimeType?: string;
 }
 
 export interface ToolCall {
@@ -89,6 +126,10 @@ export interface UserMessage {
 
 export interface AssistantMessage {
   role: 'assistant';
+  // Note: web_search_tool_result blocks (WebSearchToolResultContent) also appear
+  // at runtime when web search ran (via the pi patch). They are read defensively
+  // by the chat-translator rather than widening this union — keeping our
+  // AssistantMessage structurally assignable to pi's across the faux test seam.
   content: (TextContent | ThinkingContent | ToolCall)[];
   api: Api;
   provider: string;
@@ -148,6 +189,13 @@ export interface StreamOptions {
   signal?: AbortSignal;
   headers?: Record<string, string>;
   apiKey?: string;
+  /**
+   * Enable Anthropic native web search (server-side `web_search` tool).
+   * Honored by the pi web-search patch. `true` uses defaults; the object form
+   * sets max searches and an approximate user location (city) — matching
+   * Python's `web_search_options`.
+   */
+  webSearch?: boolean | { maxUses?: number; userLocation?: { city?: string } };
   [key: string]: unknown;
 }
 
