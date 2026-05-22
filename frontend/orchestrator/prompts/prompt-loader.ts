@@ -1,29 +1,10 @@
-import { readFileSync } from 'node:fs';
-import yaml from 'js-yaml';
+// Pure prompt render engine (JS port of the Python prompt_loader): resolves
+// nested {template.ref}s and substitutes {variables}. Operates on an in-memory
+// PromptTree — see ./index.ts, which binds it to the bundled prompts.json.
 
 export interface PromptTree {
   templates: Record<string, unknown>;
   prompts: Record<string, unknown>;
-}
-
-// eslint-disable-next-line no-restricted-syntax -- memoization of immutable YAML file reads keyed by absolute path; no per-request mutation
-const cache = new Map<string, PromptTree>();
-
-export function loadPrompts(yamlPath: string): PromptTree {
-  const cached = cache.get(yamlPath);
-  if (cached) return cached;
-  const raw = readFileSync(yamlPath, 'utf-8');
-  const parsed = (yaml.load(raw) ?? {}) as Partial<PromptTree>;
-  const tree: PromptTree = {
-    templates: parsed.templates ?? {},
-    prompts: parsed.prompts ?? {},
-  };
-  cache.set(yamlPath, tree);
-  return tree;
-}
-
-export function clearPromptCache(): void {
-  cache.clear();
 }
 
 function getNested(data: unknown, path: string): unknown {
@@ -77,12 +58,11 @@ const SKILL_PREFIX = 'skill_';
  * HIDDEN_SKILLS are excluded.
  */
 export function listSkills(
-  yamlPath: string,
+  tree: PromptTree,
   opts: { skipHidden?: boolean } = {},
 ): Record<string, string> {
-  const { templates } = loadPrompts(yamlPath);
   const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(templates)) {
+  for (const [key, value] of Object.entries(tree.templates)) {
     if (!key.startsWith(SKILL_PREFIX) || !value || typeof value !== 'object') continue;
     const name = key.slice(SKILL_PREFIX.length);
     if (opts.skipHidden && HIDDEN_SKILLS.has(name)) continue;
@@ -97,13 +77,12 @@ export function listSkills(
  * substituted, so `{{` JSON escapes stay literal (matching how preloaded skill
  * content is injected). Returns null if the skill is missing or has no content.
  */
-export function getSkill(yamlPath: string, name: string): string | null {
-  const { templates } = loadPrompts(yamlPath);
-  const template = templates[`${SKILL_PREFIX}${name}`];
+export function getSkill(tree: PromptTree, name: string): string | null {
+  const template = tree.templates[`${SKILL_PREFIX}${name}`];
   if (!template || typeof template !== 'object') return null;
   const content = (template as Record<string, unknown>).content;
   if (typeof content !== 'string' || content === '') return null;
-  return resolveTemplates(content, templates);
+  return resolveTemplates(content, tree.templates);
 }
 
 export function pyFormat(text: string, vars: Record<string, unknown>): string {
@@ -139,11 +118,10 @@ export function pyFormat(text: string, vars: Record<string, unknown>): string {
 }
 
 export function renderPrompt(
-  yamlPath: string,
+  tree: PromptTree,
   promptId: string,
   vars: Record<string, unknown>,
 ): string {
-  const tree = loadPrompts(yamlPath);
   const raw = getNested(tree.prompts, promptId);
   if (typeof raw !== 'string') throw new Error(`Prompt '${promptId}' not found`);
   const resolved = resolveTemplates(raw, tree.templates);

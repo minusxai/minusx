@@ -1,39 +1,29 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import promptsJson from './prompts.json';
 import {
-  renderPrompt as renderFromFile,
-  listSkills as listSkillsFromFile,
-  getSkill as getSkillFromFile,
+  renderPrompt as renderFromTree,
+  listSkills as listSkillsFromTree,
+  getSkill as getSkillFromTree,
+  type PromptTree,
 } from './prompt-loader';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Frozen analyst prompts, imported straight into the bundle (the backend
+// prompts.yaml is obsolete — chat is moving to v2). No filesystem read, so the
+// frontend standalone Docker image renders prompts with no backend/ tree.
+export const PROMPTS: PromptTree = {
+  templates: (promptsJson as Partial<PromptTree>).templates ?? {},
+  prompts: (promptsJson as Partial<PromptTree>).prompts ?? {},
+};
 
-const DEFAULT_PROMPTS_PATH = path.resolve(
-  __dirname,
-  '../../../backend/tasks/agents/analyst/prompts.yaml',
-);
-
-export function getPromptsPath(): string {
-  // eslint-disable-next-line no-restricted-syntax -- orchestrator is a standalone module; avoid coupling to lib/config for one optional dev override
-  return process.env.MX_PROMPTS_PATH ?? DEFAULT_PROMPTS_PATH;
+export function renderPrompt(promptId: string, vars: Record<string, unknown>): string {
+  return renderFromTree(PROMPTS, promptId, vars);
 }
 
-export function renderPrompt(
-  promptId: string,
-  vars: Record<string, unknown>,
-): string {
-  return renderFromFile(getPromptsPath(), promptId, vars);
-}
-
-export { loadPrompts, clearPromptCache, pyFormat, HIDDEN_SKILLS } from './prompt-loader';
-
-/** List skills from the active prompts.yaml (see prompt-loader.listSkills). */
 export function listSkills(opts: { skipHidden?: boolean } = {}): Record<string, string> {
-  return listSkillsFromFile(getPromptsPath(), opts);
+  return listSkillsFromTree(PROMPTS, opts);
 }
 
-/** Resolve a skill's content from the active prompts.yaml (see prompt-loader.getSkill). */
 export function getSkill(name: string): string | null {
-  return getSkillFromFile(getPromptsPath(), name);
+  return getSkillFromTree(PROMPTS, name);
 }
+
+export { pyFormat, HIDDEN_SKILLS, type PromptTree } from './prompt-loader';
