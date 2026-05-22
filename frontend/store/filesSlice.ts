@@ -76,9 +76,11 @@ function hashString(str: string): number {
   return hash;
 }
 
-/** Deterministic placeholder ID for a path being loaded (namespace 2, negative). */
+/** Deterministic placeholder ID for a path being loaded (negative, within int4). */
 function pathToVirtualId(path: string): number {
-  return -(2_000_000_000 + (Math.abs(hashString(path)) % 1_000_000_000));
+  // Kept within int4 range [-2^31, -1] so it never overflows an `integer` column.
+  // Must match lib/api/file-state.ts:pathToPlaceholderId (same path → same ID).
+  return -(1 + (Math.abs(hashString(path)) % 2_000_000_000));
 }
 
 /**

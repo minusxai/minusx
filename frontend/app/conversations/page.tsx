@@ -1,7 +1,8 @@
 'use client';
 
 import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Input, Button } from '@chakra-ui/react';
-import { useRouter } from 'next/navigation';
+// Param-preserving router so chat navigation keeps ?v=2 (and as_user/mode).
+import { useRouter } from '@/lib/navigation/use-navigation';
 import { useCallback, useMemo, useState } from 'react';
 import { LuSearch, LuPlus } from 'react-icons/lu';
 import { ConversationSummary } from '@/app/api/conversations/route';
@@ -30,6 +31,7 @@ function ConversationRow({ conversation, onClick }: { conversation: Conversation
       px={6}
       py={3}
       cursor="pointer"
+      aria-label={`Open conversation: ${conversation.name}`}
       _hover={{ bg: 'bg.muted' }}
       onClick={onClick}
       transition="all 0.15s"

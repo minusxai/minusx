@@ -147,4 +147,19 @@ describe('PGLite adapter — Phase 2 spike', () => {
     expect(files.length).toBe(2);
     expect(files.map(f => f.name).sort()).toEqual(['bulk1', 'bulk2']);
   });
+
+  it('ignores virtual/negative IDs without erroring (no int4 overflow)', async () => {
+    const realId = await DocumentDB.create('real', '/org/real', 'question', {} as any, []);
+
+    // Negative virtual/placeholder IDs (e.g. from pathToVirtualId) exceed int4
+    // range and have no DB row — getByIds must drop them, not pass them to the
+    // `WHERE id IN (...)` query (which would throw 22003 "out of range").
+    const files = await DocumentDB.getByIds([realId, -2353331357, -2737584499, -5]);
+    expect(files.map(f => f.name)).toEqual(['real']);
+  });
+
+  it('returns [] when given only virtual/negative IDs', async () => {
+    const files = await DocumentDB.getByIds([-2353331357, -1]);
+    expect(files).toEqual([]);
+  });
 });

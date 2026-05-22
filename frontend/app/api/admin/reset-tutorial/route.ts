@@ -13,6 +13,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { getModules } from '@/lib/modules/registry';
+import { sqlArray } from '@/lib/database/adapter/types';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
@@ -71,7 +72,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
     if (templateIds.length > 0) {
       await db.exec(
         `DELETE FROM files WHERE id = ANY($1::int[])`,
-        [templateIds]
+        [sqlArray(templateIds)]
       );
     }
 

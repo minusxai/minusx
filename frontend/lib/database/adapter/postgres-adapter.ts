@@ -1,7 +1,21 @@
 import { Pool, PoolClient } from 'pg';
-import { IDatabaseAdapter, ITransactionContext, QueryResult } from './types';
+import { IDatabaseAdapter, ITransactionContext, QueryResult, SqlArray } from './types';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '../postgres-schema';
 import { POSTGRES_URL, POSTGRES_SCHEMA as CONFIG_POSTGRES_SCHEMA } from '@/lib/config';
+
+/**
+ * Serialize params for node-postgres. pg binds a JS array as a Postgres array
+ * literal `{...}` — correct for `= ANY($1)` but invalid for a JSONB column (wants
+ * JSON `[...]`). So plain arrays are JSON-stringified (JSONB), while `sqlArray()`-
+ * wrapped params are passed through as native arrays (ANY()/array params).
+ */
+export function serializePgParams(params: unknown[]): unknown[] {
+  return params.map((p) => {
+    if (p instanceof SqlArray) return p.values;
+    if (Array.isArray(p)) return JSON.stringify(p);
+    return p;
+  });
+}
 
 /**
  * PostgreSQL adapter using node-postgres (pg) with connection pooling
@@ -55,9 +69,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
   async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {
     const pool = this.getPool();
 
-    // pg serializes JS arrays as Postgres arrays {1,2,...} not JSON [1,2,...].
-    // All array columns in this schema are JSONB, so stringify arrays explicitly.
-    const serialized = params.map(p => Array.isArray(p) ? JSON.stringify(p) : p);
+    const serialized = serializePgParams(params);
 
     try {
       const result = await pool.query(sql, serialized);
@@ -92,7 +104,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
       // Create transaction context that uses dedicated client
       const txContext: ITransactionContext = {
         query: async <U>(sql: string, params?: any[]) => {
-          const serializedTx = (params || []).map((p: any) => Array.isArray(p) ? JSON.stringify(p) : p);
+          const serializedTx = serializePgParams(params || []);
           const result = await client.query(sql, serializedTx);
           return {
             rows: result.rows as U[],

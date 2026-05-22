@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, Flex, Heading, HStack, Text, Icon } from '@chakra-ui/react';
-import Link from 'next/link';
+// Param-preserving Link so home/tutorial links keep ?v=2 (and as_user/mode).
+import { Link } from '@/components/ui/Link';
 import { useAppSelector } from '@/store/hooks';
 import { selectHomePage } from '@/store/uiSlice';
 import { selectContextFromPath } from '@/store/filesSlice';

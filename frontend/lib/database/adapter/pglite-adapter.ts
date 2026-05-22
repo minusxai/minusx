@@ -1,6 +1,12 @@
 import { PGlite } from '@electric-sql/pglite';
-import { IDatabaseAdapter, ITransactionContext, QueryResult } from './types';
+import { IDatabaseAdapter, ITransactionContext, QueryResult, SqlArray } from './types';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '../postgres-schema';
+
+// PGLite binds native JS arrays correctly for both `= ANY($1)` and JSONB columns,
+// so it needs no JSON-stringify — only unwrap `sqlArray()` markers to their values.
+function unwrapParams(params: unknown[]): unknown[] {
+  return params.map((p) => (p instanceof SqlArray ? [...p.values] : p));
+}
 
 /**
  * PGLite adapter — in-process Postgres-compatible engine.
@@ -26,7 +32,7 @@ export class PgliteAdapter implements IDatabaseAdapter {
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {
-    const result = await this.db.query<T>(sql, params);
+    const result = await this.db.query<T>(sql, unwrapParams(params));
     return {
       rows: result.rows as T[],
       rowCount: result.affectedRows ?? result.rows.length,
@@ -41,7 +47,7 @@ export class PgliteAdapter implements IDatabaseAdapter {
     return this.db.transaction(async (pgtx) => {
       const txContext: ITransactionContext = {
         query: async <U>(sql: string, p?: any[]) => {
-          const r = await pgtx.query<U>(sql, p ?? []);
+          const r = await pgtx.query<U>(sql, unwrapParams(p ?? []));
           return { rows: r.rows as U[], rowCount: r.affectedRows ?? r.rows.length };
         },
         exec: (sql: string) => pgtx.exec(sql).then(() => undefined),

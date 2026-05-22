@@ -93,17 +93,21 @@ export class DocumentDB {
   }
 
   static async getByIds(ids: number[], includeContent: boolean = true): Promise<DbFile[]> {
-    if (ids.length === 0) return [];
+    // Drop virtual/placeholder IDs (negative, from pathToVirtualId) and any other
+    // non-positive-integer values: they have no DB row and can exceed int4 range,
+    // which would make `WHERE id IN (...)` throw 22003 ("out of range for integer").
+    const dbIds = ids.filter((id) => Number.isInteger(id) && id > 0);
+    if (dbIds.length === 0) return [];
 
     const db = getModules().db;
-    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+    const placeholders = dbIds.map((_, i) => `$${i + 1}`).join(',');
     const columns = includeContent
       ? '*'
       : 'id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta';
 
     const result = await db.exec<DbRow>(
       `SELECT ${columns} FROM files WHERE id IN (${placeholders})`,
-      ids
+      dbIds
     );
 
     return result.rows.map(row => rowToDbFile(row, includeContent));

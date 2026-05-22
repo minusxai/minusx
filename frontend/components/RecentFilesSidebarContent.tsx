@@ -7,7 +7,8 @@
  */
 import { useEffect, useState, useCallback } from 'react';
 import { Box, HStack, Text, VStack, Icon, Flex } from '@chakra-ui/react';
-import Link from 'next/link';
+// Param-preserving Link so sidebar file links keep ?v=2 (and as_user/mode).
+import { Link } from '@/components/ui/Link';
 import { LuClock, LuTrendingUp, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
