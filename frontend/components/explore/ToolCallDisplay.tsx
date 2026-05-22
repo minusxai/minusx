@@ -2,7 +2,7 @@
 
 import { useSelector } from 'react-redux';
 import { useMemo } from 'react';
-import { Grid, GridItem, VStack } from '@chakra-ui/react';
+import { Box, Grid, GridItem, VStack } from '@chakra-ui/react';
 import { CompletedToolCall } from '@/lib/types';
 import { getToolConfig } from '@/lib/api/tool-config';
 import type { RootState } from '@/store/store';
@@ -61,9 +61,18 @@ export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact
     return null;
   }
 
+  const display = (
+    <DisplayComponent
+        {...{ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext, readOnly, viewMode, conversationID: conversationID ?? conversation?.conversationID }}
+    />
+  );
+
+  // TalkToUser is the assistant's reply (thinking/answer), not a "tool" — label
+  // only real tool rows so they're identifiable (a11y + tests).
+  if (functionName === 'TalkToUser') return display;
   return (
-        <DisplayComponent
-            {...{ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext, readOnly, viewMode, conversationID: conversationID ?? conversation?.conversationID }}
-        />
-    )
+    <Box display="contents" aria-label={`Tool: ${functionName}`}>
+      {display}
+    </Box>
+  );
 }
