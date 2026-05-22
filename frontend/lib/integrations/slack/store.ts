@@ -82,8 +82,9 @@ export async function findSlackInstallationByTeam(
 // Path: /logs/slack/{teamId}/{channelId}-{sanitizedThreadTs}
 // Type: 'conversation'
 //
-// On first message the file is pre-created (empty log), so runChatOrchestration
-// always receives a real conversationId and appends to the same file on follow-ups.
+// On first message the file is pre-created (empty log, meta.version=2), so
+// runChatOrchestrationV2 always receives a real conversationId and appends to
+// the same file on follow-ups.
 // ============================================================================
 
 function sanitizeTs(ts: string): string {
@@ -119,7 +120,10 @@ export async function getOrCreateSlackConversationId(
     };
     // Store the full first message in file-level `meta` so the conversations
     // listing can display it without loading content (mirrors createNewConversation).
-    const meta = userMessage ? { firstMessage: userMessage.trim() } : undefined;
+    // `version: 2` marks this as a v=2 conversation so the headless orchestrator
+    // (runChatOrchestrationV2) and the `/explore/{id}` link both resolve to v2.
+    const meta: Record<string, unknown> = { version: 2 };
+    if (userMessage) meta.firstMessage = userMessage.trim();
     const result = await FilesAPI.createFile(
       {
         name,

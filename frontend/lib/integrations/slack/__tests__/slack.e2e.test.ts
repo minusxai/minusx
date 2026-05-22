@@ -2,8 +2,10 @@
  * Slack Bot Integration — E2E Tests
  *
  * Tests the full Slack event → MinusX agent → Slack reply flow.
- * Only LLM calls are mocked (via LLM mock server); everything else is real
- * (SQLite DB, Python backend, Slack API calls mocked via fetch interceptors).
+ * The Slack path now runs the v2 (in-process TypeScript orchestrator) — the
+ * Python backend is not involved. Only LLM calls are mocked (via the
+ * SlackAgent's faux provider); everything else is real (PGLite DB, real
+ * orchestration loop, Slack API calls mocked via fetch interceptors).
  *
  * Run: npm test -- lib/integrations/slack/__tests__/slack.e2e.test.ts
  */
@@ -22,7 +24,8 @@ import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { POST, processSlackEvent } from '@/app/api/integrations/slack/events/route';
 import type { SlackInstallationMatch } from '@/lib/integrations/slack/store';
-import { withPythonBackend } from '@/test/harness/python-backend';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { fauxRegistration as slackFaux } from '@/agents/slack/slack-agent';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -164,22 +167,18 @@ function buildInstallation(): SlackInstallationMatch {
   };
 }
 
-const USAGE = { total_tokens: 50, prompt_tokens: 30, completion_tokens: 20 };
-
 // ============================================================================
 // Test suite
 // ============================================================================
 
 describe('Slack Bot Integration', () => {
-  const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
-
   // Records every chat.postMessage call made during a test
   const postedMessages: Array<{ channel: string; text: string; thread_ts?: string }> = [];
 
   // ── Fetch mock ──────────────────────────────────────────────────────────────
+  // No Python/LLM-mock ports: the v2 Slack path runs the orchestrator in-process
+  // and mocks LLM output via the SlackAgent faux provider (`slackFaux`).
   setupMockFetch({
-    getPythonPort,
-    getLLMMockPort,
     additionalInterceptors: [
       async (urlStr: string, init?: RequestInit) => {
         // Slack users.info
@@ -234,9 +233,9 @@ describe('Slack Bot Integration', () => {
   // ── Test DB setup ───────────────────────────────────────────────────────────
   setupTestDb(TEST_DB_PATH, { customInit: addSlackTestFixtures });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     postedMessages.length = 0;
-    await getLLMMockServer!().reset();
+    slackFaux.setResponses([]);
   });
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -318,14 +317,9 @@ describe('Slack Bot Integration', () => {
 
   describe('processSlackEvent', () => {
     it('app_mention: agent replies in the same thread', async () => {
-      await getLLMMockServer!().configure({
-        response: {
-          content: 'Revenue is up 12% this week.',
-          role: 'assistant',
-          finish_reason: 'stop',
-        },
-        usage: USAGE,
-      });
+      slackFaux.setResponses([
+        fauxAssistantMessage('Revenue is up 12% this week.', { stopReason: 'stop' }),
+      ]);
 
       const ts = '1700001000.000001';
       const installation = buildInstallation();
@@ -344,10 +338,9 @@ describe('Slack Bot Integration', () => {
       const installation = buildInstallation();
 
       // First message — creates thread binding
-      await getLLMMockServer!().configure({
-        response: { content: 'Sales are up 12%.', role: 'assistant', finish_reason: 'stop' },
-        usage: USAGE,
-      });
+      slackFaux.setResponses([
+        fauxAssistantMessage('Sales are up 12%.', { stopReason: 'stop' }),
+      ]);
       await processSlackEvent(
         makeAppMentionPayload({ ts: threadTs, threadTs, eventId: `Ev_first_${Date.now()}`, text: `<@${TEST_BOT_USER_ID}> sales?` }) as any,
         installation,
@@ -357,15 +350,15 @@ describe('Slack Bot Integration', () => {
 
       // Second message — same thread, different ts
       postedMessages.length = 0;
-      await getLLMMockServer!().configure({
-        // Use validateRequest to assert the Python backend received the follow-up text,
-        // not the first message. This is the core of Bug #1: if the agent reads
-        // ev.thread_ts's root message instead of ev.text, the messages array would end
-        // with 'sales?' rather than 'and last week?'.
-        validateRequest: (req) => {
-          const msgs = req.messages ?? [];
+      // Use a faux factory to assert the orchestrator sent the follow-up text,
+      // not the first message. This is the core of Bug #1: if the agent reads
+      // ev.thread_ts's root message instead of ev.text, the messages array would end
+      // with 'sales?' rather than 'and last week?'.
+      slackFaux.setResponses([
+        (context) => {
+          const msgs = context.messages ?? [];
           const lastUserMsg = [...msgs].reverse().find((m: any) => m.role === 'user');
-          // User message content is now multi-block — extract text before substring check
+          // User message content is multi-block — extract text before substring check
           const rawContent = lastUserMsg?.content;
           const lastMsgText = Array.isArray(rawContent)
             ? rawContent.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
@@ -375,10 +368,9 @@ describe('Slack Bot Integration', () => {
               `Expected last user message to contain "and last week?" but got: ${lastMsgText}`,
             );
           }
+          return fauxAssistantMessage('Last week they were up 8%.', { stopReason: 'stop' });
         },
-        response: { content: 'Last week they were up 8%.', role: 'assistant', finish_reason: 'stop' },
-        usage: USAGE,
-      });
+      ]);
       await processSlackEvent(
         makeAppMentionPayload({ ts: '1700002001.000001', threadTs, eventId: `Ev_second_${Date.now()}`, text: `<@${TEST_BOT_USER_ID}> and last week?` }) as any,
         installation,
@@ -421,10 +413,9 @@ describe('Slack Bot Integration', () => {
     }, 120000);
 
     it('direct message: agent replies and conversation file is stored at user path', async () => {
-      await getLLMMockServer!().configure({
-        response: { content: 'Hello! How can I help you today?', role: 'assistant', finish_reason: 'stop' },
-        usage: USAGE,
-      });
+      slackFaux.setResponses([
+        fauxAssistantMessage('Hello! How can I help you today?', { stopReason: 'stop' }),
+      ]);
 
       const ts = '1700005000.000001';
       const installation = buildInstallation();
@@ -444,10 +435,9 @@ describe('Slack Bot Integration', () => {
     }, 60000);
 
     it('event dedup: the same event_id is processed only once', async () => {
-      await getLLMMockServer!().configure({
-        response: { content: 'Here is your answer.', role: 'assistant', finish_reason: 'stop' },
-        usage: USAGE,
-      });
+      slackFaux.setResponses([
+        fauxAssistantMessage('Here is your answer.', { stopReason: 'stop' }),
+      ]);
 
       const eventId = `Ev_dedup_${Date.now()}`;
       const installation = buildInstallation();
@@ -474,10 +464,9 @@ describe('Slack Bot Integration', () => {
       const installation = buildInstallation();
 
       // Turn 1 — produces a visible answer stored in the conversation log
-      await getLLMMockServer!().configure({
-        response: { content: 'The answer from turn one.', role: 'assistant', finish_reason: 'stop' },
-        usage: USAGE,
-      });
+      slackFaux.setResponses([
+        fauxAssistantMessage('The answer from turn one.', { stopReason: 'stop' }),
+      ]);
       await processSlackEvent(
         makeAppMentionPayload({ ts: threadTs, threadTs, eventId: `Ev_stale_t1_${Date.now()}`, text: `<@${TEST_BOT_USER_ID}> question one` }) as any,
         installation,
@@ -486,14 +475,12 @@ describe('Slack Bot Integration', () => {
 
       // Turn 2 — LLM produces only <thinking> with no <answer> block (no visible text)
       postedMessages.length = 0;
-      await getLLMMockServer!().configure({
-        response: {
-          content: '<thinking>I need to query the database but I cannot right now.</thinking>',
-          role: 'assistant',
-          finish_reason: 'stop',
-        },
-        usage: USAGE,
-      });
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          '<thinking>I need to query the database but I cannot right now.</thinking>',
+          { stopReason: 'stop' },
+        ),
+      ]);
       await processSlackEvent(
         makeAppMentionPayload({ ts: '1700006001.000001', threadTs, eventId: `Ev_stale_t2_${Date.now()}`, text: `<@${TEST_BOT_USER_ID}> question two` }) as any,
         installation,
