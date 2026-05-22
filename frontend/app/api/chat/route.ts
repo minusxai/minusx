@@ -23,6 +23,7 @@ import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 import { runChatTurnV2, validateV2Mode, forkV1ConversationToV2 } from '@/lib/chat-orchestration-v2.server';
+import { isV2 } from '@/lib/chat-v2/chat-version';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import { FilesAPI } from '@/lib/data/files.server';
 import { createNewConversation } from '@/lib/conversations';
@@ -99,13 +100,14 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
       );
     }
 
-    // V=2 branch — entered when ?v=2 is on the URL. Strict mode-match: if
-    // a conversationID is supplied, the file's meta.version must be 2;
-    // otherwise we create a fresh v=2 conversation file. The orchestrator
-    // runs internally and the response is translated back to legacy
-    // `ChatResponse` shape so the frontend stays unchanged.
-    const isV2 = request.nextUrl.searchParams.get('v') === '2';
-    if (isV2) {
+    // V=2 branch — the default engine (entered unless `?v=1` is on the URL;
+    // see DEFAULT_CHAT_VERSION). Strict mode-match: if a conversationID is
+    // supplied, the file's meta.version must be 2; otherwise we create a fresh
+    // v=2 conversation file. The orchestrator runs internally and the response
+    // is translated back to legacy `ChatResponse` shape so the frontend stays
+    // unchanged.
+    const isV2Request = isV2(request.nextUrl.searchParams.get('v'));
+    if (isV2Request) {
       let v2ConversationId: number;
       if (body.conversationID) {
         const check = await validateV2Mode(body.conversationID, user, true);

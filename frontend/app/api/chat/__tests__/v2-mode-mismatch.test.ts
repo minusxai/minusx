@@ -1,10 +1,11 @@
 // Mode-mismatch guard tests for /api/chat and /api/chat/stream.
 //
 // Rule: a v=2 conversation cannot be driven through the v=1 (Python) engine →
-// rejected. The reverse (a v=1 conversation under ?v=2) is NOT rejected: it
-// forks to a fresh v=2 conversation and continues (covered by
-// v2-happy-path.test.ts + fork-v1-to-v2.test.ts). Only the v=2-under-v=1
-// rejection is asserted here.
+// rejected. v2 is the default engine, so reaching the Python engine now
+// requires an explicit `?v=1`. The reverse (a v=1 conversation under the
+// default v=2) is NOT rejected: it forks to a fresh v=2 conversation and
+// continues (covered by v2-happy-path.test.ts + fork-v1-to-v2.test.ts). Only
+// the v=2-under-v=1 rejection is asserted here.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -87,9 +88,9 @@ function makeChatRequest(url: string, body: Record<string, unknown>): NextReques
 describe('/api/chat — strict mode-match rejection', () => {
   setupTestDb(TEST_DB_PATH, { customInit: seed });
 
-  it('default URL against a v=2 conversation file → 400 with mode-mismatch error', async () => {
+  it('?v=1 against a v=2 conversation file → 400 with mode-mismatch error', async () => {
     const res = await chatPostHandler(
-      makeChatRequest('http://localhost/api/chat', {
+      makeChatRequest('http://localhost/api/chat?v=1', {
         conversationID: v2FileId,
         user_message: 'hi',
       }),
@@ -132,9 +133,9 @@ describe('/api/chat/stream — strict mode-match rejection', () => {
     return events;
   }
 
-  it('default URL against a v=2 conversation file → emits error frame AND done frame', async () => {
+  it('?v=1 against a v=2 conversation file → emits error frame AND done frame', async () => {
     const res = await chatStreamPostHandler(
-      makeChatRequest('http://localhost/api/chat/stream', {
+      makeChatRequest('http://localhost/api/chat/stream?v=1', {
         conversationID: v2FileId,
         user_message: 'hi',
       }),

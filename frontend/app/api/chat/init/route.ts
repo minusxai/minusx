@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { createNewConversation } from '@/lib/conversations';
 import { handleApiError } from '@/lib/api/api-responses';
+import { isV2 } from '@/lib/chat-v2/chat-version';
 
 /**
  * POST /api/chat/init
@@ -19,15 +20,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { firstMessage } = body;
 
-    // ?v=2 marks the conversation as v=2 (orchestrator-driven). Both modes
-    // create the same `type:'conversation'` file shape; only `meta.version`
-    // differs. The chat routes branch on `meta.version` to decide which
-    // engine handles the turn.
-    const isV2 = request.nextUrl.searchParams.get('v') === '2';
+    // The resolved chat version marks the conversation: v2 (the default; see
+    // DEFAULT_CHAT_VERSION) is orchestrator-driven and tagged `meta.version=2`,
+    // while an explicit `?v=1` creates a legacy Python conversation (no
+    // version meta). Both create the same `type:'conversation'` file shape; the
+    // chat routes branch on `meta.version` to decide which engine handles the
+    // turn.
+    const isV2Request = isV2(request.nextUrl.searchParams.get('v'));
     const { fileId, name } = await createNewConversation(
       user,
       firstMessage,
-      isV2 ? { version: 2 } : undefined,
+      isV2Request ? { version: 2 } : undefined,
     );
 
     return NextResponse.json({ conversationID: fileId, name });

@@ -4,7 +4,10 @@
  * These functions handle:
  * - `as_user` query parameter which enables admin users to impersonate other users
  * - `mode` query parameter which enables file system isolation (org vs tutorial)
+ * - `v` query parameter which selects the chat engine (see DEFAULT_CHAT_VERSION)
  */
+
+import { DEFAULT_CHAT_VERSION, type ChatVersion } from '@/lib/chat-v2/chat-version';
 
 /**
  * Extract `as_user` parameter from URL (server-side)
@@ -113,23 +116,30 @@ export function getCurrentV(): string | null {
 }
 
 /**
- * Compute a `pathname + search` for the current location with `v=2` either
- * set (when `enabled` is true) or removed (when false), preserving every
- * other query parameter and the pathname. Used by the settings toggle to
- * trigger a full reload that flips chat-v2 on or off.
+ * Compute a `pathname + search` for the current location with the chat
+ * version flipped, preserving every other query parameter and the pathname.
+ * Used by the settings toggle to trigger a full reload that switches chat
+ * engines.
  *
- * @param enabled - true to set `v=2`, false to remove `v`
+ * `enabled` means "use the new (v2) chat". Since v2 is the default
+ * (`DEFAULT_CHAT_VERSION`), enabling it clears `v` to keep the URL clean
+ * (like `mode=org` is omitted); disabling it opts into the legacy Python
+ * engine via an explicit `?v=1`. The `v` param is only ever present when it
+ * differs from the default.
+ *
+ * @param enabled - true to use v2 (clears `v`), false to use legacy v1 (sets `v=1`)
  * @returns The new `pathname + search` string. Server-side: returns '/'.
  */
 export function setVInUrl(enabled: boolean): string {
   if (typeof window === 'undefined') {
     return '/';
   }
+  const version: ChatVersion = enabled ? 2 : 1;
   const url = new URL(window.location.href);
-  if (enabled) {
-    url.searchParams.set('v', '2');
-  } else {
+  if (version === DEFAULT_CHAT_VERSION) {
     url.searchParams.delete('v');
+  } else {
+    url.searchParams.set('v', String(version));
   }
   return url.pathname + (url.search ? url.search : '');
 }

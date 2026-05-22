@@ -239,8 +239,22 @@ describe('GET /api/conversations — v=2 strict filter', () => {
 
   setupTestDb(TEST_DB_PATH_V2, { customInit: seedV2 });
 
-  it('default URL returns only v=1 conversations', async () => {
+  it('default URL (v2 is default) returns both, tagging the v=1 conversation legacy', async () => {
     const res = await GET(new Request('http://localhost/api/conversations'));
+    const body = await res.json();
+    const byName = new Map<string, ConversationSummary>(
+      body.conversations.map((c: ConversationSummary) => [c.name, c]),
+    );
+    // v=2 conversation present, not legacy
+    expect(byName.has('What is revenue?')).toBe(true);
+    expect(byName.get('What is revenue?')!.legacy).toBeUndefined();
+    // v=1 conversation visible under the default (v2) surface, tagged legacy
+    expect(byName.has('legacy chat')).toBe(true);
+    expect(byName.get('legacy chat')!.legacy).toBe(true);
+  });
+
+  it('?v=1 returns only v=1 conversations (legacy Python surface)', async () => {
+    const res = await GET(new Request('http://localhost/api/conversations?v=1'));
     const body = await res.json();
     const names = body.conversations.map((c: ConversationSummary) => c.name);
     expect(names).toContain('legacy chat');
