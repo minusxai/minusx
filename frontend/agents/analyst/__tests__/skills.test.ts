@@ -3,11 +3,9 @@
 // skills + nav skill), the LoadSkill catalog, and the preloaded-skill content
 // block. Python is the reference — these must match it exactly.
 
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import yaml from 'js-yaml';
 import type { AgentSkillSelection } from '@/lib/types';
-import { clearPromptCache } from '@/orchestrator/prompts/prompt-loader';
+import type { PromptTree } from '@/orchestrator/prompts/prompt-loader';
 import {
   getPageType,
   getPreloadedSkillNames,
@@ -15,14 +13,7 @@ import {
   buildPreloadedSkillsContent,
 } from '../skills';
 
-function makeYaml(content: string): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'mx-skills-'));
-  const file = path.join(dir, 'prompts.yaml');
-  writeFileSync(file, content, 'utf-8');
-  return file;
-}
-
-const YAML = `
+const TREE = yaml.load(`
 templates:
   skill_questions:
     description: "Question files"
@@ -44,9 +35,7 @@ templates:
     content: "Unrestricted nav content"
 prompts:
   p: "x"
-`;
-
-afterEach(() => clearPromptCache());
+`) as PromptTree;
 
 describe('getPageType', () => {
   it('passes through explore / folder / slack top-level types', () => {
@@ -101,9 +90,8 @@ describe('getPreloadedSkillNames', () => {
 
 describe('buildSkillsCatalog', () => {
   it('lists system skills minus preloaded/hidden, with the catalog line format', () => {
-    const file = makeYaml(YAML);
     const catalog = buildSkillsCatalog({
-      yamlPath: file,
+      tree: TREE,
       preloaded: new Set(['questions', 'explore', 'navigation_restricted']),
       selected: [],
       userCatalog: [],
@@ -114,13 +102,11 @@ describe('buildSkillsCatalog', () => {
     expect(catalog).not.toContain('"questions"'); // preloaded
     expect(catalog).not.toContain('"explore"'); // preloaded
     expect(catalog).not.toContain('navigation_'); // hidden
-    rmSync(path.dirname(file), { recursive: true });
   });
 
   it('lists user-defined skills, excluding ones already selected', () => {
-    const file = makeYaml(YAML);
     const catalog = buildSkillsCatalog({
-      yamlPath: file,
+      tree: TREE,
       preloaded: new Set(['questions', 'explore', 'dashboards', 'alerts', 'navigation_restricted']),
       selected: [{ type: 'user', name: 'picked_kb', content: 'c' }],
       userCatalog: [
@@ -131,40 +117,34 @@ describe('buildSkillsCatalog', () => {
     expect(catalog).toContain('User-defined skills:');
     expect(catalog).toContain('  - `"free_kb"` — A KB skill');
     expect(catalog).not.toContain('picked_kb');
-    rmSync(path.dirname(file), { recursive: true });
   });
 
   it('returns the no-skills sentinel when nothing is available', () => {
-    const file = makeYaml(YAML);
     const catalog = buildSkillsCatalog({
-      yamlPath: file,
+      tree: TREE,
       preloaded: new Set(['questions', 'dashboards', 'explore', 'alerts', 'navigation_restricted']),
       selected: [],
       userCatalog: [],
     });
     expect(catalog).toBe('No additional skills are available for this turn.');
-    rmSync(path.dirname(file), { recursive: true });
   });
 });
 
 describe('buildPreloadedSkillsContent', () => {
   it('concatenates resolved system-skill content (missing skills skipped)', () => {
-    const file = makeYaml(YAML);
     const out = buildPreloadedSkillsContent({
-      yamlPath: file,
+      tree: TREE,
       skillNames: ['explore', 'does_not_exist', 'navigation_restricted'],
       selected: [],
     });
     expect(out).toContain('Explore content');
     expect(out).toContain('Restricted nav content');
     expect(out).not.toContain('does_not_exist');
-    rmSync(path.dirname(file), { recursive: true });
   });
 
   it('appends selected user skills with a user-defined header', () => {
-    const file = makeYaml(YAML);
     const out = buildPreloadedSkillsContent({
-      yamlPath: file,
+      tree: TREE,
       skillNames: ['explore'],
       selected: [
         { type: 'user', name: 'my_kb', content: 'KB body here' },
@@ -173,6 +153,5 @@ describe('buildPreloadedSkillsContent', () => {
     });
     expect(out).toContain('## Instructions: my_kb (user-defined)\nKB body here');
     expect(out).not.toContain('Alerts content'); // system selection not injected here
-    rmSync(path.dirname(file), { recursive: true });
   });
 });

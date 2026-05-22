@@ -1,10 +1,10 @@
 // Mode-mismatch guard tests for /api/chat and /api/chat/stream.
 //
-// Strict-mode rule: URL `?v=2` must match the conversation file's
-// `meta.version`. Any mismatch must be rejected (400 for /api/chat;
-// `event: error` SSE frame for /api/chat/stream). This is what allows the
-// frontend Redux + ChatInterface to remain unaware of v=2 — they speak
-// legacy shape to a backend that picks the right engine via metadata.
+// Rule: a v=2 conversation cannot be driven through the v=1 (Python) engine →
+// rejected. The reverse (a v=1 conversation under ?v=2) is NOT rejected: it
+// forks to a fresh v=2 conversation and continues (covered by
+// v2-happy-path.test.ts + fork-v1-to-v2.test.ts). Only the v=2-under-v=1
+// rejection is asserted here.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -87,18 +87,6 @@ function makeChatRequest(url: string, body: Record<string, unknown>): NextReques
 describe('/api/chat — strict mode-match rejection', () => {
   setupTestDb(TEST_DB_PATH, { customInit: seed });
 
-  it('?v=2 against a v=1 conversation file → 400 with mode-mismatch error', async () => {
-    const res = await chatPostHandler(
-      makeChatRequest('http://localhost/api/chat?v=2', {
-        conversationID: v1FileId,
-        user_message: 'hi',
-      }),
-    );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toContain('cannot continue v=1 conversation in v=2 mode');
-  });
-
   it('default URL against a v=2 conversation file → 400 with mode-mismatch error', async () => {
     const res = await chatPostHandler(
       makeChatRequest('http://localhost/api/chat', {
@@ -143,25 +131,6 @@ describe('/api/chat/stream — strict mode-match rejection', () => {
     }
     return events;
   }
-
-  it('?v=2 against a v=1 conversation file → emits error frame AND done frame (legacy listener checks doneData first)', async () => {
-    const res = await chatStreamPostHandler(
-      makeChatRequest('http://localhost/api/chat/stream?v=2', {
-        conversationID: v1FileId,
-        user_message: 'hi',
-      }),
-    );
-    expect(res.status).toBe(200);
-    const frames = await readAllSSEEvents(res);
-    const error = frames.find((f) => f.event === 'error');
-    expect(error).toBeDefined();
-    expect((error!.data as { error?: string }).error).toContain('cannot continue v=1 conversation in v=2 mode');
-    // Without a done frame, legacy chatListener throws "Stream ended without
-    // done event" instead of surfacing the actual error.
-    const done = frames.find((f) => f.event === 'done');
-    expect(done).toBeDefined();
-    expect((done!.data as { error?: string }).error).toContain('cannot continue v=1 conversation in v=2 mode');
-  });
 
   it('default URL against a v=2 conversation file → emits error frame AND done frame', async () => {
     const res = await chatStreamPostHandler(

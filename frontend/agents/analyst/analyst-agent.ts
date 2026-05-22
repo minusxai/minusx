@@ -2,7 +2,7 @@ import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { ImageContent, TextContent, Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
-import { renderPrompt, getPromptsPath } from '@/orchestrator/prompts';
+import { renderPrompt, PROMPTS } from '@/orchestrator/prompts';
 import {
   getPreloadedSkillNames,
   buildSkillsCatalog,
@@ -64,7 +64,6 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
 
   protected getSystemPrompt(): string {
     const ctor = this.constructor as typeof RemoteAnalystAgent;
-    const yamlPath = getPromptsPath();
     const selected = this.context.selectedSkills ?? [];
     const userCatalog = this.context.userSkillCatalog ?? [];
     const preloadedNames = getPreloadedSkillNames({
@@ -90,7 +89,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded). Matches Python's _build_skills_catalog.
       skills_catalog: buildSkillsCatalog({
-        yamlPath,
+        tree: PROMPTS,
         preloaded: new Set(preloadedNames),
         selected,
         userCatalog,
@@ -100,7 +99,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // Full content of page-relevant + selected skills, injected upfront.
       // Matches Python's _build_preloaded_skills_content.
       preloaded_skills: buildPreloadedSkillsContent({
-        yamlPath,
+        tree: PROMPTS,
         skillNames: preloadedNames,
         selected,
       }),

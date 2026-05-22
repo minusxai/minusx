@@ -22,7 +22,7 @@ import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
-import { runChatTurnV2, validateV2Mode } from '@/lib/chat-orchestration-v2.server';
+import { runChatTurnV2, validateV2Mode, forkV1ConversationToV2 } from '@/lib/chat-orchestration-v2.server';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import { FilesAPI } from '@/lib/data/files.server';
 import { createNewConversation } from '@/lib/conversations';
@@ -109,20 +109,12 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
       let v2ConversationId: number;
       if (body.conversationID) {
         const check = await validateV2Mode(body.conversationID, user, true);
-        if (!check.ok) {
-          return NextResponse.json(
-            {
-              conversationID: body.conversationID,
-              log_index: 0,
-              pending_tool_calls: [],
-              completed_tool_calls: [],
-              debug: [],
-              error: check.error,
-            } as ChatResponse,
-            { status: 400 },
-          );
-        }
-        v2ConversationId = body.conversationID;
+        // A v1 conversation opened in v2 mode (the only way `check` fails in the
+        // v=2 branch) is forked to a fresh v2 conversation and continued there;
+        // the original v1 file is untouched.
+        v2ConversationId = check.ok
+          ? body.conversationID
+          : await forkV1ConversationToV2(body.conversationID, user);
       } else {
         const created = await createNewConversation(
           user,

@@ -1,5 +1,9 @@
 # MinusX Analyst Agent Prompts
 # Shared templates + toolset-specific sections
+#
+# ⚠️ OBSOLETE — DO NOT EDIT. Chat is moving to the v2 (JS) orchestrator, which uses
+# a frozen copy of these prompts at frontend/orchestrator/prompts/prompts.json.
+# Changes to this file are no longer picked up by the product.
 
 templates:
   intro: |

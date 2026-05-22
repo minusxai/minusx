@@ -180,11 +180,13 @@ describe('GET /api/conversations', () => {
     }
   });
 
-  it('?v=2 returns only v=2 conversations (none seeded → empty)', async () => {
+  it('?v=2 lists the seeded v=1 conversations, each tagged legacy', async () => {
     const res = await GET(new Request('http://localhost/api/conversations?v=2'));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.conversations).toEqual([]);
+    // The seeded conversations are all v=1 → visible in v=2 mode, tagged legacy.
+    expect(body.conversations.length).toBeGreaterThan(0);
+    expect(body.conversations.every((c: ConversationSummary) => c.legacy === true)).toBe(true);
   });
 });
 
@@ -245,12 +247,18 @@ describe('GET /api/conversations — v=2 strict filter', () => {
     expect(names).not.toContain('What is revenue?');
   });
 
-  it('?v=2 returns only v=2 conversations, named from meta.firstMessage', async () => {
+  it('?v=2 returns both v=2 and v=1 conversations, tagging v=1 as legacy', async () => {
     const res = await GET(new Request('http://localhost/api/conversations?v=2'));
     const body = await res.json();
-    const names = body.conversations.map((c: ConversationSummary) => c.name);
-    expect(names).toContain('What is revenue?');
-    expect(names).not.toContain('legacy chat');
+    const byName = new Map<string, ConversationSummary>(
+      body.conversations.map((c: ConversationSummary) => [c.name, c]),
+    );
+    // v=2 conversation present, not legacy
+    expect(byName.has('What is revenue?')).toBe(true);
+    expect(byName.get('What is revenue?')!.legacy).toBeUndefined();
+    // v=1 conversation now visible in v=2 mode, tagged legacy (forks on continue)
+    expect(byName.has('legacy chat')).toBe(true);
+    expect(byName.get('legacy chat')!.legacy).toBe(true);
   });
 
   it('?v=2 does not load content to classify or name conversations', async () => {

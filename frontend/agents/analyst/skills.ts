@@ -4,7 +4,7 @@
 // piece is unit-testable in isolation.
 
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
-import { HIDDEN_SKILLS, listSkills, getSkill } from '@/orchestrator/prompts/prompt-loader';
+import { HIDDEN_SKILLS, listSkills, getSkill, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
 
 /** Page type → skills preloaded into the system prompt. */
 export const PAGE_SKILL_MAP: Record<string, string[]> = {
@@ -62,16 +62,16 @@ export function getPreloadedSkillNames(opts: {
 
 /** Build the LoadSkill catalog, excluding already-preloaded/selected/hidden skills. */
 export function buildSkillsCatalog(opts: {
-  yamlPath: string;
+  tree: PromptTree;
   preloaded: Set<string>;
   selected: AgentSkillSelection[];
   userCatalog: AgentUserSkillCatalogItem[];
 }): string {
-  const { yamlPath, preloaded, selected, userCatalog } = opts;
+  const { tree, preloaded, selected, userCatalog } = opts;
   const excluded = new Set([...preloaded, ...HIDDEN_SKILLS]);
 
   const systemLines: string[] = [];
-  for (const [name, description] of Object.entries(listSkills(yamlPath, { skipHidden: true }))) {
+  for (const [name, description] of Object.entries(listSkills(tree, { skipHidden: true }))) {
     if (!excluded.has(name)) systemLines.push(`  - \`"${name}"\` — ${description}`);
   }
 
@@ -93,14 +93,14 @@ export function buildSkillsCatalog(opts: {
 
 /** Resolve and concatenate the content of preloaded skills (+ selected user skills). */
 export function buildPreloadedSkillsContent(opts: {
-  yamlPath: string;
+  tree: PromptTree;
   skillNames: string[];
   selected: AgentSkillSelection[];
 }): string {
-  const { yamlPath, skillNames, selected } = opts;
+  const { tree, skillNames, selected } = opts;
   const sections: string[] = [];
   for (const name of skillNames) {
-    const content = getSkill(yamlPath, name);
+    const content = getSkill(tree, name);
     if (content) sections.push(content);
   }
   for (const skill of selected) {

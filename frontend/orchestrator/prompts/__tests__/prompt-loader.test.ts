@@ -1,23 +1,12 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import {
-  clearPromptCache,
-  getSkill,
-  listSkills,
-  loadPrompts,
-  pyFormat,
-  renderPrompt,
-} from '../prompt-loader';
+import yaml from 'js-yaml';
+import { getSkill, listSkills, pyFormat, renderPrompt, type PromptTree } from '../prompt-loader';
 
-function makeYaml(content: string): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'mx-prompts-'));
-  const file = path.join(dir, 'prompts.yaml');
-  writeFileSync(file, content, 'utf-8');
-  return file;
+// The engine operates on an in-memory PromptTree; parse small YAML fixtures into
+// trees for readability.
+function tree(content: string): PromptTree {
+  const parsed = (yaml.load(content) ?? {}) as Partial<PromptTree>;
+  return { templates: parsed.templates ?? {}, prompts: parsed.prompts ?? {} };
 }
-
-afterEach(() => clearPromptCache());
 
 describe('pyFormat', () => {
   it('substitutes {var}', () => {
@@ -49,69 +38,63 @@ describe('pyFormat', () => {
 
 describe('renderPrompt', () => {
   it('renders nested {path.to.template} refs', () => {
-    const file = makeYaml(`
+    const t = tree(`
 templates:
   greeting:
     formal: "Greetings, {name}."
 prompts:
   hello: "{greeting.formal}"
 `);
-    expect(renderPrompt(file, 'hello', { name: 'Sam' })).toBe('Greetings, Sam.');
-    rmSync(path.dirname(file), { recursive: true });
+    expect(renderPrompt(t, 'hello', { name: 'Sam' })).toBe('Greetings, Sam.');
   });
 
   it('renders simple {template_name} refs when template exists', () => {
-    const file = makeYaml(`
+    const t = tree(`
 templates:
   intro: "I am the AnalystAgent."
 prompts:
   default:
     system: "{intro} Here are tools: {tools}."
 `);
-    expect(renderPrompt(file, 'default.system', { tools: 'a, b' })).toBe(
+    expect(renderPrompt(t, 'default.system', { tools: 'a, b' })).toBe(
       'I am the AnalystAgent. Here are tools: a, b.',
     );
-    rmSync(path.dirname(file), { recursive: true });
   });
 
   it('resolves nested templates recursively', () => {
-    const file = makeYaml(`
+    const t = tree(`
 templates:
   outer: "outer({inner})"
   inner: "INNER"
 prompts:
   p: "{outer}"
 `);
-    expect(renderPrompt(file, 'p', {})).toBe('outer(INNER)');
-    rmSync(path.dirname(file), { recursive: true });
+    expect(renderPrompt(t, 'p', {})).toBe('outer(INNER)');
   });
 
   it('throws on missing prompt', () => {
-    const file = makeYaml(`prompts: {}\ntemplates: {}\n`);
-    expect(() => renderPrompt(file, 'nope', {})).toThrow(/Prompt 'nope' not found/);
-    rmSync(path.dirname(file), { recursive: true });
+    expect(() => renderPrompt(tree(`prompts: {}\ntemplates: {}\n`), 'nope', {})).toThrow(
+      /Prompt 'nope' not found/,
+    );
   });
 
   it('throws on missing nested template', () => {
-    const file = makeYaml(`
+    const t = tree(`
 templates: {}
 prompts:
   p: "{a.b}"
 `);
-    expect(() => renderPrompt(file, 'p', {})).toThrow(/Template 'a.b' not found/);
-    rmSync(path.dirname(file), { recursive: true });
+    expect(() => renderPrompt(t, 'p', {})).toThrow(/Template 'a.b' not found/);
   });
 
   it('passes JSON example blocks (with {{/}} escapes) through unchanged', () => {
-    const file = makeYaml(`
+    const t = tree(`
 templates: {}
 prompts:
   p: |
     Example: {{"name": "{user}", "id": 1}}.
 `);
-    const out = renderPrompt(file, 'p', { user: 'sam' });
-    expect(out).toContain('Example: {"name": "sam", "id": 1}.');
-    rmSync(path.dirname(file), { recursive: true });
+    expect(renderPrompt(t, 'p', { user: 'sam' })).toContain('Example: {"name": "sam", "id": 1}.');
   });
 });
 
@@ -120,7 +103,7 @@ prompts:
 // when skipHidden is set; get_skill resolves nested template refs but does NOT
 // run variable substitution (so `{{` JSON escapes stay literal — matching the
 // preloaded-skills injection path).
-const SKILLS_YAML = `
+const SKILLS = tree(`
 templates:
   shared: "SHARED_FRAGMENT"
   skill_questions:
@@ -142,65 +125,41 @@ templates:
     content: ""
 prompts:
   p: "x"
-`;
+`);
 
 describe('listSkills', () => {
   it('returns name → description for every skill_* template (prefix stripped)', () => {
-    const file = makeYaml(SKILLS_YAML);
-    expect(listSkills(file)).toEqual({
+    expect(listSkills(SKILLS)).toEqual({
       questions: 'How to work with question files',
       dashboards: 'How to work with dashboards',
       navigation_restricted: 'restricted nav',
       navigation_unrestricted: 'unrestricted nav',
       empty: 'no content',
     });
-    rmSync(path.dirname(file), { recursive: true });
   });
 
   it('drops HIDDEN_SKILLS (nav skills) when skipHidden is set', () => {
-    const file = makeYaml(SKILLS_YAML);
-    const names = Object.keys(listSkills(file, { skipHidden: true }));
+    const names = Object.keys(listSkills(SKILLS, { skipHidden: true }));
     expect(names).toContain('questions');
     expect(names).not.toContain('navigation_restricted');
     expect(names).not.toContain('navigation_unrestricted');
-    rmSync(path.dirname(file), { recursive: true });
   });
 });
 
 describe('getSkill', () => {
   it('resolves nested template refs in skill content', () => {
-    const file = makeYaml(SKILLS_YAML);
-    const content = getSkill(file, 'questions');
-    expect(content).toContain('Questions body uses SHARED_FRAGMENT.');
-    rmSync(path.dirname(file), { recursive: true });
+    expect(getSkill(SKILLS, 'questions')).toContain('Questions body uses SHARED_FRAGMENT.');
   });
 
   it('does NOT run variable substitution — {{ }} JSON escapes stay literal', () => {
-    const file = makeYaml(SKILLS_YAML);
-    const content = getSkill(file, 'questions');
-    expect(content).toContain('{{"query": "SELECT 1"}}');
-    rmSync(path.dirname(file), { recursive: true });
+    expect(getSkill(SKILLS, 'questions')).toContain('{{"query": "SELECT 1"}}');
   });
 
   it('returns null for an unknown skill', () => {
-    const file = makeYaml(SKILLS_YAML);
-    expect(getSkill(file, 'does_not_exist')).toBeNull();
-    rmSync(path.dirname(file), { recursive: true });
+    expect(getSkill(SKILLS, 'does_not_exist')).toBeNull();
   });
 
   it('returns null for a skill with empty content', () => {
-    const file = makeYaml(SKILLS_YAML);
-    expect(getSkill(file, 'empty')).toBeNull();
-    rmSync(path.dirname(file), { recursive: true });
-  });
-});
-
-describe('loadPrompts caching', () => {
-  it('returns the same tree on repeat reads (cache hit)', () => {
-    const file = makeYaml(`templates: {}\nprompts: {p: "x"}\n`);
-    const a = loadPrompts(file);
-    const b = loadPrompts(file);
-    expect(a).toBe(b);
-    rmSync(path.dirname(file), { recursive: true });
+    expect(getSkill(SKILLS, 'empty')).toBeNull();
   });
 });

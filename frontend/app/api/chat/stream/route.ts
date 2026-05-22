@@ -22,6 +22,7 @@ import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 import {
   runChatTurnStreamV2,
   validateV2Mode,
+  forkV1ConversationToV2,
 } from '@/lib/chat-orchestration-v2.server';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -540,14 +541,13 @@ async function processStreamV2(
     let conversationId: number;
     if (body.conversationID) {
       const check = await validateV2Mode(body.conversationID, user, true);
-      if (!check.ok) {
-        // Throw so the outer catch block emits BOTH an error frame and a
-        // done frame. Returning here would leave the legacy chatListener
-        // throwing "Stream ended without done event" because it checks
-        // doneData before errorData.
-        throw new Error(check.error);
-      }
-      conversationId = body.conversationID;
+      // A v1 conversation opened in v2 mode (the only failure mode here) is
+      // forked to a fresh v2 conversation and continued there; the original v1
+      // file is untouched. The `done` frame returns the new conversationID so
+      // the client switches to the fork.
+      conversationId = check.ok
+        ? body.conversationID
+        : await forkV1ConversationToV2(body.conversationID, user);
     } else {
       const created = await createNewConversation(
         user,

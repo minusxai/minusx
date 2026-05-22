@@ -19,6 +19,7 @@ export interface ConversationSummary {
   name: string;      // Display name — meta.firstMessage ?? file name
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
+  legacy?: boolean;  // v1 conversation shown in v2 mode — forked to v2 on continue
 }
 
 /**
@@ -41,9 +42,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get('limit');
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    // Strict mode separation:
-    //   ?v=2 → return ONLY v=2 conversations (meta.version === 2).
-    //   else → return ONLY v=1 conversations (meta.version !== 2).
+    // Mode listing:
+    //   ?v=2 → return ALL conversations; v=1 ones are tagged `legacy` (they fork
+    //          to v2 on continue, so users can see + resume old chats).
+    //   else → return ONLY v=1 conversations (the legacy surface).
     const isV2 = searchParams.get('v') === '2';
 
     const user = await getEffectiveUser();
@@ -73,8 +75,9 @@ export async function GET(request: Request) {
     const conversations: ConversationSummary[] = [];
 
     for (const fileInfo of filesResult.data) {
-      // Strict mode filter — driven by meta.version, no content needed.
-      if (isV2 !== isV2ConversationFile(fileInfo)) continue;
+      const fileIsV2 = isV2ConversationFile(fileInfo);
+      // v1 mode shows only v1 files; v2 mode shows everything (v1 tagged legacy).
+      if (!isV2 && fileIsV2) continue;
 
       const meta = (fileInfo.meta ?? {}) as { firstMessage?: string };
       conversations.push({
@@ -82,6 +85,7 @@ export async function GET(request: Request) {
         name: meta.firstMessage || displayNameFromFileName(fileInfo.name),
         createdAt: fileInfo.created_at,
         updatedAt: fileInfo.updated_at,
+        ...(isV2 && !fileIsV2 ? { legacy: true } : {}),
       });
     }
 
