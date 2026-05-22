@@ -74,7 +74,7 @@ import type {
   ConversationFileContent,
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
 
 /**
  * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
@@ -305,12 +305,15 @@ type RootAgentCtor = new (
   context: RemoteAnalystContext,
 ) => WebAnalystAgent;
 
-const ROOT_AGENT_BY_NAME: Record<string, RootAgentCtor> = {
-  WebAnalystAgent,
-  AnalystAgent: WebAnalystAgent,
-  OnboardingContextAgent,
-  OnboardingDashboardAgent,
-};
+// A Map (not a plain object) so a user-controlled `body.agent` can't reach
+// inherited keys like `constructor`/`__proto__` (CodeQL: unvalidated dynamic
+// method call). Unknown names → undefined → WebAnalystAgent fallback.
+const ROOT_AGENT_BY_NAME = immutableMap<string, RootAgentCtor>([
+  ['WebAnalystAgent', WebAnalystAgent],
+  ['AnalystAgent', WebAnalystAgent],
+  ['OnboardingContextAgent', OnboardingContextAgent],
+  ['OnboardingDashboardAgent', OnboardingDashboardAgent],
+]);
 
 async function setupOrchestration(
   body: ChatRequest,
@@ -497,7 +500,7 @@ async function setupOrchestration(
       attachments,
       city: clientCity,
     };
-    const RootAgent = (body.agent && ROOT_AGENT_BY_NAME[body.agent]) || WebAnalystAgent;
+    const RootAgent = (body.agent && ROOT_AGENT_BY_NAME.get(body.agent)) || WebAnalystAgent;
     const agent = new RootAgent(orch, { userMessage: body.user_message }, ctx);
     return {
       conversationId,
