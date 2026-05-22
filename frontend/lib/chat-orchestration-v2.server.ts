@@ -27,6 +27,8 @@ import {
   LoadSkill,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
+import { SlackAgent } from '@/agents/slack/slack-agent';
+import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
 import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
@@ -97,6 +99,12 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   PublishAll,
   LoadSkill,
   WebAnalystAgent,
+  // Slack chat runs the v2 orchestrator headlessly (see runChatOrchestrationV2).
+  // SlackAgent extends RemoteAnalystAgent and advertises ListDBConnections (which
+  // WebAnalystAgent drops), so both must be registered for the orchestrator to
+  // instantiate them on a new turn or when reconstructing a saved Slack log.
+  SlackAgent,
+  ListDBConnections,
   // Lets the orchestrator resume / reconstruct benchmark conversations
   // (root invocation name is `'BenchmarkAnalystAgent'` for single-agent
   // benchmark runs, or `'DoubleCheckBenchmarkAgent'` for cross-check runs)

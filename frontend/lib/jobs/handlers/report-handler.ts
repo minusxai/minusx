@@ -1,9 +1,11 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
-import { runChatOrchestration } from '@/lib/chat/run-orchestration';
+import { runReportV2 } from '@/lib/chat/run-report-v2.server';
 import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { getAppStateServer } from '@/lib/api/file-state.server';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import type { ReportAgentContext, ReportAgentReference } from '@/agents/report/report-agent';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
@@ -47,32 +49,40 @@ export const reportJobHandler: JobHandler = {
 
     const baseArgs = await buildServerAgentArgs(user);
 
-    // Run the ReportAgent via the full Python↔Next.js orchestration loop
-    const { log } = await runChatOrchestration({
-      agent: 'ReportAgent',
-      agent_args: {
-        ...baseArgs,
-        report_id: reportId,
-        report_name: reportName,
-        references: enrichedReferences,
-        report_prompt: report.reportPrompt,
-        emails: [],  // Delivery handled via RunFileContent.messages below
-        connection_id: primaryConnectionId || baseArgs.connection_id,
-      },
-      user,
-      userMessage: `Execute report: ${reportName}`,
-      timeoutMs: 1_800_000, // 30-minute timeout for report generation
-    });
+    // Build the whitelist from the resolved schema (mirrors the chat path).
+    const whitelistedTables: string[] = [];
+    for (const s of baseArgs.schema ?? []) {
+      for (const t of s.tables) {
+        whitelistedTables.push(t);
+        whitelistedTables.push(`${s.schema}.${t}`);
+      }
+    }
 
-    // Extract run result from the conversation log
-    const taskResult = log.find((entry: any) => entry._type === 'task_result' && entry.result?.run);
-    const runData: ReportRunContent | null = taskResult ? (taskResult as any).result.run : null;
+    // Run the ReportAgent via the in-process v=2 orchestrator (no Python backend).
+    const runData: ReportRunContent = await runReportV2({
+      // RemoteAnalystContext (inherited by the analyst sub-agents)
+      userId: String(user.userId ?? user.email),
+      mode: user.mode === 'tutorial' ? 'tutorial' : 'org',
+      effectiveUser: user,
+      connectionId: primaryConnectionId || baseArgs.connection_id,
+      whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
+      contextDocs: baseArgs.context || undefined,
+      schema: baseArgs.schema,
+      homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
+      role: user.role,
+      // Report inputs
+      reportId,
+      reportName,
+      references: enrichedReferences as ReportAgentReference[],
+      reportPrompt: report.reportPrompt ?? '',
+      emails: [], // Delivery handled via RunFileContent.messages below
+    } satisfies ReportAgentContext);
 
     const output: ReportOutput = {
       reportId,
       reportName,
-      generatedReport: runData?.generatedReport,
-      queries: runData?.queries,
+      generatedReport: runData.generatedReport,
+      queries: runData.queries,
     };
 
     // Build email messages for recipients when the report succeeded

@@ -1,0 +1,157 @@
+/**
+ * Headless v=2 chat orchestration loop.
+ *
+ * The v=2 counterpart to `run-orchestration.ts`. Clientless callers (Slack,
+ * and — once ported — report jobs) drive a full agent execution in-process via
+ * the TypeScript orchestrator, without going through HTTP or the Python backend.
+ *
+ * Unlike the browser chat path, the agents used here (RemoteAnalystAgent
+ * family, e.g. SlackAgent) advertise only server-side tools (DB + file tools),
+ * so `orchestrator.run()` executes the whole loop to completion — there are no
+ * frontend-only tools to bridge back to a browser.
+ *
+ * Returns the conversation log translated to the *legacy* log shape so existing
+ * consumers (e.g. `extractSlackReply`, `extractQueryCharts`) work unchanged.
+ */
+import 'server-only';
+import { Orchestrator } from '@/orchestrator/orchestrator';
+import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
+import { V2_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { piLogToLegacy } from '@/lib/chat-translator';
+import { appendLogToConversation } from '@/lib/conversations';
+import { getPageType } from '@/agents/analyst/skills';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { FilesAPI } from '@/lib/data/files.server';
+import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type {
+  ConversationLogEntry as LegacyLogEntry,
+  ConversationFileContent,
+} from '@/lib/types';
+
+/**
+ * Constructor shape for a RemoteAnalystAgent-family agent (SlackAgent, …).
+ * The runner instantiates it with the orchestrator, `{ userMessage }`, and a
+ * `RemoteAnalystContext`.
+ */
+type AnalystAgentClass = new (
+  orch: Orchestrator,
+  params: { userMessage: string },
+  context: RemoteAnalystContext,
+) => object;
+
+export interface RunOrchestrationV2Params {
+  /** Agent class to run (e.g. SlackAgent). Must extend RemoteAnalystAgent. */
+  agentClass: AnalystAgentClass;
+  /** Agent args (connection_id, schema, context, app_state, …) — e.g. from buildSlackAgentArgs. */
+  agent_args: Record<string, unknown>;
+  user: EffectiveUser;
+  userMessage: string;
+  /** Existing v=2 conversation file to append to (callers pre-create it). */
+  conversationId: number;
+}
+
+export interface RunOrchestrationV2Result {
+  conversationId: number;
+  /** Full conversation log, translated to the legacy log shape. */
+  log: LegacyLogEntry[];
+  /** Entries added by this run only, translated to the legacy log shape. */
+  logDiff: LegacyLogEntry[];
+}
+
+/** Build a RemoteAnalystContext from agent_args (mirrors the chat path's v=2 setup). */
+function buildAnalystContext(
+  agent_args: Record<string, unknown>,
+  user: EffectiveUser,
+): RemoteAnalystContext {
+  const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
+
+  const schema = Array.isArray(agent_args.schema)
+    ? (agent_args.schema as { schema: string; tables: string[] }[])
+    : undefined;
+  const whitelistedTables: string[] = [];
+  for (const s of schema ?? []) {
+    for (const t of s.tables) {
+      whitelistedTables.push(t);
+      whitelistedTables.push(`${s.schema}.${t}`);
+    }
+  }
+
+  const appState = agent_args.app_state;
+  const connectionId =
+    typeof agent_args.connection_id === 'string' ? agent_args.connection_id : undefined;
+  const contextDocs = typeof agent_args.context === 'string' ? agent_args.context : undefined;
+
+  return {
+    userId: String(user.userId ?? user.email),
+    mode: narrowedMode,
+    effectiveUser: user,
+    connectionId,
+    whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
+    contextDocs: contextDocs || undefined,
+    schema,
+    homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
+    role: user.role,
+    appState,
+    pageType: getPageType(appState),
+    selectedSkills: [],
+    userSkillCatalog: [],
+    unrestrictedMode: false,
+  };
+}
+
+/**
+ * Run a full agent orchestration loop in-process (v=2 / TypeScript orchestrator).
+ *
+ * Appends the new orchestrator-shape entries to the conversation file and
+ * returns the legacy-translated log + diff.
+ */
+export async function runChatOrchestrationV2({
+  agentClass,
+  agent_args,
+  user,
+  userMessage,
+  conversationId,
+}: RunOrchestrationV2Params): Promise<RunOrchestrationV2Result> {
+  const file = await FilesAPI.loadFile(conversationId, user);
+  const content = file.data.content as unknown as ConversationFileContent | undefined;
+  const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
+  const expectedLogIndex = savedLog.length;
+
+  const ctx = buildAnalystContext(agent_args, user);
+  const registrables: RegistrableClass[] = [...V2_REGISTRABLES];
+  const orch = new Orchestrator(registrables, [...savedLog]);
+
+  const agent = new agentClass(orch, { userMessage }, ctx);
+  const stream = orch.run(agent as never);
+  for await (const ev of stream) {
+    // EventStream.result() never throws — errors surface only as stream events,
+    // so capture/log them here. A run with no visible reply degrades to the
+    // caller's fallback (e.g. Slack posts "I don't have a text reply").
+    if ((ev as { type?: string }).type === 'error') {
+      const errMsg = (ev as { error?: { errorMessage?: string } }).error?.errorMessage;
+      console.error('[v2/headless] orchestrator error event:', errMsg);
+    }
+  }
+  await stream.result();
+
+  const fullPiLog = orch.log;
+  const piDiff = fullPiLog.slice(expectedLogIndex);
+
+  let finalConversationId = conversationId;
+  if (piDiff.length > 0) {
+    const appendResult = await appendLogToConversation(
+      conversationId,
+      piDiff as unknown as LegacyLogEntry[],
+      expectedLogIndex,
+      user,
+    );
+    finalConversationId = appendResult.conversationID;
+  }
+
+  return {
+    conversationId: finalConversationId,
+    log: piLogToLegacy(fullPiLog),
+    logDiff: piLogToLegacy(piDiff),
+  };
+}
