@@ -83,21 +83,24 @@ function buildConversationPath(user: EffectiveUser, name: string): { userId: str
 export async function createNewConversation(
   user: EffectiveUser,
   firstUserMessage?: string,
-  options?: { version?: number; extraMeta?: Record<string, unknown> },
+  options?: { version?: number; extraMeta?: Record<string, unknown>; initialLog?: unknown[] },
 ): Promise<{ fileId: number; name: string }> {
   const name = truncateMessageForName(firstUserMessage || DEFAULT_CONVERSATION_NAME);
   const { userId, fileName, path } = buildConversationPath(user, firstUserMessage || 'conversation');
   const now = new Date().toISOString();
 
+  // `initialLog` seeds the conversation (used when forking a v1 chat into v2).
+  const initialLog = options?.initialLog ?? [];
   const initialConversation: ConversationFile = {
     metadata: {
       userId,
       name,
       createdAt: now,
       updatedAt: now,
-      logLength: 0
+      logLength: initialLog.length
     },
-    log: []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    log: initialLog as any
   };
 
   // Store the full first message in file-level `meta` so the conversations

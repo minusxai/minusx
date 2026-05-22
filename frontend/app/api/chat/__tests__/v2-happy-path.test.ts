@@ -128,21 +128,27 @@ describe('POST /api/chat?v=2 — happy path (orchestrator runs, response is lega
     expect(metadata?.name).toBe(userMessage);
   });
 
-  it('rejects ?v=2 against an existing v=1 conversation with 400 mode-mismatch', async () => {
-    // Create a v=1 conversation file directly.
+  it('forks ?v=2 against an existing v=1 conversation and continues in v=2 (original preserved)', async () => {
+    // A v=1 conversation with a prior turn, so the seed carries history.
     const created = await FilesAPI.createFile(
       {
         name: 'legacy',
         path: '/org/logs/conversations/1/legacy.chat.json',
         type: 'conversation',
         content: {
-          metadata: { userId: '1', name: 'legacy', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z', logLength: 0 },
-          log: [],
+          metadata: { userId: '1', name: 'legacy', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z', logLength: 3 },
+          log: [
+            { _type: 'task', _run_id: 'run-r1', agent: 'AnalystAgent', args: { user_message: 'earlier q' }, unique_id: 'r1', created_at: '2025-01-01T00:00:00Z' },
+            { _type: 'task', _run_id: 'run-ttu1', _parent_unique_id: 'r1', agent: 'TalkToUser', args: { content_blocks: [{ type: 'text', text: 'earlier a' }] }, unique_id: 'ttu1', created_at: '2025-01-01T00:00:00Z' },
+            { _type: 'task_result', _task_unique_id: 'ttu1', result: '{"success":true,"content_blocks":[{"type":"text","text":"earlier a"}]}', created_at: '2025-01-01T00:00:00Z' },
+          ],
         } as never,
         options: { createPath: true, returnExisting: false },
       },
       ADMIN,
     );
+
+    webAnalystFaux.setResponses([fauxAssistantMessage('continuing the old chat.', { stopReason: 'stop' })]);
 
     const res = await chatPostHandler(
       makeRequest('http://localhost/api/chat?v=2', {
@@ -150,8 +156,21 @@ describe('POST /api/chat?v=2 — happy path (orchestrator runs, response is lega
         user_message: 'continue',
       }),
     );
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.error).toContain('cannot continue v=1 conversation in v=2 mode');
+    // Forked: the response carries a NEW conversation id, not the v1 one.
+    expect(body.conversationID).not.toBe(created.data.id);
+
+    // The fork is a v=2 conversation seeded from the v1 log.
+    const forked = await FilesAPI.loadFile(body.conversationID as number, ADMIN);
+    const forkedMeta = forked.data.meta as { version?: number; forkedFrom?: number };
+    expect(forkedMeta.version).toBe(2);
+    expect(forkedMeta.forkedFrom).toBe(created.data.id);
+
+    // Original v1 is untouched (still v1, still its 3-entry legacy log).
+    const original = await FilesAPI.loadFile(created.data.id, ADMIN);
+    expect((original.data.meta as { version?: number } | null)?.version).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((original.data.content as any).log).toHaveLength(3);
   });
 });

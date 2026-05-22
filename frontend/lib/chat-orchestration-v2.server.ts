@@ -58,9 +58,9 @@ import {
   legacyToolResultToPi,
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
-import { appendLogToConversation, truncateMessageForName, slugify } from '@/lib/conversations';
+import { appendLogToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { isV2ConversationFile } from '@/lib/chat-translator';
+import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
 import type {
   ChatRequest,
   CompletedToolCallFromPython,
@@ -210,6 +210,29 @@ export async function validateV2Mode(
       ? 'cannot continue v=1 conversation in v=2 mode'
       : 'cannot continue v=2 conversation in v=1 mode',
   };
+}
+
+/**
+ * Fork a v1 (legacy) conversation into a fresh v2 conversation so it can be
+ * continued in v2 mode. The original v1 file is left untouched (zero data
+ * loss); the new file's `content.log` is seeded from the v1 log via
+ * `legacyLogToPi` and tagged `meta.version: 2` + `meta.forkedFrom`. Returns the
+ * new conversation's file id. The continue turn then runs against it normally
+ * (setupOrchestration appends after the seeded log).
+ */
+export async function forkV1ConversationToV2(v1FileId: number, user: EffectiveUser): Promise<number> {
+  const file = await FilesAPI.loadFile(v1FileId, user);
+  const content = file.data.content as { metadata?: { name?: string }; log?: unknown } | null;
+  const legacyLog = (Array.isArray(content?.log) ? content!.log : []) as LegacyLogEntry[];
+  const seededLog = legacyLogToPi(legacyLog);
+  const firstMessage =
+    (file.data.meta as { firstMessage?: string } | null)?.firstMessage ?? content?.metadata?.name ?? undefined;
+  const created = await createNewConversation(user, firstMessage, {
+    version: 2,
+    extraMeta: { forkedFrom: v1FileId },
+    initialLog: seededLog as unknown[],
+  });
+  return created.fileId;
 }
 
 /**

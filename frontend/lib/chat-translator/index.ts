@@ -294,6 +294,151 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
   return out;
 }
 
+// ─── legacyLogToPi: reverse — seed a forked v2 chat from a v1 log ────
+
+const SEED_USAGE: AssistantMessage['usage'] = {
+  input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+/** Common provider metadata for seeded assistant messages (historical, never re-generated). */
+function seedAssistantMeta(createdAt: string) {
+  return {
+    api: 'anthropic-messages' as AssistantMessage['api'],
+    provider: 'anthropic',
+    model: 'legacy',
+    usage: SEED_USAGE,
+    timestamp: Date.parse(createdAt) || 0,
+  };
+}
+
+/** v1 content_blocks → pi assistant content. Thinking keeps its text but DROPS
+ *  the signature (re-sending a v1 signature in a v2 native call is rejected). */
+function legacyContentBlocksToPi(blocks: unknown[]): AssistantMessage['content'] {
+  const out: AssistantMessage['content'] = [];
+  for (const b of blocks) {
+    const block = b as { type?: string; thinking?: string; text?: string; citations?: unknown[]; tool_use_id?: string; content?: unknown };
+    if (block.type === 'thinking') {
+      out.push({ type: 'thinking', thinking: block.thinking ?? '' } as ThinkingContent);
+    } else if (block.type === 'text') {
+      const t: TextContent = { type: 'text', text: block.text ?? '' };
+      if (Array.isArray(block.citations) && block.citations.length > 0) {
+        (t as { citations?: unknown }).citations = block.citations;
+      }
+      out.push(t);
+    } else if (block.type === 'web_search_tool_result') {
+      // Not in the AssistantMessage union (read defensively by piLogToLegacy) — cast.
+      out.push({ type: 'web_search_tool_result', tool_use_id: block.tool_use_id, content: block.content } as unknown as TextContent);
+    }
+  }
+  return out;
+}
+
+function parseResultObject(result: unknown): Record<string, unknown> | null {
+  if (result && typeof result === 'object') return result as Record<string, unknown>;
+  if (typeof result === 'string') {
+    try { const p = JSON.parse(result); return p && typeof p === 'object' ? (p as Record<string, unknown>) : null; } catch { return null; }
+  }
+  return null;
+}
+
+function resultToText(result: unknown): string {
+  if (typeof result === 'string') return result;
+  if (result == null) return '';
+  return JSON.stringify(result);
+}
+
+/**
+ * Reverse translation: a v1 (legacy) conversation log → a v2 (pi)
+ * ConversationLog, used to SEED a forked v2 conversation so an old chat can be
+ * continued without data loss (the original v1 file is untouched).
+ *
+ * Per turn: the root `AnalystAgent` task → root AgentInvocation (carries the
+ * user message); `TalkToUser` → the final assistant message (stopReason 'stop'
+ * — the only thing projectRootThreadHistory sends to the LLM); tool tasks →
+ * assistant `tool_use` + paired `tool_result` (stopReason 'toolUse', DISPLAY
+ * only, never re-sent to the model). Thinking keeps its text, drops its
+ * signature. Context is empty — these turns are history, never re-run.
+ */
+export function legacyLogToPi(legacyLog: LegacyLogEntry[]): ConversationLog {
+  const out: ConversationLog = [];
+  const resultByTaskId = new Map<string, TaskResultEntry>();
+  for (const e of legacyLog) {
+    if (e._type === 'task_result') resultByTaskId.set(e._task_unique_id, e);
+  }
+
+  let currentRootId: string | null = null;
+  for (const e of legacyLog) {
+    if (e._type !== 'task') continue;
+    const task = e as TaskLogEntry;
+
+    // Root user turn.
+    if (task.agent === 'AnalystAgent' && !task._parent_unique_id) {
+      currentRootId = task.unique_id;
+      const userMessage = (task.args as { user_message?: unknown } | undefined)?.user_message;
+      const invocation: AgentInvocation & { parent_id: string | null } = {
+        type: 'toolCall',
+        id: task.unique_id,
+        name: 'WebAnalystAgent',
+        arguments: { userMessage: typeof userMessage === 'string' ? userMessage : '' },
+        context: {},
+        parent_id: null,
+      };
+      out.push(invocation as unknown as PiLogEntry);
+      continue;
+    }
+
+    const parentId = task._parent_unique_id ?? currentRootId ?? null;
+    const result = resultByTaskId.get(task.unique_id);
+
+    if (task.agent === 'TalkToUser') {
+      // Final assistant reply — content_blocks live in the result (preferred) or args.
+      const parsed = parseResultObject(result?.result);
+      const fromResult = parsed && Array.isArray(parsed.content_blocks) ? (parsed.content_blocks as unknown[]) : null;
+      const fromArgs = Array.isArray((task.args as { content_blocks?: unknown[] } | undefined)?.content_blocks)
+        ? ((task.args as { content_blocks: unknown[] }).content_blocks)
+        : null;
+      const blocks = fromResult ?? fromArgs ?? [];
+      const assistant: AssistantMessage & { parent_id: string | null } = {
+        role: 'assistant',
+        content: legacyContentBlocksToPi(blocks),
+        stopReason: 'stop',
+        parent_id: parentId,
+        ...seedAssistantMeta(task.created_at),
+      };
+      out.push(assistant as unknown as PiLogEntry);
+      continue;
+    }
+
+    // Tool task → assistant(tool_use) + paired tool_result (display only).
+    const toolCall: PiToolCall = { type: 'toolCall', id: task.unique_id, name: task.agent, arguments: (task.args ?? {}) as Record<string, unknown> };
+    const assistant: AssistantMessage & { parent_id: string | null } = {
+      role: 'assistant',
+      content: [toolCall],
+      stopReason: 'toolUse',
+      parent_id: parentId,
+      ...seedAssistantMeta(task.created_at),
+    };
+    out.push(assistant as unknown as PiLogEntry);
+
+    const details = (result?.details ?? {}) as Record<string, unknown>;
+    const { success, ...restDetails } = details;
+    const toolResult: ToolResultMessage & { parent_id: string | null } = {
+      role: 'toolResult',
+      toolCallId: task.unique_id,
+      toolName: task.agent,
+      content: [{ type: 'text', text: resultToText(result?.result) }],
+      details: restDetails,
+      isError: success === false,
+      timestamp: Date.parse(task.created_at) || 0,
+      parent_id: parentId,
+    };
+    out.push(toolResult as unknown as PiLogEntry);
+  }
+
+  return out;
+}
+
 // ─── piStreamEventToLegacy: streaming ────────────────────────────────
 
 interface LegacyStreamingEvent {
