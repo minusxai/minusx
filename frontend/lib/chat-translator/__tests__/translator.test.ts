@@ -194,6 +194,42 @@ describe('piLogToLegacy — forward translation', () => {
     expect(parsed.content_blocks).toEqual([{ type: 'text', text: 'Hi! How can I help?' }]);
   });
 
+  it('web search: text citations + web_search_tool_result → content_blocks + top-level citations (server_tool_use hidden)', () => {
+    const citation = { type: 'web_search_result_location', url: 'https://ex.com', title: 'Ex', cited_text: 'fact' };
+    const serverToolUse = { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'q' } };
+    const wsr = { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [{ type: 'web_search_result', url: 'https://ex.com', title: 'Ex' }] };
+    const log: ConversationLog = [
+      rootInvocation({ id: 'r1', userMessage: 'q' }),
+      {
+        role: 'assistant',
+        content: [serverToolUse, wsr, { type: 'text', text: 'Answer', citations: [citation] }],
+        api: 'anthropic-messages',
+        provider: 'anthropic',
+        model: 'claude-test',
+        usage: EMPTY_USAGE,
+        stopReason: 'stop',
+        timestamp: 1000,
+        parent_id: 'r1',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ];
+    const out = piLogToLegacy(log);
+    const ttu = findTasks(out).find((t) => t.agent === 'TalkToUser')!;
+    const parsed = JSON.parse(String(resultByTaskId(out, ttu.unique_id)!.result));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const textBlock = parsed.content_blocks.find((b: any) => b.type === 'text');
+    expect(textBlock.citations).toEqual([citation]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wsrBlock = parsed.content_blocks.find((b: any) => b.type === 'web_search_tool_result');
+    expect(wsrBlock.content[0].url).toBe('https://ex.com');
+    // top-level citations aggregated (AgentTurnContainer enriches results with cited_text)
+    expect(parsed.citations).toEqual([citation]);
+    // server_tool_use is internal (API continuity only) — never shown in the UI.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(parsed.content_blocks.some((b: any) => b.type === 'server_tool_use')).toBe(false);
+    expect(findTasks(out).some((t) => t.agent === 'server_tool_use' || t.agent === 'web_search')).toBe(false);
+  });
+
   it('assistant text-only → usage flows to task_debug (NOT task_result.details, which v=1 keeps null)', () => {
     const log: ConversationLog = [
       rootInvocation({ id: 'r1', userMessage: 'hi' }),

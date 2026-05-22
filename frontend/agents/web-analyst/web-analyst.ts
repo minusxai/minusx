@@ -61,7 +61,10 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box;
   // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
-  static readonly callOptions = { reasoning: 'low', ...(getAnalystModelOptions() ?? {}) };
+  // `webSearch: true` enables Anthropic's native web search (server-side tool),
+  // matching Python's `include_web_search=True`. The model decides when to use
+  // it per the prompt's web_search guidance.
+  static readonly callOptions = { reasoning: 'low', webSearch: true, ...(getAnalystModelOptions() ?? {}) };
 
   protected getSystemPrompt(): string {
     // Re-uses the RemoteAnalystAgent prompt (production prompts.yaml) under
@@ -69,5 +72,17 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     // of advertised tools (in `static tools`) does the heavy lifting.
     const base = super.getSystemPrompt();
     return base.replace(/\bAnalystAgent\b/, 'WebAnalystAgent');
+  }
+
+  /**
+   * Add the user's city as web-search `userLocation` (matches Python's
+   * web_search_options.user_location). Falls back to the static callOptions
+   * (webSearch: true, no location) when no city is known.
+   */
+  protected resolveCallOptions(): Record<string, unknown> | undefined {
+    const base = super.resolveCallOptions() ?? {};
+    const city = this.context.city;
+    if (!city) return base;
+    return { ...base, webSearch: { userLocation: { city } } };
   }
 }

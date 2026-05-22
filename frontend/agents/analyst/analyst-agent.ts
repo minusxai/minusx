@@ -130,7 +130,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     const attachments = this.context.attachments ?? [];
     const attachmentImages: ImageContent[] = attachments
       .filter((a): a is Extract<AgentAttachment, { type: 'image' }> => a.type === 'image')
-      .map((a) => ({ type: 'image', data: a.data, mimeType: a.mimeType }));
+      .map((a) => (a.url ? { type: 'image', url: a.url } : { type: 'image', data: a.data, mimeType: a.mimeType }));
     const textAttachments = attachments
       .filter((a): a is Extract<AgentAttachment, { type: 'text' }> => a.type === 'text')
       .map((a) => {

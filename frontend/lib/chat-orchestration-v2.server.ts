@@ -317,6 +317,9 @@ async function setupOrchestration(
     ? (clientSkills!.user_catalog as AgentUserSkillCatalogItem[])
     : [];
   const unrestrictedMode = (agentArgs as { unrestricted_mode?: unknown }).unrestricted_mode === true;
+  const clientCity = typeof (agentArgs as { city?: unknown }).city === 'string'
+    ? (agentArgs as { city: string }).city
+    : undefined;
   const clientAppState = (agentArgs as { app_state?: unknown }).app_state;
   const pageType = getPageType(clientAppState);
   // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we
@@ -435,6 +438,7 @@ async function setupOrchestration(
       userSkillCatalog,
       unrestrictedMode,
       attachments,
+      city: clientCity,
     };
     const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
     return {

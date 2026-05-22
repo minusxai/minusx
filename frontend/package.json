@@ -16,7 +16,7 @@
     "test:ui": "vitest run --project=ui",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",
     "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | tee lib/validation/atlas-schema.gen.json | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts",
-    "postinstall": "node scripts/copy-duckdb-wasm.mjs",
+    "postinstall": "node scripts/copy-duckdb-wasm.mjs && patch-package",
     "benchmark:dab": "node --env-file=.env --max-old-space-size=8192 node_modules/.bin/tsx --conditions react-server benchmarks/dataanalystbench.ts",
     "dump-llm-calls": "node --env-file=.env node_modules/.bin/tsx scripts/dump-llm-calls.ts"
   },
@@ -87,6 +87,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "patch-package": "^8.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

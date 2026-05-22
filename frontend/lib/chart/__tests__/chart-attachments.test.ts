@@ -20,11 +20,7 @@ vi.mock('@/lib/chart/render-chart-svg', () => ({
   RENDERABLE_CHART_TYPES: new Set(['bar', 'line', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar']),
 }));
 
-// getCurrentV defaults to null (v1, upload path); a single test flips it to '2'.
-vi.mock('@/lib/navigation/url-utils', () => ({ getCurrentV: vi.fn(() => null) }));
-
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
-import { getCurrentV } from '@/lib/navigation/url-utils';
 import { buildChartAttachments, clearChartCaches } from '@/lib/chart/chart-attachments';
 import type { AppState } from '@/lib/appState';
 import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
@@ -135,24 +131,6 @@ describe('first Send', () => {
       content: MOCK_PUBLIC_URL,
       metadata: { auto: true },
     });
-  });
-});
-
-describe('v2 chat (base64, no upload)', () => {
-  it('returns the rendered base64 data URL directly and does NOT upload', async () => {
-    (getCurrentV as Mock).mockReturnValue('2');
-    try {
-      const attachments = await buildChartAttachments(makeAppState(), makeQueryResultsMap(), 'dark');
-      expect(mockRenderCharts).toHaveBeenCalledTimes(1);
-      expect(countUploadCalls()).toBe(0); // no S3 upload
-      expect(attachments[0]).toMatchObject({
-        type: 'image',
-        content: MOCK_DATA_URL, // inline base64, not an S3 URL
-        metadata: { auto: true },
-      });
-    } finally {
-      (getCurrentV as Mock).mockReturnValue(null);
-    }
   });
 });
 

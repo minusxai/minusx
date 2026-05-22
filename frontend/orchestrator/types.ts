@@ -188,6 +188,15 @@ export class MXAgent<
     ];
   }
 
+  /**
+   * Per-request stream options. Defaults to the static `callOptions`; override
+   * to inject per-turn options derived from the agent's context (e.g. the
+   * WebAnalystAgent adds web-search `userLocation` from `context.city`).
+   */
+  protected resolveCallOptions(): Record<string, unknown> | undefined {
+    return (this.constructor as typeof MXAgent).callOptions;
+  }
+
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
     // Soft cap (matches Python's _get_available_tools): once the thread reaches
@@ -198,7 +207,7 @@ export class MXAgent<
       messages: this.buildMessages(),
       tools,
     };
-    return this.orchestrator.callLLM(ctor.model, context, this.id, ctor.callOptions);
+    return this.orchestrator.callLLM(ctor.model, context, this.id, this.resolveCallOptions());
   }
 
   async run(): Promise<AssistantMessage> {
