@@ -623,6 +623,7 @@ export async function runChatTurnV2(
       await setup.rawStream.result();
     }
   } catch (err) {
+    console.error('[v2/chat] orchestrator run threw:', err);
     runError = err instanceof Error ? err.message : String(err);
   }
   return persistAndBuildLegacyResponse(
@@ -689,6 +690,7 @@ export async function* runChatTurnStreamV2(
       await setup.rawStream.result();
     }
   } catch (err) {
+    console.error('[v2/stream] orchestrator run threw:', err);
     runError = err instanceof Error ? err.message : String(err);
   }
 
@@ -702,6 +704,7 @@ export async function* runChatTurnStreamV2(
       runError,
     );
   } catch (persistErr) {
+    console.error('[v2/stream] persist threw:', persistErr);
     const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
     response = {
       conversationID: setup.conversationId,

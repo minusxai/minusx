@@ -649,6 +649,11 @@ export class Orchestrator {
   }
 
   protected synthErrorEvent(parent_id: string, err: unknown): StreamEvent {
+    // Log the full error (with stack) before reducing it to a message — the
+    // stream event only carries the message string, so without this the failing
+    // file:line is lost in production (e.g. a "Cannot read properties of
+    // undefined (reading 'length')" surfaces with no location).
+    console.error('[orchestrator] run error:', err);
     const errorMessage = err instanceof Error ? err.message : String(err);
     return {
       type: 'error',
