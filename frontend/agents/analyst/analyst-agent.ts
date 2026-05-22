@@ -60,7 +60,9 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
   static model = getAnalystModel() ?? FAUX_MODEL;
   // Hard cap on the agentic loop, enforced by MXAgent.run(). Matches Python's
   // MAX_STEPS_LOWER_LEVEL (config.py); the prompt hint below is maxSteps − 5.
-  static readonly maxSteps = 35;
+  // Typed `number` (not the literal 35) so subclasses can set their own cap
+  // (e.g. the onboarding agents use a lower limit for latency).
+  static readonly maxSteps: number = 35;
 
   protected getSystemPrompt(): string {
     const ctor = this.constructor as typeof RemoteAnalystAgent;
