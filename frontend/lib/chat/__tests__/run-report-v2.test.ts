@@ -1,0 +1,59 @@
+// runReportV2 — exercises the real headless report runner end-to-end with the
+// production registrables (V2_REGISTRABLES + ReportAgent + RemoteAnalystAgent),
+// proving the wiring resolves. No DB / Python: faux LLMs + stubbed runQuery.
+
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
+vi.mock('@/lib/connections/run-query', () => ({
+  runQuery: vi.fn(async (_db: string, sql: string) => ({
+    columns: ['n'], types: ['int'], rows: [{ n: 1 }], finalQuery: sql,
+  })),
+}));
+vi.mock('@/lib/connections/load-schema', () => ({
+  loadConnectionSchema: vi.fn(async () => []),
+}));
+
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { fauxRegistration as analystFaux } from '@/agents/analyst/analyst-agent';
+import { fauxRegistration as reportFaux } from '@/agents/report/report-agent';
+import { runReportV2 } from '@/lib/chat/run-report-v2.server';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+
+const USER: EffectiveUser = {
+  userId: 1, email: 'r@example.com', name: 'R', role: 'admin', home_folder: '/org', mode: 'org',
+};
+
+describe('runReportV2 (real registrables)', () => {
+  beforeEach(() => {
+    analystFaux.setResponses([]);
+    reportFaux.setResponses([]);
+  });
+
+  it('runs ReportAgent + analyst sub-agent through the production registrables and returns the run payload', async () => {
+    analystFaux.setResponses([fauxAssistantMessage('Revenue grew.', { stopReason: 'stop' })]);
+    reportFaux.setResponses([fauxAssistantMessage('## Summary\nGrowth across the board.', { stopReason: 'stop' })]);
+
+    const run = await runReportV2({
+      userId: '1',
+      mode: 'org',
+      effectiveUser: USER,
+      connectionId: 'db',
+      reportId: 99,
+      reportName: 'Weekly Revenue',
+      references: [
+        { reference: { id: 5 }, prompt: 'Analyze weekly revenue', file_name: 'Revenue', connection_id: 'db', app_state: { type: 'file' } },
+      ],
+      reportPrompt: 'Executive summary please.',
+      emails: [],
+    });
+
+    expect(run.status).toBe('success');
+    expect(run.reportId).toBe(99);
+    expect(run.generatedReport).toContain('# Weekly Revenue');
+    expect(run.generatedReport).toContain('Growth across the board');
+  });
+});
