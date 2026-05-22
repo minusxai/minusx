@@ -13,6 +13,7 @@ import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
+import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -202,6 +203,12 @@ export default function ChatInterface({
 
   // Load conversation from database if existing conversation (from URL)
   const { conversation: loadedConversation, isLoading, error: loadError } = useConversation(providedConversationId);
+
+  // Legacy (v1) chat opened in v2 mode: the v2 engine can't continue it (the
+  // forked agent gets no context), so we show its read-only history but replace
+  // the input with a "New Chat" CTA. See isLegacyChatInV2.
+  const useChatV2Mode = useUseChatV2();
+  const isLegacyChat = isLegacyChatInV2(useChatV2Mode, providedConversationId, loadedConversation?.version);
 
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const showExpandedMessages = useAppSelector(selectShowExpandedMessages);
@@ -1073,8 +1080,43 @@ export default function ChatInterface({
         </Box>
       )}
 
-      {/* Input - Sticky at bottom (hidden in readOnly mode) */}
-      {!readOnly && !loadError && !needsContinueConfirmation && (
+      {/* Legacy (v1) chat in v2 mode: can't be continued — show history read-only
+          and offer a New Chat instead of the input. */}
+      {!readOnly && !loadError && isLegacyChat && (
+        <HStack
+          position="sticky"
+          bottom={0}
+          bg="bg.canvas"
+          justify="center"
+          py={3}
+          px={4}
+          gap={3}
+          zIndex={10}
+          borderTop="1px solid"
+          borderColor="border.muted"
+          fontFamily="mono"
+        >
+          <Text fontSize="xs">
+            <Text as="span" fontWeight="semibold">Legacy chat.</Text>{' '}
+            <Text as="span" color="fg.muted">Older chats can&apos;t be continued — start a new chat.</Text>
+          </Text>
+          <Button
+            size="xs"
+            bg="accent.teal"
+            color="white"
+            fontFamily="mono"
+            aria-label="Start a new chat"
+            _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+            onClick={handleNewChat}
+            flexShrink={0}
+          >
+            <Icon as={LuPlus} boxSize={4} mr={1} />New Chat
+          </Button>
+        </HStack>
+      )}
+
+      {/* Input - Sticky at bottom (hidden in readOnly mode and for legacy chats) */}
+      {!readOnly && !loadError && !needsContinueConfirmation && !isLegacyChat && (
         <Box
           position="sticky"
           bottom={0}

@@ -53,6 +53,10 @@ export function useConversation(conversationId?: number) {
 
         const content = result.data.content as ConversationFileContent;
 
+        // File version from meta: 2 = v2 (JS engine), absent = legacy v1 (→ 1).
+        // Drives the "legacy chat can't be continued" UI (isLegacyChatInV2).
+        const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
+
         // Parse log into messages
         const messages = parseLogToMessages(content.log);
 
@@ -73,7 +77,8 @@ export function useConversation(conversationId?: number) {
             streamedCompletedToolCalls: [],
             streamedThinking: '',
             agent,
-            agent_args
+            agent_args,
+            version,
           },
           setAsActive: false  // Don't activate when loading from URL
         }));
