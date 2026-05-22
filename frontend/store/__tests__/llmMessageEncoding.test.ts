@@ -106,6 +106,7 @@ describe('LLM Message Encoding', () => {
     }
   });
   const mockFetch = setupMockFetch({
+    chatVersion: 1, // legacy Python engine (v2 is now the default)
     getPythonPort,
     getLLMMockPort,
     interceptors: [

@@ -84,6 +84,7 @@ describe('ExecuteQuery - Context Whitelist Table Validation', () => {
     customInit: addScopingFixtures
   });
   const mockFetch = setupMockFetch({
+    chatVersion: 1, // legacy Python engine (v2 is now the default)
     getPythonPort,
     getLLMMockPort,
     interceptors: [
