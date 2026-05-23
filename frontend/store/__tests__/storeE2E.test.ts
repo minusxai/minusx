@@ -26,6 +26,8 @@ import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb, addMxfoodConnection, ensureMxfoodDataset } from '@/test/harness/test-db';
 import { loadAgentTestSpecs, runAgentTestSpecs } from '@/test/harness/agent-test-runner';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
+import { fauxRegistration as evalFaux } from '@/agents/eval/eval-agent';
 import { NextRequest } from 'next/server';
 import {
   compareValues,
@@ -200,38 +202,19 @@ describe('Query Test Runner E2E', () => {
   });
 });
 
-describe('LLM Test Runner E2E (mock LLM server)', () => {
-  const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
-  const mockFetch = setupMockFetch({
-    getPythonPort,
-    getLLMMockPort,
-    interceptors: [
-      {
-        includesUrl: ['localhost:3000/api/chat'],
-        startsWithUrl: ['/api/chat'],
-        handler: chatPostHandler,
-      },
-    ],
-  });
-
-  const USAGE = { total_tokens: 50, prompt_tokens: 30, completion_tokens: 20 };
-
+describe('LLM Test Runner E2E (in-process v2 eval agent)', () => {
   setupTestDb(TEST_RUNNER_DB_PATH);
 
-  beforeEach(async () => {
-    await getLLMMockServer!().reset();
-    mockFetch.mockClear();
-  });
+  beforeEach(() => evalFaux.setResponses([]));
+
+  function submitFaux(toolName: string, args: Record<string, unknown>): void {
+    evalFaux.setResponses([
+      fauxAssistantMessage([fauxToolCall(toolName, args, { id: 'sub_1' })], { stopReason: 'toolUse' }),
+    ]);
+  }
 
   it('llm binary test — SubmitBinary(true) against expected true → passed', async () => {
-    await getLLMMockServer!().configure({
-      response: {
-        content: '', role: 'assistant',
-        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'SubmitBinary', arguments: JSON.stringify({ answer: true }) } }],
-        finish_reason: 'tool_calls',
-      },
-      usage: USAGE,
-    });
+    submitFaux('SubmitBinary', { answer: true });
 
     const test: Test = {
       type: 'llm',
@@ -245,18 +228,10 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
     expect(data.passed).toBe(true);
     expect(data.actualValue).toBe(true);
     expect(data.expectedValue).toBe(true);
-    expect(data.log).toBeDefined();
   }, 60000);
 
   it('llm binary test — SubmitBinary(false) against expected true → failed', async () => {
-    await getLLMMockServer!().configure({
-      response: {
-        content: '', role: 'assistant',
-        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'SubmitBinary', arguments: JSON.stringify({ answer: false }) } }],
-        finish_reason: 'tool_calls',
-      },
-      usage: USAGE,
-    });
+    submitFaux('SubmitBinary', { answer: false });
 
     const test: Test = {
       type: 'llm',

@@ -13,26 +13,19 @@ import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { buildServerAgentArgs, type BuildServerAgentArgsOptions } from '@/lib/chat/agent-args.server';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
-import '@/app/api/chat/tool-handlers.server';
+import { runEvalV2 } from '@/lib/chat/run-eval-v2.server';
 import { getAppStateServer } from '@/lib/api/file-state.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { PythonChatResponse, CompletedToolCallPayload, CompletedToolCallFromPython } from '@/lib/chat-orchestration';
+import type { EvalAssertionType } from '@/agents/eval/eval-agent';
 import type {
   Test,
   TestRunResult,
-  TestSubject,
   TestValue,
   QuestionContent,
-  ConversationLogEntry,
 } from '@/lib/types';
 import { compareValues, extractCellValue, type TestRunner } from './index';
 
-/** Assertion type string sent to the Python TestAgent */
-type PythonAssertionType = 'binary' | 'number_match' | 'string_match';
-
-function answerTypeToPythonAssertion(answerType: Test['answerType']): PythonAssertionType {
+function answerTypeToAssertion(answerType: Test['answerType']): EvalAssertionType {
   if (answerType === 'binary') return 'binary';
   if (answerType === 'number') return 'number_match';
   return 'string_match';
@@ -130,7 +123,7 @@ async function executeQueryTest(
 }
 
 /**
- * Run an LLM-type Test on the server via the Python TestAgent.
+ * Run an LLM-type Test on the server via the in-process v2 EvalAnalystAgent.
  */
 async function executeLLMTest(
   test: Test & { type: 'llm' },
@@ -140,123 +133,55 @@ async function executeLLMTest(
 ): Promise<TestRunResult> {
   const subject = test.subject as Extract<typeof test.subject, { type: 'llm' }>;
 
-  // Build app_state for the Python agent using unified server utilities
-  // executeQueries: true so the agent has query results available
+  // Build app_state (executeQueries: true so the agent has query results available).
   let app_state: Record<string, unknown> | null = null;
   if (subject.context.type === 'file') {
     app_state = await getAppStateServer(subject.context.file_id, user, { executeQueries: true });
   }
 
   const baseArgs = await buildServerAgentArgs(user, options);
-  const agentArgs = {
-    ...baseArgs,
+
+  const submission = await runEvalV2({
     goal: subject.prompt,
-    assertion: { type: answerTypeToPythonAssertion(test.answerType) },
-    connection_id: subject.connection_id || defaultConnectionId || baseArgs.connection_id,
-    app_state,
-  };
+    assertionType: answerTypeToAssertion(test.answerType),
+    schema: baseArgs.schema,
+    contextDocs: baseArgs.context,
+    connectionId: subject.connection_id || defaultConnectionId || baseArgs.connection_id,
+    appState: app_state,
+    user,
+  });
 
-  // Run the agent loop (same pattern as /api/evals route)
-  let log: ConversationLogEntry[] = [];
-  const allCompletedFromPython: CompletedToolCallFromPython[] = [];
-  let completedToolCalls: CompletedToolCallPayload[] = [];
-  let userMessage: string | null = subject.prompt;
-
-  const DUMMY_FILE_ID = -1;
-  const DUMMY_LOG_INDEX = 0;
-
-  for (let iteration = 0; iteration < 50; iteration++) {
-    const payload = {
-      log,
-      user_message: userMessage,
-      completed_tool_calls: completedToolCalls,
-      agent: 'TestAgent',
-      agent_args: agentArgs,
-    };
-
-    let pythonResponse: PythonChatResponse;
-    try {
-      const response = await pythonBackendFetch('/api/chat', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(120000),
-      }, user);
-      if (!response.ok) {
-        const errText = await response.text();
-        return { test, passed: false, error: `Agent error: ${errText}`, log: allCompletedFromPython };
-      }
-      pythonResponse = await response.json();
-    } catch (err) {
-      return { test, passed: false, error: err instanceof Error ? err.message : 'Agent request failed', log: allCompletedFromPython };
-    }
-
-    allCompletedFromPython.push(...pythonResponse.completed_tool_calls);
-    log = [...log, ...pythonResponse.logDiff];
-    userMessage = null;
-
-    if (pythonResponse.pending_tool_calls.length === 0) break;
-
-    const orchResult = await orchestratePendingTools(
-      pythonResponse.pending_tool_calls,
-      DUMMY_FILE_ID,
-      DUMMY_LOG_INDEX,
-      user,
-      { allowServerFallback: true }
-    );
-    completedToolCalls = orchResult.completedTools;
-    if (orchResult.completedTools.length === 0) break;
-  }
-
-  // Find the submit call
-  const submitCall = allCompletedFromPython.find(tc =>
-    tc.function?.name === 'SubmitBinary' ||
-    tc.function?.name === 'SubmitNumber' ||
-    tc.function?.name === 'SubmitString' ||
-    tc.function?.name === 'CannotAnswer'
-  );
-
-  if (!submitCall) {
-    return { test, passed: false, error: 'Agent did not submit an answer', log: allCompletedFromPython };
-  }
-
-  let submitContent: Record<string, unknown> = {};
-  try {
-    submitContent = typeof submitCall.content === 'string'
-      ? JSON.parse(submitCall.content)
-      : (submitCall.content as Record<string, unknown>) || {};
-  } catch {
-    submitContent = {};
+  if (!submission) {
+    return { test, passed: false, error: 'Agent did not submit an answer' };
   }
 
   // cannot_answer: test passes iff agent called CannotAnswer
   if (test.value.type === 'cannot_answer') {
-    const passed = submitCall.function?.name === 'CannotAnswer';
+    const passed = submission.toolName === 'CannotAnswer';
     return {
       test,
       passed,
       error: passed ? undefined : 'Agent submitted an answer instead of saying cannot answer',
-      log: allCompletedFromPython,
     };
   }
 
-  if (submitCall.function?.name === 'CannotAnswer') {
+  if (submission.toolName === 'CannotAnswer') {
     return {
       test,
       passed: false,
-      error: `Agent cannot answer: ${(submitContent.reason as string) ?? 'No reason given'}`,
-      log: allCompletedFromPython,
+      error: `Agent cannot answer: ${(submission.content.reason as string) ?? 'No reason given'}`,
     };
   }
 
-  const actualValue = submitContent.answer as string | number | boolean;
+  const actualValue = submission.content.answer as string | number | boolean;
   const expectedValue = await resolveExpectedValue(test.value, user);
 
   if (expectedValue === null) {
-    return { test, passed: false, actualValue, expectedValue, error: 'Could not resolve expected value', log: allCompletedFromPython };
+    return { test, passed: false, actualValue, expectedValue, error: 'Could not resolve expected value' };
   }
 
   const passed = compareValues(actualValue, expectedValue, test.operator, test.answerType);
-  return { test, passed, actualValue, expectedValue, log: allCompletedFromPython };
+  return { test, passed, actualValue, expectedValue };
 }
 
 /**

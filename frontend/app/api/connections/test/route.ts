@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { validateDuckDbFilePath, validateConnectionType } from '@/lib/data/helpers/connections';
 import { getNodeConnector } from '@/lib/connections';
 
@@ -14,10 +13,10 @@ interface TestConnectionRequest {
 
 /**
  * POST /api/connections/test
- * Test a connection configuration (can be used for both existing and new connections).
- * DuckDB connections are handled entirely in Node.js to avoid Python's exclusive file lock.
+ * Test a connection configuration (existing or new). All connection types are
+ * tested via their Node.js connector — no Python backend.
  */
-export const POST = withAuth(async (request: NextRequest, user) => {
+export const POST = withAuth(async (request: NextRequest, _user) => {
   try {
     const body: TestConnectionRequest = await request.json();
     const { name, type, config, include_schema = false } = body;
@@ -29,33 +28,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     validateConnectionType(type);
     validateDuckDbFilePath(type, config);
 
-    // Handle DuckDB (and csv/google-sheets which are DuckDB-backed) in Node.js.
-    // This bypasses Python entirely, avoiding the exclusive file lock conflict.
     const connector = getNodeConnector(name || '', type, config);
-    if (connector) {
-      const result = await connector.testConnection(include_schema);
-      return NextResponse.json(result, { status: 200 });
+    if (!connector) {
+      return ApiErrors.badRequest(`Unsupported connection type '${type}'`);
     }
-
-    // Forward all other connection types (postgresql, bigquery, etc.) to Python backend
-    const response = await pythonBackendFetch('/api/connections/test', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: name || null,
-        type,
-        config,
-        include_schema
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return ApiErrors.externalApiError(data.message || 'Connection test failed');
-    }
-
-    // Pass through Python response directly (already has success field)
-    return NextResponse.json(data, { status: 200 });
+    const result = await connector.testConnection(include_schema);
+    return NextResponse.json(result, { status: 200 });
   } catch (error) {
     return handleApiError(error);
   }

@@ -17,11 +17,21 @@ import {
 } from '@/store/__tests__/test-utils';
 import type { ConnectionContent, DatabaseSchema } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import * as pythonBackend from '@/lib/backend/python-backend.server';
+// Inject schema via a fake Node.js connector (the loader fetches schema through
+// `getNodeConnector(...).getSchema()`). `mockGetSchema` is the test seam.
+const { mockGetSchema } = vi.hoisted(() => ({ mockGetSchema: vi.fn() }));
 
-// Force the Python path for all schema fetches — no Node.js connector
 vi.mock('@/lib/connections', () => ({
-  getNodeConnector: () => null,
+  getNodeConnector: () => ({
+    getSchema: mockGetSchema,
+    query: vi.fn().mockResolvedValue({ columns: [], types: [], rows: [] }),
+  }),
+}));
+
+// Pass-through profiling so schema enrichment doesn't run queries or mutate the
+// fetched schema (keeps assertions about the raw schema valid).
+vi.mock('@/lib/connections/statistics-engine', () => ({
+  profileDatabase: vi.fn(async (_type: string, schemas: unknown) => ({ schema: schemas, queryCount: 0 })),
 }));
 
 // Database-specific mock — must be at module top level (Jest hoisting)
@@ -43,8 +53,6 @@ const testUser: EffectiveUser = {
   home_folder: '',
 };
 
-const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
-
 const FRESH_SCHEMA: DatabaseSchema = {
   schemas: [{ schema: 'public', tables: [{ table: 'users', columns: [{ name: 'id', type: 'INTEGER' }] }] }],
   updated_at: new Date().toISOString(),
@@ -59,7 +67,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  mockGetSchemaFromPython.mockReset();
+  mockGetSchema.mockReset();
 });
 
 // ---------------------------------------------------------------------------
@@ -98,7 +106,7 @@ describe('connectionLoader — fresh schema cached', () => {
 
     const result = await connectionLoader(file!, testUser);
 
-    expect(mockGetSchemaFromPython).not.toHaveBeenCalled();
+    expect(mockGetSchema).not.toHaveBeenCalled();
     const content = result.content as ConnectionContent;
     expect(content.schema?.schemas).toEqual(freshSchema.schemas);
   });
@@ -110,12 +118,12 @@ describe('connectionLoader — fresh schema cached', () => {
 
 describe('connectionLoader — stale or missing schema', () => {
   it('fetches and persists schema when no schema exists', async () => {
-    mockGetSchemaFromPython.mockResolvedValue(FRESH_SCHEMA);
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
     const file = await createConnection('conn_noschema', '/org/database/conn_noschema');
 
     const result = await connectionLoader(file!, testUser);
 
-    expect(mockGetSchemaFromPython).toHaveBeenCalledTimes(1);
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
     const content = result.content as ConnectionContent;
     expect(content.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
 
@@ -126,7 +134,7 @@ describe('connectionLoader — stale or missing schema', () => {
   });
 
   it('fetches and persists schema when schema is stale (> 24 hours old)', async () => {
-    mockGetSchemaFromPython.mockResolvedValue(FRESH_SCHEMA);
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
     const staleSchema: DatabaseSchema = {
       schemas: [{ schema: 'old', tables: [] }],
       updated_at: staleTimestamp(),
@@ -135,7 +143,7 @@ describe('connectionLoader — stale or missing schema', () => {
 
     const result = await connectionLoader(file!, testUser);
 
-    expect(mockGetSchemaFromPython).toHaveBeenCalledTimes(1);
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
     const content = result.content as ConnectionContent;
     expect(content.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
 
@@ -146,7 +154,7 @@ describe('connectionLoader — stale or missing schema', () => {
   });
 
   it('fetches schema when refresh=true even if schema is fresh', async () => {
-    mockGetSchemaFromPython.mockResolvedValue(FRESH_SCHEMA);
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
     const alreadyFreshSchema: DatabaseSchema = {
       schemas: [{ schema: 'cached', tables: [] }],
       updated_at: freshTimestamp(),
@@ -155,7 +163,7 @@ describe('connectionLoader — stale or missing schema', () => {
 
     await connectionLoader(file!, testUser, { refresh: true });
 
-    expect(mockGetSchemaFromPython).toHaveBeenCalledTimes(1);
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -165,7 +173,7 @@ describe('connectionLoader — stale or missing schema', () => {
 
 describe('connectionLoader — Python fetch failure', () => {
   it('returns cached schema when Python fetch fails and cache exists', async () => {
-    mockGetSchemaFromPython.mockRejectedValue(new Error('backend unavailable'));
+    mockGetSchema.mockRejectedValue(new Error('backend unavailable'));
     const staleSchema: DatabaseSchema = {
       schemas: [{ schema: 'fallback', tables: [] }],
       updated_at: staleTimestamp(),
@@ -180,7 +188,7 @@ describe('connectionLoader — Python fetch failure', () => {
   });
 
   it('returns empty schema when Python fetch fails and no cache exists', async () => {
-    mockGetSchemaFromPython.mockRejectedValue(new Error('backend unavailable'));
+    mockGetSchema.mockRejectedValue(new Error('backend unavailable'));
     const file = await createConnection('conn_noschema_err', '/org/database/conn_noschema_err');
 
     const result = await connectionLoader(file!, testUser);
@@ -200,7 +208,7 @@ describe('connectionLoader — empty refresh result', () => {
     // Reproduces the production failure mode: refresh would otherwise overwrite
     // a healthy cached schema with [] (e.g. when pg_stats enrichment silently
     // returns nothing). The loader should detect the empty result and bail.
-    mockGetSchemaFromPython.mockResolvedValue({ schemas: [], updated_at: new Date().toISOString() });
+    mockGetSchema.mockResolvedValue([]);
 
     const cachedSchema: DatabaseSchema = {
       schemas: [{ schema: 'public', tables: [{ table: 'orders', columns: [{ name: 'id', type: 'integer' }] }] }],
@@ -239,6 +247,6 @@ describe('connectionLoader — metadata-only file', () => {
     const result = await connectionLoader(metaFile, testUser);
 
     expect(result.content).toBeNull();
-    expect(mockGetSchemaFromPython).not.toHaveBeenCalled();
+    expect(mockGetSchema).not.toHaveBeenCalled();
   });
 });

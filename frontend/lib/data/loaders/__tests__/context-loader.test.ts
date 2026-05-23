@@ -24,11 +24,21 @@ import type {
   DocumentContent
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import * as pythonBackend from '@/lib/backend/python-backend.server';
+// Inject schema via a fake Node.js connector keyed by connection name. The
+// per-name mock returns a DatabaseSchema (`{ schemas }`); the connector unwraps
+// `.schemas` (what `getSchema()` yields). `mockGetSchema` is the test seam.
+const { mockGetSchema } = vi.hoisted(() => ({ mockGetSchema: vi.fn() }));
 
-// Mock Node.js connector so schema falls through to getSchemaFromPython mock below
 vi.mock('@/lib/connections', () => ({
-  getNodeConnector: () => null,
+  getNodeConnector: (name: string) => ({
+    getSchema: async () => (await mockGetSchema(name))?.schemas ?? [],
+    query: vi.fn().mockResolvedValue({ columns: [], types: [], rows: [] }),
+  }),
+}));
+
+// Pass-through profiling so enrichment doesn't run queries or mutate the schema.
+vi.mock('@/lib/connections/statistics-engine', () => ({
+  profileDatabase: vi.fn(async (_t: string, schemas: unknown) => ({ schema: schemas, queryCount: 0 })),
 }));
 
 // Database-specific mock
@@ -40,9 +50,6 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 const TEST_DB_PATH = getTestDbPath('context_loader');
-
-// Mock getSchemaFromPython to bypass unstable_cache
-const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
 // Test users
 const adminUser: EffectiveUser = {
@@ -88,13 +95,13 @@ describe('Context Loader Integration with Versioning', () => {
   setupTestDb(TEST_DB_PATH);
 
   beforeEach(async () => {
-    mockGetSchemaFromPython.mockClear();
+    mockGetSchema.mockClear();
 
     // Clean up existing test data (setupTestDb already called vi.clearAllMocks())
     await getModules().db.exec('DELETE FROM files', []);
 
     // Mock getSchemaFromPython to return schemas directly
-    mockGetSchemaFromPython.mockImplementation((name: string) => {
+    mockGetSchema.mockImplementation((name: string) => {
       if (name === 'duckdb_main') {
         return Promise.resolve({
           schemas: [{

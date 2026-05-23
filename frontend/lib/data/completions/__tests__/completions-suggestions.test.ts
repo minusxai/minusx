@@ -11,15 +11,11 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-// Mock Node.js connector so schema falls through to getSchemaFromPython mock below
+// Inject schema via a fake Node.js connector (the loader fetches schema through
+// getNodeConnector(...).getSchema()). No Python backend.
 vi.mock('@/lib/connections', () => ({
-  getNodeConnector: () => null,
-}));
-
-// Mock schema introspection to return test schema
-vi.mock('@/lib/backend/python-backend.server', () => ({
-  getSchemaFromPython: vi.fn().mockResolvedValue({
-    schemas: [
+  getNodeConnector: () => ({
+    getSchema: async () => ([
       {
         schema: 'main',
         tables: [
@@ -43,8 +39,14 @@ vi.mock('@/lib/backend/python-backend.server', () => ({
           }
         ]
       }
-    ]
-  })
+    ]),
+    query: vi.fn().mockResolvedValue({ columns: [], types: [], rows: [] }),
+  }),
+}));
+
+// Pass-through profiling so enrichment doesn't run queries or mutate the schema.
+vi.mock('@/lib/connections/statistics-engine', () => ({
+  profileDatabase: vi.fn(async (_t: string, schemas: unknown) => ({ schema: schemas, queryCount: 0 })),
 }));
 
 import { setupTestDb } from '@/test/harness/test-db';

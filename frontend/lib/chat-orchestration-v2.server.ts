@@ -28,6 +28,7 @@ import {
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles } from '@/agents/analyst/file-tools';
 import { SlackAgent } from '@/agents/slack/slack-agent';
+import { OnboardingContextAgent, OnboardingDashboardAgent } from '@/agents/onboarding/onboarding-agents';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
 import { FetchHandleV2 } from '@/agents/benchmark-analyst/v2/fetch-handle';
@@ -73,7 +74,7 @@ import type {
   ConversationFileContent,
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
-import { immutableSet } from '@/lib/utils/immutable-collections';
+import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
 
 /**
  * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
@@ -105,6 +106,11 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   // instantiate them on a new turn or when reconstructing a saved Slack log.
   SlackAgent,
   ListDBConnections,
+  // Onboarding-wizard agents (connection setup): run on the chat path with the
+  // frontend bridge (EditFile/CreateFile). Registered so the orchestrator can
+  // reconstruct them on resume after a bridged tool completes.
+  OnboardingContextAgent,
+  OnboardingDashboardAgent,
   // Lets the orchestrator resume / reconstruct benchmark conversations
   // (root invocation name is `'BenchmarkAnalystAgent'` for single-agent
   // benchmark runs, or `'DoubleCheckBenchmarkAgent'` for cross-check runs)
@@ -285,6 +291,29 @@ export function buildBenchmarkContextFromSavedLog(log: ConversationLog): Benchma
   }
   return {};
 }
+
+/**
+ * Root agent class selected by the request's `agent` name for a NEW production
+ * (non-benchmark) turn. Production chat sends `AnalystAgent`/`WebAnalystAgent`
+ * (→ WebAnalystAgent); the onboarding wizard sends its specialized agents. Any
+ * unknown/absent name falls back to WebAnalystAgent. (On resume the orchestrator
+ * reconstructs the root from the saved log via the registrables, not this map.)
+ */
+type RootAgentCtor = new (
+  orch: Orchestrator,
+  params: { userMessage: string },
+  context: RemoteAnalystContext,
+) => WebAnalystAgent;
+
+// A Map (not a plain object) so a user-controlled `body.agent` can't reach
+// inherited keys like `constructor`/`__proto__` (CodeQL: unvalidated dynamic
+// method call). Unknown names → undefined → WebAnalystAgent fallback.
+const ROOT_AGENT_BY_NAME = immutableMap<string, RootAgentCtor>([
+  ['WebAnalystAgent', WebAnalystAgent],
+  ['AnalystAgent', WebAnalystAgent],
+  ['OnboardingContextAgent', OnboardingContextAgent],
+  ['OnboardingDashboardAgent', OnboardingDashboardAgent],
+]);
 
 async function setupOrchestration(
   body: ChatRequest,
@@ -471,7 +500,8 @@ async function setupOrchestration(
       attachments,
       city: clientCity,
     };
-    const agent = new WebAnalystAgent(orch, { userMessage: body.user_message }, ctx);
+    const RootAgent = (body.agent && ROOT_AGENT_BY_NAME.get(body.agent)) || WebAnalystAgent;
+    const agent = new RootAgent(orch, { userMessage: body.user_message }, ctx);
     return {
       conversationId,
       expectedLogIndex,

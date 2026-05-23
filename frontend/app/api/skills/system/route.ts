@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { listSkills } from '@/orchestrator/prompts';
 
 export interface SystemSkillCatalogItem {
   name: string;
   description: string;
 }
 
-export const GET = withAuth(async (_request, user) => {
-  const response = await pythonBackendFetch('/api/skills/system', { method: 'GET' }, user);
-  if (!response.ok) {
-    return NextResponse.json({ success: false, error: 'Failed to load system skills' }, { status: response.status });
-  }
-  const data = await response.json() as SystemSkillCatalogItem[];
+// Serve the system-skill catalog from the TS prompt tree (orchestrator/prompts),
+// matching the v2 orchestrator's own skill set. No Python backend.
+export const GET = withAuth(async () => {
+  const skills = listSkills({ skipHidden: true });
+  const data: SystemSkillCatalogItem[] = Object.entries(skills).map(([name, description]) => ({
+    name,
+    description,
+  }));
   return NextResponse.json({ success: true, data });
 });

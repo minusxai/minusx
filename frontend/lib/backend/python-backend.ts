@@ -1,7 +1,7 @@
 /**
- * Client-safe connection testing functions.
- * Server-only backend functions (initializeConnectionOnPython, getSchemaFromPython, etc.)
- * live in python-backend.server.ts.
+ * Client-safe connection testing helpers. These POST to the Next.js
+ * `/api/connections/test` route, which tests connections via the Node.js
+ * connectors. (The file name is legacy — there is no Python backend involved.)
  */
 
 export async function testConnection(

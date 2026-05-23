@@ -28,8 +28,21 @@
 // Jest infrastructure mocks (must be at top due to hoisting)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Inject schema via a fake Node.js connector keyed by connection name. The
+// per-name mock returns a DatabaseSchema (`{ schemas }`); the connector unwraps
+// `.schemas`. `mockGetSchema` is the test seam.
+const { mockGetSchema } = vi.hoisted(() => ({ mockGetSchema: vi.fn() }));
+
 vi.mock('@/lib/connections', () => ({
-  getNodeConnector: () => null,
+  getNodeConnector: (name: string) => ({
+    getSchema: async () => (await mockGetSchema(name))?.schemas ?? [],
+    query: vi.fn().mockResolvedValue({ columns: [], types: [], rows: [] }),
+  }),
+}));
+
+// Pass-through profiling so enrichment doesn't run queries or mutate the schema.
+vi.mock('@/lib/connections/statistics-engine', () => ({
+  profileDatabase: vi.fn(async (_t: string, schemas: unknown) => ({ schema: schemas, queryCount: 0 })),
 }));
 
 vi.mock('@/lib/database/db-config', () => ({
@@ -59,7 +72,6 @@ import type {
   WhitelistNode,
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // ↓ NEW functions — RED until Phase 2 is implemented
 import {
@@ -337,14 +349,13 @@ describe('filterSchemaByWhitelistNode — single-connection filter', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Context loader — ContextVersion.whitelist (new schema)', () => {
-  const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
   beforeEach(async () => {
     vi.clearAllMocks();
     await getModules().db.exec('DELETE FROM files', []);
 
     // Two connections — one DuckDB, one BigQuery
-    mockGetSchemaFromPython.mockImplementation((name: string) => {
+    mockGetSchema.mockImplementation((name: string) => {
       if (name === 'duckdb_main') {
         return Promise.resolve({
           schemas: [{
@@ -635,8 +646,7 @@ describe('Default context per folder', () => {
     // Simulate the DB having three levels of default contexts
     // (createPath would create all three in production)
 
-    const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
-    mockGetSchemaFromPython.mockResolvedValue({
+    mockGetSchema.mockResolvedValue({
       schemas: [{
         schema: 'public',
         tables: [{ table: 'users', columns: [] }, { table: 'orders', columns: [] }],
@@ -666,7 +676,7 @@ describe('Default context per folder', () => {
     const tables = duckdb!.schemas[0].tables.map(t => t.table).sort();
     expect(tables).toEqual(['orders', 'users']);
 
-    mockGetSchemaFromPython.mockRestore();
+    mockGetSchema.mockRestore();
   });
 });
 

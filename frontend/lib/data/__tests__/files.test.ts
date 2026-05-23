@@ -19,8 +19,6 @@ import type {
   ConnectionContent,
   ContextContent
 } from '@/lib/types';
-import * as pythonBackend from '@/lib/backend/python-backend.server';
-
 // Database-specific mock
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -30,9 +28,6 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 const TEST_DB_PATH = getTestDbPath('files');
-
-// Mock Python backend
-const mockGetSchemaFromPython = vi.spyOn(pythonBackend, 'getSchemaFromPython');
 
 // Test user
 const testUser: EffectiveUser = {
@@ -49,24 +44,6 @@ describe('Files Data Layer - getTemplate', () => {
 
   beforeAll(async () => {
     await initTestDatabase(TEST_DB_PATH);
-
-    // Mock schema introspection
-    mockGetSchemaFromPython.mockResolvedValue({
-      schemas: [
-        {
-          name: 'main',
-          tables: [
-            {
-              name: 'users',
-              columns: [
-                { name: 'id', type: 'INTEGER', nullable: false },
-                { name: 'email', type: 'VARCHAR', nullable: false }
-              ]
-            }
-          ]
-        }
-      ]
-    });
 
     // Remove template-seeded connections so they don't interfere with selectDatabase
     // (listAll uses ORDER BY updated_at DESC, so the last-published connection is first)
