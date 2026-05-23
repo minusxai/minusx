@@ -1,4 +1,4 @@
-import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction, createSelector, weakMapMemoize } from '@reduxjs/toolkit';
 import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
@@ -1055,24 +1055,37 @@ export const selectDirtyFiles = createSelector(
  *
  * When fileId is undefined (e.g., folder pages), all dirty files are "unrelated".
  */
-export function selectSaveClassification(state: RootState, fileId: number | undefined) {
-  const allDirty = selectDirtyFiles(state);
-  if (fileId === undefined) {
-    return { currentDirty: false, childDirtyFiles: [] as FileState[], unrelatedDirtyFiles: allDirty };
-  }
-  const fileState = state.files.files[fileId];
-  const mergedContent = selectMergedContent(state, fileId);
-  const childIds = new Set(
-    fileState && mergedContent
-      ? extractReferencesFromContent(mergedContent as any, fileState.type as FileType)
-      : []
-  );
-  return {
-    currentDirty: allDirty.some(f => f.id === fileId),
-    childDirtyFiles: allDirty.filter(f => f.id !== fileId && childIds.has(f.id)),
-    unrelatedDirtyFiles: allDirty.filter(f => f.id !== fileId && !childIds.has(f.id)),
-  };
-}
+// Memoized so it returns a STABLE object reference for unchanged inputs (a plain
+// function returned a fresh object every call → React-Redux's "selector returned
+// a different result" warning + needless re-renders). `weakMapMemoize` caches per
+// distinct (state, fileId) args, so it doesn't thrash when multiple components use
+// it with different fileIds (reselect's default lru cache size is 1).
+export const selectSaveClassification = createSelector(
+  [
+    selectDirtyFiles,
+    (_state: RootState, fileId: number | undefined) => fileId,
+    (state: RootState, fileId: number | undefined) =>
+      fileId === undefined ? undefined : state.files.files[fileId],
+    (state: RootState, fileId: number | undefined) =>
+      fileId === undefined ? undefined : selectMergedContent(state, fileId),
+  ],
+  (allDirty, fileId, fileState, mergedContent) => {
+    if (fileId === undefined) {
+      return { currentDirty: false, childDirtyFiles: [] as FileState[], unrelatedDirtyFiles: allDirty };
+    }
+    const childIds = new Set(
+      fileState && mergedContent
+        ? extractReferencesFromContent(mergedContent as any, fileState.type as FileType)
+        : []
+    );
+    return {
+      currentDirty: allDirty.some(f => f.id === fileId),
+      childDirtyFiles: allDirty.filter(f => f.id !== fileId && childIds.has(f.id)),
+      unrelatedDirtyFiles: allDirty.filter(f => f.id !== fileId && !childIds.has(f.id)),
+    };
+  },
+  { memoize: weakMapMemoize, argsMemoize: weakMapMemoize },
+);
 
 export const selectConnectionsLoading = createSelector(
   [(state: RootState) => state.files.files],

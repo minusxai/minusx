@@ -1,11 +1,12 @@
 import { PGlite } from '@electric-sql/pglite';
-import { IDatabaseAdapter, ITransactionContext, QueryResult, SqlArray } from './types';
+import { IDatabaseAdapter, ITransactionContext, QueryResult, isSqlArray } from './types';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '../postgres-schema';
 
 // PGLite binds native JS arrays correctly for both `= ANY($1)` and JSONB columns,
 // so it needs no JSON-stringify — only unwrap `sqlArray()` markers to their values.
+// Use `isSqlArray` (brand check), not `instanceof` — see SqlArray in ./types.
 function unwrapParams(params: unknown[]): unknown[] {
-  return params.map((p) => (p instanceof SqlArray ? [...p.values] : p));
+  return params.map((p) => (isSqlArray(p) ? [...p.values] : p));
 }
 
 /**
@@ -17,6 +18,25 @@ function unwrapParams(params: unknown[]): unknown[] {
 export class PgliteAdapter implements IDatabaseAdapter {
   private db: PGlite;
   private schemaInitialized = false;
+
+  /**
+   * PGLite is a SINGLE embedded connection. Concurrent query/exec/transaction
+   * calls (e.g. a request's reads racing fire-and-forget analytics writes)
+   * interleave their wire messages — corrupting the protocol (Postgres `08P01`
+   * "invalid message format") or cross-binding parameters between statements
+   * (`22P02`). We serialize every adapter operation through a promise chain so
+   * exactly one runs at a time. This is PGLite-only: PostgresAdapter's `pg` Pool
+   * is concurrency-safe and must NOT be serialized. (No throughput cost — PGLite
+   * can't run queries in parallel anyway; this just makes the queueing correct.)
+   */
+  private opQueue: Promise<unknown> = Promise.resolve();
+
+  private serialize<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.opQueue.then(op, op);
+    // Keep the chain alive regardless of success/failure of each op.
+    this.opQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
 
   /** @param dataDir - undefined = in-memory (tests); path = filesystem-backed (prod) */
   constructor(dataDir?: string) {
@@ -32,28 +52,36 @@ export class PgliteAdapter implements IDatabaseAdapter {
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {
-    const result = await this.db.query<T>(sql, unwrapParams(params));
-    return {
-      rows: result.rows as T[],
-      rowCount: result.affectedRows ?? result.rows.length,
-    };
+    return this.serialize(async () => {
+      const result = await this.db.query<T>(sql, unwrapParams(params));
+      return {
+        rows: result.rows as T[],
+        rowCount: result.affectedRows ?? result.rows.length,
+      };
+    });
   }
 
   async exec(sql: string): Promise<void> {
-    await this.db.exec(sql);
+    return this.serialize(async () => {
+      await this.db.exec(sql);
+    });
   }
 
   async transaction<T>(fn: (tx: ITransactionContext) => Promise<T>): Promise<T> {
-    return this.db.transaction(async (pgtx) => {
-      const txContext: ITransactionContext = {
-        query: async <U>(sql: string, p?: any[]) => {
-          const r = await pgtx.query<U>(sql, unwrapParams(p ?? []));
-          return { rows: r.rows as U[], rowCount: r.affectedRows ?? r.rows.length };
-        },
-        exec: (sql: string) => pgtx.exec(sql).then(() => undefined),
-      };
-      return fn(txContext);
-    });
+    // Serialize the WHOLE transaction so its multiple inner queries can't be
+    // interleaved with other operations on the single connection.
+    return this.serialize(() =>
+      this.db.transaction(async (pgtx) => {
+        const txContext: ITransactionContext = {
+          query: async <U>(sql: string, p?: any[]) => {
+            const r = await pgtx.query<U>(sql, unwrapParams(p ?? []));
+            return { rows: r.rows as U[], rowCount: r.affectedRows ?? r.rows.length };
+          },
+          exec: (sql: string) => pgtx.exec(sql).then(() => undefined),
+        };
+        return fn(txContext);
+      }),
+    );
   }
 
   async close(): Promise<void> {

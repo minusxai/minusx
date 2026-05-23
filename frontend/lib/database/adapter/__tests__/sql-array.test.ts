@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { PgliteAdapter } from '../pglite-adapter';
-import { sqlArray } from '../types';
+import { sqlArray, isSqlArray } from '../types';
 
 describe('sqlArray through PgliteAdapter', () => {
   it('binds sqlArray() as a native array for `= ANY($1)`', async () => {
@@ -38,5 +38,35 @@ describe('sqlArray through PgliteAdapter', () => {
     await db.query('INSERT INTO j VALUES ($1)', [[1, 2, 3]]);
     const res = await db.query<{ data: unknown }>('SELECT data FROM j');
     expect(res.rows[0].data).toEqual([1, 2, 3]);
+  });
+
+  // Regression: SqlArray must be detected via its brand, NOT `instanceof` —
+  // Turbopack can duplicate the module across bundles, giving an SqlArray that
+  // fails `instanceof` and leaks raw into PGLite (TypeError "src must be of type
+  // string" → poisons the single connection → cascading 08P01 / empty params).
+  it('binds a foreign-bundle SqlArray (branded, NOT instanceof) as a native array', async () => {
+    const db = new PgliteAdapter();
+    await db.exec('CREATE TABLE tf (id int)');
+    await db.exec('INSERT INTO tf VALUES (1),(2),(589),(619)');
+
+    // Simulates an SqlArray created in a different bundle: same brand, different class.
+    const foreign = { __isSqlArray: true, values: [589, 619] } as unknown as ReturnType<typeof sqlArray>;
+
+    const res = await db.query<{ id: number }>(
+      'SELECT id FROM tf WHERE id = ANY($1) ORDER BY id',
+      [foreign],
+    );
+    expect(res.rows.map((r) => r.id)).toEqual([589, 619]);
+  });
+});
+
+describe('isSqlArray (cross-bundle brand detection)', () => {
+  it('detects a real SqlArray and a foreign branded one; rejects plain values', () => {
+    expect(isSqlArray(sqlArray([1, 2]))).toBe(true);
+    expect(isSqlArray({ __isSqlArray: true, values: [1, 2] })).toBe(true); // foreign bundle
+    expect(isSqlArray([1, 2])).toBe(false);
+    expect(isSqlArray({ values: [1, 2] })).toBe(false);
+    expect(isSqlArray(null)).toBe(false);
+    expect(isSqlArray('x')).toBe(false);
   });
 });
