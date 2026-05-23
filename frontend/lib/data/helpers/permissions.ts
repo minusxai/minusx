@@ -20,11 +20,6 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
   const isInCorrectMode = file.path === modePrefix || file.path.startsWith(modePrefix + '/');
 
   if (!isInCorrectMode) {
-    console.log('[Permissions] Access DENIED - file not in current mode:', {
-      filePath: file.path,
-      currentMode: user.mode,
-      expectedPrefix: modePrefix
-    });
     return false;
   }
 
@@ -49,7 +44,6 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
 
   if (conversationAccess) return true;
 
-  console.log('[Permissions] Access DENIED - file not in allowed paths');
   return false;
 }
 
@@ -163,21 +157,12 @@ function isAncestorContext(file: DbFile, user: EffectiveUser): boolean {
 export function canAccessFile(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
   // Step 1: Type check (role-based, with optional config overrides)
   if (!canAccessFileType(user.role, file.type, overrides)) {
-    console.log('[Permissions] Access DENIED - user role cannot access file type:', {
-      role: user.role,
-      fileType: file.type
-    });
     return false;
   }
 
   // Step 2: Mode isolation (all users)
   const modePrefix = `/${user.mode}`;
   if (!file.path.startsWith(modePrefix + '/') && file.path !== modePrefix) {
-    console.log('[Permissions] Access DENIED - file not in current mode:', {
-      filePath: file.path,
-      currentMode: user.mode,
-      expectedPrefix: modePrefix
-    });
     return false;
   }
 
@@ -207,7 +192,6 @@ export function canAccessFile(file: DbFile, user: EffectiveUser, overrides?: Acc
     return true;
   }
 
-  console.log('[Permissions] Access DENIED - file not in allowed paths');
   return false;
 }
 
@@ -233,10 +217,6 @@ export function canViewFileInUI(file: DbFile, user: EffectiveUser, overrides?: A
 
   // Then check UI visibility (viewTypes, with optional config overrides)
   if (!canViewFileType(user.role, file.type, overrides)) {
-    console.log('[Permissions] View DENIED - user role cannot view file type in UI:', {
-      role: user.role,
-      fileType: file.type
-    });
     return false;
   }
 
