@@ -3,7 +3,7 @@
 import { Box, Text, VStack, HStack } from '@chakra-ui/react';
 import { useState } from 'react';
 import type { TestRunResult } from '@/lib/types';
-import type { CompletedToolCallFromPython } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
 import TestResultBadge from './TestResultBadge';
 import { LuChevronDown, LuChevronRight, LuWrench, LuCheck } from 'react-icons/lu';
 
@@ -30,7 +30,7 @@ function ToolCallTrace({ log }: { log: unknown[] }) {
     });
   };
 
-  const toolCalls = log as CompletedToolCallFromPython[];
+  const toolCalls = log as CompletedToolCallResult[];
 
   return (
     <Box mt={2} pl={2} borderLeftWidth="2px" borderColor="border.muted">

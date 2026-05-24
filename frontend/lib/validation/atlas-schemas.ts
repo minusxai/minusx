@@ -7,9 +7,8 @@
  * `atlas-schema*.gen.json` artifacts used by Ajv + the EditFile tool embed) and a
  * static TypeScript type via the colocated `export type X = Static<typeof X>`.
  *
- * This replaces the old Pydantic → `export_schema.py` → `types.gen.ts` pipeline:
- * there is no Python in the loop anymore. To regenerate the JSON artifacts after
- * editing this file: `cd frontend && npm run generate-types`.
+ * To regenerate the JSON artifacts after editing this file:
+ * `cd frontend && npm run generate-types`.
  */
 import { Type, type Static, type TSchema } from 'typebox';
 
@@ -17,7 +16,7 @@ import { Type, type Static, type TSchema } from 'typebox';
 const StringEnum = <const T extends readonly string[]>(values: T, description?: string) =>
   Type.Unsafe<T[number]>({ type: 'string', enum: [...values], ...(description ? { description } : {}) });
 
-/** Optional + nullable, matching Pydantic's `Optional[X] = None` → `X | null`. */
+/** Optional + nullable property: `X | null`. */
 const Nullable = <T extends TSchema>(schema: T) => Type.Optional(Type.Union([schema, Type.Null()]));
 
 /** Optional + nullable, carrying a field-level description on the union. */

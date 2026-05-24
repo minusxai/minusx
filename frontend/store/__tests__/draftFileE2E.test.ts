@@ -15,7 +15,7 @@
  *   8. publishAll() no longer needs topological sort or batch-create — all files already
  *      have real positive IDs from createDraftFile(), so one batch-save suffices.
  *
- * Pattern: follows publishAllE2E.test.ts — no Python backend, direct route calls.
+ * Pattern: follows publishAllE2E.test.ts — no backend to spawn, direct route calls.
  */
 
 import { configureStore } from '@reduxjs/toolkit';

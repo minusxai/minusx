@@ -1,6 +1,6 @@
 // ReportAgent (v=2) — controller behavior with faux LLMs.
 //
-// Exercises the full flow without a DB or Python: ReportAgent dispatches one
+// Exercises the full flow without a DB or backend: ReportAgent dispatches one
 // analyst sub-agent per reference (faux analyst), collects their ExecuteQuery
 // results, and runs a final synthesis pass (faux report). `runQuery` /
 // `loadConnectionSchema` are stubbed so tools never reach ConnectionsAPI/FilesAPI.

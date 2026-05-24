@@ -8,7 +8,7 @@ export interface SystemSkillCatalogItem {
 }
 
 // Serve the system-skill catalog from the TS prompt tree (orchestrator/prompts),
-// matching the v2 orchestrator's own skill set. No Python backend.
+// matching the v2 orchestrator's own skill set.
 export const GET = withAuth(async () => {
   const skills = listSkills({ skipHidden: true });
   const data: SystemSkillCatalogItem[] = Object.entries(skills).map(([name, description]) => ({

@@ -19,13 +19,13 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   effectiveUser?: EffectiveUser;
   /** Viz types the agent may use (client-resolved from config). Empty/undefined → "all". */
   allowedVizTypes?: string[];
-  /** Whitelisted schema (client-resolved); injected into the prompt like Python's agent_args.schema. */
+  /** Whitelisted schema (client-resolved); injected into the prompt. */
   schema?: { schema: string; tables: string[] }[];
-  /** Resolved home-folder path; injected into the prompt like Python's home_folder. */
+  /** Resolved home-folder path; injected into the prompt. */
   homeFolder?: string;
-  /** User role (admin/editor/viewer); injected into the prompt like Python's role. */
+  /** User role (admin/editor/viewer); injected into the prompt. */
   role?: string;
-  /** Display/branding name the agent introduces itself as; like Python's agent_name. */
+  /** Display/branding name the agent introduces itself as. */
   agentName?: string;
   /**
    * Page type derived server-side from agent_args.app_state (via getPageType).
@@ -39,16 +39,16 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   userSkillCatalog?: AgentUserSkillCatalogItem[];
   /** Whether navigation is unrestricted (picks the navigation_unrestricted skill). */
   unrestrictedMode?: boolean;
-  /** User-message attachments (images pre-converted to base64, plus text), like Python's attachments. */
+  /** User-message attachments (images pre-converted to base64, plus text). */
   attachments?: AgentAttachment[];
-  /** Approximate user city — biases web-search results (Python's user_location). */
+  /** Approximate user city — biases web-search results. */
   city?: string;
 }
 
 /**
  * A user-message attachment, normalized server-side for the LLM. Image content
  * is either base64 (`data` + `mimeType`) or a remote URL (`url`, loaded by
- * Anthropic via the pi patch). Mirrors Python's image/text split.
+ * Anthropic via the pi patch).
  */
 export type AgentAttachment =
   | { type: 'image'; data?: string; mimeType?: string; url?: string }

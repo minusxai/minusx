@@ -1,11 +1,7 @@
 /**
- * Shared chat request/response types.
- *
- * The legacy-shaped request (`ChatRequest`) and completed-tool-call / LLM-call
- * payloads that the chat API routes and the v2 orchestrator translator
- * (`chat-orchestration-v2.server.ts`) produce. These names carry a `Python`
- * suffix for historical reasons — there is no Python backend anymore; the v2
- * TypeScript orchestrator emits this exact shape so the frontend stays unchanged.
+ * Shared chat request/response types — the request (`ChatRequest`) and the
+ * completed-tool-call / LLM-call payloads that the chat API routes and the
+ * orchestrator translator (`chat-orchestration-v2.server.ts`) produce.
  */
 
 import { CompletedToolCall } from '@/lib/types';
@@ -43,7 +39,7 @@ export interface ChatRequest {
  * Completed tool call as returned to the frontend — call + response info in a
  * single object.
  */
-export interface CompletedToolCallFromPython {
+export interface CompletedToolCallResult {
   role: "tool";
   tool_call_id: string;
   content: string | any;

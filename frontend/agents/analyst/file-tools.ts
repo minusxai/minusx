@@ -113,8 +113,7 @@ export class SearchFiles extends MXTool<typeof SearchFilesParams, AnalystAgentCo
         user,
       );
       // searchFilesInFolder returns whatever shape it has; normalize to
-      // {success, results, total} matching Python ExecuteQuery's shape so the
-      // LLM sees identical structure cross-engine. Pass through unknown
+      // {success, results, total}. Pass through unknown
       // result fields under spread so we don't lose data.
       const r = result as { results?: unknown[]; total?: number; files?: unknown[] };
       const payload: SearchFilesDetails = {

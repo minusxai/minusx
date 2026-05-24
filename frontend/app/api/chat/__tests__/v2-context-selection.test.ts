@@ -1,6 +1,5 @@
 // v=2 chat must use the CLIENT-RESOLVED context (the context file the user
-// selected in the UI, sent verbatim in agent_args.context), matching the Python
-// backend (self.context = agent_args.context). Previously the v2 server ignored
+// selected in the UI, sent verbatim in agent_args.context). Previously the v2 server ignored
 // agent_args.context and re-resolved from the user's home folder, so the
 // selected context never took effect.
 
@@ -113,7 +112,7 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     expect(prompt).toContain('You are BrandMarkerZed');
   });
 
-  it('tells the agent the same max_steps as Python (30)', async () => {
+  it('tells the agent max_steps = 30', async () => {
     const prompt = await captureSystemPrompt({});
     expect(prompt).toContain('maximum of 30 tool calls');
   });
@@ -161,7 +160,7 @@ describe('POST /api/chat?v=2 — honors client-resolved agent_args (context, con
     expect(contextBlock.text).not.toContain('<AppState>null</AppState>');
   });
 
-  it('sends the goal as a raw text block (no <Question> wrapper), matching Python', async () => {
+  it('sends the goal as a raw text block (no <Question> wrapper)', async () => {
     const blocks = await captureUserMessage({}, 'COUNT_USERS_GOAL');
     const last = blocks[blocks.length - 1];
     expect(last.type).toBe('text');

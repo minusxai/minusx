@@ -13,7 +13,7 @@ describe('Completions SQL IR - E2E Tests', () => {
   // These routes use local WASM (no DB needed) — don't init PGLite to avoid WASM conflicts.
   beforeEach(() => vi.clearAllMocks());
 
-  // Mock fetch with route interceptors — no Python backend needed (routes use local WASM)
+  // Mock fetch with route interceptors — no backend to spawn (routes use local WASM)
   const mockFetch = setupMockFetch({
     interceptors: [
       {

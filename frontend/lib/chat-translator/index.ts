@@ -3,7 +3,7 @@
 // One module, three exports:
 //   piLogToLegacy           orchestrator ConversationLog            → ConversationLogEntry[]      (forward; file reads + done frame)
 //   piStreamEventToLegacy   StreamEvent                      → legacy SSE payload | null   (per-event mid-stream)
-//   legacyToolResultToPi    CompletedToolCallFromPython      → ToolResultMessage           (reverse; orchestrator resume)
+//   legacyToolResultToPi    CompletedToolCallResult      → ToolResultMessage           (reverse; orchestrator resume)
 //
 // Lives at the backend boundary so the frontend never sees orchestrator log shape.
 // All three functions are pure and deterministic.
@@ -22,7 +22,7 @@ import type {
   TaskDebugEntry,
   ToolCallDetails,
 } from '@/lib/types';
-import type { CompletedToolCallFromPython } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
 
 // ─── shared private helpers ─────────────────────────────────────────
 
@@ -161,7 +161,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
       const contentBlocks: Array<Record<string, unknown>> = [];
       // Aggregated web-search citations across text blocks — surfaced at the
       // top level of the TalkToUser result so `AgentTurnContainer` can enrich
-      // web_search results with cited_text (matches Python's response shape).
+      // web_search results with cited_text.
       const allCitations: unknown[] = [];
       const blocks = Array.isArray(entry.content) ? entry.content : [];
       for (const block of blocks) {
@@ -181,7 +181,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           contentBlocks.push(out);
         } else if (t === 'web_search_tool_result') {
           // Native Anthropic web-search results — rendered as the "Browsing"
-          // card in the timeline. Passed through unchanged (matches Python).
+          // card in the timeline. Passed through unchanged.
           const wb = block as { tool_use_id?: string; content?: unknown };
           contentBlocks.push({ type: 'web_search_tool_result', tool_use_id: wb.tool_use_id, content: wb.content });
         }
@@ -443,7 +443,7 @@ export function legacyLogToPi(legacyLog: LegacyLogEntry[]): ConversationLog {
 
 interface LegacyStreamingEvent {
   type: 'StreamedContent' | 'StreamedThinking' | 'ToolCreated' | 'ToolCompleted';
-  payload: { chunk: string } | { id: string; type: 'function'; function: { name: string; arguments: Record<string, unknown> } } | CompletedToolCallFromPython;
+  payload: { chunk: string } | { id: string; type: 'function'; function: { name: string; arguments: Record<string, unknown> } } | CompletedToolCallResult;
   conversationID: number;
 }
 
@@ -540,11 +540,11 @@ export function translateConversationForFrontend<T extends {
 
 /**
  * Reverse mapping for orchestrator `resume()` input. The frontend sends back
- * legacy `CompletedToolCallFromPython` shape; the orchestrator wants orchestrator
+ * legacy `CompletedToolCallResult` shape; the orchestrator wants orchestrator
  * `ToolResultMessage`. Single-direction, no information loss for the fields
  * the orchestrator actually reads.
  */
-export function legacyToolResultToPi(toolResult: CompletedToolCallFromPython): ToolResultMessage {
+export function legacyToolResultToPi(toolResult: CompletedToolCallResult): ToolResultMessage {
   const text =
     typeof toolResult.content === 'string'
       ? toolResult.content

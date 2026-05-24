@@ -4,7 +4,7 @@
 // string `'2'` scattered across the chat routes:
 //   - the URL `?v=` param,
 //   - the conversation file's `meta.version`,
-//   - the engine itself (1 = legacy Python backend, 2 = JS orchestrator).
+//   - the engine itself (1 = legacy, 2 = JS orchestrator).
 //
 // A request's version comes from `?v=`; explicit `v=1` / `v=2` always win,
 // and an absent / empty / unrecognized value falls back to
@@ -18,7 +18,7 @@ export type ChatVersion = 1 | 2;
 
 /**
  * The engine used when the URL carries no explicit `?v=` override.
- * 2 = JS orchestrator (default); 1 = legacy Python backend.
+ * 2 = JS orchestrator (default); 1 = legacy.
  */
 export const DEFAULT_CHAT_VERSION: ChatVersion = 2;
 

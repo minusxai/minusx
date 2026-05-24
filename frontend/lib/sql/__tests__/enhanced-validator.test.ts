@@ -1,6 +1,5 @@
 /**
  * Tests for normalizeSql and validateRoundTrip.
- * Ported from backend/tests/test_enhanced_validator.py.
  */
 import { normalizeSql, validateRoundTrip } from '../enhanced-validator';
 
@@ -211,7 +210,7 @@ describe('validateRoundTrip', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Param dialect compat (ported from test_param_dialect_compat.py)
+// Param dialect compat
 // ---------------------------------------------------------------------------
 
 describe('Param dialect compatibility', () => {

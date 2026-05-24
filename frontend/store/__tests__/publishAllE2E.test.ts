@@ -6,7 +6,7 @@
  * publishAll() batch-saves all dirty files in a single round trip — no
  * topological sort, no batch-create, no virtual→real ID mapping.
  *
- * Pattern: follows read-write-e2e.test.ts — no Python backend, direct route calls.
+ * Pattern: follows read-write-e2e.test.ts — no backend to spawn, direct route calls.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
@@ -101,7 +101,7 @@ describe('publishAll E2E', () => {
   let question3Id: number;  // unrelated question (not in dashboard)
   let dashboardId: number;
 
-  // Route batch API calls to real Next.js handlers (no Python backend needed)
+  // Route batch API calls to real Next.js handlers (no backend to spawn)
   const mockFetch = setupMockFetch({
     interceptors: [
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },

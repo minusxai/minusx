@@ -1,6 +1,5 @@
 /**
  * Enforce row limits on SQL queries for safety and performance.
- * Ported from backend/sql_utils/limit_enforcer.py.
  * Uses @polyglot-sql/sdk (WASM) for parsing and regeneration.
  */
 import { init, parse, generate, Dialect } from '@polyglot-sql/sdk';

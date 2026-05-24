@@ -11,7 +11,7 @@ interface RegistrableSchema {
 }
 
 // Return OpenAI-style function schemas for the v2 tools/agents (dev tool tester,
-// DevToolsPanel). Built from the TS registrables — no Python backend.
+// DevToolsPanel). Built from the TS registrables.
 export const GET = withAuth(async (_request, user) => {
   if (!isAdmin(user.role)) {
     return ApiErrors.forbidden('Admin access required');

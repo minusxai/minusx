@@ -2,7 +2,7 @@
  * E2E Autocomplete Tests — single source of truth
  *
  * All tests call CompletionsAPI.getSqlCompletions() which routes:
- *   browser → Next.js /api/autocomplete → Python /api/sql-autocomplete
+ *   browser → Next.js /api/autocomplete (local WASM)
  *
  * Schema is loaded from the seeded tutorial database (atlas_documents.db)
  * rather than hardcoded, so it stays in sync automatically.

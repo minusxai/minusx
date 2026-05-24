@@ -58,7 +58,7 @@ export const reportJobHandler: JobHandler = {
       }
     }
 
-    // Run the ReportAgent via the in-process v=2 orchestrator (no Python backend).
+    // Run the ReportAgent via the in-process v=2 orchestrator.
     const runData: ReportRunContent = await runReportV2({
       // RemoteAnalystContext (inherited by the analyst sub-agents)
       userId: String(user.userId ?? user.email),

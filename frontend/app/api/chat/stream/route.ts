@@ -19,7 +19,7 @@ function formatSSE(event: string, data: unknown): string {
 /**
  * POST /api/chat/stream
  * Streaming chat endpoint (Server-Sent Events) backed by the in-process
- * TypeScript orchestrator (the only engine — the legacy Python backend is gone).
+ * TypeScript orchestrator (the only engine).
  *
  * Uses TransformStream + a background task: the Response is returned immediately
  * with the readable end while the writable end is populated asynchronously, so

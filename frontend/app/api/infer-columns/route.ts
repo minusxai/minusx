@@ -1,7 +1,7 @@
 /**
  * API route for inferring output columns from a question's SQL
  * Accepts a questionId, loads the question and its connection schema,
- * then calls Python /api/infer-columns via sqlglot for static analysis.
+ * then infers output columns locally via -sql/sdk (WASM).
  */
 
 import { withAuth } from '@/lib/api/with-auth';

@@ -58,8 +58,8 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     SearchFiles.schema,
   ];
   static model = getAnalystModel() ?? FAUX_MODEL;
-  // Hard cap on the agentic loop, enforced by MXAgent.run(). Matches Python's
-  // MAX_STEPS_LOWER_LEVEL (config.py); the prompt hint below is maxSteps − 5.
+  // Hard cap on the agentic loop, enforced by MXAgent.run(); the prompt hint
+  // below is maxSteps − 5.
   // Typed `number` (not the literal 35) so subclasses can set their own cap
   // (e.g. the onboarding agents use a lower limit for latency).
   static readonly maxSteps: number = 35;
@@ -74,22 +74,22 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       unrestrictedMode: this.context.unrestrictedMode ?? false,
     });
     return renderPrompt('default.system', {
-      // Branding name the agent introduces itself as (Python: agent_args.agent_name, default "MinusX").
+      // Branding name the agent introduces itself as (default "MinusX").
       agent_name: this.context.agentName ?? 'MinusX',
-      // Prompt hint = maxSteps − 5 (matches Python: MAX_STEPS_LOWER_LEVEL − 5).
+      // Prompt hint = maxSteps − 5.
       max_steps: String(ctor.maxSteps - 5),
-      // Matches Python: comma-joined list, or "all" when unspecified.
+      // Comma-joined list, or "all" when unspecified.
       allowed_viz_types: this.context.allowedVizTypes?.length
         ? this.context.allowedVizTypes.join(', ')
         : 'all',
       role: this.context.role ?? '',
-      // Whitelisted table list (client-resolved), like Python's agent_args.schema.
+      // Whitelisted table list (client-resolved).
       schema: this.context.schema ? JSON.stringify(this.context.schema) : '',
       // Markdown context docs from the chat's bound `type: 'context'` file
       // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
       context: this.context.contextDocs ?? '',
       // LoadSkill catalog: skills available to fetch on demand (system + user,
-      // minus already-preloaded). Matches Python's _build_skills_catalog.
+      // minus already-preloaded).
       skills_catalog: buildSkillsCatalog({
         tree: PROMPTS,
         preloaded: new Set(preloadedNames),
@@ -99,7 +99,6 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       connection_id: this.context.connectionId ?? '',
       home_folder: this.context.homeFolder ?? '',
       // Full content of page-relevant + selected skills, injected upfront.
-      // Matches Python's _build_preloaded_skills_content.
       preloaded_skills: buildPreloadedSkillsContent({
         tree: PROMPTS,
         skillNames: preloadedNames,
@@ -126,8 +125,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       .join('\n');
 
     // Attachments (server-normalized): images → ImageContent (base64), text →
-    // <Attachment …> blocks appended to the context block. Mirrors Python's
-    // _get_image_content_blocks + _format_attachments.
+    // <Attachment …> blocks appended to the context block.
     const attachments = this.context.attachments ?? [];
     const attachmentImages: ImageContent[] = attachments
       .filter((a): a is Extract<AgentAttachment, { type: 'image' }> => a.type === 'image')
@@ -147,8 +145,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` +
       (textAttachments ? `\n${textAttachments}` : '');
 
-    // Goal is a raw text block (no <Question> wrapper) — matches Python's
-    // _get_user_message, whose goal block is the bare text.
+    // Goal is a raw text block (no <Question> wrapper) — the bare goal text.
     return [
       { type: 'text', text: contextText },
       ...msgImages,

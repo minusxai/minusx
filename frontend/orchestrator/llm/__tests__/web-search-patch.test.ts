@@ -1,7 +1,7 @@
 // Validates the pi web-search patch (patches/@mariozechner+pi-ai+0.73.0.patch):
 //  - request: the web_search server tool is injected when options.webSearch is set
 //  - response: web_search_tool_result blocks + text-block citations are parsed,
-//    and server_tool_use is dropped (matching Python)
+//    and server_tool_use is dropped
 //  - image: an ImageContent with `url` serializes to an Anthropic url source
 // Uses an injected fake Anthropic client (options.client) returning recorded SSE
 // — the exact shapes captured from the real API in the spike.

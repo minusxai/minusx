@@ -28,7 +28,7 @@ describe('CreateFile content schema', () => {
   });
 });
 
-describe('CreateFile/EditFile embed the per-file-type content schema (Python parity)', () => {
+describe('CreateFile/EditFile embed the per-file-type content schema', () => {
   it('EditFile description embeds the no-viz content schema (question + dashboard union)', () => {
     const desc = EditFile.schema.description ?? '';
     expect(desc).toContain('Content schema');

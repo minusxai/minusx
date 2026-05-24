@@ -100,7 +100,7 @@ describe('Context Loader Integration with Versioning', () => {
     // Clean up existing test data (setupTestDb already called vi.clearAllMocks())
     await getModules().db.exec('DELETE FROM files', []);
 
-    // Mock getSchemaFromPython to return schemas directly
+    // Mock the schema loader to return schemas directly
     mockGetSchema.mockImplementation((name: string) => {
       if (name === 'duckdb_main') {
         return Promise.resolve({

@@ -1,7 +1,7 @@
-// Skills logic ported from the Python AnalystAgent (agent.py): page-type
+// Skills logic for the analyst agent: page-type
 // derivation, preloaded-skill selection (PAGE_SKILL_MAP + selected system
 // skills + nav skill), the LoadSkill catalog, and the preloaded-skill content
-// block. Python is the reference — these must match it exactly.
+// block.
 
 import yaml from 'js-yaml';
 import type { AgentSkillSelection } from '@/lib/types';

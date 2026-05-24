@@ -7,7 +7,7 @@
  * Hybrid API approach for connections:
  * - CREATE: POST /api/connections initializes the connector + creates document
  * - UPDATE: PATCH /api/files/[id] → updates document only (Phase 2 pattern)
- * - DELETE: DELETE /api/connections/[name] → cleans up Python + document
+ * - DELETE: DELETE /api/connections/[name] → cleans up the connector + document
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';

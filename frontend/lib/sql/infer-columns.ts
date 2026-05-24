@@ -1,6 +1,5 @@
 /**
  * Infer output column names and types from a SQL query using @polyglot-sql/sdk (WASM).
- * Replaces the Python sqlglot-based column_inferrer for the /api/infer-columns route.
  */
 import { init, parse, generate, Dialect } from '@polyglot-sql/sdk';
 

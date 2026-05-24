@@ -1,6 +1,5 @@
 /**
  * SQL normalizer and round-trip validator using @polyglot-sql/sdk (WASM).
- * Ported from backend/sql_ir/enhanced_validator.py.
  */
 import { init, transpile, Dialect } from '@polyglot-sql/sdk';
 

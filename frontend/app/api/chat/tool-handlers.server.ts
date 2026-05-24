@@ -113,7 +113,7 @@ registerTool('SearchFiles', async (args, user) => {
 
 /**
  * LoadSkill - Resolve user-defined Knowledge Base skills.
- * System skills are resolved directly in Python; unresolved LoadSkill calls
+ * System skills are resolved server-side; unresolved LoadSkill calls
  * are delegated here as user-defined skills by name.
  */
 registerTool('LoadSkill', async (args, _user, childResults) => {
@@ -172,7 +172,7 @@ registerTool('Clarify', async (args, _user, childResults) => {
 /**
  * ExecuteQuery - Standalone query execution (backend tool)
  * Executes SQL without modifying any files.
- * DuckDB connections are handled in Node.js; all other types fall through to Python.
+ * All connection types run via the Node.js connectors.
  */
 registerTool('ExecuteQuery', async (args, user) => {
   const { query, connectionId, parameters = {}, maxChars: rawMaxChars, _schema: whitelist, vizSettings } = args;

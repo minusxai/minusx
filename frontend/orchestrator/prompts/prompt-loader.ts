@@ -1,4 +1,4 @@
-// Pure prompt render engine (JS port of the Python prompt_loader): resolves
+// Pure prompt render engine: resolves
 // nested {template.ref}s and substitutes {variables}. Operates on an in-memory
 // PromptTree — see ./index.ts, which binds it to the bundled prompts.json.
 
@@ -52,7 +52,7 @@ export const HIDDEN_SKILLS = new Set(['navigation_restricted', 'navigation_unres
 const SKILL_PREFIX = 'skill_';
 
 /**
- * List available skills as `name → description` (mirrors Python
+ * List available skills as `name → description` (drives the skills catalog
  * prompt_loader.list_skills). Skills are templates whose keys start with
  * `skill_`; the prefix is stripped. With `skipHidden`, the nav skills in
  * HIDDEN_SKILLS are excluded.
@@ -72,7 +72,7 @@ export function listSkills(
 }
 
 /**
- * Resolve a skill's content by name (mirrors Python prompt_loader.get_skill).
+ * Resolve a skill's content by name.
  * Returns the content with nested template refs resolved — but NOT variable-
  * substituted, so `{{` JSON escapes stay literal (matching how preloaded skill
  * content is injected). Returns null if the skill is missing or has no content.

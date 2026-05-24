@@ -3,7 +3,7 @@ import { withResponseLogging } from '@/lib/api/with-response-logging';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { ToolCall } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
-import { ChatRequest, CompletedToolCallFromPython } from '@/lib/chat-orchestration';
+import { ChatRequest, CompletedToolCallResult } from '@/lib/chat-orchestration';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { runChatTurnV2, validateV2Mode, forkV1ConversationToV2 } from '@/lib/chat-orchestration-v2.server';
 import { createNewConversation } from '@/lib/conversations';
@@ -15,7 +15,7 @@ interface ChatResponse {
   conversationID: number;            // File ID
   log_index: number;
   pending_tool_calls: ToolCall[];                         // Non-empty if frontend tools are pending
-  completed_tool_calls: CompletedToolCallFromPython[];    // Flat list; frontend groups by run_id if needed
+  completed_tool_calls: CompletedToolCallResult[];    // Flat list; frontend groups by run_id if needed
   debug: DebugMessage[];                                  // Aggregated debug info from this turn's logDiff
   request_id?: string | null;                             // HTTP request ID from middleware
   credits?: number | null;
@@ -26,7 +26,7 @@ interface ChatResponse {
  * POST /api/chat
  *
  * Non-streaming chat turn. Runs the in-process TypeScript orchestrator (the only
- * engine — the legacy Python backend has been removed). Existing conversations
+ * engine). Existing conversations
  * are continued in place; a legacy (v1) conversation file is forked to a fresh
  * v2 conversation and continued there.
  */

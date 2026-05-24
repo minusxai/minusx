@@ -3,7 +3,7 @@
  *
  * Tests the full Slack event → MinusX agent → Slack reply flow.
  * The Slack path now runs the v2 (in-process TypeScript orchestrator) — the
- * Python backend is not involved. Only LLM calls are mocked (via the
+ * No backend is spawned. Only LLM calls are mocked (via the
  * SlackAgent's faux provider); everything else is real (PGLite DB, real
  * orchestration loop, Slack API calls mocked via fetch interceptors).
  *
@@ -214,7 +214,7 @@ describe('Slack Bot Integration', () => {
   const postedMessages: Array<{ channel: string; text: string; thread_ts?: string }> = [];
 
   // ── Fetch mock ──────────────────────────────────────────────────────────────
-  // No Python/LLM-mock ports: the v2 Slack path runs the orchestrator in-process
+  // No subprocess/LLM-mock ports: the v2 Slack path runs the orchestrator in-process
   // and mocks LLM output via the SlackAgent faux provider (`slackFaux`).
   setupMockFetch({
     additionalInterceptors: [
@@ -280,7 +280,7 @@ describe('Slack Bot Integration', () => {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Suite 1 — HTTP route layer (no Python needed, returns before async work)
+  // Suite 1 — HTTP route layer (no async work needed, returns before async work)
   // ────────────────────────────────────────────────────────────────────────────
 
   describe('HTTP route layer', () => {

@@ -3,7 +3,7 @@
  *
  * Runs the `ReportAgent` controller (which dispatches analyst sub-agents and
  * synthesizes a markdown report) entirely in-process via the TypeScript
- * orchestrator — no Python backend, no conversation file. Report runs are jobs,
+ * orchestrator (no conversation file). Report runs are jobs,
  * not chat threads: their output is persisted by the job-runs system, so we run
  * the orchestrator in-memory and read the structured result off the agent.
  */

@@ -404,7 +404,7 @@ describe('Backward truncation sweep', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Param dialect compat (ported from test_param_dialect_compat.py)
+// Param dialect compat
 // ---------------------------------------------------------------------------
 
 describe('Param dialect compatibility', () => {
@@ -798,7 +798,7 @@ describe('IR to SQL generator', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ported from TestSQLRoundTrip (test_sql_ir_e2e.py)
+// SQL round-trip
 // ---------------------------------------------------------------------------
 
 describe('SQL round-trip (E2E)', () => {
@@ -903,7 +903,7 @@ describe('SQL round-trip (E2E)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ported from TestSemanticEquivalence (test_sql_ir_e2e.py)
+// Semantic equivalence
 // ---------------------------------------------------------------------------
 
 describe('Semantic equivalence', () => {
@@ -940,7 +940,7 @@ describe('Semantic equivalence', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ported from TestEdgeCases (test_sql_ir_e2e.py)
+// Edge cases
 // ---------------------------------------------------------------------------
 
 describe('E2E edge cases', () => {
@@ -967,7 +967,7 @@ describe('E2E edge cases', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ported from TestDateTruncFilters (test_sql_ir_e2e.py)
+// Date-trunc filters
 // ---------------------------------------------------------------------------
 
 describe('DATE_TRUNC filters', () => {
@@ -1095,7 +1095,7 @@ describe('DATE_TRUNC filters', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ported from TestComplexExpressions (test_sql_ir_e2e.py)
+// Complex expressions
 // ---------------------------------------------------------------------------
 
 describe('Complex expressions (raw passthrough)', () => {
@@ -1162,7 +1162,7 @@ describe('Complex expressions (raw passthrough)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ported from TestCompoundQueries (test_sql_ir_e2e.py)
+// Compound queries
 // ---------------------------------------------------------------------------
 
 describe('Compound queries (UNION)', () => {

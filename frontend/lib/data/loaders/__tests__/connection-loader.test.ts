@@ -93,7 +93,7 @@ function freshTimestamp() {
 }
 
 // ---------------------------------------------------------------------------
-// Cached (fresh) schema — no Python call
+// Cached (fresh) schema — no schema fetch
 // ---------------------------------------------------------------------------
 
 describe('connectionLoader — fresh schema cached', () => {

@@ -53,7 +53,7 @@ async function runCapped() {
   return { agent, result: await stream.result() };
 }
 
-describe('MXAgent.run() step cap (parity with Python MAX_STEPS_LOWER_LEVEL)', () => {
+describe('MXAgent.run() step cap', () => {
   it('hard-stops with "Maximum iterations (N) reached." once the thread hits maxSteps', async () => {
     // Model never voluntarily stops — always calls a tool.
     faux.setResponses(

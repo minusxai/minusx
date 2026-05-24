@@ -1,6 +1,5 @@
 /**
  * SQL Autocomplete Engine using @polyglot-sql/sdk (WASM).
- * Ported from backend/sql_utils/autocomplete.py.
  */
 import { init, parse, Dialect } from '@polyglot-sql/sdk';
 import type { DatabaseWithSchema } from '@/lib/types';

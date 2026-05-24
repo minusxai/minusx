@@ -3,7 +3,7 @@ import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vi
  * E2E tests for parameterised query execution through POST /api/query.
  *
  * IR round-trip (applyNoneParams → sql-to-ir → removeNoneParamConditions → ir-to-sql)
- * exercised end-to-end. sql-to-ir and ir-to-sql now run locally via WASM (no Python).
+ * exercised end-to-end. sql-to-ir and ir-to-sql run locally via WASM.
  * A mocked DuckDB connector captures the final SQL/params to assert on.
  *
  * Architecture:
@@ -83,7 +83,7 @@ function capturedParams(): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 describe('Parameterised query execution E2E (local WASM)', () => {
-  // No Python backend needed — sql-to-ir and ir-to-sql run locally via WASM
+  // No backend to spawn — sql-to-ir and ir-to-sql run locally via WASM
   setupMockFetch({});
 
 
@@ -157,7 +157,7 @@ describe('Parameterised query execution E2E (local WASM)', () => {
   });
 
   // =========================================================================
-  // None params — filter condition removed via real Python IR
+  // None params — filter condition removed via the IR round-trip
   // =========================================================================
 
   it('= null: IR removes condition entirely', async () => {

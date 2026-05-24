@@ -1,7 +1,6 @@
 // SearchDBSchema's connection param must be `connection_id` — that's what the
-// system prompt advertises (`SearchDBSchema(connection_id, query?)`) and what
-// Python uses. v2 had `connection`, so a prompt-following model would pass a key
-// the tool didn't read.
+// system prompt advertises (`SearchDBSchema(connection_id, query?)`). v2 had
+// `connection`, so a prompt-following model would pass a key the tool didn't read.
 import { describe, it, expect } from 'vitest';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { BaseSearchDBSchema } from '@/agents/benchmark-analyst/db-tools';

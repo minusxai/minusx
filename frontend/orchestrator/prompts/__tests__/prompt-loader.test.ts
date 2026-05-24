@@ -98,7 +98,7 @@ prompts:
   });
 });
 
-// Mirrors Python prompt_loader.list_skills / get_skill: skills are templates
+// Skills are templates
 // whose keys start with `skill_`; HIDDEN_SKILLS (the nav skills) are dropped
 // when skipHidden is set; get_skill resolves nested template refs but does NOT
 // run variable substitution (so `{{` JSON escapes stay literal — matching the

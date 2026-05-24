@@ -1,7 +1,7 @@
 import { AnalyticsFileType, FileType } from './ui/file-metadata';
 import type { FileState } from '@/store/filesSlice';
 // Atlas file content types — single source of truth is the TypeBox schemas in
-// lib/validation/atlas-schemas.ts (no Python codegen).
+// lib/validation/atlas-schemas.ts.
 import type {
   QuestionContent, FileReference, InlineAsset, VizSettings,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
@@ -720,7 +720,7 @@ export interface JobHandlerResult {
 // ============================================================================
 
 /**
- * Python-style row index: 0 = first, -1 = last, -2 = second-from-last, etc.
+ * Row index: 0 = first, -1 = last, -2 = second-from-last, etc.
  * undefined defaults to 0 (first row).
  */
 export type RowIndex = number;

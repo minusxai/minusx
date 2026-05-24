@@ -25,7 +25,7 @@ describe('AnalystAgent system prompt', () => {
     expect(sp).toContain('conn-7');
   });
 
-  it('enforces the same hard step cap as Python (MAX_STEPS_LOWER_LEVEL = 35)', () => {
+  it('enforces the hard step cap (35)', () => {
     // The prompt hint (30) is maxSteps − 5; the loop hard-stops at maxSteps.
     expect((AnalystAgent as unknown as typeof MXAgent).maxSteps).toBe(35);
   });
@@ -72,14 +72,14 @@ describe('AnalystAgent skills rendering', () => {
 });
 
 describe('AnalystAgent buildUserContent', () => {
-  it('emits <AppState>/<CurrentDate> context block then the RAW goal (matches Python)', () => {
+  it('emits <AppState>/<CurrentDate> context block then the RAW goal', () => {
     const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
     const content = agent.buildUserContent();
     expect(content).toHaveLength(2);
     expect(content[0].type).toBe('text');
     expect(content[0].text).toContain('<AppState>{"page":"explore","fileId":42}</AppState>');
     expect(content[0].text).toMatch(/<CurrentDate>\d{4}-\d{2}-\d{2}<\/CurrentDate>/);
-    // Python sends the goal as a raw text block — no <Question> wrapper.
+    // The goal is a raw text block — no <Question> wrapper.
     expect(content[1].text).toBe('how many users?');
   });
 
@@ -103,7 +103,7 @@ describe('AnalystAgent buildUserContent', () => {
     expect(content[2].text).toBe('see chart');
   });
 
-  it('injects image attachments (base64) and text attachments from context (matches Python)', () => {
+  it('injects image attachments (base64) and text attachments from context', () => {
     const agent = newAgent({
       attachments: [
         { type: 'image', data: 'CHARTB64', mimeType: 'image/jpeg' },

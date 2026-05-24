@@ -1,6 +1,5 @@
 /**
  * IR to SQL generator. Converts QueryIR/CompoundQueryIR back to SQL strings.
- * Ported from backend/sql_ir/generator.py.
  */
 import type {
   QueryIR, CompoundQueryIR, AnyQueryIR, SelectColumn, FilterGroup,

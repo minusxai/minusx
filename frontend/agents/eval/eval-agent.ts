@@ -1,9 +1,8 @@
-// Eval agent (v=2 port of the Python TestAgent).
+// Eval agent.
 //
 // A RemoteAnalystAgent variant for the eval harness: it answers a question using
 // the analyst's read-only tools, then calls a Submit tool exactly once. The run
-// terminates as soon as a Submit tool result appears (mirrors Python's
-// `submit_called` short-circuit). The assertion-type instruction comes from the
+// terminates as soon as a Submit tool result appears. The assertion-type instruction comes from the
 // `eval_addendum.*` prompts (already in orchestrator/prompts/prompts.json).
 import 'server-only';
 import { Type } from 'typebox';
@@ -74,7 +73,7 @@ export class EvalAnalystAgent extends RemoteAnalystAgent {
   }
 
   // Same agentic loop as MXAgent.run, but also stops as soon as a Submit tool
-  // result is recorded (Python's `while not submit_called`).
+  // result is recorded.
   override async run(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof EvalAnalystAgent;
     let lastMsg: AssistantMessage | undefined;

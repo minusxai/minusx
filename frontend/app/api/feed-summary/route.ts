@@ -7,7 +7,7 @@ import { handleApiError } from '@/lib/api/api-responses';
  * POST /api/feed-summary
  *
  * Generates a home-feed summary via the in-process v2 FeedSummaryAgent (no
- * Python backend). Client sends pre-built appState (compressed augmented files).
+ * Client sends pre-built appState (compressed augmented files).
  */
 export async function POST(request: NextRequest) {
   try {

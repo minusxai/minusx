@@ -1,8 +1,7 @@
-// LoadSkill is the LLM-facing tool (matching Python + what the skill docs tell
-// the model to call). It resolves SYSTEM skills server-side via getSkill (from
-// the shared prompts.yaml) and defers USER skills to the frontend (the model
-// can't tell them apart — it just passes a name). Python is the reference:
-// tasks/agents/analyst/tools.py → LoadSkill.
+// LoadSkill is the LLM-facing tool (matches what the skill docs tell the model
+// to call). It resolves SYSTEM skills server-side via getSkill (from the shared
+// prompts.yaml) and defers USER skills to the frontend (the model can't tell
+// them apart — it just passes a name).
 
 import { describe, it, expect } from 'vitest';
 import { Orchestrator } from '@/orchestrator/orchestrator';
@@ -17,7 +16,7 @@ function payloadOf(content: { type: string }[]): Record<string, unknown> {
   return JSON.parse((content[0] as TextContent).text);
 }
 
-describe('LoadSkill tool (parity with Python LoadSkill)', () => {
+describe('LoadSkill tool', () => {
   it('resolves a system skill server-side and returns its content', async () => {
     const orch = new Orchestrator([], []);
     const tool = new LoadSkill(orch, { name: 'visualizations' }, ctx);

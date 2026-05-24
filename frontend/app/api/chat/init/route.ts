@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     // The resolved chat version marks the conversation: v2 (the default; see
     // DEFAULT_CHAT_VERSION) is orchestrator-driven and tagged `meta.version=2`,
-    // while an explicit `?v=1` creates a legacy Python conversation (no
+    // while an explicit `?v=1` creates a legacy (v1-shaped) conversation (no
     // version meta). Both create the same `type:'conversation'` file shape; the
     // chat routes branch on `meta.version` to decide which engine handles the
     // turn.

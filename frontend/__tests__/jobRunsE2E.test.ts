@@ -41,7 +41,7 @@ const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
 
 // ─── Node connector mock ─────────────────────────────────────────────────────
 // `runQuery` routes every connection through `getNodeConnector` now (no
-// Python fallback). The mock connector below returns a canned row by default
+// fallback). The mock connector below returns a canned row by default
 // and is overridable per-test via `mockConnectorQuery.mockImplementationOnce`
 // / `.mockRejectedValueOnce`. Hoisted so the inline `vi.mock` factory below
 // can reference it (vi.mock factories run before top-level test code).

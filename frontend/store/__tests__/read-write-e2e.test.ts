@@ -123,7 +123,7 @@ describe('Phase 1: Unified File System API E2E', () => {
   let questionId: number;
   let dashboardId: number;
 
-  // Route API calls to real Next.js handlers (no Python backend needed)
+  // Route API calls to real Next.js handlers (no backend to spawn)
   setupMockFetch({
     additionalInterceptors: [
       async (urlStr, init) => {

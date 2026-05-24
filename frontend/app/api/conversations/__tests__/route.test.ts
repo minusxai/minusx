@@ -253,7 +253,7 @@ describe('GET /api/conversations — v=2 strict filter', () => {
     expect(byName.get('legacy chat')!.legacy).toBe(true);
   });
 
-  it('?v=1 returns only v=1 conversations (legacy Python surface)', async () => {
+  it('?v=1 returns only v=1 conversations (legacy surface)', async () => {
     const res = await GET(new Request('http://localhost/api/conversations?v=1'));
     const body = await res.json();
     const names = body.conversations.map((c: ConversationSummary) => c.name);

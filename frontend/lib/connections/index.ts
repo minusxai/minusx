@@ -38,7 +38,7 @@ export { SqliteConnector } from './sqlite-connector';
 /**
  * Factory: return a NodeConnector for the given type, or null if the type is unknown.
  * All analytics connector types (postgresql, bigquery, athena, duckdb, csv, google-sheets)
- * are handled by Node.js — nothing falls through to the Python backend for known types.
+ * are all handled by the Node.js connectors.
  *
  * CSV routing:
  *   - S3-backed format (files array) → CsvConnector (in-memory DuckDB + httpfs)

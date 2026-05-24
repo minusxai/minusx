@@ -1,6 +1,5 @@
 /**
  * SQL syntax validation using @polyglot-sql/sdk (WASM).
- * Replaces the Python sqlglot-based validator for the /api/validate-sql route.
  */
 import { init, validate } from '@polyglot-sql/sdk';
 import type { ValidateSqlResult } from '@/lib/data/completions/types';
@@ -16,7 +15,7 @@ async function ensureInit() {
 
 /**
  * Validate SQL syntax locally via WASM.
- * Returns the same shape as the Python /api/validate-sql endpoint.
+ * Returns the validation result for the /api/validate-sql route.
  */
 export async function validateSqlLocal(
   query: string,

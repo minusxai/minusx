@@ -12,7 +12,7 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 // Inject schema via a fake Node.js connector (the loader fetches schema through
-// getNodeConnector(...).getSchema()). No Python backend.
+// getNodeConnector(...).getSchema()). No backend to spawn.
 vi.mock('@/lib/connections', () => ({
   getNodeConnector: () => ({
     getSchema: async () => ([
@@ -54,7 +54,7 @@ import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { CompletionsAPI } from '../completions.server';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 
-// Schema that matches the getSchemaFromPython mock — stored in the connection so
+// Schema that matches the schema-loader mock — stored in the connection so
 // getTableSuggestions/getColumnSuggestions can read it without hitting the backend.
 const TEST_SCHEMA = {
   schemas: [

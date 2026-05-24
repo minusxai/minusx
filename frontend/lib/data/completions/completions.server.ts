@@ -88,7 +88,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       console.warn('[Completions] Failed to load questions/dashboards:', error);
     }
 
-    // Run mention completions locally (replaces Python backend call)
+    // Run mention completions locally
     try {
       const suggestions = getMentionCompletionsLocal(
         prefix,
@@ -240,7 +240,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       adjustedCursorOffset = cteSection.length + cursorOffset - atSymbolsRemoved;
     }
 
-    // Run autocomplete locally via WASM (replaces Python backend call)
+    // Run autocomplete locally via WASM
     try {
       const completions = await getCompletionsLocal(
         processedQuery,

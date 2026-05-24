@@ -1,5 +1,5 @@
-// ExecuteQuery must accept `parameters` + `vizSettings` (parity with Python and
-// with what the system prompt already advertises), and must forward
+// ExecuteQuery must accept `parameters` + `vizSettings` (what the system prompt
+// already advertises), and must forward
 // agent-supplied query parameters to execution. Previously the v2 ExecuteQuery
 // schema omitted both, and run() passed `{}` for parameters (db-tools.ts), so
 // parameterized (`:name`) queries silently lost their bindings.

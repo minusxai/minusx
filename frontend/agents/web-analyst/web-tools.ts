@@ -8,8 +8,7 @@ import atlasContentSchemaNoViz from '@/lib/validation/atlas-schema-no-viz.gen.js
 // Per-file-type content JSON schema (a discriminated `oneOf` by file `type`),
 // with viz stripped for token economy — vizSettings uses the ExecuteQuery
 // vizSettings schema instead. Embedded into the EditFile/CreateFile descriptions
-// so the model emits correctly-shaped content. Mirrors Python's
-// ATLAS_FILE_SCHEMA_NO_VIZ_JSON; regenerate via `npm run generate-types`.
+// so the model emits correctly-shaped content. Regenerate via `npm run generate-types`.
 const CONTENT_SCHEMA_NO_VIZ = JSON.stringify(atlasContentSchemaNoViz);
 
 // All tools below execute in the browser via the existing
@@ -122,7 +121,7 @@ export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystCon
 // WebAnalystAgent. Server-side ReadFiles only sees persisted DB state; this
 // frontend-bridge variant routes through `frontendToolRegistry.ReadFiles@448`
 // which reads Redux file memory (drafts + persisted) and includes chart
-// images. This matches Python's frontend-bridge ReadFiles behaviour so an
+// images. The frontend-bridge ReadFiles behaviour means an
 // agent that edits a draft and reads it back sees its in-flight edits.
 const ReadFilesParams = Type.Object({
   fileIds: Type.Array(Type.Number(), { description: 'IDs of files to load.' }),
@@ -168,9 +167,9 @@ export class Navigate extends MXTool<typeof NavigateParams, RemoteAnalystContext
 // Schema matches `registerFrontendTool('ClarifyFrontend', ...)` at line 382 —
 // handler reads `question`, `options[{label, description?}]`, `multiSelect?`.
 // Naming: we expose the LLM-visible name as `ClarifyFrontend` (matches the
-// frontend handler exactly, no spawn-wrapper needed). Python uses `Clarify`
-// with a server-side spawn into `ClarifyFrontend`; Node v=2 short-circuits
-// the spawn since our orchestrator dispatches by exact name.
+// frontend handler exactly, no spawn-wrapper needed). The server-side `Clarify`
+// spawns into `ClarifyFrontend`; v2 short-circuits the spawn since the
+// orchestrator dispatches by exact name.
 const ClarifyFrontendParams = Type.Object({
   question: Type.String({ description: 'Question to ask the user.' }),
   options: Type.Array(Type.Object({

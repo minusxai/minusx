@@ -98,7 +98,7 @@ export class ListDBConnections extends MXTool<typeof ListDBConnectionsParams, Be
 const SearchDBSchemaParams = Type.Object({
   connection_id: Type.String(),
   query: Type.Optional(Type.String({
-    description: 'Search term. Empty / omitted → return full schema (no filter). String without `$` prefix → keyword match across schema/table/column names. String starting with `$` → JSONPath query (matches Python ExecuteQuery semantics).',
+    description: 'Search term. Empty / omitted → return full schema (no filter). String without `$` prefix → keyword match across schema/table/column names. String starting with `$` → JSONPath query.',
   })),
 });
 

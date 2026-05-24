@@ -1,17 +1,15 @@
-// WebAnalystAgent must advertise the same tool set as Python's production
-// AnalystAgent (backend/tasks/agents/analyst/agent.py → _get_available_tools):
+// WebAnalystAgent must advertise exactly this analyst tool set:
 //   [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify,
 //    SearchDBSchema, SearchFiles, CreateFile, LoadSkill, FuzzyMatch]
-// Known intentional naming exception: v2 uses ClarifyFrontend for Clarify
-// (the rename was deliberately not done). v2 must NOT advertise extras like
-// ListDBConnections that Python's analyst doesn't have.
+// Naming exception: it uses ClarifyFrontend for Clarify. It must NOT advertise
+// extras like ListDBConnections.
 
 import { describe, it, expect } from 'vitest';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { WebAnalystAgent } from '../web-analyst';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 
-// Python's AnalystAgent tool names, with v2's ClarifyFrontend substituted for Clarify.
+// The expected analyst tool names, with ClarifyFrontend substituted for Clarify.
 const EXPECTED_TOOLS = [
   'ReadFiles',
   'EditFile',
@@ -26,8 +24,8 @@ const EXPECTED_TOOLS = [
   'FuzzyMatch',
 ].sort();
 
-describe('WebAnalystAgent tool-set parity with Python AnalystAgent', () => {
-  it('advertises exactly the Python analyst tool set (FuzzyMatch in, ListDBConnections out)', () => {
+describe('WebAnalystAgent tool-set', () => {
+  it('advertises exactly the expected tool set (FuzzyMatch in, ListDBConnections out)', () => {
     const names = WebAnalystAgent.tools.map((t) => t.name).sort();
     expect(names).toEqual(EXPECTED_TOOLS);
   });
@@ -36,11 +34,11 @@ describe('WebAnalystAgent tool-set parity with Python AnalystAgent', () => {
     expect(WebAnalystAgent.tools.map((t) => t.name)).toContain('FuzzyMatch');
   });
 
-  it('does not advertise ListDBConnections (Python analyst has no such tool)', () => {
+  it('does not advertise ListDBConnections', () => {
     expect(WebAnalystAgent.tools.map((t) => t.name)).not.toContain('ListDBConnections');
   });
 
-  it('enables Anthropic web search (matches Python include_web_search=True)', () => {
+  it('enables Anthropic web search', () => {
     expect((WebAnalystAgent as unknown as { callOptions?: { webSearch?: unknown } }).callOptions?.webSearch).toBe(true);
   });
 

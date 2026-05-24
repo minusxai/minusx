@@ -104,7 +104,7 @@ const realFetch = global.fetch;
 // ─── LLM faux helper ──────────────────────────────────────────────────────────
 // Drives the v2 in-process orchestrator's faux LLM (WebAnalystAgent) from the
 // legacy LLM-mock `configure` shape, so each test's response queue reads the
-// same way it did against the (removed) Python LLM-mock server.
+// same way the legacy LLM-mock server did.
 type MockLLMEntry = {
   response: {
     content?: string;
