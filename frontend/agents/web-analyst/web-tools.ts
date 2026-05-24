@@ -3,6 +3,14 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { getSkill } from '@/orchestrator/prompts';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import atlasContentSchemaNoViz from '@/lib/validation/atlas-schema-no-viz.gen.json';
+
+// Per-file-type content JSON schema (a discriminated `oneOf` by file `type`),
+// with viz stripped for token economy — vizSettings uses the ExecuteQuery
+// vizSettings schema instead. Embedded into the EditFile/CreateFile descriptions
+// so the model emits correctly-shaped content. Mirrors Python's
+// ATLAS_FILE_SCHEMA_NO_VIZ_JSON; regenerate via `npm run generate-types`.
+const CONTENT_SCHEMA_NO_VIZ = JSON.stringify(atlasContentSchemaNoViz);
 
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
@@ -61,7 +69,10 @@ replaceAll behaviour (per change):
 Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
 via the Publish All button. You do not need to call Navigate or PublishFile.
 
-String Matching: Use \`oldMatch\` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.`;
+String Matching: Use \`oldMatch\` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.
+
+Content schema — the shape of the file's "content" field, by file type (a discriminated oneOf on "type"). For vizSettings, use the same schema as ExecuteQuery's vizSettings:
+${CONTENT_SCHEMA_NO_VIZ}`;
 
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
@@ -82,7 +93,17 @@ const CreateFileParams = Type.Object({
   file_type: Type.String({ description: 'File type to create (question, dashboard, folder, etc.).' }),
   name: Type.String(),
   path: Type.String(),
-  content: Type.Unknown({ description: 'Initial file content (typed by file type).' }),
+  // Object type (not Type.Unknown) so the model is told to send a JSON OBJECT, not
+  // a stringified JSON (which previously got spread char-by-char into the content).
+  // The union also accepts a string defensively — the CreateFile handler in
+  // lib/api/tool-handlers.ts JSON.parses it. Shape varies by file_type, so it's an
+  // open object validated per-type later by validateFileState (no discriminated union).
+  content: Type.Optional(
+    Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.String()], {
+      description:
+        'Initial content fields, merged on top of template defaults, as a JSON OBJECT (do NOT stringify). Same per-file-type content schema as EditFile — see the EditFile description for the exact shape by file type.',
+    }),
+  ),
 });
 
 export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystContext> {
