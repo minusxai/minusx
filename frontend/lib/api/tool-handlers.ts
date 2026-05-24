@@ -717,8 +717,23 @@ registerFrontendTool('EditFile', async (args, _context) => {
  * Returns: {success: true, state: CompressedAugmentedFile}
  */
 registerFrontendTool('CreateFile', async (args, context) => {
-  const { file_type, name, content } = args;
+  const { file_type, name } = args;
   let { path } = args;
+
+  // The `content` arg is schema-typed `Type.Unknown`, so the LLM frequently sends
+  // it as a JSON STRING. If left as a string it gets spread character-by-character
+  // into the file content (producing `{ "0":"{", "1":"\n", ... }` garbage with an
+  // empty `query`, while still returning success:true). Parse it to a real object
+  // first. (EditFile is unaffected — it uses oldMatch/newMatch string replacement.)
+  let content = args.content;
+  if (typeof content === 'string') {
+    try {
+      content = JSON.parse(content);
+    } catch {
+      const err = 'CreateFile: `content` must be a JSON object (or a valid JSON string), not a raw string.';
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
+    }
+  }
 
   // --- Page-context guards for background file creation ---
   const state = context.state ?? getStore().getState();
