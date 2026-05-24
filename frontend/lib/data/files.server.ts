@@ -83,7 +83,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async loadFile(id: number, user: EffectiveUser, options?: LoaderOptions): Promise<LoadFileResult> {
     const dbStart = Date.now();
     const file = await DocumentDB.getById(id);
-    console.log(`[FILES DataLayer] DocumentDB.getById took ${Date.now() - dbStart}ms`);
 
     if (!file) {
       throw new FileNotFoundError(id);
@@ -91,14 +90,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Load config-based access rule overrides once per request
     const overrides = await this._getOverrides(user);
-
-    // Check file access (unified: type + mode + path) - Phase 4
-    console.log(`[FILES DataLayer] Checking access for user:`, {
-      email: user.email,
-      role: user.role,
-      fileType: file.type,
-      fileId: id
-    });
 
     if (!canAccessFile(file, user, overrides)) {
       throw new AccessPermissionError('You do not have permission to access this file');
@@ -112,7 +103,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
       getFileAnalyticsSummary(id).catch(() => null),
       isConversation ? getConversationAnalytics(id).catch(() => null) : Promise.resolve(null),
     ]);
-    console.log(`[FILES DataLayer] Loading ${refIds.length} references took ${Date.now() - refStart}ms`);
 
     // Track read_as_reference for each loaded reference (fire-and-forget)
     for (const ref of references) {
@@ -156,7 +146,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
         return refLoader(ref, user, options);
       })
     );
-    console.log(`[FILES DataLayer] Custom loaders took ${Date.now() - loaderStart}ms`);
 
     return {
       data: transformedFile,
@@ -345,10 +334,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
       );
       finalPath = `${homeFolder}/${fileName}`;
 
-      console.log(`[FilesAPI.create] Redirected ${type} from system folder to home folder:`, {
-        originalPath: path,
-        redirectedPath: finalPath
-      });
     }
 
     // Check if user has access to the target path (mode-aware)
@@ -515,7 +500,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'connection') {
       const { schema, ...connectionContentWithoutSchema } = content as ConnectionContent;
       contentToSave = connectionContentWithoutSchema as BaseFileContent;
-      console.log(`[FILES DataLayer] Stripped schema from client content for connection ${name}`);
     }
 
     // For contexts: strip fullSchema/fullDocs (server-computed) and normalize version format.
@@ -530,7 +514,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
         });
       }
       contentToSave = ctx as BaseFileContent;
-      console.log(`[FILES DataLayer] Stripped fullSchema/parentSchema/fullDocs/fullSkills and normalized version format for context ${name}`);
     }
 
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
@@ -594,13 +577,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // For connections, reload through loader with refresh=true to update schema
     if (existingFile.type === 'connection') {
-      console.log(`[FILES DataLayer] Connection saved, refreshing schema for ${name}`);
       return this.loadFile(id, user, { refresh: true });
     }
 
     // For contexts, reload through loader to recompute fullSchema and fullDocs
     if (existingFile.type === 'context') {
-      console.log(`[FILES DataLayer] Context saved, recomputing fullSchema and fullDocs for ${name}`);
       return this.loadFile(id, user, { refresh: true });
     }
 

@@ -1,4 +1,5 @@
 import type { VisualizationType, VizSettings } from '@/lib/types.gen'
+import { getColumnType } from '@/lib/database/column-types'
 
 export interface ConstraintResult {
   error: string | null
@@ -87,13 +88,34 @@ export function getVizConstraintError(
 }
 
 /**
- * Check viz constraints from vizSettings alone (no query result columns needed for type checks).
- * Returns a warning string or null. Used by tool handlers to feed constraint errors back to the LLM.
+ * Check viz constraints and return a warning string (or null). Used by tool
+ * handlers to feed constraint errors back to the LLM so it can fix a misconfigured
+ * chart instead of finishing with a broken widget.
+ *
+ * Pass the executed query's `columns` + `types` so type-dependent constraints are
+ * checked too — most importantly "trend charts require a date X axis", which the
+ * chart RENDERER enforces but is invisible without column types. When omitted,
+ * only structural constraints (column counts) are validated.
  */
-export function getVizSettingsWarning(vizSettings: VizSettings | undefined | null): string | null {
+export function getVizSettingsWarning(
+  vizSettings: VizSettings | undefined | null,
+  columns?: string[],
+  types?: string[],
+): string | null {
   if (!vizSettings || vizSettings.type === 'table') return null
-  const xColCount = vizSettings.xCols?.length ?? 0
-  const yColCount = vizSettings.yCols?.length ?? 0
-  const result = getVizConstraintError(vizSettings.type, { xColCount, yColCount })
+  const xCols = vizSettings.xCols ?? []
+  const yCols = vizSettings.yCols ?? []
+  const xColTypes =
+    columns && types
+      ? xCols.map((c) => {
+          const i = columns.indexOf(c)
+          return i >= 0 ? getColumnType(types[i]) : 'text'
+        })
+      : undefined
+  const result = getVizConstraintError(vizSettings.type, {
+    xColCount: xCols.length,
+    yColCount: yCols.length,
+    xColTypes,
+  })
   return result.error
 }

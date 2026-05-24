@@ -12,5 +12,12 @@ _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
-from tasks.agents.analyst.file_schema import ATLAS_FILE_SCHEMA_JSON
-print(ATLAS_FILE_SCHEMA_JSON)
+from tasks.agents.analyst.file_schema import ATLAS_FILE_SCHEMA_JSON, ATLAS_FILE_SCHEMA_NO_VIZ_JSON
+
+# `--no-viz` prints the viz-stripped variant (embedded in the CreateFile/EditFile
+# tool descriptions to keep the prompt lean; viz is documented separately via the
+# ExecuteQuery vizSettings schema). Default prints the full schema for type codegen.
+if "--no-viz" in sys.argv:
+    print(ATLAS_FILE_SCHEMA_NO_VIZ_JSON)
+else:
+    print(ATLAS_FILE_SCHEMA_JSON)

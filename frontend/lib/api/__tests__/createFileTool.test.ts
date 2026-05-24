@@ -16,6 +16,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '@/store/filesSlice';
 import authReducer from '@/store/authSlice';
 import uiReducer from '@/store/uiSlice';
+import queryResultsReducer from '@/store/queryResultsSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import type { ToolCall } from '@/lib/types';
 import type { UserRole } from '@/lib/types';
@@ -61,7 +62,7 @@ const TEST_AUTH_STATE = {
 
 function makeStore() {
   return configureStore({
-    reducer: { files: filesReducer, auth: authReducer, ui: uiReducer },
+    reducer: { files: filesReducer, auth: authReducer, ui: uiReducer, queryResults: queryResultsReducer },
     preloadedState: { auth: TEST_AUTH_STATE },
   });
 }
@@ -258,5 +259,42 @@ describe('CreateFile tool — draft file path conflict validation', () => {
     );
 
     expect(parseContent(result).success).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: `content` sent as a JSON STRING must be parsed, not spread
+  // character-by-character ({ "0":"{", "1":"\n", ... } garbage with empty query).
+  // -------------------------------------------------------------------------
+
+  it('parses a stringified `content` arg instead of spreading it char-by-char', async () => {
+    const content = JSON.stringify({
+      query: 'SELECT 1 AS n',
+      connection_name: 'static',
+      vizSettings: { type: 'table' },
+      parameters: [],
+    });
+
+    const result = await executeToolCall(
+      createFileTool({ file_type: 'question', path: '/org', name: 'Stringified Question', content }),
+      MOCK_DB,
+    );
+
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(true);
+
+    const fileContent = parsed.state.fileState.content;
+    expect(fileContent.query).toBe('SELECT 1 AS n'); // real query preserved
+    expect(fileContent['0']).toBeUndefined();         // no char-indexed garbage
+    expect(fileContent.vizSettings).toEqual({ type: 'table' });
+  });
+
+  it('rejects a non-JSON string `content` with a tool-level error', async () => {
+    const result = await executeToolCall(
+      createFileTool({ file_type: 'question', path: '/org', name: 'Bad Content', content: 'not json {{' }),
+      MOCK_DB,
+    );
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toMatch(/must be a JSON object/i);
   });
 });

@@ -21,22 +21,17 @@ export const GET = withAuth(async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   const startTime = Date.now();
-  console.log('[FILES API] Start GET /api/files/[id]');
   try {
     const { id: idStr } = await params;
     const id = validateFileId(idStr);
 
     const includeReferences = request.nextUrl.searchParams.get('include') === 'references';
     const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true';
-    console.log(`[FILES API] Loading file ${id}, includeReferences=${includeReferences}, refresh=${forceRefresh}`);
 
     const options = forceRefresh ? { refresh: true } : undefined;
 
     if (!includeReferences) {
-      const loadStart = Date.now();
       const result = await loadFile(id, user, options);
-      console.log(`[FILES API] loadFile took ${Date.now() - loadStart}ms`);
-      console.log(`[FILES API] Total request time: ${Date.now() - startTime}ms`);
       // Track direct read (fire-and-forget)
       appEventRegistry.publish(AppEvents.FILE_VIEWED, {
         fileId: id,
@@ -55,10 +50,7 @@ export const GET = withAuth(async (
       return successResponse(translateConversationForFrontend(result.data));
     }
 
-    const loadStart = Date.now();
     const result = await loadFile(id, user, options);
-    console.log(`[FILES API] loadFile (with refs) took ${Date.now() - loadStart}ms`);
-    console.log(`[FILES API] Total request time: ${Date.now() - startTime}ms`);
     // Track direct read (fire-and-forget)
     appEventRegistry.publish(AppEvents.FILE_VIEWED, {
       fileId: id,
@@ -77,7 +69,6 @@ export const GET = withAuth(async (
       data: translateConversationForFrontend(result.data),
     });
   } catch (error) {
-    console.log(`[FILES API] Error after ${Date.now() - startTime}ms`);
     return handleApiError(error);
   }
 });
