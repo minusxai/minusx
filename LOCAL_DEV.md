@@ -1,6 +1,6 @@
 ## Local development
 
-MinusX is now a single Next.js application — there is no separate Python backend.
+MinusX is a single Next.js application — there is no separate backend service.
 The AI chat/agent orchestration runs in-process (TypeScript orchestrator under
 `frontend/orchestrator/` + `frontend/agents/`).
 

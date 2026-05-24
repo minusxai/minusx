@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## V2 chat: `frontend/orchestrator/` and `frontend/agents/`
 
-These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`) invoke for every request. **This is the only chat engine** — the legacy Python backend and the v1 chat path have been removed. (`lib/chat-orchestration.ts` survives only as a shared request/response *types* module, despite its name.)
+These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat-orchestration.ts` survives only as a shared request/response *types* module, despite its name.)
 
 **What's where:**
 - `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
@@ -66,10 +66,9 @@ npm run generate-types     # Regenerate the Atlas JSON-schema artifacts from the
 
 ### Backend
 
-There is no separate backend service anymore. The AI chat/agent orchestration runs
+There is no separate backend service. The AI chat/agent orchestration runs
 in-process inside the Next.js app (TypeScript orchestrator under
-`frontend/orchestrator/` + `frontend/agents/`). The former Python FastAPI backend
-(`backend/`) and the v1 chat path have been removed entirely. Analytics queries run
+`frontend/orchestrator/` + `frontend/agents/`). Analytics queries run
 in the Node.js connectors (`frontend/lib/connections/`).
 
 Chat is served by the Next.js routes `POST /api/chat` and `POST /api/chat/stream`, which run the in-process orchestrator. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
@@ -411,8 +410,8 @@ export async function POST(req: NextRequest) {
 > **⚠️ `DocumentDB` should only be used inside the server-side `FilesAPI` implementation.** Do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere else — go through `FilesAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell.
 
 - `frontend/lib/database/documents-db.ts` - Document DB CRUD operations (PGLite or Postgres)
-- `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `types.gen.ts`; defines frontend-only types and extends generated ones (e.g. `QuestionContent` adds `queryResultId`)
-- `frontend/lib/validation/atlas-schemas.ts` - **TypeBox single source** for Atlas file types (schemas + `Static` types). Edit here, then `cd frontend && npm run generate-types` to refresh the `*.gen.json` artifacts. (The old generated `types.gen.ts` is gone — import types from `@/lib/validation/atlas-schemas` or `@/lib/types`.)
+- `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `@/lib/validation/atlas-schemas`; defines frontend-only types and extends the shared ones (e.g. `QuestionContent` adds `queryResultId`)
+- `frontend/lib/validation/atlas-schemas.ts` - **TypeBox single source** for Atlas file types (schemas + `Static` types). Edit here, then `cd frontend && npm run generate-types` to refresh the `*.gen.json` artifacts. Import types from `@/lib/validation/atlas-schemas` or `@/lib/types`.
 
 ### Frontend State & Components
 - `frontend/store/` - Redux store with multiple domain slices:
@@ -440,7 +439,7 @@ export async function POST(req: NextRequest) {
 
 ### Writing New Tests
 
-**Chat/agent E2E tests run fully in-process** — there is no Python backend or LLM-mock server to spawn. The LLM is driven by each agent's **faux provider**: `import { fauxRegistration as X } from '@/agents/.../<agent>'` then `X.setResponses([fauxAssistantMessage(...) / fauxToolCall(...)])`. These tests:
+**Chat/agent E2E tests run fully in-process** — there is no separate backend or LLM-mock server to spawn. The LLM is driven by each agent's **faux provider**: `import { fauxRegistration as X } from '@/agents/.../<agent>'` then `X.setResponses([fauxAssistantMessage(...) / fauxToolCall(...)])`. These tests:
 - Test the full stack: Redux → Listener Middleware → API route → in-process orchestrator → faux LLM
 - Use shared test utilities from `store/__tests__/test-utils.ts` (`setupTestDb` + `getTestDbPath`) and `test/harness/mock-fetch.ts` (`setupMockFetch` with the real route handlers)
 - **Automatic tool execution**: observe automatic system behaviors (middleware, listeners) rather than manually simulating them
@@ -455,7 +454,7 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 **Single source of truth:** `frontend/lib/validation/atlas-schemas.ts` defines TypeBox schemas for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.). Each `export const X = Type.Object(...)` is BOTH a runtime JSON Schema and a static type via the colocated `export type X = Static<typeof X>`.
 
-**Pipeline (all TypeScript — no Python):**
+**Pipeline (all TypeScript):**
 1. `frontend/scripts/generate-atlas-schema.ts` reads the TypeBox schemas and writes the JSON-Schema artifacts
 2. `frontend/lib/validation/atlas-schema.gen.json` (full; consumed by Ajv in `content-validators.ts`) + `atlas-schema-no-viz.gen.json` (viz stripped; embedded in the EditFile tool description)
 3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields
@@ -472,11 +471,11 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 ## Tool Schemas
 
-Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema, the `tool-handlers.ts` behavior, and `tools.md` (return shape) in sync. (There is no longer a parallel Python `tools.py` to update.)
+Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema, the `tool-handlers.ts` behavior, and `tools.md` (return shape) in sync.
 
 ## Previous Mistakes
 
-**Scripts belong in `frontend/scripts/` as Node.js (tsx), never Python.** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
+**Scripts belong in `frontend/scripts/` as Node.js (tsx).** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
 
 **Schema changes:** Any change to `lib/database/postgres-schema.ts` (used by both PGLite and the Postgres adapter) must be accompanied by the appropriate migration entry.
 
