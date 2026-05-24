@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import { IDatabaseAdapter, ITransactionContext, QueryResult, SqlArray } from './types';
+import { IDatabaseAdapter, ITransactionContext, QueryResult, isSqlArray } from './types';
 import { POSTGRES_SCHEMA, splitSQLStatements } from '../postgres-schema';
 import { POSTGRES_URL, POSTGRES_SCHEMA as CONFIG_POSTGRES_SCHEMA } from '@/lib/config';
 
@@ -11,7 +11,7 @@ import { POSTGRES_URL, POSTGRES_SCHEMA as CONFIG_POSTGRES_SCHEMA } from '@/lib/c
  */
 export function serializePgParams(params: unknown[]): unknown[] {
   return params.map((p) => {
-    if (p instanceof SqlArray) return p.values;
+    if (isSqlArray(p)) return p.values;
     if (Array.isArray(p)) return JSON.stringify(p);
     return p;
   });

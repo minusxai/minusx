@@ -35,9 +35,12 @@ export async function runFeedSummaryV2(
   }
   const final = (await stream.result()) as AssistantMessage;
 
-  return final.content
+  const summary = final.content
     .filter((c): c is TextContent => c.type === 'text')
     .map((c) => c.text)
     .join('')
     .trim();
+
+  console.log(`[v2/feed-summary] generated summary (${summary.length} chars):\n${summary}`);
+  return summary;
 }

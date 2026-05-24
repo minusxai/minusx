@@ -19,7 +19,6 @@ export class MixpanelProvider implements AnalyticsProvider {
     if (sessionRecording?.enabled) {
       // Convert 0-1 range to 0-100 percentage (provider-specific)
       mixpanelConfig.record_sessions_percent = (sessionRecording.sampleRate ?? 0.1) * 100;
-      console.log('[Analytics] Session recording enabled:', mixpanelConfig.record_sessions_percent + '%');
     }
 
     mixpanel.init(token, mixpanelConfig);
@@ -56,7 +55,6 @@ export class MixpanelProvider implements AnalyticsProvider {
       // Check if session recording is available (may require paid plan)
       if (typeof mixpanel.start_session_recording === 'function') {
         mixpanel.start_session_recording();
-        console.log('[Analytics] Session recording started (sample rate:', sampleRate, ')');
       } else {
         console.warn('[Analytics] Session recording not available (may require paid plan)');
       }
@@ -71,7 +69,6 @@ export class MixpanelProvider implements AnalyticsProvider {
     try {
       if (typeof mixpanel.stop_session_recording === 'function') {
         mixpanel.stop_session_recording();
-        console.log('[Analytics] Session recording stopped');
       }
     } catch (error) {
       console.error('[Analytics] Failed to stop session recording:', error);

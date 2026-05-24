@@ -14,12 +14,26 @@ export interface QueryResult<T = any> {
  * "malformed array literal". Use `sqlArray(values)` at those call sites.
  */
 export class SqlArray {
+  /**
+   * Brand for cross-bundle-safe detection. Turbopack can evaluate this module in
+   * separate bundles, giving two distinct `SqlArray` classes — so `instanceof`
+   * returns false for an `SqlArray` created in another bundle, leaking the raw
+   * object into the DB driver (PGLite throws "src must be of type string" while
+   * encoding the Bind, which poisons its single connection → cascading 08P01).
+   * Detect via this brand (`isSqlArray`) instead of `instanceof`.
+   */
+  readonly __isSqlArray = true as const;
   constructor(public readonly values: readonly unknown[]) {}
 }
 
 /** Wrap an array param for use in `= ANY($1)` / `$1::int[]` contexts. */
 export function sqlArray(values: readonly unknown[]): SqlArray {
   return new SqlArray(values);
+}
+
+/** Cross-bundle-safe `SqlArray` check. Use this, NOT `instanceof SqlArray`. */
+export function isSqlArray(p: unknown): p is SqlArray {
+  return typeof p === 'object' && p !== null && (p as { __isSqlArray?: unknown }).__isSqlArray === true;
 }
 
 /**

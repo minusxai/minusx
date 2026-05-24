@@ -48,12 +48,10 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
   // Return cached schema if fresh
   if (!needsRefresh && hasSchema) {
     const ageMinutes = hasTimestamp ? Math.round((Date.now() - new Date(hasTimestamp).getTime()) / 1000 / 60) : '?';
-    console.log(`[connectionLoader] Using cached schema for ${file.name} (age: ${ageMinutes} min)`);
     return file;
   }
 
   // Fetch fresh schema via the Node.js connector for the connection's type.
-  console.log(`[connectionLoader] Fetching fresh schema for ${file.name} (refresh=${options?.refresh}, stale=${isStale})`);
   let freshSchema: DatabaseSchema;
   try {
     const connector = getNodeConnector(file.name, content.type, content.config);
@@ -65,7 +63,6 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
       try {
         const profile = await profileDatabase(content.type, result.schemas, (sql) => connector.query(sql));
         enrichedSchemas = profile.schema;
-        console.log(`[connectionLoader] Enriched schema for ${file.name} (${profile.queryCount} queries)`);
       } catch (e) {
         console.warn(`[connectionLoader] Failed to enrich schema for ${file.name}, using plain schema:`, e);
       }
@@ -89,7 +86,6 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
     console.error(`[connectionLoader] Failed to fetch schema for ${file.name}:`, error);
     // If fetch fails but we have cached schema, return it
     if (hasSchema) {
-      console.log(`[connectionLoader] Fetch failed, using stale cached schema`);
       return file;
     }
     // Otherwise return empty schema with timestamp
@@ -102,7 +98,6 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
   // Update file in database with fresh schema
   try {
     await updateCachedSchema(file.id, file.name, file.path, freshSchema, file.references);
-    console.log(`[connectionLoader] Schema saved to database for ${file.name}`);
   } catch (error) {
     console.error(`[connectionLoader] Failed to save schema for ${file.name}:`, error);
     // Continue anyway - we can still return the fresh schema

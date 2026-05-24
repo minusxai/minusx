@@ -111,8 +111,6 @@ export default async function RootLayout({
     } catch {}
   }
 
-  console.log('[Layout] Final styles length:', orgStyles.length);
-
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
