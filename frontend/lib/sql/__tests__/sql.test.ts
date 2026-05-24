@@ -2421,92 +2421,19 @@ const TEST_USER: EffectiveUser = {
   mode: 'org',
 };
 
-describe('validateQueryTables — local WASM', () => {
+describe('validateQueryTables — delegates to validateQueryTablesLocal (drops user arg)', () => {
+  // The exported wrapper is a pure pass-through to validateQueryTablesLocal
+  // (it ignores the EffectiveUser arg). The SQL/whitelist logic is covered
+  // exhaustively above; here we only assert the wrapper forwards both outcomes.
 
-  // ── Empty / no-op cases ──────────────────────────────────────────────────
-
-  it('returns null for an empty whitelist (no restriction)', async () => {
-    const result = await validateQueryTables('SELECT * FROM orders', [], TEST_USER);
-    expect(result).toBeNull();
-  });
-
-  it('returns null when whitelist is undefined-like (empty)', async () => {
-    const result = await validateQueryTables('SELECT * FROM orders', [] as WhitelistEntry[], TEST_USER);
-    expect(result).toBeNull();
-  });
-
-  // ── Allowed tables ────────────────────────────────────────────────────────
-
-  it('returns null when all referenced tables are whitelisted', async () => {
+  it('forwards an allowed query (returns null)', async () => {
     const result = await validateQueryTables('SELECT id, name FROM users', WHITELIST_USERS_ONLY, TEST_USER);
     expect(result).toBeNull();
   });
 
-  it('returns null for schema-qualified allowed reference (public.users)', async () => {
-    const result = await validateQueryTables('SELECT * FROM public.users', WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).toBeNull();
-  });
-
-  it('returns null when all tables across multiple schemas are whitelisted', async () => {
-    const sql = 'SELECT u.id, e.event FROM public.users u JOIN analytics.events e ON u.id = e.user_id';
-    const result = await validateQueryTables(sql, WHITELIST_MULTI, TEST_USER);
-    expect(result).toBeNull();
-  });
-
-  // ── Blocked tables ────────────────────────────────────────────────────────
-
-  it('returns an error string when a table is not in the whitelist', async () => {
+  it('forwards a blocked query (returns the error string)', async () => {
     const result = await validateQueryTables('SELECT * FROM orders', WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).not.toBeNull();
-    expect(typeof result).toBe('string');
     expect(result).toMatch(/orders/i);
-  });
-
-  it('error message mentions the blocked table name', async () => {
-    const result = await validateQueryTables('SELECT * FROM secret_data', WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).toMatch(/secret_data/i);
-  });
-
-  it('returns an error when one table in a multi-table query is blocked', async () => {
-    const sql = 'SELECT u.id FROM users u JOIN restricted_table r ON u.id = r.user_id';
-    const result = await validateQueryTables(sql, WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).not.toBeNull();
-    expect(result).toMatch(/restricted_table/i);
-  });
-
-  it('returns an error for wrong-schema qualified reference (analytics.users not in whitelist)', async () => {
-    // analytics.users is not in WHITELIST_USERS_ONLY (only public.users is)
-    const result = await validateQueryTables('SELECT * FROM analytics.users', WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).not.toBeNull();
-  });
-
-  // ── CTE handling ─────────────────────────────────────────────────────────
-
-  it('does not flag a CTE whose name matches a blocked table', async () => {
-    // "orders" is not whitelisted, but here it is a CTE — not a real table
-    const sql = 'WITH orders AS (SELECT 1 AS id) SELECT id FROM orders';
-    const result = await validateQueryTables(sql, WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).toBeNull();
-  });
-
-  it('flags a real table referenced inside a CTE body', async () => {
-    // "secret_table" is the real table inside the CTE body — should be blocked
-    const sql = 'WITH cte AS (SELECT * FROM secret_table) SELECT * FROM cte';
-    const result = await validateQueryTables(sql, WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).not.toBeNull();
-    expect(result).toMatch(/secret_table/i);
-  });
-
-  // ── Error tolerance ───────────────────────────────────────────────────────
-
-  it('returns null for unparseable SQL (allow through — execution layer surfaces errors)', async () => {
-    const result = await validateQueryTables('NOT VALID SQL !!! ###', WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).toBeNull();
-  });
-
-  it('returns null for an empty SQL string', async () => {
-    const result = await validateQueryTables('', WHITELIST_USERS_ONLY, TEST_USER);
-    expect(result).toBeNull();
   });
 });
 

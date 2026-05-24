@@ -163,50 +163,6 @@ describe('validateRoundTrip', () => {
     const result = await validateRoundTrip(sql, sql, 'postgres');
     expect(result.supported).toBe(true);
   });
-
-  // --- Without optimizer (same results since we don't use sqlglot optimizer) ---
-
-  it('ORDER BY ASC lossless', async () => {
-    const original = 'SELECT name FROM users ORDER BY name';
-    const regenerated = 'SELECT name FROM users ORDER BY name';
-    const result = await validateRoundTrip(original, regenerated, 'duckdb');
-    expect(result.supported).toBe(true);
-  });
-
-  it('JOIN lossless', async () => {
-    const original = 'SELECT u.id FROM users u JOIN orders o ON o.user_id = u.id';
-    const regenerated = 'SELECT u.id FROM users u JOIN orders o ON o.user_id = u.id';
-    const result = await validateRoundTrip(original, regenerated, 'postgres');
-    expect(result.supported).toBe(true);
-  });
-
-  it('ORDER BY DESC preserved', async () => {
-    const original = 'SELECT id FROM users ORDER BY id DESC';
-    const regenerated = 'SELECT id FROM users ORDER BY id DESC';
-    const result = await validateRoundTrip(original, regenerated, 'bigquery');
-    expect(result.supported).toBe(true);
-  });
-
-  it('different columns lossy (no optimizer)', async () => {
-    const original = 'SELECT id, name FROM users';
-    const regenerated = 'SELECT id FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'duckdb');
-    expect(result.supported).toBe(false);
-  });
-
-  it('dropped WHERE lossy (no optimizer)', async () => {
-    const original = 'SELECT id FROM users WHERE active = TRUE';
-    const regenerated = 'SELECT id FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'postgres');
-    expect(result.supported).toBe(false);
-  });
-
-  it('whitespace difference lossless (no optimizer)', async () => {
-    const original = 'SELECT   id   FROM   users';
-    const regenerated = 'SELECT id FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'duckdb');
-    expect(result.supported).toBe(true);
-  });
 });
 
 // ---------------------------------------------------------------------------

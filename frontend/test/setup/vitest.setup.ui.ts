@@ -1,7 +1,7 @@
 /**
  * UI test setup — runs before all *.ui.test.tsx files.
  *
- * Adds JSDOM-specific mocks that can't live in jest.setup.ts (which also runs
+ * Adds JSDOM-specific mocks that can't live in the shared node setup (which also runs
  * in the Node environment used by backend/integration tests).
  */
 
@@ -9,7 +9,7 @@ import '@testing-library/jest-dom';
 
 // ---------------------------------------------------------------------------
 // structuredClone polyfill
-// jest-environment-jsdom doesn't expose the Node.js global structuredClone
+// jsdom doesn't expose the Node.js global structuredClone
 // to the JSDOM window scope. Chakra UI (use-recipe.cjs) calls it at render.
 // Use v8.serialize/deserialize which correctly handles undefined, Maps, Sets,
 // and all other structured-clone-compatible types (unlike JSON.parse/stringify).
@@ -78,7 +78,7 @@ vi.mock('@monaco-editor/react', () => {
   };
   // __esModule: true is required so that `import Editor from '@monaco-editor/react'`
   // resolves to MockEditor (the default export) rather than the whole module object.
-  // Without it Jest treats the return value as a CJS module and the default import
+  // Without it Vitest treats the return value as a CJS module and the default import
   // receives the entire { default, Editor, DiffEditor } object — causing React to
   // throw "Element type is invalid: got: object" when SqlEditor tries to render it.
   return { __esModule: true, default: MockEditor, Editor: MockEditor, DiffEditor: MockEditor };
@@ -129,7 +129,7 @@ vi.mock('@/components/PublishModal', () => {
 
 // ---------------------------------------------------------------------------
 // react-markdown + remark-gfm → plain <div>
-// ESM-only packages that Jest can't parse. Mock with a simple passthrough
+// ESM-only packages we mock with a simple passthrough
 // that renders children as text (sufficient for UI tests).
 // ---------------------------------------------------------------------------
 vi.mock('react-markdown', () => {

@@ -1,6 +1,6 @@
 /**
  * Global Vitest setup — runs before all test files in node + ui projects.
- * Mirrors what jest.setup.js + test/setup/jest.setup.ts did under Jest.
+ * Registers the global module mocks and default test modules used everywhere.
  */
 import { vi } from 'vitest';
 import { registerModules } from '@/lib/modules/registry';

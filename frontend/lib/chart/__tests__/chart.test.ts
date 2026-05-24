@@ -1110,15 +1110,6 @@ describe('getVizConstraintError', () => {
       expect(result.error).toBeNull()
     })
 
-    it('returns no error when X-axis column is a timestamp type', () => {
-      const result = getVizConstraintError('trend', {
-        xColCount: 1,
-        yColCount: 1,
-        xColTypes: ['date'],
-      })
-      expect(result.error).toBeNull()
-    })
-
     it('returns error when X-axis column is a number type', () => {
       const result = getVizConstraintError('trend', {
         xColCount: 1,

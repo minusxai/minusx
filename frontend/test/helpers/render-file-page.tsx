@@ -7,7 +7,7 @@
  *
  * This helper replicates that structural relationship without pulling in
  * FileLayout itself (which transitively imports Markdown.tsx, an ESM-only
- * package that Jest cannot transform).
+ * package that the test runner cannot transform).
  *
  * Usage:
  *   renderFilePage(<DashboardContainerV2 fileId={id} />, store);
