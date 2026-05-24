@@ -256,7 +256,6 @@ describe('Phase 1: Unified File System API E2E', () => {
     // ========================================================================
     // Step 1: ReadFiles - Load dashboard (which loads question references)
     // ========================================================================
-    console.log('\n[TEST] Step 1: ReadFiles - Load 1 dashboard (auto-loads references)');
 
     // Load files into Redux first (simulating initial page load)
     const dashboardFile = await DocumentDB.getById(dashboardId);
@@ -278,12 +277,10 @@ describe('Phase 1: Unified File System API E2E', () => {
     expect(readResult[0].fileState.id).toBe(dashboardId);
     expect(readResult[0].references).toHaveLength(1);
     expect(readResult[0].references[0].id).toBe(questionId);
-    console.log('✓ ReadFiles(dashboard_id) loaded dashboard + 1 question reference');
 
     // ========================================================================
     // Step 2: ExecuteQuery - Run standalone query to explore data
     // ========================================================================
-    console.log('\n[TEST] Step 2: ExecuteQuery - Agent queries data independently');
 
     const exploreResult = await executeQuery({
       query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
@@ -296,12 +293,10 @@ describe('Phase 1: Unified File System API E2E', () => {
     const exploreDetails = exploreResult.details as import('@/lib/types').ExecuteQueryDetails;
     expect(exploreDetails.queryResult?.columns).toEqual(['category', 'count']);
     expect(exploreDetails.queryResult?.rows).toHaveLength(2);
-    console.log('✓ ExecuteQuery completed (returned 2 rows from products query)');
 
     // ========================================================================
     // Step 3: EditFile - Modify the question's query
     // ========================================================================
-    console.log('\n[TEST] Step 3: EditFile - Modify question query');
 
     const editResult = await editFileStr({
       fileId: questionId,
@@ -314,8 +309,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(editResult.diff).toContain('-');  // Should show removed line
       expect(editResult.diff).toContain('+');  // Should show added line
       expect(editResult.diff).toContain('ORDER BY');
-      console.log('✓ EditFile modified query (GROUP BY → ORDER BY)');
-      console.log(`Diff:\n${editResult.diff.split('\n').slice(0, 5).join('\n')}...`);
     }
 
     // Verify changes are in Redux but not saved
@@ -323,51 +316,37 @@ describe('Phase 1: Unified File System API E2E', () => {
     expect(questionState).toBeDefined();
     expect(questionState.persistableChanges.query).toContain('ORDER BY month');
     expect(questionState.persistableChanges.query).not.toContain('GROUP BY');
-    console.log('✓ Correct query changes stored in Redux persistableChanges');
 
     // ========================================================================
     // Step 4: PublishFile - Save changes to database
     // ========================================================================
-    console.log('\n[TEST] Step 4: PublishFile - Commit changes to database');
 
     const publishResult = await publishFile({ fileId: questionId });
 
     // Verify PublishFile output - new API returns { id, name }
     expect(publishResult.id).toBe(questionId);
     expect(publishResult.name).toBeDefined();
-    console.log('✓ PublishFile saved file ID:', questionId);
 
     // Verify persistableChanges were cleared
     const finalQuestionState = (store.getState() as any).files.files[questionId];
     expect(Object.keys(finalQuestionState.persistableChanges).length).toBe(0);
-    console.log('✓ persistableChanges cleared after publish');
 
     // ========================================================================
     // Step 5: Verify database was updated
     // ========================================================================
-    console.log('\n[TEST] Step 5: Verify database state');
 
     const savedFile = await DocumentDB.getById(questionId);
     expect(savedFile).toBeDefined();
 
     // Note: The actual save didn't happen in this test (we mocked the API)
     // In a real E2E test, we'd verify the DB was actually updated
-    console.log('✓ Database query completed (mocked API in test)');
 
     // ========================================================================
     // Summary
     // ========================================================================
-    console.log('\n[TEST] ========== E2E Test Summary ==========');
-    console.log('✓ ReadFiles: Loaded dashboard with 1 question reference');
-    console.log('✓ ExecuteQuery: Standalone exploration query, got 2 rows (products data)');
-    console.log('✓ EditFile: Modified query (GROUP BY → ORDER BY)');
-    console.log('✓ PublishFile: Saved changes to database');
-    console.log('✓ Verification: Redux and database state consistent');
-    console.log('==========================================\n');
   });
 
   it('should handle PublishFile with no changes', async () => {
-    console.log('\n[TEST] PublishFile with no dirty changes');
 
     // Load question into Redux (clean state)
     const questionFile = await DocumentDB.getById(questionId);
@@ -382,7 +361,6 @@ describe('Phase 1: Unified File System API E2E', () => {
     // Verify no-op - new API just returns id and name
     expect(result.id).toBe(questionId);
     expect(result.name).toBeDefined();
-    console.log('✓ PublishFile correctly handled no-op (no dirty files)');
   });
 
   // ============================================================================
@@ -391,7 +369,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
   describe('ReadFiles Integration', () => {
     it('should show changes after editing but before publishing', async () => {
-      console.log('\n[TEST] ReadFiles with unsaved changes');
 
       // Load question into Redux
       const questionFile = await DocumentDB.getById(questionId);
@@ -401,14 +378,11 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       // Step 1: Read file initially (no changes)
-      console.log('[1] Reading file before edit...');
       const initialRead = await readFiles([questionId]);
 
       expect(Object.keys(initialRead[0].fileState.persistableChanges || {}).length).toBe(0);
-      console.log('✓ Initial read shows no persistableChanges');
 
       // Step 2: Edit the file
-      console.log('[2] Editing file...');
       await editFileStr({
         fileId: questionId,
         oldMatch: '"description":"Total revenue by month"',
@@ -416,16 +390,13 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       // Step 3: Read file after edit (should show persistableChanges)
-      console.log('[3] Reading file after edit...');
       const afterEditRead = await readFiles([questionId]);
 
       expect(Object.keys(afterEditRead[0].fileState.persistableChanges || {}).length).toBeGreaterThan(0);
       expect(JSON.stringify(afterEditRead[0].fileState.persistableChanges || {})).toContain('Updated description');
-      console.log('✓ After-edit read shows persistableChanges with edits');
     });
 
     it('should show no changes after publishing', async () => {
-      console.log('\n[TEST] ReadFiles after publish shows clean state');
 
       // Load question, edit it, and publish
       const questionFile = await DocumentDB.getById(questionId);
@@ -444,17 +415,14 @@ describe('Phase 1: Unified File System API E2E', () => {
       await publishFile({ fileId: questionId });
 
       // Read after publish
-      console.log('[1] Reading file after publish...');
       const afterPublishRead = await readFiles([questionId]);
 
       expect(Object.keys(afterPublishRead[0].fileState.persistableChanges || {}).length).toBe(0);
-      console.log('✓ After-publish read shows no persistableChanges (clean state)');
     });
   });
 
   describe('PublishFile Integration', () => {
     it('should save correct content to database and clear state', async () => {
-      console.log('\n[TEST] PublishFile saves correct content to database');
 
       // Load question into Redux
       const questionFile = await DocumentDB.getById(questionId);
@@ -464,7 +432,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       // Step 1: Edit the file with specific changes
-      console.log('[1] Editing file with specific changes...');
       const editedContent = {
         description: 'Published test description',
         query: 'SELECT id, name FROM products WHERE active = true',
@@ -486,10 +453,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       const prePublishState = (store.getState() as any).files.files[questionId];
       expect(prePublishState.persistableChanges.description).toBe('Published test description');
       expect(prePublishState.persistableChanges.query).toContain('WHERE active = true');
-      console.log('✓ Edits stored in persistableChanges');
 
       // Step 2: Save using server-side FilesAPI directly
-      console.log('[2] Saving file using FilesAPI.saveFile...');
 
       const { FilesAPI } = await import('@/lib/data/files.server');
       const mergedContent = {
@@ -519,10 +484,8 @@ describe('Phase 1: Unified File System API E2E', () => {
         payload: { fileId: questionId }
       });
 
-      console.log('✓ File saved via FilesAPI.saveFile');
 
       // Step 3: Reload from database and verify content
-      console.log('[3] Reloading from database and verifying content...');
       const reloadedFile = await DocumentDB.getById(questionId);
       const reloadedContent = reloadedFile?.content as any;
 
@@ -532,10 +495,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(reloadedContent.parameters[0].name).toBe('active');
       expect(reloadedContent.vizSettings.type).toBe('line');
       expect(reloadedContent.vizSettings.xCols).toEqual(['id']);
-      console.log('✓ Database content matches our edits');
 
       // Step 4: Reload into Redux and use ReadFiles
-      console.log('[4] Using ReadFiles and verifying correct content...');
       (store.dispatch as any)({
         type: 'files/setFiles',
         payload: { files: [reloadedFile] }
@@ -549,14 +510,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(content.description).toBe('Published test description');
       expect(content.query).toContain('WHERE active = true');
       expect(Object.keys(fileState.persistableChanges || {}).length).toBe(0);
-      console.log('✓ ReadFiles returns correct content with no persistableChanges');
     });
 
   });
 
   describe('ExecuteQuery Integration', () => {
     it('should execute query with parameters', async () => {
-      console.log('\n[TEST] ExecuteQuery with parameters');
 
       const result = await executeQuery({
         query: 'SELECT name, age FROM users WHERE age > :minAge',
@@ -568,11 +527,9 @@ describe('Phase 1: Unified File System API E2E', () => {
       const resultDetails = result.details as import('@/lib/types').ExecuteQueryDetails;
       expect(resultDetails.queryResult?.columns).toEqual(['name', 'age']);
       expect(resultDetails.queryResult?.rows).toHaveLength(2);
-      console.log('✓ ExecuteQuery with parameters returned 2 rows from users data');
     });
 
     it('should use query result caching via runQuery', async () => {
-      console.log('\n[TEST] Query result caching with getQueryResult');
 
       // Load question into Redux
       const questionFile = await DocumentDB.getById(questionId);
@@ -586,7 +543,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       const testDb = 'test_db';
 
       // First call - should execute
-      console.log('[1] First call - should execute query...');
 
       const { getQueryResult } = await import('@/lib/api/file-state');
       const result1 = await getQueryResult({
@@ -598,10 +554,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(result1).toBeDefined();
       expect(result1.columns).toEqual(['id']);
       expect(result1.rows).toHaveLength(2);
-      console.log('✓ First call executed query and cached result (got 2 rows)');
 
       // Second call - should return from cache (same result)
-      console.log('[2] Second call - should return from cache...');
 
       const result2 = await getQueryResult({
         query: testQuery,
@@ -611,7 +565,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       expect(result2).toBeDefined();
       expect(result2).toEqual(result1);
-      console.log('✓ Second call returned from cache (same result as first call)');
     });
   });
 
@@ -917,7 +870,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     describe('editFileStr', () => {
       it('EditFile and ReadFiles return identical CompressedAugmentedFile after an edit', async () => {
-        console.log('\n[TEST] EditFile / ReadFiles consistency');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -951,12 +903,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect((editFileResponse.fileState.content as any).query).toContain('revenue FROM sales');
         expect(editFileResponse.fileState.isDirty).toBe(true);
 
-        console.log('✓ EditFile and ReadFiles responses are identical');
-        console.log('✓ isDirty=true, edit reflected in content');
       });
 
       it('AppState fileState is consistent with ReadFiles after an edit', async () => {
-        console.log('\n[TEST] AppState / ReadFiles consistency');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -988,12 +937,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Must be identical — same Redux state, same compressAugmentedFile transform
         expect(appStateFileState).toEqual(readFilesFileState);
 
-        console.log('✓ AppState and ReadFiles fileState are identical');
-        console.log('✓ isDirty=true in both:', appStateFileState.isDirty);
       });
 
       it('CompressedAugmentedFile correctly handles persistableChanges and ephemeralChanges', async () => {
-        console.log('\n[TEST] CompressedAugmentedFile: persistableChanges + ephemeralChanges isolation');
 
         // Load question into Redux (clean state)
         const questionFile = await DocumentDB.getById(questionId);
@@ -1022,13 +968,10 @@ describe('Phase 1: Unified File System API E2E', () => {
         // File must be dirty (persistableChanges present)
         expect(fileState.isDirty).toBe(true);
 
-        console.log('✓ persistableChanges reflected in content.description');
-        console.log('✓ isDirty = true');
       });
 
 
       it('should successfully replace string in file content', async () => {
-        console.log('\n[TEST] editFileStr - Basic string replacement');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -1057,18 +1000,14 @@ describe('Phase 1: Unified File System API E2E', () => {
           expect(result.diff).toContain('-');
           expect(result.diff).toContain('+');
           expect(result.diff).toContain('modified_sales');
-          console.log('✓ editFileStr successfully replaced string');
-          console.log(`Diff preview:\n${result.diff.split('\n').slice(0, 5).join('\n')}...`);
         }
 
         // Verify changes are in Redux
         const questionState = (store.getState() as any).files.files[questionId];
         expect(questionState.persistableChanges.query).toContain('modified_sales');
-        console.log('✓ Changes stored in Redux persistableChanges');
       });
 
       it('should handle string not found error', async () => {
-        console.log('\n[TEST] editFileStr - String not found');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -1088,13 +1027,10 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(result.success).toBe(false);
         if (!result.success) {
           expect(result.error).toContain('not found');
-          console.log('✓ editFileStr correctly rejected non-existent string');
-          console.log(`Error: ${result.error}`);
         }
       });
 
       it('should validate JSON after replacement', async () => {
-        console.log('\n[TEST] editFileStr - JSON validation');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -1119,13 +1055,10 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(result.success).toBe(false);
         if (!result.success) {
           expect(result.error).toContain('Invalid file encoding after edit');
-          console.log('✓ editFileStr correctly rejected invalid file encoding');
-          console.log(`Error: ${result.error}`);
         }
       });
 
       it('should validate required question fields', async () => {
-        console.log('\n[TEST] editFileStr - Question field validation');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -1150,13 +1083,10 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(result.success).toBe(false);
         if (!result.success) {
           expect(result.error).toContain('connection_name');
-          console.log('✓ editFileStr validated required question fields');
-          console.log(`Error: ${result.error}`);
         }
       });
 
       it('should validate required dashboard fields', async () => {
-        console.log('\n[TEST] editFileStr - Dashboard field validation');
 
         // Load dashboard into Redux
         const dashboardFile = await DocumentDB.getById(dashboardId);
@@ -1181,13 +1111,10 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(result.success).toBe(false);
         if (!result.success) {
           expect(result.error).toContain('assets');
-          console.log('✓ editFileStr validated required dashboard fields');
-          console.log(`Error: ${result.error}`);
         }
       });
 
       it('should work with editFileStr + publishFile flow', async () => {
-        console.log('\n[TEST] editFileStr + PublishFile integration');
 
         // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId);
@@ -1202,7 +1129,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(descMatch).toBeTruthy();
 
         // Step 1: Edit with string replacement
-        console.log('[1] Editing file with editFileStr...');
         const editResult = await editFileStr({
           fileId: questionId,
           oldMatch: descMatch![0],
@@ -1210,27 +1136,22 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         expect(editResult.success).toBe(true);
-        console.log('✓ editFileStr successful');
 
         // Verify changes in Redux
         const questionState1 = (store.getState() as any).files.files[questionId];
         expect(questionState1.persistableChanges.description).toBe('Monthly revenue analysis');
 
         // Step 2: Publish changes
-        console.log('[2] Publishing changes...');
         const publishResult = await publishFile({ fileId: questionId });
 
         expect(publishResult.id).toBe(questionId);
-        console.log('✓ PublishFile successful');
 
         // Verify changes cleared
         const questionState2 = (store.getState() as any).files.files[questionId];
         expect(Object.keys(questionState2.persistableChanges).length).toBe(0);
-        console.log('✓ persistableChanges cleared after publish');
       });
 
       it('should handle multiple consecutive edits', async () => {
-        console.log('\n[TEST] editFileStr - Multiple consecutive edits');
 
         // Load question into Redux (fresh state from beforeEach)
         const questionFile = await DocumentDB.getById(questionId);
@@ -1245,7 +1166,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(descMatch).toBeTruthy();
 
         // Edit 1: Change description
-        console.log('[1] First edit - change description...');
         const result1 = await editFileStr({
           fileId: questionId,
           oldMatch: descMatch![0],
@@ -1256,10 +1176,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           console.error('First edit failed:', result1.error);
         }
         expect(result1.success).toBe(true);
-        console.log('✓ First edit successful');
 
         // Edit 2: Change query (editFileStr automatically uses merged content)
-        console.log('[2] Second edit - change query...');
         // Get the current query from merged content (includes first edit)
         const questionState1 = (store.getState() as any).files.files[questionId];
         const mergedContent = { ...questionFile!.content, ...questionState1.persistableChanges };
@@ -1273,13 +1191,11 @@ describe('Phase 1: Unified File System API E2E', () => {
           newMatch: '"query":"SELECT * FROM sales WHERE month = :month"'
         });
         expect(result2.success).toBe(true);
-        console.log('✓ Second edit successful');
 
         // Verify both changes in Redux
         const questionState2 = (store.getState() as any).files.files[questionId];
         expect(questionState2.persistableChanges.description).toBe('Revenue Report');
         expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
-        console.log('✓ Both edits accumulated in persistableChanges');
       });
 
       // ── Special character edge cases ─────────────────────────────────────────
@@ -1373,7 +1289,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       it('replaceAll: true replaces all occurrences of oldMatch', async () => {
-        console.log('\n[TEST] editFileStr - replaceAll: true replaces all occurrences');
 
         const id = await DocumentDB.create(
           'Multi Occurrence',
@@ -1402,11 +1317,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         const content = compressAugmentedFile(aug).fileState.content as any;
         expect(content.description).toBe('bar bar');
         expect(content.query).toContain('bar');
-        console.log('✓ replaceAll: true replaced all occurrences');
       });
 
       it('replaceAll: false succeeds when match is unique', async () => {
-        console.log('\n[TEST] editFileStr - replaceAll: false with unique match');
 
         const id = await DocumentDB.create(
           'Unique Match',
@@ -1434,11 +1347,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         const [aug] = await readFiles([id], {});
         const content = compressAugmentedFile(aug).fileState.content as any;
         expect(content.description).toBe('updated description here');
-        console.log('✓ replaceAll: false succeeded with unique match');
       });
 
       it('replaceAll: false returns error when match is not unique', async () => {
-        console.log('\n[TEST] editFileStr - replaceAll: false with multiple occurrences');
 
         const id = await DocumentDB.create(
           'Duplicate Match',
@@ -1464,11 +1375,9 @@ describe('Phase 1: Unified File System API E2E', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/oldMatch found \d+ times/);
-        console.log(`✓ replaceAll: false correctly errored: ${result.error}`);
       });
 
       it('default (replaceAll omitted) replaces all occurrences', async () => {
-        console.log('\n[TEST] editFileStr - default replaceAll replaces all');
 
         const id = await DocumentDB.create(
           'Default ReplaceAll',
@@ -1497,7 +1406,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         const content = compressAugmentedFile(aug).fileState.content as any;
         expect(content.description).toBe('xyz xyz');
         expect(content.query).toContain('xyz');
-        console.log('✓ default replaceAll replaced all occurrences');
       });
     });
   });
@@ -1537,7 +1445,6 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     it('uses parameterValues from content when no override is set', async () => {
-      console.log('\n[TEST] EditFile tool handler: auto-execute uses parameterValues from content');
 
       const callsBefore = mockRunQuery.mock.calls.length;
 
@@ -1570,11 +1477,9 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(executeCall).toBeDefined();
       expect(executeCall[2]).toEqual({ limit: 50 });
 
-      console.log('✓ Auto-execute used parameterValues.limit=50 from content, not empty string');
     });
 
     it('uses updated parameterValues after content edit', async () => {
-      console.log('\n[TEST] EditFile tool handler: updated parameterValues in content take effect');
 
       // Edit parameterValues in content (user changed the filter to 99, marks file dirty)
       editFile({ fileId: paramQuestionId, changes: { content: { parameterValues: { limit: 99 } } } });
@@ -1608,11 +1513,9 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(executeCall).toBeDefined();
       expect(executeCall[2]).toEqual({ limit: 99 });
 
-      console.log('✓ Auto-execute used updated parameterValues.limit=99 from edited content');
     });
 
     it('returns CompressedAugmentedFile with queryResults after auto-execute', async () => {
-      console.log('\n[TEST] EditFile tool handler: returns CompressedAugmentedFile with queryResults');
 
       const { executeToolCall } = await import('@/lib/api/tool-handlers');
       const toolCall: ToolCall = {
@@ -1648,11 +1551,9 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(Array.isArray(content.queryResults)).toBe(true);
       expect(content.queryResults.length).toBeGreaterThan(0);
 
-      console.log('✓ EditFile returns CompressedAugmentedFile with isDirty=true and queryResults');
     });
 
     it('succeeds even when auto-execute fails (best-effort)', async () => {
-      console.log('\n[TEST] EditFile tool handler: auto-execute failure does not block edit');
 
       // Create a question with an empty parameters array but a query that references a param
       // This simulates the broken intermediate state: query has :param but parameters is still []
@@ -1699,7 +1600,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(parsed.fileState.isDirty).toBe(true);
       expect((parsed.fileState.content as any).description).toBe('Step 1: parameters updated next');
 
-      console.log('✓ EditFile reported success; edit staged despite auto-execute failure');
     });
   });
 

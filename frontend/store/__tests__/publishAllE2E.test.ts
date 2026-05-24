@@ -211,7 +211,6 @@ describe('publishAll E2E', () => {
 
     // Sanity: nothing dirty yet
     expect(getDirtyFileIds(store)).toHaveLength(0);
-    console.log('✓ Step 1: files loaded into Redux, no dirty state');
 
     // Step 2: Edit questions and dashboard
     store.dispatch({ type: 'files/setEdit', payload: { fileId: question1Id, edits: { description: 'Updated revenue by month' } }});
@@ -219,22 +218,18 @@ describe('publishAll E2E', () => {
     store.dispatch({ type: 'files/setEdit', payload: { fileId: dashboardId, edits: { description: 'Updated dashboard' } }});
 
     expect(getDirtyFileIds(store)).toHaveLength(3);
-    console.log('✓ Step 2: 3 dirty files (q1, q2, dashboard)');
 
     // Step 3: publishAll()
     const idMap = await publishAll();
     expect(idMap).toEqual({});  // no virtual→real mapping in new system
-    console.log('✓ Step 3: publishAll() completed');
 
     // Exactly 1 fetch call: batch-save (no batch-create needed)
     const fetchCalls = mockFetch.mock.calls.map((call: any[]) => call[0].toString());
     expect(fetchCalls.some((u: string) => u.includes('batch-save'))).toBe(true);
     expect(fetchCalls).toHaveLength(1);
-    console.log('✓ Exactly 1 API call: batch-save');
 
     // All dirty files are now clean
     expect(getDirtyFileIds(store)).toHaveLength(0);
-    console.log('✓ Redux is clean after publishAll');
 
     // DB reflects the changes
     const dbQ1 = await DocumentDB.getById(question1Id);
@@ -243,9 +238,7 @@ describe('publishAll E2E', () => {
     expect((dbQ1!.content as QuestionContent).description).toBe('Updated revenue by month');
     expect((dbQ2!.content as QuestionContent).description).toBe('Updated active user count');
     expect((dbDash!.content as DocumentContent).description).toBe('Updated dashboard');
-    console.log('✓ DB reflects all saved changes');
 
-    console.log('\n✓ publishAll E2E PASSED');
   });
 
   // -------------------------------------------------------------------------
@@ -262,7 +255,6 @@ describe('publishAll E2E', () => {
     expect(idMap).toEqual({});
     expect(mockFetch).not.toHaveBeenCalled();
 
-    console.log('✓ publishAll() is a no-op when no dirty files exist');
   });
 
   // =========================================================================

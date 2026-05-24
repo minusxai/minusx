@@ -1384,7 +1384,6 @@ export async function getQueryResult(
       const result = { ...apiResponse.data, ...(apiResponse.finalQuery && { finalQuery: apiResponse.finalQuery }) };
 
       // Update Redux cache with result (clears loading state)
-      console.log('[getQueryResult] Query completed, caching result:', queryId);
       getStore().dispatch(setQueryResult({
         query,
         params: queryParams,
