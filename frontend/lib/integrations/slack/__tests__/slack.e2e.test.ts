@@ -24,7 +24,7 @@ import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { POST, processSlackEvent } from '@/app/api/integrations/slack/events/route';
 import type { SlackInstallationMatch } from '@/lib/integrations/slack/store';
-import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { fauxRegistration as slackFaux } from '@/agents/slack/slack-agent';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -41,6 +41,12 @@ const TEST_USER_ID = 'U_TEST_USER';
 const TEST_UNKNOWN_USER_ID = 'U_UNKNOWN_USER';
 const TEST_BOT_USER_ID = 'U_BOT_ID';
 const TEST_EMAIL = 'slack-test@example.com';
+// Admin user whose stored home_folder is the documented default '/org' — this is
+// what reproduces the SearchFiles resolution bug ('/org' → '/org/org' search root).
+const TEST_ADMIN_USER_ID = 'U_ADMIN_USER';
+const TEST_ADMIN_EMAIL = 'slack-admin@example.com';
+const TEST_CONNECTION_NAME = 'test_warehouse';
+const TEST_QUESTION_NAME = 'Weekly Revenue Report';
 
 // ============================================================================
 // DB fixture setup
@@ -77,6 +83,38 @@ async function addSlackTestFixtures(_dbPath: string): Promise<void> {
     `INSERT INTO users (id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [2, TEST_EMAIL, 'Slack Test User', null, null, null, '', 'viewer', now, now]
+  );
+
+  // Admin user with the documented default home_folder '/org'. Admins can access
+  // every file, so the ONLY thing that can make their SearchFiles return empty is
+  // the search-root resolution bug ('/org' → '/org/org'). This mirrors the prod
+  // user (id=1 admin) who has lots of files but got empty results.
+  await db.exec(
+    `INSERT INTO users (id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [3, TEST_ADMIN_EMAIL, 'Slack Admin User', null, null, null, '/org', 'admin', now, now]
+  );
+
+  // Seed a connection so ListDBConnections has something to return, and a question
+  // under /org so SearchFiles has something to find.
+  const { DocumentDB } = await import('@/lib/database/documents-db');
+  await DocumentDB.create(
+    TEST_CONNECTION_NAME,
+    `/org/database/${TEST_CONNECTION_NAME}`,
+    'connection',
+    { name: TEST_CONNECTION_NAME, type: 'postgresql', config: { host: 'localhost' }, description: 'Sales warehouse' } as any,
+    [],
+    undefined,
+    false,
+  );
+  await DocumentDB.create(
+    TEST_QUESTION_NAME,
+    `/org/${TEST_QUESTION_NAME}`,
+    'question',
+    { name: TEST_QUESTION_NAME, query: 'SELECT 1', description: 'Tracks weekly revenue', connection_name: TEST_CONNECTION_NAME, vizSettings: { type: 'table' }, parameters: [] } as any,
+    [],
+    undefined,
+    false,
   );
 }
 
@@ -185,7 +223,10 @@ describe('Slack Bot Integration', () => {
         if (urlStr.includes('slack.com/api/users.info')) {
           const qs = new URLSearchParams(urlStr.split('?')[1] ?? '');
           const userId = qs.get('user');
-          const email = userId === TEST_USER_ID ? TEST_EMAIL : 'nobody@unknown.example';
+          const email =
+            userId === TEST_USER_ID ? TEST_EMAIL
+            : userId === TEST_ADMIN_USER_ID ? TEST_ADMIN_EMAIL
+            : 'nobody@unknown.example';
           return {
             ok: true,
             status: 200,
@@ -492,6 +533,49 @@ describe('Slack Bot Integration', () => {
       // Must be the honest fallback, not a stale reply.
       expect(postedMessages[0].text).toMatch(/do not have a text reply/i);
     }, 120000);
+
+    it('agent can list DB connections and search files (not empty)', async () => {
+      // The agent calls ListDBConnections + SearchFiles, then replies.
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [
+            fauxToolCall('ListDBConnections', {}),
+            fauxToolCall('SearchFiles', { query: 'revenue' }),
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage('Here are your connections and reports.', { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          userId: TEST_ADMIN_USER_ID,
+          ts: '1700009000.000001',
+          eventId: `Ev_tools_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> show me revenue`,
+        }) as any,
+        installation,
+      );
+
+      // Pull the persisted conversation log and inspect the two tool results.
+      const { getModules } = await import('@/lib/modules/registry');
+      const { rows } = await getModules().db.exec<{ content: any }>(
+        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/3/slack-%' LIMIT 1`,
+        [],
+      );
+      expect(rows).toHaveLength(1);
+      const logJson = JSON.stringify((rows[0].content as { log: unknown[] }).log);
+
+      // Bug #1 — ListDBConnections returned "[]" because ctx.connections was never
+      // populated in the headless runner. The seeded connection must appear.
+      expect(logJson).toContain(TEST_CONNECTION_NAME);
+
+      // Bug #2 — SearchFiles returned {results:[],total:0} because the admin's
+      // home_folder '/org' resolved to a non-existent '/org/org' search root.
+      // The seeded question must appear in the results.
+      expect(logJson).toContain(TEST_QUESTION_NAME);
+    }, 60000);
 
     it('unknown MinusX user receives a polite error reply', async () => {
       const installation = buildInstallation();
