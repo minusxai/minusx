@@ -577,6 +577,91 @@ describe('Slack Bot Integration', () => {
       expect(logJson).toContain(TEST_QUESTION_NAME);
     }, 60000);
 
+    it('intermediate "talk to user" preamble does NOT end the run — posts the final answer', async () => {
+      // Reproduces the reported symptom hypothesis: the model emits an intermediate
+      // talk-to-user message ("Let me look that up...") ALONGSIDE a tool call
+      // (stopReason 'toolUse'), then a real answer on the next step. The Slack path
+      // must run the agent loop to completion and post the FINAL answer — NOT return
+      // early on the intermediate preamble.
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [
+            { type: 'text', text: 'Let me look that up for you.' },
+            fauxToolCall('SearchFiles', { query: 'revenue' }),
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage('Found it: the Weekly Revenue Report.', { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          userId: TEST_ADMIN_USER_ID,
+          ts: '1700010000.000001',
+          eventId: `Ev_preamble_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> where is the revenue report?`,
+        }) as any,
+        installation,
+      );
+
+      expect(postedMessages).toHaveLength(1);
+      // Must be the final answer (turn 2), never the intermediate preamble (turn 1).
+      expect(postedMessages[0].text).toContain('Weekly Revenue Report');
+      expect(postedMessages[0].text).not.toContain('Let me look that up');
+    }, 60000);
+
+    it('ReadFiles executes server-side in the headless path (not bridged → interrupted)', async () => {
+      // Regression for the prod bug: the registered ReadFiles was the WebAnalystAgent
+      // frontend-bridge variant (throws UserInputException), so in the headless Slack
+      // path it never executed — it hung as a pending tool and got marked
+      // "interrupted", leaving only the preamble to post. The headless path must use
+      // the server-side ReadFiles so the loop completes and posts the real answer.
+      const { getModules } = await import('@/lib/modules/registry');
+      const { rows: idRows } = await getModules().db.exec<{ id: number }>(
+        `SELECT id FROM files WHERE path = $1 LIMIT 1`,
+        [`/org/${TEST_QUESTION_NAME}`],
+      );
+      const fileId = idRows[0].id;
+
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [
+            { type: 'text', text: 'Let me pull up that file for you!' },
+            fauxToolCall('ReadFiles', { fileIds: [fileId] }),
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage(`Found it — ${TEST_QUESTION_NAME}.`, { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          userId: TEST_ADMIN_USER_ID,
+          ts: '1700011000.000001',
+          eventId: `Ev_readfiles_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> can you access file ${fileId}?`,
+        }) as any,
+        installation,
+      );
+
+      expect(postedMessages).toHaveLength(1);
+      // Must be the final answer — proves ReadFiles ran and the loop continued.
+      // Before the fix, ReadFiles hung (UserInputException) and only the preamble
+      // ("Let me pull up that file…") was posted.
+      expect(postedMessages[0].text).toContain(TEST_QUESTION_NAME);
+      expect(postedMessages[0].text).not.toContain('pull up that file');
+
+      // And the persisted ReadFiles result must not be the "interrupted" dangler.
+      const { rows } = await getModules().db.exec<{ content: any }>(
+        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/3/slack-%' LIMIT 1`,
+        [],
+      );
+      const logJson = JSON.stringify((rows[0].content as { log: unknown[] }).log);
+      expect(logJson).not.toContain('"result":"interrupted"');
+    }, 60000);
+
     it('unknown MinusX user receives a polite error reply', async () => {
       const installation = buildInstallation();
       // TEST_UNKNOWN_USER_ID resolves to nobody@unknown.example which is not in the DB

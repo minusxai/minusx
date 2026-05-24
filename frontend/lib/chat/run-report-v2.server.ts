@@ -10,7 +10,7 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { RegistrableClass } from '@/orchestrator/types';
-import { V2_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ReportAgent, type ReportAgentContext } from '@/agents/report/report-agent';
 import type { ReportRunContent } from '@/lib/types';
@@ -18,12 +18,13 @@ import type { ReportRunContent } from '@/lib/types';
 /**
  * Registrables for a report run: the production chat tools/agents, plus the
  * `ReportAgent` controller and the read-only `RemoteAnalystAgent` (schema name
- * `AnalystAgent`) dispatched once per reference. `RemoteAnalystAgent` advertises
- * only server-side tools (all present in `V2_REGISTRABLES`), so the whole loop
- * runs headlessly.
+ * `AnalystAgent`) dispatched once per reference. Uses the *headless* registrables
+ * so frontend-bridge tools (e.g. `ReadFiles`) resolve to their server-side
+ * variants — there is no browser to bridge to in a report run, so the whole loop
+ * runs to completion server-side.
  */
 const REPORT_REGISTRABLES: RegistrableClass[] = [
-  ...V2_REGISTRABLES,
+  ...V2_HEADLESS_REGISTRABLES,
   ReportAgent,
   RemoteAnalystAgent,
 ];

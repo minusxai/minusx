@@ -16,7 +16,7 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
-import { V2_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import { appendLogToConversation } from '@/lib/conversations';
 import { getPageType } from '@/agents/analyst/skills';
@@ -136,7 +136,7 @@ export async function runChatOrchestrationV2({
   const expectedLogIndex = savedLog.length;
 
   const ctx = await buildAnalystContext(agent_args, user);
-  const registrables: RegistrableClass[] = [...V2_REGISTRABLES];
+  const registrables: RegistrableClass[] = [...V2_HEADLESS_REGISTRABLES];
   const orch = new Orchestrator(registrables, [...savedLog]);
 
   const agent = new agentClass(orch, { userMessage }, ctx);
