@@ -1,22 +1,28 @@
-// WebAnalystAgent: orchestrator pause/resume across UIE-throwing frontend tools.
+// WebAnalystAgent unit tests:
+//   - orchestrator pause/resume across UIE-throwing frontend tools (EditFile)
+//   - LoadSkill server-side system-skill resolution + frontend deferral
 //
-// Mirrors the existing `analyst/__tests__/runner.test.ts` faux pattern: faux
-// LLM emits a tool call (EditFile), the tool throws UserInputException, the
-// orchestrator pauses, we synthesize a ToolResultMessage and resume, the faux
-// emits a stop turn, the agent finishes.
+// Merged from the former web-analyst.test.ts + load-skill.test.ts (same agent,
+// same module graph) to amortize the per-file import.
 
 import { Orchestrator } from '@/orchestrator/orchestrator';
+import { UserInputException } from '@/orchestrator/types';
 import {
   WebAnalystAgent,
   EditFile,
   CreateFile,
+  LoadSkill,
   fauxRegistration,
 } from '../web-analyst';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import type { ToolResultMessage } from '@/orchestrator/llm';
+import type { TextContent, ToolResultMessage } from '@/orchestrator/llm';
 import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 
 const ctx: RemoteAnalystContext = { userId: 'u', mode: 'org' };
+
+function payloadOf(content: { type: string }[]): Record<string, unknown> {
+  return JSON.parse((content[0] as TextContent).text);
+}
 
 describe('WebAnalystAgent — UIE pause/resume bridge', () => {
   it('pauses on EditFile, resumes on synthetic ToolResultMessage, finishes on stop', async () => {
@@ -74,5 +80,38 @@ describe('WebAnalystAgent — UIE pause/resume bridge', () => {
       .map((c) => c.text)
       .join('\n');
     expect(finalText).toContain('Edited file 1');
+  });
+});
+
+describe('LoadSkill tool', () => {
+  it('resolves a system skill server-side and returns its content', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadSkill(orch, { name: 'visualizations' }, ctx);
+    const res = await tool.run();
+    if (res instanceof Object && 'role' in res) throw new Error('expected ToolResponse');
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.skill).toBe('visualizations');
+    expect(String(payload.content)).toContain('## Instructions: Visualizations');
+  });
+
+  it('defers unknown (user-defined) skills to the frontend via UserInputException', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadSkill(orch, { name: 'a_user_kb_skill_that_is_not_in_yaml' }, ctx);
+    await expect(tool.run()).rejects.toBeInstanceOf(UserInputException);
+  });
+
+  it('returns an error (without pausing) when no name is given', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadSkill(orch, { name: '' }, ctx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(false);
+  });
+
+  it('is advertised to the LLM as `LoadSkill` (not `LoadSkillFrontend`)', () => {
+    const names = WebAnalystAgent.tools.map((t) => t.name);
+    expect(names).toContain('LoadSkill');
+    expect(names).not.toContain('LoadSkillFrontend');
   });
 });
