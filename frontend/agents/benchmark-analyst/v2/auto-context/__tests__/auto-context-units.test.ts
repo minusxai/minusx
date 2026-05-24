@@ -1,24 +1,31 @@
+// AUTO-MERGED test file (see git history for the original per-feature files).
+// Merged to amortize the per-file module-import cost across one harness load.
+
+import type { CatalogTables } from '../../catalog';
+import { AutoContextAgent, SubmitSchemaInfo, assignCatalogIds, parseAnnotations, renderCatalogForAgent, renderGeneratedContext, verifyJoinsMechanically } from '../auto-context';
+import type { JoinProbe } from '../auto-context';
+import { fetchTableSample, pickDiverseRows } from '../samples';
+import { flattenCatalogColumns } from '../schema';
+import type { FlatColumn } from '../schema';
+import { DEFAULT_MAX_VALUE_CHARS, truncateRow, truncateValue, truncateValues } from '../truncate';
+import type { ColumnMeta, NodeConnector, QueryResult } from '@/lib/connections/base';
+import { Orchestrator } from '@/orchestrator/orchestrator';
+import type { ConversationLogEntry } from '@/orchestrator/types';
+import { validateParameters } from '@/orchestrator/utils';
+
+describe('auto-context', () => {
 /**
  * Tests for the consolidated `auto-context.ts` module. Slices are added as
  * the module is built (TDD). Initial slice: ID assignment over a catalog
  * schema.
  */
-import { describe, it, expect, vi } from 'vitest';
-import type { ColumnMeta } from '@/lib/connections/base';
-import { Orchestrator } from '@/orchestrator/orchestrator';
-import { validateParameters } from '@/orchestrator/utils';
-import type { FlatColumn } from '../schema';
-import type { ConversationLogEntry } from '@/orchestrator/types';
-import {
-  assignCatalogIds,
-  AutoContextAgent,
-  parseAnnotations,
-  renderCatalogForAgent,
-  renderGeneratedContext,
-  SubmitSchemaInfo,
-  verifyJoinsMechanically,
-  type JoinProbe,
-} from '../auto-context';
+
+
+
+
+
+
+
 
 const col = (
   connection: string,
@@ -610,4 +617,260 @@ describe('AutoContextAgent', () => {
     expect(opts?.maxTokens).toBeDefined();
     expect(opts!.maxTokens!).toBeGreaterThanOrEqual(8192);
   });
+});
+});
+
+describe('samples', () => {
+/**
+ * Tests for samples.ts — pulling representative rows from a table and
+ * narrowing them down to a length-diverse subset that surfaces format
+ * variants in narrative text columns.
+ *
+ * `pickDiverseRows` is pure (sort + index pick); `fetchTableSample` is
+ * exercised against a mocked NodeConnector.
+ */
+
+
+
+
+
+const row = (
+  id: number,
+  description: string,
+  status: string = 'active',
+): Record<string, unknown> => ({ id, description, status });
+
+const qr = (rows: Record<string, unknown>[]): QueryResult => ({
+  columns: Object.keys(rows[0] ?? {}),
+  types: Object.keys(rows[0] ?? {}).map(() => 'TEXT'),
+  rows,
+  finalQuery: '<test>',
+});
+
+describe('pickDiverseRows', () => {
+  it('returns the whole pool when pool size is <= n', () => {
+    const pool = [row(1, 'a'), row(2, 'b')];
+    expect(pickDiverseRows(pool, 5, ['description'])).toEqual(pool);
+  });
+
+  it('returns n random-ordered rows when no text columns are flagged', () => {
+    const pool = [row(1, 'a'), row(2, 'bb'), row(3, 'ccc'), row(4, 'dddd'), row(5, 'eeeee')];
+    expect(pickDiverseRows(pool, 3, [])).toHaveLength(3);
+  });
+
+  it('picks rows that span the length range of the flagged column', () => {
+    // Description lengths: 1, 5, 50, 200, 400. Asking for 3 → should cover the extremes.
+    const pool = [
+      row(1, 'x'),
+      row(2, 'small'),
+      row(3, 'a'.repeat(50)),
+      row(4, 'a'.repeat(200)),
+      row(5, 'a'.repeat(400)),
+    ];
+    const out = pickDiverseRows(pool, 3, ['description']);
+    expect(out).toHaveLength(3);
+
+    const lengths = out
+      .map((r) => (typeof r.description === 'string' ? r.description.length : 0))
+      .sort((a, b) => a - b);
+    // The shortest and longest must both be represented in a length-stratified pick.
+    expect(lengths[0]).toBe(1);
+    expect(lengths[lengths.length - 1]).toBe(400);
+  });
+
+  it('handles missing values in the flagged column gracefully', () => {
+    const pool = [{ id: 1 }, row(2, 'b'), row(3, 'ccc')];
+    expect(pickDiverseRows(pool, 2, ['description'])).toHaveLength(2);
+  });
+
+  it('returns empty array when pool is empty', () => {
+    expect(pickDiverseRows([], 5, ['description'])).toEqual([]);
+  });
+});
+
+describe('fetchTableSample', () => {
+  const fakeConn = (rows: Record<string, unknown>[]): NodeConnector =>
+    ({
+      query: vi.fn(async () => qr(rows)),
+    }) as unknown as NodeConnector;
+
+  it('returns rows from the connector via dialect-correct sampling SQL', async () => {
+    const rows = [row(1, 'short'), row(2, 'longer description here')];
+    const conn = fakeConn(rows);
+    const out = await fetchTableSample(conn, 'public', 'orders', 'duckdb', [], { sampleSize: 2 });
+    expect(out).toEqual(rows);
+  });
+
+  it('issues a $sample pipeline for mongo connections', async () => {
+    const conn = fakeConn([row(1, 'x')]);
+    await fetchTableSample(conn, 'mydb', 'users', 'mongo', [], { sampleSize: 1 });
+    const queryArg = (conn.query as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    const parsed = JSON.parse(queryArg);
+    expect(parsed.collection).toBe('users');
+    expect(parsed.pipeline?.[0]?.$sample).toBeDefined();
+  });
+
+  it('narrows down the supersample to the requested size when text columns are flagged', async () => {
+    // Connector returns 20 rows; we ask for 5 with one text column flagged.
+    const big = Array.from({ length: 20 }, (_, i) => row(i, 'x'.repeat((i + 1) * 3)));
+    const conn = fakeConn(big);
+    const out = await fetchTableSample(conn, 'public', 'docs', 'duckdb', ['description'], {
+      sampleSize: 5,
+      superSampleSize: 20,
+    });
+    expect(out).toHaveLength(5);
+  });
+
+  it('returns empty array on connector errors', async () => {
+    const conn = {
+      query: vi.fn(async () => {
+        throw new Error('boom');
+      }),
+    } as unknown as NodeConnector;
+    expect(await fetchTableSample(conn, 'public', 't', 'duckdb', [])).toEqual([]);
+  });
+});
+});
+
+describe('schema', () => {
+/**
+ * Tests for schema.ts — the flat-schema projection over the catalog.
+ *
+ * `flattenCatalogColumns` is pure (no DB, no async). It projects the
+ * `catalog.columns` rows into `FlatColumn[]` and is the cheap on-ramp the
+ * filter step uses to decide whether to filter on the user question.
+ */
+
+
+
+
+
+function makeCatalog(columnsRows: Record<string, unknown>[]): CatalogTables {
+  const empty = { columns: [], types: [], rows: [] };
+  return {
+    connections: empty,
+    schemas: empty,
+    tables: empty,
+    columns: {
+      columns: ['connection_name', 'schema_name', 'table_name', 'column_name', 'data_type'],
+      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+      rows: columnsRows,
+    },
+    indexes: empty,
+    column_stats: empty,
+    sample_rows: empty,
+    sample_notes: empty,
+  };
+}
+
+describe('flattenCatalogColumns', () => {
+  it('projects catalog.columns rows into a flat FlatColumn list', () => {
+    const catalog = makeCatalog([
+      { connection_name: 'db', schema_name: 'public', table_name: 'users', column_name: 'id', data_type: 'INTEGER' },
+      { connection_name: 'db', schema_name: 'public', table_name: 'users', column_name: 'email', data_type: 'VARCHAR' },
+      { connection_name: 'db', schema_name: 'public', table_name: 'orders', column_name: 'total', data_type: 'NUMERIC' },
+    ]);
+
+    expect(flattenCatalogColumns(catalog)).toEqual([
+      { connection: 'db', schema: 'public', table: 'users', column: 'id', type: 'INTEGER' },
+      { connection: 'db', schema: 'public', table: 'users', column: 'email', type: 'VARCHAR' },
+      { connection: 'db', schema: 'public', table: 'orders', column: 'total', type: 'NUMERIC' },
+    ]);
+  });
+
+  it('preserves the order of catalog.columns.rows', () => {
+    const catalog = makeCatalog([
+      { connection_name: 'db', schema_name: 's', table_name: 't', column_name: 'a', data_type: 'X' },
+      { connection_name: 'db', schema_name: 's', table_name: 't', column_name: 'b', data_type: 'Y' },
+    ]);
+
+    const out = flattenCatalogColumns(catalog);
+    expect(out.map((c) => c.column)).toEqual(['a', 'b']);
+  });
+
+  it('returns an empty array when no columns are present', () => {
+    expect(flattenCatalogColumns(makeCatalog([]))).toEqual([]);
+  });
+
+  it('handles multiple connections + schemas in the same catalog', () => {
+    const catalog = makeCatalog([
+      { connection_name: 'primary', schema_name: 'public', table_name: 'users', column_name: 'id', data_type: 'INTEGER' },
+      { connection_name: 'archive', schema_name: 'historic', table_name: 'logs', column_name: 'ts', data_type: 'TIMESTAMP' },
+    ]);
+
+    const out = flattenCatalogColumns(catalog);
+    expect(out).toHaveLength(2);
+    expect(out[0].connection).toBe('primary');
+    expect(out[1].connection).toBe('archive');
+    expect(out[1].schema).toBe('historic');
+  });
+});
+});
+
+describe('truncate', () => {
+/**
+ * Tests for truncate.ts — the per-value cap that prevents blob-heavy
+ * columns (README content, commit messages, narrative descriptions)
+ * from blowing past the lighter-model's context window when AutoContext
+ * serialises sample rows into its LLM prompts.
+ */
+
+
+
+
+describe('truncateValue', () => {
+  it('passes short strings through unchanged', () => {
+    expect(truncateValue('hello')).toBe('hello');
+  });
+
+  it('passes non-string values through unchanged', () => {
+    expect(truncateValue(42)).toBe(42);
+    expect(truncateValue(true)).toBe(true);
+    expect(truncateValue(null)).toBeNull();
+    expect(truncateValue(undefined)).toBeUndefined();
+    expect(truncateValue({ a: 1 })).toEqual({ a: 1 });
+  });
+
+  it('truncates strings longer than the cap and appends a size marker', () => {
+    const big = 'x'.repeat(DEFAULT_MAX_VALUE_CHARS + 1000);
+    const out = truncateValue(big);
+    expect(typeof out).toBe('string');
+    const s = out as string;
+    expect(s.length).toBeLessThan(big.length);
+    expect(s.startsWith('x'.repeat(DEFAULT_MAX_VALUE_CHARS))).toBe(true);
+    expect(s).toMatch(/\+1000 more chars/);
+  });
+
+  it('honours a custom maxChars limit', () => {
+    const out = truncateValue('abcdefghij', 4) as string;
+    expect(out).toMatch(/^abcd…<\+6 more chars>$/);
+  });
+});
+
+describe('truncateRow', () => {
+  it('truncates only the long string fields in a row', () => {
+    const row = {
+      id: 1,
+      name: 'short name',
+      content: 'x'.repeat(DEFAULT_MAX_VALUE_CHARS + 500),
+      tag: null,
+    };
+    const out = truncateRow(row);
+    expect(out.id).toBe(1);
+    expect(out.name).toBe('short name');
+    expect(out.tag).toBeNull();
+    expect((out.content as string).length).toBeLessThan((row.content as string).length);
+  });
+});
+
+describe('truncateValues', () => {
+  it('returns the array with each element individually truncated', () => {
+    const arr = ['short', 'x'.repeat(DEFAULT_MAX_VALUE_CHARS + 100), 42];
+    const out = truncateValues(arr);
+    expect(out[0]).toBe('short');
+    expect(typeof out[1]).toBe('string');
+    expect((out[1] as string).length).toBeLessThan((arr[1] as string).length);
+    expect(out[2]).toBe(42);
+  });
+});
 });
