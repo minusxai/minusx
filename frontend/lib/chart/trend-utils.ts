@@ -1,4 +1,4 @@
-import type { TrendCompareMode } from '@/lib/types.gen'
+import type { TrendCompareMode } from '@/lib/validation/atlas-schemas'
 
 export interface TrendComparison {
   /** The displayed value — the "base" of the comparison (last point in 'last' mode, second-to-last in 'previous' mode) */

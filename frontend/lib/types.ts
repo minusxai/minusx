@@ -1,11 +1,11 @@
 import { AnalyticsFileType, FileType } from './ui/file-metadata';
 import type { FileState } from '@/store/filesSlice';
-// Generated from backend/tasks/agents/analyst/file_schema.py
-// Regenerate: cd frontend && npm run generate-types
+// Atlas file content types — single source of truth is the TypeBox schemas in
+// lib/validation/atlas-schemas.ts (no Python codegen).
 import type {
   QuestionContent, FileReference, InlineAsset, VizSettings,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
-} from './types.gen';
+} from './validation/atlas-schemas';
 
 // Re-export FileType for convenience
 export type { FileType };
@@ -21,7 +21,7 @@ export type {
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   AtlasQuestionFile, AtlasDashboardFile,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
-} from './types.gen';
+} from './validation/atlas-schemas';
 
 // Geo config: discriminated union of sub-type-specific configs (null stripped — VizSettings.geoConfig handles nullability)
 export type GeoConfig = ChoroplethConfig | PointsConfig | LinesConfig | HeatmapConfig;

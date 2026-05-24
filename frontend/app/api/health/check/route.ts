@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { BACKEND_URL, MX_API_BASE_URL } from '@/lib/config'
+import { MX_API_BASE_URL } from '@/lib/config'
 
 type ServiceStatus =
   | { status: 'ok' }
@@ -17,23 +17,16 @@ async function checkService(url: string): Promise<ServiceStatus> {
 }
 
 export async function GET() {
-  const [backend, llmProvider] = await Promise.all([
-    checkService(`${BACKEND_URL}/health`),
-    MX_API_BASE_URL ? checkService(`${MX_API_BASE_URL}/health`) : Promise.resolve<ServiceStatus>({ status: 'not_configured' }),
-  ])
+  const llmProvider: ServiceStatus = MX_API_BASE_URL
+    ? await checkService(`${MX_API_BASE_URL}/health`)
+    : { status: 'not_configured' }
 
-  const overallStatus =
-    backend.status === 'error'
-      ? 'unhealthy'
-      : llmProvider.status === 'error'
-        ? 'degraded'
-        : 'healthy'
+  const overallStatus = llmProvider.status === 'error' ? 'degraded' : 'healthy'
 
   return NextResponse.json({
     status: overallStatus,
     services: {
       frontend: { status: 'ok' },
-      backend,
       llm_provider: llmProvider,
     },
   })

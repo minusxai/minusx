@@ -19,7 +19,7 @@ import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import type { AppState } from '@/lib/appState';
 import type { Attachment } from '@/lib/types';
 import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
-import type { VizSettings } from '@/lib/types.gen';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
 // S3 URL cache — per browser tab (single user). Safe: this module is only ever imported
 // from 'use client' components, so it never runs in the server-side Node.js process.

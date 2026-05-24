@@ -1,6 +1,6 @@
 import { renderChartToSvg } from '@/lib/chart/render-chart';
 import type { QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/types.gen';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
 const SAMPLE_ROWS = [
   { month: 'Jan', revenue: 100, cost: 40 },

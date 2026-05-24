@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { renderChartToSvg, BG_COLORS } from './render-chart-svg';
 import type { QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/types.gen';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
 export type { RenderChartOptions } from './render-chart-svg';
 export { renderChartToSvg, RENDERABLE_CHART_TYPES } from './render-chart-svg';

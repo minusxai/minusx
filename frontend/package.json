@@ -15,7 +15,7 @@
     "test:orchestrator": "vitest run --project=orchestrator",
     "test:ui": "vitest run --project=ui",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",
-    "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | tee lib/validation/atlas-schema.gen.json | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts && (cd ../backend && uv run python scripts/export_schema.py --no-viz) > lib/validation/atlas-schema-no-viz.gen.json",
+    "generate-types": "tsx scripts/generate-atlas-schema.ts",
     "postinstall": "node scripts/copy-duckdb-wasm.mjs && patch-package --error-on-fail",
     "benchmark:dab": "node --env-file=.env --max-old-space-size=8192 node_modules/.bin/tsx --conditions react-server benchmarks/dataanalystbench.ts",
     "dump-llm-calls": "node --env-file=.env node_modules/.bin/tsx scripts/dump-llm-calls.ts"

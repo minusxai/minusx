@@ -1,91 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withResponseLogging } from '@/lib/api/with-response-logging';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import {
-  getOrCreateConversation,
-  appendLogToConversation
-} from '@/lib/conversations';
-import { ToolCall, ConversationLogEntry } from '@/lib/types';
-import { extractDebugMessages } from '@/lib/conversations-utils';
+import { ToolCall } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
-import {
-  ChatRequest,
-  CompletedToolCallFromPython,
-  PythonChatRequest,
-  PythonChatResponse,
-  LLMCallDetail
-} from '@/lib/chat-orchestration';
-// Import tool handlers first to register them
-import './tool-handlers.server';
-import { orchestratePendingTools } from './orchestrator';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { ChatRequest, CompletedToolCallFromPython } from '@/lib/chat-orchestration';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 import { runChatTurnV2, validateV2Mode, forkV1ConversationToV2 } from '@/lib/chat-orchestration-v2.server';
-import { isV2 } from '@/lib/chat-v2/chat-version';
-import { isV2ConversationFile } from '@/lib/chat-translator';
-import { FilesAPI } from '@/lib/data/files.server';
 import { createNewConversation } from '@/lib/conversations';
 
 /**
  * Chat response to frontend
  */
 interface ChatResponse {
-  conversationID: number;            // File ID (changed from string)
+  conversationID: number;            // File ID
   log_index: number;
-  pending_tool_calls: ToolCall[];                         // Can be non-empty if tools pending
-  completed_tool_calls: CompletedToolCallFromPython[];    // Flat list from Python - frontend can group by run_id if needed
+  pending_tool_calls: ToolCall[];                         // Non-empty if frontend tools are pending
+  completed_tool_calls: CompletedToolCallFromPython[];    // Flat list; frontend groups by run_id if needed
   debug: DebugMessage[];                                  // Aggregated debug info from this turn's logDiff
-  request_id?: string | null;                             // HTTP request ID from middleware for cross-referencing network logs
-  credits?: number | null;                                // Optional
+  request_id?: string | null;                             // HTTP request ID from middleware
+  credits?: number | null;
   error?: string | null;
 }
 
 /**
- * Call Python backend /api/chat endpoint
- */
-async function callPythonBackend(request: PythonChatRequest): Promise<PythonChatResponse> {
-  const response = await pythonBackendFetch('/api/chat', {
-    method: 'POST',
-    body: JSON.stringify(request),
-    signal: AbortSignal.timeout(300000) // 5 minute timeout
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Python backend error: ${response.status} - ${errorText}`);
-  }
-
-  return response.json();
-}
-
-/**
  * POST /api/chat
- * Main chat endpoint for conversation management
+ *
+ * Non-streaming chat turn. Runs the in-process TypeScript orchestrator (the only
+ * engine — the legacy Python backend has been removed). Existing conversations
+ * are continued in place; a legacy (v1) conversation file is forked to a fresh
+ * v2 conversation and continued there.
  */
 export const POST = withResponseLogging(async function POST(request: NextRequest) {
-  let fileId: number | null = null;
   let body: ChatRequest | undefined;
-
-  // Declare variables outside try block so they're accessible in catch
-  let currentConversationID = 0;
-  let currentLogIndex = 0;
-  let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
-  let accumulatedLogDiff: ConversationLogEntry[] = [];
   let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
   try {
-    // Parse request body
     body = await request.json();
-
     if (!body) {
       throw new Error('Invalid request body');
     }
 
-    // Get effective user
     user = await getEffectiveUser();
-
     if (!user) {
       return NextResponse.json(
         {
@@ -94,272 +49,43 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
           pending_tool_calls: [],
           completed_tool_calls: [],
           debug: [],
-          error: 'Not authenticated'
+          error: 'Not authenticated',
         } as ChatResponse,
-        { status: 401 }
+        { status: 401 },
       );
     }
 
-    // V=2 branch — the default engine (entered unless `?v=1` is on the URL;
-    // see DEFAULT_CHAT_VERSION). Strict mode-match: if a conversationID is
-    // supplied, the file's meta.version must be 2; otherwise we create a fresh
-    // v=2 conversation file. The orchestrator runs internally and the response
-    // is translated back to legacy `ChatResponse` shape so the frontend stays
-    // unchanged.
-    const isV2Request = isV2(request.nextUrl.searchParams.get('v'));
-    if (isV2Request) {
-      let v2ConversationId: number;
-      if (body.conversationID) {
-        const check = await validateV2Mode(body.conversationID, user, true);
-        // A v1 conversation opened in v2 mode (the only way `check` fails in the
-        // v=2 branch) is forked to a fresh v2 conversation and continued there;
-        // the original v1 file is untouched.
-        v2ConversationId = check.ok
-          ? body.conversationID
-          : await forkV1ConversationToV2(body.conversationID, user);
-      } else {
-        const created = await createNewConversation(
-          user,
-          body.user_message ?? undefined,
-          { version: 2 },
-        );
-        v2ConversationId = created.fileId;
-      }
-      const v2Result = await runChatTurnV2(body, user, v2ConversationId);
-      return NextResponse.json(v2Result as ChatResponse);
-    }
-
-    // Step 1: Get or create conversation file (pass first message for naming)
-    const { fileId: convFileId, content: conversation } = await getOrCreateConversation(
-      body.conversationID ?? null,  // null to create new
-      user,
-      body.user_message ?? undefined  // Pass first message for naming
-    );
-    fileId = convFileId;
-
-    // Mode-mismatch guard: if URL is NOT v=2 but the conversation file IS
-    // v=2, refuse — same strict-mode rule the v=2 branch enforces. (If no
-    // conversationID was supplied, getOrCreateConversation just created a
-    // legacy v=1 file, so this only fires for resume on a v=2 file.)
+    // Resolve the conversation: continue an existing v2 file, fork a legacy file
+    // to v2, or create a fresh v2 conversation.
+    let conversationId: number;
     if (body.conversationID) {
-      const file = await FilesAPI.loadFile(body.conversationID, user);
-      if (isV2ConversationFile(file.data)) {
-        return NextResponse.json(
-          {
-            conversationID: body.conversationID,
-            log_index: 0,
-            pending_tool_calls: [],
-            completed_tool_calls: [],
-            debug: [],
-            error: 'cannot continue v=2 conversation in v=1 mode',
-          } as ChatResponse,
-          { status: 400 },
-        );
-      }
+      const check = await validateV2Mode(body.conversationID, user, true);
+      conversationId = check.ok
+        ? body.conversationID
+        : await forkV1ConversationToV2(body.conversationID, user);
+    } else {
+      const created = await createNewConversation(
+        user,
+        body.user_message ?? undefined,
+        { version: 2 },
+      );
+      conversationId = created.fileId;
     }
 
-    // Step 2: Load conversation log up to log_index (default to full log)
-    const initial_log_index = body.log_index ?? conversation.log.length;
-    const log: ConversationLogEntry[] = conversation.log.slice(0, initial_log_index);
-
-    // Step 3: Setup loop variables
-    let completed_tool_calls = body.completed_tool_calls?.map(tuple => tuple[1]) || [];
-    let user_message: string | null = body.user_message || null;
-
-    if (user_message) {
+    if (body.user_message) {
       appEventRegistry.publish(AppEvents.USER_MESSAGE, {
         source: body.source ?? 'explore',
-        conversationId: convFileId,
+        conversationId,
         userId: user.userId,
         userEmail: user.email,
-        messagePreview: user_message.slice(0, 100),
-        
+        messagePreview: body.user_message.slice(0, 100),
         mode: user.mode,
       });
     }
-    accumulatedLogDiff = [];  // Use outer scope variable
-    accumulatedCompletedToolCalls = [];  // Use outer scope variable
-    let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};
-    let pythonResponse: PythonChatResponse;
-    currentConversationID = convFileId;  // Use outer scope variable - Start with created/loaded file ID
-    let currentFileId = fileId;
-    currentLogIndex = initial_log_index;  // Use outer scope variable
-    let finalPendingToolCalls: ToolCall[] = [];
 
-    // Step 5: Execute agent and tools in a loop
-    while (true) {
-      // Resolve home folder with mode for agent context
-      const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
-
-      // Call Python backend
-      const requestPayload = {
-        log: [...log, ...accumulatedLogDiff],
-        user_message,
-        completed_tool_calls,
-        agent: body.agent || 'DefaultAgent',
-        agent_args: {
-          ...(body.agent_args || {}),
-          home_folder: resolvedHomeFolder,
-          role: user.role,
-        }
-      };
-      pythonResponse = await callPythonBackend(requestPayload);
-
-      // Accumulate logDiff and completed tool calls
-      accumulatedLogDiff.push(...pythonResponse.logDiff);
-      accumulatedCompletedToolCalls.push(...pythonResponse.completed_tool_calls);
-
-      // Accumulate LLM calls
-      if (pythonResponse.llm_calls) {
-        accumulatedLLMCalls = { ...accumulatedLLMCalls, ...pythonResponse.llm_calls };
-      }
-
-      // Check for interruption before saving
-      if (request.signal.aborted) {
-        console.log('[CHAT] Request aborted - marking pending tools as interrupted');
-
-        // Call Python to mark pending tools as interrupted
-        const closeResponse = await pythonBackendFetch('/api/chat/close', {
-          method: 'POST',
-          body: JSON.stringify({
-            log: [...log, ...accumulatedLogDiff]
-          })
-        });
-
-        if (closeResponse.ok) {
-          const { logDiff: interruptedLogDiff } = await closeResponse.json();
-          accumulatedLogDiff.push(...interruptedLogDiff);
-        }
-
-        // Save accumulated log (includes interrupted tools)
-        const appendResult = await appendLogToConversation(
-          currentFileId,
-          accumulatedLogDiff,
-          currentLogIndex,
-          user
-        );
-        currentConversationID = appendResult.conversationID;
-        currentFileId = appendResult.fileId;
-        currentLogIndex += accumulatedLogDiff.length;
-
-        throw new UserInterruptError();
-      }
-
-      // Append to conversation (may fork if conflict detected)
-      // logDiff from Python already contains details in task_result entries
-      const appendResult = await appendLogToConversation(
-        currentFileId,
-        pythonResponse.logDiff,
-        currentLogIndex,
-        user
-      );
-
-      // Update variables with potentially new conversationID and fileId
-      currentConversationID = appendResult.conversationID;
-      currentFileId = appendResult.fileId;
-      currentLogIndex += pythonResponse.logDiff.length;
-
-      // Track LLM call analytics in DuckDB (fire-and-forget)
-      // IMPORTANT: Use UPDATED currentConversationID (may have changed due to forking)
-      if (pythonResponse.llm_calls && Object.keys(pythonResponse.llm_calls).length > 0) {
-        appEventRegistry.publish(AppEvents.LLM_CALL, {
-          llmCalls: pythonResponse.llm_calls,
-          conversationId: currentConversationID,
-          
-          mode: user.mode,
-          userId: user.userId,
-          userEmail: user.email,
-          userRole: user.role,
-        });
-      }
-
-      // Clear user_message after first call (subsequent calls are tool completions only)
-      user_message = null;
-
-      // No more pending tools - we're done
-      if (pythonResponse.pending_tool_calls.length === 0) {
-        break;
-      }
-
-      // Orchestrate Next.js backend tool execution
-      const result = await orchestratePendingTools(
-        pythonResponse.pending_tool_calls,
-        currentFileId,
-        currentLogIndex,
-        user,
-        { signal: request.signal }
-      );
-
-      // Update state from orchestration result
-      currentFileId = result.updatedFileId;
-      currentLogIndex = result.updatedLogIndex;
-      currentConversationID = result.updatedFileId;
-      accumulatedLogDiff.push(...result.logEntries);
-      // Combine remaining pending tools and spawned tools for frontend execution
-      const allPendingTools = [...result.remainingPendingTools, ...result.spawnedTools];
-
-      // Handle pending tools and completed tools
-      if (allPendingTools.length > 0) {
-        if (result.completedTools.length > 0) {
-          // We have both completed and pending tools
-          // Continue loop to send completed tools to Python first
-          completed_tool_calls = result.completedTools;
-          // Don't break yet - we'll handle pending tools on next iteration
-        } else {
-          // No completed tools, just pending - break immediately
-          finalPendingToolCalls = allPendingTools;
-          break;
-        }
-      } else if (result.completedTools.length > 0) {
-        // No pending tools, but we have completed tools
-        // Continue loop to send them to Python
-        completed_tool_calls = result.completedTools;
-      } else {
-        // No completed tools and no pending tools - done
-        break;
-      }
-    }
-
-    // Publish soft Python errors (returned as HTTP 200 with error field)
-    if (pythonResponse.error && user) {
-      appEventRegistry.publish(AppEvents.ERROR, {
-        source: 'python_backend',
-        message: pythonResponse.error,
-        mode: user.mode,
-        context: { route: '/api/chat' },
-      });
-    }
-
-    // Return response - conversationID may have changed if forked
-    return NextResponse.json({
-      conversationID: currentConversationID,
-      log_index: currentLogIndex,
-      pending_tool_calls: finalPendingToolCalls,  // Includes spawned frontend tools
-      completed_tool_calls: accumulatedCompletedToolCalls,
-      debug: extractDebugMessages(accumulatedLogDiff),
-      request_id: request.headers.get('x-request-id'),
-      credits: null,
-      error: pythonResponse.error
-    } as ChatResponse);
-
+    const v2Result = await runChatTurnV2(body, user, conversationId);
+    return NextResponse.json(v2Result as ChatResponse);
   } catch (error: any) {
-    // Handle user interruption gracefully
-    if (error instanceof UserInterruptError) {
-      console.log('[CHAT] User interrupted - returning gracefully');
-
-      // Log already saved before throwing, return response with correct log_index
-      return NextResponse.json({
-        conversationID: currentConversationID,
-        log_index: currentLogIndex,  // IMPORTANT: Return actual log index after save
-        pending_tool_calls: [],
-        completed_tool_calls: accumulatedCompletedToolCalls,
-        debug: extractDebugMessages(accumulatedLogDiff),
-        request_id: request.headers.get('x-request-id'),
-        error: 'Interrupted by user'
-      } as ChatResponse);
-    }
-
-    // Handle other errors
     console.error('Chat API error:', error);
 
     if (user) {
@@ -380,9 +106,9 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
         completed_tool_calls: [],
         debug: [],
         credits: null,
-        error: error.message || 'Unknown error occurred'
+        error: error.message || 'Unknown error occurred',
       } as ChatResponse,
-      { status: 500 }
+      { status: 500 },
     );
   }
 });

@@ -1,4 +1,4 @@
-import type { VisualizationType, VizSettings } from '@/lib/types.gen'
+import type { VisualizationType, VizSettings } from '@/lib/validation/atlas-schemas'
 import { getColumnType } from '@/lib/database/column-types'
 
 export interface ConstraintResult {
