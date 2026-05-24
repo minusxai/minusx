@@ -25,20 +25,32 @@ const DATE_QUERY_RESULT: QueryResult = {
 };
 
 describe('renderChartToSvg', () => {
-  describe('bar chart', () => {
-    it('renders a valid SVG string', () => {
+  describe('SVG envelope smoke tests', () => {
+    // Each chart type renders a valid SVG from SAMPLE_QUERY_RESULT.
+    // `closing` flags the types whose original test also asserted the </svg> close tag.
+    it.each([
+      { type: 'bar', closing: true },
+      { type: 'line', closing: true },
+      { type: 'pie', closing: false },
+      { type: 'funnel', closing: false },
+      { type: 'waterfall', closing: false },
+      { type: 'radar', closing: true },
+      { type: 'area', closing: false },
+    ] as const)('renders a valid SVG string for $type chart', ({ type, closing }) => {
       const vizSettings: VizSettings = {
-        type: 'bar',
+        type,
         xCols: ['month'],
         yCols: ['revenue'],
       };
 
       const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
       expect(svg).toContain('<svg');
-      expect(svg).toContain('</svg>');
+      if (closing) {
+        expect(svg).toContain('</svg>');
+      }
     });
 
-    it('renders with multiple y columns', () => {
+    it('renders bar chart with multiple y columns', () => {
       const vizSettings: VizSettings = {
         type: 'bar',
         xCols: ['month'],
@@ -47,20 +59,6 @@ describe('renderChartToSvg', () => {
 
       const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
       expect(svg).toContain('<svg');
-    });
-  });
-
-  describe('line chart', () => {
-    it('renders a valid SVG string', () => {
-      const vizSettings: VizSettings = {
-        type: 'line',
-        xCols: ['month'],
-        yCols: ['revenue'],
-      };
-
-      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
-      expect(svg).toContain('<svg');
-      expect(svg).toContain('</svg>');
     });
 
     it('renders a valid SVG string with a date x-axis from SQL types', () => {
@@ -74,78 +72,12 @@ describe('renderChartToSvg', () => {
       expect(svg).toContain('<svg');
       expect(svg).toContain('</svg>');
     });
-  });
 
-  describe('pie chart', () => {
-    it('renders a valid SVG string', () => {
-      const vizSettings: VizSettings = {
-        type: 'pie',
-        xCols: ['month'],
-        yCols: ['revenue'],
-      };
-
-      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
-      expect(svg).toContain('<svg');
-    });
-  });
-
-  describe('funnel chart', () => {
-    it('renders a valid SVG string', () => {
-      const vizSettings: VizSettings = {
-        type: 'funnel',
-        xCols: ['month'],
-        yCols: ['revenue'],
-      };
-
-      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
-      expect(svg).toContain('<svg');
-    });
-  });
-
-  describe('waterfall chart', () => {
-    it('renders a valid SVG string', () => {
-      const vizSettings: VizSettings = {
-        type: 'waterfall',
-        xCols: ['month'],
-        yCols: ['revenue'],
-      };
-
-      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
-      expect(svg).toContain('<svg');
-    });
-  });
-
-  describe('radar chart', () => {
-    it('renders a valid SVG string', () => {
-      const vizSettings: VizSettings = {
-        type: 'radar',
-        xCols: ['month'],
-        yCols: ['revenue'],
-      };
-
-      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
-      expect(svg).toContain('<svg');
-      expect(svg).toContain('</svg>');
-    });
-
-    it('renders with multiple y columns', () => {
+    it('renders radar chart with multiple y columns', () => {
       const vizSettings: VizSettings = {
         type: 'radar',
         xCols: ['month'],
         yCols: ['revenue', 'cost'],
-      };
-
-      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
-      expect(svg).toContain('<svg');
-    });
-  });
-
-  describe('area chart', () => {
-    it('renders a valid SVG string', () => {
-      const vizSettings: VizSettings = {
-        type: 'area',
-        xCols: ['month'],
-        yCols: ['revenue'],
       };
 
       const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);

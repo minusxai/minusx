@@ -646,26 +646,11 @@ describe('Completions SQL IR - E2E Tests', () => {
 
   describe('Losslessness: Binary Support Boundary (Reject Unsupported)', () => {
     describe('Complex aggregate expressions (raw passthrough)', () => {
-      it('should parse SUM(col1 * col2) as raw passthrough', async () => {
-        const sql = 'SELECT SUM(price * quantity) AS total FROM orders';
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(true);
-        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
-      });
-
-      it('should parse COUNT(CASE WHEN ...) as raw passthrough', async () => {
-        const sql = "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) FROM users";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-
-        expect(result.success).toBe(true);
-        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
-      });
-
-      it('should parse AVG(col1 + col2) as raw passthrough', async () => {
-        const sql = 'SELECT AVG(price + tax) AS avg_total FROM products';
-
+      it.each([
+        { name: 'SUM(col1 * col2)', sql: 'SELECT SUM(price * quantity) AS total FROM orders' },
+        { name: 'COUNT(CASE WHEN ...)', sql: "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) FROM users" },
+        { name: 'AVG(col1 + col2)', sql: 'SELECT AVG(price + tax) AS avg_total FROM products' },
+      ])('should parse $name as raw passthrough', async ({ sql }) => {
         const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(true);
         expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
@@ -690,37 +675,35 @@ describe('Completions SQL IR - E2E Tests', () => {
     });
 
     describe('Unsupported operators (MUST reject)', () => {
-      it('should reject BETWEEN operator', async () => {
-        const sql = 'SELECT * FROM users WHERE age BETWEEN 20 AND 30';
-
+      it.each([
+        {
+          name: 'BETWEEN',
+          sql: 'SELECT * FROM users WHERE age BETWEEN 20 AND 30',
+          expectedFeature: 'BETWEEN (use >= and <= instead)',
+          expectedHint: 'Use >= and <=',
+        },
+        {
+          name: 'NOT LIKE',
+          sql: "SELECT * FROM users WHERE name NOT LIKE 'A%'",
+          expectedFeature: 'NOT LIKE',
+        },
+        {
+          name: 'NOT IN',
+          sql: "SELECT * FROM users WHERE status NOT IN ('deleted', 'banned')",
+          expectedFeature: 'NOT IN',
+        },
+        {
+          name: 'regex operators',
+          sql: "SELECT * FROM users WHERE email ~ '^[a-z]+@'",
+          expectedFeature: 'Regex operators (~, ~*, etc.)',
+        },
+      ])('should reject $name operator', async ({ sql, expectedFeature, expectedHint }) => {
         const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('BETWEEN (use >= and <= instead)');
-        expect(result.hint).toContain('Use >= and <=');
-      });
-
-      it('should reject NOT LIKE operator', async () => {
-        const sql = "SELECT * FROM users WHERE name NOT LIKE 'A%'";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('NOT LIKE');
-      });
-
-      it('should reject NOT IN operator', async () => {
-        const sql = "SELECT * FROM users WHERE status NOT IN ('deleted', 'banned')";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('NOT IN');
-      });
-
-      it('should reject regex operators', async () => {
-        const sql = "SELECT * FROM users WHERE email ~ '^[a-z]+@'";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('Regex operators (~, ~*, etc.)');
+        expect(result.unsupportedFeatures).toContain(expectedFeature);
+        if (expectedHint) {
+          expect(result.hint).toContain(expectedHint);
+        }
       });
     });
   });

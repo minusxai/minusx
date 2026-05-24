@@ -586,25 +586,16 @@ describe('inferColumnsLocal (polyglot WASM)', () => {
     expect(greetCol!.type).toBe('text');
   });
 
-  it('infers number type for aggregate functions', async () => {
-    const result = await inferColumnsLocal(
-      'SELECT COUNT(*) AS cnt, AVG(price) AS avg_price, MAX(qty) AS max_qty FROM t',
-      [],
-      'duckdb',
-    );
-    for (const col of result.columns) {
-      expect(col.type).toBe('number');
-    }
-  });
+  // Each row: every inferred column must have the same expected type.
+  const typeInferenceCases: Array<{ desc: string; sql: string; expectedType: string }> = [
+    { desc: 'infers number type for aggregate functions', sql: 'SELECT COUNT(*) AS cnt, AVG(price) AS avg_price, MAX(qty) AS max_qty FROM t', expectedType: 'number' },
+    { desc: 'infers text type for string functions', sql: 'SELECT LOWER(name) AS low, UPPER(name) AS up, TRIM(name) AS trimmed FROM t', expectedType: 'text' },
+  ];
 
-  it('infers text type for string functions', async () => {
-    const result = await inferColumnsLocal(
-      'SELECT LOWER(name) AS low, UPPER(name) AS up, TRIM(name) AS trimmed FROM t',
-      [],
-      'duckdb',
-    );
+  it.each(typeInferenceCases)('$desc', async ({ sql, expectedType }) => {
+    const result = await inferColumnsLocal(sql, [], 'duckdb');
     for (const col of result.columns) {
-      expect(col.type).toBe('text');
+      expect(col.type).toBe(expectedType);
     }
   });
 
@@ -620,24 +611,16 @@ describe('inferColumnsLocal (polyglot WASM)', () => {
     expect(result.columns).toEqual([]);
   });
 
-  it('works with postgres dialect', async () => {
-    const result = await inferColumnsLocal(
-      'SELECT id, name FROM users',
-      [],
-      'postgres',
-    );
-    expect(result.columns).toHaveLength(2);
-    expect(result.columns[0].name).toBe('id');
-  });
+  // Dialect smoke: infers the expected number of columns and the first name.
+  const dialectSmokeCases: Array<{ dialect: 'postgres' | 'bigquery'; sql: string; expectedLength: number; firstName: string }> = [
+    { dialect: 'postgres', sql: 'SELECT id, name FROM users', expectedLength: 2, firstName: 'id' },
+    { dialect: 'bigquery', sql: 'SELECT id FROM `project.dataset.table`', expectedLength: 1, firstName: 'id' },
+  ];
 
-  it('works with bigquery dialect', async () => {
-    const result = await inferColumnsLocal(
-      'SELECT id FROM `project.dataset.table`',
-      [],
-      'bigquery',
-    );
-    expect(result.columns).toHaveLength(1);
-    expect(result.columns[0].name).toBe('id');
+  it.each(dialectSmokeCases)('works with $dialect dialect', async ({ dialect, sql, expectedLength, firstName }) => {
+    const result = await inferColumnsLocal(sql, [], dialect);
+    expect(result.columns).toHaveLength(expectedLength);
+    expect(result.columns[0].name).toBe(firstName);
   });
 });
 
@@ -649,116 +632,26 @@ function normalizeSql(sql: string): string {
 }
 
 describe('IR to SQL generator', () => {
-  it('simple SELECT *', async () => {
-    const ir = await parseSqlToIrLocal('SELECT * FROM users', 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('SELECT *');
-    expect(normalizeSql(sql)).toContain('FROM USERS');
-  });
-
-  it('SELECT with columns and alias', async () => {
-    const ir = await parseSqlToIrLocal('SELECT name AS user_name, email FROM users', 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('NAME AS USER_NAME');
-    expect(normalizeSql(sql)).toContain('EMAIL');
-  });
-
-  it('aggregates round-trip', async () => {
-    const ir = await parseSqlToIrLocal('SELECT COUNT(*) AS total, SUM(amount) AS revenue FROM orders', 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('COUNT(*)');
-    expect(normalizeSql(sql)).toContain('SUM(AMOUNT)');
-  });
-
-  it('COUNT DISTINCT round-trip', async () => {
-    const ir = await parseSqlToIrLocal('SELECT COUNT(DISTINCT email) FROM users', 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('COUNT(DISTINCT EMAIL)');
-  });
-
-  it('JOIN round-trip', async () => {
-    const original = 'SELECT u.name, o.amount FROM users u INNER JOIN orders o ON u.id = o.user_id';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('JOIN ORDERS O ON');
-    expect(norm).toContain('U.ID = O.USER_ID');
-  });
-
-  it('LEFT JOIN round-trip', async () => {
-    const original = 'SELECT * FROM users LEFT JOIN orders ON users.id = orders.user_id';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('LEFT JOIN');
-  });
-
-  it('WHERE round-trip', async () => {
-    const original = "SELECT * FROM users WHERE active = true AND age > 18";
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('WHERE');
-    expect(norm).toContain('ACTIVE');
-    expect(norm).toContain('AGE');
-  });
-
-  it('WHERE with param round-trip', async () => {
-    const original = 'SELECT * FROM users WHERE id = :user_id';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain(':USER_ID');
-  });
-
-  it('WHERE IS NULL / IS NOT NULL round-trip', async () => {
-    const original = 'SELECT * FROM users WHERE deleted_at IS NULL AND email IS NOT NULL';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('IS NULL');
-    expect(norm).toContain('IS NOT NULL');
-  });
-
-  it('WHERE IN round-trip', async () => {
-    const original = "SELECT * FROM users WHERE status IN ('active', 'pending')";
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('IN (');
-  });
-
-  it('WHERE with expression column (lower) round-trip', async () => {
-    const original = "SELECT * FROM restaurants WHERE lower(city) = 'san francisco'";
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('LOWER');
-    expect(norm).toContain('SAN FRANCISCO');
-  });
-
-  it('GROUP BY round-trip', async () => {
-    const original = 'SELECT category, COUNT(*) FROM products GROUP BY category';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('GROUP BY CATEGORY');
-  });
-
-  it('ORDER BY round-trip', async () => {
-    const original = 'SELECT * FROM users ORDER BY name ASC, created_at DESC';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('ORDER BY');
-    expect(norm).toContain('DESC');
-  });
-
-  it('LIMIT round-trip', async () => {
-    const original = 'SELECT * FROM users LIMIT 10';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('LIMIT 10');
-  });
-
-  it('full query round-trip', async () => {
-    const original = `
+  // Each row: parse SQL → IR → regenerate SQL → assert each normalized substring
+  // is present. Same shape across all single-clause round-trip cases.
+  const cases: Array<{ desc: string; sql: string; mustContain: string[] }> = [
+    { desc: 'simple SELECT *', sql: 'SELECT * FROM users', mustContain: ['SELECT *', 'FROM USERS'] },
+    { desc: 'SELECT with columns and alias', sql: 'SELECT name AS user_name, email FROM users', mustContain: ['NAME AS USER_NAME', 'EMAIL'] },
+    { desc: 'aggregates round-trip', sql: 'SELECT COUNT(*) AS total, SUM(amount) AS revenue FROM orders', mustContain: ['COUNT(*)', 'SUM(AMOUNT)'] },
+    { desc: 'COUNT DISTINCT round-trip', sql: 'SELECT COUNT(DISTINCT email) FROM users', mustContain: ['COUNT(DISTINCT EMAIL)'] },
+    { desc: 'JOIN round-trip', sql: 'SELECT u.name, o.amount FROM users u INNER JOIN orders o ON u.id = o.user_id', mustContain: ['JOIN ORDERS O ON', 'U.ID = O.USER_ID'] },
+    { desc: 'LEFT JOIN round-trip', sql: 'SELECT * FROM users LEFT JOIN orders ON users.id = orders.user_id', mustContain: ['LEFT JOIN'] },
+    { desc: 'WHERE round-trip', sql: 'SELECT * FROM users WHERE active = true AND age > 18', mustContain: ['WHERE', 'ACTIVE', 'AGE'] },
+    { desc: 'WHERE with param round-trip', sql: 'SELECT * FROM users WHERE id = :user_id', mustContain: [':USER_ID'] },
+    { desc: 'WHERE IS NULL / IS NOT NULL round-trip', sql: 'SELECT * FROM users WHERE deleted_at IS NULL AND email IS NOT NULL', mustContain: ['IS NULL', 'IS NOT NULL'] },
+    { desc: 'WHERE IN round-trip', sql: "SELECT * FROM users WHERE status IN ('active', 'pending')", mustContain: ['IN ('] },
+    { desc: 'WHERE with expression column (lower) round-trip', sql: "SELECT * FROM restaurants WHERE lower(city) = 'san francisco'", mustContain: ['LOWER', 'SAN FRANCISCO'] },
+    { desc: 'GROUP BY round-trip', sql: 'SELECT category, COUNT(*) FROM products GROUP BY category', mustContain: ['GROUP BY CATEGORY'] },
+    { desc: 'ORDER BY round-trip', sql: 'SELECT * FROM users ORDER BY name ASC, created_at DESC', mustContain: ['ORDER BY', 'DESC'] },
+    { desc: 'LIMIT round-trip', sql: 'SELECT * FROM users LIMIT 10', mustContain: ['LIMIT 10'] },
+    {
+      desc: 'full query round-trip',
+      sql: `
       SELECT u.name, COUNT(*) AS order_count, SUM(o.amount) AS total_amount
       FROM users u
       INNER JOIN orders o ON u.id = o.user_id
@@ -767,33 +660,19 @@ describe('IR to SQL generator', () => {
       HAVING COUNT(*) > 5
       ORDER BY total_amount DESC
       LIMIT 20
-    `;
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('SELECT');
-    expect(norm).toContain('FROM USERS U');
-    expect(norm).toContain('JOIN ORDERS O');
-    expect(norm).toContain('WHERE');
-    expect(norm).toContain('GROUP BY');
-    expect(norm).toContain('HAVING');
-    expect(norm).toContain('ORDER BY');
-    expect(norm).toContain('LIMIT 20');
-  });
+    `,
+      mustContain: ['SELECT', 'FROM USERS U', 'JOIN ORDERS O', 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT 20'],
+    },
+    { desc: 'CTE round-trip', sql: 'WITH active_users AS (SELECT * FROM users WHERE active = TRUE) SELECT * FROM active_users', mustContain: ['WITH ACTIVE_USERS AS', 'FROM ACTIVE_USERS'] },
+    { desc: 'schema-qualified table round-trip', sql: 'SELECT * FROM public.users', mustContain: ['PUBLIC.USERS'] },
+  ];
 
-  it('CTE round-trip', async () => {
-    const original = 'WITH active_users AS (SELECT * FROM users WHERE active = TRUE) SELECT * FROM active_users';
-    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    const norm = normalizeSql(sql);
-    expect(norm).toContain('WITH ACTIVE_USERS AS');
-    expect(norm).toContain('FROM ACTIVE_USERS');
-  });
-
-  it('schema-qualified table round-trip', async () => {
-    const ir = await parseSqlToIrLocal('SELECT * FROM public.users', 'duckdb') as QueryIR;
-    const sql = irToSqlLocal(ir, 'duckdb');
-    expect(normalizeSql(sql)).toContain('PUBLIC.USERS');
+  it.each(cases)('$desc', async ({ sql, mustContain }) => {
+    const ir = await parseSqlToIrLocal(sql, 'duckdb') as QueryIR;
+    const norm = normalizeSql(irToSqlLocal(ir, 'duckdb'));
+    for (const substr of mustContain) {
+      expect(norm).toContain(substr);
+    }
   });
 });
 
@@ -1464,8 +1343,16 @@ describe('enforceQueryLimit', () => {
     expect(result).toContain('1000');
   });
 
-  it('UNION queries get LIMIT', async () => {
-    const result = await enforceQueryLimit('SELECT * FROM users UNION SELECT * FROM admins', { defaultLimit: 1000, dialect: 'postgres' });
+  // Compound set operations receive the default LIMIT at the root.
+  const compoundDefaultLimitCases: Array<{ desc: string; sql: string; dialect: 'duckdb' | 'postgres' | 'bigquery' }> = [
+    { desc: 'UNION queries get LIMIT', sql: 'SELECT * FROM users UNION SELECT * FROM admins', dialect: 'postgres' },
+    { desc: 'multiple UNIONs', sql: 'SELECT * FROM users UNION SELECT * FROM admins UNION SELECT * FROM guests', dialect: 'duckdb' },
+    { desc: 'INTERSECT queries', sql: 'SELECT * FROM users INTERSECT SELECT * FROM admins', dialect: 'postgres' },
+    { desc: 'EXCEPT queries', sql: 'SELECT * FROM users EXCEPT SELECT * FROM admins', dialect: 'postgres' },
+  ];
+
+  it.each(compoundDefaultLimitCases)('$desc', async ({ sql, dialect }) => {
+    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect });
     expect(result.toUpperCase()).toContain('LIMIT 1000');
   });
 
@@ -1481,48 +1368,21 @@ describe('enforceQueryLimit', () => {
     expect(result).toBe(sql);
   });
 
-  it('INSERT query — no LIMIT added', async () => {
-    const sql = "INSERT INTO users (name) VALUES ('Alice')";
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'postgres' });
-    expect(result.toUpperCase()).not.toContain('LIMIT');
-  });
+  // DML / DDL statements never receive a LIMIT.
+  const noLimitCases: Array<{ desc: string; sql: string; dialect: 'duckdb' | 'postgres' | 'bigquery' }> = [
+    { desc: 'INSERT query — no LIMIT added', sql: "INSERT INTO users (name) VALUES ('Alice')", dialect: 'postgres' },
+    { desc: 'UPDATE query — no LIMIT added', sql: "UPDATE users SET name = 'Bob' WHERE id = 1", dialect: 'bigquery' },
+    { desc: 'DELETE query — no LIMIT added', sql: 'DELETE FROM users WHERE id = 1', dialect: 'duckdb' },
+    { desc: 'CREATE TABLE — no LIMIT added', sql: 'CREATE TABLE users (id INTEGER, name TEXT)', dialect: 'postgres' },
+  ];
 
-  it('UPDATE query — no LIMIT added', async () => {
-    const sql = "UPDATE users SET name = 'Bob' WHERE id = 1";
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'bigquery' });
-    expect(result.toUpperCase()).not.toContain('LIMIT');
-  });
-
-  it('DELETE query — no LIMIT added', async () => {
-    const sql = 'DELETE FROM users WHERE id = 1';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'duckdb' });
-    expect(result.toUpperCase()).not.toContain('LIMIT');
-  });
-
-  it('CREATE TABLE — no LIMIT added', async () => {
-    const sql = 'CREATE TABLE users (id INTEGER, name TEXT)';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'postgres' });
+  it.each(noLimitCases)('$desc', async ({ sql, dialect }) => {
+    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect });
     expect(result.toUpperCase()).not.toContain('LIMIT');
   });
 
   it('case insensitive keywords', async () => {
     const result = await enforceQueryLimit('select * from users', { defaultLimit: 1000, dialect: 'bigquery' });
-    expect(result.toUpperCase()).toContain('LIMIT 1000');
-  });
-
-  it('multiple UNIONs', async () => {
-    const sql = 'SELECT * FROM users UNION SELECT * FROM admins UNION SELECT * FROM guests';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'duckdb' });
-    expect(result.toUpperCase()).toContain('LIMIT 1000');
-  });
-
-  it('INTERSECT queries', async () => {
-    const result = await enforceQueryLimit('SELECT * FROM users INTERSECT SELECT * FROM admins', { defaultLimit: 1000, dialect: 'postgres' });
-    expect(result.toUpperCase()).toContain('LIMIT 1000');
-  });
-
-  it('EXCEPT queries', async () => {
-    const result = await enforceQueryLimit('SELECT * FROM users EXCEPT SELECT * FROM admins', { defaultLimit: 1000, dialect: 'postgres' });
     expect(result.toUpperCase()).toContain('LIMIT 1000');
   });
 
@@ -1536,42 +1396,25 @@ describe('enforceQueryLimit', () => {
 
   // --- Named parameter preservation ---
 
-  it('postgres preserves :param in date filter', async () => {
-    const sql = 'SELECT COUNT(DISTINCT id) AS total_users FROM stores WHERE created_at > :date_min';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'postgres' });
-    expect(result).toContain(':date_min');
-    expect(result.toUpperCase()).toContain('LIMIT 1000');
-  });
+  // Each row: enforceQueryLimit must preserve the named :params (case-sensitive) in the
+  // output; `mustContainUpper` lists substrings asserted against the upper-cased result.
+  const paramPreservationCases: Array<{ desc: string; sql: string; dialect: 'duckdb' | 'postgres' | 'bigquery'; params: string[]; mustContainUpper?: string[] }> = [
+    { desc: 'postgres preserves :param in date filter', sql: 'SELECT COUNT(DISTINCT id) AS total_users FROM stores WHERE created_at > :date_min', dialect: 'postgres', params: [':date_min'], mustContainUpper: ['LIMIT 1000'] },
+    { desc: 'postgres preserves :param in number filter', sql: 'SELECT * FROM orders WHERE amount > :min_amount', dialect: 'postgres', params: [':min_amount'] },
+    { desc: 'postgres preserves multiple :params', sql: 'SELECT * FROM events WHERE created_at > :date_min AND created_at < :date_max', dialect: 'postgres', params: [':date_min', ':date_max'] },
+    { desc: 'postgres preserves :param in text filter', sql: 'SELECT * FROM users WHERE name = :name_val', dialect: 'postgres', params: [':name_val'] },
+    { desc: 'duckdb preserves :param', sql: 'SELECT * FROM stores WHERE created_at > :date_min', dialect: 'duckdb', params: [':date_min'] },
+    { desc: 'bigquery preserves :param', sql: 'SELECT * FROM stores WHERE created_at > :date_min', dialect: 'bigquery', params: [':date_min'] },
+  ];
 
-  it('postgres preserves :param in number filter', async () => {
-    const sql = 'SELECT * FROM orders WHERE amount > :min_amount';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'postgres' });
-    expect(result).toContain(':min_amount');
-  });
-
-  it('postgres preserves multiple :params', async () => {
-    const sql = 'SELECT * FROM events WHERE created_at > :date_min AND created_at < :date_max';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'postgres' });
-    expect(result).toContain(':date_min');
-    expect(result).toContain(':date_max');
-  });
-
-  it('postgres preserves :param in text filter', async () => {
-    const sql = 'SELECT * FROM users WHERE name = :name_val';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'postgres' });
-    expect(result).toContain(':name_val');
-  });
-
-  it('duckdb preserves :param', async () => {
-    const sql = 'SELECT * FROM stores WHERE created_at > :date_min';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'duckdb' });
-    expect(result).toContain(':date_min');
-  });
-
-  it('bigquery preserves :param', async () => {
-    const sql = 'SELECT * FROM stores WHERE created_at > :date_min';
-    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect: 'bigquery' });
-    expect(result).toContain(':date_min');
+  it.each(paramPreservationCases)('$desc', async ({ sql, dialect, params, mustContainUpper }) => {
+    const result = await enforceQueryLimit(sql, { defaultLimit: 1000, dialect });
+    for (const param of params) {
+      expect(result).toContain(param);
+    }
+    for (const substr of mustContainUpper ?? []) {
+      expect(result.toUpperCase()).toContain(substr);
+    }
   });
 });
 
@@ -1815,117 +1658,71 @@ describe('filterSchemaByWhitelist — childPaths file vs folder scope', () => {
 // ─── sql-params.test.ts ───
 
 describe('extractParametersFromSQL', () => {
-  // ── Basic extraction ──────────────────────────────────────────
-  it('returns [] for empty string', () => {
-    expect(extractParametersFromSQL('')).toEqual([]);
-  });
+  // Each row: an input SQL string and the exact params array it must extract.
+  // Covers basic extraction, type casts, lookbehind/lookahead skips, escaped
+  // colons, and complex real-world queries — all pure input→output cases.
+  const cases: Array<{ desc: string; sql: string; expected: string[] }> = [
+    // ── Basic extraction ──────────────────────────────────────────
+    { desc: 'returns [] for empty string', sql: '', expected: [] },
+    { desc: 'returns [] for whitespace-only string', sql: '   \n\t  ', expected: [] },
+    { desc: 'extracts a single param', sql: 'SELECT :foo', expected: ['foo'] },
+    { desc: 'extracts multiple params', sql: 'WHERE a = :x AND b = :y', expected: ['x', 'y'] },
+    { desc: 'deduplicates repeated params', sql: ':limit OFFSET :limit', expected: ['limit'] },
+    { desc: 'extracts params with numbers in name', sql: 'SELECT :param1', expected: ['param1'] },
+    { desc: 'extracts params with underscores', sql: 'WHERE date >= :start_date', expected: ['start_date'] },
 
-  it('returns [] for whitespace-only string', () => {
-    expect(extractParametersFromSQL('   \n\t  ')).toEqual([]);
-  });
-
-  it('extracts a single param', () => {
-    expect(extractParametersFromSQL('SELECT :foo')).toEqual(['foo']);
-  });
-
-  it('extracts multiple params', () => {
-    expect(extractParametersFromSQL('WHERE a = :x AND b = :y')).toEqual(['x', 'y']);
-  });
-
-  it('deduplicates repeated params', () => {
-    expect(extractParametersFromSQL(':limit OFFSET :limit')).toEqual(['limit']);
-  });
-
-  it('extracts params with numbers in name', () => {
-    expect(extractParametersFromSQL('SELECT :param1')).toEqual(['param1']);
-  });
-
-  it('extracts params with underscores', () => {
-    expect(extractParametersFromSQL('WHERE date >= :start_date')).toEqual(['start_date']);
-  });
-
-  // ── Type casts — must NOT extract ────────────────────────────
-  it('ignores :: DuckDB/PG type cast', () => {
-    expect(extractParametersFromSQL('SELECT col::VARCHAR')).toEqual([]);
-  });
-
-  it('ignores :: after a value', () => {
-    expect(extractParametersFromSQL("SELECT 'foo'::TEXT")).toEqual([]);
-  });
-
-  it(':p directly followed by :: is not extracted (lookahead fires) — add a space: :p ::INT', () => {
+    // ── Type casts — must NOT extract ────────────────────────────
+    { desc: 'ignores :: DuckDB/PG type cast', sql: 'SELECT col::VARCHAR', expected: [] },
+    { desc: 'ignores :: after a value', sql: "SELECT 'foo'::TEXT", expected: [] },
     // Regex limitation: (?!:) lookahead prevents matching :p when :: follows immediately.
     // Workaround: write ':p ::INT' (space before the cast).
-    expect(extractParametersFromSQL('SELECT :p::INT')).toEqual([]);
-    expect(extractParametersFromSQL('SELECT :p ::INT')).toEqual(['p']);
-  });
+    { desc: ':p directly followed by :: is not extracted (lookahead fires)', sql: 'SELECT :p::INT', expected: [] },
+    { desc: ':p with a space before the cast is extracted: :p ::INT', sql: 'SELECT :p ::INT', expected: ['p'] },
+    { desc: 'ignores DuckDB timestamp cast', sql: "SELECT '2021-01-01'::TIMESTAMP", expected: [] },
 
-  it('ignores DuckDB timestamp cast', () => {
-    expect(extractParametersFromSQL("SELECT '2021-01-01'::TIMESTAMP")).toEqual([]);
-  });
-
-  // ── Colons preceded by word chars — skipped via lookbehind ───
-  it('ignores colon in time literal', () => {
+    // ── Colons preceded by word chars — skipped via lookbehind ───
     // digits are \w, so lookbehind fires on '10:30:00'
-    expect(extractParametersFromSQL("WHERE time = '10:30:00'")).toEqual([]);
-  });
-
-  it('ignores colon in timestamp literal', () => {
-    expect(extractParametersFromSQL("WHERE ts = '2024-01-01 10:30:00'")).toEqual([]);
-  });
-
-  it('ignores URL in string', () => {
+    { desc: 'ignores colon in time literal', sql: "WHERE time = '10:30:00'", expected: [] },
+    { desc: 'ignores colon in timestamp literal', sql: "WHERE ts = '2024-01-01 10:30:00'", expected: [] },
     // 's' in 'https:' is \w, so lookbehind fires
-    expect(extractParametersFromSQL("WHERE url = 'https://example.com'")).toEqual([]);
-  });
-
-  it('ignores :param inside double-quoted identifier', () => {
+    { desc: 'ignores URL in string', sql: "WHERE url = 'https://example.com'", expected: [] },
     // 'l' in "col:name" is \w, so lookbehind fires
-    expect(extractParametersFromSQL('SELECT "col:name"')).toEqual([]);
-  });
+    { desc: 'ignores :param inside double-quoted identifier', sql: 'SELECT "col:name"', expected: [] },
+    { desc: 'extracts param after double-quoted identifier', sql: 'SELECT "col" = :p', expected: ['p'] },
 
-  it('extracts param after double-quoted identifier', () => {
-    expect(extractParametersFromSQL('SELECT "col" = :p')).toEqual(['p']);
-  });
-
-  // ── Escaped colon — must NOT extract ─────────────────────────
-  it('ignores \\: escaped colon', () => {
+    // ── Escaped colon — must NOT extract ─────────────────────────
     // backslash is in lookbehind (?<![:\w\\])
-    expect(extractParametersFromSQL('WHERE x = \\:not')).toEqual([]);
-  });
+    { desc: 'ignores \\: escaped colon', sql: 'WHERE x = \\:not', expected: [] },
 
-  // ── Complex real-world queries ────────────────────────────────
-  it('handles full query with casts and params', () => {
-    const sql = `SELECT id, name::TEXT, created_at::DATE
+    // ── Complex real-world queries ────────────────────────────────
+    {
+      desc: 'handles full query with casts and params',
+      sql: `SELECT id, name::TEXT, created_at::DATE
      FROM users
      WHERE status = 'active'
        AND created_at >= :start_date
        AND region = :region
-     LIMIT :limit`;
-    expect(extractParametersFromSQL(sql)).toEqual(['start_date', 'region', 'limit']);
-  });
-
-  it('handles DuckDB STRPTIME pattern', () => {
+     LIMIT :limit`,
+      expected: ['start_date', 'region', 'limit'],
+    },
     // colons inside '%Y-%m-%d' format string — no colons present, param outside is extracted
-    const sql = "SELECT strptime(col, '%Y-%m-%d') FROM t WHERE date >= :start";
-    expect(extractParametersFromSQL(sql)).toEqual(['start']);
-  });
-
-  it('ignores :00:00 time literal — no backtracking to :0', () => {
+    { desc: 'handles DuckDB STRPTIME pattern', sql: "SELECT strptime(col, '%Y-%m-%d') FROM t WHERE date >= :start", expected: ['start'] },
     // Without [a-zA-Z_] anchor, the engine backtracks from :00 (fails lookahead) to :0 (passes)
-    expect(extractParametersFromSQL("SELECT ':00:00'")).toEqual([]);
-  });
+    { desc: 'ignores :00:00 time literal — no backtracking to :0', sql: "SELECT ':00:00'", expected: [] },
+    {
+      desc: 'handles DATE_PARSE format string with real param',
+      sql: "SELECT DATE_PARSE(CONCAT(CAST(year AS VARCHAR), '-', LPAD(CAST(hour AS VARCHAR), 2, '0'), ':00:00'), '%Y-%m-%d %H:%i:%s') FROM t WHERE dt >= :start_date",
+      expected: ['start_date'],
+    },
 
-  it('handles DATE_PARSE format string with real param', () => {
-    const sql =
-      "SELECT DATE_PARSE(CONCAT(CAST(year AS VARCHAR), '-', LPAD(CAST(hour AS VARCHAR), 2, '0'), ':00:00'), '%Y-%m-%d %H:%i:%s') FROM t WHERE dt >= :start_date";
-    expect(extractParametersFromSQL(sql)).toEqual(['start_date']);
-  });
+    // ── Param immediately followed by punctuation ─────────────────
+    { desc: 'param followed by comma', sql: 'SELECT :p,', expected: ['p'] },
+    { desc: 'param followed by close paren', sql: 'fn(:p)', expected: ['p'] },
+    { desc: 'param followed by newline', sql: ':p\n', expected: ['p'] },
+  ];
 
-  it('handles param immediately followed by punctuation', () => {
-    expect(extractParametersFromSQL('SELECT :p,')).toEqual(['p']);
-    expect(extractParametersFromSQL('fn(:p)')).toEqual(['p']);
-    expect(extractParametersFromSQL(':p\n')).toEqual(['p']);
+  it.each(cases)('$desc', ({ sql, expected }) => {
+    expect(extractParametersFromSQL(sql)).toEqual(expected);
   });
 });
 
@@ -1933,31 +1730,48 @@ describe('extractParametersFromSQL', () => {
 
 
 describe('Basic SELECT', () => {
-  it('SELECT *', async () => {
-    const ir = await parseSqlToIrLocal('SELECT * FROM users', 'duckdb') as QueryIR;
-    expect(ir.select).toHaveLength(1);
-    expect(ir.select[0].column).toBe('*');
-    expect(ir.select[0].type).toBe('column');
-    expect(ir.from.table).toBe('users');
-  });
+  // Each row: parse SQL → IR, then assert the parsed select/from shape.
+  const cases: Array<{ desc: string; sql: string; assert: (ir: QueryIR) => void }> = [
+    {
+      desc: 'SELECT *',
+      sql: 'SELECT * FROM users',
+      assert: (ir) => {
+        expect(ir.select).toHaveLength(1);
+        expect(ir.select[0].column).toBe('*');
+        expect(ir.select[0].type).toBe('column');
+        expect(ir.from.table).toBe('users');
+      },
+    },
+    {
+      desc: 'SELECT with specific columns',
+      sql: 'SELECT name, email FROM users',
+      assert: (ir) => {
+        expect(ir.select).toHaveLength(2);
+        expect(ir.select[0].column).toBe('name');
+        expect(ir.select[1].column).toBe('email');
+      },
+    },
+    {
+      desc: 'SELECT with column alias',
+      sql: 'SELECT name AS user_name, email FROM users',
+      assert: (ir) => {
+        expect(ir.select[0].alias).toBe('user_name');
+        expect(ir.select[0].column).toBe('name');
+      },
+    },
+    {
+      desc: 'SELECT with table.column',
+      sql: 'SELECT users.name, users.email FROM users',
+      assert: (ir) => {
+        expect(ir.select[0].table).toBe('users');
+        expect(ir.select[0].column).toBe('name');
+      },
+    },
+  ];
 
-  it('SELECT with specific columns', async () => {
-    const ir = await parseSqlToIrLocal('SELECT name, email FROM users', 'duckdb') as QueryIR;
-    expect(ir.select).toHaveLength(2);
-    expect(ir.select[0].column).toBe('name');
-    expect(ir.select[1].column).toBe('email');
-  });
-
-  it('SELECT with column alias', async () => {
-    const ir = await parseSqlToIrLocal('SELECT name AS user_name, email FROM users', 'duckdb') as QueryIR;
-    expect(ir.select[0].alias).toBe('user_name');
-    expect(ir.select[0].column).toBe('name');
-  });
-
-  it('SELECT with table.column', async () => {
-    const ir = await parseSqlToIrLocal('SELECT users.name, users.email FROM users', 'duckdb') as QueryIR;
-    expect(ir.select[0].table).toBe('users');
-    expect(ir.select[0].column).toBe('name');
+  it.each(cases)('$desc', async ({ sql, assert }) => {
+    const ir = await parseSqlToIrLocal(sql, 'duckdb') as QueryIR;
+    assert(ir);
   });
 });
 
@@ -2442,26 +2256,18 @@ describe('validateQueryTables — delegates to validateQueryTablesLocal (drops u
 describe('validateSqlLocal (polyglot WASM)', () => {
   // --- Basic valid queries (various dialects) ---
 
-  it('valid simple select - duckdb', async () => {
-    const result = await validateSqlLocal('SELECT * FROM foo', 'duckdb');
-    expect(result.valid).toBe(true);
-    expect(result.errors).toEqual([]);
-  });
+  const validSelectCases: Array<{ dialect: 'duckdb' | 'postgres' | 'bigquery'; sql: string; checkNoErrors?: boolean }> = [
+    { dialect: 'duckdb', sql: 'SELECT * FROM foo', checkNoErrors: true },
+    { dialect: 'postgres', sql: 'SELECT id, name FROM users WHERE active = true' },
+    { dialect: 'bigquery', sql: 'SELECT COUNT(*) AS total FROM orders' },
+  ];
 
-  it('valid simple select - postgres', async () => {
-    const result = await validateSqlLocal(
-      'SELECT id, name FROM users WHERE active = true',
-      'postgres',
-    );
+  it.each(validSelectCases)('valid simple select - $dialect', async ({ dialect, sql, checkNoErrors }) => {
+    const result = await validateSqlLocal(sql, dialect);
     expect(result.valid).toBe(true);
-  });
-
-  it('valid simple select - bigquery', async () => {
-    const result = await validateSqlLocal(
-      'SELECT COUNT(*) AS total FROM orders',
-      'bigquery',
-    );
-    expect(result.valid).toBe(true);
+    if (checkNoErrors) {
+      expect(result.errors).toEqual([]);
+    }
   });
 
   // --- Empty / whitespace ---
@@ -2478,20 +2284,18 @@ describe('validateSqlLocal (polyglot WASM)', () => {
 
   // --- Invalid queries ---
 
-  it('invalid keyword - duckdb', async () => {
-    const result = await validateSqlLocal('SELEC * FROM foo', 'duckdb');
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-  });
+  const invalidKeywordCases: Array<{ dialect: 'duckdb' | 'postgres' | 'bigquery'; checkErrors?: boolean }> = [
+    { dialect: 'duckdb', checkErrors: true },
+    { dialect: 'postgres' },
+    { dialect: 'bigquery' },
+  ];
 
-  it('invalid keyword - postgres', async () => {
-    const result = await validateSqlLocal('SELEC * FROM foo', 'postgres');
+  it.each(invalidKeywordCases)('invalid keyword - $dialect', async ({ dialect, checkErrors }) => {
+    const result = await validateSqlLocal('SELEC * FROM foo', dialect);
     expect(result.valid).toBe(false);
-  });
-
-  it('invalid keyword - bigquery', async () => {
-    const result = await validateSqlLocal('SELEC * FROM foo', 'bigquery');
-    expect(result.valid).toBe(false);
+    if (checkErrors) {
+      expect(result.errors.length).toBeGreaterThan(0);
+    }
   });
 
   // --- Error position info ---
@@ -2558,89 +2362,48 @@ describe('validateSqlLocal (polyglot WASM)', () => {
 
   // --- Dialect-specific syntax ---
 
-  it('duckdb read_csv', async () => {
-    const result = await validateSqlLocal(
-      "SELECT * FROM read_csv('file.csv')",
-      'duckdb',
-    );
-    expect(result.valid).toBe(true);
-  });
+  const dialectSyntaxCases: Array<{ desc: string; sql: string; dialect: 'duckdb' | 'postgres' | 'bigquery' }> = [
+    { desc: 'duckdb read_csv', sql: "SELECT * FROM read_csv('file.csv')", dialect: 'duckdb' },
+    { desc: 'duckdb list literal', sql: 'SELECT [1, 2, 3] AS nums', dialect: 'duckdb' },
+    { desc: 'bigquery backtick table', sql: 'SELECT * FROM `project.dataset.table`', dialect: 'bigquery' },
+    { desc: 'bigquery struct', sql: "SELECT STRUCT(1 AS a, 'foo' AS b) AS s", dialect: 'bigquery' },
+    { desc: 'postgres dollar quoting', sql: 'SELECT $$hello world$$ AS greeting', dialect: 'postgres' },
+  ];
 
-  it('duckdb list literal', async () => {
-    const result = await validateSqlLocal(
-      'SELECT [1, 2, 3] AS nums',
-      'duckdb',
-    );
-    expect(result.valid).toBe(true);
-  });
-
-  it('bigquery backtick table', async () => {
-    const result = await validateSqlLocal(
-      'SELECT * FROM `project.dataset.table`',
-      'bigquery',
-    );
-    expect(result.valid).toBe(true);
-  });
-
-  it('bigquery struct', async () => {
-    const result = await validateSqlLocal(
-      "SELECT STRUCT(1 AS a, 'foo' AS b) AS s",
-      'bigquery',
-    );
-    expect(result.valid).toBe(true);
-  });
-
-  it('postgres dollar quoting', async () => {
-    const result = await validateSqlLocal(
-      'SELECT $$hello world$$ AS greeting',
-      'postgres',
-    );
+  it.each(dialectSyntaxCases)('$desc', async ({ sql, dialect }) => {
+    const result = await validateSqlLocal(sql, dialect);
     expect(result.valid).toBe(true);
   });
 
   // --- Multiline SQL with errors ---
 
-  it('multiline missing FROM (JION typo)', async () => {
-    const result = await validateSqlLocal(
-      `SELECT
+  // Invalid multiline queries: valid === false with at least one error reported.
+  const multilineInvalidCases: Array<{ desc: string; sql: string; dialect: 'duckdb' | 'postgres' | 'bigquery' }> = [
+    {
+      desc: 'multiline missing FROM (JION typo)',
+      dialect: 'duckdb',
+      sql: `SELECT
     u.id,
     u.name,
     o.total
 JION orders o ON o.user_id = u.id
 WHERE u.active = true`,
-      'duckdb',
-    );
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-  });
-
-  it('multiline unclosed subquery', async () => {
-    const result = await validateSqlLocal(
-      `SELECT *
+    },
+    {
+      desc: 'multiline unclosed subquery',
+      dialect: 'postgres',
+      sql: `SELECT *
 FROM (
     SELECT id, name
     FROM users
     WHERE active = true
 
 WHERE id > 10`,
-      'postgres',
-    );
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-  });
-
-  it('multiline error reports correct line', async () => {
-    const result = await validateSqlLocal(
-      'SELECT id\nFROM users\nWHERE id >\nORDER BY',
-      'bigquery',
-    );
-    expect(result.valid).toBe(false);
-    expect(result.errors[0].line).toBeGreaterThan(1);
-  });
-
-  it('multiline CTE with typo', async () => {
-    const result = await validateSqlLocal(
-      `WITH monthly_revenue AS (
+    },
+    {
+      desc: 'multiline CTE with typo',
+      dialect: 'duckdb',
+      sql: `WITH monthly_revenue AS (
     SELECT
         DATE_TRUNC('month', created_at) AS month,
         SUM(amount) AS revenue
@@ -2650,30 +2413,51 @@ WHERE id > 10`,
 SELECT *
 FROM monthly_revenue
 ORDER BY month`,
-      'duckdb',
-    );
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-  });
-
-  it('multiline double WHERE', async () => {
-    const result = await validateSqlLocal(
-      `SELECT
+    },
+    {
+      desc: 'multiline double WHERE',
+      dialect: 'postgres',
+      sql: `SELECT
     u.name,
     o.total
 FROM users u
 JOIN orders o ON o.user_id = u.id
 WHERE u.active = true
 WHERE o.created_at > '2024-01-01'`,
-      'postgres',
-    );
+    },
+    {
+      desc: 'multiline mismatched parens',
+      dialect: 'postgres',
+      sql: `SELECT
+    id,
+    name,
+    (CASE WHEN active THEN 'yes' ELSE 'no' AS status
+FROM users`,
+    },
+  ];
+
+  it.each(multilineInvalidCases)('$desc', async ({ sql, dialect }) => {
+    const result = await validateSqlLocal(sql, dialect);
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
   });
 
-  it('multiline valid complex query', async () => {
+  // Distinct assertion shape: asserts the reported error line, not the error count.
+  it('multiline error reports correct line', async () => {
     const result = await validateSqlLocal(
-      `WITH active_users AS (
+      'SELECT id\nFROM users\nWHERE id >\nORDER BY',
+      'bigquery',
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].line).toBeGreaterThan(1);
+  });
+
+  // Valid multiline queries.
+  const multilineValidCases: Array<{ desc: string; sql: string; dialect: 'duckdb' | 'postgres' | 'bigquery' }> = [
+    {
+      desc: 'multiline valid complex query',
+      dialect: 'bigquery',
+      sql: `WITH active_users AS (
     SELECT id, name, email
     FROM users
     WHERE active = true
@@ -2700,14 +2484,11 @@ SELECT
 FROM user_orders
 ORDER BY total_spent DESC
 LIMIT 50`,
-      'bigquery',
-    );
-    expect(result.valid).toBe(true);
-  });
-
-  it('multiline with params and references', async () => {
-    const result = await validateSqlLocal(
-      `SELECT
+    },
+    {
+      desc: 'multiline with params and references',
+      dialect: 'duckdb',
+      sql: `SELECT
     r.month,
     r.revenue,
     c.cost,
@@ -2717,21 +2498,11 @@ JOIN @costs_by_month_2 c ON c.month = r.month
 WHERE r.month >= :start_date
     AND r.month <= :end_date
 ORDER BY r.month`,
-      'duckdb',
-    );
-    expect(result.valid).toBe(true);
-  });
+    },
+  ];
 
-  it('multiline mismatched parens', async () => {
-    const result = await validateSqlLocal(
-      `SELECT
-    id,
-    name,
-    (CASE WHEN active THEN 'yes' ELSE 'no' AS status
-FROM users`,
-      'postgres',
-    );
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
+  it.each(multilineValidCases)('$desc', async ({ sql, dialect }) => {
+    const result = await validateSqlLocal(sql, dialect);
+    expect(result.valid).toBe(true);
   });
 });

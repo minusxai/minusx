@@ -140,40 +140,19 @@ describe('fuzzyMatch — DuckDB', () => {
   });
 });
 
-// ─── SQLite (routes through DuckDB) ─────────────────────────────────────────
+// ─── DuckDB-routed connectors (SQLite, CSV, Google Sheets) ──────────────────
 
-describe('fuzzyMatch — SQLite', () => {
-  it('uses same dual strategy as DuckDB', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    const result = await fuzzyMatch('sqlite', queryFn, DEFAULT_PARAMS);
-    expect(result.results).toHaveLength(2);
-    expect(result.results[0].method).toBe('jaro_winkler');
-    expect(result.results[1].method).toBe('substring');
-  });
-});
-
-// ─── CSV ─────────────────────────────────────────────────────────────────────
-
-describe('fuzzyMatch — CSV', () => {
-  it('uses same dual strategy as DuckDB', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    const result = await fuzzyMatch('csv', queryFn, DEFAULT_PARAMS);
-    expect(result.results).toHaveLength(2);
-    expect(result.results[0].method).toBe('jaro_winkler');
-    expect(result.results[1].method).toBe('substring');
-  });
-});
-
-// ─── Google Sheets ───────────────────────────────────────────────────────────
-
-describe('fuzzyMatch — Google Sheets', () => {
-  it('uses same dual strategy as DuckDB', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    const result = await fuzzyMatch('google-sheets', queryFn, DEFAULT_PARAMS);
-    expect(result.results).toHaveLength(2);
-    expect(result.results[0].method).toBe('jaro_winkler');
-    expect(result.results[1].method).toBe('substring');
-  });
+describe('fuzzyMatch — DuckDB-routed connectors', () => {
+  it.each(['sqlite', 'csv', 'google-sheets'])(
+    '%s uses same dual strategy as DuckDB',
+    async (connector) => {
+      const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
+      const result = await fuzzyMatch(connector, queryFn, DEFAULT_PARAMS);
+      expect(result.results).toHaveLength(2);
+      expect(result.results[0].method).toBe('jaro_winkler');
+      expect(result.results[1].method).toBe('substring');
+    },
+  );
 });
 
 // ─── PostgreSQL ──────────────────────────────────────────────────────────────
@@ -302,19 +281,14 @@ describe('fuzzyMatch — Athena', () => {
     expect(sql).toContain('GREATEST');
   });
 
-  it('sets max distance threshold based on search term length', async () => {
+  // max distance = max(floor(len/3), 3)
+  it.each([
+    ['sets max distance threshold based on search term length', 'Strawberry Jam', '<= 4'], // 14 chars → max(4, 3) = 4
+    ['uses minimum distance of 3 for short search terms', 'ab', '<= 3'],                   // 2 chars → max(0, 3) = 3
+  ])('%s', async (_desc, searchTerm, expectedThreshold) => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    // "Strawberry Jam" is 14 chars → max distance = max(floor(14/3), 3) = 4
-    await fuzzyMatch('athena', queryFn, DEFAULT_PARAMS);
-    const sql = getCapturedSql(queryFn, 0);
-    expect(sql).toContain('<= 4');
-  });
-
-  it('uses minimum distance of 3 for short search terms', async () => {
-    const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    // "ab" is 2 chars → max(floor(2/3), 3) = max(0, 3) = 3
-    await fuzzyMatch('athena', queryFn, { table: 't', columns: ['c'], searchTerm: 'ab' });
-    expect(getCapturedSql(queryFn, 0)).toContain('<= 3');
+    await fuzzyMatch('athena', queryFn, { table: 't', columns: ['c'], searchTerm });
+    expect(getCapturedSql(queryFn, 0)).toContain(expectedThreshold);
   });
 });
 

@@ -38,9 +38,14 @@ describe('normalizeSql', () => {
     expect(a).not.toBe(b);
   });
 
-  it('column alias preserved - bigquery', async () => {
-    const a = await normalizeSql('SELECT id AS user_id FROM users', 'bigquery');
-    const b = await normalizeSql('SELECT id AS user_id FROM users', 'bigquery');
+  it.each([
+    ['column alias preserved - bigquery', 'SELECT id AS user_id FROM users', 'bigquery'],
+    ['CTE normalizes consistently - postgres', 'WITH cte AS (SELECT id FROM users) SELECT * FROM cte', 'postgres'],
+    ['JOIN normalizes consistently - duckdb', 'SELECT u.id, o.total FROM users u JOIN orders o ON o.user_id = u.id', 'duckdb'],
+    ['aggregate normalizes consistently - bigquery', 'SELECT COUNT(*) AS total, SUM(amount) AS revenue FROM orders GROUP BY status', 'bigquery'],
+  ] as const)('%s', async (_desc, sql, dialect) => {
+    const a = await normalizeSql(sql, dialect);
+    const b = await normalizeSql(sql, dialect);
     expect(a).toBe(b);
   });
 
@@ -53,27 +58,6 @@ describe('normalizeSql', () => {
   it('empty string - duckdb', async () => {
     const result = await normalizeSql('', 'duckdb');
     expect(typeof result).toBe('string');
-  });
-
-  it('CTE normalizes consistently - postgres', async () => {
-    const sql = 'WITH cte AS (SELECT id FROM users) SELECT * FROM cte';
-    const a = await normalizeSql(sql, 'postgres');
-    const b = await normalizeSql(sql, 'postgres');
-    expect(a).toBe(b);
-  });
-
-  it('JOIN normalizes consistently - duckdb', async () => {
-    const sql = 'SELECT u.id, o.total FROM users u JOIN orders o ON o.user_id = u.id';
-    const a = await normalizeSql(sql, 'duckdb');
-    const b = await normalizeSql(sql, 'duckdb');
-    expect(a).toBe(b);
-  });
-
-  it('aggregate normalizes consistently - bigquery', async () => {
-    const sql = 'SELECT COUNT(*) AS total, SUM(amount) AS revenue FROM orders GROUP BY status';
-    const a = await normalizeSql(sql, 'bigquery');
-    const b = await normalizeSql(sql, 'bigquery');
-    expect(a).toBe(b);
   });
 });
 
@@ -112,38 +96,14 @@ describe('validateRoundTrip', () => {
     expect(result.hint).not.toBeNull();
   });
 
-  it('missing WHERE clause is lossy - postgres', async () => {
-    const original = 'SELECT id FROM users WHERE active = TRUE';
-    const regenerated = 'SELECT id FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'postgres');
-    expect(result.supported).toBe(false);
-  });
-
-  it('missing ORDER BY is lossy - bigquery', async () => {
-    const original = 'SELECT id FROM users ORDER BY name';
-    const regenerated = 'SELECT id FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'bigquery');
-    expect(result.supported).toBe(false);
-  });
-
-  it('missing LIMIT is lossy - duckdb', async () => {
-    const original = 'SELECT id FROM users LIMIT 100';
-    const regenerated = 'SELECT id FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'duckdb');
-    expect(result.supported).toBe(false);
-  });
-
-  it('missing GROUP BY is lossy - postgres', async () => {
-    const original = 'SELECT status, COUNT(*) FROM orders GROUP BY status';
-    const regenerated = 'SELECT status, COUNT(*) FROM orders';
-    const result = await validateRoundTrip(original, regenerated, 'postgres');
-    expect(result.supported).toBe(false);
-  });
-
-  it('added column is lossy - bigquery', async () => {
-    const original = 'SELECT id FROM users';
-    const regenerated = 'SELECT id, name FROM users';
-    const result = await validateRoundTrip(original, regenerated, 'bigquery');
+  it.each([
+    ['missing WHERE clause is lossy - postgres', 'SELECT id FROM users WHERE active = TRUE', 'SELECT id FROM users', 'postgres'],
+    ['missing ORDER BY is lossy - bigquery', 'SELECT id FROM users ORDER BY name', 'SELECT id FROM users', 'bigquery'],
+    ['missing LIMIT is lossy - duckdb', 'SELECT id FROM users LIMIT 100', 'SELECT id FROM users', 'duckdb'],
+    ['missing GROUP BY is lossy - postgres', 'SELECT status, COUNT(*) FROM orders GROUP BY status', 'SELECT status, COUNT(*) FROM orders', 'postgres'],
+    ['added column is lossy - bigquery', 'SELECT id FROM users', 'SELECT id, name FROM users', 'bigquery'],
+  ] as const)('%s', async (_desc, original, regenerated, dialect) => {
+    const result = await validateRoundTrip(original, regenerated, dialect);
     expect(result.supported).toBe(false);
   });
 
