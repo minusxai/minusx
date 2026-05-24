@@ -4,7 +4,7 @@ import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
-import { getAnalystModel, getAnalystModelOptions } from '@/agents/analyst/model-config';
+import { getAnalystModel, getAnalystModelConfig, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
   EditFile,
   CreateFile,
@@ -61,10 +61,13 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box;
   // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
-  // `webSearch: true` enables Anthropic's native web search (server-side tool),
-  // matching Python's `include_web_search=True`. The model decides when to use
-  // it per the prompt's web_search guidance.
-  static readonly callOptions = { reasoning: 'low', webSearch: true, ...(getAnalystModelOptions() ?? {}) };
+  // `webSearch` enables Anthropic's native web search (server-side tool) —
+  // only supported by the Anthropic provider, so disabled for others.
+  static readonly callOptions = {
+    reasoning: 'low',
+    webSearch: (getAnalystModelConfig()?.provider ?? 'anthropic') === 'anthropic',
+    ...(getAnalystModelOptions() ?? {}),
+  };
 
   protected getSystemPrompt(): string {
     // Re-uses the RemoteAnalystAgent prompt (production prompts.yaml) under
