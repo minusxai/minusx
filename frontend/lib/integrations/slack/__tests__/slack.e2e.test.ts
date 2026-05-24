@@ -24,7 +24,7 @@ import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { POST, processSlackEvent } from '@/app/api/integrations/slack/events/route';
 import type { SlackInstallationMatch } from '@/lib/integrations/slack/store';
-import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { fauxRegistration as slackFaux } from '@/agents/slack/slack-agent';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -41,6 +41,12 @@ const TEST_USER_ID = 'U_TEST_USER';
 const TEST_UNKNOWN_USER_ID = 'U_UNKNOWN_USER';
 const TEST_BOT_USER_ID = 'U_BOT_ID';
 const TEST_EMAIL = 'slack-test@example.com';
+// Admin user whose stored home_folder is the documented default '/org' — this is
+// what reproduces the SearchFiles resolution bug ('/org' → '/org/org' search root).
+const TEST_ADMIN_USER_ID = 'U_ADMIN_USER';
+const TEST_ADMIN_EMAIL = 'slack-admin@example.com';
+const TEST_CONNECTION_NAME = 'test_warehouse';
+const TEST_QUESTION_NAME = 'Weekly Revenue Report';
 
 // ============================================================================
 // DB fixture setup
@@ -77,6 +83,38 @@ async function addSlackTestFixtures(_dbPath: string): Promise<void> {
     `INSERT INTO users (id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [2, TEST_EMAIL, 'Slack Test User', null, null, null, '', 'viewer', now, now]
+  );
+
+  // Admin user with the documented default home_folder '/org'. Admins can access
+  // every file, so the ONLY thing that can make their SearchFiles return empty is
+  // the search-root resolution bug ('/org' → '/org/org'). This mirrors the prod
+  // user (id=1 admin) who has lots of files but got empty results.
+  await db.exec(
+    `INSERT INTO users (id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [3, TEST_ADMIN_EMAIL, 'Slack Admin User', null, null, null, '/org', 'admin', now, now]
+  );
+
+  // Seed a connection so ListDBConnections has something to return, and a question
+  // under /org so SearchFiles has something to find.
+  const { DocumentDB } = await import('@/lib/database/documents-db');
+  await DocumentDB.create(
+    TEST_CONNECTION_NAME,
+    `/org/database/${TEST_CONNECTION_NAME}`,
+    'connection',
+    { name: TEST_CONNECTION_NAME, type: 'postgresql', config: { host: 'localhost' }, description: 'Sales warehouse' } as any,
+    [],
+    undefined,
+    false,
+  );
+  await DocumentDB.create(
+    TEST_QUESTION_NAME,
+    `/org/${TEST_QUESTION_NAME}`,
+    'question',
+    { name: TEST_QUESTION_NAME, query: 'SELECT 1', description: 'Tracks weekly revenue', connection_name: TEST_CONNECTION_NAME, vizSettings: { type: 'table' }, parameters: [] } as any,
+    [],
+    undefined,
+    false,
   );
 }
 
@@ -185,7 +223,10 @@ describe('Slack Bot Integration', () => {
         if (urlStr.includes('slack.com/api/users.info')) {
           const qs = new URLSearchParams(urlStr.split('?')[1] ?? '');
           const userId = qs.get('user');
-          const email = userId === TEST_USER_ID ? TEST_EMAIL : 'nobody@unknown.example';
+          const email =
+            userId === TEST_USER_ID ? TEST_EMAIL
+            : userId === TEST_ADMIN_USER_ID ? TEST_ADMIN_EMAIL
+            : 'nobody@unknown.example';
           return {
             ok: true,
             status: 200,
@@ -492,6 +533,134 @@ describe('Slack Bot Integration', () => {
       // Must be the honest fallback, not a stale reply.
       expect(postedMessages[0].text).toMatch(/do not have a text reply/i);
     }, 120000);
+
+    it('agent can list DB connections and search files (not empty)', async () => {
+      // The agent calls ListDBConnections + SearchFiles, then replies.
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [
+            fauxToolCall('ListDBConnections', {}),
+            fauxToolCall('SearchFiles', { query: 'revenue' }),
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage('Here are your connections and reports.', { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          userId: TEST_ADMIN_USER_ID,
+          ts: '1700009000.000001',
+          eventId: `Ev_tools_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> show me revenue`,
+        }) as any,
+        installation,
+      );
+
+      // Pull the persisted conversation log and inspect the two tool results.
+      const { getModules } = await import('@/lib/modules/registry');
+      const { rows } = await getModules().db.exec<{ content: any }>(
+        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/3/slack-%' LIMIT 1`,
+        [],
+      );
+      expect(rows).toHaveLength(1);
+      const logJson = JSON.stringify((rows[0].content as { log: unknown[] }).log);
+
+      // Bug #1 — ListDBConnections returned "[]" because ctx.connections was never
+      // populated in the headless runner. The seeded connection must appear.
+      expect(logJson).toContain(TEST_CONNECTION_NAME);
+
+      // Bug #2 — SearchFiles returned {results:[],total:0} because the admin's
+      // home_folder '/org' resolved to a non-existent '/org/org' search root.
+      // The seeded question must appear in the results.
+      expect(logJson).toContain(TEST_QUESTION_NAME);
+    }, 60000);
+
+    it('intermediate "talk to user" preamble does NOT end the run — posts the final answer', async () => {
+      // Reproduces the reported symptom hypothesis: the model emits an intermediate
+      // talk-to-user message ("Let me look that up...") ALONGSIDE a tool call
+      // (stopReason 'toolUse'), then a real answer on the next step. The Slack path
+      // must run the agent loop to completion and post the FINAL answer — NOT return
+      // early on the intermediate preamble.
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [
+            { type: 'text', text: 'Let me look that up for you.' },
+            fauxToolCall('SearchFiles', { query: 'revenue' }),
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage('Found it: the Weekly Revenue Report.', { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          userId: TEST_ADMIN_USER_ID,
+          ts: '1700010000.000001',
+          eventId: `Ev_preamble_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> where is the revenue report?`,
+        }) as any,
+        installation,
+      );
+
+      expect(postedMessages).toHaveLength(1);
+      // Must be the final answer (turn 2), never the intermediate preamble (turn 1).
+      expect(postedMessages[0].text).toContain('Weekly Revenue Report');
+      expect(postedMessages[0].text).not.toContain('Let me look that up');
+    }, 60000);
+
+    it('ReadFiles executes server-side in the headless path (not bridged → interrupted)', async () => {
+      // Regression for the prod bug: the registered ReadFiles was the WebAnalystAgent
+      // frontend-bridge variant (throws UserInputException), so in the headless Slack
+      // path it never executed — it hung as a pending tool and got marked
+      // "interrupted", leaving only the preamble to post. The headless path must use
+      // the server-side ReadFiles so the loop completes and posts the real answer.
+      const { getModules } = await import('@/lib/modules/registry');
+      const { rows: idRows } = await getModules().db.exec<{ id: number }>(
+        `SELECT id FROM files WHERE path = $1 LIMIT 1`,
+        [`/org/${TEST_QUESTION_NAME}`],
+      );
+      const fileId = idRows[0].id;
+
+      slackFaux.setResponses([
+        fauxAssistantMessage(
+          [
+            { type: 'text', text: 'Let me pull up that file for you!' },
+            fauxToolCall('ReadFiles', { fileIds: [fileId] }),
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        fauxAssistantMessage(`Found it — ${TEST_QUESTION_NAME}.`, { stopReason: 'stop' }),
+      ]);
+
+      const installation = buildInstallation();
+      await processSlackEvent(
+        makeAppMentionPayload({
+          userId: TEST_ADMIN_USER_ID,
+          ts: '1700011000.000001',
+          eventId: `Ev_readfiles_${Date.now()}`,
+          text: `<@${TEST_BOT_USER_ID}> can you access file ${fileId}?`,
+        }) as any,
+        installation,
+      );
+
+      expect(postedMessages).toHaveLength(1);
+      // Must be the final answer — proves ReadFiles ran and the loop continued.
+      // Before the fix, ReadFiles hung (UserInputException) and only the preamble
+      // ("Let me pull up that file…") was posted.
+      expect(postedMessages[0].text).toContain(TEST_QUESTION_NAME);
+      expect(postedMessages[0].text).not.toContain('pull up that file');
+
+      // And the persisted ReadFiles result must not be the "interrupted" dangler.
+      const { rows } = await getModules().db.exec<{ content: any }>(
+        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/3/slack-%' LIMIT 1`,
+        [],
+      );
+      const logJson = JSON.stringify((rows[0].content as { log: unknown[] }).log);
+      expect(logJson).not.toContain('"result":"interrupted"');
+    }, 60000);
 
     it('unknown MinusX user receives a polite error reply', async () => {
       const installation = buildInstallation();

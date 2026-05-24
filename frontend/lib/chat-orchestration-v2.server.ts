@@ -26,7 +26,7 @@ import {
   PublishAll,
   LoadSkill,
 } from '@/agents/web-analyst/web-analyst';
-import { SearchFiles } from '@/agents/analyst/file-tools';
+import { SearchFiles, ReadFiles as ServerReadFiles } from '@/agents/analyst/file-tools';
 import { SlackAgent } from '@/agents/slack/slack-agent';
 import { OnboardingContextAgent, OnboardingDashboardAgent } from '@/agents/onboarding/onboarding-agents';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
@@ -136,6 +136,18 @@ const BENCHMARK_TOOL_SWAPS: Record<string, RegistrableClass> = {
 };
 
 /**
+ * Headless (clientless) tool swaps. `V2_REGISTRABLES` registers the WebAnalystAgent
+ * `ReadFiles` — a frontend-bridge variant that throws `UserInputException` so the
+ * browser can read in-flight Redux state. There is no browser in the headless path
+ * (Slack / reports / eval), so that variant hangs as a dangling pending tool and
+ * gets marked "interrupted", leaving the agent unable to finish. Swap in the
+ * server-side `ReadFiles` (reads the document DB directly) for those runs.
+ */
+const HEADLESS_TOOL_SWAPS: Record<string, RegistrableClass> = {
+  ReadFiles: ServerReadFiles,
+};
+
+/**
  * V2 benchmark registrables. The V2 agent has a different toolset (4
  * primitives, handle-based) so a swap-on-name approach doesn't cover it —
  * we replace the whole array. Both the single-agent (`V2BenchmarkAnalystAgent`)
@@ -180,6 +192,18 @@ function withSwaps(
 ): RegistrableClass[] {
   return base.map((cls) => swaps[toolName(cls)] ?? cls);
 }
+
+/**
+ * Registrables for headless (clientless) orchestration — Slack, reports, eval,
+ * feed-summary. Identical to `V2_REGISTRABLES` except frontend-bridge tools that
+ * require a browser are swapped for server-side equivalents (see
+ * `HEADLESS_TOOL_SWAPS`). Use this instead of `V2_REGISTRABLES` in any runner
+ * that has no client to bridge tool calls back to.
+ */
+export const V2_HEADLESS_REGISTRABLES: RegistrableClass[] = withSwaps(
+  V2_REGISTRABLES,
+  HEADLESS_TOOL_SWAPS,
+);
 
 /** Subset of legacy ChatResponse the v=2 path produces. */
 export interface V2LegacyChatResponse {

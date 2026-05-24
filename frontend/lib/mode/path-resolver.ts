@@ -28,8 +28,12 @@ export function resolvePath(mode: Mode, logicalPath: string): string {
     logicalPath = '/' + logicalPath;
   }
 
-  // Don't double-prefix if already has mode
-  if (logicalPath.startsWith(`/${mode}/`)) {
+  // Don't double-prefix if already mode-prefixed. Covers both the mode root
+  // itself (`/org`) and any path under it (`/org/...`); without the exact-match
+  // case, `/org` would wrongly become `/org/org` — e.g. a user whose home_folder
+  // is the documented default `/org`, which then rooted file search at the
+  // non-existent `/org/org` and returned nothing.
+  if (logicalPath === `/${mode}` || logicalPath.startsWith(`/${mode}/`)) {
     return logicalPath;
   }
 

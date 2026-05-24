@@ -16,13 +16,15 @@
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
-import { V2_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
+import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import { appendLogToConversation } from '@/lib/conversations';
 import { getPageType } from '@/agents/analyst/skills';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { FilesAPI } from '@/lib/data/files.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type {
   ConversationLogEntry as LegacyLogEntry,
@@ -60,11 +62,25 @@ export interface RunOrchestrationV2Result {
 }
 
 /** Build a RemoteAnalystContext from agent_args (mirrors the chat path's v=2 setup). */
-function buildAnalystContext(
+async function buildAnalystContext(
   agent_args: Record<string, unknown>,
   user: EffectiveUser,
-): RemoteAnalystContext {
+): Promise<RemoteAnalystContext> {
   const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
+
+  // Load the workspace's connections so the headless agent's ListDBConnections
+  // tool can discover them. Unlike the browser chat (WebAnalystAgent, which has
+  // no ListDBConnections and is handed a pre-selected connection_id from Redux),
+  // clientless agents (SlackAgent, …) must discover connections themselves — so
+  // without this they'd see an empty list and give up. SearchDBSchema/ExecuteQuery
+  // still resolve by name server-side via ConnectionsAPI, but the LLM needs the
+  // names from here first.
+  const { connections: rawConnections } = await ConnectionsAPI.listAll(user);
+  const connections: ConnectionInfo[] = rawConnections.map((c) => ({
+    name: c.name,
+    dialect: c.type,
+    config: c.config,
+  }));
 
   const schema = Array.isArray(agent_args.schema)
     ? (agent_args.schema as { schema: string; tables: string[] }[])
@@ -86,6 +102,7 @@ function buildAnalystContext(
     userId: String(user.userId ?? user.email),
     mode: narrowedMode,
     effectiveUser: user,
+    connections,
     connectionId,
     whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
     contextDocs: contextDocs || undefined,
@@ -118,8 +135,8 @@ export async function runChatOrchestrationV2({
   const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
   const expectedLogIndex = savedLog.length;
 
-  const ctx = buildAnalystContext(agent_args, user);
-  const registrables: RegistrableClass[] = [...V2_REGISTRABLES];
+  const ctx = await buildAnalystContext(agent_args, user);
+  const registrables: RegistrableClass[] = [...V2_HEADLESS_REGISTRABLES];
   const orch = new Orchestrator(registrables, [...savedLog]);
 
   const agent = new agentClass(orch, { userMessage }, ctx);
