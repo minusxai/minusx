@@ -2,8 +2,7 @@ import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vi
 /**
  * Centralized fetch mocking for E2E tests
  *
- * Handles routing /api/chat to Next.js handler while letting Python backend
- * calls through to the real server.
+ * Routes API calls (e.g. /api/chat) to the in-process Next.js route handlers.
  */
 
 import { NextRequest } from 'next/server';

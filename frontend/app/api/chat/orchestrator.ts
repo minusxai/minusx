@@ -1,37 +1,13 @@
 /**
- * Next.js Backend Orchestrator
+ * Server tool registry
  *
- * Core orchestration logic for executing pending tools from Python backend.
- * Uses a registry pattern for extensibility - tools register themselves
- * via registerTool() and can be looked up dynamically.
- *
- * Handles:
- * - Tool execution via registry
- * - FrontendToolException (spawning children)
- * - Conversation appending (with fork detection)
- * - Event emission (for streaming)
+ * A registry of server-side tool handlers, used by `/api/tools/execute` (the
+ * Tool Inspector) to re-run a tool by name with possibly-modified args. Tools
+ * register themselves via `registerTool()` (see `tool-handlers.server.ts`).
  */
 
-import { ToolCall, ConversationLogEntry, ToolCallDetails } from '@/lib/types';
+import { ToolCall, ToolCallDetails } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { appendLogToConversation } from '@/lib/conversations';
-import { FrontendToolException } from './frontend-tool-exception';
-import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import {
-  CompletedToolCallPayload,
-  generate_unique_tool_call_id
-} from '@/lib/chat-orchestration';
-
-// ============================================================================
-// Exported Types for Tool Handlers
-// ============================================================================
-
-export interface ToolExecutionResult {
-  role: "tool";
-  tool_call_id: string;
-  content: string | any;
-  details?: ToolCallDetails;  // Passed through to Python, stored in TaskResult, returned in completed_tool_calls
-}
 
 /**
  * Structured return type for server tool handlers that want to pass
@@ -40,32 +16,6 @@ export interface ToolExecutionResult {
 export interface ServerToolResult {
   content: string | object;
   details?: ToolCallDetails;
-}
-
-export function isServerToolResult(r: unknown): r is ServerToolResult {
-  return r !== null && typeof r === 'object' && 'content' in (r as object) && 'details' in (r as object);
-}
-
-/**
- * Result of orchestrating pending tool calls
- */
-export interface OrchestrationResult {
-  completedTools: CompletedToolCallPayload[];
-  remainingPendingTools: ToolCall[];
-  spawnedTools: ToolCall[];
-  updatedFileId: number;
-  updatedLogIndex: number;
-  logEntries: ConversationLogEntry[];
-}
-
-/**
- * Optional callbacks for orchestration events (used for streaming)
- */
-export interface OrchestrationCallbacks {
-  onToolExecuting?: (tool: ToolCall) => void;
-  onToolCompleted?: (tool: ToolCall, result: ToolExecutionResult) => void;
-  onToolFailed?: (tool: ToolCall, error: Error) => void;
-  onToolSpawned?: (parent: ToolCall, child: ToolCall) => void;
 }
 
 /**
@@ -81,230 +31,18 @@ export type ToolHandler = (
 ) => Promise<string | object>;
 
 /**
- * Global tool registry
+ * Global tool registry. Tools call `registerTool()` to make themselves
+ * available for server-side execution.
  */
 export const toolRegistry: Record<string, ToolHandler> = {};
 
-/**
- * Register a tool handler
- * Tools call this function to register themselves with the orchestrator
- */
+/** Register a tool handler. */
 export function registerTool(name: string, handler: ToolHandler) {
   toolRegistry[name] = handler;
 }
 
-/**
- * Fallback tool registry — activated only in server-run mode (no browser client).
- * Used for tools that normally execute client-side (Redux, UI) but have a
- * server-safe alternative when running scheduled/remote jobs.
- */
-export const fallbackToolRegistry: Record<string, ToolHandler> = {};
-
-/**
- * Register a server-fallback tool handler.
- * Called only when allowServerFallback=true is passed to orchestratePendingTools.
- */
-export function registerToolFallback(name: string, handler: ToolHandler) {
-  fallbackToolRegistry[name] = handler;
-}
-
-/**
- * Check if a tool can be executed by the Next.js backend
- */
+/** Check whether a tool can be executed by the server registry. */
 export function canExecuteTool(toolCall: ToolCall): boolean {
   const toolName = toolCall.function?.name;
   return toolName ? toolName in toolRegistry : false;
-}
-
-/**
- * Options for orchestratePendingTools
- */
-export interface OrchestrationOptions {
-  /** Enable server-fallback handlers for client-only tools (e.g. ReadFiles).
-   *  Set true only in server-run paths (runChatOrchestration, tests/server.ts)
-   *  where no browser client is present. Default: false. */
-  allowServerFallback?: boolean;
-  /** Abort signal for user-initiated cancellation (interactive chat only). */
-  signal?: AbortSignal;
-  /** Streaming event callbacks (interactive chat only). */
-  callbacks?: OrchestrationCallbacks;
-}
-
-/**
- * Execute a tool call on the Next.js backend (internal)
- */
-async function executeToolInternal(toolCall: ToolCall, user: EffectiveUser, useFallback = false): Promise<ToolExecutionResult> {
-  const toolName = toolCall.function?.name;
-  const registry = useFallback ? fallbackToolRegistry : toolRegistry;
-
-  if (!toolName || !registry[toolName]) {
-    throw new Error(`Tool ${toolName} cannot be executed by backend`);
-  }
-
-  // Call handler with destructured args
-  const rawResult = await registry[toolName](
-    toolCall.function.arguments || {},
-    user,
-    toolCall.function.child_tasks_batch
-  );
-
-  // Detect ServerToolResult shape to extract content + details separately
-  const isStructured = isServerToolResult(rawResult);
-  const content = isStructured ? rawResult.content : rawResult;
-  const details = isStructured ? rawResult.details : undefined;
-
-  return {
-    role: "tool",
-    tool_call_id: toolCall.id,
-    content: typeof content === 'string' ? content : JSON.stringify(content),
-    details
-  };
-}
-
-/**
- * Orchestrate execution of pending tool calls
- *
- * Handles:
- * - Tool execution via registry
- * - FrontendToolException (spawning children)
- * - Conversation appending (with fork detection)
- * - Event emission (for streaming)
- *
- * @param pendingTools - Tool calls from Python backend
- * @param fileId - Current conversation file ID
- * @param logIndex - Current log index
- * @param user - Effective user for permissions
- * @param signal - Optional abort signal to check for interruption
- * @param callbacks - Optional callbacks for streaming events
- * @returns Orchestration result with completed/pending/spawned tools
- */
-export async function orchestratePendingTools(
-  pendingTools: ToolCall[],
-  fileId: number,
-  logIndex: number,
-  user: EffectiveUser,
-  options: OrchestrationOptions = {}
-): Promise<OrchestrationResult> {
-  const { allowServerFallback = false, signal, callbacks } = options;
-  // Check abort at the very start (before executing any backend tools)
-  if (signal?.aborted) {
-    console.log('[orchestrator] Request aborted - skipping tool execution');
-    // Return all tools as pending (skip execution)
-    return {
-      completedTools: [],
-      remainingPendingTools: pendingTools,  // All tools still pending
-      spawnedTools: [],
-      logEntries: [],
-      updatedFileId: fileId,
-      updatedLogIndex: logIndex,
-    };
-  }
-
-  const completedTools: CompletedToolCallPayload[] = [];
-  const remainingPendingTools: ToolCall[] = [];
-  const spawnedTools: ToolCall[] = [];
-  let currentFileId = fileId;
-  let currentLogIndex = logIndex;
-  const logEntries: ConversationLogEntry[] = [];
-
-  // Process each pending tool
-  for (const toolCall of pendingTools) {
-    // When allowServerFallback=true, the fallback registry takes precedence over
-    // the primary registry. This lets server-run mode override tools like Clarify
-    // that have a primary handler but need different behaviour without a client.
-    const toolName = toolCall.function?.name ?? '';
-    const useFallback = allowServerFallback && toolName in fallbackToolRegistry;
-    if (useFallback || canExecuteTool(toolCall)) {
-      // Backend can execute this tool (fallback registry takes precedence in server-run mode)
-      try {
-        callbacks?.onToolExecuting?.(toolCall);
-
-        const result = await executeToolInternal(toolCall, user, useFallback);
-        // Include details in payload — Python stores it in TaskResult and passes it back;
-        // it is never forwarded to the LLM (task_to_tool_message uses only result, not details)
-        completedTools.push(result);
-
-        callbacks?.onToolCompleted?.(toolCall, result);
-      } catch (error) {
-        // Check if tool is spawning frontend tools
-        if (error instanceof FrontendToolException) {
-          // DON'T complete parent - spawn children instead
-          for (const spawnedTool of error.spawnedTools) {
-            const child: ToolCall = {
-              id: generate_unique_tool_call_id(),  // New ID for child
-              type: 'function' as const,
-              function: spawnedTool.function,
-              _parent_unique_id: toolCall.id  // Reference parent
-            };
-
-            spawnedTools.push(child);
-            callbacks?.onToolSpawned?.(toolCall, child);
-          }
-          // Note: Parent tool is NOT added to completedTools or remainingPending
-          // It remains pending in the log until children complete
-        } else {
-          // Other error - mark as failed
-          const errorObj = error instanceof Error ? error : new Error(String(error));
-          callbacks?.onToolFailed?.(toolCall, errorObj);
-          appEventRegistry.publish(AppEvents.ERROR, {
-            source: 'tool_handler',
-            message: errorObj.message,
-            
-            mode: user.mode,
-            context: { tool: toolCall.function.name },
-          });
-
-          // Record failure to avoid infinite loop
-          completedTools.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: JSON.stringify({
-              success: false,
-              error: errorObj.message
-            })
-          });
-        }
-      }
-    } else {
-      // Tool requires frontend/user interaction
-      remainingPendingTools.push(toolCall);
-    }
-  }
-
-  // Append spawned children to conversation
-  if (spawnedTools.length > 0) {
-    // All spawned children in the same batch share a run_id
-    const sharedRunId = generate_unique_tool_call_id();
-
-    const childLogEntries: ConversationLogEntry[] = spawnedTools.map(toolCall => ({
-      _type: 'task' as const,
-      _parent_unique_id: toolCall._parent_unique_id!,
-      _run_id: sharedRunId,  // All spawned children share the same run_id
-      agent: toolCall.function.name,
-      args: toolCall.function.arguments,
-      unique_id: toolCall.id,
-      created_at: new Date().toISOString()
-    }));
-
-    // Append to conversation (may fork if conflict detected)
-    const appendResult = await appendLogToConversation(
-      currentFileId,
-      childLogEntries,
-      currentLogIndex,
-      user
-    );
-
-    currentFileId = appendResult.conversationID;
-    currentLogIndex += childLogEntries.length;
-    logEntries.push(...childLogEntries);
-  }
-
-  return {
-    completedTools,
-    remainingPendingTools,
-    spawnedTools,
-    updatedFileId: currentFileId,
-    updatedLogIndex: currentLogIndex,
-    logEntries
-  };
 }

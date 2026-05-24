@@ -27,7 +27,7 @@ import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 
 /**
  * Server-side implementation of completions data layer
- * Loads schema and questions, then calls Python backend
+ * Loads schema and questions, then runs completions locally (WASM)
  */
 class CompletionsDataLayerServer implements ICompletionsDataLayer {
   async getMentions(options: MentionsOptions, user: EffectiveUser): Promise<MentionsResult> {
@@ -191,7 +191,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
 
         // Also inject virtual tables for any SQL aliases used for this reference
         // in the original query (e.g. "FROM @revenue_1 r" → inject table "r" too).
-        // This allows Python's dot-completion fallback to find columns when parse fails.
+        // This allows the dot-completion fallback to find columns when parse fails.
         const SQL_KEYWORDS = new Set(['on', 'where', 'join', 'inner', 'left', 'right', 'outer',
           'full', 'cross', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect',
           'as', 'and', 'or', 'not', 'in', 'is', 'null', 'between', 'like', 'select', 'from', 'with']);

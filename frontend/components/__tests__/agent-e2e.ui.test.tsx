@@ -343,9 +343,7 @@ async function catchAllApiInterceptor(
   const method = (init?.method ?? 'GET').toUpperCase();
 
   if (urlStr.includes('/api/chat/init')) {
-    // Pin to v=1 (legacy Python engine): v2 is now the default, but these
-    // suites drive the Python backend, so the created conversation must match
-    // the v=1 chat turns (else continuing it raises a mode-mismatch).
+    // Pre-create the conversation via /api/chat/init.
     const req = new NextRequest(`${BASE}/api/chat/init`, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
     const res = await chatInitHandler(req);
     const data = await res.json();
@@ -695,7 +693,6 @@ function makeRealApiFetch() {
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      // Pin to v=1 (legacy Python engine); v2 is now the default (see DEFAULT_CHAT_VERSION).
       return call(chatPostHandler, `${BASE}/api/chat`, init);
     }
     if (method === 'POST' && urlStr.includes('/api/files/batch-save')) {
@@ -1541,7 +1538,6 @@ function makeViewerApiFetch() {
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      // Pin to v=1 (legacy Python engine); v2 is now the default (see DEFAULT_CHAT_VERSION).
       return call(chatPostHandler, `${BASE}/api/chat`, init);
     }
     if (method === 'POST' && urlStr.includes('/api/files/template')) {

@@ -60,7 +60,7 @@ describe('Autocomplete API — E2E', () => {
   // -------------------------------------------------------------------------
 
   describe('@reference / CTE resolution', () => {
-    test('converts @reference to CTE before calling Python', async () => {
+    test('converts @reference to CTE before resolving completions', async () => {
       const result = await CompletionsAPI.getSqlCompletions({
         query: 'SELECT * FROM @revenue WHERE subtotal > 100',
         cursorOffset: 7, // after "SELECT "

@@ -52,7 +52,7 @@ function ToolTester() {
     return map;
   }, [toolSchemas]);
 
-  // Fetch tool schemas from Python backend on mount
+  // Fetch tool schemas from /api/tools/schema on mount
   useEffect(() => {
     fetch('/api/tools/schema')
       .then(res => res.json())

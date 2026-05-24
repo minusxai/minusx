@@ -1,5 +1,5 @@
 // The orchestrator-owned agent loop (`MXAgent.run()`) must enforce a step cap,
-// mirroring the Python backend (agent.py): hard-stop at `maxSteps` with a
+// hard-stop at `maxSteps` with a
 // "Maximum iterations (N) reached." reply, and soft-withhold tools once the
 // thread reaches `maxSteps − 5` so the model is forced to give a final answer.
 // The cap VALUE comes from the concrete agent (static maxSteps); the loop

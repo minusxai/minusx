@@ -11,11 +11,10 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { FrontendToolException } from './frontend-tool-exception';
-import { registerTool, registerToolFallback } from './orchestrator';
+import { registerTool } from './orchestrator';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
-import { readFilesServer } from '@/lib/api/file-state.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
@@ -196,85 +195,4 @@ registerTool('ExecuteQuery', async (args, user) => {
   }
 
   return result;
-});
-
-// ============================================================================
-// Server-Run Fallback Handlers
-//
-// These handlers activate only when allowServerFallback=true (i.e. scheduled
-// runs / remote execution with no browser client). Normal interactive chat
-// always uses the client-side Redux-aware implementations instead.
-// ============================================================================
-
-/**
- * ReadFiles — server-side fallback.
- * Reads files directly from the document DB instead of the Redux store.
- * Uses readFilesServer() for consistent behavior with client-side:
- * - Includes references with parameter inheritance
- * - Computes effective queryResultIds
- */
-registerToolFallback('ReadFiles', async (args, user) => {
-  const { fileIds } = args as { fileIds: number[] };
-  const files = await readFilesServer(fileIds, user, { executeQueries: false });
-  return {
-    content: { success: true, files },
-    details: { success: true },
-  };
-});
-
-/**
- * EditFile — server-side fallback.
- * File editing is not permitted during server-side evaluation runs.
- * Returns an informative error so the LLM can adjust its plan.
- */
-registerToolFallback('EditFile', async () => {
-  return {
-    content: { success: false, error: 'EditFile is not available in server-run mode. File editing requires an interactive session.' },
-    details: { success: false },
-  };
-});
-
-/**
- * Navigate — server-side fallback.
- * UI navigation is not available during server-side evaluation runs.
- */
-registerToolFallback('Navigate', async () => {
-  return {
-    content: { success: false, error: 'Navigate is not available in server-run mode. Navigation requires an interactive session.' },
-    details: { success: false },
-  };
-});
-
-/**
- * CreateFile — server-side fallback.
- * File creation requires an interactive session with Redux state.
- */
-registerToolFallback('CreateFile', async () => {
-  return {
-    content: { success: false, error: 'CreateFile is not available in server-run mode. File creation requires an interactive session.' },
-    details: { success: false },
-  };
-});
-
-/**
- * PublishAll — server-side fallback.
- * Publishing files requires an interactive session with Redux state.
- */
-registerToolFallback('PublishAll', async () => {
-  return {
-    content: { success: false, error: 'PublishAll is not available in server-run mode. Publishing requires an interactive session.' },
-    details: { success: false },
-  };
-});
-
-/**
- * Clarify — server-side fallback (overrides the primary handler).
- * In server-run mode there is no user to ask, so the agent is instructed
- * to figure it out on its own rather than waiting for a response.
- */
-registerToolFallback('Clarify', async () => {
-  return {
-    content: 'Figure it out.',
-    details: { success: true },
-  };
 });

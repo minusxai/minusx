@@ -32,9 +32,8 @@ const EditFileParams = Type.Object({
   })),
 });
 
-// Description ported verbatim from the Python reference
-// (backend/tasks/agents/analyst/tools.py → EditFile docstring). Keep the two in
-// sync — the query↔parameters warning in particular prevents broken queries.
+// Keep this description in sync with the EditFile behavior in tool-handlers.ts —
+// the query/parameters warning in particular prevents broken queries.
 const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes. Executes on the frontend with real Redux state.
 
 Search for each oldMatch in the FULL file JSON and replace with newMatch.
@@ -212,9 +211,8 @@ export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystCon
 }
 
 // ─── LoadSkill ────────────────────────────────────────────────────────────────
-// LLM-facing skill loader (matches Python tasks/agents/analyst/tools.py →
-// LoadSkill, and what the skill docstrings tell the model to call). System
-// skills resolve server-side from the shared prompts.yaml; unknown names are
+// LLM-facing skill loader (matches what the skill docstrings tell the model to
+// call). System skills resolve server-side from the shared prompts.yaml; unknown names are
 // user-defined Knowledge Base skills, resolved on the frontend via the
 // `registerFrontendTool('LoadSkill', ...)` handler in lib/api/tool-handlers.ts.
 const LoadSkillParams = Type.Object({

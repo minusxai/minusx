@@ -20,7 +20,7 @@ export const reportJobHandler: JobHandler = {
     const reportName = reportFileResult.data?.name ?? `Report ${reportId}`;
 
     // Load reference files from DB and build CompressedAugmentedFile for each.
-    // The Python AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
+    // The AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
     // — the same shape ChatInterface builds client-side via compressAugmentedFile().
     // getAppStateServer handles the full pipeline including:
     // - Parameter inheritance for dashboards

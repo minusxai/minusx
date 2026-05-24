@@ -1,5 +1,5 @@
 /**
- * Map a connection type to a SQL dialect string used by the Python backend.
+ * Map a connection type to a SQL dialect string used for dialect-specific SQL.
  */
 export function connectionTypeToDialect(connectionType: string): string {
   switch (connectionType) {

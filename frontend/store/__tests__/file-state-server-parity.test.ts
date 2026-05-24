@@ -77,8 +77,7 @@ vi.mock('@/store/store', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock: runQuery (single chokepoint for SQL execution; replaces previous
-// pythonBackendFetch mock that intercepted the Python-fallback path).
+// Mock: runQuery (single chokepoint for SQL execution).
 // ---------------------------------------------------------------------------
 const { mockRunQuery } = vi.hoisted(() => ({
   mockRunQuery: vi.fn(async (

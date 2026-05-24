@@ -58,9 +58,8 @@ vi.mock('@/store/store', () => ({
 }));
 
 // Mock runQuery to return realistic test data (no real DB in tests).
-// `runQuery` is now the single chokepoint for SQL execution — replaces
-// the previous pythonBackendFetch mock. Hoisted so the inline `vi.mock`
-// factory can reference it (mock factories run before top-level code).
+// `runQuery` is the single chokepoint for SQL execution. Hoisted so the inline
+// `vi.mock` factory can reference it (mock factories run before top-level code).
 const { mockRunQuery } = vi.hoisted(() => ({
   mockRunQuery: vi.fn(async (
     _db: string,
@@ -867,7 +866,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     beforeAll(async () => {
       // A question whose query has never been run — nothing cached in Redux.
-      // The mock pythonBackendFetch returns empty rows for unrecognised queries,
+      // The mock runQuery returns empty rows for unrecognised queries,
       // so runQueries: true is safe (it won't throw).
       freshQuestionId = await DocumentDB.create(
         'Fresh Question',
@@ -894,7 +893,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     it('runQueries: true (default) executes the query and populates queryResults', async () => {
       const result = await readFiles([freshQuestionId], { runQueries: true });
       expect(result).toHaveLength(1);
-      // pythonBackendFetch mock returns empty rows for unknown queries — but a QueryResult IS returned
+      // the mock runQuery returns empty rows for unknown queries — but a QueryResult IS returned
       expect(result[0].queryResults).toHaveLength(1);
     });
   });

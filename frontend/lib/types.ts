@@ -1009,7 +1009,7 @@ export interface ToolMessage {
 /**
  * Convert a ToolMessage to typed details for display components.
  * Prefers structured `details` (new); falls back to parsing `content` (old conversations
- * and server-side Python tools that don't populate `details`).
+ * and server-side tools that don't populate `details`).
  * Spreading parsed content allows tool-specific fields (e.g. `selection`) through.
  */
 export function contentToDetails<T extends ToolCallDetails>(toolMessage: ToolMessage): T {
@@ -1063,7 +1063,7 @@ export type ToolName = typeof ToolNames[keyof typeof ToolNames];
  */
 
 /**
- * Task interface from Python backend orchestration system
+ * Task interface for the agent orchestration system
  */
 export interface OrchestrationTask {
   id: number;
@@ -1096,7 +1096,7 @@ export interface ConversationMetadata {
 }
 
 /**
- * Conversation log entry types (matching Python backend)
+ * Conversation log entry types (append-only conversation log)
  */
 export interface TaskLogEntry {
   _type: 'task';
@@ -1114,7 +1114,7 @@ export interface TaskResultEntry {
   _task_unique_id: string;
   result: string | any | null;
   created_at: string;  // ISO timestamp
-  details?: ToolCallDetails;  // UI-only: preserved across reloads, ignored by Python backend
+  details?: ToolCallDetails;  // UI-only: preserved across reloads, ignored by the orchestrator
 }
 
 export interface TaskDebugEntry {

@@ -2,7 +2,7 @@
  * Server-side TestRunner implementation.
  *
  * Runs Tests within a server context (Next.js API route / job handler).
- * Has direct access to the database, Python backend, and file system.
+ * Has direct access to the database and file system.
  *
  * Usage:
  *   import { createServerRunner } from '@/lib/tests/server';

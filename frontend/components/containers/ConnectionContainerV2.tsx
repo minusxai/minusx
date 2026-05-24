@@ -5,7 +5,7 @@
  * Smart component using Core Patterns with useFile hook and filesSlice
  *
  * Hybrid API approach for connections:
- * - CREATE: POST /api/connections → initializes Python backend + creates document
+ * - CREATE: POST /api/connections initializes the connector + creates document
  * - UPDATE: PATCH /api/files/[id] → updates document only (Phase 2 pattern)
  * - DELETE: DELETE /api/connections/[name] → cleans up Python + document
  */
@@ -137,7 +137,7 @@ export default function ConnectionContainerV2({
     }
   }, [mode, router, fileId]);
 
-  // Reload with force refresh to fetch fresh schema from Python backend
+  // Reload with force refresh to fetch fresh schema from the connector
   const handleReload = useCallback(() => {
     if (typeof fileId === 'number') {
       reloadFile({ fileId });

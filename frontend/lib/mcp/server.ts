@@ -124,7 +124,7 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
         }
       }
 
-      // Try Node.js connector first (DuckDB) to avoid Python's exclusive file lock
+      // Resolve the connection and run via the Node.js connector.
       // Use getRawByName so credentials (e.g. service_account_json) are included
       const connData = await ConnectionsAPI.getRawByName(connection_id, user.mode).catch(() => null);
       if (connData) {
@@ -141,7 +141,7 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
         }
       }
 
-      // Fall through to Python backend for postgresql, bigquery, etc.
+      // Fall through to the Node.js query executor for postgresql, bigquery, etc.
       const execResult = await execQuery({
         query,
         connectionId: connection_id,

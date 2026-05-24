@@ -364,8 +364,7 @@ async function setupOrchestration(
   );
 
   // Prefer the client-resolved context + schema (the selected context the user
-  // picked in the UI), matching what the Python backend does — it uses
-  // agent_args.context / agent_args.schema verbatim. Server re-resolution
+  // picked in the UI) — it uses agent_args.context / agent_args.schema verbatim. Server re-resolution
   // (serverArgs) is only a fallback for requests that arrive without them.
   // (Genuinely clientless callers — Slack, report jobs — call
   // buildServerAgentArgs directly and never reach this chat path.)

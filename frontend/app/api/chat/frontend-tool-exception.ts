@@ -8,7 +8,7 @@
  * 1. The parent tool is NOT completed (no TaskResult added)
  * 2. Spawned tools are added as pending with _parent_unique_id reference
  * 3. Frontend executes the child tools
- * 4. Python orchestrator resumes parent with _child_tasks_batch arg
+ * 4. The orchestrator resumes the parent with the _child_tasks_batch arg
  */
 
 interface ToolCallSpec {

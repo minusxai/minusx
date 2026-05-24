@@ -1,21 +1,17 @@
 /**
- * Shared chat orchestration utilities
+ * Shared chat request/response types.
  *
- * Contains types, utilities, and common logic for chat API routes.
- * Used by both streaming and non-streaming chat endpoints.
+ * The legacy-shaped request (`ChatRequest`) and completed-tool-call / LLM-call
+ * payloads that the chat API routes and the v2 orchestrator translator
+ * (`chat-orchestration-v2.server.ts`) produce. These names carry a `Python`
+ * suffix for historical reasons — there is no Python backend anymore; the v2
+ * TypeScript orchestrator emits this exact shape so the frontend stays unchanged.
  */
 
-import 'server-only';
-import { ToolCall, CompletedToolCall, ConversationLogEntry } from '@/lib/types';
-import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { appendLogToConversation } from '@/lib/conversations';
-
-// ============================================================================
-// Shared Types
-// ============================================================================
+import { CompletedToolCall } from '@/lib/types';
 
 /**
- * Chat request from frontend
+ * Chat request from the frontend.
  */
 export interface ChatRequest {
   conversationID?: number | null;   // Optional - file ID, null to create new
@@ -44,19 +40,8 @@ export interface ChatRequest {
 }
 
 /**
- * Completed tool call payload for Python backend
- * Matches ChatCompletionToolMessageParamMX from Python backend
- */
-export interface CompletedToolCallPayload {
-  role: "tool";  // Required for OpenAI ChatCompletionToolMessageParamMX
-  tool_call_id: string;
-  content: string | any;  // Can be string or object (matches Python Union[str, dict])
-  details?: import('@/lib/types').ToolCallDetails;  // Passed through Python; stored in TaskResult; never sent to LLM
-}
-
-/**
- * Completed tool call from Python backend
- * Contains both call and response info in a single object
+ * Completed tool call as returned to the frontend — call + response info in a
+ * single object.
  */
 export interface CompletedToolCallFromPython {
   role: "tool";
@@ -68,22 +53,11 @@ export interface CompletedToolCallFromPython {
     arguments: Record<string, any>;  // Always an object - HTTP response handles JSON serialization
   };
   created_at: string;  // ISO timestamp
-  details?: import('@/lib/types').ToolCallDetails;  // Injected by Next.js route for server tools (not sent to Python)
+  details?: import('@/lib/types').ToolCallDetails;  // Server-tool details for the UI; never sent to the LLM
 }
 
 /**
- * Python backend chat request (aligned with Python ConversationRequest)
- */
-export interface PythonChatRequest {
-  log: ConversationLogEntry[];  // Full conversation log
-  user_message?: string | null;
-  completed_tool_calls?: CompletedToolCallPayload[];
-  agent: string;
-  agent_args: any;
-}
-
-/**
- * LLM call detail from Python backend
+ * Per-LLM-call detail surfaced for analytics.
  */
 export interface LLMCallDetail {
   llm_call_id: string;
@@ -98,30 +72,4 @@ export interface LLMCallDetail {
   cost: number;
   finish_reason?: string | null;
   trigger?: string | null;  // What initiated this LLM call: "user_message", "tool_result", etc.
-}
-
-/**
- * Python backend chat response (aligned with Python ConversationResponse)
- */
-export interface PythonChatResponse {
-  logDiff: ConversationLogEntry[];  // Only new log entries
-  pending_tool_calls: ToolCall[];
-  completed_tool_calls: CompletedToolCallFromPython[];  // NEW - completed tool calls
-  llm_calls?: Record<string, LLMCallDetail>;  // NEW - optional for backward compat
-  error?: string | null;
-}
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-/**
- * Generate unique tool call ID matching Python backend format
- */
-export function generate_unique_tool_call_id(): string {
-  // Generate random hex string similar to Python's secrets.token_hex(12)
-  const randomBytes = Array.from({ length: 12 }, () =>
-    Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
-  ).join('');
-  return `mxgen_${randomBytes}`;
 }

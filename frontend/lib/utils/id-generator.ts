@@ -1,5 +1,5 @@
 /**
- * Generate unique tool call ID matching Python backend format
+ * Generate a unique tool call ID (mxgen_-prefixed hex).
  * Can be used on both client and server
  */
 export function generateUniqueId(): string {
