@@ -15,10 +15,6 @@ import { DBModule } from '@/lib/modules/db';
 process.env.OPENAI_API_KEY = 'test-stub-no-real-calls';
 process.env.ANTHROPIC_API_KEY = 'test-stub-no-real-calls';
 
-// Clear backend URL env vars; tests must explicitly set their own
-delete process.env.NEXT_PUBLIC_BACKEND_URL;
-delete process.env.BACKEND_URL;
-
 // Mock server-only module (Next.js 13+ server components)
 vi.mock('server-only', () => ({}));
 

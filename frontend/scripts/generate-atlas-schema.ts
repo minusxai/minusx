@@ -1,7 +1,6 @@
 /**
  * Generate the Atlas JSON-Schema artifacts from the TypeBox single-source in
- * `lib/validation/atlas-schemas.ts`. Replaces the old Python pipeline
- * (`backend/scripts/export_schema.py`). Run via `npm run generate-types`.
+ * `lib/validation/atlas-schemas.ts`. Run via `npm run generate-types`.
  *
  * Emits:
  *   - lib/validation/atlas-schema.gen.json        (full; consumed by Ajv in content-validators.ts)

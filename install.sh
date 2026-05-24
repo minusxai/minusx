@@ -4,7 +4,6 @@ set -euo pipefail
 # ── config ───────────────────────────────────────────────────────────────────
 
 REPO_RAW="https://raw.githubusercontent.com/minusxai/minusx/main"
-BACKEND_IMAGE="ghcr.io/minusxai/minusx-backend:latest"
 FRONTEND_IMAGE="ghcr.io/minusxai/minusx-frontend:latest"
 TOTAL_STEPS=6
 CURRENT_STEP=0
@@ -133,7 +132,7 @@ else
   cd minusx
 fi
 
-mkdir -p backend frontend data data/pglite static
+mkdir -p frontend data data/pglite data/analytics static
 
 success "Directory ready at ${DIM}$(pwd)${RESET}"
 
@@ -141,20 +140,15 @@ success "Directory ready at ${DIM}$(pwd)${RESET}"
 
 step "Configuring environment"
 
-# Download .env.example files if missing
-if [ ! -f backend/.env.example ]; then
-  curl -fsSL -o backend/.env.example "${REPO_RAW}/backend/.env.example" 2>/dev/null || true
-fi
+# MinusX is a single Next.js app — the AI agent orchestrator runs in-process,
+# so all configuration lives in frontend/.env (there is no separate backend).
 if [ ! -f frontend/.env.example ]; then
   curl -fsSL -o frontend/.env.example "${REPO_RAW}/frontend/.env.example" 2>/dev/null || true
 fi
-
-# Seed .env from examples
-[ -f backend/.env ]  || { [ -f backend/.env.example ]  && cp backend/.env.example backend/.env  || touch backend/.env; }
 [ -f frontend/.env ] || { [ -f frontend/.env.example ] && cp frontend/.env.example frontend/.env || touch frontend/.env; }
 
-# ANTHROPIC_API_KEY
-ANTHROPIC_API_KEY=$(get_env_val backend/.env ANTHROPIC_API_KEY)
+# ANTHROPIC_API_KEY — the in-process orchestrator reads it at LLM call time.
+ANTHROPIC_API_KEY=$(get_env_val frontend/.env ANTHROPIC_API_KEY)
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   printf "\n  ${SPARKLE} ${BOLD}Anthropic API Key required${RESET}\n"
   printf "  ${GRAY}Get one at ${RESET}${BOLD}https://console.anthropic.com${RESET}\n\n"
@@ -165,7 +159,7 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
     fail "API key is required to continue"
     exit 1
   fi
-  set_env_val backend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+  set_env_val frontend/.env ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
   success "API key saved"
 else
   success "API key already configured"
@@ -185,62 +179,34 @@ else
   success "Auth secret already configured"
 fi
 
-# ── step 4: pull images ─────────────────────────────────────────────────────
+# ── step 4: pull image ──────────────────────────────────────────────────────
 
-step "Pulling latest Docker images"
+step "Pulling latest Docker image"
 
-run_with_spinner "Pulling backend image"  docker pull --platform linux/amd64 "$BACKEND_IMAGE"
 run_with_spinner "Pulling frontend image" docker pull --platform linux/amd64 "$FRONTEND_IMAGE"
 
-# ── step 5: start services ──────────────────────────────────────────────────
+# ── step 5: start service ───────────────────────────────────────────────────
 
-step "Starting services"
+step "Starting MinusX"
 
-# Network
-docker network create minusx-network 2>/dev/null || true
+# Clean up existing container
+docker rm -f mx-frontend 2>/dev/null || true
 
-# Clean up existing containers
-docker rm -f mx-backend mx-frontend 2>/dev/null || true
-
-# Detect ports
+# Detect port
 FRONTEND_PORT=$(find_free_port 3000)
-BACKEND_PORT=$(find_free_port 8001)
-
 if [ "$FRONTEND_PORT" -ne 3000 ]; then
-  warn "Port 3000 in use — frontend will use port ${BOLD}$FRONTEND_PORT${RESET}"
-fi
-if [ "$BACKEND_PORT" -ne 8001 ]; then
-  warn "Port 8001 in use — backend will use port ${BOLD}$BACKEND_PORT${RESET}"
+  warn "Port 3000 in use — MinusX will use port ${BOLD}$FRONTEND_PORT${RESET}"
 fi
 
-# Start backend
-docker run -d \
-  --name mx-backend \
-  --platform linux/amd64 \
-  --network minusx-network \
-  --restart unless-stopped \
-  -v "$(pwd)/data:/app/data" \
-  -p "${BACKEND_PORT}:8001" \
-  -e PYTHONUNBUFFERED=1 \
-  -e NEXTJS_URL="http://mx-frontend:3000" \
-  -e BASE_DUCKDB_DATA_PATH=/app \
-  --env-file backend/.env \
-  "$BACKEND_IMAGE" > /dev/null 2>&1
-
-success "Backend started on port ${BOLD}$BACKEND_PORT${RESET}"
-
-# Start frontend
 docker run -d \
   --name mx-frontend \
   --platform linux/amd64 \
-  --network minusx-network \
   --restart unless-stopped \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/data/pglite:/app/data/pglite" \
   -v "$(pwd)/static:/app/public/static" \
   -p "${FRONTEND_PORT}:3000" \
   -e NODE_ENV=production \
-  -e NEXT_PUBLIC_BACKEND_URL="http://mx-backend:8001" \
   -e BASE_DUCKDB_DATA_PATH=/app \
   -e ANALYTICS_DB_DIR=/app/data/analytics \
   -e DB_TYPE=pglite \
@@ -248,7 +214,7 @@ docker run -d \
   --env-file frontend/.env \
   "$FRONTEND_IMAGE" > /dev/null 2>&1
 
-success "Frontend started on port ${BOLD}$FRONTEND_PORT${RESET}"
+success "MinusX started on port ${BOLD}$FRONTEND_PORT${RESET}"
 
 # ── step 6: health check ────────────────────────────────────────────────────
 
@@ -292,8 +258,7 @@ printf "\n"
 printf "  ${GRAY}Your data is persisted in ${RESET}${DIM}$(pwd)/data${RESET}${GRAY} — safe across restarts & upgrades.${RESET}\n"
 printf "\n"
 printf "  ${GRAY}Useful commands:${RESET}\n"
-printf "  ${DIM}  docker logs -f mx-frontend${RESET}          ${GRAY}# frontend logs${RESET}\n"
-printf "  ${DIM}  docker logs -f mx-backend${RESET}           ${GRAY}# backend logs${RESET}\n"
-printf "  ${DIM}  docker rm -f mx-frontend mx-backend${RESET} ${GRAY}# stop & remove${RESET}\n"
+printf "  ${DIM}  docker logs -f mx-frontend${RESET}          ${GRAY}# app logs${RESET}\n"
+printf "  ${DIM}  docker rm -f mx-frontend${RESET}            ${GRAY}# stop & remove${RESET}\n"
 printf "  ${DIM}  curl -fsSL minusx.ai/install.sh | bash${RESET} ${GRAY}# upgrade${RESET}\n"
 printf "\n"

@@ -8,12 +8,6 @@ yarn-error.log*
 .next/
 out/
 
-# Python virtual environments
-.venv/
-venv/
-env/
-__pycache__/
-*.pyc
 *.pyo
 *.pyd
 

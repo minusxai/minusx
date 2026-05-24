@@ -37,7 +37,7 @@ export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveU
 
   // After migration, all contexts should have versions
   if (!content.versions || content.versions.length === 0) {
-    throw new Error('Context has no versions. Run database migration: npm run import-db -- --replace-db=y');
+    throw new Error('Context has no versions — the context document predates the context-versioning migration and is missing migrated version data.');
   }
 
   // Determine which version to use for this user
