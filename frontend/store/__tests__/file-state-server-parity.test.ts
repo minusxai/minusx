@@ -119,7 +119,6 @@ describe('Client-Server File State Parity', () => {
   // path (HTTP → handler → DB) and the server path (direct → DB) hit the same DB.
   // ---------------------------------------------------------------------------
   setupMockFetch({
-    getPythonPort: () => 0,
     additionalInterceptors: [
       async (urlStr, init) => {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;

@@ -321,7 +321,6 @@ describe('createDraftFile', () => {
 
   // Order matters: template and batch-save must match before the generic /api/files
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/template'], handler: templateHandler },
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
@@ -388,7 +387,6 @@ describe('dryRunSave', () => {
   let fileId: number;
 
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
     ],
@@ -445,7 +443,6 @@ describe('publishAll with draft files', () => {
 
   // Intercept template, create (for createDraftFile), and batch-save (for publishAll)
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/template'], handler: templateHandler },
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },

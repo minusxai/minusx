@@ -65,7 +65,6 @@ function countGetUsersFetches(mockFetch: Mock): number {
 // ---------------------------------------------------------------------------
 
 const mockFetch = setupMockFetch({
-  getPythonPort: () => 0,
   additionalInterceptors: [
     async (urlStr, init) => {
       const method = init?.method ?? 'GET';

@@ -111,7 +111,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   const dbPath = getTestDbPath('create_file_tool');
 
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/template'], handler: templateHandler },
       { includesUrl: ['/api/files'], handler: createFileHandler },

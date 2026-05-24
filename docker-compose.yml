@@ -1,27 +1,4 @@
 services:
-  mx-backend:
-    image: ghcr.io/minusxai/minusx-backend:latest
-    platform: linux/amd64
-    container_name: mx-backend
-    restart: unless-stopped
-    volumes:
-      - ./data:/app/data
-    environment:
-      - PYTHONUNBUFFERED=1
-      - NEXTJS_URL=http://mx-frontend:3000
-      - BASE_DUCKDB_DATA_PATH=/app
-      - WORKERS=${WORKERS:-4}
-    env_file:
-      - ./backend/.env
-    networks:
-      - minusx-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   mx-frontend:
     image: ghcr.io/minusxai/minusx-frontend:latest
     platform: linux/amd64
@@ -35,16 +12,12 @@ services:
       - ./static:/app/public/static
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_BACKEND_URL=http://mx-backend:8001
       - BASE_DUCKDB_DATA_PATH=/app
       - ANALYTICS_DB_DIR=/app/data/analytics
       - DB_TYPE=pglite
       - PGLITE_DATA_DIR=/app/data/pglite
     env_file:
       - ./frontend/.env
-    depends_on:
-      mx-backend:
-        condition: service_healthy
     networks:
       - minusx-network
 

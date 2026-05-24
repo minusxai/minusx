@@ -126,7 +126,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
   // Route API calls to real Next.js handlers (no Python backend needed)
   setupMockFetch({
-    getPythonPort: () => 0,
     additionalInterceptors: [
       async (urlStr, init) => {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;

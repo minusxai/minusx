@@ -59,23 +59,10 @@ export interface RouteInterceptor {
 }
 
 export interface MockFetchOptions {
-  /** Function that returns the current Python backend port (optional if no Python calls expected) */
-  getPythonPort?: () => number;
   /** Route interceptors for Next.js API routes (e.g., /api/chat, /api/sql-to-ir) */
   interceptors?: RouteInterceptor[];
-  /** Optional function that returns the LLM mock server port */
-  getLLMMockPort?: () => number;
   /** Additional custom interceptors for test-specific APIs (legacy - prefer interceptors array) */
   additionalInterceptors?: Array<(urlStr: string, init?: any, originalFetch?: typeof fetch) => Promise<Response | null>>;
-  /**
-   * Pin intercepted `/api/chat*` requests to a specific chat engine version by
-   * forcing `?v=<chatVersion>` onto the reconstructed request URL. v2 (the JS
-   * orchestrator) is the default engine (see DEFAULT_CHAT_VERSION), so suites
-   * that drive the legacy Python backend (`withPythonBackend`) set
-   * `chatVersion: 1` — otherwise the chat routes would default to v2 and run
-   * the orchestrator instead of the Python backend.
-   */
-  chatVersion?: 1 | 2;
 }
 
 /**
@@ -83,11 +70,11 @@ export interface MockFetchOptions {
  *
  * Usage:
  * ```ts
- * const mockFetch = setupMockFetch({ getPythonPort, chatPostHandler });
+ * const mockFetch = setupMockFetch({ interceptors: [{ startsWithUrl: ['/api/chat'], handler: chatPostHandler }] });
  * ```
  */
 export function setupMockFetch(options: MockFetchOptions) {
-  const { getPythonPort, interceptors = [], getLLMMockPort, additionalInterceptors = [], chatVersion } = options;
+  const { interceptors = [], additionalInterceptors = [] } = options;
   let originalFetch: typeof fetch;
   let spy: MockInstance;
 
@@ -131,17 +118,7 @@ export function setupMockFetch(options: MockFetchOptions) {
           cleanPath = '/' + cleanPath;
         }
 
-        let fullUrl = `http://localhost:3000${cleanPath}`;
-
-        // Pin chat-route requests to the configured engine version. The route
-        // reconstruction drops the original query string, and v2 is the default
-        // engine, so Python-backend suites must force `?v=1` to reach the
-        // Python branch instead of the JS orchestrator.
-        if (chatVersion != null && cleanPath.startsWith('/api/chat')) {
-          const u = new URL(fullUrl);
-          u.searchParams.set('v', String(chatVersion));
-          fullUrl = u.toString();
-        }
+        const fullUrl = `http://localhost:3000${cleanPath}`;
 
         const request = new NextRequest(fullUrl, {
           method: init?.method || 'POST',
@@ -158,21 +135,6 @@ export function setupMockFetch(options: MockFetchOptions) {
           json: async () => data
         } as Response;
       }
-    }
-
-    // Let Python backend calls through to real backend using original fetch
-    // Support both dynamic port and default port (8001) for BACKEND_URL constant
-    const pythonPort = getPythonPort?.();
-    if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
-      // Redirect calls to default port to dynamic port
-      const redirectedUrl = urlStr.replace('localhost:8001', `localhost:${pythonPort}`);
-      return originalFetch(redirectedUrl, init);
-    }
-
-    // Let LLM mock server calls through to real server
-    const llmMockPort = getLLMMockPort?.();
-    if (llmMockPort && urlStr.includes(`localhost:${llmMockPort}`)) {
-      return originalFetch(urlStr, init);
     }
 
     // Mock health check to always return healthy

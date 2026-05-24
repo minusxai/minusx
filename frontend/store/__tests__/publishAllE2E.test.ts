@@ -103,7 +103,6 @@ describe('publishAll E2E', () => {
 
   // Route batch API calls to real Next.js handlers (no Python backend needed)
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
     ],
