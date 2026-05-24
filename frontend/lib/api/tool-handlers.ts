@@ -7,7 +7,7 @@
 
 import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
-import { clearQueryResult } from '@/store/queryResultsSlice';
+import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -27,6 +27,7 @@ import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import { uploadChartOrEmbed } from '@/lib/chart/chart-attachments';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
+import type { VizSettings } from '@/lib/types';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -515,6 +516,27 @@ async function validateParameterSources(
   return warnings;
 }
 
+/**
+ * Compute the viz-constraint warning for a question, resolving the X-axis column
+ * types from the executed query result. This catches type-dependent errors (e.g.
+ * "trend charts require a date X axis") that the chart renderer shows but that the
+ * structural-only check misses — so the agent gets the signal and can fix the
+ * chart instead of finishing with a broken widget.
+ */
+function vizWarningForQuestion(fileId: number): string | null {
+  const mc = selectMergedContent(getStore().getState(), fileId) as
+    | { vizSettings?: VizSettings; query?: string; connection_name?: string; parameterValues?: Record<string, unknown> }
+    | undefined;
+  if (!mc) return null;
+  const qr =
+    mc.query && mc.connection_name
+      ? selectQueryResult(getStore().getState(), mc.query, mc.parameterValues ?? {}, mc.connection_name)
+      : undefined;
+  // The stored result keeps columns/types under `.data` ({ columns, types, rows }).
+  const data = qr?.data as { columns?: string[]; types?: string[] } | undefined;
+  return getVizSettingsWarning(mc.vizSettings, data?.columns, data?.types);
+}
+
 registerFrontendTool('EditFile', async (args, _context) => {
   const { fileId, changes } = args;
 
@@ -671,10 +693,8 @@ registerFrontendTool('EditFile', async (args, _context) => {
     return qr;
   });
 
-  // Check viz constraint violations to feed back to the LLM
-  const vizWarning = fileState?.type === 'question'
-    ? getVizSettingsWarning((selectMergedContent(getStore().getState(), fileId) as any)?.vizSettings)
-    : null;
+  // Check viz constraint violations (incl. type-dependent ones) to feed back to the LLM
+  const vizWarning = fileState?.type === 'question' ? vizWarningForQuestion(fileId) : null;
 
   const diff = diffs.join('\n');
   const content: Record<string, any> = {
@@ -868,10 +888,8 @@ registerFrontendTool('CreateFile', async (args, context) => {
     return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 
-  // Check viz constraint violations to feed back to the LLM
-  const vizWarning = file_type === 'question'
-    ? getVizSettingsWarning((selectMergedContent(getStore().getState(), draftId) as any)?.vizSettings)
-    : null;
+  // Check viz constraint violations (incl. type-dependent ones) to feed back to the LLM
+  const vizWarning = file_type === 'question' ? vizWarningForQuestion(draftId) : null;
 
   const result: Record<string, any> = { success: true, state: compressAugmentedFile(augmented) };
   if (vizWarning) result.vizWarning = vizWarning;

@@ -1216,6 +1216,34 @@ describe('getVizSettingsWarning', () => {
     const warning = getVizSettingsWarning({ type: 'combo', xCols: ['month'], yCols: ['revenue'] })
     expect(warning).toBeTruthy()
   })
+
+  // Data-aware checks: when columns/types are supplied, type-dependent constraints
+  // are validated too (matching the chart renderer) — so the agent gets the signal.
+  describe('with query result columns/types', () => {
+    it('warns when a trend chart has a non-date X column (the renderer error)', () => {
+      const warning = getVizSettingsWarning(
+        { type: 'trend', xCols: ['family'], yCols: ['avg_context_k'] },
+        ['family', 'avg_context_k'],
+        ['VARCHAR', 'INTEGER'],
+      )
+      expect(warning).toMatch(/date\/time column/i)
+    })
+
+    it('passes when a trend chart has a date X column', () => {
+      expect(
+        getVizSettingsWarning(
+          { type: 'trend', xCols: ['day'], yCols: ['revenue'] },
+          ['day', 'revenue'],
+          ['TIMESTAMP', 'DECIMAL'],
+        ),
+      ).toBeNull()
+    })
+
+    it('without columns/types, the type-dependent trend check is skipped (the old blind behavior)', () => {
+      // This is exactly why the agent never saw the error before: structural-only.
+      expect(getVizSettingsWarning({ type: 'trend', xCols: ['family'], yCols: ['avg_context_k'] })).toBeNull()
+    })
+  })
 })
 
 // ─── resolveAnnotationY ───

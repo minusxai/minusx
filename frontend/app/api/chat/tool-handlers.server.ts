@@ -185,9 +185,12 @@ registerTool('ExecuteQuery', async (args, user) => {
   }
   const result = await execQuery({ query, connectionId, parameters, maxChars: rawMaxChars }, user);
 
-  // Append viz constraint warning if vizSettings were provided
+  // Append viz constraint warning if vizSettings were provided. Pass the result
+  // columns/types so type-dependent constraints (e.g. trend charts require a date
+  // X axis) are caught — matching the chart renderer — not just structural ones.
   const parsedViz = vizSettings ? (typeof vizSettings === 'string' ? JSON.parse(vizSettings) : vizSettings) : null;
-  const vizWarning = getVizSettingsWarning(parsedViz);
+  const qr = (result.details as { queryResult?: { columns?: string[]; types?: string[] } } | undefined)?.queryResult;
+  const vizWarning = getVizSettingsWarning(parsedViz, qr?.columns, qr?.types);
   if (vizWarning && result.content && typeof result.content === 'object') {
     (result.content as Record<string, any>).vizWarning = vizWarning;
   }
