@@ -5,22 +5,10 @@ import { withAuth } from '@/lib/api/with-auth';
 import { ApiErrors } from '@/lib/api/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { isSlackOAuthConfigured, buildOAuthUrl } from '@/lib/integrations/slack/config';
-import { NEXTAUTH_SECRET } from '@/lib/config';
-interface StatePayload {
-  ts: number;
-  nonce: string;
-  returnUrl: string;
-  userEmail: string;
-}
+import { buildState } from '@/lib/integrations/slack/oauth-state';
 
-export function buildState(payload: StatePayload): string {
-  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto
-    .createHmac('sha256', NEXTAUTH_SECRET)
-    .update(encoded)
-    .digest('hex');
-  return `${encoded}.${sig}`;
-}
+// Re-exported for tests that drive the OAuth flow end to end.
+export { buildState };
 
 export const GET = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {

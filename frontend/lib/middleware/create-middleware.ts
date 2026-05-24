@@ -52,7 +52,7 @@ export function createMiddleware() {
       pathname.startsWith('/.well-known/oauth') ||
       pathname.startsWith('/api/integrations/slack/events') ||
       pathname.startsWith('/api/integrations/slack/interact') ||
-      pathname.startsWith('/api/integrations/slack/oauth-callback') ||
+      pathname === '/api/integrations/slack/oauth-callback' ||
       pathname.startsWith('/api/health') ||
       pathname === '/api/jobs/cron'
     ) {

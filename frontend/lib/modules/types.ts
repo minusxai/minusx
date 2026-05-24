@@ -63,6 +63,13 @@ export interface IAuthModule {
   getContextRunner?(): (fn: () => Promise<unknown>) => Promise<unknown>;
   /** Extra fields to embed in OAuth access token JWT. OSS: returns {}. */
   getExtraTokenPayload?(userId: number, scope: string | null): Promise<Record<string, unknown>>;
+  /**
+   * Which host should finalize the Slack OAuth install. Slack's redirect_uri is fixed
+   * to the root domain, so the callback may land on a host where the user's session
+   * doesn't apply; returning a finish URL lets a deployment route the finish step to
+   * the host where their session does apply. Not implemented → finish on the same host.
+   */
+  getSlackInstallFinishUrl?(returnUrl: string): string | null;
 }
 
 /**
