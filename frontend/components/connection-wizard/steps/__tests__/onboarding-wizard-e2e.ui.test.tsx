@@ -25,32 +25,22 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-// Onboarding tools query the connection schema / run queries server-side; stub them.
+// The agent's analytics queries are not exercised by this faux flow (it only emits
+// EditFile); run-query is stubbed so an accidental real query can't hit a warehouse.
 vi.mock('@/lib/connections/run-query', () => ({ runQuery: vi.fn(async () => ({ columns: [], types: [], rows: [], finalQuery: '' })) }));
-vi.mock('@/lib/connections/load-schema', () => ({ loadConnectionSchema: vi.fn(async () => []) }));
 
+// useContext resolves the context-file id from the (real, seeded) store via
+// selectContextFromPath, but it also drives an async loading state (useFile load +
+// system-skills fetch). That loading flicker gates StepContext's auto-trigger and
+// makes the run flaky, so we pin it to the resolved id — which IS the real seeded
+// context file. (Its resolution logic is covered by the useContext unit tests.)
 const { CONTEXT_HOLDER } = vi.hoisted(() => ({ CONTEXT_HOLDER: { id: 0 } }));
 vi.mock('@/lib/hooks/useContext', () => ({
   useContext: () => ({ contextId: CONTEXT_HOLDER.id, contextLoading: false }),
 }));
-// The CSV connection is seeded in the DB; surface it to the wizard without a fetch.
-vi.mock('@/lib/hooks/useConnections', () => ({
-  useConnections: () => ({
-    connections: {
-      my_csv: {
-        metadata: { name: 'my_csv', type: 'csv', config: {}, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
-        schema: { schemas: [{ schema: 'data', tables: [{ table: 'sales', columns: [{ name: 'amount', type: 'number' }] }] }] },
-      },
-    },
-    loading: false,
-  }),
-}));
-// The context file is seeded directly into the store; no-op useFile's background
-// load (keep editFile / buildCurrentFileStr real).
-vi.mock('@/lib/api/file-state', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api/file-state')>('@/lib/api/file-state');
-  return { ...actual, loadFiles: vi.fn(async () => []) };
-});
+// ChatInterface is the display-only, readOnly agent-trace panel — not part of the
+// wizard→agent→EditFile flow. The real one pulls in NavigationGuardProvider + the
+// full chat UI (irrelevant here), so it stays stubbed.
 vi.mock('@/components/explore/ChatInterface', () => {
   const React = require('react');
   return { __esModule: true, default: () => React.createElement('div', { 'aria-label': 'chat interface' }) };
