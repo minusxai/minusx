@@ -304,7 +304,6 @@ export async function editFile(options: EditFileOptions): Promise<void> {
     const mergedChanges = deepMerge(currentPersistableChanges, changes.content);
 
     // Store ONLY changes in persistableChanges
-    console.log('Merged changes to persistableChanges for file', fileId, mergedChanges);
     getStore().dispatch(setEdit({
       fileId,
       edits: mergedChanges
