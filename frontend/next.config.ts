@@ -32,12 +32,17 @@ const nextConfig: NextConfig = {
   // '@resvg/resvg-js'      — native SVG renderer
   // 'node-sql-parser'      — pure-JS but 5.2 MB compiled; server-only (API routes + MCP),
   //                          so making it external cuts 5 MB from the server chunk graph
+  // '@mariozechner/pi-ai'  — the in-process LLM client. It loads providers via a
+  //                          fully dynamic `import(specifier)`; bundling it makes the
+  //                          bundler emit a stub that throws "Cannot find module as
+  //                          expression is too dynamic" at runtime on every LLM call.
+  //                          Must be external so Node's native dynamic import resolves it.
   serverExternalPackages: [
     '@duckdb/duckdb-wasm', 'duckdb', '@duckdb/node-api', '@duckdb/node-bindings',
     '@duckdb/node-bindings-darwin-arm64', '@duckdb/node-bindings-darwin-x64',
     '@duckdb/node-bindings-linux-arm64', '@duckdb/node-bindings-linux-x64',
     '@duckdb/node-bindings-win32-arm64', '@duckdb/node-bindings-win32-x64',
-    '@resvg/resvg-js', '@electric-sql/pglite',
+    '@resvg/resvg-js', '@electric-sql/pglite', '@mariozechner/pi-ai',
   ],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.
