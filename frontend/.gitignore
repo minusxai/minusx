@@ -55,3 +55,5 @@ next-env.d.ts
 /agents/analyst/__tests__/output.jsonl
 
 /benchmarks/*.md
+# Sentry Config File
+.env.sentry-build-plugin

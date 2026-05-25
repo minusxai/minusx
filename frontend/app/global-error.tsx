@@ -5,6 +5,8 @@ import { captureError } from '@/lib/messaging/capture-error';
 import { IS_DEV, IS_TEST, SEND_ERRORS_IN_DEV } from '@/lib/constants';
 import { Box, Button, Text, VStack, ChakraProvider } from '@chakra-ui/react';
 import { system } from '@/lib/ui/theme';
+import * as Sentry from "@sentry/nextjs";
+import Error from "next/error";
 
 export default function GlobalError({
   error,
@@ -13,6 +15,9 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
   useEffect(() => {
     // Log error to console for debugging
     console.error('Global error:', error);

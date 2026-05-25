@@ -1,4 +1,13 @@
+import * as Sentry from '@sentry/nextjs';
+
 export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('./sentry.server.config');
+  }
+
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    await import('./sentry.edge.config');
+  }
   // eslint-disable-next-line no-restricted-syntax
   if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.NEXT_PHASE !== 'phase-production-build') {
     // eslint-disable-next-line no-restricted-syntax
@@ -15,3 +24,5 @@ export async function register() {
     await registerWithModules();
   }
 }
+
+export const onRequestError = Sentry.captureRequestError;

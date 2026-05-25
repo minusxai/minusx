@@ -38,6 +38,7 @@
     "@polyglot-sql/sdk": "^0.3.2",
     "@reduxjs/toolkit": "^2.11.0",
     "@resvg/resvg-js": "^2.6.2",
+    "@sentry/nextjs": "^10.53.1",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
     "@types/geojson": "^7946.0.16",
@@ -87,7 +88,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "patch-package": "^8.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -112,6 +112,7 @@
     "eslint-plugin-unused-imports": "^4.3.0",
     "express": "^5.2.1",
     "json-schema-to-typescript": "^15.0.4",
+    "patch-package": "^8.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4",
     "tree-kill": "^1.2.2",
