@@ -1,11 +1,15 @@
 import * as Sentry from '@sentry/nextjs';
 
 export async function register() {
+  // eslint-disable-next-line no-restricted-syntax
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // eslint-disable-next-line no-restricted-syntax
     await import('./sentry.server.config');
   }
 
+  // eslint-disable-next-line no-restricted-syntax
   if (process.env.NEXT_RUNTIME === 'edge') {
+    // eslint-disable-next-line no-restricted-syntax
     await import('./sentry.edge.config');
   }
   // eslint-disable-next-line no-restricted-syntax
