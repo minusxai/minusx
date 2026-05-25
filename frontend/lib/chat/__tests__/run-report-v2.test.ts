@@ -1,6 +1,6 @@
 // runReportV2 — exercises the real headless report runner end-to-end with the
 // production registrables (V2_REGISTRABLES + ReportAgent + RemoteAnalystAgent),
-// proving the wiring resolves. No DB / Python: faux LLMs + stubbed runQuery.
+// proving the wiring resolves. No DB or backend: faux LLMs + stubbed runQuery.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,

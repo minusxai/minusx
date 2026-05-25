@@ -1,9 +1,8 @@
 /**
- * Headless v=2 chat orchestration loop.
+ * Headless chat orchestration loop.
  *
- * The v=2 counterpart to `run-orchestration.ts`. Clientless callers (Slack,
- * and — once ported — report jobs) drive a full agent execution in-process via
- * the TypeScript orchestrator, without going through HTTP or the Python backend.
+ * Clientless callers (e.g. Slack) drive a full agent execution in-process via
+ * the TypeScript orchestrator (no HTTP hop, no browser).
  *
  * Unlike the browser chat path, the agents used here (RemoteAnalystAgent
  * family, e.g. SlackAgent) advertise only server-side tools (DB + file tools),

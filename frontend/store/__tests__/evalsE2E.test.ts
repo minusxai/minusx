@@ -2,7 +2,7 @@
  * Evals API E2E Tests
  *
  * Drives POST /api/jobs/test with the unified `Test` format against the
- * in-process v2 EvalAnalystAgent (faux LLM). No Python backend — we control the
+ * in-process v2 EvalAnalystAgent (faux LLM). No backend to spawn — we control the
  * agent's Submit tool call, so pass/fail comparisons are deterministic.
  *
  * Run: npm test -- store/__tests__/evalsE2E.test.ts

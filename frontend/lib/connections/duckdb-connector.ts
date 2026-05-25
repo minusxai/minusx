@@ -26,7 +26,7 @@ function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[
 
 /**
  * Resolve a DuckDB file path to an absolute path.
- * Mirrors Python's backend/config.py:resolve_duckdb_path().
+ * Resolves a DuckDB file path against BASE_DUCKDB_DATA_PATH.
  *
  * - Absolute paths are used as-is.
  * - Prod Docker path (/app/...) is remapped to BASE_DUCKDB_DATA_PATH when /app doesn't exist.
@@ -121,7 +121,7 @@ export class DuckDbConnector extends NodeConnector {
 
       for (const row of rows) {
         let schemaName = row.table_schema;
-        // Handle "database.schema" prefixed names (same as Python DuckDBConnector)
+        // Handle "database.schema" prefixed names
         if (schemaName.includes('.')) {
           const [prefix, suffix] = schemaName.split('.', 2);
           if (SKIP_SCHEMAS.has(prefix)) continue;

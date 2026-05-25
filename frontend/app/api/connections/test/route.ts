@@ -14,7 +14,7 @@ interface TestConnectionRequest {
 /**
  * POST /api/connections/test
  * Test a connection configuration (existing or new). All connection types are
- * tested via their Node.js connector — no Python backend.
+ * tested via their Node.js connector.
  */
 export const POST = withAuth(async (request: NextRequest, _user) => {
   try {

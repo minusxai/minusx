@@ -1,6 +1,6 @@
 /**
  * TypeScript interfaces for SQL Intermediate Representation (IR)
- * Matches backend Pydantic models in backend/sql_ir/ir_types.py
+ * The IR shape produced/consumed by the polyglot SQL parser/generator.
  */
 
 export interface SelectColumn {

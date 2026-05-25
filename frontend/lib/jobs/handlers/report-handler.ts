@@ -20,7 +20,7 @@ export const reportJobHandler: JobHandler = {
     const reportName = reportFileResult.data?.name ?? `Report ${reportId}`;
 
     // Load reference files from DB and build CompressedAugmentedFile for each.
-    // The Python AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
+    // The AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
     // — the same shape ChatInterface builds client-side via compressAugmentedFile().
     // getAppStateServer handles the full pipeline including:
     // - Parameter inheritance for dashboards
@@ -58,7 +58,7 @@ export const reportJobHandler: JobHandler = {
       }
     }
 
-    // Run the ReportAgent via the in-process v=2 orchestrator (no Python backend).
+    // Run the ReportAgent via the in-process v=2 orchestrator.
     const runData: ReportRunContent = await runReportV2({
       // RemoteAnalystContext (inherited by the analyst sub-agents)
       userId: String(user.userId ?? user.email),

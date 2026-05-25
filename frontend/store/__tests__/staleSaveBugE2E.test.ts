@@ -91,7 +91,6 @@ describe('Stale-tab save does not relocate moved files', () => {
 
   // Route /api/files/{id} (PATCH) and /api/files/batch-save (POST) to real handlers.
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
     ],

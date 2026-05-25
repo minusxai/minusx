@@ -7,14 +7,11 @@
 
 import { configureStore } from '@reduxjs/toolkit';
 import { join } from 'path';
-import { ChildProcess, spawn } from 'child_process';
-import treeKill from 'tree-kill';
 import { NextRequest } from 'next/server';
 import { initializeDatabase } from '@/lib/database/import-export';
 import chatReducer from '../chatSlice';
 import uiReducer from '../uiSlice';
 import { chatListenerMiddleware } from '../chatListener';
-import { waitForPortRelease } from './port-manager';
 
 // ============================================================================
 // Jest Mock Setup - Important Limitations
@@ -93,142 +90,6 @@ export async function cleanupTestDatabase(_dbPath: string = join(process.cwd(), 
   await getModules().db.reset?.();
 }
 
-// ============================================================================
-// Python Backend Helpers
-// ============================================================================
-
-/**
- * Check if Python backend is running on specified port.
- * Returns true if healthy, false otherwise.
- */
-export async function isPythonBackendRunning(port: number = 8001): Promise<boolean> {
-  try {
-    const response = await fetch(`http://localhost:${port}/health`);
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Start a real Python backend server on specified port.
- * Returns ChildProcess that can be killed in afterAll.
- *
- * @param port Port to run Python backend on (default: 8004 for tests)
- * @returns ChildProcess
- */
-export function startPythonBackend(port: number = 8004) {
-  const backendDir = join(process.cwd(), '..', 'backend');
-  const pythonServer = spawn('uv', ['run', 'uvicorn', 'main:app', '--port', port.toString()], {
-    cwd: backendDir,
-    stdio: ['ignore', 'ignore', 'ignore']  // CRITICAL: Detached stdio to prevent memory leaks
-  });
-
-  pythonServer.on('exit', (code: number | null, signal: string | null) => {
-    if (code !== null && code !== 0) {
-      console.error(`[Python Backend ${port}] Exited with code ${code}, signal ${signal}`);
-    }
-  });
-
-  return pythonServer;
-}
-
-/**
- * Wait for Python backend to be ready.
- * Polls health endpoint until ready or timeout.
- */
-export async function waitForPythonBackend(port: number = 8004, timeout: number = 45000): Promise<boolean> {
-  // Give process a moment to start before polling
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    if (await isPythonBackendRunning(port)) {
-      console.log(`✅ Python backend ready on port ${port}`);
-      return true;
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  console.error(`❌ Python backend failed to start on port ${port} within ${timeout}ms`);
-  return false;
-}
-
-/**
- * Kill Python backend and verify cleanup.
- * Uses tree-kill to ensure entire process tree is terminated,
- * then verifies port is released.
- *
- * @param pythonProcess The ChildProcess to kill
- * @param port Port number to verify is released
- * @param timeout Maximum time to wait for cleanup (default: 10000ms)
- */
-export async function killPythonBackend(
-  pythonProcess: ChildProcess,
-  port: number,
-  timeout: number = 10000
-): Promise<void> {
-  if (!pythonProcess.pid) {
-    console.warn('⚠️ Python backend has no PID, may have already exited');
-    return;
-  }
-
-  console.log(`🛑 Killing Python backend (PID: ${pythonProcess.pid}) on port ${port}...`);
-
-  // CRITICAL: Close stdio streams to prevent memory leaks
-  // Remove all listeners first to avoid errors when streams close
-  if (pythonProcess.stdout) {
-    pythonProcess.stdout.removeAllListeners();
-    pythonProcess.stdout.destroy();
-  }
-  if (pythonProcess.stderr) {
-    pythonProcess.stderr.removeAllListeners();
-    pythonProcess.stderr.destroy();
-  }
-  if (pythonProcess.stdin) {
-    pythonProcess.stdin.destroy();
-  }
-
-  // Use tree-kill to kill entire process tree
-  return new Promise((resolve, reject) => {
-    // First try graceful kill (SIGTERM)
-    treeKill(pythonProcess.pid!, 'SIGTERM', async (err) => {
-      if (err) {
-        console.warn(`⚠️ Error during graceful kill: ${err.message}`);
-        console.log('   Attempting force kill...');
-
-        // Try force kill (SIGKILL)
-        treeKill(pythonProcess.pid!, 'SIGKILL', async (killErr) => {
-          if (killErr) {
-            console.error(`❌ Force kill failed: ${killErr.message}`);
-            reject(killErr);
-            return;
-          }
-
-          // Verify port released
-          const released = await waitForPortRelease(port, timeout);
-          if (released) {
-            console.log(`✅ Port ${port} released successfully (force kill)`);
-            resolve();
-          } else {
-            console.error(`❌ Port ${port} still in use after ${timeout}ms (force kill)`);
-            reject(new Error(`Port ${port} not released after force kill`));
-          }
-        });
-        return;
-      }
-
-      // Graceful kill succeeded, verify port released
-      const released = await waitForPortRelease(port, timeout);
-      if (released) {
-        console.log(`✅ Port ${port} released successfully`);
-        resolve();
-      } else {
-        console.error(`❌ Port ${port} still in use after ${timeout}ms`);
-        reject(new Error(`Port ${port} not released after graceful kill`));
-      }
-    });
-  });
-}
 
 // ============================================================================
 // Async Helpers
@@ -302,13 +163,9 @@ export function getTestDbPath(testName: string): string {
 /**
  * Create a NextRequest for testing the /api/chat route handler.
  * Simplifies the creation of test requests.
- *
- * Pinned to `?v=1` (the legacy Python engine): these handler tests drive the
- * Python backend, and v2 (the JS orchestrator) is now the default engine
- * (see DEFAULT_CHAT_VERSION).
  */
 export function createNextRequest(body: any) {
-  return new NextRequest('http://localhost:3000/api/chat?v=1', {
+  return new NextRequest('http://localhost:3000/api/chat', {
     method: 'POST',
     body: JSON.stringify(body)
   });

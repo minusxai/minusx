@@ -133,7 +133,7 @@ export class MXAgent<
   static readonly tools: Tool<TSchema>[] = [];
   /**
    * Hard cap on the agentic loop, counted in `toolThread` entries (assistant +
-   * tool-result messages), mirroring the Python backend's MAX_STEPS_LOWER_LEVEL.
+   * tool-result messages); the historical MAX_STEPS_LOWER_LEVEL value.
    * The loop stops with a "Maximum iterations (N) reached." reply at the cap,
    * and tools are withheld once the thread reaches `maxSteps − 5` so the model
    * is forced to give a final answer. Default `Infinity` = uncapped (concrete
@@ -199,7 +199,7 @@ export class MXAgent<
 
   protected async llm(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
-    // Soft cap (matches Python's _get_available_tools): once the thread reaches
+    // Soft cap: once the thread reaches
     // maxSteps − 5, withhold tools so the model must give a final answer.
     const tools = this.toolThread.length >= ctor.maxSteps - 5 ? [] : ctor.tools;
     const context: Context = {
@@ -213,14 +213,14 @@ export class MXAgent<
   async run(): Promise<AssistantMessage> {
     const ctor = this.constructor as typeof MXAgent;
     let lastMsg: AssistantMessage | undefined;
-    // Hard cap (matches Python's `while len(tool_thread) < MAX_STEPS`).
+    // Hard cap on the agentic loop.
     while (this.toolThread.length < ctor.maxSteps) {
       lastMsg = await this.llm();
       if (lastMsg.stopReason === 'stop') return lastMsg;
       await this.orchestrator.dispatch(lastMsg, this as unknown as MXAgent);
     }
     // Hit the cap. Reuse the last assistant message's provider metadata (api,
-    // usage, model, …) and replace its content, mirroring Python's terminal
+    // usage, model, …) and replace its content with a terminal
     // "Maximum iterations (N) reached." reply.
     const template =
       lastMsg ??

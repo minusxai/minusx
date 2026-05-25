@@ -1,6 +1,6 @@
 /**
  * Global Vitest setup — runs before all test files in node + ui projects.
- * Mirrors what jest.setup.js + test/setup/jest.setup.ts did under Jest.
+ * Registers the global module mocks and default test modules used everywhere.
  */
 import { vi } from 'vitest';
 import { registerModules } from '@/lib/modules/registry';
@@ -14,10 +14,6 @@ import { DBModule } from '@/lib/modules/db';
 // silently calling the dev's keys or crashing with "No API key".
 process.env.OPENAI_API_KEY = 'test-stub-no-real-calls';
 process.env.ANTHROPIC_API_KEY = 'test-stub-no-real-calls';
-
-// Clear backend URL env vars; tests must explicitly set their own
-delete process.env.NEXT_PUBLIC_BACKEND_URL;
-delete process.env.BACKEND_URL;
 
 // Mock server-only module (Next.js 13+ server components)
 vi.mock('server-only', () => ({}));

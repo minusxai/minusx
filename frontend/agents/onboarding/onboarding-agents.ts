@@ -1,12 +1,11 @@
-// Onboarding agents (v=2 port of the Python OnboardingContextAgent /
-// OnboardingDashboardAgent).
+// Onboarding agents (OnboardingContextAgent / OnboardingDashboardAgent).
 //
 // Both run on the normal v=2 chat path (they use the frontend-bridged EditFile /
 // CreateFile tools), so they extend WebAnalystAgent and just (a) restrict the
 // toolset, (b) cap maxSteps for low latency, (c) render the onboarding-specific
 // prompts (`onboarding_context.*` / `onboarding_dashboard.*`, already in
 // `orchestrator/prompts/prompts.json`), and (d) disable web search
-// (Python: include_web_search=False).
+// (no web search).
 import 'server-only';
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
@@ -72,7 +71,7 @@ export class OnboardingContextAgent extends WebAnalystAgent {
   ];
   static override readonly maxSteps = 15;
   static override model = getAnalystModel() ?? FAUX_MODEL;
-  // No web search for onboarding (Python: include_web_search=False).
+  // No web search for onboarding.
   static override readonly callOptions = { reasoning: 'low', webSearch: false };
 
   protected override resolveCallOptions(): Record<string, unknown> | undefined {
@@ -112,7 +111,7 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
   ];
   static override readonly maxSteps = 25;
   static override model = getAnalystModel() ?? FAUX_MODEL;
-  // No web search for onboarding (Python: include_web_search=False).
+  // No web search for onboarding.
   static override readonly callOptions = { reasoning: 'low', webSearch: false };
 
   protected override resolveCallOptions(): Record<string, unknown> | undefined {

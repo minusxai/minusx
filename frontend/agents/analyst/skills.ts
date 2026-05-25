@@ -1,4 +1,4 @@
-// Skills selection + rendering, ported from the Python AnalystAgent (agent.py).
+// Skills selection + rendering for the analyst agent.
 // Pure functions over (appState, selected skills, user catalog, unrestricted
 // mode) plus the shared prompts.yaml. Kept separate from the agent so each
 // piece is unit-testable in isolation.

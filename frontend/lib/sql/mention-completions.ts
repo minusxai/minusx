@@ -1,6 +1,5 @@
 /**
  * Mention completions for chat interface.
- * Ported from Python get_mention_completions (backend/sql_utils/autocomplete.py).
  * Pure string matching — no SQL parsing needed.
  */
 import type { DatabaseWithSchema } from '@/lib/types';

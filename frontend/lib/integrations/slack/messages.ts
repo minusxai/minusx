@@ -1,7 +1,7 @@
 import 'server-only';
 import { combineContent, parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import type { ConversationLogEntry, QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/types.gen';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
 // ── Markdown → Slack mrkdwn conversion ───────────────────────────────────────
 

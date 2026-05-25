@@ -45,7 +45,7 @@ export function ErrorDeliverySection() {
         </Text>
       </HStack>
       <Text fontSize="xs" color="fg.muted" mb={3}>
-        Where to send app error alerts (Python errors, tool failures, stream errors)
+        Where to send app error alerts (server errors, tool failures, stream errors)
       </Text>
       <VStack align="stretch" gap={2}>
         <DeliveryCard

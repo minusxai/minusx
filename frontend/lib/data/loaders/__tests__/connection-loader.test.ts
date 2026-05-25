@@ -93,11 +93,11 @@ function freshTimestamp() {
 }
 
 // ---------------------------------------------------------------------------
-// Cached (fresh) schema — no Python call
+// Cached (fresh) schema — no schema fetch
 // ---------------------------------------------------------------------------
 
 describe('connectionLoader — fresh schema cached', () => {
-  it('returns cached schema without calling Python when schema is fresh', async () => {
+  it('returns cached schema without fetching when schema is fresh', async () => {
     const freshSchema: DatabaseSchema = {
       schemas: [{ schema: 'public', tables: [] }],
       updated_at: freshTimestamp(),
@@ -113,7 +113,7 @@ describe('connectionLoader — fresh schema cached', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Missing / stale schema — fetches Python and persists to DB
+// Missing / stale schema — fetches via the connector and persists to DB
 // ---------------------------------------------------------------------------
 
 describe('connectionLoader — stale or missing schema', () => {
@@ -171,8 +171,8 @@ describe('connectionLoader — stale or missing schema', () => {
 // Error fallback behaviour
 // ---------------------------------------------------------------------------
 
-describe('connectionLoader — Python fetch failure', () => {
-  it('returns cached schema when Python fetch fails and cache exists', async () => {
+describe('connectionLoader — schema fetch failure', () => {
+  it('returns cached schema when the schema fetch fails and cache exists', async () => {
     mockGetSchema.mockRejectedValue(new Error('backend unavailable'));
     const staleSchema: DatabaseSchema = {
       schemas: [{ schema: 'fallback', tables: [] }],
@@ -187,7 +187,7 @@ describe('connectionLoader — Python fetch failure', () => {
     expect(content.schema?.schemas).toEqual(staleSchema.schemas);
   });
 
-  it('returns empty schema when Python fetch fails and no cache exists', async () => {
+  it('returns empty schema when the schema fetch fails and no cache exists', async () => {
     mockGetSchema.mockRejectedValue(new Error('backend unavailable'));
     const file = await createConnection('conn_noschema_err', '/org/database/conn_noschema_err');
 

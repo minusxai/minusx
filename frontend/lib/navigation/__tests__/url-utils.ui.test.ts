@@ -82,7 +82,7 @@ describe('getCurrentV', () => {
 describe('setVInUrl — toggle controller (v2 is the default engine)', () => {
   // `setVInUrl(true)` = use the new (v2) chat. v2 is the default, so it clears
   // `v` (clean URL, like mode=org is omitted). `setVInUrl(false)` = opt into the
-  // legacy Python chat, which is the non-default → explicit `?v=1`.
+  // legacy chat, which is the non-default → explicit `?v=1`.
   afterEach(() => setLocation('http://localhost:3000/'));
 
   it('enabling v2 clears v (default) while preserving other params and pathname', () => {

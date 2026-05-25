@@ -20,7 +20,7 @@ export const GET = withAuth(async (request: NextRequest, user, { params }: Route
 });
 
 // DELETE /api/connections/{name}
-// Performs full connection teardown: removes document, deregisters from Python backend,
+// Performs full connection teardown: removes document,
 // and cleans up any associated S3 data (CSV / Google Sheets).
 export const DELETE = withAuth(async (request: NextRequest, user, { params }: RouteParams) => {
   try {

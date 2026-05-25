@@ -363,7 +363,7 @@ export default function SqlEditor({
             const wordMatch = textUntilPosition.match(/(\w*)$/);
             const partial = wordMatch ? wordMatch[1] : '';
 
-            // When insert_text starts with ', ' the Python backend detected a
+            // When insert_text starts with ', ' the autocomplete provider detected a
             // "trailing space after column in a list clause" situation.  We must
             // expand the range one character back to consume that trailing space so
             // the result is "…col, next" instead of "…col , next".

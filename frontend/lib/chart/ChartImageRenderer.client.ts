@@ -25,7 +25,7 @@ import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
 import { getChartHeight } from '@/lib/chart/render-chart-svg'
 import type { IChartImageRenderer, ChartInput, ChartRenderOptions, RenderedChart } from './IChartImageRenderer'
 import type { QueryResult } from '@/lib/types'
-import type { VizSettings } from '@/lib/types.gen'
+import type { VizSettings } from '@/lib/validation/atlas-schemas'
 
 function buildEChartsOption(
   queryResult: QueryResult,

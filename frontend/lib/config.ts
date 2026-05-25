@@ -28,7 +28,6 @@ interface EnvironmentConfig {
   MX_NETWORK_LOG_EXCLUDE: string;
   ANALYTICS_DB_DIR: string | undefined;
   DEFAULT_DB_TYPE: string;
-  BACKEND_URL: string;
   DEFAULT_EMAIL_WEBHOOK: string | undefined;
   SLACK_SIGNING_SECRET: string | undefined;
   SLACK_CLIENT_ID: string | undefined;
@@ -110,7 +109,6 @@ const config: EnvironmentConfig = {
   MX_NETWORK_LOG_EXCLUDE: getOptional(process.env.MX_NETWORK_LOG_EXCLUDE, ''),
   ANALYTICS_DB_DIR: process.env.ANALYTICS_DB_DIR,
   DEFAULT_DB_TYPE: getOptional(process.env.DEFAULT_DB_TYPE, 'duckdb'),
-  BACKEND_URL: getOptional(process.env.NEXT_PUBLIC_BACKEND_URL, 'http://localhost:8001'),
   DEFAULT_EMAIL_WEBHOOK: process.env.DEFAULT_EMAIL_WEBHOOK,
   SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
   SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID,
@@ -190,7 +188,6 @@ export const MX_API_KEY = config.MX_API_KEY;
 export const MX_NETWORK_LOG_EXCLUDE = config.MX_NETWORK_LOG_EXCLUDE;
 export const ANALYTICS_DB_DIR = config.ANALYTICS_DB_DIR;
 export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
-export const BACKEND_URL = config.BACKEND_URL;
 export const DEFAULT_EMAIL_WEBHOOK = config.DEFAULT_EMAIL_WEBHOOK;
 export const SLACK_SIGNING_SECRET = config.SLACK_SIGNING_SECRET;
 export const SLACK_CLIENT_ID = config.SLACK_CLIENT_ID;

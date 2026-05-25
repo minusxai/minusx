@@ -34,7 +34,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck, LuBookOpen, LuPlus, LuLayoutDashboard, LuCompass, LuExternalLink } from 'react-icons/lu';
 import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types';
-import { testConnection } from '@/lib/backend/python-backend';
+import { testConnection } from '@/lib/backend/connection-test';
 import TabSwitcher from '../TabSwitcher';
 import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';

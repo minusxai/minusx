@@ -44,7 +44,6 @@ export function createMiddleware() {
     if (
       isPublicRoute ||
       pathname.startsWith('/api/auth') ||
-      pathname.startsWith('/api/internal') ||
       pathname.startsWith('/api/public/slack-chart') ||
       pathname.startsWith('/api/orgs/register') ||
       pathname.startsWith('/api/mcp') ||

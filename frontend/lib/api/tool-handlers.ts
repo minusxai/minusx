@@ -198,7 +198,7 @@ registerFrontendTool('UserInputTool', async () => {
 /**
  * Resolve a user-defined Knowledge Base skill from the active conversation's
  * already-loaded context state. Shared by two tool names:
- *  - 'LoadSkillFrontend' — v1 (Python spawns it for user-defined skills)
+ *  - 'LoadSkillFrontend' — spawned by the server-side LoadSkill for user-defined skills
  *  - 'LoadSkill'         — v2 (the LoadSkill tool resolves system skills
  *    server-side and pauses to here for user-defined skills)
  */

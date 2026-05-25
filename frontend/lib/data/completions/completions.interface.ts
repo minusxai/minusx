@@ -18,7 +18,7 @@ import {
  * Shared interface for completions data layer
  * Both server and client implementations must conform to this interface
  *
- * Server: Loads schema/questions + calls Python backend
+ * Server: Loads schema/questions and runs completions locally (WASM)
  * Client: HTTP calls to API routes with caching
  */
 export interface ICompletionsDataLayer {

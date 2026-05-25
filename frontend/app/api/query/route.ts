@@ -75,11 +75,8 @@ export const runtime = 'nodejs';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   const startTime = Date.now();
-  console.log('[QUERY API] Start POST /api/query');
   try {
-    const parseStart = Date.now();
     const body = await request.json();
-    console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
     const { connection_name, query, parameters, references, filePath, fileId, fileVersion } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
@@ -107,7 +104,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         rowCount: cached.result.rows.length, colCount: cached.result.columns.length,
         wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
       });
-      console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
     }
 
@@ -142,9 +138,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Handle composed questions (CTE construction)
       let composedQuery = query;
       if (references && Array.isArray(references) && references.length > 0) {
-        console.log(`[QUERY API] Constructing CTEs for ${references.length} references`);
-        const cteStart = Date.now();
-
         // Load referenced questions from DB
         const resolvedRefs: ResolvedReference[] = await Promise.all(
           (references as QuestionReference[]).map(async (ref) => {
@@ -159,7 +152,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
         // Use extracted function to build CTEs
         composedQuery = CTEfyQuery(query, resolvedRefs);
-        console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
       }
 
       // Derive dialect from connection type for IR-based None param removal
@@ -202,7 +194,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     queryInflight.set(serverCacheKey, execPromise);
     try {
       const { _finalQuery: rq, ...rest } = await execPromise;
-      console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: rest, finalQuery: rq });
     } catch (execError) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {

@@ -123,8 +123,8 @@ export function getCurrentV(): string | null {
  *
  * `enabled` means "use the new (v2) chat". Since v2 is the default
  * (`DEFAULT_CHAT_VERSION`), enabling it clears `v` to keep the URL clean
- * (like `mode=org` is omitted); disabling it opts into the legacy Python
- * engine via an explicit `?v=1`. The `v` param is only ever present when it
+ * (like `mode=org` is omitted); disabling it opts into the legacy
+ * surface via an explicit `?v=1`. The `v` param is only ever present when it
  * differs from the default.
  *
  * @param enabled - true to use v2 (clears `v`), false to use legacy v1 (sets `v=1`)

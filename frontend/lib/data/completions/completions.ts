@@ -148,8 +148,7 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
     };
 
     // Only cache non-empty results — empty results may indicate a transient
-    // backend error (e.g. Python not yet started) and should not be served
-    // as stale cache hits on the next request.
+    // error and should not be served as stale cache hits on the next request.
     if (result.suggestions.length > 0) {
       this.sqlCompletionsCache.set(cacheKey, result);
 

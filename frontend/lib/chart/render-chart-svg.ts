@@ -13,7 +13,7 @@ import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRad
 import { COLOR_PALETTE } from './echarts-theme';
 import { buildColumnTypesMap } from '@/lib/database/column-types';
 import type { QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/types.gen';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
 // Register individual ECharts components for Next.js tree-shaking (SSR).
 // In Jest/tsx the full echarts bundle is loaded and these are already included.

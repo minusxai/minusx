@@ -1,6 +1,5 @@
 /**
  * SQL to IR parser using @polyglot-sql/sdk (WASM).
- * Ported from backend/sql_ir/parser.py.
  */
 import { init, parse, generate, Dialect } from '@polyglot-sql/sdk';
 import { immutableSet } from '@/lib/utils/immutable-collections';
@@ -68,7 +67,7 @@ export async function parseSqlToIrLocal(
 }
 
 // ---------------------------------------------------------------------------
-// Pre-validation (ported from enhanced_validator.py)
+// Pre-validation
 // ---------------------------------------------------------------------------
 
 function validateSqlForGui(ast: any): string[] {

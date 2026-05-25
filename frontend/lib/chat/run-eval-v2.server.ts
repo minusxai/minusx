@@ -1,7 +1,7 @@
 /**
  * Headless v=2 eval execution.
  *
- * Runs the in-process `EvalAnalystAgent` (no Python backend) and returns the
+ * Runs the in-process `EvalAnalystAgent` and returns the
  * agent's submitted answer. Used by the eval harness (`lib/tests/server.ts`).
  */
 import 'server-only';

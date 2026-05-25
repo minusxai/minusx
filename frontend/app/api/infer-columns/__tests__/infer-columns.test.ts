@@ -2,8 +2,8 @@ import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vi
 /**
  * E2E Tests for /api/infer-columns
  *
- * Part A — Python /api/infer-columns endpoint: static column inference via sqlglot
- * Part B — Next.js route: loads question from DB, calls Python, returns columns
+ * Part A — column inference via @polyglot-sql/sdk (WASM)
+ * Part B — Next.js route: loads question from DB, infers columns
  */
 
 // Must be hoisted before any imports that touch the DB — path must match getTestDbPath('infer_columns_e2e')
@@ -61,8 +61,8 @@ describe('Infer Columns - E2E Tests', () => {
     },
   });
 
-  // No Python backend needed — infer-columns runs locally via WASM
-  // Part A (Python endpoint tests) moved to lib/sql/__tests__/infer-columns.test.ts
+  // No backend to spawn — infer-columns runs locally via WASM
+  // Part A (endpoint tests) moved to lib/sql/__tests__/infer-columns.test.ts
 
   // Override global mock to include mode:'org' and home_folder:'/org'
   beforeAll(() => {

@@ -26,10 +26,6 @@ jobs:
             canary_image: minusx-frontend-canary
             context: frontend
             dockerfile: frontend/Dockerfile
-          - image: minusx-backend
-            canary_image: minusx-backend-canary
-            context: backend
-            dockerfile: backend/Dockerfile
     permissions:
       contents: read
       packages: write

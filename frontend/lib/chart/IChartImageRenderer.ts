@@ -1,5 +1,5 @@
 import type { QueryResult } from '@/lib/types'
-import type { VizSettings } from '@/lib/types.gen'
+import type { VizSettings } from '@/lib/validation/atlas-schemas'
 
 export interface ChartInput {
   queryResult: QueryResult

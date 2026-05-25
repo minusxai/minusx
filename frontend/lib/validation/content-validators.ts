@@ -1,6 +1,6 @@
 /**
  * Runtime validators for Atlas file content.
- * Compiled from the Pydantic-generated JSON schema (atlas-schema.gen.json).
+ * Compiled from the generated JSON schema (atlas-schema.gen.json).
  * To regenerate: cd frontend && npm run generate-types
  */
 import Ajv from 'ajv';
@@ -31,7 +31,7 @@ function validateContent(input: ContentValidationInput): string | null {
   if (!validate(input.data)) {
     return formatErrors(validate.errors);
   }
-  // Semantic cross-field check: Pydantic's .refine() doesn't survive JSON Schema codegen
+  // Semantic cross-field check: not expressible in JSON Schema, so enforced here
   if (input.type === 'QuestionContent') {
     const viz = input.data.vizSettings;
     if (viz?.type === 'pivot' && viz?.pivotConfig == null) {

@@ -15,7 +15,7 @@
  *   8. publishAll() no longer needs topological sort or batch-create — all files already
  *      have real positive IDs from createDraftFile(), so one batch-save suffices.
  *
- * Pattern: follows publishAllE2E.test.ts — no Python backend, direct route calls.
+ * Pattern: follows publishAllE2E.test.ts — no backend to spawn, direct route calls.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
@@ -321,7 +321,6 @@ describe('createDraftFile', () => {
 
   // Order matters: template and batch-save must match before the generic /api/files
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/template'], handler: templateHandler },
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
@@ -388,7 +387,6 @@ describe('dryRunSave', () => {
   let fileId: number;
 
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
     ],
@@ -445,7 +443,6 @@ describe('publishAll with draft files', () => {
 
   // Intercept template, create (for createDraftFile), and batch-save (for publishAll)
   const mockFetch = setupMockFetch({
-    getPythonPort: () => 0,
     interceptors: [
       { includesUrl: ['/api/files/template'], handler: templateHandler },
       { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },

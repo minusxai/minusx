@@ -8,26 +8,20 @@ ROOT="$CLAUDE_PROJECT_DIR"
 echo "[cloud-setup] Installing frontend dependencies..."
 cd "$ROOT/frontend" && npm install --prefer-offline
 
-echo "[cloud-setup] Installing backend dependencies..."
-cd "$ROOT/backend" && uv sync
-
-echo "[cloud-setup] Writing .env files..."
-# frontend/.env — NEXTAUTH_SECRET must be set in cloud environment variables
+echo "[cloud-setup] Writing frontend/.env..."
+# Single Next.js app — the agent orchestrator runs in-process, so all config
+# (auth secret + LLM provider key) lives in frontend/.env. NEXTAUTH_SECRET and
+# ANTHROPIC_API_KEY must be set in the cloud environment variables.
 if [ ! -f "$ROOT/frontend/.env" ]; then
   cat > "$ROOT/frontend/.env" <<EOF
 NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-me}
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
 BASE_DUCKDB_DATA_PATH=..
 EOF
 fi
-# backend/.env — ANTHROPIC_API_KEY must be set in cloud environment variables
-if [ ! -f "$ROOT/backend/.env" ]; then
-  cat > "$ROOT/backend/.env" <<EOF
-ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-EOF
-fi
 
-echo "[cloud-setup] Initialising documents database..."
-cd "$ROOT/frontend" && npm run import-db -- --replace-db=y
+# The documents DB is seeded automatically at workspace/company registration
+# (no manual import step).
 
 echo "[cloud-setup] Downloading sample DuckDB data..."
 mkdir -p "$ROOT/data"

@@ -86,7 +86,7 @@ export class SearchDBSchema extends BaseSearchDBSchema {
 }
 
 /**
- * Production FuzzyMatch tool. Schema mirrors Python's FuzzyMatch (tools.py);
+ * Production FuzzyMatch tool.
  * execution shares `executeFuzzyMatch` with the v1 Next.js handler so v1 and v2
  * behave identically. `semantic_expansion` is advertised for schema parity but
  * not acted on (matching the v1 handler, which runs a single fuzzy match).

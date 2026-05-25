@@ -8,8 +8,7 @@ import atlasContentSchemaNoViz from '@/lib/validation/atlas-schema-no-viz.gen.js
 // Per-file-type content JSON schema (a discriminated `oneOf` by file `type`),
 // with viz stripped for token economy — vizSettings uses the ExecuteQuery
 // vizSettings schema instead. Embedded into the EditFile/CreateFile descriptions
-// so the model emits correctly-shaped content. Mirrors Python's
-// ATLAS_FILE_SCHEMA_NO_VIZ_JSON; regenerate via `npm run generate-types`.
+// so the model emits correctly-shaped content. Regenerate via `npm run generate-types`.
 const CONTENT_SCHEMA_NO_VIZ = JSON.stringify(atlasContentSchemaNoViz);
 
 // All tools below execute in the browser via the existing
@@ -32,9 +31,8 @@ const EditFileParams = Type.Object({
   })),
 });
 
-// Description ported verbatim from the Python reference
-// (backend/tasks/agents/analyst/tools.py → EditFile docstring). Keep the two in
-// sync — the query↔parameters warning in particular prevents broken queries.
+// Keep this description in sync with the EditFile behavior in tool-handlers.ts —
+// the query/parameters warning in particular prevents broken queries.
 const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes. Executes on the frontend with real Redux state.
 
 Search for each oldMatch in the FULL file JSON and replace with newMatch.
@@ -123,7 +121,7 @@ export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystCon
 // WebAnalystAgent. Server-side ReadFiles only sees persisted DB state; this
 // frontend-bridge variant routes through `frontendToolRegistry.ReadFiles@448`
 // which reads Redux file memory (drafts + persisted) and includes chart
-// images. This matches Python's frontend-bridge ReadFiles behaviour so an
+// images. The frontend-bridge ReadFiles behaviour means an
 // agent that edits a draft and reads it back sees its in-flight edits.
 const ReadFilesParams = Type.Object({
   fileIds: Type.Array(Type.Number(), { description: 'IDs of files to load.' }),
@@ -169,9 +167,9 @@ export class Navigate extends MXTool<typeof NavigateParams, RemoteAnalystContext
 // Schema matches `registerFrontendTool('ClarifyFrontend', ...)` at line 382 —
 // handler reads `question`, `options[{label, description?}]`, `multiSelect?`.
 // Naming: we expose the LLM-visible name as `ClarifyFrontend` (matches the
-// frontend handler exactly, no spawn-wrapper needed). Python uses `Clarify`
-// with a server-side spawn into `ClarifyFrontend`; Node v=2 short-circuits
-// the spawn since our orchestrator dispatches by exact name.
+// frontend handler exactly, no spawn-wrapper needed). The server-side `Clarify`
+// spawns into `ClarifyFrontend`; v2 short-circuits the spawn since the
+// orchestrator dispatches by exact name.
 const ClarifyFrontendParams = Type.Object({
   question: Type.String({ description: 'Question to ask the user.' }),
   options: Type.Array(Type.Object({
@@ -212,9 +210,8 @@ export class PublishAll extends MXTool<typeof PublishAllParams, RemoteAnalystCon
 }
 
 // ─── LoadSkill ────────────────────────────────────────────────────────────────
-// LLM-facing skill loader (matches Python tasks/agents/analyst/tools.py →
-// LoadSkill, and what the skill docstrings tell the model to call). System
-// skills resolve server-side from the shared prompts.yaml; unknown names are
+// LLM-facing skill loader (matches what the skill docstrings tell the model to
+// call). System skills resolve server-side from the shared prompts.yaml; unknown names are
 // user-defined Knowledge Base skills, resolved on the frontend via the
 // `registerFrontendTool('LoadSkill', ...)` handler in lib/api/tool-handlers.ts.
 const LoadSkillParams = Type.Object({

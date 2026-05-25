@@ -1,4 +1,4 @@
-// Report controller agent (v=2 port of the Python `ReportAgent`).
+// Report controller agent.
 //
 // A parent-orchestrating agent: it dispatches one read-only analyst sub-agent
 // (`RemoteAnalystAgent`, schema name `AnalystAgent`) per report reference in
@@ -213,8 +213,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
   /**
    * Collect successful `ExecuteQuery` results from the analyst sub-agents.
    * Each sub-agent's `id` equals its slot id, so its tool calls/results carry
-   * `parent_id === slotId` in the flat log. Mirrors Python's
-   * `_collect_queries_from_task`.
+   * `parent_id === slotId` in the flat log.
    */
   private _collectQueries(
     slotIds: string[],

@@ -1,5 +1,5 @@
-// Eval Submit tools (v=2 port of the Python SubmitBinary/SubmitNumber/
-// SubmitString/CannotAnswer). Server-side leaf tools the eval agent calls
+// Eval Submit tools (SubmitBinary/SubmitNumber/SubmitString/CannotAnswer).
+// Server-side leaf tools the eval agent calls
 // exactly once to submit its final answer; the run terminates afterward.
 import 'server-only';
 import { Type } from 'typebox';

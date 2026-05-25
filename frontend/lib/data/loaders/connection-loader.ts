@@ -24,7 +24,7 @@ function isSchemaStale(updatedAt: string): boolean {
  *
  * Caching strategy:
  * 1. If schema exists and is fresh → return cached schema
- * 2. If schema is stale OR refresh=true → fetch fresh schema from Python
+ * 2. If schema is stale OR refresh=true → fetch fresh schema via the connector
  * 3. Save updated schema back to database file
  * 4. Return file with fresh schema
  *

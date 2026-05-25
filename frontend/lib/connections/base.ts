@@ -124,7 +124,7 @@ export type ConnectorDialect = keyof ConnectorConfigMap;
 
 /**
  * Abstract base class for Node.js database connectors.
- * Mirrors Python's AsyncDatabaseConnector interface.
+ * The async database connector interface.
  */
 export abstract class NodeConnector {
   constructor(
@@ -158,7 +158,7 @@ export abstract class NodeConnector {
 
   /**
    * Get database schema.
-   * Returns array of { schema, tables[] } — same shape as Python.
+   * Returns array of { schema, tables[] }.
    */
   abstract getSchema(): Promise<SchemaEntry[]>;
 }

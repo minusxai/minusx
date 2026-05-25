@@ -1,7 +1,7 @@
 // Chat-v2 toggle — purely URL-driven (`?v=`). No Redux, no localStorage.
 // Single source of truth: the URL. v2 (JS orchestrator) is the DEFAULT engine
 // (see DEFAULT_CHAT_VERSION) — only an explicit `?v=1` opts into the legacy
-// Python chat. The settings page flips it via a full page reload
+// Conversations surface. The settings page flips it via a full page reload
 // (`window.location.href = setVInUrl(next)`); navigation preserves the param
 // via the same `preserveParams` machinery as `as_user` / `mode` (see
 // lib/navigation/url-utils.ts).

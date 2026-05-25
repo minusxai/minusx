@@ -5,14 +5,14 @@ import { DatabaseConnection, DatabaseSchema, TestConnectionResult } from '@/lib/
  * Shared interface for connections data layer
  * Both server and client implementations must conform to this interface
  *
- * Server: Direct database access with Python backend orchestration
+ * Server: Direct database access via the Node.js connectors
  * Client: HTTP calls to API routes
  */
 export interface IConnectionsDataLayer {
   /**
    * List all connections (with optional schemas)
    * @param user - Authenticated user (server) or undefined (client, auth via cookies)
-   * @param includeSchemas - Whether to fetch schemas from Python backend (expensive)
+   * @param includeSchemas - Whether to fetch schemas via the connector (expensive)
    */
   listAll(user: EffectiveUser, includeSchemas?: boolean): Promise<ListConnectionsResult>;
 
@@ -23,24 +23,24 @@ export interface IConnectionsDataLayer {
 
   /**
    * Create new connection
-   * Validates via Python backend before creating document
+   * Validates via the connector before creating document
    */
   create(input: CreateConnectionInput, user: EffectiveUser): Promise<CreateConnectionResult>;
 
   /**
    * Update connection config
-   * Re-initializes Python connection and returns updated schema
+   * Re-initializes the connector and returns updated schema
    */
   update(name: string, config: Record<string, any>, user: EffectiveUser): Promise<UpdateConnectionResult>;
 
   /**
    * Delete connection
-   * Removes from database and Python backend
+   * Removes from the database
    */
   delete(name: string, user: EffectiveUser): Promise<void>;
 
   /**
-   * Test connection via Python backend
+   * Test connection via the connector
    */
   test(name: string, user: EffectiveUser): Promise<TestConnectionResult>;
 }

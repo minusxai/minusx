@@ -66,7 +66,7 @@ import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
 import type {
   ChatRequest,
-  CompletedToolCallFromPython,
+  CompletedToolCallResult,
 } from '@/lib/chat-orchestration';
 import type {
   ToolCall as LegacyToolCall,
@@ -210,7 +210,7 @@ export interface V2LegacyChatResponse {
   conversationID: number;
   log_index: number;
   pending_tool_calls: LegacyToolCall[];
-  completed_tool_calls: CompletedToolCallFromPython[];
+  completed_tool_calls: CompletedToolCallResult[];
   debug: DebugMessage[];
   error?: string;
 }
@@ -364,8 +364,7 @@ async function setupOrchestration(
   );
 
   // Prefer the client-resolved context + schema (the selected context the user
-  // picked in the UI), matching what the Python backend does — it uses
-  // agent_args.context / agent_args.schema verbatim. Server re-resolution
+  // picked in the UI) — it uses agent_args.context / agent_args.schema verbatim. Server re-resolution
   // (serverArgs) is only a fallback for requests that arrive without them.
   // (Genuinely clientless callers — Slack, report jobs — call
   // buildServerAgentArgs directly and never reach this chat path.)
@@ -388,7 +387,7 @@ async function setupOrchestration(
       ? (agentArgs as { agent_name: string }).agent_name
       : undefined;
   // Skills: client sends agent_args.skills.{selected, user_catalog} and
-  // unrestricted_mode (matching Python). Page type is derived from
+  // unrestricted_mode. Page type is derived from
   // agent_args.app_state for skill preloading — kept separate from the
   // (intentionally null) <AppState> user-message block.
   const clientSkills = (agentArgs as { skills?: unknown }).skills as
@@ -451,9 +450,9 @@ async function setupOrchestration(
   if (body.completed_tool_calls && body.completed_tool_calls.length > 0) {
     const piResults = body.completed_tool_calls.map((tuple) => {
       const toolCall = tuple[0];
-      const result = tuple[1] as unknown as CompletedToolCallFromPython;
-      const patched: CompletedToolCallFromPython = {
-        ...result as unknown as CompletedToolCallFromPython,
+      const result = tuple[1] as unknown as CompletedToolCallResult;
+      const patched: CompletedToolCallResult = {
+        ...result as unknown as CompletedToolCallResult,
         run_id: (result as unknown as { run_id?: string }).run_id ?? '',
         function: toolCall.function,
       };
@@ -605,7 +604,7 @@ async function persistAndBuildLegacyResponse(
   // / log_index reflect the legacy view, then slice to the new diff for
   // the response.
   const legacyFullLog = piLogToLegacy(fullPiLog);
-  const completedToolCalls: CompletedToolCallFromPython[] = legacyFullLog
+  const completedToolCalls: CompletedToolCallResult[] = legacyFullLog
     .filter((e) => e._type === 'task_result')
     .map((e) => {
       const r = e as Extract<LegacyLogEntry, { _type: 'task_result' }>;

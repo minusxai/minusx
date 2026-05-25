@@ -1,7 +1,7 @@
 /**
  * JSON-driven agent test harness.
  *
- * Translates plain JSON spec files into Jest `it()` blocks that run a real
+ * Translates plain JSON spec files into Vitest `it()` blocks that run a real
  * agent turn and assert on the resulting conversation using JSONPath.
  *
  * Usage (inside a `describe` block):
@@ -78,7 +78,7 @@ function evaluateAssertion(assertion: TestAssertion, conv: unknown): boolean {
 // ============================================================================
 
 /**
- * Register one Jest `it()` block per spec.
+ * Register one Vitest `it()` block per spec.
  * Must be called at describe-scope (not inside beforeEach/it).
  */
 export function runAgentTestSpecs(

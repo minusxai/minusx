@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { renderChartToJpeg } from '@/lib/chart/render-chart';
 import { handleApiError } from '@/lib/api/api-responses';
 import type { QueryResult } from '@/lib/types';
-import type { VizSettings } from '@/lib/types.gen';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
 type SinglePayload = {
   mode: 'single';

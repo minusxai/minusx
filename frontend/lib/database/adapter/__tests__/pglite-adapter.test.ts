@@ -6,10 +6,10 @@
  * No SQLite files, no mocked db-config — PGLite is the only DB used here.
  *
  * Pattern: registerModules({ db: new DBModule() }) in beforeEach.
- * Re-calling registerModules() overrides the default test module from jest.setup.ts.
+ * Re-calling registerModules() overrides the default test module from vitest.setup.ts.
  */
 
-// Workspace mock is already in jest.setup.ts (getWorkspaceId → 1, runWithWorkspace → no-op)
+// Workspace mock is already in vitest.setup.ts (getWorkspaceId → 1, runWithWorkspace → no-op)
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,

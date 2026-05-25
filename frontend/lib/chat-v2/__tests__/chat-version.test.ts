@@ -7,7 +7,7 @@ import {
 
 // The chat engine is selected by a single number that unifies three concepts:
 // the URL `?v=` param, the conversation file's `meta.version`, and the engine
-// (1 = legacy Python backend, 2 = JS orchestrator). `DEFAULT_CHAT_VERSION` is
+// (1 = legacy, 2 = JS orchestrator). `DEFAULT_CHAT_VERSION` is
 // what an absent/unrecognized `?v=` falls back to — flip it to change the
 // default engine for everyone (and to roll back).
 
@@ -18,7 +18,7 @@ describe('DEFAULT_CHAT_VERSION', () => {
 });
 
 describe('resolveChatVersion', () => {
-  it('explicit ?v=1 → 1 (legacy Python), ?v=2 → 2 (JS orchestrator)', () => {
+  it('explicit ?v=1 → 1 (legacy), ?v=2 → 2 (JS orchestrator)', () => {
     expect(resolveChatVersion('1')).toBe(1);
     expect(resolveChatVersion('2')).toBe(2);
   });

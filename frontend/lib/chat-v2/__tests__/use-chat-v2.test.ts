@@ -21,7 +21,7 @@ describe('isLegacyChatInV2', () => {
     expect(isLegacyChatInV2(true, 42, 2)).toBe(false);
   });
 
-  it('false: not in v2 mode (v1 chat continues normally via Python)', () => {
+  it('false: not in v2 mode (explicit ?v=1)', () => {
     expect(isLegacyChatInV2(false, 42, 1)).toBe(false);
   });
 

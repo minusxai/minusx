@@ -18,14 +18,9 @@ vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
 }));
 
-import * as path from 'path';
 import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
-import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { getTestDbPath } from './test-utils';
-import { withPythonBackend } from '@/test/harness/python-backend';
-import { setupMockFetch } from '@/test/harness/mock-fetch';
-import { setupTestDb, addMxfoodConnection, ensureMxfoodDataset } from '@/test/harness/test-db';
-import { loadAgentTestSpecs, runAgentTestSpecs } from '@/test/harness/agent-test-runner';
+import { setupTestDb } from '@/test/harness/test-db';
 import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { fauxRegistration as evalFaux } from '@/agents/eval/eval-agent';
 import { NextRequest } from 'next/server';
@@ -248,51 +243,3 @@ describe('LLM Test Runner E2E (in-process v2 eval agent)', () => {
   }, 60000);
 });
 
-// ─── jsonAgentTests ───────────────────────────────────────────────────────────
-
-const JSON_AGENT_DB_PATH = getTestDbPath('json_agent_tests');
-
-// These tests make real Anthropic calls, so they need an actual key — not the
-// `test-stub-no-real-calls` sentinel that `test/setup/vitest.setup.ts` installs
-// so other suites can sanity-check "key exists" without burning real provider
-// budget. A truthy stub would let this suite run and 401 on every call.
-const STUB_API_KEY = 'test-stub-no-real-calls';
-const HAS_REAL_ANTHROPIC_KEY =
-  !!process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== STUB_API_KEY;
-
-(HAS_REAL_ANTHROPIC_KEY ? describe : describe.skip)('JSON Agent Tests', () => {
-  // Guard: describe.skip still evaluates the callback body (to collect tests). Without
-  // this return, setupMockFetch below would install a new fetch mock that overwrites the
-  // one set up by the 'LLM Test Runner E2E' suite above, breaking its /mock/configure calls.
-  if (!HAS_REAL_ANTHROPIC_KEY) return;
-
-  beforeAll(async () => {
-    await ensureMxfoodDataset();
-  }, 60_000);
-
-  const { getPythonPort: getJsonAgentPythonPort } = withPythonBackend();
-
-  const { getStore } = setupTestDb(JSON_AGENT_DB_PATH, {
-    customInit: async (dbPath) => {
-      await addMxfoodConnection(dbPath);
-    },
-  });
-
-  const jsonAgentMockFetch = setupMockFetch({
-    getPythonPort: getJsonAgentPythonPort,
-    interceptors: [
-      {
-        includesUrl: ['localhost:3000/api/chat'],
-        startsWithUrl: ['/api/chat'],
-        handler: chatPostHandler,
-      },
-    ],
-  });
-
-  beforeEach(() => {
-    jsonAgentMockFetch.mockClear();
-  });
-
-  const specs = loadAgentTestSpecs(path.join(__dirname, 'agent-tests/test-definitions.json'));
-  runAgentTestSpecs(specs, { getStore });
-});

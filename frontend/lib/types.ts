@@ -1,11 +1,11 @@
 import { AnalyticsFileType, FileType } from './ui/file-metadata';
 import type { FileState } from '@/store/filesSlice';
-// Generated from backend/tasks/agents/analyst/file_schema.py
-// Regenerate: cd frontend && npm run generate-types
+// Atlas file content types — single source of truth is the TypeBox schemas in
+// lib/validation/atlas-schemas.ts.
 import type {
   QuestionContent, FileReference, InlineAsset, VizSettings,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
-} from './types.gen';
+} from './validation/atlas-schemas';
 
 // Re-export FileType for convenience
 export type { FileType };
@@ -21,7 +21,7 @@ export type {
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   AtlasQuestionFile, AtlasDashboardFile,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
-} from './types.gen';
+} from './validation/atlas-schemas';
 
 // Geo config: discriminated union of sub-type-specific configs (null stripped — VizSettings.geoConfig handles nullability)
 export type GeoConfig = ChoroplethConfig | PointsConfig | LinesConfig | HeatmapConfig;
@@ -720,7 +720,7 @@ export interface JobHandlerResult {
 // ============================================================================
 
 /**
- * Python-style row index: 0 = first, -1 = last, -2 = second-from-last, etc.
+ * Row index: 0 = first, -1 = last, -2 = second-from-last, etc.
  * undefined defaults to 0 (first row).
  */
 export type RowIndex = number;
@@ -1009,7 +1009,7 @@ export interface ToolMessage {
 /**
  * Convert a ToolMessage to typed details for display components.
  * Prefers structured `details` (new); falls back to parsing `content` (old conversations
- * and server-side Python tools that don't populate `details`).
+ * and server-side tools that don't populate `details`).
  * Spreading parsed content allows tool-specific fields (e.g. `selection`) through.
  */
 export function contentToDetails<T extends ToolCallDetails>(toolMessage: ToolMessage): T {
@@ -1063,7 +1063,7 @@ export type ToolName = typeof ToolNames[keyof typeof ToolNames];
  */
 
 /**
- * Task interface from Python backend orchestration system
+ * Task interface for the agent orchestration system
  */
 export interface OrchestrationTask {
   id: number;
@@ -1096,7 +1096,7 @@ export interface ConversationMetadata {
 }
 
 /**
- * Conversation log entry types (matching Python backend)
+ * Conversation log entry types (append-only conversation log)
  */
 export interface TaskLogEntry {
   _type: 'task';
@@ -1114,7 +1114,7 @@ export interface TaskResultEntry {
   _task_unique_id: string;
   result: string | any | null;
   created_at: string;  // ISO timestamp
-  details?: ToolCallDetails;  // UI-only: preserved across reloads, ignored by Python backend
+  details?: ToolCallDetails;  // UI-only: preserved across reloads, ignored by the orchestrator
 }
 
 export interface TaskDebugEntry {

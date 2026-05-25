@@ -1,9 +1,9 @@
-// FeedSummaryAgent (v=2 port of the Python FeedSummaryAgent).
+// FeedSummaryAgent.
 //
 // A leaf agent with NO tools: a single LLM call that turns recent-file app
-// state into a 2-3 sentence home-feed summary. Renders the same prompts as the
-// Python agent (`feed_summary.system` / `feed_summary.user`, already in
-// `orchestrator/prompts/prompts.json`). Runs headless via `runFeedSummaryV2`.
+// state into a 2-3 sentence home-feed summary. Renders the `feed_summary.system`
+// / `feed_summary.user` prompts (in `orchestrator/prompts/prompts.json`). Runs
+// headless via `runFeedSummaryV2`.
 import 'server-only';
 import { Type } from 'typebox';
 import type { Tool, TextContent, ImageContent } from '@/orchestrator/llm';
@@ -29,7 +29,7 @@ export class FeedSummaryAgent extends RemoteAnalystAgent {
     description: 'Generates a short home-feed summary from recent-file app state. No tools, single LLM call.',
     parameters: FeedSummaryAgentParams,
   };
-  // No tools — one LLM turn, returns text (mirrors Python's tool_choice="none").
+  // No tools — one LLM turn, returns text.
   static override readonly tools: Tool<typeof FeedSummaryAgentParams>[] = [];
   static override model = getAnalystModel() ?? FAUX_MODEL;
 

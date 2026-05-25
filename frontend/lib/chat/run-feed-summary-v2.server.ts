@@ -2,7 +2,7 @@
  * Headless v=2 feed-summary execution.
  *
  * Runs the no-tools `FeedSummaryAgent` in-process via the TypeScript
- * orchestrator (no Python backend, no conversation file) and returns the
+ * orchestrator (no conversation file) and returns the
  * generated summary text. Used by `app/api/feed-summary/route.ts`.
  */
 import 'server-only';

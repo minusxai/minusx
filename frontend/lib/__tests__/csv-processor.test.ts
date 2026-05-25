@@ -95,14 +95,17 @@ beforeEach(() => {
 // ─── sanitizeTableName ────────────────────────────────────────────────────────
 
 describe('sanitizeTableName', () => {
-  it('strips extension', () => expect(sanitizeTableName('orders.csv')).toBe('orders'));
-  it('lowercases and replaces spaces', () => expect(sanitizeTableName('My Orders.csv')).toBe('my_orders'));
-  it('replaces hyphens', () => expect(sanitizeTableName('sales-data.parquet')).toBe('sales_data'));
-  it('prefixes t_ when starts with digit', () => expect(sanitizeTableName('2024.csv')).toBe('t_2024'));
-  it('strips leading/trailing underscores', () => expect(sanitizeTableName('__data__.csv')).toBe('data'));
+  it.each([
+    ['strips extension', 'orders.csv', 'orders'],
+    ['lowercases and replaces spaces', 'My Orders.csv', 'my_orders'],
+    ['replaces hyphens', 'sales-data.parquet', 'sales_data'],
+    ['prefixes t_ when starts with digit', '2024.csv', 't_2024'],
+    ['strips leading/trailing underscores', '__data__.csv', 'data'],
+    ['falls back to "table" for empty result', '!@#$.csv', 'table'],
+    ['strips special characters', 'order$ (2024).csv', 'order_2024'],
+  ])('%s', (_desc, input, expected) => expect(sanitizeTableName(input)).toBe(expected));
+
   it('truncates to 63 chars', () => expect(sanitizeTableName('a'.repeat(80) + '.csv').length).toBeLessThanOrEqual(63));
-  it('falls back to "table" for empty result', () => expect(sanitizeTableName('!@#$.csv')).toBe('table'));
-  it('strips special characters', () => expect(sanitizeTableName('order$ (2024).csv')).toBe('order_2024'));
 });
 
 // ─── ensureUniqueTableNames ───────────────────────────────────────────────────
@@ -133,12 +136,14 @@ describe('ensureUniqueTableNames', () => {
 // ─── detectFileFormat ─────────────────────────────────────────────────────────
 
 describe('detectFileFormat', () => {
-  it('detects parquet', () => expect(detectFileFormat('data.parquet')).toBe('parquet'));
-  it('detects .pq alias', () => expect(detectFileFormat('data.pq')).toBe('parquet'));
-  it('detects xlsx', () => expect(detectFileFormat('data.xlsx')).toBe('xlsx'));
-  it('detects xlsx case-insensitively', () => expect(detectFileFormat('DATA.XLSX')).toBe('xlsx'));
-  it('defaults to csv', () => expect(detectFileFormat('data.csv')).toBe('csv'));
-  it('defaults csv for unknown extension', () => expect(detectFileFormat('data.tsv')).toBe('csv'));
+  it.each([
+    ['detects parquet', 'data.parquet', 'parquet'],
+    ['detects .pq alias', 'data.pq', 'parquet'],
+    ['detects xlsx', 'data.xlsx', 'xlsx'],
+    ['detects xlsx case-insensitively', 'DATA.XLSX', 'xlsx'],
+    ['defaults to csv', 'data.csv', 'csv'],
+    ['defaults csv for unknown extension', 'data.tsv', 'csv'],
+  ])('%s', (_desc, input, expected) => expect(detectFileFormat(input)).toBe(expected));
 });
 
 // ─── parseSpreadsheetId ───────────────────────────────────────────────────────

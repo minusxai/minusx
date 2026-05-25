@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     // Mode listing (v2 is the default surface; see DEFAULT_CHAT_VERSION):
     //   v=2 / default → return ALL conversations; v=1 ones are tagged `legacy`
     //          (they fork to v2 on continue, so users can see + resume old chats).
-    //   ?v=1 → return ONLY v=1 conversations (the legacy Python surface).
+    //   ?v=1 → return ONLY v=1 conversations (the legacy surface).
     const isV2Request = isV2(searchParams.get('v'));
 
     const user = await getEffectiveUser();
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
 
     for (const fileInfo of filesResult.data) {
       const fileIsV2 = isV2ConversationFile(fileInfo);
-      // v1 (Python) surface shows only v1 files; v2 surface shows everything
+      // v1 (legacy) surface shows only v1 files; v2 surface shows everything
       // (v1 tagged legacy).
       if (!isV2Request && fileIsV2) continue;
 

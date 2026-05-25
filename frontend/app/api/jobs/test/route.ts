@@ -13,7 +13,7 @@ export interface EvalRunRequest {
  * POST /api/jobs/test
  *
  * Run a single Test against the in-process v2 eval agent (EvalAnalystAgent) and
- * return a TestRunResult. No Python backend.
+ * return a TestRunResult.
  */
 export async function POST(request: NextRequest) {
   try {

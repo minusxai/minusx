@@ -77,8 +77,7 @@ vi.mock('@/store/store', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock: runQuery (single chokepoint for SQL execution; replaces previous
-// pythonBackendFetch mock that intercepted the Python-fallback path).
+// Mock: runQuery (single chokepoint for SQL execution).
 // ---------------------------------------------------------------------------
 const { mockRunQuery } = vi.hoisted(() => ({
   mockRunQuery: vi.fn(async (
@@ -119,7 +118,6 @@ describe('Client-Server File State Parity', () => {
   // path (HTTP → handler → DB) and the server path (direct → DB) hit the same DB.
   // ---------------------------------------------------------------------------
   setupMockFetch({
-    getPythonPort: () => 0,
     additionalInterceptors: [
       async (urlStr, init) => {
         const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;

@@ -1,9 +1,8 @@
 /**
  * Server-side SQL table whitelist validator.
  *
- * Uses @polyglot-sql/sdk (WASM) for local SQL parsing — replaces the previous
- * Python backend call. Parse errors are silently allowed — the execution layer
- * surfaces them. CTE names are excluded because they are defined within the
+ * Uses @polyglot-sql/sdk (WASM) for local SQL parsing. Parse errors are silently
+ * allowed — the execution layer surfaces them. CTE names are excluded because they are defined within the
  * query itself.
  */
 
@@ -27,7 +26,7 @@ export type WhitelistEntry = {
 
 /**
  * Validate that every table referenced in `sql` is covered by `whitelist`.
- * Pure local implementation using polyglot WASM — no Python backend needed.
+ * Pure local implementation using polyglot WASM.
  *
  * @returns An error string if any table is blocked, or `null` if the query is allowed.
  */

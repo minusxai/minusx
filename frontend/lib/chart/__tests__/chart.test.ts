@@ -140,64 +140,70 @@ describe('buildChartOption scatter with numeric x-axis', () => {
 })
 
 describe('resolveXAxisTypes', () => {
-  it('returns category for both when column type is text', () => {
-    const result = resolveXAxisTypes(['region'], { region: 'text' }, 'line')
-    expect(result).toEqual({ columnKind: 'category', axisType: 'category' })
-  })
-
-  it('returns time/time for line chart with date column', () => {
-    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'line')
-    expect(result).toEqual({ columnKind: 'time', axisType: 'time' })
-  })
-
-  it('returns time/time for area chart with date column', () => {
-    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'area')
-    expect(result).toEqual({ columnKind: 'time', axisType: 'time' })
-  })
-
-  it('returns time/time for scatter chart with date column', () => {
-    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'scatter')
-    expect(result).toEqual({ columnKind: 'time', axisType: 'time' })
-  })
-
-  it('forces category axis for bar chart with date column', () => {
-    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'bar')
-    expect(result).toEqual({ columnKind: 'time', axisType: 'category' })
-  })
-
-  it('forces category axis for bar chart with number column', () => {
-    const result = resolveXAxisTypes(['rank'], { rank: 'number' }, 'bar')
-    expect(result).toEqual({ columnKind: 'value', axisType: 'category' })
-  })
-
-  it('forces category axis for combo chart with date column', () => {
-    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'combo')
-    expect(result).toEqual({ columnKind: 'time', axisType: 'category' })
-  })
-
-  it('forces category axis for waterfall chart', () => {
-    const result = resolveXAxisTypes(['date'], { date: 'date' }, 'waterfall')
-    expect(result).toEqual({ columnKind: 'time', axisType: 'category' })
-  })
-
-  it('returns value/value for line chart with number column', () => {
-    const result = resolveXAxisTypes(['rank'], { rank: 'number' }, 'line')
-    expect(result).toEqual({ columnKind: 'value', axisType: 'value' })
-  })
-
-  it('returns value/log when xScaleType is log', () => {
-    const result = resolveXAxisTypes(['cost'], { cost: 'number' }, 'scatter', 'log')
-    expect(result).toEqual({ columnKind: 'value', axisType: 'log' })
-  })
-
-  it('bar chart with log scale still gets category (bar overrides log)', () => {
-    const result = resolveXAxisTypes(['cost'], { cost: 'number' }, 'bar', 'log')
-    expect(result).toEqual({ columnKind: 'value', axisType: 'category' })
-  })
-
-  it('defaults to category when no columns provided', () => {
-    const result = resolveXAxisTypes(undefined, undefined, 'line')
-    expect(result).toEqual({ columnKind: 'category', axisType: 'category' })
+  it.each([
+    {
+      desc: 'returns category for both when column type is text',
+      columns: ['region'], columnTypes: { region: 'text' }, chartType: 'line', xScaleType: undefined,
+      expected: { columnKind: 'category', axisType: 'category' },
+    },
+    {
+      desc: 'returns time/time for line chart with date column',
+      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'line', xScaleType: undefined,
+      expected: { columnKind: 'time', axisType: 'time' },
+    },
+    {
+      desc: 'returns time/time for area chart with date column',
+      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'area', xScaleType: undefined,
+      expected: { columnKind: 'time', axisType: 'time' },
+    },
+    {
+      desc: 'returns time/time for scatter chart with date column',
+      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'scatter', xScaleType: undefined,
+      expected: { columnKind: 'time', axisType: 'time' },
+    },
+    {
+      desc: 'forces category axis for bar chart with date column',
+      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'bar', xScaleType: undefined,
+      expected: { columnKind: 'time', axisType: 'category' },
+    },
+    {
+      desc: 'forces category axis for bar chart with number column',
+      columns: ['rank'], columnTypes: { rank: 'number' }, chartType: 'bar', xScaleType: undefined,
+      expected: { columnKind: 'value', axisType: 'category' },
+    },
+    {
+      desc: 'forces category axis for combo chart with date column',
+      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'combo', xScaleType: undefined,
+      expected: { columnKind: 'time', axisType: 'category' },
+    },
+    {
+      desc: 'forces category axis for waterfall chart',
+      columns: ['date'], columnTypes: { date: 'date' }, chartType: 'waterfall', xScaleType: undefined,
+      expected: { columnKind: 'time', axisType: 'category' },
+    },
+    {
+      desc: 'returns value/value for line chart with number column',
+      columns: ['rank'], columnTypes: { rank: 'number' }, chartType: 'line', xScaleType: undefined,
+      expected: { columnKind: 'value', axisType: 'value' },
+    },
+    {
+      desc: 'returns value/log when xScaleType is log',
+      columns: ['cost'], columnTypes: { cost: 'number' }, chartType: 'scatter', xScaleType: 'log',
+      expected: { columnKind: 'value', axisType: 'log' },
+    },
+    {
+      desc: 'bar chart with log scale still gets category (bar overrides log)',
+      columns: ['cost'], columnTypes: { cost: 'number' }, chartType: 'bar', xScaleType: 'log',
+      expected: { columnKind: 'value', axisType: 'category' },
+    },
+    {
+      desc: 'defaults to category when no columns provided',
+      columns: undefined, columnTypes: undefined, chartType: 'line', xScaleType: undefined,
+      expected: { columnKind: 'category', axisType: 'category' },
+    },
+  ])('$desc', ({ columns, columnTypes, chartType, xScaleType, expected }) => {
+    const result = resolveXAxisTypes(columns as any, columnTypes as any, chartType as any, xScaleType as any)
+    expect(result).toEqual(expected)
   })
 })
 
@@ -433,99 +439,48 @@ const DATE_ONLY = '2024-01-15'
 
 describe('formatDateValue', () => {
   describe('pattern-based formatting', () => {
-    it('formats yyyy-MM-dd', () => {
-      expect(formatDateValue(DATE, 'yyyy-MM-dd')).toBe('2024-01-15')
-    })
-
-    it('formats MM/dd/yyyy', () => {
-      expect(formatDateValue(DATE, 'MM/dd/yyyy')).toBe('01/15/2024')
-    })
-
-    it('formats dd/MM/yyyy', () => {
-      expect(formatDateValue(DATE, 'dd/MM/yyyy')).toBe('15/01/2024')
-    })
-
-    it('formats MMM dd, yyyy (short month)', () => {
-      expect(formatDateValue(DATE, 'MMM dd, yyyy')).toBe('Jan 15, 2024')
-    })
-
-    it('formats MMMM dd, yyyy (full month)', () => {
-      expect(formatDateValue(DATE, 'MMMM dd, yyyy')).toBe('January 15, 2024')
-    })
-
-    it("formats MMM'yy", () => {
-      expect(formatDateValue(DATE, "MMM'yy")).toBe("Jan'24")
-    })
-
-    it('formats yyyy alone', () => {
-      expect(formatDateValue(DATE, 'yyyy')).toBe('2024')
-    })
-
-    it('formats yy (2-digit year)', () => {
-      expect(formatDateValue(DATE, 'yy')).toBe('24')
-    })
-
-    it('formats time HH:mm:ss', () => {
-      expect(formatDateValue(DATE, 'HH:mm:ss')).toBe('14:05:09')
-    })
-
-    it('formats date + time yyyy-MM-dd HH:mm', () => {
-      expect(formatDateValue(DATE, 'yyyy-MM-dd HH:mm')).toBe('2024-01-15 14:05')
-    })
-
-    it('handles date-only input strings', () => {
-      expect(formatDateValue(DATE_ONLY, 'MM/dd/yyyy')).toBe('01/15/2024')
-    })
-
-    it('preserves literal separators', () => {
-      expect(formatDateValue(DATE, 'dd.MM.yyyy')).toBe('15.01.2024')
-      expect(formatDateValue(DATE, 'dd-MM-yyyy')).toBe('15-01-2024')
+    it.each([
+      ['formats yyyy-MM-dd', DATE, 'yyyy-MM-dd', '2024-01-15'],
+      ['formats MM/dd/yyyy', DATE, 'MM/dd/yyyy', '01/15/2024'],
+      ['formats dd/MM/yyyy', DATE, 'dd/MM/yyyy', '15/01/2024'],
+      ['formats MMM dd, yyyy (short month)', DATE, 'MMM dd, yyyy', 'Jan 15, 2024'],
+      ['formats MMMM dd, yyyy (full month)', DATE, 'MMMM dd, yyyy', 'January 15, 2024'],
+      ["formats MMM'yy", DATE, "MMM'yy", "Jan'24"],
+      ['formats yyyy alone', DATE, 'yyyy', '2024'],
+      ['formats yy (2-digit year)', DATE, 'yy', '24'],
+      ['formats time HH:mm:ss', DATE, 'HH:mm:ss', '14:05:09'],
+      ['formats date + time yyyy-MM-dd HH:mm', DATE, 'yyyy-MM-dd HH:mm', '2024-01-15 14:05'],
+      ['handles date-only input strings', DATE_ONLY, 'MM/dd/yyyy', '01/15/2024'],
+      ['preserves literal separators (dot)', DATE, 'dd.MM.yyyy', '15.01.2024'],
+      ['preserves literal separators (dash)', DATE, 'dd-MM-yyyy', '15-01-2024'],
+    ])('%s', (_desc, input, pattern, expected) => {
+      expect(formatDateValue(input, pattern)).toBe(expected)
     })
   })
 
   describe('legacy named format compat', () => {
-    it('maps "iso" to yyyy-MM-dd', () => {
-      expect(formatDateValue(DATE, 'iso')).toBe('2024-01-15')
-    })
-
-    it('maps "us" to MM/dd/yyyy', () => {
-      expect(formatDateValue(DATE, 'us')).toBe('01/15/2024')
-    })
-
-    it('maps "short" to MMM dd, yyyy', () => {
-      expect(formatDateValue(DATE, 'short')).toBe('Jan 15, 2024')
-    })
-
-    it("maps 'month-year' to MMM'yy", () => {
-      expect(formatDateValue(DATE, 'month-year')).toBe("Jan'24")
-    })
-
-    it('maps "year" to yyyy', () => {
-      expect(formatDateValue(DATE, 'year')).toBe('2024')
+    it.each([
+      ['maps "iso" to yyyy-MM-dd', 'iso', '2024-01-15'],
+      ['maps "us" to MM/dd/yyyy', 'us', '01/15/2024'],
+      ['maps "short" to MMM dd, yyyy', 'short', 'Jan 15, 2024'],
+      ["maps 'month-year' to MMM'yy", 'month-year', "Jan'24"],
+      ['maps "year" to yyyy', 'year', '2024'],
+    ])('%s', (_desc, format, expected) => {
+      expect(formatDateValue(DATE, format)).toBe(expected)
     })
   })
 
   describe('edge cases', () => {
-    it('returns original string for invalid date', () => {
-      expect(formatDateValue('not-a-date', 'yyyy-MM-dd')).toBe('not-a-date')
-    })
-
-    it('returns original string for empty string', () => {
-      expect(formatDateValue('', 'yyyy-MM-dd')).toBe('')
-    })
-
-    it('handles different months correctly', () => {
-      expect(formatDateValue('2024-12-25', 'MMM')).toBe('Dec')
-      expect(formatDateValue('2024-06-01', 'MMMM')).toBe('June')
-      expect(formatDateValue('2024-02-14', 'MMM dd')).toBe('Feb 14')
-    })
-
-    it('zero-pads single-digit day and month', () => {
-      expect(formatDateValue('2024-03-05', 'dd/MM/yyyy')).toBe('05/03/2024')
-    })
-
-    it('zero-pads midnight time', () => {
-      expect(formatDateValue('2024-01-15T00:00:00Z', 'HH:mm:ss')).toBe('00:00:00')
+    it.each([
+      ['returns original string for invalid date', 'not-a-date', 'yyyy-MM-dd', 'not-a-date'],
+      ['returns original string for empty string', '', 'yyyy-MM-dd', ''],
+      ['handles different months correctly (MMM)', '2024-12-25', 'MMM', 'Dec'],
+      ['handles different months correctly (MMMM)', '2024-06-01', 'MMMM', 'June'],
+      ['handles different months correctly (MMM dd)', '2024-02-14', 'MMM dd', 'Feb 14'],
+      ['zero-pads single-digit day and month', '2024-03-05', 'dd/MM/yyyy', '05/03/2024'],
+      ['zero-pads midnight time', '2024-01-15T00:00:00Z', 'HH:mm:ss', '00:00:00'],
+    ])('%s', (_desc, input, pattern, expected) => {
+      expect(formatDateValue(input, pattern)).toBe(expected)
     })
   })
 })
@@ -533,37 +488,24 @@ describe('formatDateValue', () => {
 // ─── geo-color-scale.test.ts ───
 
 describe('interpolateColor', () => {
-  it('returns start color at t=0', () => {
-    expect(interpolateColor('#000000', '#ffffff', 0)).toBe('#000000')
-  })
-
-  it('returns end color at t=1', () => {
-    expect(interpolateColor('#000000', '#ffffff', 1)).toBe('#ffffff')
-  })
-
-  it('returns midpoint color at t=0.5', () => {
-    const mid = interpolateColor('#000000', '#ffffff', 0.5)
-    expect(mid).toBe('#808080')
-  })
-
-  it('clamps t below 0 to start color', () => {
-    expect(interpolateColor('#ff0000', '#0000ff', -0.5)).toBe('#ff0000')
-  })
-
-  it('clamps t above 1 to end color', () => {
-    expect(interpolateColor('#ff0000', '#0000ff', 1.5)).toBe('#0000ff')
+  it.each([
+    ['returns start color at t=0', '#000000', '#ffffff', 0, '#000000'],
+    ['returns end color at t=1', '#000000', '#ffffff', 1, '#ffffff'],
+    ['returns midpoint color at t=0.5', '#000000', '#ffffff', 0.5, '#808080'],
+    ['clamps t below 0 to start color', '#ff0000', '#0000ff', -0.5, '#ff0000'],
+    ['clamps t above 1 to end color', '#ff0000', '#0000ff', 1.5, '#0000ff'],
+  ])('%s', (_desc, start, end, t, expected) => {
+    expect(interpolateColor(start, end, t)).toBe(expected)
   })
 })
 
 describe('getColorScale', () => {
-  it('returns low color for minimum value', () => {
-    const color = getColorScale(0, 0, 100, 'light')
-    expect(color).toBeDefined()
-    expect(color).toMatch(/^#[0-9a-f]{6}$/)
-  })
-
-  it('returns high color for maximum value', () => {
-    const color = getColorScale(100, 0, 100, 'light')
+  it.each([
+    ['returns low color for minimum value', 0],
+    ['returns high color for maximum value', 100],
+    ['handles min === max without crashing', 50, 50, 50],
+  ])('%s', (_desc, value, min = 0, max = 100) => {
+    const color = getColorScale(value, min, max, 'light')
     expect(color).toBeDefined()
     expect(color).toMatch(/^#[0-9a-f]{6}$/)
   })
@@ -572,11 +514,6 @@ describe('getColorScale', () => {
     const low = getColorScale(10, 0, 100, 'light')
     const high = getColorScale(90, 0, 100, 'light')
     expect(low).not.toBe(high)
-  })
-
-  it('handles min === max without crashing', () => {
-    const color = getColorScale(50, 50, 50, 'light')
-    expect(color).toMatch(/^#[0-9a-f]{6}$/)
   })
 
   it('returns different palettes for light vs dark mode', () => {
@@ -594,18 +531,13 @@ describe('getColorScale', () => {
     expect(blue).not.toBe(ryg)
   })
 
-  it('falls back to default scale for unknown key', () => {
+  it.each([
+    ['falls back to default scale for unknown key', 'nonexistent'],
+    ['falls back to default scale for null', null],
+    ['falls back to default scale for undefined', undefined],
+  ])('%s', (_desc, scaleKey) => {
     const defaultColor = getColorScale(50, 0, 100, 'light')
-    const unknownColor = getColorScale(50, 0, 100, 'light', 'nonexistent')
-    expect(unknownColor).toBe(defaultColor)
-  })
-
-  it('falls back to default scale for null/undefined', () => {
-    const defaultColor = getColorScale(50, 0, 100, 'light')
-    const nullColor = getColorScale(50, 0, 100, 'light', null)
-    const undefColor = getColorScale(50, 0, 100, 'light', undefined)
-    expect(nullColor).toBe(defaultColor)
-    expect(undefColor).toBe(defaultColor)
+    expect(getColorScale(50, 0, 100, 'light', scaleKey)).toBe(defaultColor)
   })
 })
 
@@ -640,12 +572,22 @@ describe('getHeatGradient', () => {
 })
 
 describe('getRadiusScale', () => {
-  it('returns minimum radius for minimum value', () => {
-    expect(getRadiusScale(0, 0, 100)).toBe(4)
-  })
-
-  it('returns maximum radius for maximum value', () => {
-    expect(getRadiusScale(100, 0, 100)).toBe(30)
+  it.each([
+    // [desc, value, min, max, minRadius, scale, expected]
+    ['returns minimum radius for minimum value', 0, 0, 100, undefined, undefined, 4],
+    ['returns maximum radius for maximum value', 100, 0, 100, undefined, undefined, 30],
+    ['handles min === max', 50, 50, 50, undefined, undefined, 4],
+    ['clamps values below min', -10, 0, 100, undefined, undefined, 4],
+    ['clamps values above max', 200, 0, 100, undefined, undefined, 30],
+    ['uses custom minRadius when provided', 0, 0, 100, 10, undefined, 10],
+    ['uses custom minRadius for min===max fallback', 50, 50, 50, 10, undefined, 10],
+    ['scales between custom minRadius and MAX_RADIUS', 100, 0, 100, 10, undefined, 30],
+    ['interpolates correctly with custom minRadius', 50, 0, 100, 10, undefined, 20],
+    ['scale=2 doubles all radii', 50, 0, 100, undefined, 2, 34],
+    ['scale applies to min value too', 0, 0, 100, undefined, 3, 12],
+    ['scale applies to min===max fallback', 50, 50, 50, 10, 2, 20],
+  ])('%s', (_desc, value, min, max, minRadius, scale, expected) => {
+    expect(getRadiusScale(value, min, max, minRadius, scale)).toBe(expected)
   })
 
   it('returns intermediate radius for middle value', () => {
@@ -654,50 +596,8 @@ describe('getRadiusScale', () => {
     expect(r).toBeLessThan(30)
   })
 
-  it('handles min === max', () => {
-    const r = getRadiusScale(50, 50, 50)
-    expect(r).toBe(4)
-  })
-
-  it('clamps values below min', () => {
-    expect(getRadiusScale(-10, 0, 100)).toBe(4)
-  })
-
-  it('clamps values above max', () => {
-    expect(getRadiusScale(200, 0, 100)).toBe(30)
-  })
-
-  it('uses custom minRadius when provided', () => {
-    expect(getRadiusScale(0, 0, 100, 10)).toBe(10)
-  })
-
-  it('uses custom minRadius for min===max fallback', () => {
-    expect(getRadiusScale(50, 50, 50, 10)).toBe(10)
-  })
-
-  it('scales between custom minRadius and MAX_RADIUS', () => {
-    const r = getRadiusScale(100, 0, 100, 10)
-    expect(r).toBe(30)
-  })
-
-  it('interpolates correctly with custom minRadius', () => {
-    expect(getRadiusScale(50, 0, 100, 10)).toBe(20)
-  })
-
-  it('scale=2 doubles all radii', () => {
-    expect(getRadiusScale(50, 0, 100, undefined, 2)).toBe(34)
-  })
-
   it('scale=1 is same as default', () => {
     expect(getRadiusScale(50, 0, 100, undefined, 1)).toBe(getRadiusScale(50, 0, 100))
-  })
-
-  it('scale applies to min value too', () => {
-    expect(getRadiusScale(0, 0, 100, undefined, 3)).toBe(12)
-  })
-
-  it('scale applies to min===max fallback', () => {
-    expect(getRadiusScale(50, 50, 50, 10, 2)).toBe(20)
   })
 })
 
@@ -706,103 +606,39 @@ describe('getRadiusScale', () => {
 const geoColumns = ['state', 'revenue', 'lat', 'lng', 'lat2', 'lng2', 'intensity']
 
 describe('getGeoConstraintError', () => {
-  describe('choropleth', () => {
-    it('requires regionCol', () => {
-      const config: GeoConfig = { subType: 'choropleth', mapName: 'us-states', valueCol: 'revenue' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toContain('Region')
-    })
+  // expected: a substring the error must contain, null = no error, TRUTHY = some error
+  const TRUTHY = Symbol('truthy-error')
 
-    it('requires valueCol', () => {
-      const config: GeoConfig = { subType: 'choropleth', mapName: 'us-states', regionCol: 'state' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toContain('Value')
-    })
-
-    it('requires mapName', () => {
-      const config: GeoConfig = { subType: 'choropleth', regionCol: 'state', valueCol: 'revenue' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toContain('map')
-    })
-
-    it('passes with valid config', () => {
-      const config: GeoConfig = { subType: 'choropleth', mapName: 'us-states', regionCol: 'state', valueCol: 'revenue' }
-      const result = getGeoConstraintError(config, geoColumns)
+  it.each<{ desc: string; config: GeoConfig | undefined; expected: string | null | typeof TRUTHY }>([
+    // choropleth
+    { desc: 'choropleth requires regionCol', config: { subType: 'choropleth', mapName: 'us-states', valueCol: 'revenue' }, expected: 'Region' },
+    { desc: 'choropleth requires valueCol', config: { subType: 'choropleth', mapName: 'us-states', regionCol: 'state' }, expected: 'Value' },
+    { desc: 'choropleth requires mapName', config: { subType: 'choropleth', regionCol: 'state', valueCol: 'revenue' }, expected: 'map' },
+    { desc: 'choropleth passes with valid config', config: { subType: 'choropleth', mapName: 'us-states', regionCol: 'state', valueCol: 'revenue' }, expected: null },
+    { desc: 'choropleth errors when regionCol not in columns', config: { subType: 'choropleth', mapName: 'us-states', regionCol: 'missing', valueCol: 'revenue' }, expected: TRUTHY },
+    // points
+    { desc: 'points requires latCol and lngCol', config: { subType: 'points', latCol: 'lat' }, expected: 'Lng' },
+    { desc: 'points passes with valid config', config: { subType: 'points', latCol: 'lat', lngCol: 'lng' }, expected: null },
+    { desc: 'points passes with optional valueCol for bubble sizing', config: { subType: 'points', latCol: 'lat', lngCol: 'lng', valueCol: 'revenue' }, expected: null },
+    { desc: 'points errors when optional valueCol not in columns', config: { subType: 'points', latCol: 'lat', lngCol: 'lng', valueCol: 'missing' }, expected: TRUTHY },
+    // lines
+    { desc: 'lines requires all four coordinate columns', config: { subType: 'lines', latCol: 'lat', lngCol: 'lng', latCol2: 'lat2' }, expected: 'Lng2' },
+    { desc: 'lines passes with valid config', config: { subType: 'lines', latCol: 'lat', lngCol: 'lng', latCol2: 'lat2', lngCol2: 'lng2' }, expected: null },
+    // heatmap
+    { desc: 'heatmap requires latCol and lngCol', config: { subType: 'heatmap' }, expected: TRUTHY },
+    { desc: 'heatmap passes with lat+lng (no value)', config: { subType: 'heatmap', latCol: 'lat', lngCol: 'lng' }, expected: null },
+    { desc: 'heatmap passes with lat+lng+value', config: { subType: 'heatmap', latCol: 'lat', lngCol: 'lng', valueCol: 'intensity' }, expected: null },
+    // missing geoConfig
+    { desc: 'returns error for undefined config', config: undefined, expected: TRUTHY },
+  ])('$desc', ({ config, expected }) => {
+    const result = getGeoConstraintError(config, geoColumns)
+    if (expected === null) {
       expect(result.error).toBeNull()
-    })
-
-    it('errors when regionCol not in columns', () => {
-      const config: GeoConfig = { subType: 'choropleth', mapName: 'us-states', regionCol: 'missing', valueCol: 'revenue' }
-      const result = getGeoConstraintError(config, geoColumns)
+    } else if (expected === TRUTHY) {
       expect(result.error).toBeTruthy()
-    })
-  })
-
-  describe('points', () => {
-    it('requires latCol and lngCol', () => {
-      const config: GeoConfig = { subType: 'points', latCol: 'lat' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toContain('Lng')
-    })
-
-    it('passes with valid config', () => {
-      const config: GeoConfig = { subType: 'points', latCol: 'lat', lngCol: 'lng' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeNull()
-    })
-
-    it('passes with optional valueCol for bubble sizing', () => {
-      const config: GeoConfig = { subType: 'points', latCol: 'lat', lngCol: 'lng', valueCol: 'revenue' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeNull()
-    })
-
-    it('errors when optional valueCol not in columns', () => {
-      const config: GeoConfig = { subType: 'points', latCol: 'lat', lngCol: 'lng', valueCol: 'missing' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeTruthy()
-    })
-  })
-
-  describe('lines', () => {
-    it('requires all four coordinate columns', () => {
-      const config: GeoConfig = { subType: 'lines', latCol: 'lat', lngCol: 'lng', latCol2: 'lat2' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toContain('Lng2')
-    })
-
-    it('passes with valid config', () => {
-      const config: GeoConfig = { subType: 'lines', latCol: 'lat', lngCol: 'lng', latCol2: 'lat2', lngCol2: 'lng2' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeNull()
-    })
-  })
-
-  describe('heatmap', () => {
-    it('requires latCol and lngCol', () => {
-      const config: GeoConfig = { subType: 'heatmap' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeTruthy()
-    })
-
-    it('passes with lat+lng (no value)', () => {
-      const config: GeoConfig = { subType: 'heatmap', latCol: 'lat', lngCol: 'lng' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeNull()
-    })
-
-    it('passes with lat+lng+value', () => {
-      const config: GeoConfig = { subType: 'heatmap', latCol: 'lat', lngCol: 'lng', valueCol: 'intensity' }
-      const result = getGeoConstraintError(config, geoColumns)
-      expect(result.error).toBeNull()
-    })
-  })
-
-  describe('missing geoConfig', () => {
-    it('returns error for undefined config', () => {
-      const result = getGeoConstraintError(undefined, geoColumns)
-      expect(result.error).toBeTruthy()
-    })
+    } else {
+      expect(result.error).toContain(expected)
+    }
   })
 })
 
@@ -898,22 +734,20 @@ describe('computeHeatmapOptions', () => {
 // ─── geo-value-utils.test.ts ───
 
 describe('parseGeoNumber', () => {
-  it('returns numeric inputs unchanged', () => {
-    expect(parseGeoNumber(42)).toBe(42)
-    expect(parseGeoNumber(-122.41)).toBe(-122.41)
+  it.each<[string, string | number, number]>([
+    ['returns numeric inputs unchanged (positive)', 42, 42],
+    ['returns numeric inputs unchanged (negative)', -122.41, -122.41],
+    ['parses plain numeric strings', '37.78', 37.78],
+    ['parses strings with thousands separators', '33,076', 33076],
+  ])('%s', (_desc, input, expected) => {
+    expect(parseGeoNumber(input)).toBe(expected)
   })
 
-  it('parses plain numeric strings', () => {
-    expect(parseGeoNumber('37.78')).toBe(37.78)
-  })
-
-  it('parses strings with thousands separators', () => {
-    expect(parseGeoNumber('33,076')).toBe(33076)
-  })
-
-  it('returns NaN for empty or invalid strings', () => {
-    expect(parseGeoNumber('')).toBeNaN()
-    expect(parseGeoNumber('SOMA')).toBeNaN()
+  it.each<[string, string]>([
+    ['returns NaN for empty string', ''],
+    ['returns NaN for invalid string', 'SOMA'],
+  ])('%s', (_desc, input) => {
+    expect(parseGeoNumber(input)).toBeNaN()
   })
 })
 
@@ -1102,15 +936,6 @@ describe('getVizConstraintError', () => {
     })
 
     it('returns no error when X-axis column is a date type', () => {
-      const result = getVizConstraintError('trend', {
-        xColCount: 1,
-        yColCount: 1,
-        xColTypes: ['date'],
-      })
-      expect(result.error).toBeNull()
-    })
-
-    it('returns no error when X-axis column is a timestamp type', () => {
       const result = getVizConstraintError('trend', {
         xColCount: 1,
         yColCount: 1,

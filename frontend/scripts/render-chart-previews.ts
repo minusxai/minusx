@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { renderChartToPng } from '../lib/chart/render-chart';
 import type { QueryResult } from '../lib/types';
-import type { VizSettings } from '../lib/types.gen';
+import type { VizSettings } from '../lib/validation/atlas-schemas';
 
 const OUTPUT_DIR = path.join(__dirname, '..', '.chart-previews');
 

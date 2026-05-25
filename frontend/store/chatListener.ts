@@ -76,9 +76,8 @@ export const chatListenerMiddleware = createListenerMiddleware();
  *
  * The XHR-based SSE driver bypasses `window.fetch`, so it doesn't pick up
  * the global fetch-patch automatically. We replicate the same param-
- * forwarding here. `v` is critical for v=2 conversations — without it the
- * backend treats every stream request as v=1 and rejects v=2 conversations
- * with mode-mismatch.
+ * forwarding here. `v` carries the chat-surface selection (`?v=1` = legacy
+ * Conversations surface) through the streamed request.
  */
 function patchApiUrl(path: string): string {
   if (typeof window === 'undefined') return path;

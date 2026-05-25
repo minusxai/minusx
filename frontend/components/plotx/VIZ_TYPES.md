@@ -2,7 +2,7 @@
 
 Single source of truth for all viz type capabilities and rendering details.
 
-The canonical type union is `VisualizationType` in `backend/tasks/agents/analyst/file_schema.py` (generates `frontend/lib/types.gen.ts`).
+The canonical type union is `VizSettings.type` in `frontend/lib/validation/atlas-schemas.ts` (the TypeBox single source), re-exported via `frontend/lib/types.ts`.
 
 ## Type Matrix
 
@@ -38,8 +38,7 @@ The canonical type union is `VisualizationType` in `backend/tasks/agents/analyst
 
 ## Key Files
 
-- **Type enum (source of truth)**: `backend/tasks/agents/analyst/file_schema.py` -> `VisualizationType`
-- **Generated TS type**: `frontend/lib/types.gen.ts` -> `VisualizationType`
+- **Type union (source of truth)**: `frontend/lib/validation/atlas-schemas.ts` -> `VizSettings.type` (TypeBox; re-exported by `frontend/lib/types.ts`)
 - **Chart routing**: `frontend/components/plotx/ChartBuilder.tsx` (line ~788, `plotMap`)
 - **Renderable set + aspect ratios**: `frontend/lib/chart/render-chart-svg.ts`
 - **ECharts option builders**: `frontend/lib/chart/chart-utils.ts`

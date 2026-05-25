@@ -74,7 +74,7 @@ import {
 } from '@/store/chatSlice';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { publishAll } from '@/lib/api/file-state';
-import type { DashboardContent } from '@/lib/types.gen';
+import type { DashboardContent } from '@/lib/validation/atlas-schemas';
 import type { UserRole } from '@/lib/types';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { renderFilePage } from '@/test/helpers/render-file-page';
@@ -83,7 +83,8 @@ import FileHeader from '@/components/FileHeader';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import ChatInterface from '@/components/explore/ChatInterface';
 
-import { withPythonBackend } from '@/test/harness/python-backend';
+import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
+import { fauxRegistration as webFaux } from '@/agents/web-analyst/web-analyst';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -99,6 +100,49 @@ import { GET as configsGetHandler } from '@/app/api/configs/route';
 
 // Capture real fetch before any test can override it
 const realFetch = global.fetch;
+
+// ─── LLM faux helper ──────────────────────────────────────────────────────────
+// Drives the v2 in-process orchestrator's faux LLM (WebAnalystAgent) from the
+// legacy LLM-mock `configure` shape, so each test's response queue reads the
+// same way the legacy LLM-mock server did.
+type MockLLMEntry = {
+  response: {
+    content?: string;
+    content_blocks?: Array<{ type: string; thinking?: string; text?: string; signature?: string }>;
+    role?: string;
+    tool_calls?: Array<{ id: string; type?: string; function: { name: string; arguments: string } }>;
+    finish_reason?: string;
+  };
+  usage?: unknown;
+};
+function thinkingBlocks(blocks?: Array<{ type: string; thinking?: string; text?: string }>) {
+  return (blocks ?? [])
+    .filter((b) => b.type === 'thinking')
+    .map((b) => ({ type: 'thinking' as const, thinking: b.thinking ?? '' }));
+}
+function setFaux(entries: MockLLMEntry | MockLLMEntry[]): void {
+  const list = Array.isArray(entries) ? entries : [entries];
+  webFaux.setResponses(
+    list.map((e) => {
+      const r = e.response;
+      if (r.tool_calls && r.tool_calls.length > 0) {
+        const calls = r.tool_calls.map((tc) =>
+          fauxToolCall(tc.function.name, JSON.parse(tc.function.arguments || '{}'), { id: tc.id }),
+        );
+        return fauxAssistantMessage([...thinkingBlocks(r.content_blocks), ...calls], { stopReason: 'toolUse' });
+      }
+      if (r.content_blocks && r.content_blocks.length > 0) {
+        const blocks = r.content_blocks.map((b) =>
+          b.type === 'thinking'
+            ? { type: 'thinking' as const, thinking: b.thinking ?? '' }
+            : { type: 'text' as const, text: b.text ?? '' },
+        );
+        return fauxAssistantMessage(blocks, { stopReason: 'stop' });
+      }
+      return fauxAssistantMessage(r.content ?? '', { stopReason: 'stop' });
+    }),
+  );
+}
 
 // ─── Agent creates files via chat ─────────────────────────────────────────────
 
@@ -150,17 +194,12 @@ async function filesCreateInterceptor(urlStr: string, init?: RequestInit): Promi
 }
 
 describe('UI Agent E2E Suites', () => {
-  const { getPythonPort: sharedPythonPort, getLLMMockPort: sharedLLMMockPort, getLLMMockServer: sharedGetLLMMockServer } =
-    withPythonBackend({ withLLMMock: true });
 
 describe('Agent creates files via chat', () => {
 
   setupTestDb(getTestDbPath('agent_creates_files_ui'));
 
   const mockFetch = setupMockFetch({
-    chatVersion: 1, // legacy Python engine (v2 is now the default)
-    getPythonPort: sharedPythonPort,
-    getLLMMockPort: sharedLLMMockPort,
     interceptors: [
       {
         includesUrl: ['localhost:3000/api/chat'],
@@ -189,10 +228,7 @@ describe('Agent creates files via chat', () => {
   });
 
   it('creates a question via the agent and the UI reflects the new file', async () => {
-    const mockServer = sharedGetLLMMockServer!();
-    await mockServer.reset();
-
-    await mockServer.configure([
+    setFaux([
       {
         response: {
           content: '',
@@ -202,7 +238,7 @@ describe('Agent creates files via chat', () => {
             type: 'function',
             function: {
               name: 'CreateFile',
-              arguments: JSON.stringify({ file_type: 'question', name: 'Total Revenue' }),
+              arguments: JSON.stringify({ file_type: 'question', name: 'Total Revenue', path: '/org' }),
             },
           }],
           finish_reason: 'tool_calls',
@@ -247,14 +283,10 @@ describe('Agent creates files via chat', () => {
     expect(createdQuestion).toBeDefined();
 
     await screen.findByLabelText('Total Revenue');
-    expect((await mockServer.getCalls()).length).toBeGreaterThanOrEqual(2);
   }, 45000);
 
   it('displays nothing before the agent runs and updates once it completes', async () => {
-    const mockServer = sharedGetLLMMockServer!();
-    await mockServer.reset();
-
-    await mockServer.configure([
+    setFaux([
       {
         response: {
           content: '',
@@ -264,7 +296,7 @@ describe('Agent creates files via chat', () => {
             type: 'function',
             function: {
               name: 'CreateFile',
-              arguments: JSON.stringify({ file_type: 'question', name: 'Monthly Users' }),
+              arguments: JSON.stringify({ file_type: 'question', name: 'Monthly Users', path: '/org' }),
             },
           }],
           finish_reason: 'tool_calls',
@@ -311,10 +343,8 @@ async function catchAllApiInterceptor(
   const method = (init?.method ?? 'GET').toUpperCase();
 
   if (urlStr.includes('/api/chat/init')) {
-    // Pin to v=1 (legacy Python engine): v2 is now the default, but these
-    // suites drive the Python backend, so the created conversation must match
-    // the v=1 chat turns (else continuing it raises a mode-mismatch).
-    const req = new NextRequest(`${BASE}/api/chat/init?v=1`, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
+    // Pre-create the conversation via /api/chat/init.
+    const req = new NextRequest(`${BASE}/api/chat/init`, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
     const res = await chatInitHandler(req);
     const data = await res.json();
     return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
@@ -363,9 +393,6 @@ describe('Explore page: submit question → agent responds → see answer → to
   global.fetch = realFetch;
 
   const exploreMockFetch = setupMockFetch({
-    chatVersion: 1, // legacy Python engine (v2 is now the default)
-    getPythonPort: sharedPythonPort,
-    getLLMMockPort: sharedLLMMockPort,
     interceptors: [
       {
         includesUrl: ['localhost:3000/api/chat'],
@@ -399,10 +426,7 @@ describe('Explore page: submit question → agent responds → see answer → to
   it(
     'shows the final answer and supports toggling thinking after the agent responds',
     async () => {
-      const mockServer = sharedGetLLMMockServer!();
-      await mockServer.reset();
-
-      await mockServer.configure({
+      setFaux({
         response: {
           content: 'Based on the data, the answer is 42.',
           content_blocks: [
@@ -645,8 +669,7 @@ async function insertQuestionsWithSharedParams(_dbPath: string): Promise<void> {
   );
 }
 
-function makeRealApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) {
-  const { pythonPort, llmPort } = opts;
+function makeRealApiFetch() {
   const BASE = 'http://localhost:3000';
 
   const call = async (
@@ -670,14 +693,7 @@ function makeRealApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) 
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      // Pin to v=1 (legacy Python engine); v2 is now the default (see DEFAULT_CHAT_VERSION).
-      return call(chatPostHandler, `${BASE}/api/chat?v=1`, init);
-    }
-    if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
-      return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
-    }
-    if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
-      return realFetch(urlStr, init);
+      return call(chatPostHandler, `${BASE}/api/chat`, init);
     }
     if (method === 'POST' && urlStr.includes('/api/files/batch-save')) {
       return call(batchSaveHandler, `${BASE}/api/files/batch-save`, init);
@@ -849,10 +865,7 @@ describe('Dashboard agentic scenarios', () => {
     testStore = storeModule.makeStore();
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
-    const pythonPort = sharedPythonPort();
-    const llmPort = sharedLLMMockPort?.();
-
-    global.fetch = makeRealApiFetch({ pythonPort, llmPort });
+    global.fetch = makeRealApiFetch();
   });
 
   afterEach(() => {
@@ -861,9 +874,7 @@ describe('Dashboard agentic scenarios', () => {
   });
 
   it('agentic (Scenario 1): agent adds question to existing dashboard via EditFile + PublishAll', async () => {
-    const mockServer = sharedGetLLMMockServer!();
-    await mockServer.reset();
-    await mockServer.configure([
+    setFaux([
       {
         response: {
           content: '',
@@ -970,10 +981,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
       },
     });
 
-    const pythonPort = sharedPythonPort();
-    const llmPort = sharedLLMMockPort?.();
-
-    global.fetch = makeRealApiFetch({ pythonPort, llmPort });
+    global.fetch = makeRealApiFetch();
   });
 
   afterEach(() => {
@@ -1084,9 +1092,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
   });
 
   it('agentic: agent navigates to new dashboard, creates question, links via EditFile, publishes', async () => {
-    const mockServer = sharedGetLLMMockServer!();
-    await mockServer.reset();
-    await mockServer.configure([
+    setFaux([
       {
         response: {
           content: '',
@@ -1508,8 +1514,7 @@ async function insertViewerDashboardAndQuestion(_dbPath: string): Promise<void> 
   );
 }
 
-function makeViewerApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) {
-  const { pythonPort, llmPort } = opts;
+function makeViewerApiFetch() {
   const BASE = 'http://localhost:3000';
 
   const call = async (
@@ -1533,14 +1538,7 @@ function makeViewerApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}
     const method = (init?.method ?? 'GET').toUpperCase();
 
     if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      // Pin to v=1 (legacy Python engine); v2 is now the default (see DEFAULT_CHAT_VERSION).
-      return call(chatPostHandler, `${BASE}/api/chat?v=1`, init);
-    }
-    if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
-      return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
-    }
-    if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
-      return realFetch(urlStr, init);
+      return call(chatPostHandler, `${BASE}/api/chat`, init);
     }
     if (method === 'POST' && urlStr.includes('/api/files/template')) {
       return call(templateHandler, `${BASE}/api/files/template`, init);
@@ -1635,14 +1633,11 @@ describe('Viewer role: agent CreateFile is rejected', () => {
   beforeEach(async () => {
     (await vi.importMock<typeof import('@/lib/auth/auth-helpers')>('@/lib/auth/auth-helpers')).getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
-    const pythonPort = sharedPythonPort();
-    const llmPort = sharedLLMMockPort?.();
-
     testStore = storeModule.makeStore();
     testStore.dispatch(setUser(VIEWER_AUTH_USER));
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
-    global.fetch = makeViewerApiFetch({ pythonPort, llmPort });
+    global.fetch = makeViewerApiFetch();
   });
 
   afterEach(() => {
@@ -1651,9 +1646,7 @@ describe('Viewer role: agent CreateFile is rejected', () => {
   });
 
   it('returns a permission error when viewer agent tries to CreateFile', async () => {
-    const mockServer = sharedGetLLMMockServer!();
-    await mockServer.reset();
-    await mockServer.configure([
+    setFaux([
       {
         response: {
           content: '',
@@ -1733,9 +1726,6 @@ describe('Viewer role: agent EditFile on dashboard is rejected', () => {
   beforeEach(async () => {
     (await vi.importMock<typeof import('@/lib/auth/auth-helpers')>('@/lib/auth/auth-helpers')).getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
 
-    const pythonPort = sharedPythonPort();
-    const llmPort = sharedLLMMockPort?.();
-
     testStore = storeModule.makeStore();
     testStore.dispatch(setUser(VIEWER_AUTH_USER));
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
@@ -1743,7 +1733,7 @@ describe('Viewer role: agent EditFile on dashboard is rejected', () => {
     testStore.dispatch(setFile({ file: makeViewerDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeViewerQuestionDbFile(), references: [] }));
 
-    global.fetch = makeViewerApiFetch({ pythonPort, llmPort });
+    global.fetch = makeViewerApiFetch();
   });
 
   afterEach(() => {
@@ -1752,9 +1742,7 @@ describe('Viewer role: agent EditFile on dashboard is rejected', () => {
   });
 
   it('returns a permission error when agent calls EditFile on a dashboard as a viewer', async () => {
-    const mockServer = sharedGetLLMMockServer!();
-    await mockServer.reset();
-    await mockServer.configure([
+    setFaux([
       {
         response: {
           content: '',

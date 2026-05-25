@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## V2 chat: `frontend/orchestrator/` and `frontend/agents/`
 
-These directories hold the headless TypeScript orchestrator and agent/tool definitions that power the **v2 chat path**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes invoke when a request carries `?v=2` (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`). The v1 (legacy) path (`lib/chat-orchestration.ts`) still exists and runs by default — the legacy → v2 migration is in progress (branch `feature/legacy-to-v2-chat`).
+These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat-orchestration-v2.server.ts`, which the chat API routes (`app/api/chat/route.ts`, `app/api/chat/stream/route.ts`) invoke for every request. **This is the only chat engine.** (`lib/chat-orchestration.ts` survives only as a shared request/response *types* module, despite its name.)
 
 **What's where:**
 - `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
@@ -38,8 +38,7 @@ These directories hold the headless TypeScript orchestrator and agent/tool defin
 ## Project Overview
 
 MinusX is an agentic, file-system based BI Tool that combines:
-- **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux
-- **Backend**: Python FastAPI AI chat/agent orchestration engine (LLM calls, conversation log, tool/skill schemas)
+- **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux (also hosts the in-process AI chat/agent orchestrator — no separate backend service)
 - **Storage**: PGLite (open-source) or Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
 - **Architecture**: Dual-database system with integer ID-based file access, hierarchical permissions, and mode-based file system isolation
 
@@ -58,28 +57,23 @@ npm run test:main          # Run only the `node` project (integration/server tes
 npm run test:ui            # Run only the `ui` project (jsdom *.ui.test.tsx tests)
 npm run test:orchestrator  # Run only the `orchestrator` project
 npm run update-workspace-template  # Re-run migrations on the seed template after adding a migration
-npm run generate-types     # Regenerate frontend/lib/types.gen.ts from Pydantic models
+npm run generate-types     # Regenerate the Atlas JSON-schema artifacts from the TypeBox schemas
 ```
 
 **IMPORTANT: Always use `npm run validate` to quickly verify code correctness. Do NOT use `npm run build` for validation - it's too slow and memory-intensive. Only run `npm run build` before deployment.**
 
 **IMPORTANT: Frontend tests run on Vitest (`npm test` → `vitest run`), configured via `frontend/vitest.config.ts` with three projects: `node` (integration/server tests, node env), `ui` (`*.ui.test.tsx` component tests, jsdom env), and `orchestrator` (the headless orchestrator/agents tree). Run a single project with `npm run test:main` / `test:ui` / `test:orchestrator`, or `npx vitest run --project=<name> <pattern>`. (The repo previously used Jest; that has been fully migrated to Vitest — there is no `jest.config.*` or `npx jest`.)**
 
-### Backend (Python FastAPI)
-```bash
-cd backend
-uv run uvicorn main:app --reload --reload-include='*.yaml' --port 8001    # Start backend server
-uv run ruff check .    # Lint (use this to validate code)
-uv run pytest          # Run tests
-```
+### Backend
 
-**IMPORTANT: Always use `uv run ruff check .` to quickly verify Python code correctness before committing.**
+There is no separate backend service. The AI chat/agent orchestration runs
+in-process inside the Next.js app (TypeScript orchestrator under
+`frontend/orchestrator/` + `frontend/agents/`). Analytics queries run
+in the Node.js connectors (`frontend/lib/connections/`).
 
-The backend runs at http://localhost:8001 and handles AI chat/agent orchestration:
-- Chat orchestration (`POST /api/chat`, `POST /api/chat/stream`, `POST /api/chat/close`)
-- Tool/skill schemas (`GET /api/tools/schema`, `GET /api/skills/system`)
+Chat is served by the Next.js routes `POST /api/chat` and `POST /api/chat/stream`, which run the in-process orchestrator. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
 
-**Query execution does NOT live in the Python backend.** Analytics queries run on the Next.js side: `app/api/query/route.ts` → `lib/connections/run-query.ts` → Node.js connectors in `lib/connections/` (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Google Sheets).
+**Query execution** runs on the Next.js side: `app/api/query/route.ts` → `lib/connections/run-query.ts` → Node.js connectors in `lib/connections/` (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Google Sheets).
 
 ### Database Management
 
@@ -112,7 +106,7 @@ npm run update-workspace-template   # re-runs migrations on the template; review
 - **Document DB** — PGLite (open-source) or Postgres (`DATABASE_URL`): questions, dashboards, notebooks, connections, contexts, users, folders. Accessed directly by Next.js server components.
 - **Node.js query connectors** (`lib/connections/`) — execute analytics queries directly against DuckDB / BigQuery / PostgreSQL / SQLite / Athena / Mongo / CSV / Sheets.
 
-**Backend (Python FastAPI)** — AI chat/agent orchestration engine (LLM calls, append-only conversation log, tool/skill schemas). The frontend calls it for chat/orchestration only.
+**AI chat/agent orchestration** runs in-process in the Next.js app (TypeScript orchestrator under `frontend/orchestrator/` + `frontend/agents/`): LLM calls, append-only conversation log, tool/skill schemas. There is no separate backend service.
 
 ### Key Concepts
 
@@ -195,8 +189,7 @@ Connection schemas are enriched with column-level metadata (category, null count
 
 ### Directory Structure
 
-- `frontend/` — Next.js 16 app (React 19, Chakra UI, Redux): `app/` (App Router pages + API routes), `components/`, `lib/` (utilities, API clients, types), `store/` (Redux slices).
-- `backend/` — Python FastAPI chat/agent orchestration engine.
+- `frontend/` — Next.js 16 app (React 19, Chakra UI, Redux): `app/` (App Router pages + API routes), `components/`, `lib/` (utilities, API clients, types), `store/` (Redux slices), `orchestrator/` + `agents/` (in-process AI chat/agent engine).
 - `data/` — database files (PGLite documents, DuckDB analytics).
 
 ## Key Design Patterns
@@ -219,19 +212,18 @@ Connection schemas are enriched with column-level metadata (category, null count
 
 ### AI Orchestration & Tool Calling Architecture
 
-The Python backend is a **stateless** orchestration engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls** that execute across tiers; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (registry pattern); execution streams to the client via Server-Sent Events.
+The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`V2_REGISTRABLES`); execution streams to the client via Server-Sent Events.
 
 **Tools execute in the tier they need:**
-- **Python tools** — execute immediately (e.g. sending messages, data transforms).
-- **Next.js backend tools** — need the document DB or API access (querying data, searching schema, loading files).
-- **Frontend tools** — need Redux/UI state (modifying the current question, editing dashboard layout); executed automatically via Redux middleware, not manually.
+- **Server tools** — run in-process during orchestration; need the document DB / connectors (querying data, searching schema, loading files: `ExecuteQuery`, `SearchDBSchema`, `ReadFiles`, `SearchFiles`).
+- **Frontend-bridged tools** — need Redux/UI state (modifying the current question, editing dashboard layout, navigating); they throw `UserInputException` to pause the run and are executed in the browser via Redux middleware, then resume. Headless runs swap these for server equivalents where possible (`V2_HEADLESS_REGISTRABLES`; e.g. server-side `ReadFiles`).
 
 **Tool call flow:**
 ```
-User Input → Python (pending tools) → Next.js (execute some) → Frontend (execute rest)
-         ← Python (resume)         ← Next.js (completed)   ← Frontend (completed)
+User Input → orchestrator (server tools execute in-process) → pause on frontend tool
+          → return pending → browser executes → resume orchestrator → … → finish
 ```
-The Next.js backend auto-executes every tool it can, looping until it hits frontend-only tools, then returns those to the client; completed results flow back to Python to resume. **Mixed completion:** when a pass yields both completed and pending work, record completions *before* returning pending items — breaking early loses completed results.
+The orchestrator auto-executes every server tool, looping until it hits a frontend-only tool, then returns those to the client; completed results flow back in to resume. **Mixed completion:** when a pass yields both completed and pending work, record completions *before* returning pending items — breaking early loses completed results.
 
 **AI chat contexts** (each sends relevant app state to the orchestrator): **Explore** (full-page chat for ad-hoc SQL), **Question** (sidebar with current query/params/results), **Dashboard** (sidebar with dashboard assets + layout).
 
@@ -353,11 +345,11 @@ export async function POST(req: NextRequest) {
 ```
 `handleApiError` returns a consistent error shape for all unhandled errors. ESLint enforces this — a direct `NextResponse.json` with `{ status: 500 }` is a lint error in `app/api/**`. If a route genuinely needs a custom response shape for 500s (e.g. `/api/chat` returns `ChatResponse`), suppress inline with `// eslint-disable-next-line no-restricted-syntax` and ensure the error is reported via `appEventRegistry.publish(AppEvents.ERROR, ...)` manually. Error events are forwarded to the mx-llm-provider `/notify` endpoint, which routes `type: "error"` to Slack.
 
-### Adding Python Backend Endpoints
-1. Add route handler in `backend/main.py`
-2. Define Pydantic models for request/response
-3. Add corresponding API client in `frontend/lib/api/`
-4. Update TypeScript types if needed
+### Adding Agent Tools / Agents
+1. Add a tool (`MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`
+2. Register it in `lib/chat-orchestration-v2.server.ts` (`V2_REGISTRABLES`); headless runners use `V2_HEADLESS_REGISTRABLES`
+3. Implement the client/server behavior in `tool-handlers.ts` (frontend bridge) / `tool-handlers.server.ts` (server) as needed
+4. Document the return shape in `tools.md`
 
 ## Important Technical Details
 
@@ -370,10 +362,9 @@ export async function POST(req: NextRequest) {
 - **ECharts 6** for visualizations (themed with JetBrains Mono fonts)
 - **NextAuth v5** for authentication
 
-### Backend
-- **FastAPI** with uvicorn
-- **AI chat/agent orchestration**: LLM calls, append-only conversation log, tool/skill schemas
-- **No query execution / DB connectors** — analytics queries run in the Next.js Node.js connectors (`frontend/lib/connections/`), not here
+### AI Orchestration (in-process)
+- **TypeScript orchestrator** (`frontend/orchestrator/` + `frontend/agents/`): LLM calls, append-only conversation log, tool/skill schemas — runs inside the Next.js app
+- **Analytics queries** run in the Next.js Node.js connectors (`frontend/lib/connections/`)
 - **Path Resolution**: DuckDB file paths are resolved relative to `BASE_DUCKDB_DATA_PATH` environment variable
   - Absolute paths (starting with `/`) are used as-is
   - Relative paths are prepended with `BASE_DUCKDB_DATA_PATH`
@@ -419,8 +410,8 @@ export async function POST(req: NextRequest) {
 > **⚠️ `DocumentDB` should only be used inside the server-side `FilesAPI` implementation.** Do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere else — go through `FilesAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell.
 
 - `frontend/lib/database/documents-db.ts` - Document DB CRUD operations (PGLite or Postgres)
-- `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `types.gen.ts`; defines frontend-only types and extends generated ones (e.g. `QuestionContent` adds `queryResultId`)
-- `frontend/lib/types.gen.ts` - **Generated file — do not edit by hand.** Regenerate with `cd frontend && npm run generate-types` after changing Pydantic models in `backend/tasks/agents/analyst/file_schema.py`
+- `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `@/lib/validation/atlas-schemas`; defines frontend-only types and extends the shared ones (e.g. `QuestionContent` adds `queryResultId`)
+- `frontend/lib/validation/atlas-schemas.ts` - **TypeBox single source** for Atlas file types (schemas + `Static` types). Edit here, then `cd frontend && npm run generate-types` to refresh the `*.gen.json` artifacts. Import types from `@/lib/validation/atlas-schemas` or `@/lib/types`.
 
 ### Frontend State & Components
 - `frontend/store/` - Redux store with multiple domain slices:
@@ -440,64 +431,59 @@ export async function POST(req: NextRequest) {
 - `frontend/lib/auth/access-rules.ts` - Server-side permission helpers (canEditFileType, canDeleteFileType, etc.)
 - `frontend/lib/auth/access-rules.client.ts` - Client-side permission helpers (mirrors server functions)
 
-### Backend
-- `backend/main.py` - FastAPI application (chat orchestration endpoints)
-- `backend/tasks/agents/` - Agents, tools, and skills (e.g. `analyst/`)
-- `frontend/lib/connections/` - Node.js query connectors (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Sheets) — **query execution lives here now, not in the Python backend**
+### AI Orchestration & Connectors
+- `frontend/orchestrator/` - the `Orchestrator` engine + conversation-log/LLM types
+- `frontend/agents/` - agents, tools, and skills (e.g. `analyst/`, `web-analyst/`, `slack/`, `report/`, `eval/`)
+- `frontend/lib/chat-orchestration-v2.server.ts` - wires agents/tools into `V2_REGISTRABLES` and runs chat turns
+- `frontend/lib/connections/` - Node.js query connectors (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Sheets) — query execution lives here
 
 ### Writing New Tests
 
-**All new tests should be written as Redux integration E2E tests** (following the `chatE2E.test.ts` pattern). These tests:
-- Test the full stack: Redux → Listener Middleware → API → Python Backend
-- Provide realistic end-to-end coverage
-- Use shared test utilities from `store/__tests__/test-utils.ts`
-- **Automatic tool execution**: Tests should observe automatic system behaviors (middleware, listeners) rather than manually simulating them - manual intervention interferes with production flow
+**Chat/agent E2E tests run fully in-process** — there is no separate backend or LLM-mock server to spawn. The LLM is driven by each agent's **faux provider**: `import { fauxRegistration as X } from '@/agents/.../<agent>'` then `X.setResponses([fauxAssistantMessage(...) / fauxToolCall(...)])`. These tests:
+- Test the full stack: Redux → Listener Middleware → API route → in-process orchestrator → faux LLM
+- Use shared test utilities from `store/__tests__/test-utils.ts` (`setupTestDb` + `getTestDbPath`) and `test/harness/mock-fetch.ts` (`setupMockFetch` with the real route handlers)
+- **Automatic tool execution**: observe automatic system behaviors (middleware, listeners) rather than manually simulating them
 
-**Copy the setup from `store/__tests__/chatE2E.test.ts`** — it wires the standard harness (`withPythonBackend`, `setupTestDb` + `getTestDbPath`, `setupMockFetch` with the real `chatPostHandler`). See `store/__tests__/test-utils.ts` for available utilities.
+**Reference patterns:** `lib/integrations/slack/__tests__/slack.e2e.test.ts` (headless v2 orchestration via faux), `store/__tests__/storeE2E.test.ts` (in-process eval agent), and `app/api/chat/__tests__/v2-happy-path.test.ts` (chat route).
 
-**Test Ports:** Tests use ports 8002-8006 (distinct from dev servers on 3000 and 8001). Always check for stale test processes before running tests.
-
-For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` for the reference pattern (Python backend, LLM mock server, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
+For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` and `components/__tests__/streaming-render.ui.test.tsx` for the reference pattern (in-process orchestrator + faux LLM, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
 
 **UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
 
-## Pydantic → TypeScript Type Codegen
+## Atlas Schema Codegen (TypeBox)
 
-**Single source of truth:** `backend/tasks/agents/analyst/file_schema.py` defines Pydantic models for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.).
+**Single source of truth:** `frontend/lib/validation/atlas-schemas.ts` defines TypeBox schemas for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.). Each `export const X = Type.Object(...)` is BOTH a runtime JSON Schema and a static type via the colocated `export type X = Static<typeof X>`.
 
-**Pipeline:**
-1. Pydantic models emit a JSON schema via `ATLAS_FILE_SCHEMA_JSON`
-2. `backend/scripts/export_schema.py` prints the schema to stdout
-3. `json-schema-to-typescript` converts it to `frontend/lib/types.gen.ts`
-4. `frontend/lib/types.ts` re-exports generated types and extends them with frontend-only fields
+**Pipeline (all TypeScript):**
+1. `frontend/scripts/generate-atlas-schema.ts` reads the TypeBox schemas and writes the JSON-Schema artifacts
+2. `frontend/lib/validation/atlas-schema.gen.json` (full; consumed by Ajv in `content-validators.ts`) + `atlas-schema-no-viz.gen.json` (viz stripped; embedded in the EditFile tool description)
+3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields
 
 **When to regenerate:**
-- After changing any Pydantic model in `file_schema.py`, run: `cd frontend && npm run generate-types`
-- Commit the updated `types.gen.ts` — it's a tracked artifact (CI typechecks without Python)
+- After editing `atlas-schemas.ts`, run: `cd frontend && npm run generate-types` (runs the tsx generator)
+- Commit the updated `*.gen.json` — they're tracked artifacts
 
 **Key rules:**
-- **Never edit `types.gen.ts` by hand** — changes are overwritten on next codegen
-- Frontend-only fields (e.g. `queryResultId` on `QuestionContent`) go in `types.ts` as interface extensions, not in Pydantic
-- Pydantic `Optional[T]` generates `T | null` in TypeScript (not `T | undefined`) — fix call sites with `?? undefined` where needed
-- `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than the generated `DashboardContent`
+- **Never edit the `*.gen.json` by hand** — overwritten on next codegen. Edit `atlas-schemas.ts`.
+- `StringEnum` uses a `const` type param so literal arrays narrow to a union (not `string`).
+- Frontend-only fields (e.g. `queryResultId` on `QuestionContent`) go in `types.ts` as interface extensions.
+- `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than `DashboardContent`.
 
-## Tool Schema Dual-Update Rule
+## Tool Schemas
 
-**When modifying frontend tool handlers (`tool-handlers.ts`), always update the corresponding Pydantic class in `backend/tasks/agents/analyst/tools.py` too.** The Pydantic class is the source of truth for what args the LLM is told it can pass — stale schemas cause the model to use wrong/old args. Both files must stay in sync: `tools.py` defines the schema (args + docstring), `tool-handlers.ts` implements the behavior, and `tools.md` documents the return shape.
+Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema, the `tool-handlers.ts` behavior, and `tools.md` (return shape) in sync.
 
 ## Previous Mistakes
 
-**Scripts belong in `frontend/scripts/` as Node.js (tsx), never Python.** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
+**Scripts belong in `frontend/scripts/` as Node.js (tsx).** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
 
 **Schema changes:** Any change to `lib/database/postgres-schema.ts` (used by both PGLite and the Postgres adapter) must be accompanied by the appropriate migration entry.
 
-**Tool Registration:** When a tool spawns another tool via `FrontendToolException`, the spawned tool MUST be registered with `@register_agent` because the Python orchestrator needs to instantiate it from the registry when processing the conversation log.
+**Tool Registration:** When a tool spawns another tool (via `FrontendToolException`) or an agent dispatches a sub-agent, the spawned class MUST be in `V2_REGISTRABLES` (`lib/chat-orchestration-v2.server.ts`) — the orchestrator instantiates it from that registry by `schema.name` when resuming / reconstructing a saved conversation log.
 
-**Module Import Timing (BACKEND_URL):** When testing API routes that use `BACKEND_URL` constant, always use `setupMockFetch()`. Without it, `BACKEND_URL` is evaluated at module import time (before test port allocation), causing fetch calls to default port 8001 instead of dynamic test port. `setupMockFetch()` intercepts and redirects port 8001 → test port.
+**Debugging Async Orchestration:** Debug multi-tier async execution by adding temporary logging at tier boundaries (orchestrator stream events, tool execution results) to trace data flow through the execution loop.
 
-**Debugging Async Orchestration:** Debug multi-tier async execution by adding temporary logging at tier boundaries (Python response, tool execution results) to trace data flow through execution loop
-
-**TalkToUser is NOT a normal tool_call for most agents — do not mock it as one.** `TalkToUser` is only in `SlackAgent`'s toolset (so the bot can post back to Slack threads). All other agents (`AnalystAgent`, `DashboardAgent`, etc.) reply via `finish_reason='stop'` with plain `content` — `TalkToUser` is never in their tool list. In tests, the correct mock pattern for a non-Slack agent reply is `{ response: { content: 'reply text', finish_reason: 'stop' } }`. Mocking TalkToUser as a tool_call for non-Slack agents will silently fail (Python won't recognise it) and produce the "I do not have a text reply" error. The `LLMMockServer.configure()` method enforces this: it throws if `tool_calls` contains TalkToUser — always use `finish_reason: 'stop'` with `content` instead, and let the Python backend handle reply formatting.
+**TalkToUser is NOT a normal tool_call for most agents — do not mock it as one.** `TalkToUser` is only in `SlackAgent`'s toolset (so the bot can post back to Slack threads). All other agents (`AnalystAgent`, `DashboardAgent`, etc.) reply via `stopReason: 'stop'` with plain `content` — `TalkToUser` is never in their tool list. In tests, the correct faux pattern for a non-Slack agent reply is `fauxAssistantMessage('reply text', { stopReason: 'stop' })`. Mocking TalkToUser as a `fauxToolCall` for non-Slack agents will fail (the orchestrator can't resolve it) and produce the "I do not have a text reply" fallback — always use `stopReason: 'stop'` with content instead.
 
 ## Past Learnings
 

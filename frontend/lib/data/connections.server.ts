@@ -3,7 +3,7 @@ import 'server-only';
 /**
  * Server-side connections data layer
  * Direct database access; all connection testing / schema fetching runs through
- * the Node.js connectors (`getNodeConnector`). No Python backend.
+ * the Node.js connectors (`getNodeConnector`).
  * Used by server components and API routes
  */
 
@@ -227,9 +227,8 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     await DocumentDB.deleteByIds([conn.id]);
     // Note: managed-warehouse data files (CSV / Google Sheets parquet) are no
-    // longer cleaned up here — that cleanup previously went through the Python
-    // backend, which no longer has those endpoints. The connection document is
-    // removed; orphaned data files (if any) are a separate concern.
+    // longer cleaned up here. The connection document is removed; orphaned data
+    // files (if any) are a separate concern.
   }
 
   /**

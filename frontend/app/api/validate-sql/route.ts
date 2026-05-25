@@ -29,7 +29,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
   }
 
-  // Validate locally via WASM (replaces Python backend call)
+  // Validate locally via WASM
   const data = await validateSqlLocal(query, dialect);
   return NextResponse.json(data);
 

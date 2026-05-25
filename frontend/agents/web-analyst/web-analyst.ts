@@ -78,8 +78,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   }
 
   /**
-   * Add the user's city as web-search `userLocation` (matches Python's
-   * web_search_options.user_location). Falls back to the static callOptions
+   * Add the user's city as web-search `userLocation`. Falls back to the static callOptions
    * (webSearch: true, no location) when no city is known.
    */
   protected resolveCallOptions(): Record<string, unknown> | undefined {

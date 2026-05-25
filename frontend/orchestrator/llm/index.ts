@@ -10,7 +10,7 @@
  *
  * Design:
  *  - DOMAIN types (messages, content blocks, tool calls, events, Context, Tool,
- *    Usage) are DEFINED here as our own — not re-exported from pi. They mirror
+ *    Usage) are DEFINED here as our own — not re-exported from pi. They mirror the
  *    pi's shapes so the wrappers can cast across the seam; tsc over all consumers
  *    is the guard that they stay sufficient.
  *  - HANDLE types (`Model`, `Api`) are opaque pass-throughs — nothing outside this
@@ -46,7 +46,7 @@ export type Model<TApi extends Api = Api> = PiModel<TApi>;
 /**
  * A web-search citation attached to a text block (Anthropic-native shape, as
  * surfaced by the pi web-search patch). The frontend renders these as source
- * chips; matches the citation objects Python's chat produces.
+ * chips.
  */
 export interface Citation {
   type: 'web_search_result_location';
@@ -193,7 +193,7 @@ export interface StreamOptions {
    * Enable Anthropic native web search (server-side `web_search` tool).
    * Honored by the pi web-search patch. `true` uses defaults; the object form
    * sets max searches and an approximate user location (city) — matching
-   * Python's `web_search_options`.
+   * Provider web-search options.
    */
   webSearch?: boolean | { maxUses?: number; userLocation?: { city?: string } };
   [key: string]: unknown;

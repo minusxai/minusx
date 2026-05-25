@@ -7,7 +7,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { getNodeConnector } from '@/lib/connections';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
 
-/** Args for the FuzzyMatch tool — mirrors Python's FuzzyMatch (tools.py). */
+/** Args for the FuzzyMatch tool. */
 export interface FuzzyMatchToolArgs {
   connection_id: string;
   table: string;
@@ -16,7 +16,7 @@ export interface FuzzyMatchToolArgs {
   schema?: string;
   limit?: number;
   return_columns?: string[];
-  // semantic_expansion is accepted (schema parity with Python) but not used —
+  // semantic_expansion is accepted (schema compat) but not used —
   // matching the v1 handler, which calls fuzzyMatch() once.
   semantic_expansion?: boolean;
 }
@@ -24,7 +24,7 @@ export interface FuzzyMatchToolArgs {
 /**
  * Resolve a connection, validate the target column is text/categorical, and run
  * a single fuzzy match. Shared by the v1 Next.js tool handler and the v2
- * production FuzzyMatch tool so both behave identically (matching Python chat).
+ * production FuzzyMatch tool so both behave identically.
  */
 export async function executeFuzzyMatch(
   args: FuzzyMatchToolArgs,

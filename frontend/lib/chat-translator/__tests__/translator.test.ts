@@ -3,7 +3,7 @@
 // One module, three exports:
 //   piLogToLegacy     orchestrator ConversationLog        → ConversationLogEntry[]   (forward; file reads + done frame)
 //   piStreamEventToLegacy  StreamEvent             → legacy SSE payload | null (per-event mid-stream)
-//   legacyToolResultToPi   CompletedToolCallFromPython → ToolResultMessage     (reverse; orchestrator resume)
+//   legacyToolResultToPi   CompletedToolCallResult → ToolResultMessage     (reverse; orchestrator resume)
 
 import { describe, it, expect } from 'vitest';
 import type {
@@ -19,7 +19,7 @@ import type {
   TaskResultEntry,
   TaskDebugEntry,
 } from '@/lib/types';
-import type { CompletedToolCallFromPython } from '@/lib/chat-orchestration';
+import type { CompletedToolCallResult } from '@/lib/chat-orchestration';
 import {
   piLogToLegacy,
   piStreamEventToLegacy,
@@ -640,7 +640,7 @@ describe('piStreamEventToLegacy — per-event SSE translation', () => {
 
 describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () => {
   it('basic: tool_call_id → toolCallId, string content → [{type:text,text}]', () => {
-    const legacy: CompletedToolCallFromPython = {
+    const legacy: CompletedToolCallResult = {
       role: 'tool',
       tool_call_id: 'tc1',
       content: 'edit applied',
@@ -657,7 +657,7 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
   });
 
   it('object content → JSON-stringified text content', () => {
-    const legacy: CompletedToolCallFromPython = {
+    const legacy: CompletedToolCallResult = {
       role: 'tool',
       tool_call_id: 'tc1',
       content: { rows: [{ id: 1 }], columns: ['id'] },
@@ -675,7 +675,7 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
 
   it('details preserved as details', () => {
     const details = { success: true, diff: '+a' };
-    const legacy: CompletedToolCallFromPython = {
+    const legacy: CompletedToolCallResult = {
       role: 'tool',
       tool_call_id: 'tc1',
       content: 'ok',
@@ -689,7 +689,7 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
   });
 
   it('details.success === false → isError: true', () => {
-    const legacy: CompletedToolCallFromPython = {
+    const legacy: CompletedToolCallResult = {
       role: 'tool',
       tool_call_id: 'tc1',
       content: 'boom',
@@ -703,7 +703,7 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
   });
 
   it('function.name → toolName', () => {
-    const legacy: CompletedToolCallFromPython = {
+    const legacy: CompletedToolCallResult = {
       role: 'tool',
       tool_call_id: 'tc1',
       content: 'ok',

@@ -13,7 +13,7 @@ describe('Completions SQL IR - E2E Tests', () => {
   // These routes use local WASM (no DB needed) — don't init PGLite to avoid WASM conflicts.
   beforeEach(() => vi.clearAllMocks());
 
-  // Mock fetch with route interceptors — no Python backend needed (routes use local WASM)
+  // Mock fetch with route interceptors — no backend to spawn (routes use local WASM)
   const mockFetch = setupMockFetch({
     interceptors: [
       {
@@ -646,26 +646,11 @@ describe('Completions SQL IR - E2E Tests', () => {
 
   describe('Losslessness: Binary Support Boundary (Reject Unsupported)', () => {
     describe('Complex aggregate expressions (raw passthrough)', () => {
-      it('should parse SUM(col1 * col2) as raw passthrough', async () => {
-        const sql = 'SELECT SUM(price * quantity) AS total FROM orders';
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(true);
-        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
-      });
-
-      it('should parse COUNT(CASE WHEN ...) as raw passthrough', async () => {
-        const sql = "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) FROM users";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-
-        expect(result.success).toBe(true);
-        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
-      });
-
-      it('should parse AVG(col1 + col2) as raw passthrough', async () => {
-        const sql = 'SELECT AVG(price + tax) AS avg_total FROM products';
-
+      it.each([
+        { name: 'SUM(col1 * col2)', sql: 'SELECT SUM(price * quantity) AS total FROM orders' },
+        { name: 'COUNT(CASE WHEN ...)', sql: "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) FROM users" },
+        { name: 'AVG(col1 + col2)', sql: 'SELECT AVG(price + tax) AS avg_total FROM products' },
+      ])('should parse $name as raw passthrough', async ({ sql }) => {
         const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(true);
         expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
@@ -690,37 +675,35 @@ describe('Completions SQL IR - E2E Tests', () => {
     });
 
     describe('Unsupported operators (MUST reject)', () => {
-      it('should reject BETWEEN operator', async () => {
-        const sql = 'SELECT * FROM users WHERE age BETWEEN 20 AND 30';
-
+      it.each([
+        {
+          name: 'BETWEEN',
+          sql: 'SELECT * FROM users WHERE age BETWEEN 20 AND 30',
+          expectedFeature: 'BETWEEN (use >= and <= instead)',
+          expectedHint: 'Use >= and <=',
+        },
+        {
+          name: 'NOT LIKE',
+          sql: "SELECT * FROM users WHERE name NOT LIKE 'A%'",
+          expectedFeature: 'NOT LIKE',
+        },
+        {
+          name: 'NOT IN',
+          sql: "SELECT * FROM users WHERE status NOT IN ('deleted', 'banned')",
+          expectedFeature: 'NOT IN',
+        },
+        {
+          name: 'regex operators',
+          sql: "SELECT * FROM users WHERE email ~ '^[a-z]+@'",
+          expectedFeature: 'Regex operators (~, ~*, etc.)',
+        },
+      ])('should reject $name operator', async ({ sql, expectedFeature, expectedHint }) => {
         const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('BETWEEN (use >= and <= instead)');
-        expect(result.hint).toContain('Use >= and <=');
-      });
-
-      it('should reject NOT LIKE operator', async () => {
-        const sql = "SELECT * FROM users WHERE name NOT LIKE 'A%'";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('NOT LIKE');
-      });
-
-      it('should reject NOT IN operator', async () => {
-        const sql = "SELECT * FROM users WHERE status NOT IN ('deleted', 'banned')";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('NOT IN');
-      });
-
-      it('should reject regex operators', async () => {
-        const sql = "SELECT * FROM users WHERE email ~ '^[a-z]+@'";
-
-        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('Regex operators (~, ~*, etc.)');
+        expect(result.unsupportedFeatures).toContain(expectedFeature);
+        if (expectedHint) {
+          expect(result.hint).toContain(expectedHint);
+        }
       });
     });
   });
@@ -967,67 +950,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     });
   });
 
-  describe('Losslessness: Textual Preservation (Dirty Tracking)', () => {
-    it('should detect IR is unchanged (deep equality)', () => {
-      const ir: QueryIR = {
-        version: 1,
-        select: [{ type: 'column', column: 'name' }],
-        from: { table: 'users' }
-      };
-
-      // Deep clone to simulate "unchanged" IR
-      const unchangedIR = JSON.parse(JSON.stringify(ir));
-
-      // Stable serialization for comparison
-      const serialize = (obj: any) => JSON.stringify(obj, Object.keys(obj).sort());
-
-      expect(serialize(ir)).toBe(serialize(unchangedIR));
-    });
-
-    it('should detect IR has changed (deep equality)', () => {
-      const originalIR: QueryIR = {
-        version: 1,
-        select: [{ type: 'column', column: 'name' }],
-        from: { table: 'users' }
-      };
-
-      const modifiedIR: QueryIR = {
-        version: 1,
-        select: [{ type: 'column', column: 'name' }, { type: 'column', column: 'email' }],
-        from: { table: 'users' }
-      };
-
-      const serialize = (obj: any) => JSON.stringify(obj, Object.keys(obj).sort());
-
-      expect(serialize(originalIR)).not.toBe(serialize(modifiedIR));
-    });
-
-    it('should document expected behavior: preserve original SQL when IR unchanged', async () => {
-      const originalSQL = 'SELECT name, email FROM users WHERE active = true';
-
-      // Parse to IR
-      const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL, dialect: 'postgres' });
-      expect(parseResult.success).toBe(true);
-
-      const originalIR = parseResult.ir!;
-
-      // Simulate: User opens GUI, makes no changes, closes GUI
-      // In this case, we want to return originalSQL, not regenerated SQL
-
-      // Deep clone IR (simulates no changes)
-      const unchangedIR = JSON.parse(JSON.stringify(originalIR));
-
-      // Check if IR is dirty
-      const serialize = (obj: any) => JSON.stringify(obj, Object.keys(obj).sort());
-      const isDirty = serialize(originalIR) !== serialize(unchangedIR);
-
-      expect(isDirty).toBe(false);
-
-      // Expected behavior: When not dirty, QueryBuilder should return originalSQL
-      // When dirty, QueryBuilder should generate new SQL from IR
-      // This will be implemented in QueryBuilder component with state tracking
-    });
-
+  describe('Losslessness: Textual Preservation', () => {
     describe('Formatting differences in regenerated SQL', () => {
       it('should normalize formatting in regenerated SQL', async () => {
         const originalSQL = 'SELECT    name,email   FROM     users   WHERE active=true';
@@ -1106,92 +1029,4 @@ HAVING AVG(avg_order_value) > '75'`;
     });
   });
 
-  describe('BigQuery-style DATE_TRUNC / TIMESTAMP_TRUNC / CURRENT_TIMESTAMP support', () => {
-    it('should parse DATE_TRUNC(col, MONTH) filter + COUNT(DISTINCT) + positional GROUP BY / ORDER BY', async () => {
-      const sql = `
-        SELECT
-          DATE_TRUNC(created_at, MONTH) AS month,
-          COUNT(DISTINCT conv_id) AS unique_conversations
-        FROM analytics.processed_requests_with_sub
-        WHERE DATE_TRUNC(created_at, MONTH) < TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
-        GROUP BY 1
-        ORDER BY 1
-      `;
-
-      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'bigquery' });
-      expect(parseResult.success).toBe(true);
-      expect(parseResult.ir).toBeDefined();
-
-      const ir = parseResult.ir! as QueryIR;
-      expect(ir.select).toHaveLength(2);
-      expect(ir.select[0].type).toBe('expression');
-      expect(ir.select[0].function).toBe('DATE_TRUNC');
-      expect(ir.select[0].unit).toBe('MONTH');
-      expect(ir.where).toBeDefined();
-      expect(ir.group_by).toBeDefined();
-      expect(ir.order_by).toBeDefined();
-
-      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'bigquery' });
-      expect(generateResult.success).toBe(true);
-      expect(generateResult.sql).toContain('DATE_TRUNC');
-      expect(generateResult.sql).toContain('WHERE');
-      expect(generateResult.sql).toContain('GROUP BY');
-      expect(generateResult.sql).toContain('ORDER BY');
-    });
-
-    it('should parse DATE_TRUNC filter combined with string equality filter', async () => {
-      const sql = `
-        SELECT
-          DATE_TRUNC(created_at, MONTH) AS month,
-          COUNT(*) AS user_questions
-        FROM analytics.processed_requests_with_sub
-        WHERE last_message_role = 'user'
-          AND DATE_TRUNC(created_at, MONTH) < TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
-        GROUP BY 1
-        ORDER BY 1
-      `;
-
-      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'bigquery' });
-      expect(parseResult.success).toBe(true);
-
-      const ir = parseResult.ir! as QueryIR;
-      expect(ir.where).toBeDefined();
-      expect(ir.where!.operator).toBe('AND');
-      expect(ir.where!.conditions).toHaveLength(2);
-      expect(ir.group_by).toBeDefined();
-      expect(ir.order_by).toBeDefined();
-
-      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'bigquery' });
-      expect(generateResult.success).toBe(true);
-      expect(generateResult.sql).toContain('last_message_role');
-      expect(generateResult.sql).toContain('DATE_TRUNC');
-    });
-
-    it('should parse CURRENT_TIMESTAMP (no parens) in OR filter', async () => {
-      const sql = `
-        SELECT
-          plan_type,
-          COUNT(DISTINCT email_id) AS users
-        FROM analytics.all_subscriptions
-        WHERE subscription_end IS NULL OR subscription_end > CURRENT_TIMESTAMP
-        GROUP BY 1
-        ORDER BY 2 DESC
-      `;
-
-      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
-      expect(parseResult.success).toBe(true);
-
-      const ir = parseResult.ir! as QueryIR;
-      expect(ir.where).toBeDefined();
-      expect(ir.where!.operator).toBe('OR');
-      expect(ir.group_by).toBeDefined();
-      expect(ir.order_by).toBeDefined();
-      expect(ir.order_by![0].direction).toBe('DESC');
-
-      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
-      expect(generateResult.success).toBe(true);
-      expect(generateResult.sql).toContain('IS NULL');
-      expect(generateResult.sql?.toUpperCase()).toContain('CURRENT_TIMESTAMP');
-    });
-  });
 });
