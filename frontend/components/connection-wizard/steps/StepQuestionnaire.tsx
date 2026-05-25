@@ -158,6 +158,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
                 </Box>
               ) : (
                 <Textarea
+                  aria-label={label}
                   value={answers[key]}
                   onChange={(e) => handleChange(key, e.target.value)}
                   placeholder={placeholder}
@@ -178,6 +179,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
       {/* Footer */}
       <HStack justify="flex-end">
         <Button
+          aria-label="Continue to documentation step"
           bg="accent.teal"
           color="white"
           _hover={{ opacity: 0.9 }}
