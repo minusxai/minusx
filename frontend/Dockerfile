@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
 # ===== BUILDER STAGE ===== #
@@ -36,8 +37,11 @@ ARG GIT_COMMIT_SHA
 ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
 ARG NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG
 ENV NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=$NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG
+# Sentry auth token (optional) is mounted as a secret so it never lands in an
+# image layer; when present, the Sentry plugin uploads source maps during build.
 RUN --mount=type=cache,target=/app/.next/cache \
-    npm run build
+    --mount=type=secret,id=sentry_auth_token \
+    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" npm run build
 
 # ===== RUNTIME STAGE ===== #
 FROM node:20-slim AS runner

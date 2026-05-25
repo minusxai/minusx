@@ -64,5 +64,7 @@ jobs:
           build-args: |
             GIT_COMMIT_SHA=${{ github.sha }}
             NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=${{ secrets.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
