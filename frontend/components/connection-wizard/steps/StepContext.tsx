@@ -9,6 +9,7 @@ import type { ConnectionWithSchema } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { editFile, publishFile } from '@/lib/api/file-state';
+import { getStore } from '@/store/store';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
@@ -368,9 +369,14 @@ export default function StepContext({
     }
     onRequestChat?.(realFileId);
 
-    // Build appState so the agent knows it's on a context file page
+    // Build appState so the agent knows it's on a context file page.
+    // Read the LIVE store (not the render-closure `reduxState`): the empty doc
+    // entry appended on entering the docs sub-step is dispatched synchronously
+    // just before this runs, and EditFile matches against that live content. Using
+    // the stale closure would send `docs:[]`, so the agent's `"docs":[]` oldMatch
+    // wouldn't match the live file (the production EditFile "not found" failure).
     let appState = null;
-    const [augmented] = selectAugmentedFiles(reduxState, [realFileId]);
+    const [augmented] = selectAugmentedFiles(getStore().getState(), [realFileId]);
     if (augmented) {
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
@@ -423,7 +429,7 @@ export default function StepContext({
       message: agentMessage,
     }));
     setShowAgentFeed(true);
-  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, newDocContent, contextPath, staticSchemas, questionnaireAnswers]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, connections, newDocContent, contextPath, staticSchemas, questionnaireAnswers]);
 
   // Auto-trigger context agent when entering docs sub-step with questionnaire answers
   const hasAutoTriggeredAgent = useRef(false);
@@ -568,6 +574,7 @@ export default function StepContext({
         {/* Actions */}
         <HStack justify="flex-end" gap={3}>
           <Button
+            aria-label="Continue to documentation"
             variant="outline"
             size="sm"
             fontFamily="mono"
