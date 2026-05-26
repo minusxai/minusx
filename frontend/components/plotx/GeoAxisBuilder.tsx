@@ -117,14 +117,19 @@ function PointsSizeInputs({ config, onUpdate }: { config: PointsConfig; onUpdate
   )
 }
 
+// Module-scoped defaults so empty defaults don't re-trigger memos/effects
+// downstream (tooltipCols is in a useMemo dep at line 235).
+const EMPTY_TOOLTIP_COLS: string[] = []
+const EMPTY_COLOR_OVERRIDES: Record<string, string> = {}
+
 export function GeoAxisBuilder({
   columns,
   types,
   geoConfig,
   onGeoConfigChange,
-  tooltipCols = [],
+  tooltipCols = EMPTY_TOOLTIP_COLS,
   onTooltipColsChange,
-  colorOverrides = {},
+  colorOverrides = EMPTY_COLOR_OVERRIDES,
   onColorOverridesChange,
   getMapView,
 }: GeoAxisBuilderProps) {

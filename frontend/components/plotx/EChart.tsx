@@ -5,6 +5,23 @@ import type { EChartsType } from 'echarts/core'
 import type { EChartsOption, SetOptionOpts } from 'echarts'
 import { debounce } from 'lodash'
 
+// Module-scoped defaults: previously these lived in the function signature as
+// inline `{}` / `{ ... }` literals, which gave them a fresh identity on every
+// render. Listing them in the init effect's dep array then caused dispose →
+// init on every parent re-render. If `option` happened to be stable across
+// that render, setOption never fired on the new instance and the chart
+// rendered blank. Hoisting these makes the defaults reference-stable.
+const DEFAULT_CHART_SETTINGS = { useCoarsePointer: true } as const
+const DEFAULT_OPTION_SETTINGS: SetOptionOpts = { notMerge: true }
+const DEFAULT_STYLE: React.CSSProperties = {
+  width: '100%',
+  height: '100%',
+  minHeight: '300px',
+  display: 'flex',
+  justifyContent: 'center',
+}
+const EMPTY_EVENTS: Record<string, (param: any) => void> = {}
+
 interface EChartProps extends React.HTMLAttributes<HTMLDivElement> {
   option: EChartsOption
   chartSettings?: { useCoarsePointer?: boolean; renderer?: 'canvas' | 'svg' }
@@ -23,19 +40,23 @@ interface EChartProps extends React.HTMLAttributes<HTMLDivElement> {
  */
 export const EChart = ({
   option,
-  chartSettings = { useCoarsePointer: true }, // enables clicking near a line and still highlighting it
-  optionSettings = { notMerge: true }, // don't merge two options together when updating option
-  style = { width: '100%', height: '100%', minHeight: '300px', display: "flex", justifyContent: "center" },
+  chartSettings = DEFAULT_CHART_SETTINGS,
+  optionSettings = DEFAULT_OPTION_SETTINGS,
+  style = DEFAULT_STYLE,
   loading = false,
-  events = {},
+  events = EMPTY_EVENTS,
   onChartUpdate,
   ...props
 }: EChartProps) => {
   const chartRef = useRef<HTMLDivElement>(null)
 
-  // Stable ref so init effect doesn't need onChartUpdate as a dependency
+  // Stable refs so the init effect can stay mount-only — callers commonly pass
+  // inline `events={{ click: ... }}` / new `onChartUpdate` each render, and we
+  // don't want either to tear the chart down.
   const onChartUpdateRef = useRef(onChartUpdate)
+  const eventsRef = useRef(events)
   useEffect(() => { onChartUpdateRef.current = onChartUpdate })
+  useEffect(() => { eventsRef.current = events })
 
   // Debounce resize event so it only fires periodically instead of constantly
   const resizeChart = useMemo(
@@ -53,35 +74,39 @@ export const EChart = ({
     []
   )
 
+  // Mount-only: create the chart, wire events, observe resize. We also seed
+  // the initial option here so a brand-new instance is never left blank if the
+  // option-change effect happens to short-circuit (stable `option` reference).
   useEffect(() => {
     if (!chartRef.current) return
 
-    // Initialize chart
     const chart = init(chartRef.current, null, chartSettings)
+    chart.setOption(option, optionSettings)
     onChartUpdateRef.current?.(chart)
 
-    // Set up event listeners
-    for (const [key, handler] of Object.entries(events)) {
+    for (const [key, handler] of Object.entries(eventsRef.current)) {
       chart.on(key, (param) => {
         handler(param)
       })
     }
 
-    // Resize event listener
     const resizeObserver = new ResizeObserver(() => {
       resizeChart()
     })
-
     const currentRef = chartRef.current
     resizeObserver.observe(currentRef)
 
-    // Return cleanup function
     return () => {
       chart?.dispose()
       resizeObserver.unobserve(currentRef)
       resizeObserver.disconnect()
     }
-  }, [chartSettings, events, resizeChart])
+    // chartSettings is included so a caller that explicitly switches renderer
+    // (canvas ↔ svg) gets a fresh instance. With the module-scoped default,
+    // identity is stable across normal re-renders. `option` / `optionSettings`
+    // are intentionally NOT in the deps — the second effect handles updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartSettings, resizeChart])
 
   useEffect(() => {
     // Re-render chart when option changes
