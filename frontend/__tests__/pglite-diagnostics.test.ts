@@ -5,6 +5,11 @@
  *
  * This test isolates exactly which SQL operations succeed or abort in PGLite,
  * independent of the rest of the stack. Keep this file until all CI tests pass.
+ *
+ * NOTE: PGLite cold-boot is ~5–8s. Tests that need a fresh DB share a single
+ * `beforeAll` instance per describe block where it doesn't change semantics —
+ * the operations under test are namespaced (different schemas / different
+ * table names) so they coexist on one instance.
  */
 
 // Must come first — same mock pattern as storeE2E / adminAPI
@@ -51,31 +56,35 @@ describe('1. Raw PGLite — all POSTGRES_SCHEMA stmts in sequence', () => {
   });
 });
 
-// ─── 2. Raw PGLite: CREATE SCHEMA operations ──────────────────────────────────
+// ─── 2. Raw PGLite: CREATE SCHEMA + DDL routing operations ───────────────────
+// All these tests verify that specific SQL forms work on a freshly-booted PGLite.
+// They use different schema names / table names so they coexist on a single
+// instance without interfering — share one cold-boot across all 5 checks.
 
 describe('2. Raw PGLite — CREATE SCHEMA behaviour', () => {
+  let db: PGlite;
+  beforeAll(async () => {
+    db = new PGlite();
+    await db.waitReady;
+  });
+
   it('CREATE SCHEMA IF NOT EXISTS public — fresh db', async () => {
-    const db = new PGlite();
     await db.exec('CREATE SCHEMA IF NOT EXISTS public');
   });
 
   it('CREATE SCHEMA IF NOT EXISTS my_test_schema — fresh db', async () => {
-    const db = new PGlite();
     await db.exec('CREATE SCHEMA IF NOT EXISTS my_test_schema');
   });
 
   it('SET search_path TO public — fresh db', async () => {
-    const db = new PGlite();
     await db.exec('SET search_path TO public');
   });
 
   it('query() DDL: CREATE TABLE via query()', async () => {
-    const db = new PGlite();
     await db.query('CREATE TABLE IF NOT EXISTS t1 (id INT)');
   });
 
   it('query() DDL: CREATE SCHEMA via query()', async () => {
-    const db = new PGlite();
     await db.query('CREATE SCHEMA IF NOT EXISTS s1');
   });
 });
@@ -108,18 +117,23 @@ describe('3. DBModule.exec — routing (no-params + no-semicolon goes to query()
 });
 
 // ─── 4. Full initializeSchema (via getAdapter) ────────────────────────────────
+// One reset() shared across both checks — both want a freshly-initialised
+// DBModule adapter; reset()ing twice in a row just pays the PGLite cold-boot cost
+// twice for the same observation.
 
 describe('4. Full initializeSchema via getAdapter()', () => {
-  it('initializes without crashing', async () => {
+  beforeAll(async () => {
     await getModules().db.reset?.();
-    // Force adapter creation + initializeSchema
+    // Force adapter creation + initializeSchema once for the whole describe.
+    await getModules().db.exec<{ one: number }>('SELECT 1 AS one', []);
+  });
+
+  it('initializes without crashing', async () => {
     const result = await getModules().db.exec<{ one: number }>('SELECT 1 AS one', []);
     expect(result.rows[0]?.one).toBe(1);
   });
 
   it('SELECT from files table after init', async () => {
-    await getModules().db.reset?.();
-    await getModules().db.exec('SELECT 1 AS one', []);  // force init
     const r = await getModules().db.exec<{ count: number }>('SELECT COUNT(*) AS count FROM files', []);
     expect(r.rows[0]?.count).toBeDefined();
   });
