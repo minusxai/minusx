@@ -31,6 +31,7 @@ import { POST as createFileHandler } from '@/app/api/files/route';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
 import { POST as templateHandler } from '@/app/api/files/template/route';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
+import { getModules } from '@/lib/modules/registry';
 
 // ---------------------------------------------------------------------------
 // Jest module mocks — hoisted to top of file by Jest
@@ -99,20 +100,30 @@ async function createPublishedFile(
   return DocumentDB.create(name, path, type, content as any, references, undefined, false);
 }
 
+// All 5 describes below share this PGLite (in-memory; db-config is module-mocked
+// so every dbPath maps to the same instance). Init once at file load instead of
+// each describe doing its own initTestDatabase + cleanupTestDatabase round-trip
+// — that pattern was destroying and re-cold-booting PGLite between describes,
+// which cost ~5–8s × 5 = ~30s of WASM startup. Each describe now just clears
+// non-template files in its beforeAll before seeding its own fixtures.
+const FILE_DB_PATH = getTestDbPath('draft_e2e_shared');
+beforeAll(async () => {
+  await initTestDatabase(FILE_DB_PATH);
+});
+afterAll(async () => {
+  await cleanupTestDatabase(FILE_DB_PATH);
+});
+
+async function clearFilesExceptOrg(): Promise<void> {
+  await getModules().db.exec("DELETE FROM files WHERE path != '/org'", []);
+}
+
 // ============================================================================
 // 1. DocumentDB draft behavior (no Redux, no fetch mock needed)
 // ============================================================================
 
 describe('DocumentDB draft behavior', () => {
-  const dbPath = getTestDbPath('draft_db_unit');
-
-  beforeAll(async () => {
-    await initTestDatabase(dbPath);
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
-  });
+  beforeAll(clearFilesExceptOrg);
 
   it('create() stores files with draft: true by default', async () => {
     const id = await DocumentDB.create(
@@ -187,18 +198,13 @@ describe('DocumentDB draft behavior', () => {
 // ============================================================================
 
 describe('DocumentDB.batchSave dryRun', () => {
-  const dbPath = getTestDbPath('draft_dryrun_unit');
   let fileAId: number;
   let fileBId: number;
 
   beforeAll(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
     fileAId = await createPublishedFile('File A', '/org/file-a', 'question', questionContent('file-a'));
     fileBId = await createPublishedFile('File B', '/org/file-b', 'question', questionContent('file-b'));
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
   });
 
   it('dryRun:true returns success without committing (DB unchanged)', async () => {
@@ -316,7 +322,6 @@ describe('DocumentDB.batchSave dryRun', () => {
 // ============================================================================
 
 describe('createDraftFile', () => {
-  const dbPath = getTestDbPath('draft_create_state');
   let store: ReturnType<typeof makeStore>;
 
   // Order matters: template and batch-save must match before the generic /api/files
@@ -329,15 +334,11 @@ describe('createDraftFile', () => {
   });
 
   beforeAll(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
     // Pre-create sub-folders so each test can create draft files in a unique location
     for (let i = 1; i <= 4; i++) {
       await DocumentDB.create(`draft-test-${i}`, `/org/draft-test-${i}`, 'folder', { description: '' } as any, [], undefined, false);
     }
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
   });
 
   beforeEach(() => {
@@ -382,7 +383,6 @@ describe('createDraftFile', () => {
 // ============================================================================
 
 describe('dryRunSave', () => {
-  const dbPath = getTestDbPath('draft_dryrun_state');
   let store: ReturnType<typeof makeStore>;
   let fileId: number;
 
@@ -393,12 +393,8 @@ describe('dryRunSave', () => {
   });
 
   beforeAll(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
     fileId = await createPublishedFile('DryRun File', '/org/dryrun-file', 'question', questionContent('original'));
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
   });
 
   beforeEach(async () => {
@@ -436,7 +432,6 @@ describe('dryRunSave', () => {
 // ============================================================================
 
 describe('publishAll with draft files', () => {
-  const dbPath = getTestDbPath('draft_publish_e2e');
   let store: ReturnType<typeof makeStore>;
   let existingQuestionId: number;
   let dashboardId: number;
@@ -451,7 +446,7 @@ describe('publishAll with draft files', () => {
   });
 
   beforeAll(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
 
     existingQuestionId = await createPublishedFile(
       'Existing Q', '/org/existing-q', 'question', questionContent('original-q')
@@ -466,10 +461,6 @@ describe('publishAll with draft files', () => {
       } as DocumentContent,
       [existingQuestionId]
     );
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
   });
 
   beforeEach(async () => {

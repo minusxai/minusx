@@ -64,17 +64,19 @@ const VALID_BRANDING = {
 // Tests
 // ---------------------------------------------------------------------------
 
+// Both describes below share the same PGLite (in-memory; db-config is mocked
+// to use the same instance). Init once at file level — the previous structure
+// ran initTestDatabase + cleanupTestDatabase in EACH describe, which destroyed
+// and re-cold-booted PGLite between them for no behavioural benefit.
+const SHARED_DB_PATH = getTestDbPath('configs_e2e');
+beforeAll(async () => {
+  await initTestDatabase(SHARED_DB_PATH);
+});
+afterAll(async () => {
+  await cleanupTestDatabase(SHARED_DB_PATH);
+});
+
 describe('GET /api/configs', () => {
-  const dbPath = getTestDbPath('configs_e2e');
-
-  beforeAll(async () => {
-    await initTestDatabase(dbPath);
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
-  });
-
   it('returns 200 with a config object (falls back to default when none stored)', async () => {
     const res = await getConfig();
     const body = await res.json();
@@ -84,16 +86,6 @@ describe('GET /api/configs', () => {
 });
 
 describe('POST /api/configs', () => {
-  const dbPath = getTestDbPath('configs_e2e');
-
-  beforeAll(async () => {
-    await initTestDatabase(dbPath);
-    // /org/configs folder is created by initTestDatabase via workspace-template.json
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
-  });
 
   it('returns 400 when branding is not an object', async () => {
     const res = await postConfig({ branding: 'not-an-object' });

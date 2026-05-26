@@ -34,7 +34,6 @@ vi.mock('next/cache', () => ({
 // ---------------------------------------------------------------------------
 
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
-import { resetDB } from '@/test/harness/test-db';
 import { getModules } from '@/lib/modules/registry';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -74,9 +73,12 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  // Wipe all files except the /org root between tests, then reset the adapter.
+  // Wipe all files except the /org root between tests. (We used to also call
+  // resetDB() here, which destroyed the PGLite WASM instance and forced the
+  // next test to re-cold-boot it — ~9s wasted per test. The DELETE is enough:
+  // the workspace template's /org root + seeded users persist, and PGLite stays
+  // warm across the whole suite.)
   await getModules().db.exec("DELETE FROM files WHERE path != '/org'", []);
-  await resetDB();
 });
 
 // ---------------------------------------------------------------------------
