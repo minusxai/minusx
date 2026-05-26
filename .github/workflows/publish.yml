@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/sentry-docker-build
     tags:
       - 'v*'
   workflow_dispatch:
