@@ -11,6 +11,44 @@ import { getVizConstraintError, getVizSettingsWarning } from '@/lib/chart/viz-co
 
 // ─── chart-utils.test.ts ───
 
+describe('buildChartOption animation default', () => {
+  // Background: a Chrome perf trace showed zrender Animation.update / step / ZRText
+  // ._updatePlainTexts dominating main-thread CPU (~590ms over a 16s session),
+  // plus ~500ms of forced layout from measureText on every animation frame
+  // (zrender appends a span → reads offsetWidth → removes it). ECharts' default
+  // animation is decorative and not worth the cost in a BI tool; disable by
+  // default and let callers opt back in per chart via additionalOptions.
+  it('returns animation: false by default for standard charts', () => {
+    const option = buildChartOption({
+      chartType: 'bar',
+      xAxisData: ['a', 'b', 'c'],
+      series: [{ name: 's', data: [1, 2, 3] }],
+      colorPalette: ['#16a085'],
+    })
+    expect(option.animation).toBe(false)
+  })
+
+  it('honours an explicit animation override from additionalOptions', () => {
+    const option = buildChartOption({
+      chartType: 'bar',
+      xAxisData: ['a', 'b', 'c'],
+      series: [{ name: 's', data: [1, 2, 3] }],
+      colorPalette: ['#16a085'],
+      additionalOptions: { animation: true },
+    })
+    expect(option.animation).toBe(true)
+  })
+
+  it('returns animation: false by default for pie charts', () => {
+    const option = buildPieChartOption({
+      xAxisData: ['a', 'b'],
+      series: [{ name: 's', data: [1, 2] }],
+      colorPalette: ['#16a085', '#27ae60'],
+    } as any)
+    expect(option.animation).toBe(false)
+  })
+})
+
 describe('buildChartOption scatter log axis', () => {
   it('derives x-axis log extent from positive scatter values and excludes non-positive x points', () => {
     const option = buildChartOption({

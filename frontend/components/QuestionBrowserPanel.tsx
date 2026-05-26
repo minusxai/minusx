@@ -7,6 +7,7 @@ import { LuScanSearch, LuSearch, LuPlus, LuType } from 'react-icons/lu';
 import { useMemo, useState, useEffect } from 'react';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { setFile } from '@/store/filesSlice';
 import { FilesAPI } from '@/lib/data/files';
 import { pushView } from '@/store/uiSlice';
@@ -37,7 +38,9 @@ export const QuestionBrowserPanel = ({
 }: QuestionBrowserPanelProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [questionsMap, setQuestionsMap] = useState<Record<number, QuestionDisplay>>({});
-  const filesInRedux = useAppSelector(state => state.files.files);
+  // shallowEqual: skip re-renders when the files bag's top-level ref changes
+  // but no actual entry differs (Immer-induced).
+  const filesInRedux = useAppSelector(state => state.files.files, shallowEqual);
   const dispatch = useAppDispatch();
 
   // Load all questions from folder

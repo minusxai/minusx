@@ -29,6 +29,7 @@ import Markdown from '../Markdown';
 import DocumentHeader from '../DocumentHeader';
 import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { selectConnectionsLoading } from '@/store/filesSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
@@ -300,7 +301,9 @@ export default function ContextEditorV2({
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
   const user = useAppSelector(state => state.auth.user);
-  const filesState = useAppSelector(state => state.files.files); // Moved here for consistent hooks order
+  // shallowEqual: skip re-renders when state.files.files's top-level ref rotated
+  // but no actual entry changed (Immer-induced on unrelated slice writes).
+  const filesState = useAppSelector(state => state.files.files, shallowEqual); // Moved here for consistent hooks order
 
   // Version management state
   const [isCreateVersionOpen, setIsCreateVersionOpen] = useState(false);

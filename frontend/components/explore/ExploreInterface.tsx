@@ -8,6 +8,7 @@ import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import Breadcrumb from '@/components/Breadcrumb';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { setLeftSidebarCollapsed, setRightSidebarCollapsed } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
@@ -45,7 +46,9 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // Find home context (any context file that is direct child of homeFolder)
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org';
 
-  const files = useAppSelector(state => state.files.files);
+  // shallowEqual: avoid re-running the homeContext useMemo when Immer rotates
+  // the bag ref but no entry actually changed.
+  const files = useAppSelector(state => state.files.files, shallowEqual);
   const homeContext = useMemo(() => {
     for (const file of Object.values(files)) {
       if (file.type !== 'context') continue;
