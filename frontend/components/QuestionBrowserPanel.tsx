@@ -3,7 +3,7 @@
 import { Box, VStack, Text, HStack, Input, IconButton, Button } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionContent } from '@/lib/types';
-import { LuScanSearch, LuSearch, LuPlus, LuType } from 'react-icons/lu';
+import { LuScanSearch, LuSearch, LuPlus, LuType, LuMinus } from 'react-icons/lu';
 import { useMemo, useState, useEffect } from 'react';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -17,6 +17,7 @@ interface QuestionBrowserPanelProps {
   folderPath: string;
   onAddQuestion: (questionId: number) => void;
   onAddTextBlock?: () => void;
+  onAddDivider?: () => void;
   excludedIds?: number[];
   title?: string;
   dashboardId?: number;
@@ -32,6 +33,7 @@ export const QuestionBrowserPanel = ({
   folderPath,
   onAddQuestion,
   onAddTextBlock,
+  onAddDivider,
   excludedIds = [],
   title,
   dashboardId,
@@ -47,47 +49,40 @@ export const QuestionBrowserPanel = ({
   useEffect(() => {
     async function loadFolderQuestions() {
       try {
-        // Get lightweight FileInfo list for all questions in folder
         const { data: questionFiles } = await FilesAPI.getFiles({
           paths: [folderPath],
           type: 'question',
-          depth: 999  // All subfolders
+          depth: 999
         });
 
-        // Separate questions already in Redux vs missing ones
         const newQuestionsMap: Record<number, QuestionDisplay> = {};
         const missingIds: number[] = [];
 
         questionFiles.forEach(f => {
           if (filesInRedux[f.id]) {
-            // Reuse from Redux if already loaded
             const content = filesInRedux[f.id].content as QuestionContent;
             newQuestionsMap[f.id] = {
               id: f.id,
-              name: f.name || 'Untitled Question',  // Use file name (metadata), not content.name
+              name: f.name || 'Untitled Question',
               ...content
             };
           } else {
-            // Track missing IDs to fetch
             missingIds.push(f.id);
           }
         });
 
-        // Only fetch missing questions from database
         if (missingIds.length > 0) {
           const { data: fullQuestions } = await FilesAPI.loadFiles(missingIds);
 
-          // Dispatch to Redux (like useFile does)
           fullQuestions.forEach(q => {
             const content = q.content as QuestionContent;
-            // No need to validate - name is in file.name (metadata), not content
             dispatch(setFile({
               file: { ...q, content },
               references: []
             }));
             newQuestionsMap[q.id] = {
               id: q.id,
-              name: q.name || 'Untitled Question',  // Use file name (metadata), not content.name
+              name: q.name || 'Untitled Question',
               ...content
             };
           });
@@ -102,9 +97,7 @@ export const QuestionBrowserPanel = ({
     loadFolderQuestions();
   }, [folderPath, dispatch]);
 
-  // Convert map to array and filter out questions that are already in the dashboard and apply search
   const availableQuestions = useMemo(() => {
-    // Convert map to array - content already includes id
     let filtered = Object.entries(questionsMap)
       .filter(([idStr]) => {
         const id = parseInt(idStr, 10);
@@ -124,30 +117,62 @@ export const QuestionBrowserPanel = ({
   }, [questionsMap, excludedIds, searchQuery]);
 
   return (
-    <VStack
-      bg="bg.surface"
-      align="stretch"
-      gap={0}
-      overflowY="auto"
-      borderRadius={5}
+    <Box
       fontFamily="mono"
+      bg="bg.surface"
+      borderRadius="md"
+      border="1px solid"
+      borderColor="border.default"
+      overflow="hidden"
+      maxW="600px"
+      mx="auto"
     >
-      {/* Title */}
       {title && (
-        <Box p={3} borderBottom="1px solid" borderColor="border.default">
-          <Text fontSize="sm" fontWeight="700" color="fg.default">
+        <Box px={4} py={2.5} borderBottomWidth="1px" borderColor="border.default" bg="bg.muted">
+          <Text fontSize="xs" fontWeight={700} color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
             {title}
           </Text>
         </Box>
       )}
 
-      {/* Create Question / Text Block Buttons */}
-      <Box p={3} borderBottom="1px solid" borderColor="border.default">
-        <VStack gap={2} align="stretch">
+      <HStack align="stretch" gap={0}>
+        {/* Left: nav items — Existing Questions is highlighted, others are instant actions */}
+        <VStack
+          gap={0}
+          align="stretch"
+          borderRightWidth="1px"
+          borderColor="border.default"
+          minW="200px"
+          flexShrink={0}
+        >
+          {/* Existing Questions — active/highlighted item, connects to the right panel */}
+          <HStack
+            px={3}
+            py={2.5}
+            gap={2}
+            bg="accent.teal/8"
+            borderLeftWidth="3px"
+            borderColor="accent.teal"
+            cursor="default"
+          >
+            <LuSearch size={12} color="var(--chakra-colors-accent-teal)" />
+            <Text fontSize="xs" fontWeight={600} color="accent.teal">
+              Existing Questions
+            </Text>
+          </HStack>
+
           <Button
-            type="button"
-            size="sm"
-            width="100%"
+            size="xs"
+            variant="ghost"
+            borderRadius="0"
+            px={3}
+            py={2.5}
+            h="auto"
+            fontWeight={500}
+            fontSize="xs"
+            color="fg.muted"
+            justifyContent="flex-start"
+            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
             onClick={async (e) => {
               e.stopPropagation();
               if (dashboardId !== undefined) {
@@ -155,113 +180,119 @@ export const QuestionBrowserPanel = ({
                 dispatch(pushView({ type: 'create-question', folderPath, dashboardId, fileId: draftFileId }));
               }
             }}
-            colorPalette="teal"
-            gap={2}
             aria-label="Create New Question"
           >
-            <LuPlus /> Create New Question
+            <LuPlus size={12} />
+            New Question
           </Button>
+
           {onAddTextBlock && (
             <Button
-              type="button"
-              size="sm"
-              width="100%"
-              variant="outline"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddTextBlock();
-              }}
-              gap={2}
+              size="xs"
+              variant="ghost"
+              borderRadius="0"
+              px={3}
+              py={2.5}
+              h="auto"
+              fontWeight={500}
+              fontSize="xs"
+              color="fg.muted"
+              justifyContent="flex-start"
+              _hover={{ bg: 'bg.muted', color: 'fg.default' }}
+              onClick={(e) => { e.stopPropagation(); onAddTextBlock(); }}
               aria-label="Add text block"
             >
-              <LuType size={14} /> Add Text Block
+              <LuType size={12} />
+              Text Block
+            </Button>
+          )}
+
+          {onAddDivider && (
+            <Button
+              size="xs"
+              variant="ghost"
+              borderRadius="0"
+              px={3}
+              py={2.5}
+              h="auto"
+              fontWeight={500}
+              fontSize="xs"
+              color="fg.muted"
+              justifyContent="flex-start"
+              _hover={{ bg: 'bg.muted', color: 'fg.default' }}
+              onClick={(e) => { e.stopPropagation(); onAddDivider(); }}
+              aria-label="Add divider"
+            >
+              <LuMinus size={12} />
+              Divider
             </Button>
           )}
         </VStack>
-      </Box>
 
-      {/* Header */}
-      {availableQuestions.length > 0 ? (
-        <Box>
-            <Box
-                p={4}
-                borderBottom="1px solid"
-                borderColor="border.default"
-                bg="bg.muted"
-            >
-                <Text
-                fontSize="xs"
-                fontWeight="700"
-                color="fg.subtle"
-                textTransform="uppercase"
-                letterSpacing="0.1em"
-                mb={3}
-                               >
-                Available Questions ({availableQuestions.length})
-                </Text>
-
-                {/* Search Bar */}
+        {/* Right: question browser (always visible) */}
+        <Box flex={1} minW={0}>
+          {availableQuestions.length > 0 || searchQuery.trim() ? (
+            <>
+              {/* Search */}
+              <Box p={3} borderBottomWidth="1px" borderColor="border.default" bg="bg.muted">
                 <Box position="relative">
-                <Box
+                  <Box
                     position="absolute"
-                    left={3}
+                    left={2.5}
                     top="50%"
                     transform="translateY(-50%)"
                     color="fg.muted"
                     pointerEvents="none"
-                >
-                    <LuSearch size={14} />
-                </Box>
-                <Input
-                    placeholder="Search questions..."
-                    size="sm"
+                  >
+                    <LuSearch size={12} />
+                  </Box>
+                  <Input
+                    placeholder="Search existing questions..."
+                    size="xs"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    pl={2}
+                    pl={7}
                     bg="bg.surface"
-                                       borderColor="border.default"
+                    borderColor="border.default"
                     _hover={{ borderColor: 'border.emphasized' }}
                     _focus={{ borderColor: 'accent.primary', boxShadow: '0 0 0 1px var(--chakra-colors-accent-primary)' }}
                     fontSize="xs"
-                />
+                    borderRadius="md"
+                  />
                 </Box>
-            </Box>
+              </Box>
 
-            <Box p={3} maxHeight="320px" overflowY="auto">
+              {/* Question list */}
+              <Box maxHeight="240px" overflowY="auto">
                 {availableQuestions.length > 0 ? (
-                <VStack align="stretch" gap={2}>
+                  <VStack align="stretch" gap={0} py={1}>
                     {availableQuestions.map(question => (
-                    <QuestionItem
+                      <QuestionItem
                         key={question.id}
                         question={question}
                         onAddQuestion={onAddQuestion}
-                    />
+                      />
                     ))}
-                </VStack>
+                  </VStack>
                 ) : (
-                <Box
-                    p={4}
-                    borderRadius="md"
-                    border="1px dashed"
-                    borderColor="border.muted"
-                    textAlign="center"
-                >
+                  <Box p={4} textAlign="center">
                     <Text fontSize="xs" color="fg.muted">
-                    {searchQuery.trim() ? 'No questions match your search' : 'All questions have been added'}
+                      No questions match your search
                     </Text>
-                </Box>
+                  </Box>
                 )}
+              </Box>
+            </>
+          ) : (
+            <Box p={4} display="flex" alignItems="center" justifyContent="center" height="100%">
+              <Text fontSize="xs" color="fg.muted">
+                All questions have been added
+              </Text>
             </Box>
-        </Box>)
-        : (
-            <Box>
-                <Text fontSize="xs" color="fg.muted" textAlign={"center"} p={3}>
-                    No new existing question in this folder.
-                </Text>
-            </Box>
-        )}
-
-    </VStack>
+          )}
+        </Box>
+      </HStack>
+    </Box>
   );
 };
 
@@ -274,66 +305,43 @@ const QuestionItem = ({ question, onAddQuestion }: QuestionItemProps) => {
   const questionColor = FILE_TYPE_METADATA.question.color;
 
   return (
-    <Box
+    <HStack
       role="article"
       aria-label={question.name || 'Untitled Question'}
-      p={3}
-      bg="bg.surface"
-      borderRadius="md"
-      border="1px solid"
-      borderColor="border.default"
-      _hover={{
-        bg: 'bg.muted',
-        borderColor: questionColor,
-        boxShadow: '0 0 12px rgba(41, 128, 185, 0.15)'
-      }}
-      transition="all 0.15s ease"
+      px={3}
+      py={1.5}
+      _hover={{ bg: 'bg.muted' }}
+      transition="background 0.1s"
+      gap={2}
+      cursor="default"
     >
-      <HStack gap={2.5} align="flex-start">
-        <Box
-          as={LuScanSearch}
-          fontSize="md"
-          color={questionColor}
-          flexShrink={0}
-          mt={0.5}
-        />
-        <VStack align="stretch" gap={1} flex="1" minWidth={0}>
-          <Tooltip content={question.name || 'Untitled Question'}>
-            <Text
-              fontSize="sm"
-              fontWeight="600"
-              color="fg.default"
-              lineClamp={1}
-
-            >
-              {question.name || 'Untitled Question'}
-            </Text>
-          </Tooltip>
-          {question.description && (
-            <Tooltip content={question.description}>
-              <Text
-                fontSize="xs"
-                color="fg.muted"
-                lineClamp={2}
-                lineHeight="1.4"
-              >
-                {question.description}
-              </Text>
-            </Tooltip>
-          )}
-        </VStack>
-        <IconButton
-          onClick={() => onAddQuestion(question.id)}
-          aria-label="Add to dashboard"
-          size="xs"
-          variant="ghost"
-          colorPalette="teal"
-          px={2}
-        >
-          <LuPlus />
-          Add
-        </IconButton>
-      </HStack>
-    </Box>
+      <Box
+        as={LuScanSearch}
+        fontSize="xs"
+        color={questionColor}
+        flexShrink={0}
+      />
+      <Box flex="1" minWidth={0}>
+        <Tooltip content={question.name || 'Untitled Question'}>
+          <Text
+            fontSize="xs"
+            fontWeight={500}
+            color="fg.default"
+            lineClamp={1}
+          >
+            {question.name || 'Untitled Question'}
+          </Text>
+        </Tooltip>
+      </Box>
+      <IconButton
+        onClick={() => onAddQuestion(question.id)}
+        aria-label="Add to dashboard"
+        size="2xs"
+        variant="ghost"
+        colorPalette="teal"
+      >
+        <LuPlus size={12} />
+      </IconButton>
+    </HStack>
   );
 };
