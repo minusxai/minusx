@@ -12,8 +12,14 @@
  */
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { QuestionVisualization, ContainerConfig } from '@/components/question/QuestionVisualization';
-import { QuestionContent, QuestionParameter } from '@/lib/types';
+import { QuestionContent, QuestionParameter, QuestionReference } from '@/lib/types';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
+
+// Stable empty fallback — `localQuestion.references || []` would allocate a
+// fresh array on every render, breaking referential equality on `useQueryResult`'s
+// dep array and re-firing its effect (which cascades into duplicate /api/query
+// round-trips on large dashboards where the LRU can't absorb them).
+const EMPTY_REFERENCES: QuestionReference[] = [];
 
 interface EmbeddedQuestionContainerProps {
   question: QuestionContent;
@@ -76,7 +82,7 @@ export default function EmbeddedQuestionContainer({
     localQuestion.query || '',
     queryParams,
     localQuestion.connection_name || '', // Empty string if missing, rely on skip to prevent execution
-    localQuestion.references || [],
+    localQuestion.references || EMPTY_REFERENCES,
     { skip: !localQuestion.query || !localQuestion.connection_name, filePath } // Skip if no query or no database
   );
 
