@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files and postinstall inputs (needed during npm ci).
@@ -44,7 +45,12 @@ RUN --mount=type=cache,target=/app/.next/cache \
     SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
     CI=true \
     SENTRY_LOG_LEVEL=debug \
-    sh -c 'echo "[sentry-debug] token byte length=${#SENTRY_AUTH_TOKEN}"; npm run build'
+    sh -c 'echo "[sentry-debug] token byte length=${#SENTRY_AUTH_TOKEN}"; \
+           echo "[sentry-debug] auth probe (project read):"; \
+           curl -sS -o /dev/null -w "[sentry-debug] HTTP %{http_code}\n" \
+                -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
+                https://sentry.io/api/0/projects/minusx/minusx-bi/; \
+           npm run build'
 
 # ===== RUNTIME STAGE ===== #
 FROM node:20-slim AS runner
