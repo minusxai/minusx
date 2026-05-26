@@ -250,15 +250,17 @@ export default function Sidebar() {
                 </Text>
               </HStack>
             </Link>
-            <IconButton
-              onClick={handleToggleSidebar}
-              variant="ghost"
-              aria-label="Collapse sidebar"
-              size="sm"
-              cursor="w-resize"
-            >
-              <LuPanelLeftClose />
-            </IconButton>
+            <Tooltip content="Collapse sidebar" positioning={{ placement: 'right' }}>
+                <IconButton
+                onClick={handleToggleSidebar}
+                variant="ghost"
+                aria-label="Collapse sidebar"
+                size="sm"
+                cursor="w-resize"
+                >
+                    <LuPanelLeftClose />
+                </IconButton>
+            </Tooltip>
           </>
 
         )}
