@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Dialog, Button, VStack, HStack, Text, Box, Portal } from '@chakra-ui/react';
+import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
 import { batchMoveFiles } from '@/lib/api/file-state';
@@ -100,8 +101,11 @@ export default function BulkMoveFileModal({ isOpen, onClose, files }: BulkMoveFi
     items: folders.map(path => ({ label: path, value: path }))
   });
 
+  // Stable identity to keep Dialog.Root from churning on parent re-renders.
+  const handleOpenChange = useStableCallback((e: { open: boolean }) => { if (!e.open) handleClose(); });
+
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && handleClose()}>
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
       <Portal>
       <Dialog.Backdrop />
       <Dialog.Positioner>

@@ -9,6 +9,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { Dialog, Input, Button, VStack, HStack, Text, Box, Icon } from '@chakra-ui/react';
+import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { LuFolder, LuFolderOpen, LuChevronRight, LuChevronDown } from 'react-icons/lu';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { isUnderSystemFolder } from '@/lib/mode/path-resolver';
@@ -265,9 +266,11 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
   const handleClose = () => {
     onClose();
   };
+  // Stable identity to keep Dialog.Root from churning on parent re-renders.
+  const handleOpenChange = useStableCallback((e: { open: boolean }) => { if (!e.open) handleClose(); });
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && handleClose()} placement="center">
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange} placement="center">
       <Dialog.Backdrop />
       <Dialog.Positioner>
         <Dialog.Content
