@@ -45,6 +45,7 @@ describe('Suggested question chips (full reply render path)', () => {
         markdownContext="mainpage"
         viewMode="detailed"
         conversationID={99}
+        isLastAssistantMessage={true}
       />,
       { store },
     );
