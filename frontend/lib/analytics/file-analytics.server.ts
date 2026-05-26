@@ -1,12 +1,12 @@
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { sqlArray } from '@/lib/database/adapter/types';
-import { FileEventType, insertFileEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
+import { FileEventType, insertFileEvent, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
 import type { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
 export { FileEventType } from './file-analytics.db';
-export { insertFileEvent, insertLlmCallEvent, insertQueryExecutionEvent };
+export { insertFileEvent, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent };
 
 /**
  * Track a single file event. Fire-and-forget.
@@ -18,6 +18,20 @@ export function trackFileEvent(event: FileEvent): void {
     fileVersion: event.fileVersion ?? null,
     referencedByFileId: event.referencedByFileId ?? null,
     userId: event.userId ?? null,
+  });
+}
+
+/**
+ * Track a feedback event. Fire-and-forget.
+ */
+export function trackFeedbackEvent(p: { conversationId: number; userMessageLogIndex: number; rating: 'positive' | 'negative'; tags: string[]; comment?: string; userId?: number | null }): void {
+  insertFeedbackEvent({
+    conversationId: p.conversationId,
+    userMessageLogIndex: p.userMessageLogIndex,
+    rating: p.rating,
+    tags: p.tags,
+    comment: p.comment,
+    userId: p.userId ?? null,
   });
 }
 
