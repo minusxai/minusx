@@ -82,6 +82,9 @@ export interface DocumentHeaderProps {
   // Optional highlight color for the header background (e.g. dashboard edit mode)
   highlightColor?: string;
   highlightLabel?: string;  // Label shown next to title when highlighted (e.g. "Editing Dashboard")
+
+  // Extra action buttons rendered before the edit/save buttons
+  extraActions?: ReactNode;
 }
 
 export default function DocumentHeader({
@@ -109,6 +112,7 @@ export default function DocumentHeader({
   saveCount = 1,
   highlightColor,
   highlightLabel,
+  extraActions,
 }: DocumentHeaderProps) {
   const metadata = getFileTypeMetadata(fileType);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -260,6 +264,9 @@ export default function DocumentHeader({
             {!editMode && questionId !== undefined && (
               <ExplainButton questionId={questionId} size="xs" />
             )}
+
+            {/* Extra actions from parent */}
+            {extraActions}
 
             {/* Review unsaved changes — muted text link, informational */}
             {onReviewChanges && dirtyFileCount > 0 && (
