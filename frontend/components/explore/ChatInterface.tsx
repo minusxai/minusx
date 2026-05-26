@@ -873,6 +873,8 @@ export default function ChatInterface({
               {viewMode === 'detailed' ? (
                 (() => {
                   let lastUserLogIndex: number | undefined;
+                  // Find the last TalkToUser message index so we only show suggested questions on it
+                  const lastTalkToUserIdx = allMessages.reduce((acc, msg: any, idx) => msg.role === 'tool' && msg.function?.name === 'TalkToUser' ? idx : acc, -1);
                   return allMessages.map((msg, idx) => {
                     if (msg.role === 'user' && (msg as any).logIndex !== undefined) {
                       lastUserLogIndex = (msg as any).logIndex;
@@ -890,12 +892,13 @@ export default function ChatInterface({
                           readOnly={readOnly || needsContinueConfirmation}
                           viewMode={viewMode}
                           userMessageLogIndex={msg.role !== 'user' ? lastUserLogIndex : undefined}
+                          isLastAssistantMessage={idx === lastTalkToUserIdx}
                       />
                     );
                   });
                 })()
               ) : (
-                groupIntoTurns(allMessages).map((turn, turnIdx) => (
+                groupIntoTurns(allMessages).map((turn, turnIdx, turns) => (
                   <AgentTurnContainer
                     key={`turn-${turnIdx}`}
                     turn={turn}
@@ -907,6 +910,7 @@ export default function ChatInterface({
                     readOnly={readOnly || needsContinueConfirmation}
                     conversationID={conversationID}
                     viewMode={viewMode}
+                    isLastTurn={turnIdx === turns.length - 1}
                   />
                 ))
               )}

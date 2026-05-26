@@ -28,9 +28,10 @@ interface ChatMessageProps {
   readOnly?: boolean;
   viewMode?: import('@/lib/types').ChatViewMode;
   userMessageLogIndex?: number;
+  isLastAssistantMessage?: boolean;
 }
 
-const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage', conversationID, readOnly = false, viewMode, userMessageLogIndex }: ChatMessageProps) {
+const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage', conversationID, readOnly = false, viewMode, userMessageLogIndex, isLastAssistantMessage }: ChatMessageProps) {
   const dispatch = useAppDispatch();
   const showDebug = useAppSelector(selectDevMode);
   const [isEditing, setIsEditing] = useState(false);
@@ -293,7 +294,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
         gap={2}
         w="100%"
         >
-            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} toggleShowThinking={toggleShowThinking} markdownContext={markdownContext} readOnly={readOnly} viewMode={viewMode} conversationID={conversationID} userMessageLogIndex={userMessageLogIndex}/>
+            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} toggleShowThinking={toggleShowThinking} markdownContext={markdownContext} readOnly={readOnly} viewMode={viewMode} conversationID={conversationID} userMessageLogIndex={userMessageLogIndex} isLastAssistantMessage={isLastAssistantMessage}/>
         </Grid>
     )
   }

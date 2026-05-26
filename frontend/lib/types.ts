@@ -1211,6 +1211,7 @@ export interface DisplayProps {
   viewMode?: ChatViewMode;
   conversationID?: number;  // Owning conversation (for suggested-question clicks)
   userMessageLogIndex?: number;  // logIndex of the user message this response answers (for feedback)
+  isLastAssistantMessage?: boolean;  // true if this is the last assistant message in the conversation (controls suggested questions visibility)
 }
 
 // ============================================================================

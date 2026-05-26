@@ -38,6 +38,7 @@ interface AgentTurnContainerProps {
   readOnly: boolean;
   conversationID?: number;
   viewMode?: import('@/lib/types').ChatViewMode;
+  isLastTurn?: boolean;
 }
 
 function getToolName(msg: MessageWithFlags): string {
@@ -349,6 +350,7 @@ export default function AgentTurnContainer({
   readOnly,
   conversationID,
   viewMode,
+  isLastTurn,
 }: AgentTurnContainerProps) {
   const sharedProps = {
     databaseName,
@@ -848,6 +850,7 @@ export default function AgentTurnContainer({
           message={lastChatMessage}
           {...sharedProps}
           userMessageLogIndex={(turn.userMessage as any)?.logIndex}
+          isLastAssistantMessage={isLastTurn}
         />
       )}
     </>
