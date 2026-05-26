@@ -1,7 +1,7 @@
 'use client';
 
-import { Box, Text, Button } from '@chakra-ui/react';
-import { LuPlus } from 'react-icons/lu';
+import { Box, Text, Button, IconButton, HStack } from '@chakra-ui/react';
+import { LuPlus, LuX, LuGripVertical } from 'react-icons/lu';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -12,7 +12,7 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, addDividerToDashboard, updateTextBlockContent } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -83,11 +83,12 @@ const getAssetLayoutKey = (asset: AssetReference): string => {
   return (asset as InlineAsset).id || '';
 };
 
-/** Assets that participate in the grid layout (questions and text blocks). */
+/** Assets that participate in the grid layout (questions, text blocks, dividers). */
 const getLayoutableAssets = (assets: AssetReference[]): AssetReference[] =>
   assets?.filter(asset =>
     (asset.type === 'question' && 'id' in asset && asset.id) ||
-    (asset.type === 'text' && 'id' in asset && asset.id)
+    (asset.type === 'text' && 'id' in asset && asset.id) ||
+    (asset.type === 'divider' && 'id' in asset && asset.id)
   ) || [];
 
 // Generate default layout for all layoutable assets
@@ -95,17 +96,18 @@ const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
   const layoutable = getLayoutableAssets(assets);
   let currentY = 0;
   return layoutable.map((asset) => {
+    const isDivider = asset.type === 'divider';
     const isText = asset.type === 'text';
-    const w = isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
-    const h = isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
+    const w = isDivider ? 12 : isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
+    const h = isDivider ? 1 : isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
     const layout: Layout = {
       i: getAssetLayoutKey(asset),
-      x: isText ? 0 : (currentY === 0 ? 0 : 0), // text blocks always full-width
+      x: 0,
       y: currentY,
       w,
       h,
-      minW: isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W,
-      minH: isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H,
+      minW: isDivider ? 12 : isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W,
+      minH: isDivider ? 1 : isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H,
     };
     currentY += h;
     return layout;
@@ -209,16 +211,17 @@ export default function DashboardView({
       baseLayout = layoutableAssets.map((asset) => {
         const id = getAssetLayoutKey(asset);
         const item = layoutMap.get(id);
+        const isDivider = asset.type === 'divider';
         const isText = asset.type === 'text';
-        const minW = isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W;
-        const minH = isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H;
+        const minW = isDivider ? 12 : isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W;
+        const minH = isDivider ? 1 : isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H;
         if (item) {
           return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW, minH };
         }
         // Asset exists but has no layout entry — place below existing items with default size
-        const w = isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
-        const h = isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
-        const result = { i: id, x: isText ? 0 : (missingCount % 2) * DASHBOARD_DEFAULT_W, y: maxY + Math.floor(missingCount / 2) * h, w, h, minW, minH };
+        const w = isDivider ? 12 : isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
+        const h = isDivider ? 1 : isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
+        const result = { i: id, x: 0, y: maxY + Math.floor(missingCount / 2) * h, w, h, minW, minH };
         missingCount++;
         return result;
       });
@@ -554,6 +557,52 @@ export default function DashboardView({
         );
       }
 
+      // Divider
+      if (asset.type === 'divider') {
+        return (
+          <Box
+            key={key}
+            display="flex"
+            alignItems="center"
+            height="100%"
+            bg={editMode ? 'bg.subtle' : 'transparent'}
+            borderRadius={editMode ? 'md' : undefined}
+            borderWidth={editMode ? '1px' : undefined}
+            borderColor={editMode ? 'border.default' : undefined}
+            px={editMode ? 0 : 4}
+          >
+            {editMode && (
+              <HStack
+                className="drag-handle"
+                cursor="move"
+                px={2}
+                flexShrink={0}
+                height="100%"
+                alignItems="center"
+              >
+                <LuGripVertical size={14} opacity={0.5} />
+              </HStack>
+            )}
+            <Box flex={1} borderTopWidth="1px" borderColor="border.emphasized" />
+            {editMode && (
+              <IconButton
+                onClick={() => handleRemoveAsset(key)}
+                onMouseDown={(e) => e.stopPropagation()}
+                aria-label="Remove divider"
+                size="2xs"
+                variant="ghost"
+                color="fg.muted"
+                cursor="pointer"
+                mx={2}
+                _hover={{ color: 'accent.danger' }}
+              >
+                <LuX size={12} />
+              </IconButton>
+            )}
+          </Box>
+        );
+      }
+
       // Text block
       const textAsset = asset as InlineAsset;
       const isExpanded = expandedHeights.has(key);
@@ -733,6 +782,7 @@ export default function DashboardView({
                       dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
                     }}
                     onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
+                    onAddDivider={() => dispatch(addDividerToDashboard({ dashboardId: fileId }))}
                     excludedIds={questionIds}
                     title="Add questions / text"
                     dashboardId={fileId}
@@ -743,15 +793,16 @@ export default function DashboardView({
 
             {/* Add Questions/Text Panel - after last card in edit mode */}
             {editMode && layoutableAssets.length > 0 && (
-              <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10} ref={addPanelRef}>
+              <Box mt={4} position="relative" zIndex={10} ref={addPanelRef}>
                 <QuestionBrowserPanel
                   folderPath={folderPath}
                   onAddQuestion={(questionId) => {
                     dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
                   }}
                   onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
+                  onAddDivider={() => dispatch(addDividerToDashboard({ dashboardId: fileId }))}
                   excludedIds={questionIds}
-                  title="Add more questions / text"
+                  title="Add content"
                   dashboardId={fileId}
                 />
               </Box>

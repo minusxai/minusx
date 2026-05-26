@@ -760,6 +760,48 @@ const filesSlice = createSlice({
       };
     },
 
+    addDividerToDashboard(state, action: PayloadAction<{ dashboardId: number }>) {
+      const { dashboardId } = action.payload;
+      const dashboard = state.files[dashboardId];
+      if (!dashboard || dashboard.type !== 'dashboard') return;
+
+      const content = dashboard.content as DocumentContent | null;
+      const changes = dashboard.persistableChanges as Partial<DocumentContent> | undefined;
+      if (!content) return;
+
+      const currentAssets = changes?.assets ?? content.assets ?? [];
+      const currentLayout = changes?.layout ?? content.layout ?? { columns: 12, items: [] };
+
+      const dividerId = crypto.randomUUID();
+
+      const newAsset: AssetReference = {
+        type: 'divider',
+        id: dividerId,
+        content: null,
+      };
+
+      const maxY = currentLayout.items?.reduce((max: number, item: any) => {
+        return Math.max(max, (item.y ?? 0) + (item.h ?? 4));
+      }, 0) ?? 0;
+
+      const newLayoutItem = {
+        id: dividerId,
+        x: 0,
+        y: maxY,
+        w: 12,
+        h: 1,
+      };
+
+      state.files[dashboardId].persistableChanges = {
+        ...changes,
+        assets: [...currentAssets, newAsset],
+        layout: {
+          columns: 12,
+          items: [...(currentLayout.items || []), newLayoutItem]
+        }
+      };
+    },
+
     /**
      * Update the content of a text block in a dashboard
      */
@@ -869,6 +911,7 @@ export const {
   addFile,
   addQuestionToDashboard,
   addTextBlockToDashboard,
+  addDividerToDashboard,
   updateTextBlockContent,
   addReferenceToQuestion,
   removeReferenceFromQuestion,
