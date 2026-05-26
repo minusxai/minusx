@@ -46,10 +46,13 @@ RUN --mount=type=cache,target=/app/.next/cache \
     CI=true \
     SENTRY_LOG_LEVEL=debug \
     sh -c 'echo "[sentry-debug] token byte length=${#SENTRY_AUTH_TOKEN}"; \
-           echo "[sentry-debug] auth probe (project read):"; \
-           curl -sS -o /dev/null -w "[sentry-debug] HTTP %{http_code}\n" \
+           echo "[sentry-debug] DNS sentry.io:"; getent hosts sentry.io || echo "[sentry-debug] DNS FAIL"; \
+           echo "[sentry-debug] control (npm registry):"; \
+           curl -sS -o /dev/null --connect-timeout 10 -w "[sentry-debug] npm HTTP %{http_code}\n" https://registry.npmjs.org/ 2>&1; \
+           echo "[sentry-debug] verbose curl to sentry.io:"; \
+           curl -4 -v -o /dev/null --connect-timeout 10 -w "[sentry-debug] sentry HTTP %{http_code}\n" \
                 -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
-                https://sentry.io/api/0/projects/minusx/minusx-bi/; \
+                https://sentry.io/api/0/projects/minusx/minusx-bi/ 2>&1 | head -30; \
            npm run build'
 
 # ===== RUNTIME STAGE ===== #
