@@ -13,10 +13,12 @@ import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
-import { useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
+import isEqual from 'lodash/isEqual';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 
 export interface ContainerConfig {
   showHeader: boolean;
@@ -126,7 +128,7 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
   );
 }
 
-export function QuestionVisualization({
+function QuestionVisualizationInner({
   currentState,
   config,
   loading,
@@ -422,3 +424,24 @@ export function QuestionVisualization({
     </VStack>
   );
 }
+
+/**
+ * memo comparator: deep-equal the small structured `config` (callers rebuild
+ * it inline each render — trace flagged `config.viz` as the only unstable
+ * prop) and shallow compare everything else (`currentState`/`data` come from
+ * Redux and stay referentially stable when unchanged; callbacks were already
+ * useCallback'd at the parent).
+ *
+ * If a caller later starts passing inline callbacks, those would correctly
+ * trigger re-renders here — we intentionally don't ignore them, so the child
+ * subtree (ChartBuilder/BaseChart/EChart) never sees a stale closure.
+ *
+ * Pre-fix this was 33/33 wasted; the layer also gates the entire chart
+ * pipeline below it.
+ */
+const questionVizPropsEqual = (prev: QuestionVisualizationProps, next: QuestionVisualizationProps): boolean => {
+  if (!isEqual(prev.config, next.config)) return false;
+  return shallowEqualExcept(prev, next, ['config']);
+};
+
+export const QuestionVisualization = memo(QuestionVisualizationInner, questionVizPropsEqual);

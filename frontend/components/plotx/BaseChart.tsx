@@ -3,7 +3,7 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { useChartContainer } from './useChartContainer'
 import { ChartHost } from './ChartHost'
-import { useDeepStable } from '@/lib/hooks/use-deep-stable'
+import { useDeepStableIgnoreFunctions } from '@/lib/hooks/use-deep-stable'
 import { buildAnnotationGraphics, buildChartOption, isValidChartData, type ChartProps, type StandardChartType } from '@/lib/chart/chart-utils'
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
@@ -67,8 +67,16 @@ export const BaseChart = (props: BaseChartProps) => {
   // tree even when nothing semantically changed. Collapsing the boundary
   // with a deep-equal stabiliser means EChart's `option`-change effect (and
   // ECharts' own option-diff walk) only fire on genuine option changes.
-  // Pre-fix trace flagged ChartHost as 100% wasted across 40 renders.
-  const option = useDeepStable(rawOption)
+  //
+  // We use the *ignore-functions* variant because `buildChartOption` produces
+  // nested formatter closures (`tooltip.formatter`, `yAxis.axisLabel.formatter`,
+  // `toolbox.feature.*.tooltip.formatter`, ...) inline each render. Their
+  // identities are never stable but their behaviour is derived from data we're
+  // also comparing (columnFormats, colorPalette, chartType, ...), so treating
+  // them as equal is sound here. The first-iteration trace (Tasks.md #1)
+  // showed ChartHost still 100% wasted because plain `isEqual` strictly
+  // compared these function refs and bailed.
+  const option = useDeepStableIgnoreFunctions(rawOption)
 
   // Stable callback: read latest props + colorMode from a ref instead of
   // closing over them as closure variables, so the function identity doesn't

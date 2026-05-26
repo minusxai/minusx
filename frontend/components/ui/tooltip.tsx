@@ -2,7 +2,9 @@
 
 import { Tooltip as ChakraTooltip, Portal } from "@chakra-ui/react"
 import * as React from "react"
+import isEqual from "lodash/isEqual"
 import { useDeepStable } from "@/lib/hooks/use-deep-stable"
+import { shallowEqualExcept } from "@/lib/hooks/use-stable-callback"
 
 export interface TooltipProps extends ChakraTooltip.RootProps {
   showArrow?: boolean
@@ -12,7 +14,7 @@ export interface TooltipProps extends ChakraTooltip.RootProps {
   portalRef?: React.RefObject<HTMLElement>
 }
 
-export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
+const TooltipInner = React.forwardRef<HTMLDivElement, TooltipProps>(
   function Tooltip(props, ref) {
     const {
       showArrow,
@@ -28,9 +30,9 @@ export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
 
     // Almost every caller passes a brand-new inline literal
     // (`positioning={{ placement: 'top' }}`), which was the single biggest
-    // source of Tooltip "Consider memoization" warnings in the perf trace
-    // (226 wasted renders). Stabilising the reference here means we don't
-    // need a useMemo at each call site.
+    // source of Tooltip "Consider memoization" warnings in the perf trace.
+    // Stabilising the reference here means we don't need a useMemo at each
+    // call site, and the downstream `<ChakraTooltip.Root>` sees a stable ref.
     const stablePositioning = useDeepStable(positioning)
 
     if (disabled) return children
@@ -54,4 +56,17 @@ export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
     )
   }
 )
+TooltipInner.displayName = 'Tooltip'
+
+/**
+ * memo comparator: deep-equal `positioning` (callers consistently pass inline
+ * `positioning={{ placement: 'top' }}` literals — the trace's #1 Tooltip-prop
+ * offender); shallow everything else. Even though `useDeepStable` inside the
+ * wrapper protected the *downstream* Chakra Tooltip, the wrapper itself still
+ * re-rendered, which React DevTools flagged.
+ */
+export const Tooltip = React.memo(TooltipInner, (prev, next) => {
+  if (!isEqual(prev.positioning, next.positioning)) return false
+  return shallowEqualExcept(prev, next, ['positioning'])
+}) as typeof TooltipInner
 Tooltip.displayName = 'Tooltip'
