@@ -111,7 +111,13 @@ function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, 
   return points
 }
 
-export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height, columnFormats = {}, onMapReady }: GeoPlotProps) {
+// Module-scoped defaults so identity is stable across renders. Inline `[]` /
+// `{}` defaults in the signature would be new references on every render and
+// cascade into useMemo/useEffect deps below.
+const EMPTY_TOOLTIP_COLS: string[] = []
+const EMPTY_COLUMN_FORMATS: Record<string, ColumnFormatConfig> = {}
+
+export function GeoPlot({ rows, columns, geoConfig, tooltipCols = EMPTY_TOOLTIP_COLS, markerColor, height, columnFormats = EMPTY_COLUMN_FORMATS, onMapReady }: GeoPlotProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const palette = useMemo(() => {
@@ -123,12 +129,17 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
   const selectedLayerRef = useRef<L.Layer | null>(null)
   const mapRef = useRef<LeafletMapHandle>(null)
 
-  // Expose getView to parent via callback
+  // Expose getView to parent via callback. The deps are intentionally just
+  // [onMapReady] — `mapRef.current` flips from null to a handle once during
+  // mount and re-running this effect on every render to "catch map init"
+  // produced loops when parents passed an inline `onMapReady` closure. The
+  // ref-callback pattern would be cleaner, but this hook contract is fixed by
+  // existing callers.
   useEffect(() => {
     if (mapRef.current && onMapReady) {
       onMapReady(() => mapRef.current?.getView() ?? null)
     }
-  }) // runs after every render to catch map init
+  }, [onMapReady])
 
   // Validate config
   const constraint = getGeoConstraintError(geoConfig, columns)

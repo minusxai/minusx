@@ -18,6 +18,10 @@ const MAP_BG = {
   dark: '#0D1117',   // bg.canvas dark
 }
 
+// Module-scoped default so the prop reference is stable across renders. Used
+// as the default for the `style` prop below.
+const DEFAULT_MAP_STYLE: React.CSSProperties = { width: '100%', height: '100%', minHeight: '300px' }
+
 interface LeafletMapProps {
   layers: L.Layer[]
   center?: [number, number]
@@ -43,7 +47,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   showTiles = false,
   colorMode,
   fitBounds,
-  style = { width: '100%', height: '100%', minHeight: '300px' },
+  style = DEFAULT_MAP_STYLE,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
