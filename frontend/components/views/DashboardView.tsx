@@ -1,12 +1,13 @@
 'use client';
 
 import { Box, Text, Button, IconButton, HStack } from '@chakra-ui/react';
-import { LuPlus, LuX, LuGripVertical } from 'react-icons/lu';
+import { LuPlus, LuX, LuGripVertical, LuPresentation } from 'react-icons/lu';
+import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../ParameterRow';
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -20,6 +21,7 @@ import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
 import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
+import { useSetDashboardHeaderActions } from '@/lib/context/dashboard-header-actions';
 
 const EMPTY_PARAMS: Record<string, any> = {};
 const DASHBOARD_MIN_W = 2;
@@ -258,6 +260,14 @@ export default function DashboardView({
     };
   }, [layouts, expandedHeights]);
 
+  // Presentation mode
+  const [isPresenting, setIsPresenting] = useState(false);
+  const slides = useMemo(() => {
+    if (!document?.assets) return [];
+    const layoutItems = document.layout?.items ?? [];
+    return splitIntoSlides(document.assets, layoutItems);
+  }, [document?.assets, document?.layout]);
+
   // Extract question IDs from assets (SmartEmbeddedQuestionContainer will load content)
   // Simple filter/map - no useMemo needed for this cheap operation
   const questionIds = document?.assets
@@ -493,6 +503,54 @@ export default function DashboardView({
   // All assets that participate in the grid
   const layoutableAssets = useMemo(() => getLayoutableAssets(document?.assets || []), [document?.assets]);
 
+  // Register header actions (Present button in view mode, Add Content in edit mode)
+  const setActions = useSetDashboardHeaderActions();
+  useEffect(() => {
+    setActions(
+      <>
+        {!editMode && slides.length > 1 && (
+          <Button
+            size="xs"
+            variant="outline"
+            borderRadius="md"
+            borderColor="accent.teal"
+            color="accent.teal"
+            fontSize="xs"
+            fontWeight={500}
+            px={3}
+            _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
+            transition="all 0.15s"
+            onClick={() => setIsPresenting(true)}
+            aria-label="Present dashboard"
+          >
+            <LuPresentation size={13} />
+            <Text ml={1}>Present</Text>
+          </Button>
+        )}
+        {editMode && layoutableAssets.length > 0 && (
+          <Button
+            size="xs"
+            variant="outline"
+            borderRadius="md"
+            borderColor="accent.teal"
+            color="accent.teal"
+            fontSize="xs"
+            fontWeight={500}
+            px={3}
+            _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
+            transition="all 0.15s"
+            onClick={() => addPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            aria-label="Add content"
+          >
+            <LuPlus size={12} />
+            <Text ml={1}>Add content</Text>
+          </Button>
+        )}
+      </>
+    );
+    return () => setActions(null);
+  }, [editMode, slides.length, layoutableAssets.length, setActions]);
+
   // Memoize the grid items (questions + text blocks) to prevent re-rendering on every keystroke
   const gridItems = useMemo(() => {
     const paramHighlightedIds = hoveredParamKey ? (paramToQuestionIds.get(hoveredParamKey) ?? []) : null;
@@ -696,28 +754,6 @@ export default function DashboardView({
             </Box>
           )}
 
-          {/* Scroll-to-add button in edit mode */}
-          {editMode && layoutableAssets.length > 0 && (
-            <Box display="flex" justifyContent="flex-end" mb={2}>
-              <Button
-                size="xs"
-                variant="outline"
-                borderRadius="md"
-                borderColor="accent.teal"
-                color="accent.teal"
-                fontSize="xs"
-                fontWeight={500}
-                px={3}
-                _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
-                transition="all 0.15s"
-                onClick={() => addPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-              >
-                <LuPlus size={12} />
-                <Text ml={1}>Add content</Text>
-              </Button>
-            </Box>
-          )}
-
           {/* Grid Layout */}
           <Box position="relative" maxW="100%" pb={30} minH={"100%"}>
             {gridBackground}
@@ -812,6 +848,15 @@ export default function DashboardView({
         </>
       )}
 
+      {/* Presentation overlay */}
+      {isPresenting && (
+        <PresentationOverlay
+          slides={slides}
+          fileId={fileId}
+          onClose={() => setIsPresenting(false)}
+          paramValues={effectiveSubmittedValues}
+        />
+      )}
     </Box>
   );
 }

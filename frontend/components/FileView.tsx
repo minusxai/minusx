@@ -19,6 +19,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import FileHeader from './FileHeader';
+import { DashboardHeaderActionsProvider } from '@/lib/context/dashboard-header-actions';
 
 export interface FileViewProps {
   fileId: FileId;
@@ -132,7 +133,8 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
 
   // Render file-specific component
   // getFileComponent returns a stable reference from a lookup table
-  return (
+  const isDashboard = file.type === 'dashboard';
+  const content = (
     <>
       {showFileHeader && (
         <Box px={3} pt={3} pb={0} borderBottomWidth="1px" borderColor="border.muted">
@@ -147,4 +149,10 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
       />
     </>
   );
+
+  // Wrap dashboards with the header actions provider so DashboardView can
+  // inject buttons (Present, Add Content) into FileHeader.
+  return isDashboard ? (
+    <DashboardHeaderActionsProvider>{content}</DashboardHeaderActionsProvider>
+  ) : content;
 }
