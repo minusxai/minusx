@@ -153,7 +153,7 @@ export default function PresentationOverlay({
       overflow="hidden"
     >
       {/* Slide content */}
-      <Box flex={1} overflow="auto" p={6}>
+      <Box flex={1} overflow="auto" p={6} display="flex" alignItems="center" justifyContent="center">
         <SlideRenderer
           slide={slide}
           fileId={fileId}

@@ -12,6 +12,7 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFiles } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
@@ -306,16 +307,28 @@ export default function DocumentHeader({
 
             {/* Edit/Cancel Button */}
             {!hideEditToggle && (
-            <IconButton
-              onClick={onEditModeToggle}
-              aria-label={editMode ? 'Cancel editing' : 'Edit'}
-              variant={editMode ? 'outline' : 'subtle'}
-              size="xs"
-              px={2}
-            >
-              {!editMode && <LuPencil />}
-              {editMode ? 'Cancel' : 'Edit'}
-            </IconButton>
+              editMode ? (
+                <IconButton
+                  onClick={onEditModeToggle}
+                  aria-label="Cancel editing"
+                  variant="outline"
+                  size="xs"
+                  px={2}
+                >
+                  Cancel
+                </IconButton>
+              ) : (
+                <Tooltip content="Edit">
+                  <IconButton
+                    onClick={onEditModeToggle}
+                    aria-label="Edit"
+                    variant="subtle"
+                    size="xs"
+                  >
+                    <LuPencil />
+                  </IconButton>
+                </Tooltip>
+              )
             )}
             {/* JSON View Toggle (shown only when showJson setting is enabled) */}
             {onViewModeChange && showJson && (

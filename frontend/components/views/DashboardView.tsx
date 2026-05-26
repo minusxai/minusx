@@ -1,11 +1,12 @@
 'use client';
 
-import { Box, Text, Button, IconButton, HStack } from '@chakra-ui/react';
+import { Box, Text, IconButton, HStack } from '@chakra-ui/react';
 import { LuPlus, LuX, LuGripVertical, LuPresentation } from 'react-icons/lu';
 import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
+import { Tooltip } from '@/components/ui/tooltip';
 import ParameterRow from '../ParameterRow';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
@@ -509,42 +510,28 @@ export default function DashboardView({
     setActions(
       <>
         {!editMode && slides.length > 1 && (
-          <Button
-            size="xs"
-            variant="outline"
-            borderRadius="md"
-            borderColor="accent.teal"
-            color="accent.teal"
-            fontSize="xs"
-            fontWeight={500}
-            px={3}
-            _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
-            transition="all 0.15s"
-            onClick={() => setIsPresenting(true)}
-            aria-label="Present dashboard"
-          >
-            <LuPresentation size={13} />
-            <Text ml={1}>Present</Text>
-          </Button>
+          <Tooltip content="Present">
+            <IconButton
+              onClick={() => setIsPresenting(true)}
+              aria-label="Present"
+              variant="subtle"
+              size="xs"
+            >
+              <LuPresentation size={14} />
+            </IconButton>
+          </Tooltip>
         )}
         {editMode && layoutableAssets.length > 0 && (
-          <Button
-            size="xs"
-            variant="outline"
-            borderRadius="md"
-            borderColor="accent.teal"
-            color="accent.teal"
-            fontSize="xs"
-            fontWeight={500}
-            px={3}
-            _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
-            transition="all 0.15s"
+          <IconButton
             onClick={() => addPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
             aria-label="Add content"
+            variant="subtle"
+            size="xs"
+            px={2}
           >
-            <LuPlus size={12} />
-            <Text ml={1}>Add content</Text>
-          </Button>
+            <LuPlus size={14} />
+            Add content
+          </IconButton>
         )}
       </>
     );
