@@ -4,7 +4,8 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import {
   OrchestrationTask,
   ConversationFileContent,
-  ConversationLogEntry
+  ConversationLogEntry,
+  ErrorLogEntry
 } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { DEFAULT_CONVERSATION_NAME } from '@/lib/constants';
@@ -100,7 +101,10 @@ export async function createNewConversation(
       logLength: initialLog.length
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    log: initialLog as any
+    log: initialLog as any,
+    // Initialized so `appendErrorToConversation`'s jsonb_set path exists from
+    // the first turn (otherwise jsonb_set on a missing path returns NULL).
+    errors: [],
   };
 
   // Store the full first message in file-level `meta` so the conversations
@@ -185,6 +189,20 @@ export async function appendTasksToConversation(
  * Uses an atomic SQL JSONB append — no full read on the happy path.
  * If the log length doesn't match log_index, forks to a new conversation file.
  */
+/**
+ * Append a structured error entry to the conversation's `errors[]` field.
+ * Separate from pi-ai's `log` so pi-ai's LLM-context builder is never affected.
+ * Append-only and non-OCC (errors don't race like log entries); safe to call
+ * concurrently from server orchestration and client error-report endpoints.
+ */
+export async function appendErrorToConversation(
+  fileId: number,
+  error: ErrorLogEntry,
+  user: EffectiveUser,
+): Promise<void> {
+  await FilesAPI.appendJsonArray(fileId, [error], undefined, user, 'errors', 'metadata.updatedAt');
+}
+
 export async function appendLogToConversation(
   fileId: number,
   logDiff: ConversationLogEntry[],

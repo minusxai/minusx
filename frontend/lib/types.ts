@@ -1168,9 +1168,34 @@ export type DebugMap = Record<string, MessageDebugInfo>;
  * Conversation file structure
  * Stored in /logs/conversations/{userId}/{conversationId}-{name}.chat.json
  */
+/**
+ * Append-only error log entry persisted on the conversation document alongside
+ * the orchestrator log. NEVER sent to the LLM (filtered out of pi-ai context);
+ * surfaced in the UI as a distinct ErrorMessage row. One entry per failure point —
+ * LLM call, server tool, frontend tool, transport, persist, session, unhandled.
+ */
+export interface ErrorLogEntry {
+  _type: 'error';
+  source: 'llm' | 'server-tool' | 'frontend-tool' | 'persist' | 'transport' | 'session' | 'unhandled';
+  message: string;
+  timestamp: number;
+  parent_id?: string;
+  details?: {
+    http_status?: number;
+    request_id?: string;
+    tool_name?: string;
+    tool_call_id?: string;
+    retry_count?: number;
+    stack?: string;
+  };
+}
+
 export interface ConversationFileContent extends BaseFileContent {
   metadata: ConversationMetadata;
   log: ConversationLogEntry[];
+  /** Parallel error log — append-only, separate from pi-ai's `log` so pi-ai's
+   *  context-builder is untouched. UI merges by timestamp. */
+  errors?: ErrorLogEntry[];
 }
 
 export type ChatViewMode = 'compact' | 'detailed';
