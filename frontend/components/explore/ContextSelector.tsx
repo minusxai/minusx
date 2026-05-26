@@ -4,10 +4,11 @@ import { useAppSelector } from '@/store/hooks';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { LuNotebookText } from 'react-icons/lu';
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { ContextContent } from '@/lib/types';
 import GenericSelector, { SelectorOption } from '@/components/GenericSelector';
 import { useContexts } from '@/lib/hooks/useContexts';
+import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 
 interface ContextSelectorProps {
   selectedContextPath: string | null;
@@ -16,7 +17,11 @@ interface ContextSelectorProps {
   compact?: boolean;
 }
 
-export function ContextSelector({ selectedContextPath, selectedVersion, onSelectContext, compact = false }: ContextSelectorProps) {
+function ContextSelectorInner({ selectedContextPath, selectedVersion, onSelectContext, compact = false }: ContextSelectorProps) {
+  // Stable identity for onSelectContext so the auto-select effect and the
+  // inline onChange handler don't churn this component when the caller passes
+  // a fresh closure each render.
+  const stableOnSelectContext = useStableCallback(onSelectContext);
   const user = useAppSelector(state => state.auth.user);
 
   // Triggers context loading and provides accurate loading state.
@@ -55,10 +60,10 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
       const content = homeContext?.content as ContextContent | undefined;
       const publishedVersion = content?.published?.all;
       if (publishedVersion) {
-        onSelectContext(homeContextPath, publishedVersion);
+        stableOnSelectContext(homeContextPath, publishedVersion);
       }
     }
-  }, [selectedContextPath, homeContextPath, homeContext, onSelectContext]);
+  }, [selectedContextPath, homeContextPath, homeContext, stableOnSelectContext]);
 
   // Build options for GenericSelector
   const options = useMemo((): SelectorOption[] => {
@@ -133,7 +138,7 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
       onChange={(val) => {
         const [path, versionStr] = val.split(':');
         const version = versionStr ? parseInt(versionStr) : undefined;
-        onSelectContext(path, version);
+        stableOnSelectContext(path, version);
       }}
       options={options}
       loading={contextsLoading}
@@ -148,3 +153,8 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
     />
   );
 }
+
+// `onSelectContext` is consumed through a ref so its identity doesn't matter
+// for memoisation; other props are shallow-compared. Pre-fix this component
+// was flagged as 100% wasted in the perf trace.
+export const ContextSelector = memo(ContextSelectorInner, (prev, next) => shallowEqualExcept(prev, next, ['onSelectContext']));

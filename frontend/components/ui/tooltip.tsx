@@ -2,6 +2,7 @@
 
 import { Tooltip as ChakraTooltip, Portal } from "@chakra-ui/react"
 import * as React from "react"
+import { useDeepStable } from "@/lib/hooks/use-deep-stable"
 
 export interface TooltipProps extends ChakraTooltip.RootProps {
   showArrow?: boolean
@@ -21,13 +22,21 @@ export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
       content,
       contentProps,
       portalRef,
+      positioning,
       ...rest
     } = props
+
+    // Almost every caller passes a brand-new inline literal
+    // (`positioning={{ placement: 'top' }}`), which was the single biggest
+    // source of Tooltip "Consider memoization" warnings in the perf trace
+    // (226 wasted renders). Stabilising the reference here means we don't
+    // need a useMemo at each call site.
+    const stablePositioning = useDeepStable(positioning)
 
     if (disabled) return children
 
     return (
-      <ChakraTooltip.Root {...rest}>
+      <ChakraTooltip.Root {...rest} positioning={stablePositioning}>
         <ChakraTooltip.Trigger asChild>{children}</ChakraTooltip.Trigger>
         <Portal disabled={!portalled} container={portalRef}>
           <ChakraTooltip.Positioner>

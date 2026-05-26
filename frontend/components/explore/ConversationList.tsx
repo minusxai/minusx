@@ -5,6 +5,7 @@ import { Box, VStack, HStack, Text, Spinner, Badge } from '@chakra-ui/react';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
+import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 
 interface ConversationListProps {
   onSelectConversation: (id?: number) => void;
@@ -84,8 +85,13 @@ interface ConversationItemProps {
   onSelect: (id: number) => void;
 }
 
+// Custom comparator: `onSelect` is consumed through a stable wrapper inside,
+// so its identity (the parent typically passes a fresh closure each render)
+// is intentionally ignored. Other props are shallow-compared. Pre-fix the
+// trace showed ConversationItem as 40/40 wasted renders.
 const ConversationItem = React.memo(function ConversationItem({ conversation, isActive, onSelect }: ConversationItemProps) {
-  const handleClick = useCallback(() => onSelect(conversation.id), [onSelect, conversation.id]);
+  const stableOnSelect = useStableCallback(onSelect);
+  const handleClick = useCallback(() => stableOnSelect(conversation.id), [stableOnSelect, conversation.id]);
 
   // Format timestamp to relative time
   const getRelativeTime = (timestamp: string) => {
@@ -139,4 +145,4 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
       </VStack>
     </Box>
   );
-});
+}, (prev, next) => shallowEqualExcept(prev, next, ['onSelect']));

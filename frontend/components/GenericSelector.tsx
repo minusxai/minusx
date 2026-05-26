@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Box, Text, HStack, Icon, Menu, VStack, Spinner } from '@chakra-ui/react';
 import { LuChevronDown, LuBadgeCheck, LuCheck } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
+import isEqual from 'lodash/isEqual';
+import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 
 export interface SelectorOption {
   value: string;
@@ -29,8 +31,18 @@ interface GenericSelectorProps {
   compactLabel?: string;  // Prefix label shown in compact mode (e.g., "Database")
 }
 
+/**
+ * memo comparator: ignore `onChange` (consumed via ref pattern inside) and
+ * deep-equal `options` (callers usually rebuild this with `.map(...)` per
+ * render even when the underlying data is unchanged). Everything else shallow.
+ */
+function selectorPropsEqual<P extends { onChange: unknown; options: SelectorOption[] }>(prev: P, next: P): boolean {
+  if (!isEqual(prev.options, next.options)) return false;
+  return shallowEqualExcept(prev, next, ['onChange', 'options']);
+}
+
 /** Compact mode — icon + tiny badge at rest, label expands on hover or while menu is open */
-function CompactSelector({
+function CompactSelectorInner({
   value,
   onChange,
   options,
@@ -41,6 +53,7 @@ function CompactSelector({
   label,
   compactLabel,
 }: Pick<GenericSelectorProps, 'value' | 'onChange' | 'options' | 'loading' | 'placeholder' | 'emptyMessage' | 'defaultIcon' | 'color' | 'label' | 'compactLabel'>) {
+  const stableOnChange = useStableCallback(onChange);
   const [menuOpen, setMenuOpen] = useState(false);
   // Keep label expanded briefly after menu closes so user sees the update
   const [recentlyClosed, setRecentlyClosed] = useState(false);
@@ -156,7 +169,7 @@ function CompactSelector({
               cursor="pointer"
               bg={option.value === value ? 'bg.muted' : 'transparent'}
               _hover={{ bg: 'bg.emphasis' }}
-              onClick={() => onChange(option.value)}
+              onClick={() => stableOnChange(option.value)}
             >
               <HStack gap={1.5} justify="space-between" w="100%">
                 <HStack gap={1.5} minW={0} flex={1}>
@@ -201,7 +214,9 @@ function CompactSelector({
   );
 }
 
-export default function GenericSelector({
+const CompactSelector = memo(CompactSelectorInner, selectorPropsEqual);
+
+function GenericSelectorInner({
   value,
   onChange,
   options,
@@ -216,6 +231,7 @@ export default function GenericSelector({
   compact = false,
   compactLabel,
 }: GenericSelectorProps) {
+  const stableOnChange = useStableCallback(onChange);
   // Find the selected option to display
   const selectedOption = options.find(opt => opt.value === value);
 
@@ -402,7 +418,7 @@ export default function GenericSelector({
                       py={size === 'sm' ? 1.5 : 2}
                       bg={option.value === value ? `${color}/10` : 'transparent'}
                       _hover={{ bg: option.value === value ? `${color}/20` : 'bg.muted' }}
-                      onClick={() => onChange(option.value)}
+                      onClick={() => stableOnChange(option.value)}
                     >
                       <HStack gap={sizeStyles.gap} justify="space-between">
                         <HStack gap={sizeStyles.gap}>
@@ -446,3 +462,9 @@ export default function GenericSelector({
     </Menu.Root>
   );
 }
+
+// Memo on the way out — onChange ignored (ref pattern handles latest closure);
+// options deep-equal; everything else shallow. Custom comparator iterates
+// Object.keys so new props don't silently slip past.
+const GenericSelector = memo(GenericSelectorInner, selectorPropsEqual);
+export default GenericSelector;

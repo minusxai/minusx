@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Dialog, Input, Button, VStack, HStack, Text, Box } from '@chakra-ui/react';
+import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
@@ -93,8 +94,11 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
     items: folders.map(path => ({ label: path, value: path }))
   });
 
+  // Stable identity to keep Dialog.Root from churning on parent re-renders.
+  const handleOpenChange = useStableCallback((e: { open: boolean }) => { if (!e.open) handleClose(); });
+
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && handleClose()}>
+    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
       <Dialog.Backdrop />
       <Dialog.Positioner>
         <Dialog.Content

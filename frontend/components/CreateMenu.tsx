@@ -20,6 +20,12 @@ import { isViewer } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import NewFolderModal from './NewFolderModal';
 
+// Static _hover style presets hoisted to module scope so they don't get a
+// fresh identity on every render (flagged in the perf trace).
+const HOVER_BG_MUTED = { bg: 'bg.muted' };
+const HOVER_LIFT = { transform: 'translateY(-1px)', shadow: 'md' };
+const HOVER_OPACITY_DIM = { opacity: 0.9 };
+
 interface CreateMenuProps {
   /** Current folder path for creating files */
   currentPath?: string;
@@ -126,7 +132,7 @@ export default function CreateMenu({
               py={3}
               cursor="pointer"
               borderRadius="md"
-              _hover={{ bg: 'bg.muted' }}
+              _hover={HOVER_BG_MUTED}
               onClick={handleExplore}
             >
               <HStack gap={3}>
@@ -141,7 +147,7 @@ export default function CreateMenu({
                 py={3}
                 cursor="pointer"
                 borderRadius="md"
-                _hover={{ bg: 'bg.muted' }}
+                _hover={HOVER_BG_MUTED}
                 onClick={() => handleNewFile(type)}
               >
                 <HStack gap={3}>
@@ -159,7 +165,7 @@ export default function CreateMenu({
                   py={3}
                   cursor="pointer"
                   borderRadius="md"
-                  _hover={{ bg: 'bg.muted' }}
+                  _hover={HOVER_BG_MUTED}
                   onClick={() => setIsFolderModalOpen(true)}
                 >
                   <HStack gap={3}>
@@ -185,7 +191,7 @@ export default function CreateMenu({
                     py={3}
                     cursor="pointer"
                     borderRadius="md"
-                    _hover={{ bg: 'bg.muted' }}
+                    _hover={HOVER_BG_MUTED}
                     onClick={() => handleNewFile(type)}
                   >
                     <HStack gap={3}>
@@ -245,7 +251,7 @@ export default function CreateMenu({
               py={2}
               borderRadius="md"
               cursor="pointer"
-              _hover={{ transform: 'translateY(-1px)', shadow: 'md' }}
+              _hover={HOVER_LIFT}
               transition="all 0.2s"
               display="flex"
               alignItems="center"
@@ -277,7 +283,7 @@ export default function CreateMenu({
               color="white"
               size="md"
               fontWeight="600"
-              _hover={{ opacity: 0.9 }}
+              _hover={HOVER_OPACITY_DIM}
               gap={2}
             >
               <Icon as={LuPlus} />
@@ -307,7 +313,7 @@ export default function CreateMenu({
                 borderRadius="md"
                 px={3}
                 py={2}
-                _hover={{ bg: 'bg.muted' }}
+                _hover={HOVER_BG_MUTED}
                 onClick={handleExplore}
               >
                 <HStack gap={3}>
@@ -323,7 +329,7 @@ export default function CreateMenu({
                   borderRadius="md"
                   px={3}
                   py={2}
-                  _hover={{ bg: 'bg.muted' }}
+                  _hover={HOVER_BG_MUTED}
                   onClick={() => handleNewFile(type)}
                 >
                   <HStack gap={3}>
@@ -344,7 +350,7 @@ export default function CreateMenu({
                     borderRadius="md"
                     px={3}
                     py={2}
-                    _hover={{ bg: 'bg.muted' }}
+                    _hover={HOVER_BG_MUTED}
                     onClick={() => setIsFolderModalOpen(true)}
                   >
                     <HStack gap={3}>
@@ -372,7 +378,7 @@ export default function CreateMenu({
                       borderRadius="md"
                       px={3}
                       py={2}
-                      _hover={{ bg: 'bg.muted' }}
+                      _hover={HOVER_BG_MUTED}
                       onClick={() => handleNewFile(type)}
                     >
                       <HStack gap={3}>

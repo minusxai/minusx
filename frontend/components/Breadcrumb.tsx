@@ -31,6 +31,13 @@ interface BreadcrumbProps {
 const TYPE_ORDER: Record<string, number> = { context: 0, dashboard: 1, folder: 2, question: 3 };
 const TYPE_LABELS: Record<string, string> = { context: 'Knowledge Base', dashboard: 'Dashboards', folder: 'Folders', question: 'Questions' };
 
+// Static style presets hoisted to module scope. Inline `_hover`/`_focus`
+// literals get a fresh identity each render and were flagged in the perf
+// trace as "Referentially unequal but deeply equal objects."
+const SEARCH_INPUT_FOCUS_STYLE = { outline: 'none', boxShadow: 'none', border: 'none' };
+const SEARCH_INPUT_PLACEHOLDER_STYLE = { color: 'fg.muted', fontFamily: 'mono' };
+const MENU_ITEM_HOVER_STYLE = { bg: 'bg.muted' };
+
 function sortByTypeHierarchy(files: BaseFileMetadata[]): BaseFileMetadata[] {
   return [...files].sort((a, b) => {
     const orderA = TYPE_ORDER[a.type] ?? 4;
@@ -137,8 +144,8 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={(e) => e.stopPropagation()}
-                        _focus={{ outline: 'none', boxShadow: 'none', border: 'none' }}
-                        _placeholder={{ color: 'fg.muted', fontFamily: 'mono' }}
+                        _focus={SEARCH_INPUT_FOCUS_STYLE}
+                        _placeholder={SEARCH_INPUT_PLACEHOLDER_STYLE}
                       />
                     </Flex>
                   </Box>
@@ -167,7 +174,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                           px={3}
                           py={2}
                           cursor="pointer"
-                          _hover={{ bg: 'bg.muted' }}
+                          _hover={MENU_ITEM_HOVER_STYLE}
                         >
                           <Flex align="center" gap={2}>
                             <Icon

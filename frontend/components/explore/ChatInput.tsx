@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useRef, KeyboardEvent, useEffect } from 'react';
+import { memo, useState, useRef, KeyboardEvent, useEffect } from 'react';
+import isEqual from 'lodash/isEqual';
+import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
 import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -41,7 +43,7 @@ interface ChatInputProps {
   prefillText?: string;
 }
 
-export default function ChatInput({
+function ChatInputInner({
   onSend,
   onStop,
   isAgentRunning,
@@ -487,3 +489,21 @@ export default function ChatInput({
     </Grid>
   );
 }
+
+/**
+ * memo comparator: ignores callback identity (parent passes inline closures
+ * for onSend, onContextChange, onCommandExecute) and deep-equals the data
+ * arrays callers tend to rebuild inline. Pre-fix the trace showed ChatInput
+ * as 43/43 wasted renders (100%).
+ */
+const chatInputPropsEqual = (prev: ChatInputProps, next: ChatInputProps): boolean => {
+  if (!isEqual(prev.availableSkills, next.availableSkills)) return false;
+  if (!isEqual(prev.availableCommands, next.availableCommands)) return false;
+  if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
+  return shallowEqualExcept(prev, next, [
+    'availableSkills', 'availableCommands', 'whitelistedSchemas',
+    'onSend', 'onStop', 'onDatabaseChange', 'onContextChange', 'onCommandExecute',
+  ]);
+};
+
+export default memo(ChatInputInner, chatInputPropsEqual);

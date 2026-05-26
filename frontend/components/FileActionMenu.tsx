@@ -4,6 +4,7 @@ import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, Clos
 import { LuEllipsis, LuCopy, LuTrash2, LuFolderInput, LuListChecks } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
+import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { FileType } from '@/lib/types';
 import { deleteFile } from '@/lib/api/file-state';
 import MoveFileModal from './MoveFileModal';
@@ -29,6 +30,8 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
   const handleDeleteClick = () => {
     setIsDeleteDialogOpen(true);
   };
+  // Stable identity to keep Dialog.Root from churning on parent re-renders.
+  const handleDeleteDialogOpenChange = useStableCallback((e: { open: boolean }) => setIsDeleteDialogOpen(e.open));
 
   const handleDeleteConfirm = async () => {
     try {
@@ -156,7 +159,7 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog.Root open={isDeleteDialogOpen} onOpenChange={(e) => setIsDeleteDialogOpen(e.open)}>
+      <Dialog.Root open={isDeleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
         <Portal>
           <Dialog.Backdrop />
           <Dialog.Positioner>

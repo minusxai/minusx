@@ -24,6 +24,16 @@ import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';
 import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
 
+// Static _hover style presets hoisted to module scope so they don't get a new
+// identity on every render (flagged in the perf trace as "Referentially
+// unequal but deeply equal objects."). Dynamic hover styles that depend on
+// state (e.g. activeTab) are kept inline.
+const HOVER_BG_MUTED = { bg: 'bg.muted' };
+const HOVER_BG_ELEVATED = { bg: 'bg.elevated' };
+const HOVER_BG_ACCENT_TEAL = { bg: 'accent.teal/20' };
+const HOVER_FG_DEFAULT = { color: 'fg.default' };
+const HOVER_OPACITY_FULL = { opacity: 1 };
+
 // ============================================================================
 // RightSidebar Props Interface
 // ============================================================================
@@ -197,7 +207,7 @@ function SectionHeader({
       borderColor={section.color}
       cursor="pointer"
       onClick={onToggle}
-      _hover={{ bg: 'bg.muted' }}
+      _hover={HOVER_BG_MUTED}
       transition="background 0.2s"
       gap={2}
       justifyContent="space-between"
@@ -262,7 +272,7 @@ function TabsLayout({
           cursor="pointer"
           onClick={onCollapse}
           color="fg.muted"
-          _hover={{ color: 'fg.default' }}
+          _hover={HOVER_FG_DEFAULT}
           transition="color 0.2s"
           display="flex"
           alignItems="center"
@@ -524,7 +534,7 @@ export default function RightSidebar({
           cursor="col-resize"
           onMouseDown={() => setIsDragging(true)}
           bg={isDragging ? "accent.teal/30" : "transparent"}
-          _hover={{ bg: "accent.teal/20" }}
+          _hover={HOVER_BG_ACCENT_TEAL}
           transition="background 0.2s"
           display="flex"
           alignItems="center"
@@ -535,7 +545,7 @@ export default function RightSidebar({
             boxSize={3}
             color={isDragging ? "accent.teal" : "fg.muted"}
             opacity={isDragging ? 1 : 0.5}
-            _hover={{ opacity: 1 }}
+            _hover={HOVER_OPACITY_FULL}
           />
         </Box>
       )}
@@ -576,7 +586,7 @@ export default function RightSidebar({
             borderColor="border.default"
             cursor="pointer"
             onClick={handleToggle}
-            _hover={{ bg: 'bg.elevated' }}
+            _hover={HOVER_BG_ELEVATED}
             transition="all 0.2s"
           >
             <Tooltip content="Expand sidebar">
@@ -597,7 +607,7 @@ export default function RightSidebar({
                 dispatch(setActiveSidebarSection('chat'));
                 dispatch(setRightSidebarCollapsed(false));
               }}
-              _hover={{ bg: 'bg.muted' }}
+              _hover={HOVER_BG_MUTED}
               transition="all 0.2s"
             >
               <Tooltip content="Chat">
@@ -618,7 +628,7 @@ export default function RightSidebar({
                 if (first) dispatch(setActiveSidebarSection(first.id));
                 dispatch(setRightSidebarCollapsed(false));
               }}
-              _hover={{ bg: 'bg.muted' }}
+              _hover={HOVER_BG_MUTED}
               transition="all 0.2s"
             >
               <Tooltip content="Context">

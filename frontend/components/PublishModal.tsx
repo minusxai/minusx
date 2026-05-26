@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   Box,
@@ -259,11 +260,15 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     }
   }, [saveModalFileId, dirtyFiles, exitEditMode, pendingSaveAllIds]);
 
+  // Stable onOpenChange so Dialog.Root doesn't re-run its internal hooks on
+  // every parent re-render (132 wasted DialogRoot renders flagged in trace).
+  const handleOpenChange = useStableCallback((e: { open: boolean }) => { if (!e.open) onClose(); });
+
   return (
     <>
     <Dialog.Root
       open={isOpen}
-      onOpenChange={(e: { open: boolean }) => { if (!e.open) onClose(); }}
+      onOpenChange={handleOpenChange}
       size="xl"
     >
       <Portal>

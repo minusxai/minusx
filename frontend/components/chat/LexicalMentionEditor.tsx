@@ -1,4 +1,6 @@
-import React, { forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
+import React, { forwardRef, memo, useImperativeHandle, useMemo, useRef, useCallback } from 'react';
+import isEqual from 'lodash/isEqual';
+import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -36,12 +38,38 @@ export interface LexicalMentionEditorRef {
   insertMention: (mentionData: ChatMentionData, triggerLength: number) => void;
 }
 
+// Module-scoped: avoids a fresh identity each render, which was flagging
+// LexicalComposer's `initialConfig` as "Referentially unequal but deeply equal".
 const editorTheme = {
   paragraph: 'editor-paragraph',
   text: {
     bold: 'editor-text-bold',
     italic: 'editor-text-italic',
   },
+};
+
+const EDITOR_NODES = [MentionNode];
+const handleEditorError = (error: Error) => console.error(error);
+
+// ContentEditable inline styles — hoisted so identity is stable across
+// re-renders of the editor.
+const SINGLE_LINE_STYLES: React.CSSProperties = {
+  minHeight: '40px',
+  maxHeight: '40px',
+  overflow: 'hidden',
+  outline: 'none',
+  fontFamily: 'var(--font-jetbrains-mono), monospace',
+  fontSize: '14px',
+  padding: '8px 16px',
+  display: 'flex',
+  alignItems: 'center',
+};
+const MULTI_LINE_STYLES: React.CSSProperties = {
+  minHeight: '72px',
+  outline: 'none',
+  fontFamily: 'monospace',
+  fontSize: '14px',
+  padding: '8px',
 };
 
 function OnSubmitPlugin({ onSubmit }: { onSubmit?: () => void }) {
@@ -198,7 +226,23 @@ function FocusPlugin({
   return null;
 }
 
-export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalMentionEditorProps>(
+/**
+ * memo comparator: ignores callback identity (handled internally via stable
+ * wrappers / the plugin-level ref pattern); deep-equals the data arrays that
+ * callers tend to rebuild inline (`whitelistedSchemas`, `availableSkills`,
+ * `availableCommands`). Pre-fix the trace showed 43/43 wasted renders here.
+ */
+const lexicalEditorPropsEqual = (prev: LexicalMentionEditorProps, next: LexicalMentionEditorProps): boolean => {
+  if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
+  if (!isEqual(prev.availableSkills, next.availableSkills)) return false;
+  if (!isEqual(prev.availableCommands, next.availableCommands)) return false;
+  return shallowEqualExcept(prev, next, [
+    'whitelistedSchemas', 'availableSkills', 'availableCommands',
+    'onSubmit', 'onChange', 'onFocus', 'onBlur', 'onCommandExecute',
+  ]);
+};
+
+const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMentionEditorProps>(
   function LexicalMentionEditor(
     {
       placeholder = 'Ask a question...',
@@ -260,15 +304,21 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
       },
     }));
 
-    const initialConfig = {
+    // initialConfig's identity only matters when `disabled` flips — Lexical
+    // reads it on mount but we want to keep the reference stable across
+    // unrelated re-renders so LexicalComposer's memoisation works.
+    const initialConfig = useMemo(() => ({
       namespace: 'MentionEditor',
       theme: editorTheme,
-      onError: (error: Error) => console.error(error),
-      nodes: [MentionNode],
+      onError: handleEditorError,
+      nodes: EDITOR_NODES,
       editable: !disabled,
-    };
+    }), [disabled]);
 
-    const handleChange = (editorState: EditorState) => {
+    // useStableCallback: handleChange identity stays constant so the
+    // OnChangePlugin doesn't re-mount its listener every render. The wrapped
+    // closure still reads the latest `onChange` prop.
+    const handleChange = useStableCallback((editorState: EditorState) => {
       if (!onChange) return;
 
       editorState.read(() => {
@@ -276,29 +326,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
         const serialized = serializeEditorState(root);
         onChange(serialized);
       });
-    };
-
-    // Styles for single-line mode (compact search bar style)
-    const singleLineStyles: React.CSSProperties = {
-      minHeight: '40px',
-      maxHeight: '40px',
-      overflow: 'hidden',
-      outline: 'none',
-      fontFamily: 'var(--font-jetbrains-mono), monospace',
-      fontSize: '14px',
-      padding: '8px 16px',
-      display: 'flex',
-      alignItems: 'center',
-    };
-
-    // Styles for multi-line mode (default)
-    const multiLineStyles: React.CSSProperties = {
-      minHeight: '72px',
-      outline: 'none',
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      padding: '8px',
-    };
+    });
 
     return (
       <Box position="relative" flex={singleLine ? 1 : undefined}>
@@ -306,7 +334,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
           <Box position="relative">
             <RichTextPlugin
               contentEditable={
-                <ContentEditable style={singleLine ? singleLineStyles : multiLineStyles} />
+                <ContentEditable style={singleLine ? SINGLE_LINE_STYLES : MULTI_LINE_STYLES} />
               }
               placeholder={
                 <Box
@@ -337,6 +365,8 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
     );
   }
 );
+
+export const LexicalMentionEditor = memo(LexicalMentionEditorInner, lexicalEditorPropsEqual);
 
 // Serialization helper
 function serializeEditorState(root: any): string {
