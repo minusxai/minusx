@@ -322,6 +322,37 @@ function handleStreamError(
 }
 
 /** Non-streaming path used in test environments (fetch to /api/chat). */
+/**
+ * Bounded retry around `fetchChatNonStreaming` for transient transport failures
+ * (network drops / 5xx). Does NOT retry on AbortError or SessionExpiredError —
+ * those are terminal. The server's log append is fork-aware on length mismatch,
+ * so client retries are idempotent. Up to 2 retries with exponential backoff.
+ */
+async function fetchChatWithRetry(
+  body: object,
+  conversationID: number,
+  signal: AbortSignal,
+  dispatch: AppDispatch,
+  maxRetries = 2,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await fetchChatNonStreaming(body, conversationID, signal, dispatch);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const e = err as { name?: string };
+      if (e?.name === 'AbortError' || e?.name === 'SessionExpiredError') throw err;
+      if (attempt < maxRetries) {
+        const backoffMs = 500 * Math.pow(2, attempt); // 500ms, 1s
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchChatNonStreaming(
   body: object,
   conversationID: number,
@@ -383,7 +414,7 @@ chatListenerMiddleware.startListening({
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );
@@ -427,7 +458,7 @@ chatListenerMiddleware.startListening({
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );
@@ -472,7 +503,7 @@ chatListenerMiddleware.startListening({
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );
@@ -530,7 +561,7 @@ chatListenerMiddleware.startListening({
       }
 
       if (IS_TEST) {
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID, log_index: conversation.log_index, user_message: userMessage, completed_tool_calls, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );

@@ -32,7 +32,18 @@ export async function POST(request: NextRequest) {
   // getEffectiveUser() calls headers() from next/headers, which is tied to the
   // request lifecycle. If called from a background task after POST() returns,
   // the request context is gone and headers() hangs indefinitely.
-  const body: ChatRequest = await request.json();
+  let body: ChatRequest;
+  try {
+    body = await request.json();
+  } catch {
+    // Malformed request body — return JSON 400 BEFORE opening the SSE stream,
+    // so the client sees a structured error instead of a generic "Stream ended
+    // without done event".
+    return new Response(
+      JSON.stringify({ error: 'malformed request body' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
   const user = await getEffectiveUser();
 
   if (!user) {
@@ -48,10 +59,22 @@ export async function POST(request: NextRequest) {
   // Ping flushes response headers to the client immediately.
   writer.write(encoder.encode(': ping\n\n'));
 
-  processStreamV2(writer, encoder, body, user).catch((err) => {
-    console.error('[chat/stream] Unhandled processStream error:', err);
-    void writer.close().catch(() => {});
-  });
+  // SSE keepalive — emit a comment-line ping every 15 s so external proxies
+  // (Cloudflare / ALB / nginx) don't sever the connection during long native-
+  // thinking turns where no SSE frames flow. Cleared in the `finally` of
+  // processStreamV2 below (via the `closeWriter` wrapper).
+  const keepalive = setInterval(() => {
+    writer.write(encoder.encode(': ping\n\n')).catch(() => { /* writer closed */ });
+  }, 15000);
+
+  processStreamV2(writer, encoder, body, user)
+    .catch((err) => {
+      console.error('[chat/stream] Unhandled processStream error:', err);
+    })
+    .finally(() => {
+      clearInterval(keepalive);
+      void writer.close().catch(() => {});
+    });
 
   return new Response(readable, {
     headers: {

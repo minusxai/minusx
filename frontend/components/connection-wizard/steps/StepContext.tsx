@@ -9,6 +9,7 @@ import type { ConnectionWithSchema } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { editFile, publishFile } from '@/lib/api/file-state';
+import { logInitFailure } from '@/lib/api/report-client-error';
 import { getStore } from '@/store/store';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
@@ -407,12 +408,38 @@ export default function StepContext({
         : '',
     ].filter(Boolean).join('\n\n');
 
-    const initRes = await fetch('/api/chat/init', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firstMessage: agentMessage }),
-    });
-    const { conversationID: newConvId } = await initRes.json();
+    // Wrap /api/chat/init in try/catch + non-2xx handling. On failure, route the
+    // error to the active prior conversation's errors[] (so it shows in history)
+    // and surface in the wizard UI. If there's no prior conv, logInitFailure no-ops
+    // — true cold-start init failures go to Sentry / UI only.
+    let newConvId: number;
+    try {
+      const initRes = await fetch('/api/chat/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstMessage: agentMessage }),
+      });
+      if (!initRes.ok) {
+        let msg = `/api/chat/init returned HTTP ${initRes.status}`;
+        try { const b = await initRes.json(); if (b?.error) msg = String(b.error); } catch { /* non-JSON body */ }
+        logInitFailure(msg, initRes.status);
+        setError(msg);
+        return;
+      }
+      const initData = await initRes.json();
+      newConvId = initData.conversationID;
+      if (typeof newConvId !== 'number') {
+        const msg = '/api/chat/init returned no conversationID';
+        logInitFailure(msg);
+        setError(msg);
+        return;
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logInitFailure(msg);
+      setError(`Could not start the chat: ${msg}`);
+      return;
+    }
 
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({

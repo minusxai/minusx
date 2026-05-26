@@ -94,6 +94,36 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
     expect(typeof capturedLogErrorBody!.error.timestamp).toBe('number');
   });
 
+  it('Cycle 11: bounded retry — transient transport failures are retried 2x before logging', async () => {
+    let chatCallCount = 0;
+    global.fetch = vi.fn(async (url: any, init?: any) => {
+      const u = String(url);
+      if (u.includes('/api/chat/log-error')) {
+        capturedLogErrorBody = init?.body ? JSON.parse(init.body) : null;
+        return { ok: true, status: 200, json: async () => ({ success: true }) } as Response;
+      }
+      if (u.includes('/api/chat')) {
+        chatCallCount++;
+        throw new TypeError('fetch failed (ECONNREFUSED)');
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }) as any;
+
+    const CONV_ID = 88888;
+    store.dispatch(createConversation({
+      conversationID: CONV_ID,
+      agent: 'WebAnalystAgent',
+      agent_args: {} as any,
+      message: 'hi',
+    }));
+
+    // Retry backoff is 500ms + 1s; account for some scheduling slack.
+    await vi.waitFor(() => expect(capturedLogErrorBody).not.toBeNull(), { timeout: 10000, interval: 50 });
+
+    // Initial attempt + 2 retries = 3 calls to /api/chat before giving up.
+    expect(chatCallCount).toBeGreaterThanOrEqual(3);
+  });
+
   it('Cycle 9: logInitFailure posts to the active conversation when /api/chat/init has nowhere else to attach', async () => {
     const { logInitFailure } = await import('@/lib/api/report-client-error');
 

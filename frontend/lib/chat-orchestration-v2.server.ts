@@ -823,6 +823,12 @@ export async function* runChatTurnStreamV2(
   } catch (err) {
     console.error('[v2/stream] orchestrator run threw:', err);
     runError = err instanceof Error ? err.message : String(err);
+    // Tag the error so any escape paths (e.g. dangling microtasks that reject
+    // after the route returns) route to the right conversation via the
+    // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
+    if (err && typeof err === 'object') {
+      (err as { conversationId?: number }).conversationId = setup.conversationId;
+    }
   }
 
   let response: V2LegacyChatResponse;
