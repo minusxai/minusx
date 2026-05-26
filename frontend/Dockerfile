@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     g++ \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files and postinstall inputs (needed during npm ci).
