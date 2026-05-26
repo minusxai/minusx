@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { Box, HStack, IconButton, Textarea, Button, Text, Dialog, VStack } from '@chakra-ui/react';
-import { LuThumbsUp, LuThumbsDown, LuCheck } from 'react-icons/lu';
+import { LuThumbsUp, LuThumbsDown, LuCheck, LuCopy } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface FeedbackBlockProps {
   conversationID: number;
   userMessageLogIndex: number;
   markdownContext?: 'sidebar' | 'mainpage';
+  answerContent?: string;
 }
 
 const POSITIVE_TAGS = [
@@ -30,13 +32,22 @@ const NEGATIVE_TAGS = [
 
 type FeedbackState = 'idle' | 'submitted';
 
-export default function FeedbackBlock({ conversationID, userMessageLogIndex, markdownContext = 'mainpage' }: FeedbackBlockProps) {
+export default function FeedbackBlock({ conversationID, userMessageLogIndex, markdownContext = 'mainpage', answerContent }: FeedbackBlockProps) {
   const [state, setState] = useState<FeedbackState>('idle');
   const [submittedRating, setSubmittedRating] = useState<'positive' | 'negative' | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalRating, setModalRating] = useState<'positive' | 'negative'>('positive');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [comment, setComment] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!answerContent) return;
+    navigator.clipboard.writeText(answerContent).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
 
   const sendFeedback = (rating: 'positive' | 'negative', tags: string[], feedbackComment?: string) => {
     fetch('/api/chat/feedback', {
@@ -88,10 +99,7 @@ export default function FeedbackBlock({ conversationID, userMessageLogIndex, mar
   const accentColor = modalRating === 'positive' ? 'accent.teal' : 'accent.danger';
 
   return (
-    <Box mt={isSmall ? '3' : '4'}>
-      {/* Thin divider */}
-      <Box h="1px" bg="border.default" mb={isSmall ? '2' : '2.5'} opacity={0.6} />
-
+    <Box mb={2}>
       {state === 'submitted' ? (
         /* ── Thank-you state ── */
         <HStack
@@ -123,45 +131,73 @@ export default function FeedbackBlock({ conversationID, userMessageLogIndex, mar
       ) : (
         /* ── Idle state ── */
         <HStack gap="1" alignItems="center">
-          <IconButton
-            aria-label="Thumbs up"
-            size="2xs"
-            variant="ghost"
-            borderRadius="full"
-            onClick={() => openModal('positive')}
-            color="fg.subtle"
-            css={{
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              '&:hover': {
-                color: 'var(--chakra-colors-accent-teal)',
-                background: 'color-mix(in srgb, var(--chakra-colors-accent-teal) 8%, transparent)',
-                transform: 'scale(1.15)',
-              },
-              '&:active': { transform: 'scale(0.92)' },
-            }}
-          >
-            <LuThumbsUp size={isSmall ? 11 : 13} />
-          </IconButton>
+          {answerContent && (
+            <Tooltip content={copied ? 'Copied!' : 'Copy response'}>
+              <IconButton
+                aria-label="Copy response"
+                size="2xs"
+                variant="ghost"
+                borderRadius="full"
+                onClick={handleCopy}
+                color={copied ? 'accent.teal' : 'fg.subtle'}
+                css={{
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  '&:hover': {
+                    color: 'var(--chakra-colors-accent-teal)',
+                    background: 'color-mix(in srgb, var(--chakra-colors-accent-teal) 8%, transparent)',
+                    transform: 'scale(1.15)',
+                  },
+                  '&:active': { transform: 'scale(0.92)' },
+                }}
+              >
+                {copied ? <LuCheck size={isSmall ? 11 : 13} /> : <LuCopy size={isSmall ? 11 : 13} />}
+              </IconButton>
+            </Tooltip>
+          )}
 
-          <IconButton
-            aria-label="Thumbs down"
-            size="2xs"
-            variant="ghost"
-            borderRadius="full"
-            onClick={() => openModal('negative')}
-            color="fg.subtle"
-            css={{
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              '&:hover': {
-                color: 'var(--chakra-colors-accent-danger)',
-                background: 'color-mix(in srgb, var(--chakra-colors-accent-danger) 8%, transparent)',
-                transform: 'scale(1.15)',
-              },
-              '&:active': { transform: 'scale(0.92)' },
-            }}
-          >
-            <LuThumbsDown size={isSmall ? 11 : 13} />
-          </IconButton>
+          <Tooltip content="Positive feedback">
+            <IconButton
+              aria-label="Thumbs up"
+              size="2xs"
+              variant="ghost"
+              borderRadius="full"
+              onClick={() => openModal('positive')}
+              color="fg.subtle"
+              css={{
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  color: 'var(--chakra-colors-accent-teal)',
+                  background: 'color-mix(in srgb, var(--chakra-colors-accent-teal) 8%, transparent)',
+                  transform: 'scale(1.15)',
+                },
+                '&:active': { transform: 'scale(0.92)' },
+              }}
+            >
+              <LuThumbsUp size={isSmall ? 11 : 13} />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip content="Negative feedback">
+            <IconButton
+              aria-label="Thumbs down"
+              size="2xs"
+              variant="ghost"
+              borderRadius="full"
+              onClick={() => openModal('negative')}
+              color="fg.subtle"
+              css={{
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  color: 'var(--chakra-colors-accent-danger)',
+                  background: 'color-mix(in srgb, var(--chakra-colors-accent-danger) 8%, transparent)',
+                  transform: 'scale(1.15)',
+                },
+                '&:active': { transform: 'scale(0.92)' },
+              }}
+            >
+              <LuThumbsDown size={isSmall ? 11 : 13} />
+            </IconButton>
+          </Tooltip>
 
           <Text
             fontSize="2xs"

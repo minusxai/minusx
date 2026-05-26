@@ -246,7 +246,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     key={`answer-${idx}`}
                     colSpan={12}
                     colStart={1}
-                    my={2}
+                    mt={2}
+                    mb={0}
                 >
                     <Box px={3} py={1} aria-label="Answer block">
                         <Markdown context={markdownContext} conversationID={conversationID}>{block}</Markdown>
@@ -265,6 +266,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     conversationID={conversationID}
                     userMessageLogIndex={userMessageLogIndex}
                     markdownContext={markdownContext}
+                    answerContent={rawAnswerBlocks.join('\n\n').trimEnd()}
                   />
                 </Box>
               </GridItem>
