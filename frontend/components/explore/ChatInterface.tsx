@@ -556,13 +556,23 @@ export default function ChatInterface({
 
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container });
 
-  // Stable callback wrapper for memo'd children (e.g. ExampleQuestions).
+  // Stable callback wrapper for memo'd children (e.g. ExampleQuestions, ChatInput).
   // handleSendMessage closes over many stateful values and is recreated each
-  // render — passing it directly would defeat React.memo. The ref lets memo'd
-  // children hold an unchanging onClick while still invoking the latest impl.
+  // render — passing it directly to memo'd children defeats their memo, AND it
+  // also DESTABILISES children whose memo comparator IGNORES callback identity
+  // (ChatInput / LexicalMentionEditor's `chatInputPropsEqual` and
+  // `lexicalEditorPropsEqual` both strip onSend/onSubmit from the comparison).
+  // In that case the comparator skips the re-render but the child keeps holding
+  // the FIRST onSend ever passed — the editor's KEY_ENTER_COMMAND useEffect (deps
+  // `[editor, onSubmit]`) never re-runs, so Enter invokes a closure that captured
+  // `input=''` from mount and short-circuits handleSend, while Lexical still clears
+  // the editor afterwards. The user sees "message disappears, nothing sent".
+  // The ref lets every memo'd child hold one unchanging callback identity while
+  // still invoking the latest impl. Regression test:
+  // components/__tests__/chat-input-stable-onsend.ui.test.tsx.
   const sendMessageRef = useRef<((userInput: string, attachments?: Attachment[]) => Promise<void>) | null>(null);
-  const stableSendMessage = useCallback((prompt: string) => {
-    void sendMessageRef.current?.(prompt);
+  const stableSendMessage = useCallback((userInput: string, attachments: Attachment[] = []) => {
+    void sendMessageRef.current?.(userInput, attachments);
   }, []);
 
   const handleSendMessage = async (userInput: string, attachments: Attachment[] = []) => {
@@ -1218,7 +1228,7 @@ export default function ChatInterface({
           ) : (
 <Box width="100%">
             <ChatInput
-              onSend={handleSendMessage}
+              onSend={stableSendMessage}
               onStop={handleStopAgent}
               isAgentRunning={isAgentRunning || isStreaming}
               allowChatQueue={allowChatQueue}

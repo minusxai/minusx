@@ -2,7 +2,7 @@
 
 import { memo, useState, useRef, KeyboardEvent, useEffect } from 'react';
 import isEqual from 'lodash/isEqual';
-import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
+import { shallowEqualExcept, useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
 import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -145,13 +145,24 @@ function ChatInputInner({
 
   const chatLocked = isAgentRunning && !allowChatQueue;
 
-  const handleSend = () => {
+  // useStableCallback: LexicalMentionEditor is React.memo'd with a comparator
+  // that strips `onSubmit` from comparison ("must be a stable callback" contract).
+  // OnSubmitPlugin inside it registers KEY_ENTER_COMMAND via useEffect with deps
+  // `[editor, onSubmit]`. If we passed a fresh handleSend closure each render,
+  // memo would skip LexicalMentionEditor's re-render, OnSubmitPlugin's effect
+  // would never re-run, and the registered Enter handler would keep calling
+  // the mount-time handleSend — whose closure captured `input=''`. The user
+  // saw: type a message, press Enter → editor clears, nothing sent. The Run
+  // button worked because it dispatches through the latest render's handleSend.
+  // The stable wrapper preserves callback identity while always invoking the
+  // latest impl. Regression test: components/__tests__/chat-input-enter.ui.test.tsx.
+  const handleSend = useStableCallback(() => {
     if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading && !chatLocked) {
       onSend(input.trim(), attachments);
       // Don't clear here — input stays greyed while isPreparing=true,
       // then cleared by the useEffect when isPreparing transitions to false.
     }
-  };
+  });
 
   const processFile = async (file: File) => {
     if (file.type.startsWith('image/')) {
