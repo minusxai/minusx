@@ -529,10 +529,14 @@ export class Orchestrator {
         currentRootId = e.id;
       } else if (
         'role' in e &&
-        e.role === 'assistant' &&
         e.parent_id === currentRootId &&
-        e.stopReason === 'stop'
+        (e.role === 'assistant' || e.role === 'toolResult')
       ) {
+        // Emit ALL assistant turns under this root (including intermediate
+        // `stopReason: 'toolUse'` messages with tool_use blocks) AND every
+        // matching `toolResult` message. Previously only `stopReason === 'stop'`
+        // replies survived, so the next turn's model saw the final text but
+        // none of the tool calls — it lost all record of what it had done.
         out.push(e);
       }
     }
