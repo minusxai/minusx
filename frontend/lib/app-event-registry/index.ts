@@ -1,7 +1,7 @@
 import 'server-only';
 import { AppEvents } from './events';
 import { appEventRegistry } from './registry';
-import { FileEventType, trackFileEvent, trackLLMCallEvents, trackQueryExecutionEvent } from '@/lib/analytics/file-analytics.server';
+import { FileEventType, trackFileEvent, trackFeedbackEvent, trackLLMCallEvents, trackQueryExecutionEvent } from '@/lib/analytics/file-analytics.server';
 import { notifyAppEvent } from '@/lib/messaging/app-events-notifier';
 
 export { AppEvents } from './events';
@@ -33,3 +33,5 @@ appEventRegistry.subscribe(AppEvents.USER_MESSAGE,             p => notifyAppEve
 appEventRegistry.subscribe(AppEvents.USER_LOGGED_IN,           p => notifyAppEvent(AppEvents.USER_LOGGED_IN,           p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.USER_CREATED,             p => notifyAppEvent(AppEvents.USER_CREATED,             p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.USER_DELETED,             p => notifyAppEvent(AppEvents.USER_DELETED,             p as unknown as Record<string, unknown>));
+appEventRegistry.subscribe(AppEvents.FEEDBACK,                 p => trackFeedbackEvent({ conversationId: p.conversationId, userMessageLogIndex: p.userMessageLogIndex, rating: p.rating, tags: p.tags, comment: p.comment, userId: p.userId }));
+appEventRegistry.subscribe(AppEvents.FEEDBACK,                 p => notifyAppEvent(AppEvents.FEEDBACK,                 p as unknown as Record<string, unknown>));

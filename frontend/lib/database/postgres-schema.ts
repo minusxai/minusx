@@ -310,4 +310,19 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_qee_hash  ON query_execution_events(query_hash, created_at);
   CREATE INDEX IF NOT EXISTS idx_qee_ts    ON query_execution_events(created_at);
 
+  CREATE TABLE IF NOT EXISTS feedback_events (
+    id                      BIGSERIAL PRIMARY KEY,
+    conversation_id         INTEGER NOT NULL,
+    user_message_log_index  INTEGER NOT NULL,
+    rating                  VARCHAR NOT NULL,
+    tags                    JSONB NOT NULL DEFAULT '[]',
+    comment                 TEXT DEFAULT '',
+    user_id                 INTEGER,
+    request_id              UUID,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_fbe_conv  ON feedback_events(conversation_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_fbe_ts    ON feedback_events(created_at);
+
 `;

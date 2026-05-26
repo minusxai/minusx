@@ -7,10 +7,11 @@ import { DisplayProps } from '@/lib/types';
 import Markdown from '../../Markdown';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { useEffect } from 'react';
+import FeedbackBlock from '../message/FeedbackBlock';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode, conversationID }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode, conversationID, userMessageLogIndex, isLastAssistantMessage }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -64,16 +65,16 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
   // Extract <suggested_questions> and <trust_info> blocks from content before
   // parseThinkingAnswer runs, so they don't end up in `unparsed` (which renders
   // above the answer). They'll be re-appended to the last answer block later.
+  // Suggested questions are only re-appended for the last assistant message.
   let trailingXml = '';
   let contentForParsing = content;
   if (content) {
     const xmlBlocks: string[] = [];
-    const strippedContent = content
-      .replace(/<suggested_questions>[\s\S]*?<\/suggested_questions>/g, (m: string) => { xmlBlocks.push(m); return ''; })
+    contentForParsing = content
+      .replace(/<suggested_questions>[\s\S]*?<\/suggested_questions>/g, (m: string) => { if (isLastAssistantMessage) xmlBlocks.push(m); return ''; })
       .replace(/<trust_info[\s\S]*?<\/trust_info>/g, (m: string) => { xmlBlocks.push(m); return ''; });
     if (xmlBlocks.length > 0) {
       trailingXml = xmlBlocks.join('\n\n');
-      contentForParsing = strippedContent;
     }
   }
 
@@ -245,7 +246,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     key={`answer-${idx}`}
                     colSpan={12}
                     colStart={1}
-                    my={2}
+                    mt={2}
+                    mb={0}
                 >
                     <Box px={3} py={1} aria-label="Answer block">
                         <Markdown context={markdownContext} conversationID={conversationID}>{block}</Markdown>
@@ -255,6 +257,20 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
 
             {/* Show citations with answer if answer exists */}
             {showCitationsWithAnswer && renderCitations(false)}
+
+            {/* Feedback thumbs up/down */}
+            {hasAnswer && conversationID !== undefined && userMessageLogIndex !== undefined && (
+              <GridItem colSpan={12} colStart={1}>
+                <Box px={3}>
+                  <FeedbackBlock
+                    conversationID={conversationID}
+                    userMessageLogIndex={userMessageLogIndex}
+                    markdownContext={markdownContext}
+                    answerContent={rawAnswerBlocks.join('\n\n').trimEnd()}
+                  />
+                </Box>
+              </GridItem>
+            )}
             </>
   );
 }

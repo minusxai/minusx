@@ -31,6 +31,15 @@ export interface InsertLlmCallEventParams {
   userId?: number | null;
 }
 
+export interface InsertFeedbackEventParams {
+  conversationId: number;
+  userMessageLogIndex: number;
+  rating: 'positive' | 'negative';
+  tags: string[];
+  comment?: string;
+  userId?: number | null;
+}
+
 export interface InsertQueryExecutionEventParams {
   queryHash: string;
   fileId?: number | null;
@@ -115,6 +124,21 @@ export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): v
         p.error ?? null,
         p.userId ?? null,
         requestId,
+      ]
+    );
+  })());
+}
+
+export function insertFeedbackEvent(p: InsertFeedbackEventParams): void {
+  fireAndForget((async () => {
+    const requestId = await getRequestId();
+    await getModules().db.exec(
+      `INSERT INTO feedback_events
+         (conversation_id, user_message_log_index, rating, tags, comment, user_id, request_id)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7::uuid)`,
+      [
+        p.conversationId, p.userMessageLogIndex, p.rating,
+        JSON.stringify(p.tags), p.comment ?? '', p.userId ?? null, requestId,
       ]
     );
   })());
