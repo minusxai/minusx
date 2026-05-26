@@ -80,6 +80,38 @@ export function insertFileEvent(p: InsertFileEventParams): void {
   })());
 }
 
+/**
+ * Batched variant of insertFileEvent — one multi-row INSERT instead of N
+ * single-row INSERTs. Sentry MINUSX-BI-A flagged the N+1 produced by callers
+ * (notably /api/files/batch) doing 11 sequential INSERTs in a tight loop.
+ */
+export function insertFileEvents(events: InsertFileEventParams[]): void {
+  if (events.length === 0) return;
+  fireAndForget((async () => {
+    const requestId = await getRequestId();
+    const valueGroups: string[] = [];
+    const params: unknown[] = [];
+    let i = 1;
+    for (const p of events) {
+      valueGroups.push(`($${i}, $${i + 1}, $${i + 2}, $${i + 3}, $${i + 4}, $${i + 5}::uuid)`);
+      params.push(
+        p.eventType,
+        p.fileId,
+        p.fileVersion ?? null,
+        p.referencedByFileId ?? null,
+        p.userId ?? null,
+        requestId,
+      );
+      i += 6;
+    }
+    await getModules().db.exec(
+      `INSERT INTO file_events (event_type, file_id, file_version, referenced_by_file_id, user_id, request_id)
+       VALUES ${valueGroups.join(', ')}`,
+      params
+    );
+  })());
+}
+
 export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
   fireAndForget((async () => {
     const requestId = await getRequestId();

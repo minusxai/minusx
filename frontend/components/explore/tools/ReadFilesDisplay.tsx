@@ -9,6 +9,7 @@ import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
@@ -144,8 +145,10 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
   const fileIds: number[] = args.fileIds || [];
 
   // Select the stable files dictionary; derive the array with useMemo to avoid new object
-  // references in the selector (which would cause Redux to warn about unnecessary re-renders)
-  const filesDict = useAppSelector(state => state.files.files);
+  // references in the selector (which would cause Redux to warn about unnecessary re-renders).
+  // shallowEqual prevents this leaf from re-rendering when other (unrelated) files mutate —
+  // Immer reissues the bag's top-level ref on any nested write, otherwise.
+  const filesDict = useAppSelector(state => state.files.files, shallowEqual);
   const fileInfos = useMemo(() =>
     fileIds.map(id => ({
       id,

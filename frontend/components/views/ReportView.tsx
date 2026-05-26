@@ -142,8 +142,10 @@ export default function ReportView({
   // Get available dashboards and questions from Redux — memoized selectors avoid O(n) scan on every file change
   const dashboards = useAppSelector(selectDashboardFiles, shallowEqual);
   const questions = useAppSelector(selectQuestionFiles, shallowEqual);
-  // By-ID dictionary for reference lookups (O(1) access)
-  const files = useAppSelector(state => state.files.files);
+  // By-ID dictionary for reference lookups (O(1) access).
+  // shallowEqual mirrors the dashboards/questions selectors above: avoid re-
+  // rendering when Immer rotates the bag's top-level ref but no entry changed.
+  const files = useAppSelector(state => state.files.files, shallowEqual);
 
   // Create collections for select dropdowns
   const questionCollection = useMemo(() => createListCollection({

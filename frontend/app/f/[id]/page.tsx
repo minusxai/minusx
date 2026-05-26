@@ -7,6 +7,7 @@ import FileView from '@/components/FileView';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { parseFileId } from '@/lib/slug-utils';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import FileNotFound from '@/components/FileNotFound';
 import { ContextContent } from '@/lib/types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
@@ -34,7 +35,10 @@ export default function FilePage({ params }: FilePageProps) {
   const user = useAppSelector(state => state.auth.user);
 
   // ALL HOOKS MUST BE BEFORE EARLY RETURNS
-  const filesState = useAppSelector(state => state.files.files);
+  // shallowEqual: state.files.files is a Record<id, File> bag; Immer reissues
+  // the top-level ref on every nested mutation, so a strict-equal subscription
+  // re-renders on unrelated file edits anywhere in the app.
+  const filesState = useAppSelector(state => state.files.files, shallowEqual);
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
   const [selectedContextPath, setSelectedContextPath] = useState<string | null>(null);
 

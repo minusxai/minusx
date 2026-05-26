@@ -97,6 +97,13 @@ export const EChart = ({
     resizeObserver.observe(currentRef)
 
     return () => {
+      // Dispatch hideTip first to flush any pending tooltip-show callback
+      // ECharts may have scheduled (animation frame / setTimeout). Without
+      // this, navigating away mid-hover left a deferred `setContent` racing
+      // against the about-to-be-disposed tooltip DOM, producing the Sentry
+      // MINUSX-BI-C "Cannot set properties of null (setting 'innerHTML')"
+      // TypeError from inside `TooltipHTMLContent.setContent`.
+      try { chart?.dispatchAction({ type: 'hideTip' }) } catch { /* chart may already be in a partial-teardown state */ }
       chart?.dispose()
       resizeObserver.unobserve(currentRef)
       resizeObserver.disconnect()

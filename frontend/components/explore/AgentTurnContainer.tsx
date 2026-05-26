@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
 import { LuBrain, LuDatabase, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
@@ -25,6 +25,7 @@ import { WebSearchDetailCard, type WebSearchResult } from './tools/WebSearchDisp
 import { ToolNames } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import Markdown from '../Markdown';
 import type { QueryResult } from '@/lib/types';
 
@@ -340,7 +341,7 @@ function buildTimeline(
 
 // ─── Component ─────────────────────────────────────────────────────
 
-export default function AgentTurnContainer({
+function AgentTurnContainerImpl({
   turn,
   isCompact,
   databaseName,
@@ -363,7 +364,12 @@ export default function AgentTurnContainer({
     viewMode,
   } as const;
 
-  const filesDict = useAppSelector(state => state.files.files);
+  // shallowEqual: state.files.files is a Record<id, File> bag — Immer reissues
+  // the top-level ref on every file mutation, even unrelated ones. Without a
+  // shallow compare, this re-renders the entire agent-turn tree on every
+  // file/dashboard write coming from elsewhere in the app. Comparing entries
+  // key-by-key (N ref comparisons) is far cheaper than the avoided fan-out.
+  const filesDict = useAppSelector(state => state.files.files, shallowEqual);
 
   const { timeline, lastChatMessage } = useMemo(
     () => buildTimeline(turn.agentMessages),
@@ -856,3 +862,12 @@ export default function AgentTurnContainer({
     </>
   );
 }
+
+// memo with default referential equality: once ChatInterface passes stable
+// props (`toggleShowThinking` is useCallback'd, sharedProps' primitives are
+// stable, and `turn` comes from a stable groupIntoTurns memoization), this
+// subtree no longer re-renders when an unrelated streaming chunk lands on
+// the parent. Trace 3 attributed 14 ChatInterface re-renders during streaming;
+// without this, each one cascaded into a fresh render of every turn.
+const AgentTurnContainer = memo(AgentTurnContainerImpl);
+export default AgentTurnContainer;

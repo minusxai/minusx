@@ -240,12 +240,42 @@ class FilesDataLayerServer implements IFilesDataLayer {
       ? paths.map(p => files.find(f => f.path === p && f.type === 'folder')).filter((f): f is DbFile => f !== undefined)
       : [];
 
+    // N+1 fix (Sentry MINUSX-BI-9): folder files have their children resolved
+    // by `resolveChildIds(path)`, which does one `path LIKE …` query per
+    // folder. With N folders that was N round-trips (Sentry observed 19 in a
+    // single /api/files call). Pre-fetch all folder children in one query
+    // (DocumentDB.listAll accepts multiple paths and OR's them together),
+    // then expose a cache-backed resolver so `extractReferenceIds` for
+    // folders becomes a map lookup.
+    const folderPaths = files.filter(f => f.type === 'folder').map(f => f.path);
+    const childIdsByParent = new Map<string, number[]>();
+    if (folderPaths.length > 0) {
+      const allChildren = await DocumentDB.listAll(undefined, folderPaths, 1, false);
+      for (const child of allChildren) {
+        // A file's parent path is everything up to the last "/" — match against
+        // the requested folder paths (listAll OR's path-LIKE, so any child can
+        // belong to any of the requested parents).
+        const lastSlash = child.path.lastIndexOf('/');
+        const parent = lastSlash > 0 ? child.path.substring(0, lastSlash) : '/';
+        const arr = childIdsByParent.get(parent);
+        if (arr) arr.push(child.id);
+        else childIdsByParent.set(parent, [child.id]);
+      }
+    }
+    const resolveChildIdsCached = async (folderPath: string): Promise<number[]> => {
+      const cached = childIdsByParent.get(folderPath);
+      if (cached !== undefined) return cached;
+      // Fallback for any folder not in our pre-fetched set (defensive — should
+      // not happen given we pre-filtered all folder files above).
+      return resolveChildIds(folderPath);
+    };
+
     const fileInfos: FileInfo[] = await Promise.all(files.map(async file => ({
       id: file.id,
       name: file.name,
       path: file.path,
       type: file.type,
-      references: await extractReferenceIds(file, resolveChildIds),
+      references: await extractReferenceIds(file, resolveChildIdsCached),
       created_at: file.created_at,
       updated_at: file.updated_at,
       version: file.version,

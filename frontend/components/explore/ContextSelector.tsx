@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { LuNotebookText } from 'react-icons/lu';
@@ -27,7 +28,9 @@ function ContextSelectorInner({ selectedContextPath, selectedVersion, onSelectCo
   // Triggers context loading and provides accurate loading state.
   // Must be called before early returns to satisfy Rules of Hooks.
   const { loading: contextsLoading } = useContexts();
-  const filesState = useAppSelector(state => state.files.files);
+  // shallowEqual: avoid re-running the context-list useMemo when Immer rotates
+  // the bag ref but no entry differs (i.e. unrelated file/dashboard writes).
+  const filesState = useAppSelector(state => state.files.files, shallowEqual);
 
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '';
 

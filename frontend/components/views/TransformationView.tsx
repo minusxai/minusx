@@ -6,6 +6,7 @@ import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical, 
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
@@ -399,7 +400,9 @@ export default function TransformationView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  const files = useAppSelector(state => state.files.files);
+  // shallowEqual: avoid re-rendering when Immer rotates the bag ref but no
+  // entry changed.
+  const files = useAppSelector(state => state.files.files, shallowEqual);
   const filePath = useAppSelector(state => state.files.files[fileId]?.path) ?? '';
 
   const questions = useMemo(() =>

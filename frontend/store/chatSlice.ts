@@ -645,6 +645,30 @@ export const selectAllToolsCompleted = (state: RootState, conversationID: number
   return conv.pending_tool_calls.every(p => p.result !== undefined);
 };
 
+// Walk the fork chain starting from a given conversation ID and return the
+// tail (latest) conversation. Memoized so that — even though state.chat.conversations
+// gets a new top-level reference on every streaming dispatch — the OUTPUT ref is
+// stable when nothing in the chain changed. useAppSelector's `===` check then
+// skips re-rendering subscribers (ChatInterface's empty-state path was the
+// regression motivating this; see components/__tests__/chat-rerender.ui.test.tsx).
+export const selectForkChainTail = createSelector(
+  [
+    (state: RootState) => state.chat.conversations,
+    (_state: RootState, startConversationID: number | undefined) => startConversationID,
+  ],
+  (conversations, startID): Conversation | undefined => {
+    if (startID === undefined) return undefined;
+    let conv = conversations[startID];
+    // Defensive cap on chain depth — fork chains should be short.
+    for (let i = 0; conv?.forkedConversationID && i < 64; i++) {
+      const next = conversations[conv.forkedConversationID];
+      if (!next || next === conv) break;
+      conv = next;
+    }
+    return conv;
+  }
+);
+
 // Memoized selector for optional conversation (handles undefined conversationID)
 export const selectOptionalConversation = createSelector(
   [

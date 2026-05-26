@@ -42,6 +42,7 @@ import { QuestionVisualization } from '../question/QuestionVisualization';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
@@ -170,8 +171,9 @@ export default function QuestionViewV2({
   const [guiError, setGuiError] = useState<string | null>(null);
   const [canUseGUI, setCanUseGUI] = useState(true);
 
-  // Get files state for referenced questions
-  const filesState = useAppSelector(state => state.files.files);
+  // Get files state for referenced questions. shallowEqual avoids re-rendering
+  // this view when Immer rotates the bag's top-level ref on an unrelated write.
+  const filesState = useAppSelector(state => state.files.files, shallowEqual);
 
   // Memoize referencedQuestions to avoid unnecessary re-renders
   const referencedQuestions = useMemo(() => {

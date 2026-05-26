@@ -223,6 +223,18 @@ export async function readFiles(
 
 
 /**
+ * In-flight request deduplication for readFilesByCriteria. Multiple components
+ * in the same page tree (e.g. file detail at /f/:id) commonly request files
+ * by overlapping criteria (5× connection/depth=1, 2× context/depth=-1, ...)
+ * in the same React commit. Without dedupe each call fires its own HTTP
+ * request — Sentry flagged this as MINUSX-BI-7 (N+1 API Call) and
+ * MINUSX-BI-B (HTTP/1.1 Overhead, 15× GET /api/files). Sharing a single
+ * in-flight Promise per (criteria, partial) collapses 8 requests to 3 in
+ * the trace's repro.
+ */
+const criteriaInflight = new PromiseManager<AugmentedFile[]>();
+
+/**
  * ReadFilesByCriteria - Load files by criteria (path, type, depth)
  *
  * @param options - Criteria and options
@@ -233,25 +245,33 @@ export async function readFilesByCriteria(
 ): Promise<AugmentedFile[]> {
   const { criteria, ttl = CACHE_TTL.FILE, skip = false, partial = false } = options;
 
-  // Step 1: Get file metadata matching criteria
-  const result = await FilesAPI.getFiles(criteria);
-  const fileIds = result.data.map(f => f.id);
+  // Dedupe key intentionally excludes `ttl`/`skip` — those only control how
+  // we read from the cache (downstream behavior), not which files come back
+  // from the network. Two concurrent callers with the same criteria + partial
+  // should share a single round-trip.
+  const dedupeKey = JSON.stringify({ criteria, partial });
 
-  // Step 2: If partial load, store metadata in Redux and return without augmentation
-  if (partial) {
-    // Store file metadata in Redux so reactive selectors (useFilesByCriteria) can find them
-    if (result.data.length > 0) {
-      getStore().dispatch(setFileInfo(result.data));
+  return criteriaInflight.execute(dedupeKey, async () => {
+    // Step 1: Get file metadata matching criteria
+    const result = await FilesAPI.getFiles(criteria);
+    const fileIds = result.data.map(f => f.id);
+
+    // Step 2: If partial load, store metadata in Redux and return without augmentation
+    if (partial) {
+      // Store file metadata in Redux so reactive selectors (useFilesByCriteria) can find them
+      if (result.data.length > 0) {
+        getStore().dispatch(setFileInfo(result.data));
+      }
+      const state = getStore().getState();
+      return fileIds
+        .map(id => selectFile(state, id))
+        .filter((f): f is FileState => Boolean(f))
+        .map(fileState => ({ fileState, references: [], queryResults: [] }));
     }
-    const state = getStore().getState();
-    return fileIds
-      .map(id => selectFile(state, id))
-      .filter((f): f is FileState => Boolean(f))
-      .map(fileState => ({ fileState, references: [], queryResults: [] }));
-  }
 
-  // Step 3: Full load with augmentation
-  return readFiles(fileIds, { ttl, skip });
+    // Step 3: Full load with augmentation
+    return readFiles(fileIds, { ttl, skip });
+  });
 }
 
 /**

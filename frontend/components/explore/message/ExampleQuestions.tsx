@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem } from '@chakra-ui/react';
 import { LuSparkles, LuSearch, LuChartLine } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
@@ -39,7 +39,7 @@ const suggestedPrompts = [
   }
 ];
 
-export default function ExampleQuestions({ onPromptClick, container, colSpan, colStart }: ExampleQuestionsProps) {
+function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: ExampleQuestionsProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const companyName = useAppSelector(selectCompanyName);
   const user = useAppSelector(selectEffectiveUser);
@@ -183,3 +183,11 @@ export default function ExampleQuestions({ onPromptClick, container, colSpan, co
     </Grid>
   );
 }
+
+// Memoized: ChatInterface used to re-render on every streaming chunk (cascading
+// down into ~15 Box renders here, 46+ times per 16s in the original trace).
+// Even after the bag-selector fix in ChatInterface, this guards against future
+// regressions where the parent re-renders for an internal reason (scroll state,
+// container resize, …) — the props are stable, so React skips the subtree.
+const ExampleQuestions = memo(ExampleQuestionsImpl);
+export default ExampleQuestions;

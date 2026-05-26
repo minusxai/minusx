@@ -298,6 +298,15 @@ export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'da
   const axisDefaults = getAxisDefaults(colorMode)
 
   const mergedOptions: EChartsOption = {
+    // Perf default: disable ECharts' built-in transition animation. zrender's
+    // animation loop (Animation.update → ZRText._updatePlainTexts → DOM
+    // measureText cascade) was eating ~600ms of main-thread CPU per chart per
+    // trace (it appends a span, reads offsetWidth, removes it — every frame).
+    // Static charts feel just as good in a BI tool and don't pay that cost.
+    // Callers that genuinely want animation can opt back in via
+    // `additionalOptions: { animation: true }` (the spread of `options` below
+    // overrides this default).
+    animation: false,
     ...minusXTheme,
     ...options,
     // Deep merge specific properties
