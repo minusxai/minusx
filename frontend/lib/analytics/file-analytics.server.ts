@@ -1,12 +1,12 @@
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { sqlArray } from '@/lib/database/adapter/types';
-import { FileEventType, insertFileEvent, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
+import { FileEventType, insertFileEvent, insertFileEvents, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
 import type { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
 export { FileEventType } from './file-analytics.db';
-export { insertFileEvent, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent };
+export { insertFileEvent, insertFileEvents, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent };
 
 /**
  * Track a single file event. Fire-and-forget.
@@ -19,6 +19,21 @@ export function trackFileEvent(event: FileEvent): void {
     referencedByFileId: event.referencedByFileId ?? null,
     userId: event.userId ?? null,
   });
+}
+
+/**
+ * Track many file events as a single batched INSERT. Fire-and-forget. Use
+ * from batch endpoints (e.g. /api/files/batch) to avoid the N+1 INSERT
+ * pattern flagged in Sentry MINUSX-BI-A.
+ */
+export function trackFileEvents(events: FileEvent[]): void {
+  insertFileEvents(events.map(e => ({
+    eventType: e.eventType,
+    fileId: e.fileId,
+    fileVersion: e.fileVersion ?? null,
+    referencedByFileId: e.referencedByFileId ?? null,
+    userId: e.userId ?? null,
+  })));
 }
 
 /**

@@ -3,7 +3,7 @@ import { successResponse, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { loadFiles } from '@/lib/data/files.server';
 import { validateFileIds } from '@/lib/data/helpers/validation';
-import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { FileEventType, trackFileEvents } from '@/lib/analytics/file-analytics.server';
 import { translateConversationForFrontend } from '@/lib/chat-translator';
 
 /**
@@ -23,21 +23,20 @@ export const POST = withAuth(async (
     const validatedIds = validateFileIds(ids);
     const result = await loadFiles(validatedIds, user);
 
-    // Track read_direct for each loaded file (fire-and-forget, non-blocking)
-    for (const file of result.data) {
-      appEventRegistry.publish(AppEvents.FILE_VIEWED, {
-        fileId: file.id,
-        fileVersion: file.version,
-        fileType: file.type,
-        filePath: file.path,
-        fileName: file.name,
-        userId: user.userId,
-        userEmail: user.email,
-        userRole: user.role,
-
-        mode: user.mode,
-      });
-    }
+    // Track read_direct for the whole batch in a single multi-row INSERT.
+    // Previously this loop fired one INSERT per file, which Sentry flagged as
+    // MINUSX-BI-A (N+1 INSERTs into file_events). We deliberately bypass
+    // appEventRegistry.publish(FILE_VIEWED) here — that path fires both the
+    // analytics INSERT *and* a per-event HTTP notify to MX_API_BASE_URL/notify,
+    // which is also wasteful for bulk reads. Batched analytics keeps the
+    // important signal (file-view counts); per-file notify for bulk loads is
+    // dropped intentionally.
+    trackFileEvents(result.data.map(file => ({
+      eventType: FileEventType.READ_DIRECT,
+      fileId: file.id,
+      fileVersion: file.version,
+      userId: user.userId,
+    })));
 
     // v=2 conversations: translate orchestrator content.log → legacy task-log so
     // the frontend never sees orchestrator log shape. v=1 files pass through unchanged.

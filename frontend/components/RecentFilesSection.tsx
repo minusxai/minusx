@@ -28,8 +28,12 @@ interface HomeAnalyticsData {
   trending: RecentFile[];
 }
 
-function relativeTime(isoString: string): string {
-  const now = Date.now();
+/**
+ * Compute "5m ago" / "yesterday" / etc. relative to a given `now`. Splitting
+ * `now` from the call means callers control SSR-safety — see <RelativeTime>
+ * below for the hydration-safe component wrapper.
+ */
+function relativeTime(isoString: string, now: number): string {
   const then = new Date(isoString).getTime();
   const diffMs = now - then;
   const diffMin = Math.floor(diffMs / 60_000);
@@ -42,6 +46,34 @@ function relativeTime(isoString: string): string {
   if (diffDay < 7) return `${diffDay}d ago`;
   if (diffDay < 30) return `${Math.floor(diffDay / 7)}w ago`;
   return `${Math.floor(diffDay / 30)}mo ago`;
+}
+
+/**
+ * Hydration-safe "5m ago"-style label.
+ *
+ * On SSR (and the first client render before useEffect runs) we emit a
+ * locale-formatted absolute date — deterministic, identical on both sides, so
+ * React's hydration check passes. After mount we swap to the relative form
+ * and refresh every minute. This was the source of Sentry MINUSX-BI-3 —
+ * `relativeTime` previously read `Date.now()` directly during render, so SSR
+ * at T and client at T+Δ produced different text (and cascaded into the
+ * React-reported "xmlns" SVG-frame in the stack).
+ */
+function RelativeTime({ iso }: { iso: string }) {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    // Intentional setState-on-mount: this hook deliberately defers the
+    // "Date.now()"-dependent render to post-hydration. Same pattern as
+    // useFilesByCriteria in lib/hooks/file-state-hooks.ts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  if (now === null) {
+    return <>{new Date(iso).toLocaleDateString()}</>;
+  }
+  return <>{relativeTime(iso, now)}</>;
 }
 
 /** Section header with horizontal rule */
@@ -205,7 +237,7 @@ function QuestionCarousel({ questions }: { questions: RecentFile[] }) {
 }
 
 /** Compact list item */
-function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: string }) {
+function CompactFileLink({ file, meta: subtitle }: { file: RecentFile; meta: React.ReactNode }) {
   const typeMeta = FILE_TYPE_METADATA[file.fileType as keyof typeof FILE_TYPE_METADATA];
   const FileIcon = typeMeta?.icon;
   const color = typeMeta?.color ?? 'fg.muted';
@@ -291,7 +323,7 @@ function CompactConversationLink({ conversation }: { conversation: ConversationS
           {conversation.name}
         </Text>
         <Text fontSize="2xs" color="fg.subtle" flexShrink={0} fontFamily="mono">
-          {relativeTime(conversation.updatedAt)}
+          <RelativeTime iso={conversation.updatedAt} />
         </Text>
       </HStack>
     </Link>
@@ -529,7 +561,7 @@ export function RecentDashboards() {
       {recentDashboards.length > 0 ? (
         <VStack gap={1.5} align="stretch">
           {recentDashboards.map(file => (
-            <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
+            <CompactFileLink key={file.fileId} file={file} meta={<RelativeTime iso={file.lastVisited} />} />
           ))}
         </VStack>
       ) : (
@@ -778,7 +810,7 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
           <SectionHeader label="Recent dashboards" />
           <VStack gap={1.5} align="stretch">
             {recentDashboards.map(file => (
-              <CompactFileLink key={file.fileId} file={file} meta={relativeTime(file.lastVisited)} />
+              <CompactFileLink key={file.fileId} file={file} meta={<RelativeTime iso={file.lastVisited} />} />
             ))}
           </VStack>
         </>
