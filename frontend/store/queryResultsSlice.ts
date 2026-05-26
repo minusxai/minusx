@@ -7,12 +7,23 @@
  * Architecture:
  * - Query results keyed by hash of (query, params, database)
  * - TTL-based freshness (default: 120 seconds)
- * - Auto-cleanup: Keep last 32 results, remove oldest
+ * - Auto-cleanup: Keep last 256 results, remove oldest (must exceed the
+ *   largest realistic dashboard's question count to avoid LRU thrash —
+ *   when the cap is below the dashboard size, every re-render evicts
+ *   previously-cached results and cascades into duplicate /api/query
+ *   round-trips)
  * - Loading state tracked per query
  */
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
+
+/**
+ * Cap on cached query results. Keep large enough that the biggest dashboard
+ * can fit its entire question set in cache (otherwise every re-render evicts
+ * the earliest-completed results and cascades into duplicate query fetches).
+ */
+const MAX_CACHED_RESULTS = 256;
 
 /**
  * Query result stored in Redux
@@ -75,7 +86,7 @@ const queryResultsSlice = createSlice({
 
     /**
      * Set query result data
-     * Automatically cleans up old results if > 32 entries
+     * Automatically cleans up old results if > MAX_CACHED_RESULTS entries
      */
     setQueryResult(state, action: PayloadAction<{ query: string; params: Record<string, any>; database: string; data: any }>) {
       const { query, params, database, data } = action.payload;
@@ -91,13 +102,12 @@ const queryResultsSlice = createSlice({
         error: null
       };
 
-      // Cleanup: Keep last 32 results
+      // Cleanup: Keep last MAX_CACHED_RESULTS. Must be larger than the
+      // biggest dashboard's question count — see the file-header comment.
       const entries = Object.entries(state.results);
-      if (entries.length > 32) {
-        // Sort by updatedAt, keep newest 32
+      if (entries.length > MAX_CACHED_RESULTS) {
         const sorted = entries.sort((a, b) => b[1].updatedAt - a[1].updatedAt);
-        const toKeep = sorted.slice(0, 32);
-        state.results = Object.fromEntries(toKeep);
+        state.results = Object.fromEntries(sorted.slice(0, MAX_CACHED_RESULTS));
       }
     },
 
