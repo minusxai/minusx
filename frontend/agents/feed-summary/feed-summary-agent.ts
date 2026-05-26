@@ -10,7 +10,7 @@ import type { Tool, TextContent, ImageContent } from '@/orchestrator/llm';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-feed-summary-api',
@@ -31,7 +31,7 @@ export class FeedSummaryAgent extends RemoteAnalystAgent {
   };
   // No tools — one LLM turn, returns text.
   static override readonly tools: Tool<typeof FeedSummaryAgentParams>[] = [];
-  static override model = getAnalystModel() ?? FAUX_MODEL;
+  static override model = getAgentModelOrTestFallback(FAUX_MODEL);
 
   protected override getSystemPrompt(): string {
     return renderPrompt('feed_summary.system', {

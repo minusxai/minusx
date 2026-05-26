@@ -4,7 +4,7 @@ import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { SearchDBSchema, ExecuteQuery, FuzzyMatch } from '@/agents/benchmark-analyst/db-tools.server';
 import { SearchFiles } from '@/agents/analyst/file-tools';
-import { getAnalystModel, getAnalystModelConfig, getAnalystModelOptions } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback, getAnalystModelConfig, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import {
   EditFile,
   CreateFile,
@@ -57,7 +57,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     PublishAll.schema,
     LoadSkill.schema,
   ];
-  static model = getAnalystModel() ?? FAUX_MODEL;
+  static model = getAgentModelOrTestFallback(FAUX_MODEL);
   // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box;
   // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.

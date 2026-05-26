@@ -24,7 +24,7 @@ import { MXAgent, type MXAgentDetails } from '@/orchestrator/types';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import type { ReportRunContent, ReportQueryResult, VizSettings } from '@/lib/types';
 
@@ -81,7 +81,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
   // No LLM-driven tools — `run()` is hand-rolled.
   static readonly tools = [];
   // Synthesis LLM call uses the analyst model (faux in tests).
-  static model = getAnalystModel() ?? FAUX_MODEL;
+  static model = getAgentModelOrTestFallback(FAUX_MODEL);
 
   /** Sub-agent dispatched per reference. Read-only analyst (server-side tools only). */
   static analystAgent: AnalystAgentClass = RemoteAnalystAgent;

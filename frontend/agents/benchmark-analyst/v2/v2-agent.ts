@@ -13,7 +13,7 @@ import { ExploreV2 } from './explore';
 import { FetchHandleV2 } from './fetch-handle';
 import { renderDialectHints, extractDialects } from './dialect-hints';
 import { clearSessionLabels } from './query-refs';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import type { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ToolMessage } from '@/orchestrator/types';
 
@@ -44,7 +44,7 @@ export class V2BenchmarkAnalystAgent extends BenchmarkAnalystAgent {
     FetchHandleV2.schema,
   ];
 
-  static model = getAnalystModel() ?? FAUX_MODEL;
+  static model = getAgentModelOrTestFallback(FAUX_MODEL);
 
   constructor(
     orchestrator: Orchestrator,

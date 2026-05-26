@@ -3,7 +3,7 @@ import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { MXAgent } from '@/orchestrator/types';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import { CatalogSearchDBSchema, ChainedExecuteQuery, FuzzyMatch } from './db-tools';
 import { SubmitAnswer } from './submit-answer';
 import { ExploreDataset } from './explore-dataset';
@@ -48,7 +48,7 @@ export class BenchmarkAnalystAgent<
     ExploreDataset.schema,
     SubmitAnswer.schema,
   ];
-  static model = getAnalystModel() ?? FAUX_MODEL;
+  static model = getAgentModelOrTestFallback(FAUX_MODEL);
 
   protected getSystemPrompt(): string {
     const ToolCls = this.constructor as typeof BenchmarkAnalystAgent;

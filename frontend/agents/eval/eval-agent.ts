@@ -19,7 +19,7 @@ import {
   ReadFiles,
   SearchFiles,
 } from '@/agents/analyst/analyst-agent';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { SubmitBinary, SubmitNumber, SubmitString, CannotAnswer, SUBMIT_TOOL_NAMES } from './submit-tools';
 
@@ -59,7 +59,7 @@ export class EvalAnalystAgent extends RemoteAnalystAgent {
     SubmitString.schema,
     CannotAnswer.schema,
   ];
-  static override model = getAnalystModel() ?? FAUX_MODEL;
+  static override model = getAgentModelOrTestFallback(FAUX_MODEL);
   static override readonly callOptions = { reasoning: 'low', webSearch: false };
 
   protected override resolveCallOptions(): Record<string, unknown> | undefined {

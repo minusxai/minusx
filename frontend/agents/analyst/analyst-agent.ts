@@ -8,7 +8,7 @@ import {
   buildSkillsCatalog,
   buildPreloadedSkillsContent,
 } from './skills';
-import { getAnalystModel } from './model-config';
+import { getAgentModelOrTestFallback } from './model-config';
 import { ReadFiles, SearchFiles } from './file-tools';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
@@ -57,7 +57,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     ReadFiles.schema,
     SearchFiles.schema,
   ];
-  static model = getAnalystModel() ?? FAUX_MODEL;
+  static model = getAgentModelOrTestFallback(FAUX_MODEL);
   // Hard cap on the agentic loop, enforced by MXAgent.run(); the prompt hint
   // below is maxSteps − 5.
   // Typed `number` (not the literal 35) so subclasses can set their own cap
