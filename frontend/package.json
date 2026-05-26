@@ -90,6 +90,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@lexical/headless": "^0.40.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
