@@ -43,6 +43,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
     --mount=type=secret,id=sentry_auth_token \
     SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
     CI=true \
+    SENTRY_LOG_LEVEL=debug \
     sh -c 'echo "[sentry-debug] token byte length=${#SENTRY_AUTH_TOKEN}"; npm run build'
 
 # ===== RUNTIME STAGE ===== #
