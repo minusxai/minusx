@@ -8,6 +8,13 @@ on:
     branches:
       - main
 
+# Restrict GITHUB_TOKEN to the minimum the workflow needs. CodeQL flags
+# workflows without an explicit permissions block (medium severity).
+# Both jobs only read repo contents (checkout + install + run); they do
+# not push, comment, deploy, or call any other GitHub API.
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Validate (typecheck + lint)
