@@ -14,7 +14,7 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 
 export const fauxRegistration = registerFauxProvider({
@@ -70,7 +70,7 @@ export class OnboardingContextAgent extends WebAnalystAgent {
     ExecuteQuery.schema,
   ];
   static override readonly maxSteps = 15;
-  static override model = getAnalystModel() ?? FAUX_MODEL;
+  static override model = getAgentModelOrTestFallback(FAUX_MODEL);
   // No web search for onboarding.
   static override readonly callOptions = { reasoning: 'low', webSearch: false };
 
@@ -110,7 +110,7 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
     EditFile.schema,
   ];
   static override readonly maxSteps = 25;
-  static override model = getAnalystModel() ?? FAUX_MODEL;
+  static override model = getAgentModelOrTestFallback(FAUX_MODEL);
   // No web search for onboarding.
   static override readonly callOptions = { reasoning: 'low', webSearch: false };
 

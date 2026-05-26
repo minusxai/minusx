@@ -3,7 +3,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
-import { getAnalystModel } from '@/agents/analyst/model-config';
+import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-slack-api',
@@ -23,7 +23,7 @@ export class SlackAgent extends RemoteAnalystAgent {
     parameters: SlackAgentParams,
   };
   // Inherits tool set (DB tools + file tools) from RemoteAnalystAgent.
-  static model = getAnalystModel() ?? FAUX_MODEL;
+  static model = getAgentModelOrTestFallback(FAUX_MODEL);
 
   protected getSystemPrompt(): string {
     const base = renderPrompt('default.system', {
