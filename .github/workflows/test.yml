@@ -8,6 +8,12 @@ on:
     branches:
       - main
 
+# GitHub will force actions/* @v4 onto Node.js 24 on June 2nd, 2026. Opting in
+# now silences the deprecation warning and ensures the workflow keeps running
+# unchanged through the cutover.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 # Restrict GITHUB_TOKEN to the minimum the workflow needs. CodeQL flags
 # workflows without an explicit permissions block (medium severity).
 # Both jobs only read repo contents (checkout + install + run); they do
@@ -78,6 +84,10 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
+      # ubuntu-latest is 4 vCPU; use all of them. We previously left one core
+      # free for the OS at --max-workers=3, but measurement showed the suite
+      # is CPU-bound on test execution itself (not on background OS work) and
+      # 4 workers comfortably fits in 16GB RAM (~500MB RSS per worker).
       - name: Run frontend tests
         working-directory: ./frontend
-        run: npm test -- --coverage --max-workers=3
+        run: npm test -- --coverage --max-workers=4
