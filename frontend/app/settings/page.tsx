@@ -666,22 +666,6 @@ function SettingsContent() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
-    { id: 'appearance', label: 'Appearance', visible: isAdmin, custom: <AppearanceSettings /> },
-    {
-      id: 'messaging',
-      label: 'Messaging',
-      visible: isAdmin,
-      custom: (
-        <VStack align="stretch" gap={4}>
-          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-            <ChannelsSection />
-          </Box>
-          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-            <ErrorDeliverySection />
-          </Box>
-        </VStack>
-      ),
-    },
     {
       id: 'integrations',
       label: 'Integrations',
@@ -693,6 +677,22 @@ function SettingsContent() {
           </Text>
           <SlackIntegration />
           <McpIntegration />
+        </VStack>
+      ),
+    },
+    { id: 'appearance', label: 'Appearance', visible: isAdvancedAdmin, custom: <AppearanceSettings /> },
+    {
+      id: 'messaging',
+      label: 'Messaging',
+      visible: isAdvancedAdmin,
+      custom: (
+        <VStack align="stretch" gap={4}>
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            <ChannelsSection />
+          </Box>
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            <ErrorDeliverySection />
+          </Box>
         </VStack>
       ),
     },
