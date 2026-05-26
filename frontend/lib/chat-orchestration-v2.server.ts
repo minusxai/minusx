@@ -628,25 +628,27 @@ async function persistAndBuildLegacyResponse(
             .join('\n')
         : String(content ?? '');
 
-      // Classify:
-      //   - `isError:true`        → server-tool error (unknown tool / bad params /
-      //                              server-tool throw — set by the orchestrator).
+      // Classify (check `{success:false}` content FIRST — `legacyToolResultToPi`
+      // sets `isError:true` whenever `details.success===false`, so frontend-tool
+      // errors arrive with BOTH flags. Order matters here; flipping it would
+      // misclassify every frontend-tool error as 'server-tool'.):
       //   - `content.success===false` → frontend-tool error (the bridge sends back
       //                              `{success:false, error}` from a failed
       //                              frontend-tool handler — see chatListener.runOne).
+      //   - `isError:true` only       → server-tool error (unknown tool / bad params
+      //                              / server-tool throw — set by the orchestrator).
       let source: 'server-tool' | 'frontend-tool' | null = null;
       let message = text;
-      if (entry.isError === true) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object' && (parsed as { success?: unknown }).success === false) {
+          source = 'frontend-tool';
+          const err = (parsed as { error?: unknown }).error;
+          if (typeof err === 'string') message = err;
+        }
+      } catch { /* not JSON-shaped — fine, treat as not-a-frontend-tool-error */ }
+      if (!source && entry.isError === true) {
         source = 'server-tool';
-      } else {
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && typeof parsed === 'object' && (parsed as { success?: unknown }).success === false) {
-            source = 'frontend-tool';
-            const err = (parsed as { error?: unknown }).error;
-            if (typeof err === 'string') message = err;
-          }
-        } catch { /* not JSON-shaped — fine, treat as successful tool result */ }
       }
       if (!source) continue;
 
