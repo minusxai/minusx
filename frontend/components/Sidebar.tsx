@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder } from 'react-icons/lu';
+import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -208,7 +208,14 @@ export default function Sidebar() {
               height={8}
             >
               {logoHovered ? (
-                <Icon as={LuChevronRight} boxSize={5} color="accent.teal" />
+                <IconButton
+                variant="ghost"
+                aria-label="Collapse sidebar"
+                size="sm"
+                cursor="e-resize"
+                >
+                    <LuPanelLeftOpen />
+                </IconButton>
               ) : (
                 <Box
                   aria-label="Workspace logo"
@@ -243,14 +250,17 @@ export default function Sidebar() {
                 </Text>
               </HStack>
             </Link>
-            <IconButton
-              onClick={handleToggleSidebar}
-              variant="ghost"
-              aria-label="Collapse sidebar"
-              size="sm"
-            >
-              <LuChevronLeft />
-            </IconButton>
+            <Tooltip content="Collapse sidebar" positioning={{ placement: 'right' }}>
+                <IconButton
+                onClick={handleToggleSidebar}
+                variant="ghost"
+                aria-label="Collapse sidebar"
+                size="sm"
+                cursor="w-resize"
+                >
+                    <LuPanelLeftClose />
+                </IconButton>
+            </Tooltip>
           </>
 
         )}

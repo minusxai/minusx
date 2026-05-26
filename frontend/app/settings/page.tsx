@@ -517,22 +517,6 @@ function SettingsContent() {
     {
       tab: 'general',
       section: 'Experimental Flags',
-      title: 'Use new chat interface',
-      description: 'The new Chats surface (TS-orchestrator) is the default. Turn this off to use the legacy Conversations surface. Toggling reloads the page, adding `?v=1` (off) or clearing `v` (on) — the URL is the only source of truth.',
-      control: (
-        <SwitchControl
-          checked={useChatV2}
-          onChange={(checked) => {
-            // Single source of truth: the URL. Full reload guarantees every
-            // component sees the new state on next render.
-            window.location.href = setVInUrl(checked);
-          }}
-        />
-      ),
-    },
-    {
-      tab: 'general',
-      section: 'Experimental Flags',
       title: 'Background Agent Mode',
       description: 'Allow the agent to work unrestricted — create and edit files without needing to navigate to the target page first.',
       control: (
@@ -556,8 +540,8 @@ function SettingsContent() {
       ),
     },
     {
-      tab: 'general',
-      section: 'Experimental Flags',
+      tab: 'dev',
+      section: 'Alpha Flags',
       title: 'Queue Strategy',
       description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
       control: (
@@ -579,6 +563,22 @@ function SettingsContent() {
         <SwitchControl
           checked={showExpandedMessages}
           onChange={(checked) => dispatch(setShowExpandedMessages(checked))}
+        />
+      ),
+    },
+    {
+      tab: 'dev',
+      section: 'Alpha Flags',
+      title: 'Use new chat interface',
+      description: 'The new Chats surface (TS-orchestrator) is the default. Turn this off to use the legacy Conversations surface. Toggling reloads the page, adding `?v=1` (off) or clearing `v` (on) — the URL is the only source of truth.',
+      control: (
+        <SwitchControl
+          checked={useChatV2}
+          onChange={(checked) => {
+            // Single source of truth: the URL. Full reload guarantees every
+            // component sees the new state on next render.
+            window.location.href = setVInUrl(checked);
+          }}
         />
       ),
     },
@@ -666,22 +666,6 @@ function SettingsContent() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
-    { id: 'appearance', label: 'Appearance', visible: isAdmin, custom: <AppearanceSettings /> },
-    {
-      id: 'messaging',
-      label: 'Messaging',
-      visible: isAdmin,
-      custom: (
-        <VStack align="stretch" gap={4}>
-          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-            <ChannelsSection />
-          </Box>
-          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-            <ErrorDeliverySection />
-          </Box>
-        </VStack>
-      ),
-    },
     {
       id: 'integrations',
       label: 'Integrations',
@@ -693,6 +677,22 @@ function SettingsContent() {
           </Text>
           <SlackIntegration />
           <McpIntegration />
+        </VStack>
+      ),
+    },
+    { id: 'appearance', label: 'Appearance', visible: isAdvancedAdmin, custom: <AppearanceSettings /> },
+    {
+      id: 'messaging',
+      label: 'Messaging',
+      visible: isAdvancedAdmin,
+      custom: (
+        <VStack align="stretch" gap={4}>
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            <ChannelsSection />
+          </Box>
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            <ErrorDeliverySection />
+          </Box>
         </VStack>
       ),
     },
