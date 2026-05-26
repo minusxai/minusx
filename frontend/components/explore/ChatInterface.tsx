@@ -10,8 +10,8 @@ import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, type DebugMessage } from '@/store/chatSlice';
+import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useContext } from '@/lib/hooks/useContext';
@@ -219,11 +219,12 @@ export default function ChatInterface({
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
   const devMode = useAppSelector(selectDevMode);
-  const queryResultsMap = useAppSelector(state => state.queryResults.results);
-  const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
-  const disableAppStateImages = useAppSelector(selectDisableAppStateImages);
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
-  const unrestrictedMode = useAppSelector(selectUnrestrictedMode);
+  // queryResultsMap / colorMode / disableAppStateImages / unrestrictedMode are
+  // ONLY needed inside handleSendMessage. Read them on demand via useAppStore
+  // instead of subscribing — otherwise this parent re-renders every time any
+  // unrelated query result lands or the user toggles colorMode.
+  const store = useAppStore();
 
   const chatSkills = contextInfo.availableSkills;
 
@@ -256,16 +257,20 @@ export default function ChatInterface({
     return uniqueSkills(refs);
   }, [chatSkills, uniqueSkills]);
 
-  // Case 1: existing conversation — follow fork chain from loaded conversation
-  const conversations = useAppSelector(state => state.chat.conversations);
+  // Case 1: existing conversation — follow fork chain from loaded conversation.
+  // selectForkChainTail is memoized: when state.chat.conversations changes due
+  // to an unrelated streaming dispatch, the result ref stays stable so this
+  // useAppSelector skips the re-render. (Previously this subscribed to the
+  // entire conversations map and re-rendered on every chunk.)
+  const forkChainStartID = loadedConversation?.forkedConversationID;
+  const forkChainTail = useAppSelector(state => selectForkChainTail(state, forkChainStartID));
   const forkFollowedConversation = useMemo(() => {
     if (!providedConversationId || !loadedConversation) return null;
-    let conv = loadedConversation;
-    while (conv?.forkedConversationID) {
-      conv = conversations[conv.forkedConversationID] || conv;
-    }
-    return conv;
-  }, [providedConversationId, loadedConversation, conversations]);
+    // No fork → the loaded conversation is itself the tail.
+    return loadedConversation.forkedConversationID
+      ? (forkChainTail ?? loadedConversation)
+      : loadedConversation;
+  }, [providedConversationId, loadedConversation, forkChainTail]);
 
   // Case 2: new conversation — find the active conversation (real positive ID from /api/chat/init)
   const activeConversationId = useAppSelector(selectActiveConversation);
@@ -447,12 +452,19 @@ export default function ChatInterface({
     };
   }, []);
 
-  // Compute layout based on container width and mode
-//   console.log('Container width:', containerWidth, 'Container:', container);
+  // Compute layout based on container width and mode.
+  // Memoized so the colSpan/colStart object identities are stable across renders,
+  // letting React.memo'd children (ExampleQuestions) skip when nothing relevant changed.
   const isCompact = container === 'sidebar' || (containerWidth > 0 && containerWidth < 900);
   const isMedium = !isCompact && containerWidth > 0 && containerWidth < 1100;
-  const colSpan = isCompact ? 12 : isMedium ? { base: 12, md: 8 } : { base: 12, md: 8, lg: 6 };
-  const colStart = isCompact ? 1 : isMedium ? { base: 1, md: 3 } : { base: 1, md: 3, lg: 4 };
+  const colSpan = useMemo(
+    () => isCompact ? 12 : isMedium ? { base: 12, md: 8 } : { base: 12, md: 8, lg: 6 },
+    [isCompact, isMedium],
+  );
+  const colStart = useMemo(
+    () => isCompact ? 1 : isMedium ? { base: 1, md: 3 } : { base: 1, md: 3, lg: 4 },
+    [isCompact, isMedium],
+  );
 
 
   // Clear errors when navigating between conversations — intentional setState in effect
@@ -544,6 +556,15 @@ export default function ChatInterface({
 
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container });
 
+  // Stable callback wrapper for memo'd children (e.g. ExampleQuestions).
+  // handleSendMessage closes over many stateful values and is recreated each
+  // render — passing it directly would defeat React.memo. The ref lets memo'd
+  // children hold an unchanging onClick while still invoking the latest impl.
+  const sendMessageRef = useRef<((userInput: string, attachments?: Attachment[]) => Promise<void>) | null>(null);
+  const stableSendMessage = useCallback((prompt: string) => {
+    void sendMessageRef.current?.(prompt);
+  }, []);
+
   const handleSendMessage = async (userInput: string, attachments: Attachment[] = []) => {
     if (!userInput.trim()) return;
 
@@ -608,6 +629,11 @@ export default function ChatInterface({
     let allAttachments: Attachment[];
     let convId = conversationID;
     try {
+      // Pull handler-only state here so the component doesn't subscribe to it.
+      const sendState = store.getState();
+      const queryResultsMap = sendState.queryResults.results;
+      const colorMode = sendState.ui.colorMode as 'light' | 'dark';
+      const disableAppStateImages = selectDisableAppStateImages(sendState);
       const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode, disableAppStateImages);
       allAttachments = [...attachments, ...fileAttachments];
 
@@ -685,7 +711,7 @@ export default function ChatInterface({
         app_state: appState,
         city: config.city,
         agent_name: config.branding.agentName || 'MinusX',
-        unrestricted_mode: unrestrictedMode,
+        unrestricted_mode: selectUnrestrictedMode(store.getState()),
         skills: {
           selected: agentSelectedSkills,
           user_catalog: uniqueUserCatalog,
@@ -702,6 +728,9 @@ export default function ChatInterface({
       attachments: attachments.length > 0 ? attachments : undefined,
     }));
   };
+  // Keep the ref pointing at the freshest closure so stableSendMessage always
+  // calls the up-to-date implementation.
+  sendMessageRef.current = handleSendMessage;
 
   // Navigate when conversation forks (new conversation gets real ID, or conflict resolution)
   useEffect(() => {
@@ -860,7 +889,7 @@ export default function ChatInterface({
             <FileNotFound/>
           ) : !readOnly && allMessages.length === 0 ? (
             <ExampleQuestions
-              onPromptClick={handleSendMessage}
+              onPromptClick={stableSendMessage}
               container={container}
               colSpan={colSpan}
               colStart={colStart}

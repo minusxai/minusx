@@ -19,17 +19,25 @@ process.env.ANTHROPIC_API_KEY = 'test-stub-no-real-calls';
 vi.mock('server-only', () => ({}));
 
 // Stub analytics module — fire-and-forget; stubs match real error-path behaviour.
+// Keep this in lockstep with the real exports of `lib/analytics/file-analytics.server.ts`:
+// when an export is added there, add a stub here or any test that touches a route
+// importing it (e.g. files/batch, feedback) explodes with a vitest mock error.
 vi.mock('@/lib/analytics/file-analytics.server', () => ({
   FileEventType: { CREATED: 0, READ_DIRECT: 1, READ_AS_REFERENCE: 2, UPDATED: 3, DELETED: 4 },
   trackFileEvent: vi.fn(),
+  trackFileEvents: vi.fn(),
+  trackFeedbackEvent: vi.fn(),
   trackLLMCallEvents: vi.fn(),
   trackQueryExecutionEvent: vi.fn(),
   insertFileEvent: vi.fn(),
+  insertFileEvents: vi.fn(),
+  insertFeedbackEvent: vi.fn(),
   insertLlmCallEvent: vi.fn(),
   insertQueryExecutionEvent: vi.fn(),
   getFileAnalyticsSummary: vi.fn().mockResolvedValue(null),
   getFilesAnalyticsSummary: vi.fn().mockResolvedValue({}),
   getConversationAnalytics: vi.fn().mockResolvedValue(null),
+  getRelevantFiles: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock NextAuth
