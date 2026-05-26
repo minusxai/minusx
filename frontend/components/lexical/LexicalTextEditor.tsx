@@ -113,25 +113,32 @@ const editorTheme = {
 
 /** Shared CSS for the Lexical editor content — used in both edit and read-only modes. */
 const LEXICAL_CONTENT_CSS = {
-  // Typography
-  '& .lexical-h1': { fontSize: '1.5em', fontWeight: 700, lineHeight: 1.3, margin: '0.4em 0 0.2em' },
-  '& .lexical-h2': { fontSize: '1.25em', fontWeight: 600, lineHeight: 1.3, margin: '0.4em 0 0.2em' },
-  '& .lexical-h3': { fontSize: '1.1em', fontWeight: 600, lineHeight: 1.3, margin: '0.3em 0 0.15em' },
+  // Paragraphs
+  '& p': { marginBottom: '1em', lineHeight: 1.8 },
+  '& p:last-child': { marginBottom: 0 },
+
+  // Headings
+  '& .lexical-h1': { fontSize: '1.5em', fontWeight: 700, lineHeight: 1.3, marginTop: '1.2em', marginBottom: '0.6em' },
+  '& .lexical-h2': { fontSize: '1.25em', fontWeight: 600, lineHeight: 1.4, marginTop: '1em', marginBottom: '0.5em' },
+  '& .lexical-h3': { fontSize: '1.1em', fontWeight: 600, lineHeight: 1.4, marginTop: '0.8em', marginBottom: '0.4em' },
+  '& .lexical-h1:first-child, & .lexical-h2:first-child, & .lexical-h3:first-child': { marginTop: 0 },
+
+  // Inline formatting
   '& .lexical-bold': { fontWeight: 700 },
   '& .lexical-italic': { fontStyle: 'italic' },
   '& .lexical-strikethrough': { textDecoration: 'line-through' },
   '& .lexical-inline-code': {
     fontFamily: 'var(--font-jetbrains-mono), monospace',
     fontSize: '0.85em',
-    padding: '1px 4px',
-    borderRadius: '3px',
+    padding: '2px 5px',
+    borderRadius: '4px',
     backgroundColor: 'var(--chakra-colors-bg-emphasized)',
   },
 
   // Lists
-  '& .lexical-ul': { listStyleType: 'disc', paddingLeft: '1.5em', margin: '0.3em 0' },
-  '& .lexical-ol': { listStyleType: 'decimal', paddingLeft: '1.5em', margin: '0.3em 0' },
-  '& .lexical-li': { margin: '0.1em 0' },
+  '& .lexical-ul': { listStyleType: 'disc', paddingLeft: '1.5em', margin: '0.5em 0', lineHeight: 1.7 },
+  '& .lexical-ol': { listStyleType: 'decimal', paddingLeft: '1.5em', margin: '0.5em 0', lineHeight: 1.7 },
+  '& .lexical-li': { marginBottom: '0.25em' },
   '& .lexical-li-checked, & .lexical-li-unchecked': {
     listStyleType: 'none',
     position: 'relative',
@@ -152,8 +159,8 @@ const LEXICAL_CONTENT_CSS = {
   // Block quote
   '& .lexical-quote': {
     borderLeft: '3px solid var(--chakra-colors-border-default)',
-    paddingLeft: '0.8em',
-    margin: '0.4em 0',
+    paddingLeft: '1em',
+    margin: '0.6em 0',
     color: 'var(--chakra-colors-fg-muted)',
     fontStyle: 'italic',
   },
@@ -162,10 +169,10 @@ const LEXICAL_CONTENT_CSS = {
   '& .lexical-code-block': {
     fontFamily: 'var(--font-jetbrains-mono), monospace',
     fontSize: '0.85em',
-    padding: '0.6em 0.8em',
+    padding: '0.75em 1em',
     borderRadius: '6px',
     backgroundColor: 'var(--chakra-colors-bg-emphasized)',
-    margin: '0.4em 0',
+    margin: '0.6em 0',
     whiteSpace: 'pre-wrap',
     overflowX: 'auto',
   },
@@ -180,7 +187,7 @@ const LEXICAL_CONTENT_CSS = {
   '& .lexical-hr': {
     border: 'none',
     borderTop: '1px solid var(--chakra-colors-border-default)',
-    margin: '0.6em 0',
+    margin: '1em 0',
   },
 
   // Table — matches Markdown.tsx table styles
@@ -363,7 +370,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
               <ContentEditable
                 style={{
                   outline: 'none',
-                  padding: '12px 16px',
+                  padding: '32px 32px',
                   minHeight: '100%',
                   fontSize: '14px',
                   lineHeight: 1.6,
@@ -429,7 +436,7 @@ export function LexicalTextViewer({ markdown }: LexicalTextViewerProps) {
             <ContentEditable
               style={{
                 outline: 'none',
-                padding: '16px',
+                padding: '40px 32px',
                 minHeight: '100%',
                 fontSize: '14px',
                 lineHeight: 1.6,
