@@ -368,6 +368,10 @@ export default function StepContext({
       setError('Context file is still loading. Please wait a moment.');
       return;
     }
+    // Clear any stale error from a prior failed attempt — without this, the
+    // user could see an old "[object Object]" or other error text persist
+    // even when the current run succeeds.
+    setError(null);
     onRequestChat?.(realFileId);
 
     // Build appState so the agent knows it's on a context file page.
@@ -421,7 +425,20 @@ export default function StepContext({
       });
       if (!initRes.ok) {
         let msg = `/api/chat/init returned HTTP ${initRes.status}`;
-        try { const b = await initRes.json(); if (b?.error) msg = String(b.error); } catch { /* non-JSON body */ }
+        // The API error envelope is `{ error: { code, message, type } }` —
+        // grab `.message`. Previously we did `String(b.error)`, which on the
+        // envelope shape produced literal "[object Object]". Fall back through
+        // plain-string error / a coerced string for legacy shapes.
+        try {
+          const b = await initRes.json();
+          if (typeof b?.error === 'string') {
+            msg = b.error;
+          } else if (typeof b?.error?.message === 'string') {
+            msg = b.error.message;
+          } else if (typeof b?.message === 'string') {
+            msg = b.message;
+          }
+        } catch { /* non-JSON body */ }
         logInitFailure(msg, initRes.status);
         setError(msg);
         return;
