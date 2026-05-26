@@ -111,7 +111,7 @@
     "eslint-plugin-import-x": "^4.16.1",
     "eslint-plugin-unused-imports": "^4.3.0",
     "express": "^5.2.1",
-    "jsdom": "^29.1.1",
+    "jsdom": "^26.1.0",
     "json-schema-to-typescript": "^15.0.4",
     "patch-package": "^8.0.1",
     "postcss": "^8.5.6",
