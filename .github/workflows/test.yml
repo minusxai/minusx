@@ -23,7 +23,19 @@ jobs:
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
 
+      # Cache the resolved node_modules (not just the npm download cache).
+      # Key invalidates on lockfile, package.json (postinstall script), or any
+      # patch-package patch change — everything that can alter the final tree.
+      # The two parallel jobs share this cache via the same key.
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-deps
+        with:
+          path: ./frontend/node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
+
       - name: Install frontend dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         working-directory: ./frontend
         run: npm ci
 
@@ -47,12 +59,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-deps
+        with:
+          path: ./frontend/node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
+
       - name: Install frontend dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         working-directory: ./frontend
         run: npm ci
 
-      # Coverage only on push to main (slow instrumentation + report build).
-      # PR runs skip it; if you want it locally, run `npm test -- --coverage`.
       - name: Run frontend tests
         working-directory: ./frontend
-        run: npm test -- --max-workers=3 ${{ github.event_name == 'pull_request' && '' || '--coverage' }}
+        run: npm test -- --coverage --max-workers=3
