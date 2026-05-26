@@ -41,7 +41,9 @@ ENV NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=$NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG
 # image layer; when present, the Sentry plugin uploads source maps during build.
 RUN --mount=type=cache,target=/app/.next/cache \
     --mount=type=secret,id=sentry_auth_token \
-    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" npm run build
+    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
+    CI=true \
+    sh -c 'echo "[sentry-debug] token byte length=${#SENTRY_AUTH_TOKEN}"; npm run build'
 
 # ===== RUNTIME STAGE ===== #
 FROM node:20-slim AS runner
