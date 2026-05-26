@@ -260,6 +260,24 @@ function applyDoneEvent(
  * Handle a stream error in a catch block.
  * Returns true if the error was an abort (caller should return early).
  */
+/**
+ * Fire-and-forget post of a transport-level error to /api/chat/log-error so it
+ * lands on the conversation document's `errors[]` and survives page reload.
+ * Best-effort: any failure here is swallowed (we never recurse on log failures).
+ */
+function reportClientErrorToServer(conversationID: number, message: string): void {
+  if (!Number.isFinite(conversationID) || conversationID <= 0) return; // pre-init virtual id
+  const body = {
+    conversationID,
+    error: { _type: 'error', source: 'transport', message, timestamp: Date.now() },
+  };
+  void fetch(patchApiUrl(`${API_BASE_URL}/api/chat/log-error`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => { /* best-effort */ });
+}
+
 function handleStreamError(
   error: any,
   captureLabel: string,
@@ -272,6 +290,7 @@ function handleStreamError(
     dispatch(setError({ conversationID, error: String(error) }));
     dispatch(clearStreamingContent({ conversationID }));
     abortControllers.delete(stableId);
+    reportClientErrorToServer(conversationID, String(error));
     return false;
   }
   if (error.name === 'AbortError') return true;
@@ -279,6 +298,7 @@ function handleStreamError(
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
+  reportClientErrorToServer(conversationID, error.message || 'Unknown error');
   return false;
 }
 

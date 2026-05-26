@@ -1028,7 +1028,7 @@ export type CompletedToolCall = [ToolCall, ToolMessage];
 export type ToolCallRound = CompletedToolCall[];
 
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'tool' | 'debug';
+  role: 'user' | 'assistant' | 'tool' | 'debug' | 'error';
   content: string | null;
   tool_calls?: ToolCall[];  // Assistant messages can have tool_calls (OpenAI spec)
   tool_call_id?: string;    // Tool messages reference their call (OpenAI spec)

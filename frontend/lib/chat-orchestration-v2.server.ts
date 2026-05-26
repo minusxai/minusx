@@ -618,19 +618,43 @@ async function persistAndBuildLegacyResponse(
     }
     for (const rawEntry of piDiff) {
       const entry = rawEntry as unknown as Record<string, unknown>;
-      if (entry?.role !== 'toolResult' || entry?.isError !== true) continue;
+      if (entry?.role !== 'toolResult') continue;
+
       const content = entry.content;
-      const message = Array.isArray(content)
+      const text = Array.isArray(content)
         ? (content as Array<{ type?: string; text?: string }>)
             .filter((c) => c?.type === 'text' && typeof c.text === 'string')
             .map((c) => c.text)
             .join('\n')
         : String(content ?? '');
+
+      // Classify:
+      //   - `isError:true`        → server-tool error (unknown tool / bad params /
+      //                              server-tool throw — set by the orchestrator).
+      //   - `content.success===false` → frontend-tool error (the bridge sends back
+      //                              `{success:false, error}` from a failed
+      //                              frontend-tool handler — see chatListener.runOne).
+      let source: 'server-tool' | 'frontend-tool' | null = null;
+      let message = text;
+      if (entry.isError === true) {
+        source = 'server-tool';
+      } else {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object' && (parsed as { success?: unknown }).success === false) {
+            source = 'frontend-tool';
+            const err = (parsed as { error?: unknown }).error;
+            if (typeof err === 'string') message = err;
+          }
+        } catch { /* not JSON-shaped — fine, treat as successful tool result */ }
+      }
+      if (!source) continue;
+
       await appendErrorToConversation(
         finalConversationId,
         {
           _type: 'error',
-          source: 'server-tool',
+          source,
           message,
           timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
           parent_id: typeof entry.parent_id === 'string' ? entry.parent_id : undefined,
