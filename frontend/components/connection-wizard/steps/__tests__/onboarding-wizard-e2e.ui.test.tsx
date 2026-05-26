@@ -175,5 +175,131 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     const merged = { ...(file.content as any), ...(file.persistableChanges as any) };
     const docs = merged.versions[merged.versions.length - 1].docs;
     expect(docs.some((d: any) => typeof d.content === 'string' && d.content.includes('Sales Overview'))).toBe(true);
+
+    // Bug-catching: no EditFile call should have failed during the run. If the
+    // agent's oldMatch fails to match buildCurrentFileStr (serializer mismatch,
+    // escape mismatch, key-order mismatch), it lands on errors[] as frontend-tool.
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    const convDoc = await DocumentDB.getById(realConvId);
+    const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
+    const frontendErrors = convErrors.filter((e) => e.source === 'frontend-tool');
+    expect(
+      frontendErrors,
+      `agent's EditFile produced ${frontendErrors.length} frontend-tool errors: ${frontendErrors.map(e => e.message).join(' | ')}`,
+    ).toHaveLength(0);
+  }, 45000);
+
+  it('REALISTIC LLM faux: derives oldMatch from app_state the way a real model does — reveals serializer mismatch', async () => {
+    // Mimic a real LLM: read the app_state from the user prompt, copy a JSON
+    // fragment verbatim (the empty doc entry `{"content":""}`), and use that as
+    // oldMatch. If `app_state` (JSON.stringify) and `buildCurrentFileStr`
+    // (encodeFileStr) serialize differently, this fails — which is exactly the
+    // production symptom: "every EditFile errored".
+    onboardingFaux.setResponses([
+      (ctx) => {
+        // Find the rendered user prompt (it embeds the app_state JSON).
+        const userMsg = ctx.messages.find((m) => m.role === 'user');
+        const text = typeof userMsg?.content === 'string'
+          ? userMsg.content
+          : ((userMsg?.content as Array<{ type?: string; text?: string }> | undefined) ?? [])
+              .filter((c) => c?.type === 'text' && typeof c.text === 'string')
+              .map((c) => c.text!)
+              .join('');
+        // The empty doc shows up as `{"content":""}` in JSON.stringify form.
+        // A real LLM would copy that verbatim from what it sees in the prompt.
+        const empty = '{"content":""}';
+        if (!text.includes(empty)) {
+          throw new Error(`prompt did not contain expected empty doc fragment "${empty}"`);
+        }
+        return fauxAssistantMessage(
+          [fauxToolCall('EditFile', {
+            fileId: contextId,
+            changes: [{ oldMatch: empty, newMatch: `{"content":"${DOC_MARKDOWN}"}` }],
+          }, { id: 'tc_real_edit' })],
+          { stopReason: 'toolUse' },
+        );
+      },
+      fauxAssistantMessage('Documented.', { stopReason: 'stop' }),
+    ]);
+
+    renderWithProviders(
+      <ConnectionWizard initialStep="questionnaire" initialConnectionId={1} initialConnectionName="my_csv" />,
+      { store: testStore },
+    );
+    await userEvent.type(await screen.findByLabelText('What is this dataset about?'), 'Sales warehouse');
+    await userEvent.click(await screen.findByLabelText('Continue to documentation step'));
+    await userEvent.click(await screen.findByLabelText('Continue to documentation'));
+
+    const convId = await waitFor(() => {
+      const id = selectActiveConversation(testStore.getState() as RootState);
+      expect(id).toBeTruthy();
+      return id!;
+    }, { timeout: 5000 });
+    const realConvId = await waitForConversationFinished(() => testStore.getState() as RootState, convId);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    const convDoc = await DocumentDB.getById(realConvId);
+    const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
+    const frontendErrors = convErrors.filter((e) => e.source === 'frontend-tool');
+    // Production bug surface: LLM-style oldMatch fails to match. If this fails,
+    // the production symptom is reproduced — fix the serializer mismatch.
+    expect(
+      frontendErrors,
+      `LLM-style EditFile failed: ${frontendErrors.map(e => e.message).join(' | ')}`,
+    ).toHaveLength(0);
+  }, 45000);
+
+  it('REPRODUCES production: LLM tries to ADD doc entries (not just fill empty) → post-edit guard rejects → frontend-tool errors logged', async () => {
+    // A real LLM, given the context file, often emits oldMatch/newMatch that
+    // changes the docs *array length* (adding entries) or touches non-doc-content
+    // fields. The post-edit guard for context files (`tool-handlers.ts:602-627`)
+    // rejects any change outside `docs[].content`, so every such call lands as a
+    // frontend-tool error.
+    onboardingFaux.setResponses([
+      fauxAssistantMessage(
+        [fauxToolCall('EditFile', {
+          fileId: contextId,
+          changes: [{
+            oldMatch: '"docs":[{"content":""}]',
+            // Tries to ADD entries (changes docs.length) — guard will reject.
+            newMatch: '"docs":[{"content":"# Doc1"},{"content":"# Doc2"}]',
+          }],
+        }, { id: 'tc_addentries' })],
+        { stopReason: 'toolUse' },
+      ),
+      fauxAssistantMessage('done', { stopReason: 'stop' }),
+    ]);
+
+    renderWithProviders(
+      <ConnectionWizard initialStep="questionnaire" initialConnectionId={1} initialConnectionName="my_csv" />,
+      { store: testStore },
+    );
+    await userEvent.type(await screen.findByLabelText('What is this dataset about?'), 'Sales warehouse');
+    await userEvent.click(await screen.findByLabelText('Continue to documentation step'));
+    await userEvent.click(await screen.findByLabelText('Continue to documentation'));
+
+    const convId = await waitFor(() => {
+      const id = selectActiveConversation(testStore.getState() as RootState);
+      expect(id).toBeTruthy();
+      return id!;
+    }, { timeout: 5000 });
+    const realConvId = await waitForConversationFinished(() => testStore.getState() as RootState, convId);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    const convDoc = await DocumentDB.getById(realConvId);
+    const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
+
+    // Production-failure reproduction: the guard rejection is logged as a
+    // frontend-tool error. Subtle: `legacyToolResultToPi` flips `isError:true`
+    // whenever `details.success===false`, so the server sees BOTH flags. The
+    // classifier in persistAndBuildLegacyResponse therefore checks the
+    // `{success:false}` shape FIRST (before falling back to 'server-tool' on
+    // bare isError). Without that ordering, every frontend-tool error would
+    // be mislabeled as 'server-tool' in the UI.
+    const guardErrors = convErrors.filter((e) =>
+      /can only modify doc content text|docs\[\]\.content/i.test(e.message),
+    );
+    expect(guardErrors.length).toBeGreaterThan(0);
+    expect(guardErrors[0].source).toBe('frontend-tool');
   }, 45000);
 });
