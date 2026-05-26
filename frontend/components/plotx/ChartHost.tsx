@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from 'react'
+import { memo, type ReactNode, type RefObject } from 'react'
 import { Box } from '@chakra-ui/react'
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
@@ -18,7 +18,7 @@ interface ChartHostProps {
   children?: ReactNode
 }
 
-export const ChartHost = ({
+const ChartHostInner = ({
   containerRef,
   height,
   option,
@@ -49,3 +49,9 @@ export const ChartHost = ({
     </Box>
   )
 }
+
+// memo with the default referential comparator: once the upstream `option`,
+// `events`, and `onChartUpdate` are stable (via BaseChart's useDeepStable +
+// ref-pattern callback), unrelated parent re-renders skip this subtree
+// entirely. Pre-fix, ChartHost was flagged as 100% wasted (40/40 renders).
+export const ChartHost = memo(ChartHostInner)

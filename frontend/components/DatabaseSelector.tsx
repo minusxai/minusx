@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useAppSelector } from '@/store/hooks';
 import { selectConnectionsLoading } from '@/store/filesSlice';
 import { LuDatabase } from 'react-icons/lu';
 import GenericSelector, { SelectorOption } from './GenericSelector';
 import { connectionTypeToDialect, FullQuery } from '@/lib/types';
+import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 
 interface DatabaseSelectorProps {
   value: string;
@@ -15,7 +16,7 @@ interface DatabaseSelectorProps {
   compact?: boolean;
 }
 
-export default function DatabaseSelector({
+function DatabaseSelectorInner({
   value,
   onChange,
   size = 'sm',
@@ -35,11 +36,15 @@ export default function DatabaseSelector({
   // Check if connections are loading from Redux (this fixes the "No connection" flash bug)
   const connectionsLoading = useAppSelector(selectConnectionsLoading);
 
-  const handleChange = (connection_name: string) => {
+  // Wrap the caller's onChange in a stable identity so handleChange below is
+  // also stable (it only depends on connectionsMap, which is already stable
+  // through the hook's own memoisation).
+  const stableOnChange = useStableCallback(onChange);
+  const handleChange = useCallback((connection_name: string) => {
     const conn = connectionsMap[connection_name];
     const dialect = connectionTypeToDialect(conn?.metadata?.type ?? '');
-    onChange({ connection_name, dialect });
-  };
+    stableOnChange({ connection_name, dialect });
+  }, [connectionsMap, stableOnChange]);
 
   return (
     <GenericSelector
@@ -59,3 +64,7 @@ export default function DatabaseSelector({
     />
   );
 }
+
+// `onChange` is consumed through a ref so its identity doesn't matter for
+// memoisation. Other props are shallow-compared.
+export default memo(DatabaseSelectorInner, (prev, next) => shallowEqualExcept(prev, next, ['onChange']));

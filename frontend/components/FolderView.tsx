@@ -34,6 +34,10 @@ import { useAppSelector } from '@/store/hooks';
 import { isSystemFolder, SYSTEM_FOLDERS, resolvePath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE, Mode } from '@/lib/mode/mode-types';
 
+// Hoisted static _hover style (flagged in perf trace as "Referentially
+// unequal but deeply equal objects").
+const FOLDER_TRIGGER_HOVER = { bg: 'bg.muted', color: 'fg.default' };
+
 function DefaultEmptyState({ currentPath }: { currentPath: string }) {
   return (
     <Box
@@ -238,7 +242,7 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
             aria-label="Reload folder"
             onClick={() => readFolder(path, { forceLoad: true }).catch(() => {})}
             color="fg.muted"
-            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
+            _hover={FOLDER_TRIGGER_HOVER}
             borderRadius="md"
           >
             <LuRefreshCw />
