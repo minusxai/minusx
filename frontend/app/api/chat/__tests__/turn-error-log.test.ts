@@ -209,4 +209,33 @@ describe('POST /api/chat — errors persisted to conversation.errors[]', () => {
     expect(entry).toMatchObject({ _type: 'error', source: 'transport', message: 'fetch failed (ECONNREFUSED)', timestamp: 1700000000000 });
     expect(entry.details).toMatchObject({ http_status: 502, retry_count: 1 });
   });
+
+  it('Cycle 8: logTaggedRejection appends source:"unhandled" when the error carries a conversationId tag', async () => {
+    const { logTaggedRejection } = await import('@/lib/api/unhandled-rejection-logger');
+    const { createNewConversation } = await import('@/lib/conversations');
+    const user = { userId: 1, email: 'test@example.com', name: 'Test', role: 'admin', home_folder: '/org', mode: 'org' } as any;
+    const { fileId } = await createNewConversation(user, 'cycle 8 unhandled rejection');
+
+    const tagged = Object.assign(new Error('background task crashed: foo is undefined'), { conversationId: fileId });
+    await logTaggedRejection(tagged, user);
+
+    const content = await readConversation(fileId);
+    expect(Array.isArray(content.errors)).toBe(true);
+    expect(content.errors).toHaveLength(1);
+    const entry = content.errors![0] as Record<string, any>;
+    expect(entry).toMatchObject({ _type: 'error', source: 'unhandled' });
+    expect(String(entry.message)).toContain('background task crashed');
+    expect(typeof entry.timestamp).toBe('number');
+  });
+
+  it('Cycle 8: logTaggedRejection is a no-op when the error has no conversationId tag', async () => {
+    const { logTaggedRejection } = await import('@/lib/api/unhandled-rejection-logger');
+    const { createNewConversation } = await import('@/lib/conversations');
+    const user = { userId: 1, email: 'test@example.com', name: 'Test', role: 'admin', home_folder: '/org', mode: 'org' } as any;
+    const { fileId } = await createNewConversation(user, 'cycle 8 untagged rejection');
+
+    await logTaggedRejection(new Error('untagged'), user);
+    const content = await readConversation(fileId);
+    expect(content.errors ?? []).toHaveLength(0);
+  });
 });

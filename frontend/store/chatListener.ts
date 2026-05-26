@@ -265,17 +265,35 @@ function applyDoneEvent(
  * lands on the conversation document's `errors[]` and survives page reload.
  * Best-effort: any failure here is swallowed (we never recurse on log failures).
  */
-function reportClientErrorToServer(conversationID: number, message: string): void {
+function reportClientErrorToServer(
+  conversationID: number,
+  message: string,
+  source: 'transport' | 'session' | 'unhandled' = 'transport',
+  httpStatus?: number,
+): void {
   if (!Number.isFinite(conversationID) || conversationID <= 0) return; // pre-init virtual id
   const body = {
     conversationID,
-    error: { _type: 'error', source: 'transport', message, timestamp: Date.now() },
+    error: {
+      _type: 'error',
+      source,
+      message,
+      timestamp: Date.now(),
+      ...(typeof httpStatus === 'number' ? { details: { http_status: httpStatus } } : {}),
+    },
   };
   void fetch(patchApiUrl(`${API_BASE_URL}/api/chat/log-error`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).catch(() => { /* best-effort */ });
+}
+
+function classifyError(error: { name?: string; httpStatus?: number }): { source: 'transport' | 'session'; httpStatus?: number } {
+  if (error?.name === 'SessionExpiredError' || error?.httpStatus === 401) {
+    return { source: 'session', httpStatus: error.httpStatus ?? 401 };
+  }
+  return { source: 'transport', httpStatus: error?.httpStatus };
 }
 
 function handleStreamError(
@@ -298,7 +316,8 @@ function handleStreamError(
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
-  reportClientErrorToServer(conversationID, error.message || 'Unknown error');
+  const { source, httpStatus } = classifyError(error);
+  reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
   return false;
 }
 
@@ -315,6 +334,12 @@ async function fetchChatNonStreaming(
     body: JSON.stringify(body),
     signal,
   });
+  if (response.status === 401) {
+    const err = new Error('Session expired — please sign in again') as Error & { name: string; httpStatus: number };
+    err.name = 'SessionExpiredError';
+    err.httpStatus = 401;
+    throw err;
+  }
   const data = await response.json();
   if (data.error) {
     dispatch(setError({ conversationID, error: data.error }));
