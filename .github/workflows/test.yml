@@ -9,8 +9,8 @@ on:
       - main
 
 jobs:
-  test-frontend:
-    name: Frontend Tests (Chat API, E2E, MinusX Agent)
+  validate:
+    name: Validate (typecheck + lint)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -31,6 +31,28 @@ jobs:
         working-directory: ./frontend
         run: npm run validate
 
+  test-frontend:
+    # NOTE: this job's `name:` is the required-check string on PRs — DO NOT
+    # rename it without updating the branch protection rule.
+    name: Frontend Tests (Chat API, E2E, MinusX Agent)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      # Coverage only on push to main (slow instrumentation + report build).
+      # PR runs skip it; if you want it locally, run `npm test -- --coverage`.
       - name: Run frontend tests
         working-directory: ./frontend
-        run: npm test -- --coverage --max-workers=3
+        run: npm test -- --max-workers=3 ${{ github.event_name == 'pull_request' && '' || '--coverage' }}
