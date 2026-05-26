@@ -260,6 +260,42 @@ function applyDoneEvent(
  * Handle a stream error in a catch block.
  * Returns true if the error was an abort (caller should return early).
  */
+/**
+ * Fire-and-forget post of a transport-level error to /api/chat/log-error so it
+ * lands on the conversation document's `errors[]` and survives page reload.
+ * Best-effort: any failure here is swallowed (we never recurse on log failures).
+ */
+function reportClientErrorToServer(
+  conversationID: number,
+  message: string,
+  source: 'transport' | 'session' | 'unhandled' = 'transport',
+  httpStatus?: number,
+): void {
+  if (!Number.isFinite(conversationID) || conversationID <= 0) return; // pre-init virtual id
+  const body = {
+    conversationID,
+    error: {
+      _type: 'error',
+      source,
+      message,
+      timestamp: Date.now(),
+      ...(typeof httpStatus === 'number' ? { details: { http_status: httpStatus } } : {}),
+    },
+  };
+  void fetch(patchApiUrl(`${API_BASE_URL}/api/chat/log-error`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => { /* best-effort */ });
+}
+
+function classifyError(error: { name?: string; httpStatus?: number }): { source: 'transport' | 'session'; httpStatus?: number } {
+  if (error?.name === 'SessionExpiredError' || error?.httpStatus === 401) {
+    return { source: 'session', httpStatus: error.httpStatus ?? 401 };
+  }
+  return { source: 'transport', httpStatus: error?.httpStatus };
+}
+
 function handleStreamError(
   error: any,
   captureLabel: string,
@@ -272,6 +308,7 @@ function handleStreamError(
     dispatch(setError({ conversationID, error: String(error) }));
     dispatch(clearStreamingContent({ conversationID }));
     abortControllers.delete(stableId);
+    reportClientErrorToServer(conversationID, String(error));
     return false;
   }
   if (error.name === 'AbortError') return true;
@@ -279,10 +316,43 @@ function handleStreamError(
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
+  const { source, httpStatus } = classifyError(error);
+  reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
   return false;
 }
 
 /** Non-streaming path used in test environments (fetch to /api/chat). */
+/**
+ * Bounded retry around `fetchChatNonStreaming` for transient transport failures
+ * (network drops / 5xx). Does NOT retry on AbortError or SessionExpiredError —
+ * those are terminal. The server's log append is fork-aware on length mismatch,
+ * so client retries are idempotent. Up to 2 retries with exponential backoff.
+ */
+async function fetchChatWithRetry(
+  body: object,
+  conversationID: number,
+  signal: AbortSignal,
+  dispatch: AppDispatch,
+  maxRetries = 2,
+): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await fetchChatNonStreaming(body, conversationID, signal, dispatch);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const e = err as { name?: string };
+      if (e?.name === 'AbortError' || e?.name === 'SessionExpiredError') throw err;
+      if (attempt < maxRetries) {
+        const backoffMs = 500 * Math.pow(2, attempt); // 500ms, 1s
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchChatNonStreaming(
   body: object,
   conversationID: number,
@@ -295,6 +365,12 @@ async function fetchChatNonStreaming(
     body: JSON.stringify(body),
     signal,
   });
+  if (response.status === 401) {
+    const err = new Error('Session expired — please sign in again') as Error & { name: string; httpStatus: number };
+    err.name = 'SessionExpiredError';
+    err.httpStatus = 401;
+    throw err;
+  }
   const data = await response.json();
   if (data.error) {
     dispatch(setError({ conversationID, error: data.error }));
@@ -338,7 +414,7 @@ chatListenerMiddleware.startListening({
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );
@@ -382,7 +458,7 @@ chatListenerMiddleware.startListening({
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );
@@ -427,7 +503,7 @@ chatListenerMiddleware.startListening({
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );
@@ -485,7 +561,7 @@ chatListenerMiddleware.startListening({
       }
 
       if (IS_TEST) {
-        await fetchChatNonStreaming(
+        await fetchChatWithRetry(
           { conversationID, log_index: conversation.log_index, user_message: userMessage, completed_tool_calls, agent: conversation.agent, agent_args: conversation.agent_args },
           conversationID, abortController.signal, dispatch,
         );

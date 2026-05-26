@@ -1,4 +1,4 @@
-import { ConversationLogEntry } from '@/lib/types';
+import { ConversationLogEntry, ErrorLogEntry } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 
 /**
@@ -64,7 +64,7 @@ export function truncateMessageForName(message: string): string {
  * @param log - Conversation log entries
  * @returns Array of user messages, completed tool calls, and debug entries
  */
-export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
+export function parseLogToMessages(log: ConversationLogEntry[], errors?: ErrorLogEntry[]): any[] {
   const messages: any[] = [];
   const pendingTasks = new Map<string, any>(); // unique_id -> task
 
@@ -121,6 +121,24 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
 
   // Append aggregated debug messages (reuse extractDebugMessages)
   messages.push(...extractDebugMessages(log));
+
+  // Merge in conversation `errors[]` as `role:'error'` ErrorMessage rows so the
+  // chat UI can render them distinctly (similar to debug messages). pi-ai never
+  // sees these; they live on a parallel `errors[]` field on the conversation doc.
+  if (errors && errors.length > 0) {
+    for (const err of errors) {
+      messages.push({
+        role: 'error',
+        source: err.source,
+        content: err.message,
+        created_at: new Date(typeof err.timestamp === 'number' ? err.timestamp : Date.now()).toISOString(),
+        ...(err.details ? { details: err.details } : {}),
+        ...(err.parent_id ? { parent_id: err.parent_id } : {}),
+      });
+    }
+    // Re-sort by created_at so errors interleave with log entries in time order.
+    messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }
 
   return messages;
 }

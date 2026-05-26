@@ -61,7 +61,7 @@ import {
   legacyToolResultToPi,
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
-import { appendLogToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
+import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
 import type {
@@ -600,6 +600,76 @@ async function persistAndBuildLegacyResponse(
     }
   }
 
+  // Persist structured error entries alongside the pi-ai log so failures survive
+  // page reload and render as distinct ErrorMessage rows in the UI.
+  // Best-effort: a failure here must NOT crash the response.
+  //   (a) `runError` — hard run failure (LLM call threw, agent.run() threw, etc.).
+  //   (b) `toolResult` entries with `isError:true` — server-side tool errors
+  //       (unknown tool / bad params / server-tool throw). The toolResult stays
+  //       in the pi-ai log so the LLM can recover; the mirrored entry is for
+  //       UI visibility only and pi-ai never sees `errors[]`.
+  try {
+    if (runError) {
+      await appendErrorToConversation(
+        finalConversationId,
+        { _type: 'error', source: 'llm', message: runError, timestamp: Date.now() },
+        user,
+      );
+    }
+    for (const rawEntry of piDiff) {
+      const entry = rawEntry as unknown as Record<string, unknown>;
+      if (entry?.role !== 'toolResult') continue;
+
+      const content = entry.content;
+      const text = Array.isArray(content)
+        ? (content as Array<{ type?: string; text?: string }>)
+            .filter((c) => c?.type === 'text' && typeof c.text === 'string')
+            .map((c) => c.text)
+            .join('\n')
+        : String(content ?? '');
+
+      // Classify:
+      //   - `isError:true`        → server-tool error (unknown tool / bad params /
+      //                              server-tool throw — set by the orchestrator).
+      //   - `content.success===false` → frontend-tool error (the bridge sends back
+      //                              `{success:false, error}` from a failed
+      //                              frontend-tool handler — see chatListener.runOne).
+      let source: 'server-tool' | 'frontend-tool' | null = null;
+      let message = text;
+      if (entry.isError === true) {
+        source = 'server-tool';
+      } else {
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object' && (parsed as { success?: unknown }).success === false) {
+            source = 'frontend-tool';
+            const err = (parsed as { error?: unknown }).error;
+            if (typeof err === 'string') message = err;
+          }
+        } catch { /* not JSON-shaped — fine, treat as successful tool result */ }
+      }
+      if (!source) continue;
+
+      await appendErrorToConversation(
+        finalConversationId,
+        {
+          _type: 'error',
+          source,
+          message,
+          timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
+          parent_id: typeof entry.parent_id === 'string' ? entry.parent_id : undefined,
+          details: {
+            tool_name: typeof entry.toolName === 'string' ? entry.toolName : undefined,
+            tool_call_id: typeof entry.toolCallId === 'string' ? entry.toolCallId : undefined,
+          },
+        },
+        user,
+      );
+    }
+  } catch (e) {
+    console.error('[v2/chat] failed to append error log entry:', e);
+  }
+
   // Translate the FULL log to legacy shape so completed_tool_calls / debug
   // / log_index reflect the legacy view, then slice to the new diff for
   // the response.
@@ -753,6 +823,12 @@ export async function* runChatTurnStreamV2(
   } catch (err) {
     console.error('[v2/stream] orchestrator run threw:', err);
     runError = err instanceof Error ? err.message : String(err);
+    // Tag the error so any escape paths (e.g. dangling microtasks that reject
+    // after the route returns) route to the right conversation via the
+    // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
+    if (err && typeof err === 'object') {
+      (err as { conversationId?: number }).conversationId = setup.conversationId;
+    }
   }
 
   let response: V2LegacyChatResponse;

@@ -26,6 +26,21 @@ export async function register() {
     // eslint-disable-next-line no-restricted-syntax
     const { registerWithModules } = await import('./lib/instrumentation/register-modules');
     await registerWithModules();
+
+    // Route orchestrator-tagged unhandled rejections to the conversation's
+    // errors[] so the failure shows up in chat history (Cycle 8 wire).
+    // Untagged rejections are ignored here (Sentry already captures them).
+    // Best-effort: the handler swallows its own errors.
+    // eslint-disable-next-line no-restricted-syntax
+    const { logTaggedRejection } = await import('./lib/api/unhandled-rejection-logger');
+    const systemUser = {
+      userId: -1, email: 'system@minusx', name: 'System',
+      role: 'admin', home_folder: '/org', mode: 'org',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    process.on('unhandledRejection', (reason) => {
+      void logTaggedRejection(reason, systemUser);
+    });
   }
 }
 
