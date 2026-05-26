@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, Text } from '@chakra-ui/react';
+import { Box, Text, Button } from '@chakra-ui/react';
+import { LuPlus } from 'react-icons/lu';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -129,6 +130,8 @@ export default function DashboardView({
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
   documentRef.current = document;
+
+  const addPanelRef = useRef<HTMLDivElement>(null);
 
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
@@ -644,6 +647,28 @@ export default function DashboardView({
             </Box>
           )}
 
+          {/* Scroll-to-add button in edit mode */}
+          {editMode && layoutableAssets.length > 0 && (
+            <Box display="flex" justifyContent="flex-end" mb={2}>
+              <Button
+                size="xs"
+                variant="outline"
+                borderRadius="md"
+                borderColor="accent.teal"
+                color="accent.teal"
+                fontSize="xs"
+                fontWeight={500}
+                px={3}
+                _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
+                transition="all 0.15s"
+                onClick={() => addPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              >
+                <LuPlus size={12} />
+                <Text ml={1}>Add content</Text>
+              </Button>
+            </Box>
+          )}
+
           {/* Grid Layout */}
           <Box position="relative" maxW="100%" pb={30} minH={"100%"}>
             {gridBackground}
@@ -718,7 +743,7 @@ export default function DashboardView({
 
             {/* Add Questions/Text Panel - after last card in edit mode */}
             {editMode && layoutableAssets.length > 0 && (
-              <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10}>
+              <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10} ref={addPanelRef}>
                 <QuestionBrowserPanel
                   folderPath={folderPath}
                   onAddQuestion={(questionId) => {
