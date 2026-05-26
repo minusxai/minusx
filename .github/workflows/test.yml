@@ -14,10 +14,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
-# Restrict GITHUB_TOKEN to the minimum the workflow needs. CodeQL flags
-# workflows without an explicit permissions block (medium severity).
-# Both jobs only read repo contents (checkout + install + run); they do
-# not push, comment, deploy, or call any other GitHub API.
+# Restrict GITHUB_TOKEN to the minimum the workflow needs.
 permissions:
   contents: read
 
@@ -36,10 +33,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
 
-      # Cache the resolved node_modules (not just the npm download cache).
-      # Key invalidates on lockfile, package.json (postinstall script), or any
-      # patch-package patch change — everything that can alter the final tree.
-      # The two parallel jobs share this cache via the same key.
       - name: Cache node_modules
         uses: actions/cache@v4
         id: cache-deps
@@ -56,11 +49,18 @@ jobs:
         working-directory: ./frontend
         run: npm run validate
 
-  test-frontend:
-    # NOTE: this job's `name:` is the required-check string on PRs — DO NOT
-    # rename it without updating the branch protection rule.
-    name: Frontend Tests (Chat API, E2E, MinusX Agent)
+  # Sharded test execution. Vitest distributes test files evenly across shards
+  # (by file hash), so each shard runs roughly half the suite in parallel. The
+  # shards share the node_modules cache via the same key as the validate job.
+  test-frontend-shard:
+    name: Frontend Tests — shard ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
+    strategy:
+      # Run both shards to completion even if one fails so we surface all
+      # failures in a single CI cycle.
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -84,10 +84,28 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      # ubuntu-latest is 4 vCPU; use all of them. We previously left one core
-      # free for the OS at --max-workers=3, but measurement showed the suite
-      # is CPU-bound on test execution itself (not on background OS work) and
-      # 4 workers comfortably fits in 16GB RAM (~500MB RSS per worker).
-      - name: Run frontend tests
+      - name: Run frontend tests (shard ${{ matrix.shard }}/2)
         working-directory: ./frontend
-        run: npm test -- --coverage --max-workers=4
+        run: npm test -- --coverage --max-workers=4 --shard=${{ matrix.shard }}/2
+
+  # Aggregator job — this is the required-check name in branch protection. It
+  # depends on every shard and fails if any of them failed. Keeping a single
+  # required check decouples branch protection from how many shards we use, so
+  # bumping shard count later (2→3→4) only edits the matrix above.
+  test-frontend:
+    # NOTE: this job's `name:` is the required-check string on PRs — DO NOT
+    # rename it without updating the branch protection rule.
+    name: Frontend Tests (Chat API, E2E, MinusX Agent)
+    runs-on: ubuntu-latest
+    needs: [test-frontend-shard]
+    if: always()
+    steps:
+      - name: Verify all test shards passed
+        run: |
+          result='${{ needs.test-frontend-shard.result }}'
+          echo "Shard matrix result: $result"
+          if [[ "$result" != "success" ]]; then
+            echo "::error::One or more test shards did not pass (result: $result)"
+            exit 1
+          fi
+          echo "All shards passed."
