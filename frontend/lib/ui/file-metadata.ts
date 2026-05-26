@@ -87,7 +87,7 @@ export const FILE_TYPE_METADATA = {
     icon: LuFileText,
     color: 'accent.secondary',      // Emerald green (#2ecc71)
     category: 'analytics',
-    supported: true,
+    supported: false,
     h: 'none',
   },
   config: {
@@ -121,7 +121,7 @@ export const FILE_TYPE_METADATA = {
     icon: LuArrowRightLeft,
     color: 'accent.success',        // Emerald green (#2ecc71)
     category: 'analytics',
-    supported: true,
+    supported: false,
     h: 'none',
   },
   context_run: {
