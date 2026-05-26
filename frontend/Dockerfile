@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
-    curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -43,18 +42,7 @@ ENV NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=$NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG
 # image layer; when present, the Sentry plugin uploads source maps during build.
 RUN --mount=type=cache,target=/app/.next/cache \
     --mount=type=secret,id=sentry_auth_token \
-    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
-    CI=true \
-    SENTRY_LOG_LEVEL=debug \
-    sh -c 'echo "[sentry-debug] token byte length=${#SENTRY_AUTH_TOKEN}"; \
-           echo "[sentry-debug] DNS sentry.io:"; getent hosts sentry.io || echo "[sentry-debug] DNS FAIL"; \
-           echo "[sentry-debug] control (npm registry):"; \
-           curl -sS -o /dev/null --connect-timeout 10 -w "[sentry-debug] npm HTTP %{http_code}\n" https://registry.npmjs.org/ 2>&1; \
-           echo "[sentry-debug] verbose curl to sentry.io:"; \
-           curl -4 -v -o /dev/null --connect-timeout 10 -w "[sentry-debug] sentry HTTP %{http_code}\n" \
-                -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
-                https://sentry.io/api/0/projects/minusx/minusx-bi/ 2>&1 | head -30; \
-           npm run build'
+    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" npm run build
 
 # ===== RUNTIME STAGE ===== #
 FROM node:20-slim AS runner
