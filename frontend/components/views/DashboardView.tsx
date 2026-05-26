@@ -29,6 +29,8 @@ const TEXT_BLOCK_DEFAULT_W = 6;
 const TEXT_BLOCK_DEFAULT_H = 3;
 const TEXT_BLOCK_MIN_W = 2;
 const TEXT_BLOCK_MIN_H = 1;
+const GRID_ROW_HEIGHT = 80;
+const GRID_MARGIN = 6;
 
 /** Convert a react-grid-layout string key back to number (questions) or string (inline assets). */
 const parseLayoutItemId = (key: string): number | string =>
@@ -131,6 +133,22 @@ export default function DashboardView({
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
 
+  // Track expanded text block heights (pixel height → grid rows)
+  const [expandedHeights, setExpandedHeights] = useState<Map<string, number>>(new Map());
+  const handleTextBlockResize = useCallback((textBlockId: string, height: number | null) => {
+    setExpandedHeights(prev => {
+      const next = new Map(prev);
+      if (height === null) {
+        next.delete(textBlockId);
+      } else {
+        // Cell pixel height = h * ROW_HEIGHT + (h-1) * MARGIN → h = ceil((px + MARGIN) / (ROW_HEIGHT + MARGIN))
+        const gridRows = Math.ceil((height + GRID_MARGIN) / (GRID_ROW_HEIGHT + GRID_MARGIN));
+        next.set(textBlockId, gridRows);
+      }
+      return next;
+    });
+  }, []);
+
   // Force react-grid-layout to remount when file reverts from dirty → clean (discard/save).
   // ResponsiveGridLayout maintains internal layout state that doesn't always sync
   // with the `layouts` prop, so we force a remount via key change.
@@ -216,6 +234,23 @@ export default function DashboardView({
       xxs: mobileLayout // 6 cols - vertically stacked
     };
   }, [document?.layout, document?.assets]);
+
+  // Apply expanded text block heights to layouts (view-only, not persisted)
+  const effectiveLayouts = useMemo(() => {
+    if (expandedHeights.size === 0) return layouts;
+    const applyExpansion = (items: Layout[]) =>
+      items.map(item => {
+        const expanded = expandedHeights.get(item.i);
+        return expanded ? { ...item, h: expanded } : item;
+      });
+    return {
+      lg: applyExpansion(layouts.lg),
+      md: applyExpansion(layouts.md),
+      sm: applyExpansion(layouts.sm),
+      xs: applyExpansion(layouts.xs),
+      xxs: applyExpansion(layouts.xxs),
+    };
+  }, [layouts, expandedHeights]);
 
   // Extract question IDs from assets (SmartEmbeddedQuestionContainer will load content)
   // Simple filter/map - no useMemo needed for this cheap operation
@@ -397,15 +432,13 @@ export default function DashboardView({
   const gridBackground = useMemo(() => {
     if (!editMode) return null;
 
-    const gridRowHeight = 80; // Must match rowHeight prop on ResponsiveGridLayout
-    const gridMargin = 6;    // Must match margin prop on ResponsiveGridLayout
-    const cellHeight = gridRowHeight + gridMargin; // 90px per row (rowHeight + vertical margin)
+    const cellHeight = GRID_ROW_HEIGHT + GRID_MARGIN;
     const minHeight = 1500;
     const cols = currentCols; // Use responsive column count
     const maxLayoutRow = layouts.lg.reduce((max: number, item: Layout) => Math.max(max, item.y + item.h), 0);
     const minRows = Math.ceil(minHeight / cellHeight);
     const numRows = Math.max(minRows, maxLayoutRow + 10);
-    const halfMargin = gridMargin / 2; // 5px — half the margin on each side of a cell
+    const halfMargin = GRID_MARGIN / 2; // 5px — half the margin on each side of a cell
 
     return (
       <Box
@@ -520,6 +553,7 @@ export default function DashboardView({
 
       // Text block
       const textAsset = asset as InlineAsset;
+      const isExpanded = expandedHeights.has(key);
       return (
         <Box
           key={key}
@@ -527,7 +561,7 @@ export default function DashboardView({
           borderWidth="1px"
           borderColor="border.default"
           borderRadius="md"
-          overflow="hidden"
+          overflow={isExpanded ? 'visible' : 'hidden'}
           display="flex"
           flexDirection="column"
         >
@@ -539,11 +573,12 @@ export default function DashboardView({
               dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId: id, content }));
             }}
             onRemove={(id) => handleRemoveAsset(id)}
+            onResize={handleTextBlockResize}
           />
         </Box>
       );
     });
-  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, expandedHeights, handleTextBlockResize]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
@@ -617,17 +652,17 @@ export default function DashboardView({
               <ResponsiveGridLayout
                 key={`grid-v${gridVersion}`}
                 className="layout"
-                layouts={layouts}
+                layouts={effectiveLayouts}
                 breakpoints={{ lg: 1024, md: 768, sm: 0 }}
                 cols={{ lg: 12, md: 12, sm: 6 }}
-                rowHeight={80}
+                rowHeight={GRID_ROW_HEIGHT}
                 compactType="vertical"
                 onBreakpointChange={(_breakpoint, cols) => setCurrentCols(cols)}
                 onDragStop={handleLayoutChange}
                 onResizeStop={handleLayoutChange}
                 draggableHandle=".drag-handle"
                 containerPadding={[0, 0]}
-                margin={[6, 6]}
+                margin={[GRID_MARGIN, GRID_MARGIN]}
                 isDraggable={editMode}
                 isResizable={editMode}
               >
