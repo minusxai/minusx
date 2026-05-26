@@ -7,10 +7,11 @@ import { DisplayProps } from '@/lib/types';
 import Markdown from '../../Markdown';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { useEffect } from 'react';
+import FeedbackBlock from '../message/FeedbackBlock';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode, conversationID }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode, conversationID, userMessageLogIndex }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -255,6 +256,19 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
 
             {/* Show citations with answer if answer exists */}
             {showCitationsWithAnswer && renderCitations(false)}
+
+            {/* Feedback thumbs up/down */}
+            {hasAnswer && conversationID !== undefined && userMessageLogIndex !== undefined && (
+              <GridItem colSpan={12} colStart={1}>
+                <Box px={3}>
+                  <FeedbackBlock
+                    conversationID={conversationID}
+                    userMessageLogIndex={userMessageLogIndex}
+                    markdownContext={markdownContext}
+                  />
+                </Box>
+              </GridItem>
+            )}
             </>
   );
 }

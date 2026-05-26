@@ -847,6 +847,7 @@ export default function AgentTurnContainer({
         <SimpleChatMessage
           message={lastChatMessage}
           {...sharedProps}
+          userMessageLogIndex={(turn.userMessage as any)?.logIndex}
         />
       )}
     </>

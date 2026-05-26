@@ -871,20 +871,29 @@ export default function ChatInterface({
             <GridItem colSpan={colSpan} colStart={colStart}>
 
               {viewMode === 'detailed' ? (
-                allMessages.map((msg, idx) => (
-                    <SimpleChatMessage
-                        key={`${msg.role}-${idx}-${(msg as any).tool_call_id || ''}`}
-                        message={msg}
-                        databaseName={selectedDatabase || ''}
-                        isCompact={isCompact}
-                        showThinking={showThinking}
-                        toggleShowThinking={toggleShowThinking}
-                        markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
-                        conversationID={conversationID}
-                        readOnly={readOnly || needsContinueConfirmation}
-                        viewMode={viewMode}
-                    />
-                ))
+                (() => {
+                  let lastUserLogIndex: number | undefined;
+                  return allMessages.map((msg, idx) => {
+                    if (msg.role === 'user' && (msg as any).logIndex !== undefined) {
+                      lastUserLogIndex = (msg as any).logIndex;
+                    }
+                    return (
+                      <SimpleChatMessage
+                          key={`${msg.role}-${idx}-${(msg as any).tool_call_id || ''}`}
+                          message={msg}
+                          databaseName={selectedDatabase || ''}
+                          isCompact={isCompact}
+                          showThinking={showThinking}
+                          toggleShowThinking={toggleShowThinking}
+                          markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
+                          conversationID={conversationID}
+                          readOnly={readOnly || needsContinueConfirmation}
+                          viewMode={viewMode}
+                          userMessageLogIndex={msg.role !== 'user' ? lastUserLogIndex : undefined}
+                      />
+                    );
+                  });
+                })()
               ) : (
                 groupIntoTurns(allMessages).map((turn, turnIdx) => (
                   <AgentTurnContainer

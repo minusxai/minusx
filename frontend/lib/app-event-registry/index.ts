@@ -33,3 +33,4 @@ appEventRegistry.subscribe(AppEvents.USER_MESSAGE,             p => notifyAppEve
 appEventRegistry.subscribe(AppEvents.USER_LOGGED_IN,           p => notifyAppEvent(AppEvents.USER_LOGGED_IN,           p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.USER_CREATED,             p => notifyAppEvent(AppEvents.USER_CREATED,             p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.USER_DELETED,             p => notifyAppEvent(AppEvents.USER_DELETED,             p as unknown as Record<string, unknown>));
+appEventRegistry.subscribe(AppEvents.FEEDBACK,                 p => notifyAppEvent(AppEvents.FEEDBACK,                 p as unknown as Record<string, unknown>));

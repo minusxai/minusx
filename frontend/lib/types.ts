@@ -1210,6 +1210,7 @@ export interface DisplayProps {
   readOnly?: boolean;
   viewMode?: ChatViewMode;
   conversationID?: number;  // Owning conversation (for suggested-question clicks)
+  userMessageLogIndex?: number;  // logIndex of the user message this response answers (for feedback)
 }
 
 // ============================================================================

@@ -17,6 +17,7 @@ export const AppEvents = {
   USER_LOGGED_IN:           'user:login',
   USER_CREATED:             'user:created',
   USER_DELETED:             'user:deleted',
+  FEEDBACK:                 'user:feedback',
 } as const;
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
@@ -42,4 +43,5 @@ export interface AppEventPayloads {
   'user:login':               BaseEventPayload & { userId?: number; userEmail?: string; role?: string };
   'user:created':             BaseEventPayload & { userId?: number; userEmail?: string; role?: string; createdBy?: string };
   'user:deleted':             BaseEventPayload & { userId?: number; userEmail?: string; role?: string; deletedBy?: string };
+  'user:feedback':            BaseEventPayload & { conversationId: number; userMessageLogIndex: number; rating: 'positive' | 'negative'; tags: string[]; comment?: string; userId?: number; userEmail?: string };
 }
