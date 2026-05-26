@@ -5,77 +5,92 @@
  * the same across renders, BUT invoking it always runs the latest closure the
  * caller passed in. Both halves of that contract get a test here so a future
  * refactor can't quietly break one.
+ *
+ * react-hooks/refs is disabled file-wide: the test harness deliberately
+ * inspects ref values during render to observe identity stability — the
+ * exact property under test.
  */
-import { useState } from 'react';
-import { render, screen, act } from '@testing-library/react';
+/* eslint-disable react-hooks/refs */
+import { useRef, useState } from 'react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 
+/**
+ * Helper that exposes the number of distinct callback identities ever returned
+ * by useStableCallback via a tagged aria-label. Avoids mutating outer-scope
+ * vars during render (which trips react-hooks/globals).
+ */
+function StabilityProbe({ cb }: { cb: () => void }) {
+  const stable = useStableCallback(cb);
+  const lastSeen = useRef<{ ref: unknown; count: number }>({ ref: stable, count: 1 });
+  // eslint-disable-next-line react-hooks/refs
+  if (!Object.is(lastSeen.current.ref, stable)) {
+    // eslint-disable-next-line react-hooks/refs
+    lastSeen.current = { ref: stable, count: lastSeen.current.count + 1 };
+  }
+  // eslint-disable-next-line react-hooks/refs
+  const count = lastSeen.current.count;
+  return <span aria-label="IdentityCount">{count}</span>;
+}
+
 describe('useStableCallback', () => {
-  it('returns a function whose identity is stable across re-renders', async () => {
-    const seenIdentities = new Set<() => void>();
+  it('returns a function whose identity is stable across re-renders', () => {
+    const { rerender } = render(<StabilityProbe cb={() => undefined} />);
+    rerender(<StabilityProbe cb={() => undefined} />);
+    rerender(<StabilityProbe cb={() => undefined} />);
 
-    function Harness({ cb }: { cb: () => void }) {
-      const stable = useStableCallback(cb);
-      seenIdentities.add(stable);
-      return null;
-    }
-
-    const { rerender } = render(<Harness cb={() => undefined} />);
-    rerender(<Harness cb={() => undefined} />);
-    rerender(<Harness cb={() => undefined} />);
-
-    // Three renders, three brand-new caller closures, but useStableCallback
-    // should have surfaced the same wrapper identity each time.
-    expect(seenIdentities.size).toBe(1);
+    // Three renders, three brand-new caller closures — but the hook should
+    // have surfaced the same wrapper identity each time.
+    expect(screen.getByLabelText('IdentityCount').textContent).toBe('1');
   });
 
   it('always invokes the latest closure', async () => {
-    let latest: () => string = () => 'A';
-    let returned: string | null = null;
-
-    function Harness({ cb }: { cb: () => string }) {
+    /**
+     * Inner harness writes the latest return value to its own DOM. The
+     * "current closure" is passed in via props, so we don't need to mutate
+     * outer-scope state during render.
+     */
+    function ResultProbe({ cb }: { cb: () => string }) {
       const stable = useStableCallback(cb);
+      const [result, setResult] = useState<string>('-');
       return (
-        <button aria-label="Run" onClick={() => { returned = stable(); }}>run</button>
+        <>
+          <button aria-label="Run" onClick={() => setResult(stable())}>run</button>
+          <span aria-label="Result">{result}</span>
+        </>
       );
     }
 
-    const { rerender } = render(<Harness cb={latest} />);
+    const cbA = () => 'A';
+    const cbB = () => 'B';
+    const { rerender } = render(<ResultProbe cb={cbA} />);
 
     await userEvent.click(screen.getByLabelText('Run'));
-    expect(returned).toBe('A');
+    expect(screen.getByLabelText('Result').textContent).toBe('A');
 
-    latest = () => 'B';
-    rerender(<Harness cb={latest} />);
+    rerender(<ResultProbe cb={cbB} />);
 
     await userEvent.click(screen.getByLabelText('Run'));
-    expect(returned).toBe('B');
+    expect(screen.getByLabelText('Result').textContent).toBe('B');
   });
 
   it('survives state-driven re-renders without identity churn', async () => {
-    let stableRef: (() => void) | null = null;
-    const ids = new Set<() => void>();
-
     function Harness() {
       const [n, setN] = useState(0);
-      const cb = useStableCallback(() => undefined);
-      stableRef = cb;
-      ids.add(cb);
-      return <button aria-label="Bump" onClick={() => setN(n + 1)}>{n}</button>;
+      return (
+        <>
+          <StabilityProbe cb={() => undefined} />
+          <button aria-label="Bump" onClick={() => setN(n + 1)}>{n}</button>
+        </>
+      );
     }
-
     render(<Harness />);
-    const first = stableRef;
 
     await userEvent.click(screen.getByLabelText('Bump'));
     await userEvent.click(screen.getByLabelText('Bump'));
 
-    expect(ids.size).toBe(1);
-    expect(stableRef).toBe(first);
-
-    // suppress unused warning for `act`
-    void act;
+    expect(screen.getByLabelText('IdentityCount').textContent).toBe('1');
   });
 });
 

@@ -9,13 +9,18 @@ import { useEffect, useRef } from 'react'
  *
  * Don't use this when you actually want the consumer to re-react to a new
  * function (e.g. when the callback's identity is the signal for invalidation).
+ *
+ * react-hooks/refs is disabled deliberately: the stable-wrapper pattern needs
+ * to return ref.current during render so the consumer sees a constant identity.
  */
 export function useStableCallback<T extends (...args: never[]) => unknown>(fn: T): T {
   const ref = useRef(fn)
   useEffect(() => { ref.current = fn })
   // The wrapper is created once per component instance; the ref points at the
   // latest fn each render.
+  // eslint-disable-next-line react-hooks/refs
   const stable = useRef(((...args: Parameters<T>) => ref.current(...args)) as T)
+  // eslint-disable-next-line react-hooks/refs
   return stable.current
 }
 
