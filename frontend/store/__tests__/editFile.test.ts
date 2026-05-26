@@ -15,6 +15,8 @@ import authReducer from '../authSlice';
 import uiReducer from '../uiSlice';
 import { NextRequest } from "next/server";
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
+import { DocumentDB } from '@/lib/database/documents-db';
+import { getModules } from '@/lib/modules/registry';
 
 // Mock db-config to use test database
 vi.mock('@/lib/database/db-config', () => ({
@@ -33,8 +35,24 @@ vi.mock('@/store/store', () => ({
   getStore: () => testStore
 }));
 
+// All DB-touching describes below share this PGLite (in-memory; module-mocked
+// db-config → all dbPaths resolve to the same instance). Init the schema +
+// workspace template ONCE per file instead of in every beforeEach — between
+// tests we just clear non-template files via DELETE.
+const SHARED_DB_PATH = getTestDbPath('edit_file');
+beforeAll(async () => {
+  await initTestDatabase(SHARED_DB_PATH);
+});
+afterAll(async () => {
+  await cleanupTestDatabase(SHARED_DB_PATH);
+});
+
+async function clearFilesExceptOrg(): Promise<void> {
+  await getModules().db.exec("DELETE FROM files WHERE path != '/org'", []);
+}
+
 describe('editFile - Question Editing Flow', () => {
-  const dbPath = getTestDbPath('edit_file');
+  const dbPath = SHARED_DB_PATH;
   let questionId1: number;
   let questionId2: number;
   let questionId3: number;
@@ -80,9 +98,8 @@ describe('editFile - Question Editing Flow', () => {
   });
 
   beforeEach(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
 
-    const { DocumentDB } = await import('@/lib/database/documents-db');
     questionId1 = await DocumentDB.create('test-question-1', '/org/test-question-1', 'question', {
       query: 'SELECT 1', connection_name: 'test_db', parameters: [], references: [],
       vizSettings: { type: 'table', xCols: [], yCols: [] }
@@ -336,9 +353,8 @@ describe('editFile - Question content validation', () => {
   });
 
   beforeEach(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
 
-    const { DocumentDB } = await import('@/lib/database/documents-db');
     questionId = await DocumentDB.create('viz-validation-question', '/org/viz-validation-question', 'question', {
       query: 'SELECT 1', connection_name: 'test_db', parameters: [], references: [],
       vizSettings: { type: 'table', xCols: [], yCols: [] }
@@ -488,9 +504,8 @@ describe('editFile - Dashboard content validation', () => {
   });
 
   beforeEach(async () => {
-    await initTestDatabase(dbPath);
+    await clearFilesExceptOrg();
 
-    const { DocumentDB } = await import('@/lib/database/documents-db');
     dashboardId = await DocumentDB.create('test-dashboard', '/org/test-dashboard', 'dashboard', initialContent, []);
 
     testStore = setupStore();

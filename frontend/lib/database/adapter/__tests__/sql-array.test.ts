@@ -3,13 +3,19 @@
 // PGLite and node-postgres reject as "malformed array literal"), while plain array
 // params still bind correctly to JSONB columns.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { PgliteAdapter } from '../pglite-adapter';
 import { sqlArray, isSqlArray } from '../types';
 
 describe('sqlArray through PgliteAdapter', () => {
+  // One PGLite cold-boot for the whole suite — each test uses a unique table name,
+  // so there's no cross-test data leakage and no need to reset between tests.
+  let db: PgliteAdapter;
+  beforeAll(() => {
+    db = new PgliteAdapter();
+  });
+
   it('binds sqlArray() as a native array for `= ANY($1)`', async () => {
-    const db = new PgliteAdapter();
     await db.exec('CREATE TABLE t (id int)');
     await db.exec('INSERT INTO t VALUES (1),(2),(3),(589),(619),(910)');
 
@@ -21,7 +27,6 @@ describe('sqlArray through PgliteAdapter', () => {
   });
 
   it('binds sqlArray() for an `$1::int[]` cast', async () => {
-    const db = new PgliteAdapter();
     await db.exec('CREATE TABLE t2 (id int)');
     await db.exec('INSERT INTO t2 VALUES (10),(20),(30)');
 
@@ -33,7 +38,6 @@ describe('sqlArray through PgliteAdapter', () => {
   });
 
   it('still binds a plain array param to a JSONB column (regression)', async () => {
-    const db = new PgliteAdapter();
     await db.exec('CREATE TABLE j (data jsonb)');
     await db.query('INSERT INTO j VALUES ($1)', [[1, 2, 3]]);
     const res = await db.query<{ data: unknown }>('SELECT data FROM j');
@@ -45,7 +49,6 @@ describe('sqlArray through PgliteAdapter', () => {
   // fails `instanceof` and leaks raw into PGLite (TypeError "src must be of type
   // string" → poisons the single connection → cascading 08P01 / empty params).
   it('binds a foreign-bundle SqlArray (branded, NOT instanceof) as a native array', async () => {
-    const db = new PgliteAdapter();
     await db.exec('CREATE TABLE tf (id int)');
     await db.exec('INSERT INTO tf VALUES (1),(2),(589),(619)');
 
