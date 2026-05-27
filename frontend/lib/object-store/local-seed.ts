@@ -34,7 +34,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
  * Downloads mxfood.duckdb once, exports all requested tables, then deletes the temp DB.
  * Idempotent: skips tables that already exist on disk.
  */
-export async function ensureLocalMxfoodSeeds(tableNames: string[]): Promise<void> {
+export async function ensureLocalMxfoodSeeds(tableNames: readonly string[]): Promise<void> {
   const missing = tableNames.filter((t) => !existsSync(seedPath(t)));
   if (missing.length === 0) return;
 

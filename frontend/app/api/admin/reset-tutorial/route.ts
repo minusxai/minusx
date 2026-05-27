@@ -18,13 +18,7 @@ import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { copySeedMxfoodForMode } from '@/lib/object-store';
-
-const MXFOOD_TABLES = [
-  'ad_campaigns', 'ad_spend', 'attribution', 'deliveries', 'drivers',
-  'events', 'marketing_channels', 'order_items', 'orders', 'product_categories',
-  'product_subcategories', 'products', 'promo_codes', 'promo_usage', 'restaurants',
-  'subscription_plans', 'support_tickets', 'user_subscriptions', 'users', 'zones',
-];
+import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
