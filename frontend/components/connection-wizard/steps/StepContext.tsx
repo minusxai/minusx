@@ -175,8 +175,6 @@ export default function StepContext({
   const [error, setError] = useState<string | null>(null);
   const [showAgentFeed, setShowAgentFeed] = useState(false);
   const [subStep, setSubStep] = useState<ContextSubStep>('tables');
-  const hasAppendedDoc = useRef(false);
-
   // Typewriter effect for greeting
   const [displayedText, setDisplayedText] = useState('');
   const [typingDone, setTypingDone] = useState(!greeting);
@@ -215,43 +213,19 @@ export default function StepContext({
     return { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
   }, [contextFile]);
 
-  // Extract existing docs (all docs except the last one which is our new empty doc)
-  const existingDocs = useMemo(() => {
+  // All docs from the latest version
+  const allDocs = useMemo(() => {
     if (!effectiveContent?.versions?.length) return [];
     const latestVersion = effectiveContent.versions[effectiveContent.versions.length - 1];
-    const docs = latestVersion?.docs ?? [];
-    // If we've appended a new doc, existing = all but the last
-    if (hasAppendedDoc.current && docs.length > 1) {
-      return docs.slice(0, -1).filter(d => d.content.trim());
-    }
-    // Before append, all existing docs
-    return docs.filter(d => d.content.trim());
+    return latestVersion?.docs ?? [];
   }, [effectiveContent]);
 
-  // The new doc content — last doc in the array after we've appended
-  const newDocContent = useMemo(() => {
-    if (!hasAppendedDoc.current || !effectiveContent?.versions?.length) return '';
-    const latestVersion = effectiveContent.versions[effectiveContent.versions.length - 1];
-    const docs = latestVersion?.docs ?? [];
-    return docs[docs.length - 1]?.content ?? '';
-  }, [effectiveContent]);
+  // Combined doc content for the editor (all docs joined)
+  const docContent = useMemo(() => {
+    return allDocs.map(d => d.content).filter(c => c.trim()).join('\n\n---\n\n');
+  }, [allDocs]);
 
-  // Append a new empty doc when entering the docs sub-step
-  useEffect(() => {
-    if (subStep !== 'docs' || !realFileId || !contextFile || contextFile.loading || hasAppendedDoc.current) return;
-    hasAppendedDoc.current = true;
-    const content = { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
-    const versions = content?.versions;
-    if (!versions?.length) return;
-    const latestVersion = versions[versions.length - 1];
-    const updatedVersions = versions.map((v, i) => {
-      if (i !== versions.length - 1) return v;
-      return { ...v, docs: [...(latestVersion.docs || []), { content: '' }] };
-    });
-    editFile({ fileId: realFileId, changes: { content: { ...content, versions: updatedVersions } } });
-  }, [subStep, realFileId, contextFile]);
-
-  // Debounced editor change — writes to the last doc in the version via editFile
+  // Debounced editor change — overwrites docs with a single entry
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -262,9 +236,7 @@ export default function StepContext({
       if (!versions?.length) return;
       const updatedVersions = versions.map((v, i) => {
         if (i !== versions.length - 1) return v;
-        const docs = [...(v.docs || [])];
-        docs[docs.length - 1] = { ...docs[docs.length - 1], content: value || '' };
-        return { ...v, docs };
+        return { ...v, docs: [{ content: value || '' }] };
       });
       editFile({ fileId: realFileId, changes: { content: { ...content, versions: updatedVersions } } });
     }, 300);
@@ -375,11 +347,6 @@ export default function StepContext({
     onRequestChat?.(realFileId);
 
     // Build appState so the agent knows it's on a context file page.
-    // Read the LIVE store (not the render-closure `reduxState`): the empty doc
-    // entry appended on entering the docs sub-step is dispatched synchronously
-    // just before this runs, and EditFile matches against that live content. Using
-    // the stale closure would send `docs:[]`, so the agent's `"docs":[]` oldMatch
-    // wouldn't match the live file (the production EditFile "not found" failure).
     let appState = null;
     const [augmented] = selectAugmentedFiles(getStore().getState(), [realFileId]);
     if (augmented) {
@@ -467,13 +434,13 @@ export default function StepContext({
         context_path: contextPath,
         context_version: null,
         schema: simplifiedSchema,
-        context: newDocContent || '',
+        context: docContent || '',
         app_state: appState,
       },
       message: agentMessage,
     }));
     setShowAgentFeed(true);
-  }, [realFileId, dispatch, onRequestChat, connectionName, connections, newDocContent, contextPath, staticSchemas, questionnaireAnswers]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, connections, docContent, contextPath, staticSchemas, questionnaireAnswers]);
 
   // Auto-trigger context agent when entering docs sub-step with questionnaire answers
   const hasAutoTriggeredAgent = useRef(false);
@@ -646,63 +613,10 @@ export default function StepContext({
         </Text>
       </Box>
 
-      {/* Existing docs — subtle display */}
-      {existingDocs.length > 0 && (
-        <Collapsible.Root>
-          <Collapsible.Trigger asChild>
-            <HStack
-              cursor="pointer"
-              px={4}
-              py={2.5}
-              border="1px solid"
-              borderColor="border.default"
-              borderRadius="lg"
-              _hover={{ bg: 'bg.muted' }}
-              justify="space-between"
-            >
-              <HStack gap={2}>
-                <Text fontSize="sm" fontWeight="600" color="fg.muted">Existing context</Text>
-                <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
-                  {existingDocs.length} {existingDocs.length === 1 ? 'doc' : 'docs'}
-                </Text>
-              </HStack>
-              <Icon
-                as={LuChevronDown}
-                boxSize={4}
-                color="fg.subtle"
-                css={{
-                  '[data-state=closed] &': { transform: 'rotate(-90deg)' },
-                  transition: 'transform 0.15s',
-                }}
-              />
-            </HStack>
-          </Collapsible.Trigger>
-          <Collapsible.Content>
-            <Box
-              border="1px solid"
-              borderColor="border.default"
-              borderTop="0"
-              borderRadius="0 0 lg lg"
-              p={4}
-              maxH="200px"
-              overflowY="auto"
-              bg="bg.muted"
-              mt="-1px"
-            >
-              {existingDocs.map((doc, idx) => (
-                <Box key={idx} mb={idx < existingDocs.length - 1 ? 3 : 0}>
-                  <Markdown context="mainpage">{doc.content}</Markdown>
-                </Box>
-              ))}
-            </Box>
-          </Collapsible.Content>
-        </Collapsible.Root>
-      )}
-
-      {/* New doc editor — hidden while agent is actively writing */}
-      {(!isAgentRunning || newDocContent.trim()) && <Box>
+      {/* Doc editor — hidden while agent is actively writing */}
+      {(!isAgentRunning || docContent.trim()) && <Box>
         <Text fontSize="sm" fontWeight="600" mb={2}>
-          {showAgentFeed ? 'Auto-generated context' : existingDocs.length > 0 ? 'Add more context' : 'Data context'}
+          {showAgentFeed ? 'Auto-generated context' : 'Data context'}
           <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>{showAgentFeed ? '(editable)' : '(optional, markdown)'}</Text>
         </Text>
         <Box
@@ -716,7 +630,7 @@ export default function StepContext({
               <Editor
                 height="250px"
                 language="markdown"
-                value={newDocContent}
+                value={docContent}
                 onChange={handleEditorChange}
                 theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
                 options={{
@@ -742,8 +656,8 @@ export default function StepContext({
               borderColor="border.default"
               minW={0}
             >
-              {newDocContent.trim() ? (
-                <Markdown context="mainpage">{newDocContent}</Markdown>
+              {docContent.trim() ? (
+                <Markdown context="mainpage">{docContent}</Markdown>
               ) : (
                 <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
               )}

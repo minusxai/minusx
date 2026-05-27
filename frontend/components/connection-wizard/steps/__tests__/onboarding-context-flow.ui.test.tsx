@@ -1,18 +1,9 @@
 /**
- * Onboarding setup-wizard flow (StepContext) — reproduces the production bug where
- * the OnboardingContextAgent's EditFile fails with `String "docs":[] not found`.
+ * Onboarding setup-wizard flow (StepContext) — verifies the OnboardingContextAgent
+ * receives correct app_state when auto-triggered from the docs sub-step.
  *
- * Root cause: StepContext appends an empty doc entry ({content:''}) to the context
- * file (Redux persistableChanges) on entering the docs sub-step, then auto-triggers
- * the agent. But `handleAgentDescribe` builds the `app_state` it sends from a STALE
- * render closure (`reduxState`) captured before that edit, so the agent sees
- * `docs:[]`. EditFile later matches the LIVE Redux file (which has the empty entry),
- * so the agent's `"docs":[]` oldMatch — derived from the stale app_state — is not
- * found.
- *
- * This test captures the exact /api/chat/stream request body the wizard sends and
- * asserts the app_state it carries includes the empty doc entry that EditFile will
- * target. Red before the fix (docs:[]), green after.
+ * The agent uses EditFile to add/modify docs in the context file directly —
+ * no pre-appended empty doc slot needed.
  */
 
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
@@ -131,7 +122,7 @@ describe('Onboarding wizard — context agent app_state', () => {
     vi.restoreAllMocks();
   });
 
-  it('sends app_state that includes the empty doc entry EditFile will target', async () => {
+  it('sends app_state with the current docs to the agent', async () => {
     renderWithProviders(
       <StepContext
         connectionName="my_csv"
@@ -144,8 +135,7 @@ describe('Onboarding wizard — context agent app_state', () => {
       { store },
     );
 
-    // Advance tables → docs. This both appends the empty doc entry (effect) and
-    // auto-triggers the onboarding agent (effect), which posts to /api/chat/stream.
+    // Advance tables → docs. This auto-triggers the onboarding agent.
     await userEvent.click(await screen.findByLabelText('Continue to documentation'));
 
     await waitFor(() => expect(capturedChatBody).not.toBeNull(), { timeout: 5000 });
@@ -153,9 +143,8 @@ describe('Onboarding wizard — context agent app_state', () => {
     const sentContent = capturedChatBody.agent_args.app_state.state.fileState.content;
     const sentDocs = sentContent.versions[sentContent.versions.length - 1].docs;
 
-    // The agent must see the empty doc entry that StepContext added (and that
-    // EditFile matches against). Before the fix this is [] → agent emits a
-    // `"docs":[]` oldMatch that fails against the live file.
-    expect(sentDocs).toEqual([{ content: '' }]);
+    // The agent sees the file's current docs (empty array — no pre-appended slot).
+    // It will use EditFile to add docs directly.
+    expect(sentDocs).toEqual([]);
   });
 });
