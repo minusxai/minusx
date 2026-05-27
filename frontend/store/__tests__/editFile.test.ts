@@ -898,3 +898,157 @@ describe('CreateFile tool - content validation', () => {
     expect(parsed.vizWarning).toBeUndefined();
   });
 });
+
+describe('EditFile - Context post-edit guard', () => {
+  let contextId: number;
+
+  const contextContent = {
+    versions: [{
+      version: 1,
+      whitelist: { databases: [] },
+      docs: [{ content: '# Original doc', draft: false }],
+      createdAt: new Date().toISOString(),
+      createdBy: 1,
+    }],
+    published: { all: 1 },
+    databases: [{ databaseName: 'test_db', whitelist: [] }],
+    docs: [{ content: '# Original doc', draft: false }],
+  };
+
+  function makeEditToolCall(args: Record<string, unknown>) {
+    return {
+      id: 'test-edit-ctx',
+      type: 'function' as const,
+      function: { name: 'EditFile', arguments: args },
+    };
+  }
+
+  function setupStore() {
+    return configureStore({
+      reducer: {
+        files: filesReducer,
+        queryResults: queryResultsReducer,
+        auth: authReducer,
+      },
+    });
+  }
+
+  beforeAll(() => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(async () => {
+    await clearFilesExceptOrg();
+    contextId = await DocumentDB.create('test-context', '/org/test-context', 'context', contextContent, []);
+    testStore = setupStore();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    testStore = null;
+    if (global.gc) global.gc();
+  });
+
+  it('allows editing doc content text', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{ oldMatch: '# Original doc', newMatch: '# Updated doc with new info' }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(true);
+  });
+
+  it('allows adding a new doc entry', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{
+          oldMatch: '"docs":[{"content":"# Original doc","draft":false}]',
+          newMatch: '"docs":[{"content":"# Original doc","draft":false},{"content":"# New doc","draft":true}]',
+        }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(true);
+  });
+
+  it('allows removing a doc entry', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{
+          oldMatch: '"docs":[{"content":"# Original doc","draft":false}]',
+          newMatch: '"docs":[]',
+        }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(true);
+  });
+
+  it('allows toggling doc draft status', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{
+          oldMatch: '"draft":false',
+          newMatch: '"draft":true',
+        }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(true);
+  });
+
+  it('rejects editing databases field', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{
+          oldMatch: '"databaseName":"test_db"',
+          newMatch: '"databaseName":"hacked_db"',
+        }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(false);
+    expect(result.details?.error).toMatch(/can only modify docs/);
+  });
+
+  it('rejects editing published field', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{
+          oldMatch: '"published":{"all":1}',
+          newMatch: '"published":{"all":99}',
+        }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(false);
+    expect(result.details?.error).toMatch(/can only modify docs/);
+  });
+});
