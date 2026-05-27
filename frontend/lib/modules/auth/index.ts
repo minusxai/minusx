@@ -8,6 +8,8 @@ import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 import { hashPassword } from '@/lib/auth/password-utils';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
+import { copySeedMxfoodForMode } from '@/lib/object-store';
+import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 
 function escapeForJson(s: string): string {
   return JSON.stringify(s).slice(1, -1);
@@ -64,6 +66,18 @@ export class AuthModule implements IAuthModule {
     const initData = applyMigrations(rawData, rawData.version);
     initData.version = LATEST_DATA_VERSION;
     await atomicImport(initData);
+
+    // Tutorial mode ships a CSV connection that points at parquet files which
+    // must live on disk under LOCAL_UPLOAD_PATH/csvs/tutorial/mxfood/. Without
+    // this best-effort copy, the very first tutorial query in a fresh install
+    // explodes with a DuckDB "No files found that match the pattern" IO error.
+    // Fire-and-forget so registration redirect isn't blocked on the (possibly
+    // multi-MB) one-time download from the mxfood seed release.
+    copySeedMxfoodForMode('tutorial', MXFOOD_TABLES).then((copied) => {
+      console.log(`[AuthModule.register] Seeded ${copied.length}/${MXFOOD_TABLES.length} mxfood tutorial tables`);
+    }).catch((err) => {
+      console.warn('[AuthModule.register] mxfood tutorial seed failed (non-fatal):', err);
+    });
 
     return { redirectUrl: '/login' };
   }

@@ -112,7 +112,7 @@ export function getMxfoodTutorialKey(mode: string, tableName: string): string {
  */
 export async function copySeedMxfoodForMode(
   mode: string,
-  tableNames: string[],
+  tableNames: readonly string[],
 ): Promise<string[]> {
   if (isLocalObjectStore()) {
     await ensureLocalMxfoodSeeds(tableNames);
