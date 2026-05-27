@@ -3,12 +3,11 @@
  * content types and their JSON-Schema validation.
  *
  * Authored in TypeBox: each `export const X = Type.Object(...)` is BOTH a runtime
- * JSON Schema (consumed by `scripts/generate-atlas-schema.ts` → the
- * `atlas-schema*.gen.json` artifacts used by Ajv + the EditFile tool embed) and a
- * static TypeScript type via the colocated `export type X = Static<typeof X>`.
+ * JSON Schema (consumed at module load by `atlas-json-schemas.ts` → the
+ * `atlasSchema` / `atlasSchemaNoViz` objects used by Ajv + the EditFile tool embed)
+ * and a static TypeScript type via the colocated `export type X = Static<typeof X>`.
  *
- * To regenerate the JSON artifacts after editing this file:
- * `cd frontend && npm run generate-types`.
+ * No codegen step — edit this file and consumers re-build on next module load.
  */
 import { Type, type Static, type TSchema } from 'typebox';
 

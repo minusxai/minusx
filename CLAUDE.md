@@ -57,7 +57,6 @@ npm run test:main          # Run only the `node` project (integration/server tes
 npm run test:ui            # Run only the `ui` project (jsdom *.ui.test.tsx tests)
 npm run test:orchestrator  # Run only the `orchestrator` project
 npm run update-workspace-template  # Re-run migrations on the seed template after adding a migration
-npm run generate-types     # Regenerate the Atlas JSON-schema artifacts from the TypeBox schemas
 ```
 
 **IMPORTANT: Always use `npm run validate` to quickly verify code correctness. Do NOT use `npm run build` for validation - it's too slow and memory-intensive. Only run `npm run build` before deployment.**
@@ -411,7 +410,7 @@ export async function POST(req: NextRequest) {
 
 - `frontend/lib/database/documents-db.ts` - Document DB CRUD operations (PGLite or Postgres)
 - `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `@/lib/validation/atlas-schemas`; defines frontend-only types and extends the shared ones (e.g. `QuestionContent` adds `queryResultId`)
-- `frontend/lib/validation/atlas-schemas.ts` - **TypeBox single source** for Atlas file types (schemas + `Static` types). Edit here, then `cd frontend && npm run generate-types` to refresh the `*.gen.json` artifacts. Import types from `@/lib/validation/atlas-schemas` or `@/lib/types`.
+- `frontend/lib/validation/atlas-schemas.ts` - **TypeBox single source** for Atlas file types (schemas + `Static` types). Edit here; `lib/validation/atlas-json-schemas.ts` re-derives the JSON-Schema objects at module load (no codegen step). Import types from `@/lib/validation/atlas-schemas` or `@/lib/types`.
 
 ### Frontend State & Components
 - `frontend/store/` - Redux store with multiple domain slices:
@@ -450,21 +449,17 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 **UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
 
-## Atlas Schema Codegen (TypeBox)
+## Atlas Schemas (TypeBox)
 
 **Single source of truth:** `frontend/lib/validation/atlas-schemas.ts` defines TypeBox schemas for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.). Each `export const X = Type.Object(...)` is BOTH a runtime JSON Schema and a static type via the colocated `export type X = Static<typeof X>`.
 
-**Pipeline (all TypeScript):**
-1. `frontend/scripts/generate-atlas-schema.ts` reads the TypeBox schemas and writes the JSON-Schema artifacts
-2. `frontend/lib/validation/atlas-schema.gen.json` (full; consumed by Ajv in `content-validators.ts`) + `atlas-schema-no-viz.gen.json` (viz stripped; embedded in the EditFile tool description)
-3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields
-
-**When to regenerate:**
-- After editing `atlas-schemas.ts`, run: `cd frontend && npm run generate-types` (runs the tsx generator)
-- Commit the updated `*.gen.json` — they're tracked artifacts
+**Pipeline (no codegen — pure in-process):**
+1. `frontend/lib/validation/atlas-json-schemas.ts` rebuilds the JSON-Schema objects at module load: full `atlasSchema` and the viz-stripped `atlasSchemaNoViz`. TypeBox's `Symbol(Kind)` metadata is dropped via `JSON.parse(JSON.stringify(...))` so Ajv sees a clean object.
+2. Consumers import directly from there: `content-validators.ts` (Ajv compile) and `agents/web-analyst/web-tools.ts` (embedded in EditFile / CreateFile tool descriptions).
+3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields.
 
 **Key rules:**
-- **Never edit the `*.gen.json` by hand** — overwritten on next codegen. Edit `atlas-schemas.ts`.
+- Edit `atlas-schemas.ts`; everything else re-derives on the next module load. No `npm run generate-types` step, no `*.gen.json` artifacts.
 - `StringEnum` uses a `const` type param so literal arrays narrow to a union (not `string`).
 - Frontend-only fields (e.g. `queryResultId` on `QuestionContent`) go in `types.ts` as interface extensions.
 - `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than `DashboardContent`.

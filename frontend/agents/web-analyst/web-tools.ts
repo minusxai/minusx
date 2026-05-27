@@ -3,13 +3,14 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { getSkill } from '@/orchestrator/prompts';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import atlasContentSchemaNoViz from '@/lib/validation/atlas-schema-no-viz.gen.json';
+import { atlasSchemaNoViz } from '@/lib/validation/atlas-json-schemas';
 
 // Per-file-type content JSON schema (a discriminated `oneOf` by file `type`),
 // with viz stripped for token economy — vizSettings uses the ExecuteQuery
 // vizSettings schema instead. Embedded into the EditFile/CreateFile descriptions
-// so the model emits correctly-shaped content. Regenerate via `npm run generate-types`.
-const CONTENT_SCHEMA_NO_VIZ = JSON.stringify(atlasContentSchemaNoViz);
+// so the model emits correctly-shaped content. Built at module load from
+// the TypeBox single-source in lib/validation/atlas-schemas.ts.
+const CONTENT_SCHEMA_NO_VIZ = JSON.stringify(atlasSchemaNoViz);
 
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they

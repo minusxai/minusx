@@ -1,10 +1,10 @@
 /**
  * Runtime validators for Atlas file content.
- * Compiled from the generated JSON schema (atlas-schema.gen.json).
- * To regenerate: cd frontend && npm run generate-types
+ * Compiled from the in-process JSON schema (lib/validation/atlas-json-schemas.ts),
+ * which is built at module load from the TypeBox source.
  */
 import Ajv from 'ajv';
-import atlasSchema from './atlas-schema.gen.json';
+import { atlasSchema } from './atlas-json-schemas';
 import type { FileType, QuestionContent, DashboardContent } from '@/lib/types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
 
