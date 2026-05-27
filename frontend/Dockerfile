@@ -26,6 +26,14 @@ COPY patches ./patches
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --cache /root/.npm
 
+# Verify the pi-ai patch (web search + image-URL support) was actually applied
+# by postinstall. patch-package --error-on-fail silently exits 0 when no patches
+# are found, and buildkit can cache an unpatched npm ci layer that silently
+# ships broken images. This grep fails the build the instant that happens, so
+# we never silently ship an unpatched pi-ai again.
+RUN grep -q "MX PATCH" node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js \
+    || (echo "ERROR: pi-ai patch not applied — postinstall did not run or patches/ missing at npm ci time" && exit 1)
+
 # Copy application source
 COPY . .
 
