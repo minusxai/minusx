@@ -6,7 +6,7 @@ import { LuX, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import { AssetReference, InlineAsset, DashboardLayoutItem } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from './containers/SmartEmbeddedQuestionContainer';
 import { LexicalTextViewer } from './lexical/LexicalTextEditor';
-import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
+import { WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);

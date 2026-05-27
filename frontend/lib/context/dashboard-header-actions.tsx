@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 /**
  * Split context pattern to avoid infinite re-renders:
