@@ -56,7 +56,13 @@ export function buildCompactYLabel(names: string[], maxNames = 1): string {
     commonTokens = commonTokens.slice(0, shared)
     if (commonTokens.length === 0) break
   }
-  const commonLabel = commonTokens.join(' ').trim().replace(/[\s(|,-]+$/, '').trim()
+  // Strip trailing separators with a linear walk rather than a `[…]+$` regex
+  // (CodeQL js/polynomial-redos flags those as O(n²) worst-case on backtracking).
+  const joined = commonTokens.join(' ').trim()
+  const SEP_RE = /[\s(|,\-]/
+  let endIdx = joined.length
+  while (endIdx > 0 && SEP_RE.test(joined[endIdx - 1])) endIdx--
+  const commonLabel = joined.slice(0, endIdx)
   if (commonLabel.length >= 6) return commonLabel
 
   // No meaningful common prefix — show first N names + count

@@ -119,9 +119,9 @@ export default function GettingStartedSection() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Fetch user count for admins — intentional setState in effect
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     // useUsers() handles fetching; just mark as loaded once userIsAdmin is resolved
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoaded(true);
   }, [userIsAdmin]);
 

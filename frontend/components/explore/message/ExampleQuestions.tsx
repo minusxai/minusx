@@ -50,8 +50,8 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
   // greetings is module-level and stable; greeting is intentionally
   // re-randomised on firstName change only — Math.random() in useMemo is
   // the desired behaviour.
-  // eslint-disable-next-line react-hooks/purity
   const greeting = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
     const index = Math.floor(Math.random() * greetings.length);
     return greetings[index](firstName);
   }, [firstName]);
