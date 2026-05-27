@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppSelector } from '@/store/hooks';
 import { Dither } from '@/components/Dither';
-import { ColorModeButton } from '@/components/ui/color-mode';
+import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { OrgConfig } from '@/lib/branding/whitelabel';
 import { OTPInput } from '@/components/auth/OTPInput';
@@ -285,7 +285,7 @@ export function LoginOrRegisterForm({
       overflow="hidden"
     >
       <Box position="absolute" top={4} right={4} zIndex={10}>
-        <ColorModeButton />
+        <ColorModeSwitch />
       </Box>
       <Box position="absolute" top={0} left={0} right={0} bottom={0} zIndex={0} pointerEvents="none">
         <Dither

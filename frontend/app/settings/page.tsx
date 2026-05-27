@@ -3,13 +3,12 @@
 import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
 import { Box, VStack, Text, Flex, Switch, Button, Heading, Tabs, Badge, HStack, Icon, IconButton, Input, Textarea } from '@chakra-ui/react';
 import { LuRefreshCw, LuUser, LuX } from 'react-icons/lu';
-import { ColorModeButton } from '@/components/ui/color-mode';
+import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { useUseChatV2 } from '@/lib/chat-v2/use-chat-v2';
 import { setVInUrl } from '@/lib/navigation/url-utils';
 import { canEdit } from '@/lib/auth/role-helpers';
-import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
@@ -475,7 +474,7 @@ function SettingsContent() {
       section: 'Feature Flags',
       title: 'Appearance: Dark Mode',
       description: 'Switch between light and dark theme',
-      control: <ColorModeButton />,
+      control: <ColorModeSwitch />,
     },
     {
       tab: 'general',

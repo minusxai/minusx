@@ -32,6 +32,3 @@ export const ColorModeSwitch = function ColorModeSwitch(props: ColorModeSwitchPr
     </ClientOnly>
   )
 }
-
-// Deprecated: Use ColorModeSwitch instead
-export const ColorModeButton = ColorModeSwitch

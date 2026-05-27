@@ -121,8 +121,3 @@ export async function renderChartToJpeg(
     .toBuffer();
 }
 
-/**
- * @deprecated Use renderChartToJpeg instead.
- * Kept for backward compatibility — callers will be migrated.
- */
-export const renderChartToPng = renderChartToJpeg;
