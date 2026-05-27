@@ -126,12 +126,12 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
   });
 
   it('drives questionnaire → context, runs the onboarding agent to completion, EditFile writes docs', async () => {
-    // The agent fills the empty doc entry the wizard appended, then stops.
+    // The agent writes docs into the empty docs array, then stops.
     onboardingFaux.setResponses([
       fauxAssistantMessage(
         [fauxToolCall('EditFile', {
           fileId: contextId,
-          changes: [{ oldMatch: '"content":""', newMatch: `"content":"${DOC_MARKDOWN}"` }],
+          changes: [{ oldMatch: '"docs":[]', newMatch: `"docs":[{"content":"${DOC_MARKDOWN}"}]` }],
         }, { id: 'tc_editfile' })],
         { stopReason: 'toolUse' },
       ),
@@ -148,8 +148,7 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     await userEvent.type(await screen.findByLabelText('What is this dataset about?'), 'Sales warehouse');
     await userEvent.click(await screen.findByLabelText('Continue to documentation step'));
 
-    // Step: context (tables → docs). Advancing appends the empty doc entry and
-    // auto-triggers the onboarding agent.
+    // Step: context (tables → docs). Advancing auto-triggers the onboarding agent.
     await userEvent.click(await screen.findByLabelText('Continue to documentation'));
 
     // The wizard creates a real conversation via /api/chat/init, then runs it.
@@ -161,16 +160,15 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
 
     const realConvId = await waitForConversationFinished(() => testStore.getState() as RootState, convId);
 
-    // Bug guard: the agent must have RECEIVED an app_state containing the empty doc
-    // entry (not docs:[]). Fails if StepContext sends the stale-closure app_state.
+    // The agent receives app_state with docs:[] (no empty doc appended).
     expect(capturedAgentAppState).not.toBeNull();
     const recvContent = capturedAgentAppState.state.fileState.content;
-    expect(recvContent.versions[recvContent.versions.length - 1].docs).toEqual([{ content: '' }]);
+    expect(recvContent.versions[recvContent.versions.length - 1].docs).toEqual([]);
 
     // No orchestration/EditFile error.
     expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
 
-    // The empty doc entry now carries the agent's markdown — EditFile matched and applied.
+    // The agent's EditFile wrote docs into the context file.
     const file = testStore.getState().files.files[contextId];
     const merged = { ...(file.content as any), ...(file.persistableChanges as any) };
     const docs = merged.versions[merged.versions.length - 1].docs;
@@ -191,10 +189,9 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
 
   it('REALISTIC LLM faux: derives oldMatch from app_state the way a real model does — reveals serializer mismatch', async () => {
     // Mimic a real LLM: read the app_state from the user prompt, copy a JSON
-    // fragment verbatim (the empty doc entry `{"content":""}`), and use that as
-    // oldMatch. If `app_state` (JSON.stringify) and `buildCurrentFileStr`
-    // (encodeFileStr) serialize differently, this fails — which is exactly the
-    // production symptom: "every EditFile errored".
+    // fragment verbatim (`"docs":[]`), and use that as oldMatch. If `app_state`
+    // (JSON.stringify) and `buildCurrentFileStr` (encodeFileStr) serialize
+    // differently, this fails — which is exactly the production symptom.
     onboardingFaux.setResponses([
       (ctx) => {
         // Find the rendered user prompt (it embeds the app_state JSON).
@@ -205,16 +202,15 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
               .filter((c) => c?.type === 'text' && typeof c.text === 'string')
               .map((c) => c.text!)
               .join('');
-        // The empty doc shows up as `{"content":""}` in JSON.stringify form.
-        // A real LLM would copy that verbatim from what it sees in the prompt.
-        const empty = '{"content":""}';
-        if (!text.includes(empty)) {
-          throw new Error(`prompt did not contain expected empty doc fragment "${empty}"`);
+        // Docs start empty — a real LLM would copy `"docs":[]` from the prompt.
+        const emptyDocs = '"docs":[]';
+        if (!text.includes(emptyDocs)) {
+          throw new Error(`prompt did not contain expected empty docs fragment "${emptyDocs}"`);
         }
         return fauxAssistantMessage(
           [fauxToolCall('EditFile', {
             fileId: contextId,
-            changes: [{ oldMatch: empty, newMatch: `{"content":"${DOC_MARKDOWN}"}` }],
+            changes: [{ oldMatch: emptyDocs, newMatch: `"docs":[{"content":"${DOC_MARKDOWN}"}]` }],
           }, { id: 'tc_real_edit' })],
           { stopReason: 'toolUse' },
         );
@@ -249,22 +245,23 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     ).toHaveLength(0);
   }, 45000);
 
-  it('REPRODUCES production: LLM tries to ADD doc entries (not just fill empty) → post-edit guard rejects → frontend-tool errors logged', async () => {
-    // A real LLM, given the context file, often emits oldMatch/newMatch that
-    // changes the docs *array length* (adding entries) or touches non-doc-content
-    // fields. The post-edit guard for context files (`tool-handlers.ts:602-627`)
-    // rejects any change outside `docs[].content`, so every such call lands as a
-    // frontend-tool error.
+  it('post-edit guard rejects changes to non-doc fields on context files', async () => {
+    // The post-edit guard for context files (`tool-handlers.ts`) rejects any
+    // change outside `docs[]` within versions (e.g. databases, published, etc.).
+    // Use a two-step faux: first EditFile writes a doc (succeeds, so the agent
+    // is in the context-file flow), then a second EditFile touches `published`
+    // which the guard should reject.
     onboardingFaux.setResponses([
       fauxAssistantMessage(
         [fauxToolCall('EditFile', {
           fileId: contextId,
           changes: [{
-            oldMatch: '"docs":[{"content":""}]',
-            // Tries to ADD entries (changes docs.length) — guard will reject.
-            newMatch: '"docs":[{"content":"# Doc1"},{"content":"# Doc2"}]',
+            oldMatch: '"docs":[]',
+            // Write a doc AND flip published — the guard strips docs before
+            // comparing, so the published change is detected.
+            newMatch: '"docs":[{"content":"# Doc"}],"published":false',
           }],
-        }, { id: 'tc_addentries' })],
+        }, { id: 'tc_nonDoc' })],
         { stopReason: 'toolUse' },
       ),
       fauxAssistantMessage('done', { stopReason: 'stop' }),
@@ -289,15 +286,9 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     const convDoc = await DocumentDB.getById(realConvId);
     const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
 
-    // Production-failure reproduction: the guard rejection is logged as a
-    // frontend-tool error. Subtle: `legacyToolResultToPi` flips `isError:true`
-    // whenever `details.success===false`, so the server sees BOTH flags. The
-    // classifier in persistAndBuildLegacyResponse therefore checks the
-    // `{success:false}` shape FIRST (before falling back to 'server-tool' on
-    // bare isError). Without that ordering, every frontend-tool error would
-    // be mislabeled as 'server-tool' in the UI.
+    // The guard rejection is logged as a frontend-tool error.
     const guardErrors = convErrors.filter((e) =>
-      /can only modify doc content text|docs\[\]\.content/i.test(e.message),
+      /can only modify docs within versions/i.test(e.message),
     );
     expect(guardErrors.length).toBeGreaterThan(0);
     expect(guardErrors[0].source).toBe('frontend-tool');

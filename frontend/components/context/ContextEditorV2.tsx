@@ -297,6 +297,7 @@ export default function ContextEditorV2({
 
   const [activeTab, setActiveTab] = useState<'picker' | 'yaml'>('picker');
   const [yamlText, setYamlText] = useState<string>('');
+  const [docsJsonText, setDocsJsonText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
@@ -452,7 +453,12 @@ export default function ContextEditorV2({
     setYamlText(newYaml);
   }, [content.databases]);
 
-  // Handle tab change - parse YAML when switching from YAML to picker
+  // Sync content to JSON when docs change
+  useEffect(() => {
+    setDocsJsonText(JSON.stringify(content.docs || [], null, 2));
+  }, [content.docs]);
+
+  // Handle tab change - parse YAML/JSON when switching from code to picker
   const handleTabChange = (tab: string) => {
     if (activeTab === 'yaml' && tab === 'picker') {
       try {
@@ -462,6 +468,14 @@ export default function ContextEditorV2({
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Invalid YAML format');
         console.error('YAML parse error:', err);
+        return;
+      }
+      try {
+        const parsedDocs = JSON.parse(docsJsonText);
+        onChange({ docs: parsedDocs });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Invalid docs JSON');
+        console.error('Docs JSON parse error:', err);
         return;
       }
     }
@@ -552,7 +566,7 @@ export default function ContextEditorV2({
 
   // Save handler - delegate to container
   const handleSave = async () => {
-    // If on YAML tab, validate and parse first
+    // If on code tab, validate and parse YAML/JSON first
     if (activeTab === 'yaml') {
       try {
         const parsedDatabases = parseDatabasesYaml(yamlText);
@@ -561,6 +575,14 @@ export default function ContextEditorV2({
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Invalid YAML format');
         console.error('Cannot save - YAML parse error:', err);
+        return;
+      }
+      try {
+        const parsedDocs = JSON.parse(docsJsonText);
+        onChange({ docs: parsedDocs });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Invalid docs JSON');
+        console.error('Cannot save - docs JSON parse error:', err);
         return;
       }
     }
@@ -1256,6 +1278,7 @@ export default function ContextEditorV2({
 
         {/* Docs Tab */}
         <Tabs.Content value="docs">
+          {activeTab === 'picker' ? (
           <VStack gap={6} align="stretch">
               <Box>
                 {(!content.docs || content.docs.length === 0) && (
@@ -1525,6 +1548,35 @@ export default function ContextEditorV2({
                 </VStack>
               </Box>
           </VStack>
+          ) : (
+            <Box
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              overflow="hidden"
+              minH="600px"
+            >
+              <Editor
+                height="600px"
+                language="json"
+                value={docsJsonText}
+                onChange={(value) => setDocsJsonText(value || '')}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  readOnly: !editMode,
+                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  fontSize: 14,
+                  fontFamily: 'var(--font-jetbrains-mono)',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                }}
+              />
+            </Box>
+          )}
         </Tabs.Content>
 
         {/* Evals Tab */}
