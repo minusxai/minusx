@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import {
   Box,
   VStack,
@@ -13,7 +12,6 @@ import {
   IconButton,
   Collapsible,
   Icon,
-  Switch,
 } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import {
@@ -23,11 +21,6 @@ import {
   LuDatabase,
   LuChevronDown,
   LuChevronRight,
-  LuPlus,
-  LuLayoutDashboard,
-  LuCompass,
-  LuBookOpen,
-  LuCheck,
 } from 'react-icons/lu';
 import { SchemaTreeItem } from './SchemaTreeView';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -46,14 +39,6 @@ interface StaticTablesBrowserProps {
   onRetry: () => void;
   /** Schemas that are in the context whitelist for this connection */
   whitelistedSchemas?: WhitelistedSchema[];
-  contextId?: number;
-  /** Toggle whitelist for a specific schema */
-  onSchemaWhitelistToggle?: (schemaName: string) => void;
-  whitelistToggling?: boolean;
-  /** Add a context doc string */
-  onAddContext?: (text: string) => Promise<void>;
-  /** Whether context docs already exist */
-  hasContextDocs?: boolean;
 }
 
 export default function StaticTablesBrowser({
@@ -63,11 +48,6 @@ export default function StaticTablesBrowser({
   connectionName,
   onRetry,
   whitelistedSchemas,
-  contextId,
-  onSchemaWhitelistToggle,
-  whitelistToggling,
-  onAddContext,
-  hasContextDocs,
 }: StaticTablesBrowserProps) {
   const router = useRouter();
   const [tableSearch, setTableSearch] = useState('');
@@ -96,25 +76,6 @@ export default function StaticTablesBrowser({
 
   const getContextStatus = (schemaName: string, tableCount: number) =>
     getDatasetContextStatus(schemaName, tableCount, whitelistedSchemas);
-
-  // Add context doc state
-  const [contextInput, setContextInput] = useState('');
-  const [contextAdding, setContextAdding] = useState(false);
-  const [contextAdded, setContextAdded] = useState(false);
-  const [contextExpanded, setContextExpanded] = useState(false);
-
-  const handleAddContextSubmit = async () => {
-    if (!onAddContext || !contextInput.trim()) return;
-    setContextAdding(true);
-    try {
-      await onAddContext(contextInput.trim());
-      setContextAdded(true);
-      setContextInput('');
-      setContextExpanded(false);
-    } finally {
-      setContextAdding(false);
-    }
-  };
 
   if (schemaLoading) {
     return (
@@ -159,8 +120,13 @@ export default function StaticTablesBrowser({
   const totalTables = filteredSchemas.reduce((sum, s) => sum + s.tables.length, 0);
 
   return (
-    <VStack align="stretch" gap={4}>
+    <VStack align="stretch" gap={2}>
       {/* Search and Refresh */}
+      <HStack justify="space-between" align="center">
+        <Text fontSize="xs" color="fg.muted">
+          {filteredSchemas.length} dataset{filteredSchemas.length !== 1 ? 's' : ''} &middot; {totalTables} table{totalTables !== 1 ? 's' : ''}
+        </Text>
+      </HStack>
       <HStack gap={2}>
         <Input
           placeholder="Search tables..."
@@ -179,65 +145,6 @@ export default function StaticTablesBrowser({
         >
           <LuRefreshCw size={16} />
         </IconButton>
-      </HStack>
-
-      <HStack justify="space-between" align="center">
-        <Text fontSize="xs" color="fg.muted">
-          {filteredSchemas.length} dataset{filteredSchemas.length !== 1 ? 's' : ''} &middot; {totalTables} table{totalTables !== 1 ? 's' : ''}
-        </Text>
-        <HStack gap={2}>
-          <Link href={`/new/question?databaseName=${encodeURIComponent(connectionName)}`}>
-            <HStack
-              gap={1.5}
-              px={3}
-              py={1.5}
-              borderRadius="md"
-              border="1px solid"
-              borderColor="border.default"
-              bg="bg.surface"
-              _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
-              transition="all 0.15s"
-              cursor="pointer"
-            >
-              <LuPlus size={12} color="var(--chakra-colors-accent-teal)" />
-              <Text fontSize="2xs" fontWeight="600" fontFamily="mono">New Question</Text>
-            </HStack>
-          </Link>
-          <Link href="/new/dashboard">
-            <HStack
-              gap={1.5}
-              px={3}
-              py={1.5}
-              borderRadius="md"
-              border="1px solid"
-              borderColor="border.default"
-              bg="bg.surface"
-              _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
-              transition="all 0.15s"
-              cursor="pointer"
-            >
-              <LuLayoutDashboard size={12} color="var(--chakra-colors-accent-teal)" />
-              <Text fontSize="2xs" fontWeight="600" fontFamily="mono">New Dashboard</Text>
-            </HStack>
-          </Link>
-          <Link href="/explore">
-            <HStack
-              gap={1.5}
-              px={3}
-              py={1.5}
-              borderRadius="md"
-              border="1px solid"
-              borderColor="border.default"
-              bg="bg.surface"
-              _hover={{ borderColor: 'accent.teal', bg: 'accent.teal/5' }}
-              transition="all 0.15s"
-              cursor="pointer"
-            >
-              <LuCompass size={12} color="var(--chakra-colors-accent-teal)" />
-              <Text fontSize="2xs" fontWeight="600" fontFamily="mono">Explore</Text>
-            </HStack>
-          </Link>
-        </HStack>
       </HStack>
 
       {filteredSchemas.length === 0 ? (
@@ -387,138 +294,6 @@ export default function StaticTablesBrowser({
                         ))}
                       </Box>
 
-                      {/* Per-dataset quick actions — matches ConnectionFormV2 Quick Actions */}
-                      <Box
-                        w="300px"
-                        flexShrink={0}
-                        borderLeft="1px solid"
-                        borderColor="border.subtle"
-                        p={4}
-                      >
-                        <Text fontSize="sm" fontWeight="700" mb={3} fontFamily="mono">
-                          Quick Actions
-                        </Text>
-                        <VStack align="stretch" gap={1}>
-                          {onSchemaWhitelistToggle && (
-                            <>
-                              <HStack
-                                gap={2.5}
-                                px={3}
-                                py={2}
-                                borderRadius="md"
-                                justify="space-between"
-                              >
-                                <VStack align="start" gap={0}>
-                                  <Text fontSize="xs" fontWeight="600" fontFamily="mono">
-                                    Whitelist Tables
-                                  </Text>
-                                  <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
-                                    {schemaWL
-                                      ? contextStatus.fullyWhitelisted ? 'All tables in knowledge base' : `${contextStatus.whitelistedTableCount}/${contextStatus.totalTableCount} tables`
-                                      : 'Not in knowledge base'}
-                                  </Text>
-                                  {contextId && (
-                                    <Link href={`/f/${contextId}?tab=databases`}>
-                                      <Text fontSize="2xs" color="fg.muted" fontFamily="mono" lineHeight="1" _hover={{ color: 'accent.teal' }}>
-                                        See all table selections →
-                                      </Text>
-                                    </Link>
-                                  )}
-                                </VStack>
-                                <Switch.Root
-                                  checked={schemaWL}
-                                  onCheckedChange={() => onSchemaWhitelistToggle(schema.schema)}
-                                  disabled={whitelistToggling || !contextId}
-                                  size="sm"
-                                  colorPalette="teal"
-                                >
-                                  <Switch.HiddenInput />
-                                  <Switch.Control>
-                                    <Switch.Thumb />
-                                  </Switch.Control>
-                                </Switch.Root>
-                              </HStack>
-                            </>
-                          )}
-
-                          {/* Add Context */}
-                          {onAddContext && (
-                            <VStack align="stretch" gap={0} px={3} py={2}>
-                              {contextAdded ? (
-                                <HStack gap={2.5}>
-                                  <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
-                                  <Text fontSize="xs" fontWeight="600" fontFamily="mono" color="accent.teal">
-                                    Context Saved
-                                  </Text>
-                                </HStack>
-                              ) : (
-                                <>
-                                  <HStack justify="space-between">
-                                    <VStack align="start" gap={0}>
-                                      <Text fontSize="xs" fontWeight="600" fontFamily="mono">
-                                        Add Context
-                                      </Text>
-                                      {hasContextDocs && contextId && (
-                                        <Link href={`/f/${contextId}?tab=docs`} target="_blank">
-                                          <Text fontSize="2xs" color="fg.muted" fontFamily="mono" _hover={{ color: 'accent.teal' }}>
-                                            See existing docs →
-                                          </Text>
-                                        </Link>
-                                      )}
-                                    </VStack>
-                                    <Button
-                                      size="2xs"
-                                      variant="outline"
-                                      onClick={() => setContextExpanded(!contextExpanded)}
-                                      fontSize="2xs"
-                                      fontFamily="mono"
-                                    >
-                                      {contextExpanded ? 'Hide' : 'Add'}
-                                    </Button>
-                                  </HStack>
-                                  {contextExpanded && (
-                                    <VStack align="stretch" gap={1.5} mt={2}>
-                                      <Box position="relative">
-                                        <Input
-                                          value={contextInput}
-                                          onChange={(e) => setContextInput(e.target.value)}
-                                          placeholder="Describe this dataset..."
-                                          fontFamily="mono"
-                                          fontSize="2xs"
-                                          pr="36px"
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                              e.preventDefault();
-                                              handleAddContextSubmit();
-                                            }
-                                          }}
-                                        />
-                                        <Box position="absolute" top="50%" right="8px" transform="translateY(-50%)">
-                                          <Button
-                                            size="2xs"
-                                            bg="accent.teal"
-                                            color="white"
-                                            onClick={handleAddContextSubmit}
-                                            loading={contextAdding}
-                                            disabled={!contextInput.trim()}
-                                            borderRadius="full"
-                                            p={0}
-                                            minW="24px"
-                                            h="24px"
-                                          >
-                                            <LuPlus size={12} />
-                                          </Button>
-                                        </Box>
-                                      </Box>
-                                    </VStack>
-                                  )}
-                                </>
-                              )}
-                            </VStack>
-                          )}
-
-                        </VStack>
-                      </Box>
                     </HStack>
                   </Collapsible.Content>
                 </Collapsible.Root>
