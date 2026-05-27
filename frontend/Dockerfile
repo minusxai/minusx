@@ -80,23 +80,14 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
-# Install tsx GLOBALLY for running TypeScript scripts.
-#
-# We must NOT install into /app/node_modules — that would reconcile against the
-# package-lock.json shipped in /app/.next/standalone and reinstall every package
-# (including @mariozechner/pi-ai) from the npm tarball, overwriting the
-# patched anthropic.js produced by postinstall in the builder stage and
-# shipping an unpatched pi-ai at runtime (silently breaking image-URL
-# attachments + web search). `--global` installs to /usr/local and leaves
-# /app/node_modules untouched.
-RUN npm install --global --ignore-scripts tsx
-
-# Defense in depth: verify the patched pi-ai survived to the runtime image.
-# Mirrors the builder-stage guard so any future change that strips patches
-# (e.g. another stray `npm install` in /app) fails the build instead of
-# silently shipping broken images.
+# Install tsx + re-apply pi-ai patches. The npm install restores native deps
+# (libduckdb.so) that standalone tracing can't follow, but also overwrites the
+# patched pi-ai with the upstream tarball — so patches are re-applied after.
+COPY --from=builder /app/patches ./patches
+RUN npm install --ignore-scripts tsx
+RUN npx --yes patch-package --error-on-fail && rm -rf ./patches
 RUN grep -q "MX PATCH" /app/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js \
-    || (echo "ERROR: pi-ai patch missing from runtime image — something in the runner stage stripped it" && exit 1)
+    || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
 
 # Create data directories (docker-compose volumes mount over these; standalone runs use them directly)
 RUN mkdir -p /app/data/pglite /app/data/analytics
