@@ -64,7 +64,7 @@ function fileInfoToFileState(info: FileInfo): FileState {
 async function readFilesImpl(
   fileIds: number[],
   user: EffectiveUser,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _options: ReadFilesOptions = {}
 ): Promise<AugmentedFile[]> {
   const results: AugmentedFile[] = [];
@@ -135,7 +135,7 @@ async function readFolderImpl(
 
 async function getQueryResultImpl(
   params: QueryExecutionParams,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   _options: GetQueryResultOptions = {},
   user: EffectiveUser
 ): Promise<QueryResult> {

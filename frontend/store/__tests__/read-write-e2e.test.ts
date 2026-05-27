@@ -1,4 +1,3 @@
-import type { Mock } from 'vitest';
 /**
  * Phase 1 E2E Test - Unified File System API
  *

@@ -21,7 +21,6 @@ import {
   Code,
 } from '@chakra-ui/react';
 import {
-  LuChevronDown,
   LuChevronLeft,
   LuChevronRight,
   LuSparkles,

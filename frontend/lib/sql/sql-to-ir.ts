@@ -8,7 +8,6 @@ import type {
   JoinClause, JoinCondition, FilterGroup, FilterCondition,
   GroupByClause, GroupByItem, OrderByClause, CTE,
 } from './ir-types';
-import { irToSqlLocal } from './ir-to-sql';
 
 let initialized = false;
 

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { Session } from 'next-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
-import { isValidMode, type Mode } from '@/lib/mode/mode-types';
+import { isValidMode } from '@/lib/mode/mode-types';
 import { logNetworkRequest } from '@/lib/network-logging';
 import { getModules } from '@/lib/modules/registry';
 

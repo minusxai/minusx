@@ -114,7 +114,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
     const { query, cursorOffset, context } = options;
 
     // Use already resolved references from context if provided, otherwise load dynamically
-    let resolvedReferences: ResolvedReference[] = context.resolvedReferences || [];
+    const resolvedReferences: ResolvedReference[] = context.resolvedReferences || [];
 
     // If no resolved references provided, extract and load them dynamically
     if (resolvedReferences.length === 0) {

@@ -390,9 +390,9 @@ class BenchmarkSharedDuckdb {
 // race is guarded by `initPromise` — same pattern as
 // `duckdb-registry.ts:12`. Concurrent first-callers all await the same
 // in-flight create.
-// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+ 
 let sharedInstance: BenchmarkSharedDuckdb | null = null;
-// eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
+ 
 let initPromise: Promise<BenchmarkSharedDuckdb> | null = null;
 
 async function getOrCreateShared(): Promise<BenchmarkSharedDuckdb> {

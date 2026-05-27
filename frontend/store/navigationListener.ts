@@ -1,5 +1,5 @@
 import { createListenerMiddleware } from '@reduxjs/toolkit';
-import type { AppDispatch, RootState } from './store';
+import type { RootState } from './store';
 import { setNavigation, selectPathState } from './navigationSlice';
 import { readFiles, readFolder } from '@/lib/api/file-state';
 

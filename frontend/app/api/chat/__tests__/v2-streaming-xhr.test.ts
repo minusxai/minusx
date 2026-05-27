@@ -124,7 +124,7 @@ class MockXHR implements MockXHREventHandlers {
         return;
       }
       const decoder = new TextDecoder();
-      // eslint-disable-next-line no-constant-condition, no-restricted-syntax -- streaming SSE
+       
       while (true) {
         if (this.aborted) return;
         const { value, done } = await reader.read();

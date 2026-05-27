@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { MockedFunction } from 'vitest';
 import { uploadSlackFile } from '@/lib/integrations/slack/api';
 import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks, extractQueryChart, extractQueryCharts } from '@/lib/integrations/slack/messages';
 import type { ConversationLogEntry } from '@/lib/types';

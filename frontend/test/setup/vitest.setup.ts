@@ -122,7 +122,7 @@ if (typeof globalThis.window !== 'undefined') {
     globalThis.fetch = fetch;
   }
   // JSDOM's Blob/File lack arrayBuffer() — override with Node's globals.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   const nodeBuffer = require('node:buffer');
   if (nodeBuffer.Blob && typeof nodeBuffer.Blob.prototype.arrayBuffer === 'function') {
     globalThis.Blob = nodeBuffer.Blob;

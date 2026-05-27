@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock } from 'vitest';
 /**
  * E2E tests for parameterised query execution through POST /api/query.
  *

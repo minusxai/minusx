@@ -127,7 +127,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   useEffect(() => {
     if (!isGenerating || !conversation) return;
     if (conversation.executionState !== 'FINISHED') return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setIsGenerating(false);
   }, [isGenerating, conversation]);
 
@@ -138,7 +138,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const wasGeneratingRef = useRef(false);
   useEffect(() => {
     if (wasGeneratingRef.current && !isGenerating && hasStarted) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setShowTrace(false);
     }
     wasGeneratingRef.current = isGenerating;

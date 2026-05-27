@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock } from 'vitest';
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
   DB_PATH: undefined,

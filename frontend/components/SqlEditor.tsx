@@ -11,7 +11,6 @@ import { DatabaseWithSchema } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { ResolvedReference } from '@/lib/sql/query-composer';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
-import { debounce } from 'lodash';
 
 // PERFORMANCE EXCEPTION — monaco-editor (~73 MB of JS) is lazy-loaded via next/dynamic
 // rather than imported statically. Monaco is browser-only (ssr: false is correct) and is

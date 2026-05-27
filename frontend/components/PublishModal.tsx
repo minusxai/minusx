@@ -33,7 +33,7 @@ import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
 import { publishAll, discardAll, editFile } from '@/lib/api/file-state';
 import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
-import { selectFile, selectEffectiveName, effectiveName } from '@/store/filesSlice';
+import { selectFile, selectEffectiveName } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';
 import type { AssetReference, DocumentContent, DashboardLayoutItem } from '@/lib/types';
 import { DashboardPublishHighlightsContext, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';

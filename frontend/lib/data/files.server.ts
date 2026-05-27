@@ -22,7 +22,7 @@ import {
   DeleteFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
-import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
+import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';

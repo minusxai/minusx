@@ -275,7 +275,7 @@ export function Dither({
       gl.deleteShader(frag);
       gl.deleteBuffer(buf);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   return (
     <div ref={containerRef} style={{ opacity, width: '100%', height: '100%' }}>

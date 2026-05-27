@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
@@ -9,7 +9,6 @@ import MobileRightSidebar from '@/components/MobileRightSidebar';
 import Breadcrumb from '@/components/Breadcrumb';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import { setLeftSidebarCollapsed, setRightSidebarCollapsed } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { ContextContent } from '@/lib/types';
@@ -66,7 +65,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
     if (storedContextPath) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedContextPath(storedContextPath);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSelectedVersion(storedContextVersion);
     }
   }, [storedContextPath, storedContextVersion]);

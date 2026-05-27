@@ -69,9 +69,9 @@ describe.each(specs as TestSpec[])('real-llm spec: $name', (spec) => {
       const finalText = finalAssistant
         ? finalAssistant.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n')
         : '(no final stop message)';
-      // eslint-disable-next-line no-console
+       
       console.log(`\n[${spec.name}] User: ${(spec.parameters as { userMessage: string }).userMessage}`);
-      // eslint-disable-next-line no-console
+       
       console.log(`[${spec.name}] Final: ${finalText}`);
       expect({ name: spec.name, failures }).toEqual({ name: spec.name, failures: [] });
       expect(pass).toBe(true);

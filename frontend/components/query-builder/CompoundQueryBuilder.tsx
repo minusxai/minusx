@@ -7,7 +7,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, VStack, HStack, Text, Button, Spinner } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Button } from '@chakra-ui/react';
 import { LuPlus, LuX, LuPlay } from 'react-icons/lu';
 import type { CompoundQueryIR, CompoundOperator, QueryIR, OrderByClause } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';

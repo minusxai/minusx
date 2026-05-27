@@ -6,7 +6,7 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
+import { Box, VStack, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';

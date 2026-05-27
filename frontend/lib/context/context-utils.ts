@@ -1,5 +1,5 @@
 import yaml from 'js-yaml';
-import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode } from '../types';
+import { ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode } from '../types';
 
 export function mergeSkillsByName(...skillGroups: SkillEntry[][]): SkillEntry[] {
   const byName = new Map<string, SkillEntry>();

@@ -3,7 +3,6 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import { hashContent } from '@/lib/utils/query-hash';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig } from '@/lib/branding/whitelabel';
-import { getModules } from '@/lib/modules/registry';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';

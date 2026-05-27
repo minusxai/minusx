@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock } from 'vitest';
 /**
  * Tests for statistics-engine.ts
  *

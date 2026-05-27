@@ -207,7 +207,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   const pendingRemoveRef = useRef<{ column: string; zoneLabel: string } | null>(null)
   // Keep a ref to the latest zones so deferred removal can use fresh closures
   const zonesRef = useRef(zones)
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+   
   useEffect(() => { zonesRef.current = zones }, [zones])
 
   // Compute assigned columns from all zones

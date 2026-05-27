@@ -6,7 +6,7 @@
 'use client';
 
 import { Box, HStack, Text } from '@chakra-ui/react';
-import { LuX, LuTable, LuHash, LuCalendar, LuType, LuLock } from 'react-icons/lu';
+import { LuX, LuHash, LuCalendar, LuType, LuLock } from 'react-icons/lu';
 import { ReactNode } from 'react';
 import { useAppSelector } from '@/store/hooks';
 

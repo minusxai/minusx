@@ -6,11 +6,9 @@ import { FetchHandleV2 } from '../fetch-handle';
 import { clearHandles, fetchHandle, getHandleTable, queryHandle, storeHandle } from '../handle-store';
 import { detectLowLimit, findUnresolvedMongoLabelRefs, interpolateMongoRefs, interpolateRefs } from '../query-refs';
 import { computeResultStats } from '../result-stats';
-import type { ResultStats } from '../result-stats';
 import { buildSampleSql } from '../sample-sql';
 import type { QueryResult } from '@/lib/connections/base';
 import type { TextContent } from '@/orchestrator/llm';
-import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 
 describe('handle-store', () => {

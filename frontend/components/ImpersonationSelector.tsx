@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { LuUserCog } from 'react-icons/lu';
-import GenericSelector, { type SelectorOption } from './GenericSelector';
+import GenericSelector from './GenericSelector';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { startImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';

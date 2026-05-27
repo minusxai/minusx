@@ -122,7 +122,7 @@ export default function GettingStartedSection() {
   useEffect(() => {
     // useUsers() handles fetching; just mark as loaded once userIsAdmin is resolved
     setIsLoaded(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [userIsAdmin]);
 
   // Handle item click - mark as completed

@@ -15,8 +15,7 @@
 
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
-import type { QuestionContent, UserRole } from '@/lib/types';
-import type { Mode } from '@/lib/mode/mode-types';
+import type { QuestionContent } from '@/lib/types';
 import { POST as filePostHandler } from '@/app/api/files/route';
 import { PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { POST as folderPostHandler } from '@/app/api/folders/route';

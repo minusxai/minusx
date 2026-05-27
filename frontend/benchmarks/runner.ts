@@ -586,7 +586,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
   const termWidth = process.stderr.columns ?? 120;
 
   /** Strip ANSI escape sequences to measure visible character width. */
-  // eslint-disable-next-line no-control-regex
+   
   const ANSI_RE = /\x1b\[[0-9;]*m/g;
   function visibleLength(s: string): number {
     return s.replace(ANSI_RE, '').length;

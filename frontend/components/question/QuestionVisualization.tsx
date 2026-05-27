@@ -5,10 +5,9 @@
  * Displays query results with multiple visualization types
  */
 
-import { Box, HStack, VStack, Text, Spinner, Button, IconButton } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
 import { LuRocket, LuWrench, LuSettings, LuCode } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
-import { Table } from '@/components/plotx/Table';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';

@@ -1,15 +1,13 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Switch } from '@chakra-ui/react';
-import type { CheckedChangeDetails } from '@zag-js/switch';
+import { Box, Text, VStack, HStack } from '@chakra-ui/react';
 import { AlertContent, JobRun, Test } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuBell, LuMail, LuGripVertical, LuHistory, LuFlaskConical } from 'react-icons/lu';
+import { LuBell, LuGripVertical, LuFlaskConical } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
-import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';

@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { MockInstance } from 'vitest';
 /**
  * Bulk Move UI tests
  *
@@ -17,7 +17,7 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 import React from 'react';
-import { screen, waitFor, within, act } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextRequest } from 'next/server';
 

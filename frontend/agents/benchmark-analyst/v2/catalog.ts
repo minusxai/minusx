@@ -6,7 +6,7 @@
 
 import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
-import type { SchemaEntry, NodeConnector, QueryResult, ColumnMeta } from '@/lib/connections/base';
+import type { SchemaEntry, NodeConnector, ColumnMeta } from '@/lib/connections/base';
 import { profileDatabase } from '@/lib/connections/statistics-engine';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { ConnectionInfo } from '../types';

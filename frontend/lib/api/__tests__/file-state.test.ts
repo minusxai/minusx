@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { MockedFunction } from 'vitest';
 /**
  * Tests for readFiles - File State Manager with Promise Deduplication and TTL Caching
  *
@@ -10,7 +10,7 @@ import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vi
  */
 
 import { configureStore } from '@reduxjs/toolkit';
-import filesReducer, { setFile, setFiles, FileState, setEdit } from '@/store/filesSlice';
+import filesReducer, { setFile, setEdit } from '@/store/filesSlice';
 import queryResultsReducer, { setQueryResult } from '@/store/queryResultsSlice';
 import authReducer from '@/store/authSlice';
 import {

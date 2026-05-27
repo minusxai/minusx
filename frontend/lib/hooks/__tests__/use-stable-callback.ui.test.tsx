@@ -24,12 +24,12 @@ import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-ca
 function StabilityProbe({ cb }: { cb: () => void }) {
   const stable = useStableCallback(cb);
   const lastSeen = useRef<{ ref: unknown; count: number }>({ ref: stable, count: 1 });
-  // eslint-disable-next-line react-hooks/refs
+   
   if (!Object.is(lastSeen.current.ref, stable)) {
-    // eslint-disable-next-line react-hooks/refs
+     
     lastSeen.current = { ref: stable, count: lastSeen.current.count + 1 };
   }
-  // eslint-disable-next-line react-hooks/refs
+   
   const count = lastSeen.current.count;
   return <span aria-label="IdentityCount">{count}</span>;
 }

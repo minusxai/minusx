@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuCopy, LuTrash2, LuFolderInput, LuListChecks } from 'react-icons/lu';
+import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';

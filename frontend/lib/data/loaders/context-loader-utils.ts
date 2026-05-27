@@ -4,7 +4,7 @@
  * Used by both context loader and file template generation
  */
 
-import { DatabaseWithSchema, ContextVersion, DatabaseContext, DbFile, DocEntry, SkillEntry, Whitelist } from '@/lib/types';
+import { DatabaseWithSchema, ContextVersion, DocEntry, SkillEntry, Whitelist } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';

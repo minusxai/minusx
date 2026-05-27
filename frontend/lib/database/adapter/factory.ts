@@ -20,7 +20,7 @@ import { POSTGRES_URL } from '@/lib/config';
  * MUST be a single instance.)
  */
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __minusx_db_adapter__: Promise<IDatabaseAdapter> | undefined;
 }
 

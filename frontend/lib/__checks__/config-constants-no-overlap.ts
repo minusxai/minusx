@@ -18,7 +18,7 @@ type ConstantsKeys = keyof typeof Constants;
 // assignment below fails with a compile error.
 type Overlap = ConfigKeys & ConstantsKeys;
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 const _noOverlap: Overlap extends never
   ? true
   : 'ERROR: overlapping exports between lib/config.ts and lib/constants.ts — move the duplicate to exactly one file' = true;

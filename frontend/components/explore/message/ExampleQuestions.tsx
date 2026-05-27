@@ -50,7 +50,7 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
   const greeting = useMemo(() => {
     const index = Math.floor(Math.random() * greetings.length);
     return greetings[index](firstName);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [firstName]);
 
   return (

@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { MockInstance } from 'vitest';
 /**
  * Centralized fetch mocking for E2E tests
  *

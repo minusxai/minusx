@@ -10,7 +10,7 @@
  * Run: cd frontend && npx jest duckdb-security --no-coverage
  */
 
-import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
+import { DuckDBInstance } from '@duckdb/node-api';
 import { mkdirSync, writeFileSync, mkdtempSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

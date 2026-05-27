@@ -46,7 +46,7 @@ import {
   type AugmentedFolder,
 } from '@/lib/store/file-selectors';
 import type { AppState } from '@/lib/appState';
-import { selectAppState, selectAppStateWithUI } from '@/store/appStateSelector';
+import { selectAppStateWithUI } from '@/store/appStateSelector';
 import { getStore } from '@/store/store';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';

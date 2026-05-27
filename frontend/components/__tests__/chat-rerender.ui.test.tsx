@@ -94,7 +94,7 @@ describe('ChatInterface re-render contract', () => {
       expect(renderCount.value).toBeGreaterThan(0);
     });
     const initialCount = renderCount.value;
-    // eslint-disable-next-line no-console
+     
     console.log('[chat-rerender test] initial render count =', initialCount);
 
     // Fire N streaming chunks to the OTHER conversation, with a real macrotask
@@ -116,7 +116,7 @@ describe('ChatInterface re-render contract', () => {
     // Give React a final flush window.
     await new Promise((r) => setTimeout(r, 30));
 
-    // eslint-disable-next-line no-console
+     
     console.log('[chat-rerender test] after 10 unrelated streaming updates: total =', renderCount.value);
 
     // After fix: zero extra renders (the displayed conversation didn't change).

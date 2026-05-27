@@ -399,7 +399,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     const el = anchorRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setDropdownPos({ top: rect.top - 4, left: rect.left, width: rect.width });
   }, [showDropdown, filteredMentions.length]);
 

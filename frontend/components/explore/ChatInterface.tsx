@@ -11,7 +11,7 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useContext } from '@/lib/hooks/useContext';
@@ -169,7 +169,7 @@ export default function ChatInterface({
   // changes and the conversation is already in Redux, or when it loads from DB).
   useEffect(() => {
     if (storedConnectionId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSelectedDatabase(storedConnectionId);
     }
   }, [storedConnectionId]);
@@ -180,7 +180,7 @@ export default function ChatInterface({
       // Prefer databases with schemas loaded for auto-select so the user starts with a working connection.
       const dbsWithSchemas = databases.filter(db => db.schemas.length > 0);
       const autoSelected = selectDatabase(dbsWithSchemas.length > 0 ? dbsWithSchemas : databases, null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSelectedDatabase(autoSelected);
     }
   }, [databases, selectedDatabase]);
@@ -330,7 +330,7 @@ export default function ChatInterface({
   useEffect(() => {
     if (prevConversationIdRef.current !== providedConversationId) {
       prevConversationIdRef.current = providedConversationId;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setContinueChatConfirmed(false);
     }
   }, [providedConversationId]);
@@ -475,7 +475,7 @@ export default function ChatInterface({
 
     // Clear errors when going from one conversation to another
     if (prevId !== providedConversationId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setLocalError(null);
     }
   }, [providedConversationId]);
@@ -515,13 +515,13 @@ export default function ChatInterface({
       scrollToBottom();
       prevUserMessageCountRef.current = userMessageCount;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     checkScrollPosition();
   }, [userMessageCount]);
 
   // Re-check scroll position when any message changes (e.g. agent adds responses/suggestions)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     checkScrollPosition();
   }, [allMessages.length, checkScrollPosition]);
 

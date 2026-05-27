@@ -1,9 +1,9 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton, Portal } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Button, Textarea, Badge, IconButton, Portal } from '@chakra-ui/react';
 import { ReportContent, ReportReference, ReportOutput, RunFileContent, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuMail, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
+import { LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';

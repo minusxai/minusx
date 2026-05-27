@@ -18,7 +18,7 @@ export function useStableCallback<T extends (...args: never[]) => unknown>(fn: T
   useEffect(() => { ref.current = fn })
   // The wrapper is created once per component instance; the ref points at the
   // latest fn each render.
-  // eslint-disable-next-line react-hooks/refs
+   
   const stable = useRef(((...args: Parameters<T>) => ref.current(...args)) as T)
   // eslint-disable-next-line react-hooks/refs
   return stable.current

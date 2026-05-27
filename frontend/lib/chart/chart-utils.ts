@@ -56,7 +56,7 @@ export function buildCompactYLabel(names: string[], maxNames = 1): string {
     commonTokens = commonTokens.slice(0, shared)
     if (commonTokens.length === 0) break
   }
-  let commonLabel = commonTokens.join(' ').trim().replace(/[\s(|,-]+$/, '').trim()
+  const commonLabel = commonTokens.join(' ').trim().replace(/[\s(|,-]+$/, '').trim()
   if (commonLabel.length >= 6) return commonLabel
 
   // No meaningful common prefix — show first N names + count

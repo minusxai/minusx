@@ -67,8 +67,6 @@ import type {
   DatabaseSchema,
   DatabaseWithSchema,
   ConnectionContent,
-  // ↓ NEW types — these imports are RED until Phase 1 is implemented
-  Whitelist,
   WhitelistNode,
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
