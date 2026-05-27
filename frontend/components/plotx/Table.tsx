@@ -101,7 +101,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize, sql, data
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleColumns(new Set(columns))
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setColumnWidths({})
   }, [columns])
 

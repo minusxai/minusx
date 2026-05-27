@@ -4,7 +4,6 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import {
   SessionRecordingFileContent,
-  SessionRecordingMetadata,
   FileType
 } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Heading, Text, Button, VStack, HStack, Table, IconButton, Input, Dialog, Portal, Menu } from '@chakra-ui/react';
+import { Box, Text, Button, VStack, HStack, Table, IconButton, Input, Dialog, Portal, Menu } from '@chakra-ui/react';
 import { LuPlus, LuPencil, LuTrash2, LuCrown, LuSquarePen, LuEye, LuCheck, LuX, LuChevronDown } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
@@ -9,7 +9,7 @@ import type { User } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useUsers } from '@/lib/hooks/useUsers';
-import { loadUsers, setUsersInStore } from '@/lib/hooks/useUsers';
+import { setUsersInStore } from '@/lib/hooks/useUsers';
 
 // Helper to get icon based on role
 const getRoleIcon = (role: string | undefined) => {

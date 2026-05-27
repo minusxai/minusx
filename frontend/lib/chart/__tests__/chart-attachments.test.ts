@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock } from 'vitest';
 /**
  * chart-attachments — S3 URL cache lifecycle tests
  *

@@ -8,7 +8,6 @@
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { ConnectionContent } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { FrontendToolException } from './frontend-tool-exception';
 import { registerTool } from './orchestrator';
@@ -17,9 +16,6 @@ import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { validateQueryTablesLocal } from '@/lib/sql/validate-query-tables';
 import { getVizSettingsWarning } from '@/lib/chart/viz-constraints';
-import { ConnectionsAPI } from '@/lib/data/connections.server';
-import { getNodeConnector } from '@/lib/connections';
-import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
 import { executeFuzzyMatch, type FuzzyMatchToolArgs } from '@/lib/connections/fuzzy-match-tool';
 
 // ============================================================================

@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { MockedFunction } from 'vitest';
 // ─── lib-unit.test.ts ───
 // Merged: conversations-client, oauth, context-utils-yaml, api-responses-network,
 //         permissions, content-validators, xml-parser, file-search
@@ -384,7 +384,7 @@ describe('OAuthTokenDB', () => {
     });
 
     it('returns null for a token signed with a different secret', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const jwt = require('jsonwebtoken') as typeof import('jsonwebtoken');
       const forged = jwt.sign({ userId: USER_ID, scope: null }, 'wrong-secret', { expiresIn: 3600 });
 
@@ -392,7 +392,7 @@ describe('OAuthTokenDB', () => {
     });
 
     it('returns null for an expired token', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       const jwt = require('jsonwebtoken') as typeof import('jsonwebtoken');
       const expired = jwt.sign(
         { userId: USER_ID, scope: null },

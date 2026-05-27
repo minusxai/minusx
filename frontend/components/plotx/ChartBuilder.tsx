@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { Box, HStack, VStack, Text } from '@chakra-ui/react'
+import { Box, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { RowPlot } from './RowPlot'

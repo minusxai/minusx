@@ -15,7 +15,7 @@ import '@testing-library/jest-dom';
 // and all other structured-clone-compatible types (unlike JSON.parse/stringify).
 // ---------------------------------------------------------------------------
 if (typeof structuredClone === 'undefined') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   const v8 = require('v8') as typeof import('v8');
   (global as any).structuredClone = (val: unknown) => v8.deserialize(v8.serialize(val));
 }

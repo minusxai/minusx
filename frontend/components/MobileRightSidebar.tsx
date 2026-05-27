@@ -5,12 +5,10 @@ import { Box, VStack, HStack, Text, Icon, Dialog, Portal } from '@chakra-ui/reac
 import { LuX, LuMove } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSidebarSection } from '@/store/uiSlice';
-import { AppState } from '@/lib/appState';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import AppStateViewer from './AppStateViewer';
-import { ReactNode } from 'react';
 import { useContext } from '@/lib/hooks/useContext';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';

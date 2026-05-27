@@ -7,8 +7,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, HStack, Spinner, Text, VStack } from '@chakra-ui/react';
-import type { AnyQueryIR, QueryIR, CompoundQueryIR } from '@/lib/types';
+import { Box, HStack, Spinner, Text } from '@chakra-ui/react';
+import type { QueryIR, CompoundQueryIR } from '@/lib/types';
 import { isCompoundQueryIR } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryBuilder } from './QueryBuilder';

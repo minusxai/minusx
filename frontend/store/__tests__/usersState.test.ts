@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock } from 'vitest';
 /**
  * Users State E2E Tests
  *
@@ -13,7 +13,7 @@ import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vi
 
 import { configureStore } from '@reduxjs/toolkit';
 import { NextRequest } from 'next/server';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase, waitFor } from './test-utils';
+import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { GET as usersGetHandler, POST as usersPostHandler } from '@/app/api/users/route';
 import { PUT as userPutHandler, DELETE as userDeleteHandler } from '@/app/api/users/[id]/route';

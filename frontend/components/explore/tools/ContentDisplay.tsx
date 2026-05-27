@@ -15,7 +15,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
-  let nativeThinkingBlocks: string[] = [];
+  const nativeThinkingBlocks: string[] = [];
 
   try {
     const jsonParsed = typeof toolMessage.content === 'string'

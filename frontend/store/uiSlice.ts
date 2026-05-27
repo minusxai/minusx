@@ -1,5 +1,4 @@
 import { createSlice, createSelector, PayloadAction } from '@reduxjs/toolkit';
-import { IS_DEV } from '@/lib/constants';
 import type { RootState } from './store';
 import type { Attachment } from '@/lib/types';
 

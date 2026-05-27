@@ -11,7 +11,7 @@ export interface ModuleSet {
 // request-handler bundles. global is shared across all bundles in the same process,
 // so it bridges the gap without needing IPC.
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __minusx_modules__: ModuleSet | undefined;
 }
 

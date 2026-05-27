@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, Icon, VStack, IconButton, Flex, SimpleGrid, Button } from '@chakra-ui/react';
-import { LuList, LuLayoutGrid, LuFiles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { Box, HStack, Text, Icon, VStack, Flex, SimpleGrid, Button } from '@chakra-ui/react';
+import { LuFiles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
 import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
 import FileActionMenu from './FileActionMenu';
-import { Tooltip } from '@/components/ui/tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { generateFileUrl } from '@/lib/slug-utils';

@@ -108,8 +108,9 @@ const eslintConfig = defineConfig([
       // Disable base rules as they are replaced by unused-imports
       "@typescript-eslint/no-unused-vars": "off",
       "no-unused-vars": "off",
-      // Unused imports/vars — warn, not error (harmless clutter, fix gradually)
-      "unused-imports/no-unused-imports": "warn",
+      // Unused imports — error (auto-fixable; keeps clutter from accruing).
+      // Unused vars/args — still warn (not auto-fixable; some are intentional placeholders).
+      "unused-imports/no-unused-imports": "error",
       "unused-imports/no-unused-vars": [
         "warn",
         {

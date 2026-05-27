@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { MockInstance } from 'vitest';
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
 const { mockReplaceFileState, mockRouterPush } = vi.hoisted(() => ({

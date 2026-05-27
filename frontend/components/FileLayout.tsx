@@ -23,9 +23,8 @@ import { DbFile } from '@/lib/types';
 import { selectEffectiveName } from '@/store/filesSlice';
 import { useFile, useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import { setLeftSidebarCollapsed, selectViewStackDepth, selectDashboardEditMode } from '@/store/uiSlice';
+import { selectViewStackDepth, selectDashboardEditMode } from '@/store/uiSlice';
 import ViewStackOverlay from './ViewStack';
-import { useEffect } from 'react';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
 /**

@@ -1,5 +1,5 @@
 import React from 'react'
-import { screen, within, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { TableV2 } from '@/components/plotx/TableV2'

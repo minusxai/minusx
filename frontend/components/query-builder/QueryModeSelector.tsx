@@ -4,7 +4,7 @@
 
 'use client';
 
-import { HStack, Box, Text } from '@chakra-ui/react';
+import { HStack, Text } from '@chakra-ui/react';
 import { LuCode, LuMousePointerClick, LuChartColumn } from 'react-icons/lu';
 
 export type QueryTab = 'sql' | 'gui' | 'viz';

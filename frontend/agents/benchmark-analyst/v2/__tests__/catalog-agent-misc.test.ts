@@ -2,17 +2,14 @@
 // Merged to amortize the per-file module-import cost across one harness load.
 
 import { detachAllBenchmarkAttachments } from '../../shared-duckdb';
-import type { BenchmarkAnalystContext, ConnectionInfo } from '../../types';
+import type { BenchmarkAnalystContext } from '../../types';
 import { buildCatalog, clearCatalogCache, getCatalogStore } from '../catalog';
-import type { CatalogConnector, CatalogTables } from '../catalog';
+import type { CatalogConnector } from '../catalog';
 import { V2DataTool } from '../data-tool-base';
 import { ExecuteQueryV2 } from '../execute-query';
-import { ExploreV2 } from '../explore';
-import { FetchHandleV2 } from '../fetch-handle';
 import { clearHandles, fetchHandle, storeHandle } from '../handle-store';
 import { applyRerank, buildPromptPassPreviews, buildPromptPassUserContent, parsePromptPassResponse, pickPromptPassInfo, runPromptPassFree } from '../prompt-pass';
 import type { PromptPassEntry } from '../prompt-pass';
-import { SearchDBSchemaV2 } from '../search-db-schema';
 import { V2BenchmarkAnalystAgent } from '../v2-agent';
 import type { NodeConnector, QueryResult, SchemaEntry } from '@/lib/connections/base';
 import type { Api, Model, TextContent, Tool } from '@/orchestrator/llm';

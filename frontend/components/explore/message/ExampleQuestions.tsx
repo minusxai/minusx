@@ -47,10 +47,13 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
   const agentName = config.branding.agentName;
   const isMinusx = agentName.toLowerCase() === 'minusx';
   const firstName = user?.name?.split(' ')[0].split('@')[0] || 'there';
+  // greetings is module-level and stable; greeting is intentionally
+  // re-randomised on firstName change only — Math.random() in useMemo is
+  // the desired behaviour.
   const greeting = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
     const index = Math.floor(Math.random() * greetings.length);
     return greetings[index](firstName);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstName]);
 
   return (

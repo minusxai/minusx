@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { searchFilesInFolder } from '@/lib/search/file-search';
-import { FileType } from '@/lib/types';
 
 /**
  * POST /api/files/search

@@ -2,14 +2,12 @@
 
 import React, { useState } from 'react';
 import { Box, Grid, GridItem, HStack, Text, Icon, IconButton, Textarea } from '@chakra-ui/react';
-import { ChatMessage as ChatMessageType, MessageDebugInfo, CompletedToolCall } from '@/lib/types';
+import { MessageDebugInfo, CompletedToolCall } from '@/lib/types';
 import ToolCallDisplay from './ToolCallDisplay';
 import DebugInfoDisplay from './DebugInfoDisplay';
-import Markdown from '../Markdown';
 import { MessageWithMentions } from '../chat/MessageWithMentions';
 import { useAppSelector } from '@/store/hooks';
 import { useAppDispatch } from '@/store/hooks';
-import { cloneDeep, isEmpty } from 'lodash';
 
 import { MessageWithFlags } from './message/messageHelpers';
 import { LuPencil, LuCheck, LuX, LuBookOpen, LuTriangleAlert } from 'react-icons/lu';

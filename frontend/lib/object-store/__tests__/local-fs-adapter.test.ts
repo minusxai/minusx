@@ -1,6 +1,5 @@
-import { mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 
 vi.mock('@/lib/config', () => ({

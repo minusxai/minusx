@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 // ─── Hoisted mocks ───────────────────────────────────────────────────────────
 
 vi.mock('@/lib/database/db-config', () => ({

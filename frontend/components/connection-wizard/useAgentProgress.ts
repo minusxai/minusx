@@ -23,7 +23,7 @@ export function useAgentProgress(isRunning: boolean, isDone: boolean, tau: numbe
       return;
     }
     if (!isRunning) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setProgress(0);
       startTimeRef.current = null;
       return;
@@ -33,7 +33,7 @@ export function useAgentProgress(isRunning: boolean, isDone: boolean, tau: numbe
       if (!startTimeRef.current) return;
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
       const p = (1 - Math.exp(-elapsed / tau)) * 100;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setProgress(Math.min(p, 99));
     }, PROGRESS_INTERVAL_MS);
     return () => clearInterval(interval);

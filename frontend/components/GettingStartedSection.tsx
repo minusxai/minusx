@@ -121,8 +121,8 @@ export default function GettingStartedSection() {
   // Fetch user count for admins — intentional setState in effect
   useEffect(() => {
     // useUsers() handles fetching; just mark as loaded once userIsAdmin is resolved
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoaded(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userIsAdmin]);
 
   // Handle item click - mark as completed

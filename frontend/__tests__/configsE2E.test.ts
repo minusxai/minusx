@@ -29,7 +29,6 @@ vi.mock('next/cache', () => ({
 
 import { NextRequest } from 'next/server';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
-import { DocumentDB } from '@/lib/database/documents-db';
 import { GET as configGetHandler, POST as configPostHandler } from '@/app/api/configs/route';
 
 // ---------------------------------------------------------------------------

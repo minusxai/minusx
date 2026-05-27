@@ -3,7 +3,7 @@
 import { Box, HStack, VStack, Text, Icon, Badge, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuBadgeInfo } from 'react-icons/lu';
 import { DisplayProps, ClarifyDetails, contentToDetails } from '@/lib/types';
-import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
+import { type DetailCardProps, parseToolArgs, parseToolContent } from './DetailCarousel';
 import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';

@@ -10,7 +10,7 @@
 // - `FROM handle_xyz` works in any dataset via the built-in `_scratch` DuckDB.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import RealDatabase from 'better-sqlite3';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
@@ -41,7 +41,6 @@ import {
 } from '../db-tools';
 import { clearHandles } from '../v2/handle-store';
 import { clearSessionLabels } from '../v2/query-refs';
-import { detachAllBenchmarkAttachments } from '../shared-duckdb';
 import type { BenchmarkAnalystContext } from '../types';
 
 describe('clampQueryTimeoutSeconds', () => {

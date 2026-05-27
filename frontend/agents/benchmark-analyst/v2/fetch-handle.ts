@@ -6,7 +6,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { BenchmarkAnalystContext } from '../types';
 import { fetchHandle } from './handle-store';
-import { computeResultStats, type ResultStats } from './result-stats';
+import { computeResultStats } from './result-stats';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 
 const FetchHandleParams = Type.Object({

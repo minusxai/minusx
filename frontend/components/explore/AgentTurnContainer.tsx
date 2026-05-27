@@ -572,7 +572,7 @@ function AgentTurnContainerImpl({
   const rightPaneH = hasPendingClarify ? '400px' : hasMultipleCharts ? '450px' : hasChartContent ? '400px' : 'auto';
 
   // Scroll active horizontal timeline chip into view
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   const activeChipRef = useCallback((el: HTMLElement | null) => {
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   }, [safeIdx]);

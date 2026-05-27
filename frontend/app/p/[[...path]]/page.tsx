@@ -10,7 +10,6 @@ import FolderView from '@/components/FolderView';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
-import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';

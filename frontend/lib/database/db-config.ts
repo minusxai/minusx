@@ -1,5 +1,4 @@
 import path from 'path';
-import { IS_DEV } from '../constants';
 import { DB_TYPE, PGLITE_DATA_DIR_ENV, BASE_DUCKDB_DATA_PATH } from '../config';
 
 export function getDbType(): 'postgres' | 'pglite' {

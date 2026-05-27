@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Flex, HStack, Icon, Text, VStack, IconButton } from '@chakra-ui/react';
+import { Box, Flex, HStack, Icon, Text, VStack } from '@chakra-ui/react';
 import { LuLogOut, LuSettings } from 'react-icons/lu';
 import { signOut } from 'next-auth/react';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';

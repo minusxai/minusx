@@ -418,7 +418,7 @@ const filesSlice = createSlice({
       if (!file) return;
 
       // Auto-update path slug when name changes (keep parent folder)
-      let updatedChanges = { ...changes };
+      const updatedChanges = { ...changes };
       if (changes.name && !changes.path) {
         // Get current path (with any pending changes applied)
         const currentPath = file.metadataChanges?.path || file.path;

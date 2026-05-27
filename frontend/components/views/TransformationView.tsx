@@ -1,10 +1,8 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Combobox } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Portal, Combobox } from '@chakra-ui/react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical, LuExternalLink } from 'react-icons/lu';
-import Link from 'next/link';
-import { preserveParams } from '@/lib/navigation/url-utils';
+import { LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
@@ -16,7 +14,6 @@ import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
-import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import TransformationRunContainerV2 from '@/components/containers/TransformationRunContainerV2';

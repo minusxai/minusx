@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState, useMemo } from 'react';
-import { Box, Spinner, Center, Text } from '@chakra-ui/react';
+import { Spinner, Center } from '@chakra-ui/react';
 import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -10,7 +10,6 @@ import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import FileNotFound from '@/components/FileNotFound';
 import { ContextContent } from '@/lib/types';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { useSearchParams } from 'next/navigation';
 
 interface FilePageProps {

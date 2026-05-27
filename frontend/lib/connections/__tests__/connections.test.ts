@@ -1,4 +1,4 @@
-import type { Mock, MockedFunction, MockedClass, MockInstance, Mocked } from 'vitest';
+import type { Mock, MockedClass } from 'vitest';
 vi.mock('@aws-sdk/client-athena', () => ({
   AthenaClient: vi.fn(),
   StartQueryExecutionCommand: vi.fn(function (this: any, args: any) { this.input = args; }),

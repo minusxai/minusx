@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, createContext, useContext as useReact
 import { Box, HStack, Text, VStack, Icon, Skeleton } from '@chakra-ui/react';
 // Param-preserving Link so file/chat links keep ?v=2 (and as_user/mode).
 import { Link } from '@/components/ui/Link';
-import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuPlus, LuArrowRight, LuSendHorizontal } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuMessageSquare, LuRefreshCw, LuArrowRight, LuSendHorizontal } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { generateFileUrl } from '@/lib/slug-utils';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';

@@ -6,7 +6,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
-import { Box, Spinner, Text, HStack, VStack, IconButton, Menu, Portal, Icon } from '@chakra-ui/react';
+import { Box, Spinner, Text, HStack, IconButton, Menu, Portal, Icon } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
 import { LuEllipsis, LuSparkles, LuExternalLink, LuTrash2, LuPencil } from 'react-icons/lu';
 import { useExplainQuestion } from '@/lib/hooks/useExplainQuestion';

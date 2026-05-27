@@ -1,7 +1,6 @@
 'use client';
 
-import { Box, HStack, VStack, Text, Icon, Link } from '@chakra-ui/react';
-import { LuExternalLink } from 'react-icons/lu';
+import { Box, HStack, Text, Icon, Link } from '@chakra-ui/react';
 
 export interface WebSearchResult {
   url: string;

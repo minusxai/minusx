@@ -1,4 +1,4 @@
-import { ApiEndpoint, CacheStrategy } from './declarations';
+import { CacheStrategy } from './declarations';
 
 // In-memory cache for responses
 type CacheEntry<T> = {

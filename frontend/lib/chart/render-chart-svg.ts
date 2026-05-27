@@ -18,7 +18,7 @@ import type { VizSettings } from '@/lib/validation/atlas-schemas';
 // Register individual ECharts components for Next.js tree-shaking (SSR).
 // In Jest/tsx the full echarts bundle is loaded and these are already included.
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax -- dynamic require needed: echarts sub-path exports are ESM-only and break Jest's CJS transform
+   
   const r = require;
   const { SVGRenderer } = r('echarts/renderers');
   const { TitleComponent, LegendComponent, TooltipComponent, GridComponent, RadarComponent } = r('echarts/components');
@@ -28,7 +28,7 @@ try {
   // Full echarts bundle already includes everything — no registration needed
 }
 
-// eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
+ 
 export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'row', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar', 'combo']);
 
 /** Height-to-width ratio per chart type. Used by image renderers to pick a
@@ -62,7 +62,7 @@ export interface RenderChartOptions {
   width?: number;
   height?: number;
   colorMode?: 'light' | 'dark';
-  /** Path to logo file for footer. Used by server-side renderChartToPng only. */
+  /** Path to logo file for footer. Used by server-side renderChartToJpeg only. */
   logoPath?: string;
   /** Override auto-generated chart title (e.g. use the file/question name). */
   titleOverride?: string;

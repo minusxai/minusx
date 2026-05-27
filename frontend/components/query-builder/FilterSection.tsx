@@ -18,7 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FilterGroup, FilterCondition } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton } from './QueryChip';
-import { PickerPopover, PickerList, PickerItem } from './PickerPopover';
+import { PickerPopover, PickerItem } from './PickerPopover';
 import { ColumnPickerDropdown } from './ColumnPickerDropdown';
 import { LuX, LuPlus, LuChevronDown, LuCheck } from 'react-icons/lu';
 

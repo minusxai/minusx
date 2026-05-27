@@ -1,5 +1,5 @@
 import 'server-only';
-import type { NodeConnector, QueryResult, SchemaEntry, TableIndex, TestConnectionResult } from './base';
+import type { QueryResult, SchemaEntry, TableIndex, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 import { getOrCreatePgPool } from './pg-registry';

@@ -6,7 +6,7 @@ import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { BenchmarkAnalystContext } from '../../types';
 import { ExecuteQueryV2 } from '../execute-query';
 import { setLighterModel } from '../data-tool-base';
-import { storeHandle, clearHandles, fetchHandle } from '../handle-store';
+import { clearHandles, fetchHandle } from '../handle-store';
 import type { QueryResult } from '@/lib/connections/base';
 
 const fauxReg = registerFauxProvider({

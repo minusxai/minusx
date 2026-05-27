@@ -582,7 +582,7 @@ export async function publishFile(
 
   // Prepare content for saving: merge only persistable changes, NOT ephemeral
   // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted
-  let contentToSave = fileState.persistableChanges
+  const contentToSave = fileState.persistableChanges
     ? { ...fileState.content, ...fileState.persistableChanges }
     : fileState.content;
 
