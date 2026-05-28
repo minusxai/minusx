@@ -13,6 +13,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
 import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolver.server';
+import { getModules } from '@/lib/modules/registry';
 
 /**
  * Transform a query+params pair so that None (null) parameter values are handled:
@@ -56,9 +57,9 @@ function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: s
 const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
 
 interface CacheEntry { result: QueryResult; cachedAt: number; finalQuery: string; }
-// eslint-disable-next-line no-restricted-syntax -- keys are `${mode}:${queryHash}`
+// eslint-disable-next-line no-restricted-syntax -- keys are `${getUserKey(user)}:${queryHash}`
 const queryCache = new Map<string, CacheEntry>();
-// eslint-disable-next-line no-restricted-syntax -- keys are `${mode}:${queryHash}`
+// eslint-disable-next-line no-restricted-syntax -- keys are `${getUserKey(user)}:${queryHash}`
 const queryInflight = new Map<string, Promise<QueryResult & { _finalQuery: string }>>();
 
 // Evict stale entries every 5 minutes
@@ -92,25 +93,15 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Compute hash on raw inputs (matches client-side Redux hash key)
     const queryHash = getQueryHash(query, paramValues, connection_name);
-    // Server cache key includes mode to prevent cross-mode hits
-    const serverCacheKey = `${user.mode}:${queryHash}`;
+    // User-scoped namespace prevents cross-mode (and, in proprietary, cross-tenant) hits.
+    const serverCacheKey = `${getModules().auth.getUserKey(user)}:${queryHash}`;
 
-    // Cache hit — return immediately
-    const cached = queryCache.get(serverCacheKey);
-    if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
-      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
-        databaseName: connection_name, durationMs: 0,
-        rowCount: cached.result.rows.length, colCount: cached.result.columns.length,
-        wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
-      });
-      return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
-    }
-
-    // Whitelist validation — only when the caller supplies a filePath (question view).
-    // Validate the raw query before CTE expansion: the original SQL contains the actual
-    // table references; CTE expansion only wraps referenced questions as WITH clauses.
-    // @alias references (question references) will fail to parse → allowed through safely.
+    // Whitelist validation runs BEFORE the cache lookup. The cache is keyed by
+    // (user, query, params) and does not include filePath; if validation came
+    // after the cache hit, a user could replay a query that succeeded under one
+    // filePath's whitelist from another filePath where it would now be denied,
+    // or keep hitting cached results after an admin revoked the whitelist.
+    // Validate first, then trust the cache only for authorized queries.
     let schemaContext: Array<{ schema: string; table: string; columns: string[] }> | null = null;
     if (filePath) {
       const whitelist = await getWhitelistForPath(filePath, connection_name, user);
@@ -124,6 +115,18 @@ export const POST = withAuth(async (request: NextRequest, user) => {
           );
         }
       }
+    }
+
+    // Cache hit — return immediately (whitelist already validated above)
+    const cached = queryCache.get(serverCacheKey);
+    if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
+      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
+        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
+        databaseName: connection_name, durationMs: 0,
+        rowCount: cached.result.rows.length, colCount: cached.result.columns.length,
+        wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
+      });
+      return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
     }
 
     // Thundering herd: join in-flight promise for same hash

@@ -33,6 +33,7 @@ function makeMockModules(db: DBModule) {
       }),
       addHeaders: async () => true,
       register: async () => { throw new Error('not in tests'); },
+      getUserKey: (user: { mode: string }) => user.mode,
     },
     db,
     store: {
