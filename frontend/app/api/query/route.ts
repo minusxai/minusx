@@ -93,8 +93,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Compute hash on raw inputs (matches client-side Redux hash key)
     const queryHash = getQueryHash(query, paramValues, connection_name);
-    // User-scoped namespace prevents cross-mode (and, in proprietary, cross-tenant) hits.
-    const serverCacheKey = `${getModules().auth.getUserKey(user)}:${queryHash}`;
+    // User-scoped namespace prevents the cache from serving one user's result to another.
+    const serverCacheKey = `${await getModules().auth.getUserKey(user)}:${queryHash}`;
 
     // Whitelist validation runs BEFORE the cache lookup. The cache is keyed by
     // (user, query, params) and does not include filePath; if validation came

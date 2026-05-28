@@ -27,7 +27,7 @@ export class AuthModule implements IAuthModule {
     throw new Error('handleRequest() — not yet wired into middleware');
   }
 
-  getUserKey(user: { mode: string }): string {
+  async getUserKey(user: { mode: string }): Promise<string> {
     return user.mode;
   }
 
