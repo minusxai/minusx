@@ -139,7 +139,7 @@ export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): v
       `WITH _q AS (
          INSERT INTO queries (query_hash, query, params, schema_context, connection_name, file_id, file_version)
          VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7)
-         ON CONFLICT (query_hash) DO NOTHING
+         ON CONFLICT DO NOTHING
        )
        INSERT INTO query_execution_events
          (query_hash, file_id, duration_ms, row_count, col_count, was_cache_hit, error, user_id, request_id)

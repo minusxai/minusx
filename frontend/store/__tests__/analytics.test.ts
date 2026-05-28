@@ -8,7 +8,7 @@
  * Unmocks the analytics module so real DocumentDB inserts are tested.
  */
 
-// Must be before any imports — overrides the global stub in jest.setup.ts
+// Must be before any imports — overrides the global stub in test/setup/vitest.setup.ts
 vi.unmock('@/lib/analytics/file-analytics.server');
 vi.unmock('@/lib/analytics/file-analytics.db');
 

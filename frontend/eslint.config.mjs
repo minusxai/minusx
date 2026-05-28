@@ -151,7 +151,7 @@ const eslintConfig = defineConfig([
   },
   // Allow process.env in the two centralized config files, scripts, and test bootstrap
   {
-    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "jest.setup.js", "next.config.ts"],
+    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts"],
     rules: {
       "no-restricted-syntax": ["error", BASE_RESTRICTED_SYNTAX[0], BASE_RESTRICTED_SYNTAX[1]],
     },
