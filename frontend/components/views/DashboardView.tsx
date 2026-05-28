@@ -1,8 +1,9 @@
 'use client';
 
-import { Box, Text, IconButton, HStack } from '@chakra-ui/react';
-import { LuPlus, LuX, LuGripVertical, LuPresentation } from 'react-icons/lu';
+import { Box, Text, IconButton, HStack, Portal, MenuRoot, MenuTrigger, MenuPositioner, MenuContent, MenuItem } from '@chakra-ui/react';
+import { LuPlus, LuX, LuGripVertical, LuPresentation, LuFileText, LuChevronDown, LuCheck } from 'react-icons/lu';
 import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
+import ReportOverlay from '../ReportOverlay';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -23,6 +24,13 @@ import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
 import { useDashboardPublishHighlights, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
 import { useSetDashboardHeaderActions } from '@/lib/context/dashboard-header-actions';
+
+const livePulseAnimation = `
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+`;
 
 const EMPTY_PARAMS: Record<string, any> = {};
 const DASHBOARD_MIN_W = 2;
@@ -261,8 +269,21 @@ export default function DashboardView({
     };
   }, [layouts, expandedHeights]);
 
-  // Presentation mode
+  // Dashboard version selector (Live vs snapshots)
+  const [dashboardVersion, setDashboardVersion] = useState('live');
+  const dashboardVersionOptions = [
+    { value: 'live', label: 'Live' },
+    { value: 'snapshot-2026-05', label: 'Snapshot May 2026' },
+    { value: 'snapshot-2026-04', label: 'Snapshot April 2026' },
+    { value: 'snapshot-2026-03', label: 'Snapshot March 2026' },
+    { value: 'snapshot-2026-02', label: 'Snapshot February 2026' },
+  ];
+  const activeVersionLabel = dashboardVersionOptions.find(o => o.value === dashboardVersion)?.label ?? 'Live';
+  const isLive = dashboardVersion === 'live';
+
+  // Presentation / Report mode
   const [isPresenting, setIsPresenting] = useState(false);
+  const [isReporting, setIsReporting] = useState(false);
   const slides = useMemo(() => {
     if (!document?.assets) return [];
     const layoutItems = document.layout?.items ?? [];
@@ -509,17 +530,102 @@ export default function DashboardView({
   useEffect(() => {
     setActions(
       <>
-        {!editMode && slides.length > 1 && (
-          <Tooltip content="Present">
-            <IconButton
-              onClick={() => setIsPresenting(true)}
-              aria-label="Present"
-              variant="subtle"
-              size="xs"
+        <style>{livePulseAnimation}</style>
+        <MenuRoot positioning={{ placement: 'bottom-start' }}>
+          <MenuTrigger asChild>
+            <HStack
+              as="button"
+              gap={1.5}
+              px={2}
+              py={0.5}
+              borderRadius="full"
+              bg={isLive ? 'accent.teal/8' : 'bg.muted'}
+              borderWidth="1px"
+              borderColor={isLive ? 'accent.teal/15' : 'border.muted'}
+              cursor="pointer"
+              _hover={{ borderColor: isLive ? 'accent.teal/30' : 'border.emphasized' }}
+              transition="all 0.15s"
             >
-              <LuPresentation size={14} />
-            </IconButton>
-          </Tooltip>
+              {isLive && (
+                <Box w="6px" h="6px" borderRadius="full" bg="accent.teal" css={{ animation: 'livePulse 2s ease-in-out infinite' }} />
+              )}
+              <Text fontSize="xs" fontWeight="700" color={isLive ? 'accent.teal' : 'fg.muted'} fontFamily="mono">
+                {activeVersionLabel}
+              </Text>
+              <LuChevronDown size={10} color={isLive ? 'var(--chakra-colors-accent-teal)' : undefined} />
+            </HStack>
+          </MenuTrigger>
+          <Portal>
+            <MenuPositioner>
+              <MenuContent minW="200px" bg="bg.surface" borderColor="border.default" shadow="lg" p={1}>
+                {dashboardVersionOptions.map(opt => (
+                  <MenuItem
+                    key={opt.value}
+                    value={opt.value}
+                    onClick={() => setDashboardVersion(opt.value)}
+                    px={3}
+                    py={1.5}
+                    borderRadius="sm"
+                    _hover={{ bg: 'bg.muted' }}
+                    cursor="pointer"
+                  >
+                    <HStack gap={2} w="full" justify="space-between">
+                      <HStack gap={1.5}>
+                        {opt.value === 'live' && (
+                          <Box w="6px" h="6px" borderRadius="full" bg="accent.teal" css={{ animation: 'livePulse 2s ease-in-out infinite' }} />
+                        )}
+                        <Text fontSize="xs" fontFamily="mono" fontWeight={opt.value === dashboardVersion ? '700' : '500'}>
+                          {opt.label}
+                        </Text>
+                      </HStack>
+                      {opt.value === dashboardVersion && <LuCheck size={12} />}
+                    </HStack>
+                  </MenuItem>
+                ))}
+                <Box borderTopWidth="1px" borderColor="border.muted" my={1} />
+                <MenuItem
+                  value="new-snapshot"
+                  onClick={() => {/* TODO: create snapshot */}}
+                  px={3}
+                  py={1.5}
+                  borderRadius="sm"
+                  _hover={{ bg: 'bg.muted' }}
+                  cursor="pointer"
+                >
+                  <HStack gap={1.5}>
+                    <LuPlus size={12} />
+                    <Text fontSize="xs" fontFamily="mono" fontWeight="600">
+                      New Snapshot
+                    </Text>
+                  </HStack>
+                </MenuItem>
+              </MenuContent>
+            </MenuPositioner>
+          </Portal>
+        </MenuRoot>
+        {!editMode && slides.length > 1 && (
+          <>
+            <Tooltip content="Report">
+              <IconButton
+                onClick={() => setIsReporting(true)}
+                aria-label="Report"
+                variant="subtle"
+                size="xs"
+              >
+                <LuFileText size={14} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip content="Present">
+              <IconButton
+                onClick={() => setIsPresenting(true)}
+                aria-label="Present"
+                variant="subtle"
+                size="xs"
+              >
+                <LuPresentation size={14} />
+              </IconButton>
+            </Tooltip>
+          </>
         )}
         {editMode && layoutableAssets.length > 0 && (
           <IconButton
@@ -536,7 +642,7 @@ export default function DashboardView({
       </>
     );
     return () => setActions(null);
-  }, [editMode, slides.length, layoutableAssets.length, setActions]);
+  }, [editMode, slides.length, layoutableAssets.length, setActions, dashboardVersion]);
 
   // Memoize the grid items (questions + text blocks) to prevent re-rendering on every keystroke
   const gridItems = useMemo(() => {
@@ -841,6 +947,16 @@ export default function DashboardView({
           slides={slides}
           fileId={fileId}
           onClose={() => setIsPresenting(false)}
+          paramValues={effectiveSubmittedValues}
+        />
+      )}
+
+      {/* Report overlay */}
+      {isReporting && (
+        <ReportOverlay
+          slides={slides}
+          fileId={fileId}
+          onClose={() => setIsReporting(false)}
           paramValues={effectiveSubmittedValues}
         />
       )}
