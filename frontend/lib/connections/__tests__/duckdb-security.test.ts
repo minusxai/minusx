@@ -7,7 +7,7 @@
  * These tests exercise the DuckDB Node.js binding directly — no connector
  * mocks, no Next.js plumbing — so they validate DuckDB's own security model.
  *
- * Run: cd frontend && npx jest duckdb-security --no-coverage
+ * Run: cd frontend && npx vitest run duckdb-security
  */
 
 import { DuckDBInstance } from '@duckdb/node-api';

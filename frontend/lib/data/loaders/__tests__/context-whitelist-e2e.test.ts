@@ -21,7 +21,7 @@
  *  13.  V33 migration: converts old databases[] format → new WhitelistNode tree
  *  14.  V33 migration: creates default context (whitelist:'*') for every folder without one
  *
- * Run: npx jest context-whitelist-e2e --no-coverage --verbose
+ * Run: npx vitest run context-whitelist-e2e
  */
 
 // ─────────────────────────────────────────────────────────────────────────────

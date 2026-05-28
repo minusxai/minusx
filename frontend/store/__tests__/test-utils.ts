@@ -14,43 +14,28 @@ import uiReducer from '../uiSlice';
 import { chatListenerMiddleware } from '../chatListener';
 
 // ============================================================================
-// Jest Mock Setup - Important Limitations
+// Vitest Mock Setup — Hoisting Limitation
 // ============================================================================
 
 /**
- * ⚠️ Jest Hoisting Limitation
- *
- * jest.mock() calls are hoisted to the TOP of the module, BEFORE any imports.
+ * vi.mock() calls are hoisted to the TOP of the module, BEFORE any imports.
  * This means you CANNOT:
- * - Import factory functions and call them in jest.mock()
+ * - Import factory functions and call them in vi.mock()
  * - Reference variables defined in the test file
  * - Use dynamic values computed at runtime
  *
- * ❌ This does NOT work:
- * ```typescript
- * import { createDbMockFactory } from './test-utils';
- * jest.mock('@/lib/database/db-config', createDbMockFactory('test.db'));
- * // Error: Cannot access 'test_utils' before initialization
- * ```
+ * Does NOT work:
+ *   import { createDbMockFactory } from './test-utils';
+ *   vi.mock('@/lib/database/db-config', createDbMockFactory('test.db'));
  *
- * ✅ This DOES work:
- * ```typescript
- * jest.mock('@/lib/database/db-config', () => {
- *   const path = require('path');  // Can use require() inside factory
- *   return {
- *     DB_PATH: path.join(process.cwd(), 'data', 'test.db'),
- *     DB_DIR: path.join(process.cwd(), 'data')
- *   };
- * });
- * ```
+ * DOES work — factory must be self-contained:
+ *   vi.mock('@/lib/database/db-config', () => {
+ *     const path = require('path');
+ *     return { DB_PATH: path.join(process.cwd(), 'data', 'test.db') };
+ *   });
  *
- * The ~21 lines of mock setup in each test file CANNOT be reduced via
- * imported factory functions. This duplication is a necessary cost of
- * Jest's hoisting mechanism.
- *
- * For more info:
- * - https://jestjs.io/docs/manual-mocks
- * - https://dev.to/jobber/serious-jest-making-sense-of-hoisting-253i
+ * Each test file repeats its own mock block; that duplication is the cost
+ * of hoisting. See https://vitest.dev/api/vi.html#vi-mock.
  */
 
 // ============================================================================
