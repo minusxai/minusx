@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, HStack, Text, IconButton } from '@chakra-ui/react';
-import { LuX, LuChevronUp, LuChevronDown } from 'react-icons/lu';
+import { Box } from '@chakra-ui/react';
+import { LuChevronUp, LuChevronDown } from 'react-icons/lu';
+import OverlayControlBar from './OverlayControlBar';
 import { AssetReference, InlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from './containers/SmartEmbeddedQuestionContainer';
 import { LexicalTextViewer } from './lexical/LexicalTextEditor';
@@ -119,95 +120,22 @@ export default function ReportOverlay({
         </Box>
       </Box>
 
-      {/* Bottom control bar — floating, centered */}
-      <Box
-        position="absolute"
-        bottom={5}
-        left="50%"
-        transform="translateX(-50%)"
-        zIndex={1}
-      >
-        <HStack
-          bg="bg.surface"
-          border="1px solid"
-          borderColor="border.default"
-          borderRadius="full"
-          px={4}
-          py={1.5}
-          gap={3}
-          boxShadow="0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)"
-          backdropFilter="blur(8px)"
-        >
-          {/* Prev */}
-          <IconButton
-            onClick={goPrev}
-            aria-label="Previous page"
-            size="xs"
-            variant="ghost"
-            borderRadius="full"
-            disabled={currentPage === 0}
-            color="fg.muted"
-            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
-          >
-            <LuChevronUp size={15} />
-          </IconButton>
-
-          {/* Dots */}
-          <HStack gap={1.5}>
-            {slides.map((_, i) => (
-              <Box
-                key={i}
-                w={currentPage === i ? '18px' : '6px'}
-                h="6px"
-                borderRadius="full"
-                bg={currentPage === i ? 'accent.primary' : 'border.emphasized'}
-                cursor="pointer"
-                transition="all 0.2s"
-                onClick={() => scrollToPage(i)}
-                _hover={{ bg: currentPage === i ? 'accent.primary' : 'fg.muted' }}
-              />
-            ))}
-          </HStack>
-
-          {/* Next */}
-          <IconButton
-            onClick={goNext}
-            aria-label="Next page"
-            size="xs"
-            variant="ghost"
-            borderRadius="full"
-            disabled={currentPage === slides.length - 1}
-            color="fg.muted"
-            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
-          >
-            <LuChevronDown size={15} />
-          </IconButton>
-
-          {/* Divider */}
-          <Box w="1px" h="16px" bg="border.default" />
-
-          {/* Page counter */}
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
-            {currentPage + 1} / {slides.length}
-          </Text>
-
-          {/* Divider */}
-          <Box w="1px" h="16px" bg="border.default" />
-
-          {/* Close */}
-          <IconButton
-            onClick={onClose}
-            aria-label="Exit report"
-            size="xs"
-            variant="ghost"
-            borderRadius="full"
-            color="fg.muted"
-            _hover={{ bg: 'accent.danger/10', color: 'accent.danger' }}
-          >
-            <LuX size={14} />
-          </IconButton>
-        </HStack>
-      </Box>
+      {/* Bottom control bar */}
+      <OverlayControlBar
+        currentIndex={currentPage}
+        total={slides.length}
+        onPrev={goPrev}
+        onNext={goNext}
+        onGoTo={scrollToPage}
+        onClose={onClose}
+        prevIcon={<LuChevronUp size={15} />}
+        nextIcon={<LuChevronDown size={15} />}
+        prevLabel="Previous page"
+        nextLabel="Next page"
+        exitLabel="Exit report"
+        accentColor="accent.primary"
+        onExport={(format) => { console.log('Export report as', format); }}
+      />
     </Box>
   );
 }

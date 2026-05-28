@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, IconButton } from '@chakra-ui/react';
-import { LuX, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { Box } from '@chakra-ui/react';
+import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import OverlayControlBar from './OverlayControlBar';
 import { AssetReference, InlineAsset, DashboardLayoutItem } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from './containers/SmartEmbeddedQuestionContainer';
 import { LexicalTextViewer } from './lexical/LexicalTextEditor';
@@ -161,95 +162,22 @@ export default function PresentationOverlay({
         />
       </Box>
 
-      {/* Bottom control bar — floating, centered */}
-      <Box
-        position="absolute"
-        bottom={5}
-        left="50%"
-        transform="translateX(-50%)"
-        zIndex={1}
-      >
-        <HStack
-          bg="bg.surface"
-          border="1px solid"
-          borderColor="border.default"
-          borderRadius="full"
-          px={4}
-          py={1.5}
-          gap={3}
-          boxShadow="0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)"
-          backdropFilter="blur(8px)"
-        >
-          {/* Prev */}
-          <IconButton
-            onClick={goPrev}
-            aria-label="Previous slide"
-            size="xs"
-            variant="ghost"
-            borderRadius="full"
-            disabled={currentSlide === 0}
-            color="fg.muted"
-            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
-          >
-            <LuChevronLeft size={15} />
-          </IconButton>
-
-          {/* Dots */}
-          <HStack gap={1.5}>
-            {slides.map((_, i) => (
-              <Box
-                key={i}
-                w={currentSlide === i ? '18px' : '6px'}
-                h="6px"
-                borderRadius="full"
-                bg={currentSlide === i ? 'accent.teal' : 'border.emphasized'}
-                cursor="pointer"
-                transition="all 0.2s"
-                onClick={() => setCurrentSlide(i)}
-                _hover={{ bg: currentSlide === i ? 'accent.teal' : 'fg.muted' }}
-              />
-            ))}
-          </HStack>
-
-          {/* Next */}
-          <IconButton
-            onClick={goNext}
-            aria-label="Next slide"
-            size="xs"
-            variant="ghost"
-            borderRadius="full"
-            disabled={currentSlide === slides.length - 1}
-            color="fg.muted"
-            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
-          >
-            <LuChevronRight size={15} />
-          </IconButton>
-
-          {/* Divider */}
-          <Box w="1px" h="16px" bg="border.default" />
-
-          {/* Slide counter */}
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
-            {currentSlide + 1} / {slides.length}
-          </Text>
-
-          {/* Divider */}
-          <Box w="1px" h="16px" bg="border.default" />
-
-          {/* Close */}
-          <IconButton
-            onClick={onClose}
-            aria-label="Exit presentation"
-            size="xs"
-            variant="ghost"
-            borderRadius="full"
-            color="fg.muted"
-            _hover={{ bg: 'accent.danger/10', color: 'accent.danger' }}
-          >
-            <LuX size={14} />
-          </IconButton>
-        </HStack>
-      </Box>
+      {/* Bottom control bar */}
+      <OverlayControlBar
+        currentIndex={currentSlide}
+        total={slides.length}
+        onPrev={goPrev}
+        onNext={goNext}
+        onGoTo={setCurrentSlide}
+        onClose={onClose}
+        prevIcon={<LuChevronLeft size={15} />}
+        nextIcon={<LuChevronRight size={15} />}
+        prevLabel="Previous slide"
+        nextLabel="Next slide"
+        exitLabel="Exit presentation"
+        accentColor="accent.teal"
+        onExport={(format) => { console.log('Export presentation as', format); }}
+      />
     </Box>
   );
 }
