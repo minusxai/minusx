@@ -61,6 +61,7 @@ registerModules({
       }),
       addHeaders: async () => true,
       register: async () => { throw new Error('auth.register not available in tests'); },
+      getUserKey: (user: { mode: string }) => user.mode,
     },
     db: new DBModule(),
     store: {

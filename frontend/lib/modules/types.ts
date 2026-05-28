@@ -54,6 +54,13 @@ export interface IAuthModule {
     response?: NextResponse;
   }>;
   getRequestContext(): Promise<RequestContext>;
+  /**
+   * Identity-scoped namespace for in-process caches (e.g. the query result cache).
+   * Must include everything that distinguishes one user's data from another's.
+   * OSS: `${mode}`. Proprietary: `${companyId}:${mode}` — prevents cross-tenant
+   * cache hits on the same (connection_name, query, params) hash.
+   */
+  getUserKey(user: { mode: string }): string;
   /** Returns true if request context was established (or no auth module active), false if request should be dropped. */
   addHeaders(req: NextRequest, headers: Headers, hints?: Record<string, string>): Promise<boolean>;
   register(input: RegisterInput): Promise<RegisterResult>;
