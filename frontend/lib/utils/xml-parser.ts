@@ -158,3 +158,68 @@ export function combineContent(
 
   return parts.join('\n\n');
 }
+
+// ── Structured reply blocks: <suggested_questions> and <trust_info> ───────────
+
+export interface ParsedTrustInfo {
+  level: 'high' | 'medium' | 'low';
+  reasons: string[];
+}
+
+/** Parse the <question> items out of a <suggested_questions> block. */
+export function parseSuggestedQuestions(xml: string): string[] {
+  const questions: string[] = [];
+  const re = /<question>([\s\S]*?)<\/question>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    const q = m[1].trim();
+    if (q) questions.push(q);
+  }
+  return questions;
+}
+
+/** Parse a <trust_info level="..."> block into its level + reasons. */
+export function parseTrustInfo(xml: string): ParsedTrustInfo | null {
+  const levelMatch = xml.match(/level="(high|medium|low)"/);
+  if (!levelMatch) return null;
+
+  const reasons: string[] = [];
+  const reasonRe = /<reason>([\s\S]*?)<\/reason>/g;
+  let m;
+  while ((m = reasonRe.exec(xml)) !== null) {
+    const r = m[1].trim();
+    if (r) reasons.push(r);
+  }
+
+  return { level: levelMatch[1] as 'high' | 'medium' | 'low', reasons };
+}
+
+export interface ExtractedXmlBlocks {
+  /** The content with the <suggested_questions>/<trust_info> blocks removed, trimmed. */
+  text: string;
+  suggestedQuestions: string[];
+  trustInfo: ParsedTrustInfo | null;
+}
+
+/**
+ * Strip <suggested_questions> and <trust_info> blocks out of a content string
+ * and return them parsed. Used by both the chat UI (Markdown) and server-side
+ * consumers (Slack) so the parsing lives in one place.
+ */
+export function extractXmlBlocks(content: string): ExtractedXmlBlocks {
+  let suggestedQuestions: string[] = [];
+  let trustInfo: ParsedTrustInfo | null = null;
+
+  const text = content
+    .replace(/<suggested_questions>[\s\S]*?<\/suggested_questions>/g, (m) => {
+      suggestedQuestions = parseSuggestedQuestions(m);
+      return '';
+    })
+    .replace(/<trust_info[\s\S]*?<\/trust_info>/g, (m) => {
+      trustInfo = parseTrustInfo(m);
+      return '';
+    })
+    .trim();
+
+  return { text, suggestedQuestions, trustInfo };
+}

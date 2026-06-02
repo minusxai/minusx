@@ -1,5 +1,5 @@
 import 'server-only';
-import { combineContent, parseThinkingAnswer } from '@/lib/utils/xml-parser';
+import { combineContent, parseThinkingAnswer, extractXmlBlocks, type ParsedTrustInfo } from '@/lib/utils/xml-parser';
 import type { ConversationLogEntry, QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
@@ -60,6 +60,8 @@ export function markdownToSlackMrkdwn(md: string): string {
 export interface SlackReply {
   text: string;
   images: string[];
+  suggestedQuestions: string[];
+  trustInfo: ParsedTrustInfo | null;
 }
 
 function extractToolContent(content: unknown): { text: string; images: string[] } {
@@ -135,6 +137,12 @@ export function normalizeSlackPrompt(text: string, botUserId?: string): string {
 
 const AGENT_TOOL_NAMES = ['TalkToUser', 'AnalystAgent', 'AtlasAnalystAgent', 'SlackAgent'];
 
+/** Strip the <suggested_questions>/<trust_info> blocks out of the visible text into a SlackReply. */
+function buildReply(visible: string, images: string[]): SlackReply {
+  const { text, suggestedQuestions, trustInfo } = extractXmlBlocks(visible);
+  return { text: text || visible.trim(), images, suggestedQuestions, trustInfo };
+}
+
 /**
  * Extract a structured reply (text + images) from a conversation log.
  * Returns null if no usable reply is found.
@@ -156,7 +164,7 @@ export function extractSlackReply(log: ConversationLogEntry[]): SlackReply | nul
 
         const visible = toVisibleReply(rawText);
         if (visible) {
-          return { text: visible, images };
+          return buildReply(visible, images);
         }
       }
     }
@@ -165,7 +173,7 @@ export function extractSlackReply(log: ConversationLogEntry[]): SlackReply | nul
     if (rootRaw) {
       const visible = toVisibleReply(rootRaw);
       if (visible) {
-        return { text: visible, images: rootImages };
+        return buildReply(visible, rootImages);
       }
     }
   }
@@ -188,13 +196,22 @@ export function extractSlackReplyFromLog(log: ConversationLogEntry[]): string | 
 interface SlackReplyBlocksOptions {
   text: string;
   images?: string[];
+  suggestedQuestions?: string[];
+  trustInfo?: ParsedTrustInfo | null;
   viewUrl?: string;
 }
+
+const TRUST_DISPLAY: Record<ParsedTrustInfo['level'], { emoji: string; label: string }> = {
+  high: { emoji: '🟢', label: 'High confidence' },
+  medium: { emoji: '🟡', label: 'Medium confidence' },
+  low: { emoji: '🔴', label: 'Low confidence' },
+};
 
 /**
  * Build Slack Block Kit blocks for a rich reply message.
  * - Section block with mrkdwn text
  * - Optional image blocks
+ * - Optional trust_info context block + suggested-questions section
  * - Optional "View in MinusX" button
  */
 export function buildSlackReplyBlocks(options: SlackReplyBlocksOptions): unknown[] {
@@ -217,6 +234,41 @@ export function buildSlackReplyBlocks(options: SlackReplyBlocksOptions): unknown
     }
   }
 
+  // Trust info — a subtle context block
+  if (options.trustInfo) {
+    const { emoji, label } = TRUST_DISPLAY[options.trustInfo.level];
+    const reasons = options.trustInfo.reasons.join(' ');
+    const text = reasons ? `${emoji} *${label}* · ${reasons}` : `${emoji} *${label}*`;
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text }],
+    });
+  }
+
+  // Suggested follow-up questions — each rendered as a full-text section with an
+  // "Ask" accessory button that re-triggers the bot. Section text has a 3000-char
+  // limit (vs. 75 for button labels), so the whole question stays visible. The
+  // button `value` carries the question; the interact route threads the answer.
+  if (options.suggestedQuestions && options.suggestedQuestions.length > 0) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '🚀 *Suggested follow-ups*' },
+    });
+    for (const [i, q] of options.suggestedQuestions.slice(0, 5).entries()) {
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: q },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Ask', emoji: true },
+          action_id: `suggested_question:${i}`,
+          value: q,
+        },
+      });
+    }
+  }
+
   // "View in MinusX" button
   if (options.viewUrl) {
     blocks.push({
@@ -226,6 +278,7 @@ export function buildSlackReplyBlocks(options: SlackReplyBlocksOptions): unknown
         text: { type: 'plain_text', text: 'View in MinusX', emoji: true },
         url: options.viewUrl,
         action_id: 'view_in_minusx',
+        style: 'primary',
       }],
     });
   }

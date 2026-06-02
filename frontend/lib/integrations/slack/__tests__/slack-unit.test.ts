@@ -381,6 +381,7 @@ describe('buildSlackReplyBlocks', () => {
         text: { type: 'plain_text', text: 'View in MinusX', emoji: true },
         url: 'https://app.minusx.ai/f/42',
         action_id: 'view_in_minusx',
+        style: 'primary',
       }],
     });
   });
@@ -400,6 +401,90 @@ describe('buildSlackReplyBlocks', () => {
   it('skips images and button when not provided', () => {
     const blocks = buildSlackReplyBlocks({ text: 'Simple reply.' });
     expect(blocks).toHaveLength(1);
+  });
+
+  it('renders a trust_info context block', () => {
+    const blocks = buildSlackReplyBlocks({
+      text: 'Answer.',
+      trustInfo: { level: 'medium', reasons: ['Assumed daily counts'] },
+    });
+    expect(blocks).toContainEqual({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: '🟡 *Medium confidence* · Assumed daily counts' }],
+    });
+  });
+
+  it('renders each suggested question as a full-text section with an Ask button', () => {
+    const blocks = buildSlackReplyBlocks({
+      text: 'Answer.',
+      suggestedQuestions: ['Break it down by type', 'Compare to last year'],
+    });
+    expect(blocks).toContainEqual({ type: 'divider' });
+    expect(blocks).toContainEqual({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '🚀 *Suggested follow-ups*' },
+    });
+    // Each question is its own section so the full text shows; the Ask accessory carries the value
+    expect(blocks).toContainEqual({
+      type: 'section',
+      text: { type: 'mrkdwn', text: 'Break it down by type' },
+      accessory: { type: 'button', text: { type: 'plain_text', text: 'Ask', emoji: true }, action_id: 'suggested_question:0', value: 'Break it down by type' },
+    });
+    expect(blocks).toContainEqual({
+      type: 'section',
+      text: { type: 'mrkdwn', text: 'Compare to last year' },
+      accessory: { type: 'button', text: { type: 'plain_text', text: 'Ask', emoji: true }, action_id: 'suggested_question:1', value: 'Compare to last year' },
+    });
+  });
+
+  it('keeps long questions fully visible in the section text and value', () => {
+    const longQ = 'How does the 2026 first-quarter Strait of Hormuz crossing volume compare to the same period in 2025 across every vessel category?';
+    const blocks = buildSlackReplyBlocks({ text: 'Answer.', suggestedQuestions: [longQ] });
+    expect(blocks).toContainEqual({
+      type: 'section',
+      text: { type: 'mrkdwn', text: longQ },
+      accessory: { type: 'button', text: { type: 'plain_text', text: 'Ask', emoji: true }, action_id: 'suggested_question:0', value: longQ },
+    });
+  });
+
+  it('omits trust/suggested blocks when empty', () => {
+    const blocks = buildSlackReplyBlocks({
+      text: 'Answer.',
+      suggestedQuestions: [],
+      trustInfo: null,
+    });
+    expect(blocks).toHaveLength(1);
+  });
+});
+
+describe('extractSlackReply with XML blocks', () => {
+  function talkToUserLog(content: string): ConversationLogEntry[] {
+    return [
+      {
+        _type: 'task_result',
+        result: {
+          completed_tool_calls: [
+            { function: { name: 'TalkToUser' }, content },
+          ],
+        },
+      } as unknown as ConversationLogEntry,
+    ];
+  }
+
+  it('strips suggested_questions and trust_info from the reply text', () => {
+    const raw = `5,147 ships crossed.
+
+<suggested_questions>
+<question>Break it down by vessel type</question>
+</suggested_questions>
+
+<trust_info level="medium">
+<reason>Assumed daily counts</reason>
+</trust_info>`;
+    const reply = extractSlackReply(talkToUserLog(raw))!;
+    expect(reply.text).toBe('5,147 ships crossed.');
+    expect(reply.suggestedQuestions).toEqual(['Break it down by vessel type']);
+    expect(reply.trustInfo).toEqual({ level: 'medium', reasons: ['Assumed daily counts'] });
   });
 });
 
