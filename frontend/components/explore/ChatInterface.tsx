@@ -422,6 +422,11 @@ export default function ChatInterface({
   const TOKEN_LIMIT = 250_000;
   const tokenLimitExceeded = useMemo(() => {
     if (!conversation?.messages) return false;
+    // Gate only makes sense once there's accumulated history to shed by starting
+    // over. On a single-query conversation a fresh chat would re-run the same
+    // query and hit the same size, so don't lock the user out.
+    const userMessageCount = conversation.messages.filter(m => m.role === 'user').length;
+    if (userMessageCount < 2) return false;
     const lastDebug = [...conversation.messages].reverse().find(m => m.role === 'debug') as DebugMessage | undefined;
     if (!lastDebug?.llmDebug?.length) return false;
     return lastDebug.llmDebug.some((llm: { total_tokens: number }) => llm.total_tokens > TOKEN_LIMIT);
@@ -1221,7 +1226,7 @@ export default function ChatInterface({
           )}
 
 {tokenLimitExceeded && !isAgentRunning && !isStreaming ? (
-            <HStack justify="center" py={2} px={4} gap={3} borderTop="1px solid" borderColor="border.muted" fontFamily="mono">
+            <HStack aria-label="conversation too long warning" justify="center" py={2} px={4} gap={3} borderTop="1px solid" borderColor="border.muted" fontFamily="mono">
               <Text fontSize="xs"><Text as="span" fontWeight="semibold">Conversation too long.</Text>{' '}<Text as="span" color="fg.muted">Long conversations degrade agent performance. Please start a new chat.</Text></Text>
               <Button size="xs" bg="accent.teal" color="white" fontFamily="mono" _hover={{ bg: 'accent.teal', opacity: 0.9 }} onClick={handleNewChat} flexShrink={0}><Icon as={LuPlus} boxSize={4} mr={1} />New Chat</Button>
             </HStack>
