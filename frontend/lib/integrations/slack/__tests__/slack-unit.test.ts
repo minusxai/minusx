@@ -422,7 +422,7 @@ describe('buildSlackReplyBlocks', () => {
     expect(blocks).toContainEqual({ type: 'divider' });
     expect(blocks).toContainEqual({
       type: 'section',
-      text: { type: 'mrkdwn', text: '💡 *Suggested follow-ups*' },
+      text: { type: 'mrkdwn', text: '🚀 *Suggested follow-ups*' },
     });
     // Each question is its own section so the full text shows; the Ask accessory carries the value
     expect(blocks).toContainEqual({
