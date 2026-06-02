@@ -236,12 +236,19 @@ async function handleStreamingEvent(data: any, dispatch: AppDispatch, signal: Ab
 }
 
 /** Apply the done event: clear streaming state and update conversation. */
-function applyDoneEvent(
+export function applyDoneEvent(
   doneData: any,
   conversationID: number,
   stableId: string,
   dispatch: AppDispatch,
 ): void {
+  // The server embeds orchestrator/LLM errors (rate limits, proxy down, mid-stream
+  // drops) inside the `done` frame's `error` field rather than a separate `error`
+  // frame. Surface it as a thrown error so the caller's handleStreamError shows the
+  // error banner + "Try again" instead of rendering a blank (empty-content) success.
+  if (doneData.error) {
+    throw new Error(doneData.error);
+  }
   const realConversationID = doneData.conversationID || conversationID;
   dispatch(clearStreamingContent({ conversationID: realConversationID }));
   dispatch(updateConversation({
