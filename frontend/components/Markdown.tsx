@@ -17,6 +17,7 @@ import { selectShowSuggestedQuestions, selectShowTrustScore } from '@/store/uiSl
 import { selectContextFromPath } from '@/store/filesSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { parseSuggestedQuestions, parseTrustInfo, type ParsedTrustInfo } from '@/lib/utils/xml-parser';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
@@ -115,37 +116,8 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
 }
 
 // --- XML block parsing helpers ---
-
-interface ParsedTrustInfo {
-  level: 'high' | 'medium' | 'low';
-  reasons: string[];
-}
-
-function parseSuggestedQuestions(xml: string): string[] {
-  const questions: string[] = [];
-  const re = /<question>([\s\S]*?)<\/question>/g;
-  let m;
-  while ((m = re.exec(xml)) !== null) {
-    const q = m[1].trim();
-    if (q) questions.push(q);
-  }
-  return questions;
-}
-
-function parseTrustInfo(xml: string): ParsedTrustInfo | null {
-  const levelMatch = xml.match(/level="(high|medium|low)"/);
-  if (!levelMatch) return null;
-
-  const reasons: string[] = [];
-  const reasonRe = /<reason>([\s\S]*?)<\/reason>/g;
-  let m;
-  while ((m = reasonRe.exec(xml)) !== null) {
-    const r = m[1].trim();
-    if (r) reasons.push(r);
-  }
-
-  return { level: levelMatch[1] as 'high' | 'medium' | 'low', reasons };
-}
+// `parseSuggestedQuestions`, `parseTrustInfo`, and `ParsedTrustInfo` are shared
+// with the Slack reply path — see `@/lib/utils/xml-parser`.
 
 type ContentPart =
   | { type: 'text'; content: string }
