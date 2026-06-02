@@ -227,14 +227,17 @@ describe('XHR-driven /api/chat/stream?v=2 — full streaming pipeline', () => {
       configurable: true,
     });
 
-    // Step 1: createConversation in chatSlice (sets conversationID +
-    // messages=[user_message]). Then sendMessage to drive chatListener.
+    // Step 1: createConversation sets up the Redux conversation state ONLY — no
+    // `message`, so its listener early-returns instead of firing a stream
+    // request. (Passing a message here would drive a SECOND /api/chat/stream
+    // request that races sendMessage for the single queued faux response and
+    // leaves the conversation in an error state.) sendMessage below is the sole
+    // driver of the streaming turn.
     store.dispatch(
       createConversation({
         conversationID: conversationId,
         agent: 'AnalystAgent',
         agent_args: {},
-        message: 'What is the answer?',
       }),
     );
     // Capture the MAX values of streamedThinking and streamedCompletedToolCalls
