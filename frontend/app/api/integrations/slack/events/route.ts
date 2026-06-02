@@ -210,9 +210,11 @@ export async function processSlackEvent(
         }
       }
 
-      // Then send the text reply with "View in MinusX" button
+      // Then send the text reply with trust info, suggested follow-ups, and "View in MinusX" button
       const blocks = buildSlackReplyBlocks({
         text: mrkdwnText,
+        suggestedQuestions: slackReply.suggestedQuestions,
+        trustInfo: slackReply.trustInfo,
         viewUrl,
       });
 

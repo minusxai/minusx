@@ -2,23 +2,10 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { postSlackMessage, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { findSlackInstallationByTeam } from '@/lib/integrations/slack/store';
+import { resolveThreadTs, type SlackInteractionPayload } from '@/lib/integrations/slack/interactions';
 import { processSlackEvent, type SlackEventEnvelope } from '../events/route';
 
 export const runtime = 'nodejs';
-
-interface SlackInteractionPayload {
-  type: 'block_actions';
-  trigger_id: string;
-  user: { id: string; team_id?: string };
-  team?: { id: string };
-  channel?: { id: string };
-  message?: { ts: string };
-  actions?: Array<{
-    action_id: string;
-    value?: string;
-    type: string;
-  }>;
-}
 
 /**
  * Handles Slack interactivity payloads (button clicks from welcome message).
@@ -87,15 +74,21 @@ export async function POST(request: NextRequest) {
   console.log('[Slack interact] Processing action: %s', action.value);
 
   const channel = payload.channel?.id ?? payload.user.id;
+  // Continue in the thread the button lives in (falls back to the message itself
+  // when it's a root message, e.g. the welcome message).
+  const parentThreadTs = resolveThreadTs(payload);
 
-  // Ack immediately with a "working on it" message, then thread the answer under it
   after(async () => {
+    // Ack into the existing thread so the conversation stays in place.
     const ack = await postSlackMessage(installation.bot.bot_token, {
       channel,
       text: `:mag: Working on: _${action.value}_`,
+      thread_ts: parentThreadTs,
     });
 
-    // Build a synthetic message event with thread_ts so the reply threads under the ack
+    const threadTs = parentThreadTs ?? ack.ts;
+
+    // Build a synthetic message event in that thread so the reply threads correctly.
     const syntheticEnvelope: SlackEventEnvelope = {
       type: 'event_callback',
       team_id: teamId,
@@ -105,7 +98,7 @@ export async function POST(request: NextRequest) {
         text: action.value,
         channel,
         channel_type: 'im',
-        thread_ts: ack.ts,
+        thread_ts: threadTs,
         ts: ack.ts,
       },
     };
