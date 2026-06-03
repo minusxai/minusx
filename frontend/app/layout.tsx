@@ -9,7 +9,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitelabel';
-import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES } from '@/lib/config';
+import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
@@ -56,6 +56,7 @@ async function loadInitialState(): Promise<{
   config: OrgConfig;
   analyticsConfig: AnalyticsConfig;
   disableAppStateImages: boolean;
+  maxConcurrentQueries: number;
 }> {
   const user = await getEffectiveUserCached();
   let config: OrgConfig = DEFAULT_CONFIG;
@@ -77,6 +78,7 @@ async function loadInitialState(): Promise<{
     config,
     analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG),
     disableAppStateImages: DISABLE_APP_STATE_IMAGES,
+    maxConcurrentQueries: MAX_CONCURRENT_QUERIES,
   };
 }
 

@@ -23,6 +23,8 @@ import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, s
 import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
+import { selectMaxConcurrentQueries } from '@/store/configsSlice';
+import { Semaphore } from '@/lib/utils/semaphore';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
@@ -1312,6 +1314,18 @@ async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]
  */
 const queryPromiseManager = new PromiseManager<QueryResult>();
 
+// Caps concurrent /api/query calls across the tab. Limit is read from the
+// store on each acquire (hydrated from the MAX_CONCURRENT_QUERIES runtime env),
+// defaulting to 10 if configs aren't loaded yet or the store shape is partial.
+const DEFAULT_MAX_CONCURRENT_QUERIES = 10;
+const querySemaphore = new Semaphore(() => {
+  try {
+    return selectMaxConcurrentQueries(getStore().getState()) ?? DEFAULT_MAX_CONCURRENT_QUERIES;
+  } catch {
+    return DEFAULT_MAX_CONCURRENT_QUERIES;
+  }
+});
+
 /**
  * getQueryResult - Execute query with TTL caching and promise deduplication
  *
@@ -1372,9 +1386,13 @@ export async function getQueryResult(
   return queryPromiseManager.execute(queryId, async () => {
     // Import Redux actions
 
-    // Set loading state
+    // Set loading state immediately — before acquiring a semaphore slot — so
+    // cards queued behind the in-flight cap still show "loading", not stale.
     getStore().dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));
 
+    // Cap concurrent /api/query calls so a dashboard's parallel card queries
+    // don't overwhelm the server. Limit is the runtime-configured value.
+    return querySemaphore.run(async () => {
     // undefined if fetch() itself rejected (network failure); set otherwise.
     let responseStatus: number | undefined;
     try {
@@ -1439,6 +1457,7 @@ export async function getQueryResult(
 
       throw error;
     }
+    });
   });
 }
 

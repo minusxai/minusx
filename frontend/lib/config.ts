@@ -62,6 +62,8 @@ interface EnvironmentConfig {
   DAB_AUTOCTX_ONLY: string | undefined;
   MAX_LLM_CONCURRENCY: string | undefined;
   MAX_AGENTS_CONCURRENCY: string | undefined;
+  MAX_CONCURRENT_QUERIES: number;
+  QUERY_CACHE_TTL_MS: number;
 }
 
 const errors: string[] = [];
@@ -86,6 +88,11 @@ function requireSecret(name: string, value: string | undefined): string {
 
 function getOptional(value: string | undefined, defaultValue: string): string {
   return value || defaultValue;
+}
+
+function getOptionalNumber(value: string | undefined, defaultValue: number): number {
+  const n = Number(value);
+  return value !== undefined && value !== '' && Number.isFinite(n) ? n : defaultValue;
 }
 
 const baseDuckdbDataPath = getOptional(process.env.BASE_DUCKDB_DATA_PATH, IS_DEV ? '..' : '.');
@@ -147,6 +154,8 @@ const config: EnvironmentConfig = {
   DAB_AUTOCTX_ONLY: process.env.DAB_AUTOCTX_ONLY,
   MAX_LLM_CONCURRENCY: process.env.MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
+  MAX_CONCURRENT_QUERIES: getOptionalNumber(process.env.MAX_CONCURRENT_QUERIES, 10),
+  QUERY_CACHE_TTL_MS: getOptionalNumber(process.env.QUERY_CACHE_TTL_MS, 60_000),
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -200,6 +209,8 @@ export const OBJECT_STORE_SECRET_ACCESS_KEY = config.OBJECT_STORE_SECRET_ACCESS_
 export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
 export const USE_BASE64_UPLOADS = config.USE_BASE64_UPLOADS;
 export const DISABLE_APP_STATE_IMAGES = config.DISABLE_APP_STATE_IMAGES;
+export const MAX_CONCURRENT_QUERIES = config.MAX_CONCURRENT_QUERIES;
+export const QUERY_CACHE_TTL_MS = config.QUERY_CACHE_TTL_MS;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
 export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
 export const MD_HOME = config.MD_HOME;
