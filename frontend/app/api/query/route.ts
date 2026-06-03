@@ -15,6 +15,7 @@ import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
 import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolver.server';
 import { getModules } from '@/lib/modules/registry';
+import { QUERY_CACHE_TTL_MS } from '@/lib/config';
 
 /**
  * Transform a query+params pair so that None (null) parameter values are handled:
@@ -55,7 +56,8 @@ function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: s
 }
 
 // ---- Server-side query result cache (shared across sessions per process) ----
-const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
+// TTL is the runtime-configured QUERY_CACHE_TTL_MS env (default 60_000),
+// imported at the top of the file.
 
 interface CacheEntry { result: QueryResult; cachedAt: number; finalQuery: string; }
 // eslint-disable-next-line no-restricted-syntax -- keys are `${getUserKey(user)}:${queryHash}`

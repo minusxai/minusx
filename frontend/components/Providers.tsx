@@ -25,6 +25,7 @@ interface ProvidersProps {
     config: OrgConfig;  // Always present (from SSR or defaults)
     analyticsConfig?: AnalyticsConfig;
     disableAppStateImages?: boolean;  // Server runtime env flag (DISABLE_APP_STATE_IMAGES)
+    maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
   };
 }
 
@@ -38,6 +39,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       // eslint-disable-next-line react-hooks/purity
       loadedAt: initialData?.config ? Date.now() : null,
       disableAppStateImages: initialData?.disableAppStateImages ?? false,
+      maxConcurrentQueries: initialData?.maxConcurrentQueries ?? 10,
     },
 
     // Auth (if user present)
