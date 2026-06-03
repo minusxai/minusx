@@ -78,6 +78,7 @@ export default function EmbeddedQuestionContainer({
     loading,
     error,
     isStale,
+    refetch,
   } = useQueryResult(
     localQuestion.query || '',
     queryParams,
@@ -150,6 +151,7 @@ export default function EmbeddedQuestionContainer({
       loading={loading}
       error={error}
       data={queryData}
+      onRetry={refetch}
       onVizTypeChange={handleVizTypeChange}
       onAxisChange={handleAxisChange}
     />

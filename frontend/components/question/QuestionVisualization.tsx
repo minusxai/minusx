@@ -6,7 +6,7 @@
  */
 
 import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
-import { LuRocket, LuWrench, LuSettings, LuCode } from 'react-icons/lu';
+import { LuRocket, LuWrench, LuSettings, LuCode, LuRefreshCw, LuCloudOff } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
@@ -38,6 +38,8 @@ interface QuestionVisualizationProps {
   loading: boolean;
   error: string | null;
   data: QueryResult | null;
+  /** Re-run the query, bypassing cache. When provided, a Retry button shows in the error state. */
+  onRetry?: () => void | Promise<void>;
   queryEstimatedDurationMs?: number | null;
   onVizTypeChange: (type: VizSettings['type']) => void;
   onAxisChange: (xCols: string[], yCols: string[]) => void;
@@ -133,6 +135,7 @@ function QuestionVisualizationInner({
   loading,
   error,
   data,
+  onRetry,
   queryEstimatedDurationMs,
   onVizTypeChange,
   onAxisChange,
@@ -158,6 +161,17 @@ function QuestionVisualizationInner({
     dispatch(setSidebarPendingMessage('Fix the error'));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
+  };
+
+  const [isRetrying, setIsRetrying] = useState(false);
+  const handleRetry = async () => {
+    if (!onRetry) return;
+    setIsRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setIsRetrying(false);
+    }
   };
 
   if (!currentState) {
@@ -205,7 +219,43 @@ function QuestionVisualizationInner({
           flexDirection="column"
         >
         {/* Error state */}
-        {error && (
+        {error && (() => {
+          const parsed = parseErrorMessage(error);
+
+          // Network / transport failures get a calmer, centered treatment with a
+          // prominent Retry — they're transient, not a bug in the user's query.
+          if (parsed.isNetworkError) {
+            return (
+              <Box p={6} width="full" height="full" display="flex" alignItems="center" justifyContent="center">
+                <VStack gap={3} maxW="320px" textAlign="center">
+                  <LuCloudOff size={28} color="var(--chakra-colors-fg-muted)" />
+                  <Text fontSize="sm" fontWeight="600" color="fg.default">
+                    {parsed.title}
+                  </Text>
+                  <Text fontSize="xs" color="fg.muted" lineHeight="1.6">
+                    {parsed.hint}
+                  </Text>
+                  {onRetry && (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      colorPalette="teal"
+                      onClick={handleRetry}
+                      loading={isRetrying}
+                      loadingText="Retrying"
+                      mt={1}
+                    >
+                      <LuRefreshCw />
+                      Retry
+                    </Button>
+                  )}
+                </VStack>
+              </Box>
+            );
+          }
+
+          // Query / SQL errors keep the detailed, red-accented treatment.
+          return (
           <Box p={6} width="full">
             <VStack gap={4} align="stretch">
               <Box
@@ -220,25 +270,39 @@ function QuestionVisualizationInner({
                     fontWeight="600"
                     color="accent.danger"
                   >
-                    {parseErrorMessage(error).title}
+                    {parsed.title}
                   </Text>
-                  {config.fixError && <Button
-                    size="xs"
-                    variant="solid"
-                    colorPalette="teal"
-                    onClick={handleFixError}
-                  >
-                    <LuWrench />
-                    Fix with {agentName}
-                  </Button>
-                  }
+                  <HStack gap={2}>
+                    {onRetry && (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={handleRetry}
+                        loading={isRetrying}
+                        loadingText="Retrying"
+                      >
+                        <LuRefreshCw />
+                        Retry
+                      </Button>
+                    )}
+                    {config.fixError && <Button
+                      size="xs"
+                      variant="solid"
+                      colorPalette="teal"
+                      onClick={handleFixError}
+                    >
+                      <LuWrench />
+                      Fix with {agentName}
+                    </Button>
+                    }
+                  </HStack>
                 </HStack>
                 <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                  {parseErrorMessage(error).hint}
+                  {parsed.hint}
                 </Text>
               </Box>
 
-              {parseErrorMessage(error).details && (
+              {parsed.details && (
                 <Box>
                   <Text
                     fontSize="xs"
@@ -267,14 +331,15 @@ function QuestionVisualizationInner({
                       wordBreak="break-word"
                       lineHeight="1.6"
                     >
-                      {parseErrorMessage(error).details}
+                      {parsed.details}
                     </Text>
                   </Box>
                 </Box>
               )}
             </VStack>
           </Box>
-        )}
+          );
+        })()}
 
         {/* Empty state overlay */}
         {!loading && !data && !error && config.showHeader && (
