@@ -21,7 +21,7 @@ import { extractDebugMessages, parseLogToMessages } from '../conversations-utils
 import type { ConversationLogEntry } from '../types';
 
 import { createHash, randomBytes } from 'crypto';
-import { OAuthCodeDB, OAuthTokenDB } from '@/lib/oauth/db';
+import { OAuthCodeDB, OAuthTokenDB, OAuthRefreshDB } from '@/lib/oauth/db';
 
 import { serializeDatabases, parseDatabasesYaml } from '@/lib/context/context-utils';
 import type { DatabaseContext } from '@/lib/types';
@@ -416,6 +416,54 @@ describe('OAuthTokenDB', () => {
       const result = await OAuthTokenDB.validateAccessToken(accessToken);
       expect(result!.scope).toBeNull();
     });
+  });
+});
+
+describe('OAuthRefreshDB (stateless JWT)', () => {
+  it('create returns a non-empty token string', async () => {
+    const token = await OAuthRefreshDB.create(USER_ID, null);
+    expect(typeof token).toBe('string');
+    expect(token.length).toBeGreaterThan(10);
+  });
+
+  it('consume returns userId and scope for a valid token', async () => {
+    const token = await OAuthRefreshDB.create(USER_ID, 'read:schema');
+    const result = await OAuthRefreshDB.consume(token);
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe(USER_ID);
+    expect(result!.scope).toBe('read:schema');
+  });
+
+  it('returns null for a garbage token', async () => {
+    expect(await OAuthRefreshDB.consume('not-a-real-token')).toBeNull();
+  });
+
+  it('returns null for a token signed with a different secret', async () => {
+    const jwtLib = require('jsonwebtoken') as typeof import('jsonwebtoken');
+    const forged = jwtLib.sign({ userId: USER_ID, scope: null, type: 'refresh' }, 'wrong-secret', { expiresIn: 3600 });
+    expect(await OAuthRefreshDB.consume(forged)).toBeNull();
+  });
+
+  it('is stateless — survives an in-memory store wipe (no globalThis dependency)', async () => {
+    // The whole point of the JWT approach: a refresh token verifies by signature
+    // alone, so wiping any in-memory state (a restart) must NOT invalidate it.
+    const token = await OAuthRefreshDB.create(USER_ID, null);
+    ((globalThis as Record<string, unknown>).__oauthRefreshTokens as Map<string, unknown> | undefined)?.clear();
+    const result = await OAuthRefreshDB.consume(token);
+    expect(result).not.toBeNull();
+    expect(result!.userId).toBe(USER_ID);
+  });
+});
+
+describe('OAuth token type isolation (no confusion between access & refresh)', () => {
+  it('a refresh token is NOT accepted as an access token', async () => {
+    const refreshToken = await OAuthRefreshDB.create(USER_ID, null);
+    expect(await OAuthTokenDB.validateAccessToken(refreshToken)).toBeNull();
+  });
+
+  it('an access token is NOT accepted as a refresh token', async () => {
+    const { accessToken } = await OAuthTokenDB.create(USER_ID);
+    expect(await OAuthRefreshDB.consume(accessToken)).toBeNull();
   });
 });
 
