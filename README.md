@@ -9,7 +9,7 @@ MinusX is an open source agentic business intelligence platform for founders. <b
 <h3>
   <a href="https://minusx.ai">Website</a>
   <span> · </span>
-  <a href="https://docsv2.minusx.ai">Docs</a>
+  <a href="https://docs.minusx.ai">Docs</a>
   <span> · </span>
   <!-- <a href="https://github.com/orgs/minusxai/projects/14">Roadmap</a>
   <span> · </span> -->
