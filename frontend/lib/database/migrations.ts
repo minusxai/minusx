@@ -72,7 +72,9 @@ function v36ShiftUserFileIds(data: InitData): InitData {
   const newDocuments = documents.map(doc => ({
     ...doc,
     id: remap(doc.id),
-    references: ((doc as any).references ?? []).map((id: number) => remap(id)),
+    // Guard with Array.isArray (not `?? []`): legacy rows can have a non-array
+    // file_references (e.g. {}), which `??` won't catch → .map would throw.
+    references: (Array.isArray((doc as any).references) ? (doc as any).references : []).map((id: number) => remap(id)),
     content: remapContent(doc.content) as typeof doc.content,
   }));
 
@@ -116,6 +118,10 @@ export function getTargetVersions(): { dataVersion: number; schemaVersion: numbe
 export function fixData(data: InitData): InitData {
   const documents = data.documents ?? (data.orgs ?? []).flatMap((org: OrgData) => org.documents);
   for (const doc of documents) {
+    // Normalize references to an array (legacy rows can hold a non-array JSONB
+    // value, e.g. {}). Runs before the content skip so it applies to every doc.
+    if (!Array.isArray((doc as any).references)) (doc as any).references = [];
+
     const content = doc.content as any;
     if (!content || typeof content !== 'object') continue;
 

@@ -289,3 +289,41 @@ describe('Files Data Layer - rename-only save', () => {
     expect(fromDb?.name).toBe('New Name');
   });
 });
+
+describe('Files Data Layer - non-array references guard at write', () => {
+  beforeAll(async () => {
+    await initTestDatabase(TEST_DB_PATH);
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase(TEST_DB_PATH);
+  });
+
+  const content: QuestionContent = {
+    query: 'SELECT 1',
+    parameters: [],
+    references: [],
+    description: '',
+    vizSettings: { type: 'table' },
+    connection_name: 'test_db',
+    parameterValues: {},
+  };
+
+  it('saveFile coerces a non-array references to [] instead of throwing', async () => {
+    const id = await DocumentDB.create('Guard Save', '/org/guard-save', 'question', content, []);
+    // Pass a non-array references (the corrupt shape) — must not throw.
+    const result = await FilesAPI.saveFile(id, 'Guard Save', '/org/guard-save', content, {} as any, testUser);
+    expect(result).toBeDefined();
+    const fromDb = await DocumentDB.getById(id);
+    expect(fromDb?.references).toEqual([]);
+  });
+
+  it('createFile coerces a non-array references to []', async () => {
+    await FilesAPI.createFile(
+      { name: 'Guard Create', path: '/org/guard-create', type: 'question', content, references: {} as any },
+      testUser,
+    );
+    const fromDb = await DocumentDB.getByPath('/org/guard-create');
+    expect(fromDb?.references).toEqual([]);
+  });
+});
