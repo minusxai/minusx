@@ -158,12 +158,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         composedQuery = CTEfyQuery(query, resolvedRefs);
       }
 
-      // Derive dialect from connection type for IR-based None param removal.
-      // Use the lightweight getRawByName (single getByPath, no loader) rather
-      // than FilesAPI.loadFile — loadFile on a connection runs the
-      // connectionLoader, which can trigger a full schema profiling refresh on
-      // a stale/missing cache. On a dashboard firing N parallel queries that
-      // refresh storm serializes the DB and surfaces as "Failed to fetch".
+      // Derive dialect via getRawByName, not FilesAPI.loadFile: loadFile runs
+      // the connectionLoader, which can trigger a full schema profiling refresh.
       let queryDialect = 'duckdb';
       try {
         const { type } = await ConnectionsAPI.getRawByName(connection_name, user.mode);

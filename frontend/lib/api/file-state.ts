@@ -21,6 +21,7 @@
 import { getStore } from '@/store/store';
 import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
+import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
@@ -1374,6 +1375,8 @@ export async function getQueryResult(
     // Set loading state
     getStore().dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));
 
+    // undefined if fetch() itself rejected (network failure); set otherwise.
+    let responseStatus: number | undefined;
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
@@ -1391,6 +1394,7 @@ export async function getQueryResult(
           ...(fileVersion !== undefined && { fileVersion })
         })
       });
+      responseStatus = response.status;
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -1422,6 +1426,16 @@ export async function getQueryResult(
         database,
         error: errorMessage
       }));
+
+      // Report network/5xx failures (invisible server-side); skip 4xx SQL errors.
+      if (responseStatus === undefined || responseStatus >= 500) {
+        void captureError('query:network', error, {
+          connection: database,
+          status: responseStatus,
+          ...(fileId !== undefined && { fileId }),
+          ...(filePath && { filePath }),
+        });
+      }
 
       throw error;
     }
