@@ -351,3 +351,45 @@ describe('fixData', () => {
     expect(viz.styleConfig.colors).toEqual(colors);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// V36 — malformed `references` must not crash the whole migration
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('applyMigrations — non-array file_references (regression)', () => {
+  // Legacy/bad rows can have a non-array JSONB `file_references` (e.g. {}).
+  // `?? []` only guards null/undefined, so V36 used to throw
+  // "(references ?? []).map is not a function" and 500 the entire migrate-db run.
+  it('does not throw when a document has a non-array references value', () => {
+    const data: InitData = {
+      version: 35,
+      users: [],
+      documents: [makeDoc(500, { references: {} as any })],
+    };
+    expect(() => applyMigrations(data, 35)).not.toThrow();
+  });
+
+  it('normalizes a non-array references to an empty array and still shifts the id', () => {
+    const data: InitData = {
+      version: 35,
+      users: [],
+      documents: [makeDoc(500, { references: {} as any })],
+    };
+    const result = applyMigrations(data, 35);
+    expect(result.documents![0].references).toEqual([]);
+    expect(result.documents![0].id).toBe(1000); // V36 still ran
+  });
+
+  it('still remaps a valid references array', () => {
+    // Two user docs <1000: ids 500 and 501 → shifted to 1000 and 1001.
+    // Doc 500 references 501, which must be remapped to 1001.
+    const data: InitData = {
+      version: 35,
+      users: [],
+      documents: [makeDoc(500, { references: [501] }), makeDoc(501)],
+    };
+    const result = applyMigrations(data, 35);
+    const shifted = result.documents!.find(d => d.name === 'doc-500')!;
+    expect(shifted.references).toEqual([1001]);
+  });
+});

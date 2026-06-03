@@ -72,7 +72,9 @@ function v36ShiftUserFileIds(data: InitData): InitData {
   const newDocuments = documents.map(doc => ({
     ...doc,
     id: remap(doc.id),
-    references: ((doc as any).references ?? []).map((id: number) => remap(id)),
+    // Guard with Array.isArray (not `?? []`): legacy rows can have a non-array
+    // file_references (e.g. {}), which `??` won't catch → .map would throw.
+    references: (Array.isArray((doc as any).references) ? (doc as any).references : []).map((id: number) => remap(id)),
     content: remapContent(doc.content) as typeof doc.content,
   }));
 
