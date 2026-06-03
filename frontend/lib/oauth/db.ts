@@ -4,15 +4,35 @@
  * Auth codes: in-memory Map (5-min lifetime, ephemeral by design — lost on
  *   restart is acceptable; user simply re-authorizes).
  *
- * Access tokens: short-lived JWTs signed with NEXTAUTH_SECRET.
+ * Access tokens: short-lived JWTs (1 hour) signed with NEXTAUTH_SECRET.
  *   Stateless — validated by signature check, no DB lookup.
- *   No refresh tokens in v1; clients re-run OAuth when the JWT expires.
+ *
+ * Refresh tokens: opaque random tokens (30-day lifetime), stored in-memory
+ *   via globalThis so they survive HMR. Lost on full server restart — clients
+ *   re-run OAuth in that case, which is acceptable.
+ *   Token rotation: each refresh issues a new refresh token and invalidates the old one.
  */
 
 import 'server-only';
 import { randomBytes, createHash } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { NEXTAUTH_SECRET } from '@/lib/config';
+
+// ---------------------------------------------------------------------------
+// In-memory refresh token store (survives HMR via globalThis)
+// ---------------------------------------------------------------------------
+
+interface RefreshTokenEntry {
+  userId: number;
+  scope: string | null;
+  expiresAt: number; // ms since epoch
+}
+
+/* eslint-disable no-restricted-syntax -- globalThis used to survive HMR; in-process singleton is intentional */
+const refreshTokenStore: Map<string, RefreshTokenEntry> = (
+  (globalThis as Record<string, unknown>).__oauthRefreshTokens ??= new Map<string, RefreshTokenEntry>()
+) as Map<string, RefreshTokenEntry>;
+/* eslint-enable no-restricted-syntax */
 
 // ---------------------------------------------------------------------------
 // In-memory auth code store (survives HMR via globalThis)
@@ -134,6 +154,49 @@ export class OAuthTokenDB {
       return decoded;
     } catch {
       return null;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// OAuthRefreshDB — long-lived opaque refresh tokens (30-day, single-use with rotation)
+// ---------------------------------------------------------------------------
+
+const REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+
+export class OAuthRefreshDB {
+  /** Issue a new refresh token for the given user. Returns the plaintext token. */
+  static async create(userId: number, scope: string | null): Promise<string> {
+    const token = randomBytes(32).toString('hex');
+    refreshTokenStore.set(token, {
+      userId,
+      scope,
+      expiresAt: Date.now() + REFRESH_TOKEN_TTL,
+    });
+    return token;
+  }
+
+  /**
+   * Consume a refresh token: validate, delete (single-use / rotation), and return its data.
+   * Returns null if the token is invalid or expired.
+   */
+  static async consume(token: string): Promise<{ userId: number; scope: string | null } | null> {
+    const entry = refreshTokenStore.get(token);
+    if (!entry) return null;
+
+    // Always delete — prevents replay even on failed validation
+    refreshTokenStore.delete(token);
+
+    if (Date.now() > entry.expiresAt) return null;
+
+    return { userId: entry.userId, scope: entry.scope };
+  }
+
+  /** Prune stale entries (bounded by 30-day TTL, so this is just housekeeping). */
+  static async cleanupExpired(): Promise<void> {
+    const now = Date.now();
+    for (const [token, entry] of refreshTokenStore) {
+      if (now > entry.expiresAt) refreshTokenStore.delete(token);
     }
   }
 }
