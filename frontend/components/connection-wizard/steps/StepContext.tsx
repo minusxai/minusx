@@ -17,10 +17,9 @@ import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { mergeWhitelist } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import Editor from '@monaco-editor/react';
-import Markdown from '@/components/Markdown';
+import ContextDocsEditor from '@/components/context/ContextDocsEditor';
 import ChatInterface from '@/components/explore/ChatInterface';
-import type { ContextContent, Whitelist, WhitelistNode } from '@/lib/types';
+import type { ContextContent, Whitelist, WhitelistNode, DocEntry } from '@/lib/types';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
@@ -161,7 +160,6 @@ export default function StepContext({
 }: StepContextProps) {
   const connections = connectionsProp ?? {};
   const connectionsLoading = connectionsLoadingProp ?? false;
-  const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.devMode);
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
@@ -226,21 +224,47 @@ export default function StepContext({
     return allDocs.map(d => d.content).filter(c => c.trim()).join('\n\n---\n\n');
   }, [allDocs]);
 
-  // Debounced editor change — overwrites docs with a single entry
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const handleEditorChange = useCallback((value: string | undefined) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      if (!realFileId || !contextFile) return;
-      const content = { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
-      const versions = content?.versions;
-      if (!versions?.length) return;
-      const updatedVersions = versions.map((v, i) => {
-        if (i !== versions.length - 1) return v;
-        return { ...v, docs: [{ content: value || '' }] };
-      });
-      editFile({ fileId: realFileId, changes: { content: { ...content, versions: updatedVersions } } });
-    }, 300);
+  // Capture once, on first load, whether the context already had docs BEFORE the
+  // agent ran. Lets us label the panel "Current Docs" (these pre-date this session)
+  // vs "Auto-generated context" (the agent wrote them fresh) — instead of always
+  // calling existing docs "auto-generated".
+  const [hadExistingDocs, setHadExistingDocs] = useState(false);
+  // How many real docs predated the agent — used to keep those collapsed and
+  // expand only the doc(s) the agent adds.
+  const baseDocCountRef = useRef<number | null>(null);
+  const capturedExistingDocsRef = useRef(false);
+  useEffect(() => {
+    if (capturedExistingDocsRef.current) return;
+    if (!contextFile || contextFile.loading) return;
+    capturedExistingDocsRef.current = true;
+    setHadExistingDocs(docContent.trim().length > 0);
+    baseDocCountRef.current = allDocs.filter(d => d.content.trim()).length;
+  }, [contextFile, docContent, allDocs]);
+
+  // Docs start collapsed; once the agent finishes, open only the entries it added
+  // (indices at/after the pre-existing count). Controlled so manual toggles persist.
+  const [expandedDocIndices, setExpandedDocIndices] = useState<number[]>([]);
+  const expandedFiredRef = useRef(false);
+  useEffect(() => {
+    if (expandedFiredRef.current || !isAgentDone) return;
+    const base = baseDocCountRef.current ?? 0;
+    const newIndices: number[] = [];
+    for (let i = base; i < allDocs.length; i++) newIndices.push(i);
+    expandedFiredRef.current = true;
+    if (newIndices.length) setExpandedDocIndices(newIndices);
+  }, [isAgentDone, allDocs.length]);
+
+  // Persist the full docs array into the latest version. ContextDocsEditor owns
+  // the per-entry edit debounce, so this just writes through what it emits.
+  const handleDocsChange = useCallback((newDocs: DocEntry[]) => {
+    if (!realFileId || !contextFile) return;
+    const content = { ...contextFile.content, ...contextFile.persistableChanges } as ContextContent;
+    const versions = content?.versions;
+    if (!versions?.length) return;
+    const updatedVersions = versions.map((v, i) =>
+      i !== versions.length - 1 ? v : { ...v, docs: newDocs }
+    );
+    editFile({ fileId: realFileId, changes: { content: { ...content, versions: updatedVersions } } });
   }, [realFileId, contextFile]);
 
   // Get schema from Redux — filter to uploaded schemas for static connections
@@ -621,57 +645,27 @@ export default function StepContext({
         </Text>
       </Box>
 
-      {/* Doc editor — hidden while agent is actively writing */}
+      {/* Docs — hidden while agent is actively writing into an empty context */}
       {(!isAgentRunning || docContent.trim()) && <Box>
         <Text fontSize="sm" fontWeight="600" mb={2}>
-          {showAgentFeed ? 'Auto-generated context' : 'Data context'}
-          <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>{showAgentFeed ? '(editable)' : '(optional, markdown)'}</Text>
+          {hadExistingDocs ? 'Current Docs' : showAgentFeed ? 'Auto-generated context' : 'Data context'}
+          <Text as="span" fontSize="xs" color="fg.subtle" ml={2}>
+            {(hadExistingDocs || showAgentFeed) ? '(editable)' : '(optional, markdown)'}
+          </Text>
         </Text>
-        <Box
-          border="1px solid"
-          borderColor="border.default"
-          borderRadius="lg"
-          overflow="hidden"
-        >
-          <HStack gap={0} align="stretch" display="flex">
-            <Box flex={1} minW={0}>
-              <Editor
-                height="250px"
-                language="markdown"
-                value={docContent}
-                onChange={handleEditorChange}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  lineNumbers: 'off',
-                  fontSize: 13,
-                  fontFamily: 'var(--font-jetbrains-mono)',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  tabSize: 2,
-                  placeholder: 'Describe your data here... e.g.,\n\n# My Database\n\nThis contains our e-commerce data: orders, customers, products.',
-                }}
-              />
-            </Box>
-            <Box
-              flex={1}
-              p={3}
-              bg="bg.muted"
-              maxH="250px"
-              overflowY="auto"
-              borderLeft="1px solid"
-              borderColor="border.default"
-              minW={0}
-            >
-              {docContent.trim() ? (
-                <Markdown context="mainpage">{docContent}</Markdown>
-              ) : (
-                <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
-              )}
-            </Box>
-          </HStack>
-        </Box>
+        <ContextDocsEditor
+          docs={allDocs.length ? allDocs : [{ content: '' }]}
+          onDocsChange={handleDocsChange}
+          editorHeight="250px"
+          entryLabel="Doc"
+          showAddButton={false}
+          showHelperText={false}
+          showEmptyWarning={false}
+          showDraftToggle={true}
+          showChildPaths={false}
+          expandedIndices={expandedDocIndices}
+          onExpandedChange={setExpandedDocIndices}
+        />
       </Box>}
 
       {/* Error */}

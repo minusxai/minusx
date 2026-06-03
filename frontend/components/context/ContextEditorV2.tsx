@@ -10,8 +10,7 @@ import { Box, VStack, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, P
 import { memo, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { LuBookOpen, LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
-import { uploadFile } from '@/lib/object-store/client';
+import { LuBookOpen, LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, Test, SkillEntry } from '@/lib/types';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
@@ -22,12 +21,10 @@ import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
-import ChildPathSelector from '../ChildPathSelector';
+import ContextDocsEditor from './ContextDocsEditor';
 import { Checkbox } from '@/components/ui/checkbox';
-import Editor, { DiffEditor } from '@monaco-editor/react';
-import Markdown from '../Markdown';
+import Editor from '@monaco-editor/react';
 import DocumentHeader from '../DocumentHeader';
-import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { selectConnectionsLoading } from '@/store/filesSlice';
@@ -326,43 +323,6 @@ export default function ContextEditorV2({
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
   const hasInitializedExpanded = useRef(false);
 
-  // Collapsible doc entries state
-  const [expandedDocs, setExpandedDocs] = useState<Set<number>>(() => new Set([0])); // First entry expanded by default
-  // null = default (editor + preview side by side), 'editor' = editor only, 'preview' = preview only, 'diff' = diff side by side
-  const [docViewModes, setDocViewModes] = useState<Record<number, 'editor' | 'preview' | 'diff' | null>>({});
-
-  // Image upload: one hidden file input shared across all doc entries
-  const imageUploadInputRef = useRef<HTMLInputElement>(null);
-  const imageUploadTargetIndex = useRef<number | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const docEditorRefs = useRef<Record<number, any>>({});
-
-  const handleImageUploadClick = useCallback((index: number) => {
-    imageUploadTargetIndex.current = index;
-    imageUploadInputRef.current?.click();
-  }, []);
-
-  const handleImageFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || imageUploadTargetIndex.current === null) return;
-
-    const targetIndex = imageUploadTargetIndex.current;
-    try {
-      const { publicUrl } = await uploadFile(file);
-      const markdownSnippet = `![${file.name}](${publicUrl})`;
-      const editor = docEditorRefs.current[targetIndex];
-      if (editor) {
-        const selection = editor.getSelection();
-        editor.executeEdits('image-upload', [{ range: selection, text: markdownSnippet }]);
-        editor.focus();
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to upload image';
-      toaster.create({ title: message, type: 'error' });
-    }
-  }, []);
-
   // Get connections loading state from Redux (for loading indicator)
   const isLoading = useAppSelector(selectConnectionsLoading);
 
@@ -406,22 +366,6 @@ export default function ContextEditorV2({
       setExpandedDatabases(new Set());
     }
   }, [availableDatabases]);
-
-  const toggleDoc = (index: number) => {
-    setExpandedDocs(prev => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  };
-
-  const setDocViewMode = (index: number, mode: 'editor' | 'preview' | 'diff' | null) => {
-    setDocViewModes(prev => ({ ...prev, [index]: mode }));
-  };
 
   const toggleDatabase = (name: string) => {
     setExpandedDatabases(prev => {
@@ -486,57 +430,6 @@ export default function ContextEditorV2({
   const handleYamlChange = (newYaml: string) => {
     setYamlText(newYaml);
     // Don't parse immediately, wait for tab switch or save
-  };
-
-  // Handle docs changes - debounced to avoid re-rendering preview on every keystroke.
-  // Monaco manages its own buffer so typing stays responsive.
-  const markdownTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const contentDocsRef = useRef(content.docs);
-  contentDocsRef.current = content.docs;
-
-  const handleMarkdownChange = useCallback((index: number, newMarkdown: string) => {
-    if (markdownTimerRef.current) clearTimeout(markdownTimerRef.current);
-    markdownTimerRef.current = setTimeout(() => {
-      const currentDocs = contentDocsRef.current || [];
-      const newDocs = [...currentDocs];
-      newDocs[index] = {
-        ...newDocs[index],
-        content: newMarkdown
-      };
-      onChangeRef.current({ docs: newDocs });
-    }, 300);
-  }, []);
-
-  const handleAddDoc = () => {
-    const currentDocs = content.docs || [];
-    onChange({ docs: [...currentDocs, { content: '' }] });
-  };
-
-  const handleRemoveDoc = (index: number) => {
-    const currentDocs = content.docs || [];
-    onChange({ docs: currentDocs.filter((_, i) => i !== index) });
-  };
-
-  const handleToggleDraft = (index: number) => {
-    const currentDocs = content.docs || [];
-    const newDocs = [...currentDocs];
-    newDocs[index] = {
-      ...newDocs[index],
-      draft: !newDocs[index].draft
-    };
-    onChange({ docs: newDocs });
-  };
-
-  const handleChildPathsChange = (index: number, childPaths: string[] | undefined) => {
-    const currentDocs = content.docs || [];
-    const newDocs = [...currentDocs];
-    newDocs[index] = {
-      ...newDocs[index],
-      childPaths
-    };
-    onChange({ docs: newDocs });
   };
 
   // Handle whitelist change - pure controlled
@@ -693,16 +586,6 @@ export default function ContextEditorV2({
 
   return (
     <VStack gap={6} align="stretch" p={3}>
-      {/* Hidden file input shared across all markdown editors for image upload */}
-      <input
-        aria-label="Upload image to insert in documentation"
-        type="file"
-        accept="image/*"
-        ref={imageUploadInputRef}
-        style={{ display: 'none' }}
-        onChange={handleImageFileSelect}
-      />
-
       {/* Document Header */}
       <Box borderBottomWidth="1px" borderColor="border.muted" pb={2}>
         <DocumentHeader
@@ -1279,275 +1162,14 @@ export default function ContextEditorV2({
         {/* Docs Tab */}
         <Tabs.Content value="docs">
           {activeTab === 'picker' ? (
-          <VStack gap={6} align="stretch">
-              <Box>
-                {(!content.docs || content.docs.length === 0) && (
-                  <HStack gap={1} color="accent.warning" mb={3}>
-                    <LuCircleAlert size={16} />
-                    <Text fontSize="sm" fontWeight="500">No documentation added</Text>
-                  </HStack>
-                )}
-                <Text fontSize="sm" color="fg.muted" mb={3}>
-                  Add notes and documentation about the databases
-                </Text>
-
-                {/* Inherited docs (read-only) */}
-                {content.fullDocs && content.fullDocs.length > 0 && (
-                  <Box mb={4}>
-                    <Text fontSize="sm" fontWeight="600" color="fg.muted" mb={2}>
-                      Inherited Documentation (from parent contexts)
-                    </Text>
-                    <VStack gap={2} align="stretch">
-                      {content.fullDocs.map((docEntry, idx) => (
-                        <Box
-                          key={`inherited-${idx}`}
-                          p={3}
-                          border="1px solid"
-                          borderColor="border.default"
-                          borderRadius="md"
-                          bg="bg.muted"
-                          opacity={0.7}
-                        >
-                          <Markdown context="mainpage">{docEntry.content}</Markdown>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </Box>
-                )}
-
-                {/* Own docs (editable) */}
-                <VStack gap={4} align="stretch">
-                  {(content.docs || []).map((docEntry, index) => {
-                    const isDocExpanded = expandedDocs.has(index);
-                    const hasDiff = originalDocs?.[index] != null && originalDocs[index].content !== docEntry.content;
-                    const rawDocView = docViewModes[index] ?? null;
-                    // Auto-fallback: if on diff but no diff exists, show default
-                    const docView = rawDocView === 'diff' && !hasDiff ? null : rawDocView;
-                    const previewLine = docEntry.content.trim().split('\n')[0]?.slice(0, 80) || 'Empty';
-
-                    return (
-                    <Box
-                      key={index}
-                      border="1px solid"
-                      borderColor={docEntry.draft ? 'border.muted' : 'border.default'}
-                      borderRadius="md"
-                      overflow="hidden"
-                      opacity={docEntry.draft ? 0.6 : 1}
-                    >
-                      {/* Collapsible header */}
-                      <Collapsible.Root open={isDocExpanded} onOpenChange={() => toggleDoc(index)}>
-                        <Collapsible.Trigger asChild>
-                          <Box
-                            px={3}
-                            py={2}
-                            bg="bg.muted"
-                            cursor="pointer"
-                            _hover={{ bg: 'bg.emphasized' }}
-                            {...(isDocExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
-                          >
-                            <HStack justify="space-between">
-                              <HStack gap={2}>
-                                <Icon
-                                  as={isDocExpanded ? LuChevronDown : LuChevronRight}
-                                  boxSize={4}
-                                  color="fg.muted"
-                                />
-                                <Text fontSize="sm" fontWeight="600">
-                                  Documentation Entry {index + 1}
-                                </Text>
-                                {!isDocExpanded && (
-                                  <Text fontSize="xs" color="fg.muted" truncate maxW="400px">
-                                    {previewLine}
-                                  </Text>
-                                )}
-                              </HStack>
-                              <HStack gap={3} onClick={(e) => e.stopPropagation()}>
-                                <HStack gap={1.5}>
-                                  <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
-                                    {docEntry.draft ? 'Draft' : 'Active'}
-                                  </Badge>
-                                  <Switch.Root
-                                    size="sm"
-                                    checked={!docEntry.draft}
-                                    onCheckedChange={() => handleToggleDraft(index)}
-                                    colorPalette="green"
-                                  >
-                                    <Switch.HiddenInput />
-                                    <Switch.Control>
-                                      <Switch.Thumb />
-                                    </Switch.Control>
-                                  </Switch.Root>
-                                </HStack>
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  colorPalette="red"
-                                  onClick={() => handleRemoveDoc(index)}
-                                >
-                                  <LuTrash2 />
-                                </Button>
-                              </HStack>
-                            </HStack>
-                          </Box>
-                        </Collapsible.Trigger>
-                        <Collapsible.Content>
-                          {/* childPaths selector */}
-                          <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
-                            <ChildPathSelector
-                              availablePaths={availableChildPaths}
-                              selectedPaths={docEntry.childPaths}
-                              onChange={(paths) => handleChildPathsChange(index, paths)}
-                            />
-                          </Box>
-
-                          {/* Toolbar: view mode + image upload */}
-                          <HStack px={3} py={1.5} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" gap={1} justify="space-between">
-                            <HStack gap={1}>
-                              <Button
-                                size="xs"
-                                variant={docView === 'editor' ? 'solid' : 'ghost'}
-                                onClick={() => setDocViewMode(index, docView === 'editor' ? null : 'editor')}
-                              >
-                                Editor
-                              </Button>
-                              <Button
-                                size="xs"
-                                variant={docView === 'preview' ? 'solid' : 'ghost'}
-                                onClick={() => setDocViewMode(index, docView === 'preview' ? null : 'preview')}
-                              >
-                                Preview
-                              </Button>
-                              {originalDocs?.[index] != null && (
-                                <Button
-                                  size="xs"
-                                  variant={docView === 'diff' ? 'solid' : 'ghost'}
-                                  onClick={() => setDocViewMode(index, docView === 'diff' ? null : 'diff')}
-                                  disabled={!hasDiff}
-                                >
-                                  Diff
-                                </Button>
-                              )}
-                            </HStack>
-                            <Button
-                              aria-label="Upload image"
-                              size="xs"
-                              variant="ghost"
-                              onClick={() => handleImageUploadClick(index)}
-                              title="Insert image"
-                            >
-                              <LuImage />
-                              Image
-                            </Button>
-                          </HStack>
-
-                          {/* Preview-only mode */}
-                          {docView === 'preview' && (
-                            <Box
-                              p={4}
-                              minH="500px"
-                              maxH="500px"
-                              overflowY="auto"
-                            >
-                              {docEntry.content.trim() ? (
-                                <Markdown context="mainpage">{docEntry.content}</Markdown>
-                              ) : (
-                                <Text color="fg.muted" fontSize="sm">No content to preview.</Text>
-                              )}
-                            </Box>
-                          )}
-
-                          {/* Editor (always mounted, hidden in preview-only mode) + optional side panel */}
-                          <HStack gap={0} align="stretch" display={docView === 'preview' ? 'none' : 'flex'}>
-                            <Box flex={1} minW={0}>
-                              <Editor
-                                height="500px"
-                                language="markdown"
-                                value={docEntry.content}
-                                onChange={(value) => handleMarkdownChange(index, value || '')}
-                                onMount={(editor) => { docEditorRefs.current[index] = editor; }}
-	                                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-	                                options={{
-	                                  readOnly: !editMode,
-	                                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
-	                                  minimap: { enabled: false },
-	                                  wordWrap: 'on',
-                                  lineNumbers: 'on',
-                                  fontSize: 14,
-                                  fontFamily: 'var(--font-jetbrains-mono)',
-                                  scrollBeyondLastLine: false,
-                                  automaticLayout: true,
-                                  tabSize: 2,
-                                }}
-                              />
-                            </Box>
-                            {/* Default (null) mode: editor + preview side by side */}
-                            {docView === null && (
-                              <Box
-                                flex={1}
-                                p={3}
-                                bg="bg.muted"
-                                maxH="500px"
-                                overflowY="auto"
-                                borderLeft="1px solid"
-                                borderColor="border.default"
-                                minW={0}
-                              >
-                                {docEntry.content.trim() ? (
-                                  <Markdown context="mainpage">{docEntry.content}</Markdown>
-                                ) : (
-                                  <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
-                                )}
-                              </Box>
-                            )}
-                            {/* Diff mode: editor + diff side by side */}
-                            {originalDocs?.[index] && (
-                              <Box
-                                flex={1}
-                                borderLeft="1px solid"
-                                borderColor="border.default"
-                                minW={0}
-                                display={docView === 'diff' ? 'block' : 'none'}
-                              >
-                                <DiffEditor
-                                  height="500px"
-                                  language="markdown"
-                                  original={originalDocs[index].content}
-                                  modified={docEntry.content}
-                                  theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                                  keepCurrentOriginalModel
-                                  keepCurrentModifiedModel
-                                  options={{
-                                    minimap: { enabled: false },
-                                    wordWrap: 'on',
-                                    fontSize: 14,
-                                    fontFamily: 'var(--font-jetbrains-mono)',
-                                    scrollBeyondLastLine: false,
-                                    automaticLayout: true,
-                                    readOnly: true,
-                                    renderSideBySide: false,
-                                  }}
-                                />
-                              </Box>
-                            )}
-                          </HStack>
-                        </Collapsible.Content>
-                      </Collapsible.Root>
-                    </Box>
-                    );
-                  })}
-
-                  {/* Add doc button */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleAddDoc}
-                  >
-                    <LuPlus />
-                    Add Documentation Entry
-                  </Button>
-                </VStack>
-              </Box>
-          </VStack>
+          <ContextDocsEditor
+            docs={content.docs || []}
+            onDocsChange={(docs) => onChange({ docs })}
+            inheritedDocs={content.fullDocs}
+            originalDocs={originalDocs}
+            availableChildPaths={availableChildPaths}
+            editMode={editMode}
+          />
           ) : (
             <Box
               border="1px solid"
