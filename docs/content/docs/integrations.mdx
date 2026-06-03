@@ -9,33 +9,36 @@ MinusX integrates with external tools so you can query your data from wherever y
 
 ## MCP (Model Context Protocol)
 
-MinusX exposes an MCP-compatible server, letting AI clients like **Claude Desktop**, **Cursor**, and **Windsurf** query your databases directly.
+MinusX exposes an MCP-compatible server, letting AI clients like **Claude**, **ChatGPT**, and **Cursor** query your BI directly.
 
 ### What you get
 
-Three tools are available to any connected MCP client:
+Five tools are available to any connected MCP client:
 
 | Tool | Description |
 |------|-------------|
-| **SearchDBSchema** | Search tables, columns, and relationships across your connected databases |
-| **ExecuteQuery** | Run SQL queries with parameter support |
-| **ListAllConnections** | List all available database connections |
+| **SearchDBSchema** | Search tables, columns, and relationships across your connected databases (keyword or JSONPath) |
+| **ExecuteQuery** | Run a SQL query against a connection (default `LIMIT 1000`, capped at 10000) |
+| **ListAllConnections** | List all available database connections with their names and types |
+| **SearchFiles** | Search questions and dashboards by name, description, or content; returns ranked match snippets |
+| **ReadFiles** | Load one or more files by ID with their full content (name, path, type, content) |
 
 ### How it works
 
-1. MinusX runs an MCP endpoint at `/api/mcp`
-2. MCP clients authenticate via OAuth 2.1 (auto-triggered on first connection — no manual tokens needed)
+1. MinusX runs a single MCP endpoint at `/api/mcp`
+2. MCP clients authenticate via **OAuth 2.1 with PKCE — auto-triggered on first connection, no manual tokens**. The client discovers the auth server via the `.well-known/oauth-protected-resource` and `.well-known/oauth-authorization-server` metadata, then runs the authorization-code flow (you're prompted to log in to MinusX and approve)
 3. Queries execute against your configured database connections
 4. All MCP tool calls are logged as conversation files for audit
 
 ### Setup
 
-1. Go to **Settings → Integrations → MCP**
-2. Copy the config JSON shown in the UI
-3. Paste it into your client's config file:
-   - **Claude Desktop**: `claude_desktop_config.json`
-   - **Cursor / Windsurf**: follow the client's MCP setup docs
-4. Restart the client — it will auto-authenticate on first use
+You only need to give your client the MinusX MCP URL — **connecting directly kicks off the OAuth login automatically; there's nothing to copy or paste manually.**
+
+1. Go to **Settings → Integrations → MCP** to find your MCP endpoint URL (and a ready-made config snippet)
+2. Add it to your client:
+   - **Claude (Desktop/web)**: add a custom connector pointing at the MCP URL — it auto-authenticates on first use
+   - **Cursor / Windsurf / other config-file clients**: paste the snippet into the client's MCP config (e.g. `claude_desktop_config.json`) and restart
+3. On first connection the client opens the MinusX login + consent screen; approve it and you're connected
 
 ---
 
