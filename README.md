@@ -9,7 +9,7 @@ MinusX is an open source agentic business intelligence platform for founders. <b
 <h3>
   <a href="https://minusx.ai">Website</a>
   <span> · </span>
-  <a href="https://docsv2.minusx.ai">Docs</a>
+  <a href="https://docs.minusx.ai">Docs</a>
   <span> · </span>
   <!-- <a href="https://github.com/orgs/minusxai/projects/14">Roadmap</a>
   <span> · </span> -->
@@ -66,7 +66,7 @@ We've spent years watching companies struggle with the same problem: they buy ex
 When LLMs got better, everyone (including us) bolted chatbots / text-to-SQL onto existing tools. Unfortunately, it doesn't work. These tools were designed around menus, isolated query editors and tons of scaffolding. The AI is an afterthought (a parlor trick almost) that breaks the moment you need it to do anything real. 
 
 
-We built a state-of-the-art data agent that learns your business. And then built a BI platform around it. Learning from the magic of Claude Code, MinusX exposes the entire BI (questions, dashboards, reports etc.) as a file system the agent can read and write. The agent is omni-present, working exactly how you work.
+We built a state-of-the-art data agent that learns your business (ranked #1 on DataAgentBench, a realistic data-tasks benchmark from UC Berkeley's EPIC lab). And then built a BI platform around it. Learning from the magic of Claude Code, MinusX exposes the entire BI (questions, dashboards, reports etc.) as a file system the agent can read and write. The agent is omni-present, working exactly how you work.
 
 Anyone who has spent any time working with LLMs in data knows that the hard part is not SQL, it's context. The model doesn't know that `revenue` is `ARR_operational` in your company, or that the `orders` table has a quirk where cancelled orders still show up, but only till 2025(!!!). MinusX Knowledge Base gives you tools to teach the agent what it needs to know, and learns from your continued usage. A 200 line generated SQL that you cannot understand, trust and reason about is as useless as not having the answer.
 

@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Keeping docs current:** `docs/DOCS_SYNC.md` records the commit these docs (CLAUDE.md, README, `docs/`) were last reconciled to. To find drift, run `git log --oneline <hash>..HEAD`; after updating docs, bump the hash there.
+
 ---
 
 ## ⚠️ PRIMARY WORKING STYLE: TEST-DRIVEN DEVELOPMENT
@@ -169,12 +171,13 @@ The configs system provides per-company configuration stored as database documen
 - References prevent circular dependencies at save time
 
 **Query Execution Flow**
-1. User edits SQL in QuestionViewer → Redux tracks state
-2. Execute query → `POST /api/query` (Next.js)
-3. Route resolves the named connection from the document DB and applies parameters (`applyNoneParams`)
-4. `runQuery` (`lib/connections/run-query.ts`) selects the Node.js connector via `getNodeConnector` and executes the query directly (DuckDB/BigQuery/PostgreSQL/...)
-5. Return QueryResult (columns, types, rows)
-6. Visualization updates with data
+1. User edits SQL → Redux tracks state
+2. Execute → `POST /api/query`; client calls are funneled through `querySemaphore` (caps concurrency at `MAX_CONCURRENT_QUERIES`)
+3. Route applies params (`applyNoneParams`) and derives dialect via the lightweight `ConnectionsAPI.getRawByName` — *not* `FilesAPI.loadFile`, which can trigger schema profiling
+4. Server `queryCache` (TTL `QUERY_CACHE_TTL_MS`, default 60s) serves hits; concurrent identical queries share one run via `queryInflight`
+5. On a miss, `runQuery` (`lib/connections/run-query.ts`) picks the connector via `getNodeConnector`, executes → QueryResult → viz updates
+
+`getQueryResult({ forceLoad: true })` / `useQueryResult().refetch()` bypass the cache (powers the retry button).
 
 **Schema Profiling & Statistics Enrichment**
 
@@ -344,11 +347,18 @@ export async function POST(req: NextRequest) {
 ```
 `handleApiError` returns a consistent error shape for all unhandled errors. ESLint enforces this — a direct `NextResponse.json` with `{ status: 500 }` is a lint error in `app/api/**`. If a route genuinely needs a custom response shape for 500s (e.g. `/api/chat` returns `ChatResponse`), suppress inline with `// eslint-disable-next-line no-restricted-syntax` and ensure the error is reported via `appEventRegistry.publish(AppEvents.ERROR, ...)` manually. Error events are forwarded to the mx-llm-provider `/notify` endpoint, which routes `type: "error"` to Slack.
 
+### Client-Side Error Handling
+
+Browser-side complement to `handleApiError`:
+- `lib/utils/error-parser.ts` — `parseErrorMessage()` → `{ title, hint, details?, isNetworkError? }`; flags transport failures (`'failed to fetch'`, etc.) as `isNetworkError` so the UI shows a retryable "Couldn't load results" instead of a SQL error.
+- `lib/messaging/capture-error.ts` — `captureError()` POSTs to `/api/capture-error` with exponential backoff + jitter and 60s dedup; best-effort, never throws.
+- `lib/utils/semaphore.ts` — `Semaphore` (limit may be a getter for live runtime caps); used as `querySemaphore` in `file-state.ts`.
+
 ### Adding Agent Tools / Agents
 1. Add a tool (`MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`
 2. Register it in `lib/chat-orchestration-v2.server.ts` (`V2_REGISTRABLES`); headless runners use `V2_HEADLESS_REGISTRABLES`
 3. Implement the client/server behavior in `tool-handlers.ts` (frontend bridge) / `tool-handlers.server.ts` (server) as needed
-4. Document the return shape in `tools.md`
+4. Keep the TypeBox param schema (colocated with the tool) and the handler behavior in sync — the schema is the single source of truth for the args the LLM is told it can pass
 
 ## Important Technical Details
 
@@ -389,6 +399,10 @@ export async function POST(req: NextRequest) {
 - `PGLITE_DATA_DIR`: Directory for PGLite persistence (default: derived from `BASE_DUCKDB_DATA_PATH`)
 - `NEXTAUTH_SECRET`: NextAuth secret for session encryption
 - `NEXTAUTH_URL`: NextAuth URL (default: `http://localhost:3000`)
+- `MAX_CONCURRENT_QUERIES`: max concurrent client `/api/query` calls (default: `10`); hydrated SSR → `configsSlice.maxConcurrentQueries`, read live by `querySemaphore` via `selectMaxConcurrentQueries`
+- `QUERY_CACHE_TTL_MS`: TTL for the server-side `queryCache` (default: `60000`)
+
+**Runtime-config → Redux pattern:** server config read in `lib/config.ts` → Redux `preloadedState` at SSR → consumed via selector; `Semaphore` takes a *getter* limit so Redux changes apply without recreating it.
 
 #### Accessing env vars in code
 - **Server-only vars** (secrets, DB URLs, internal flags): import from `frontend/lib/config.ts` — has `import 'server-only'` guard, throws at build time if a client component imports it.
@@ -401,8 +415,8 @@ export async function POST(req: NextRequest) {
 
 > **CRITICAL — always reuse, never re-implement.** `file-state.ts` and `file-state-hooks.ts` are the single source of truth for all file and query operations in the frontend. Before writing any new fetch, Redux read, or file-operation logic, read these files first. Duplicating their functionality elsewhere is a code smell.
 
-- `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult`, `createVirtualFile`.
-- `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult`.
+- `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult` (accepts `{ forceLoad }` to bypass the query cache; calls bounded by `querySemaphore`).
+- `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult` (returns `refetch()` for force-reload / retry).
 
 **FilesAPI dual-implementation pattern:** A shared interface defines the contract for all file CRUD operations. There is a client implementation (HTTP calls) and a server implementation (direct DB access), both exported as `FilesAPI` from their respective modules. `file-state.ts` uses the client `FilesAPI` and adds Redux state management on top. **When adding a new file operation, add it to the interface and implement it in both client and server.** Never bypass `FilesAPI` with raw `fetch` calls.
 
@@ -466,7 +480,7 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 ## Tool Schemas
 
-Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema, the `tool-handlers.ts` behavior, and `tools.md` (return shape) in sync.
+Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema and the `tool-handlers.ts` / `tool-handlers.server.ts` behavior (which produces the return shape) in sync.
 
 ## Previous Mistakes
 

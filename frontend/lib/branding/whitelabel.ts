@@ -84,7 +84,7 @@ export const DEFAULT_CONFIG: OrgConfig = {
     logoDark: '/logox.svg',
   },
   links: {
-    docsUrl: 'https://docsv2.minusx.ai',
+    docsUrl: 'https://docs.minusx.ai',
     supportUrl: 'https://minusx.ai/support',
     githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
   },
