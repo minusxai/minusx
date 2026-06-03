@@ -306,6 +306,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async createFile(input: CreateFileInput, user: EffectiveUser): Promise<CreateFileResult> {
     const { name, path, type, content, references = [], options, editId } = input;
+    // Guard the single write path: references must be an array (a non-array
+    // JSONB value can never reach the DB through FilesAPI).
+    const safeReferences = Array.isArray(references) ? references : [];
 
     // Idempotency: if this editId was already used, return the existing file
     if (editId) {
@@ -444,7 +447,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Guard: references must be real (positive) IDs — virtual files must be saved first
-    const negativeCreateRefs = references.filter(id => id < 0);
+    const negativeCreateRefs = safeReferences.filter(id => id < 0);
     if (negativeCreateRefs.length > 0) {
       throw new Error(`Cannot create file: references contain unsaved virtual IDs [${negativeCreateRefs.join(', ')}]`);
     }
@@ -456,7 +459,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId, startAsDraft, input.meta ?? null);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, safeReferences, editId, startAsDraft, input.meta ?? null);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -499,6 +502,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
+    // Guard the single write path: references must be an array (a non-array
+    // JSONB value can never reach the DB through FilesAPI).
+    references = Array.isArray(references) ? references : [];
     // Get existing file
     const existingFile = await DocumentDB.getById(id);
 

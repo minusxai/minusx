@@ -118,6 +118,10 @@ export function getTargetVersions(): { dataVersion: number; schemaVersion: numbe
 export function fixData(data: InitData): InitData {
   const documents = data.documents ?? (data.orgs ?? []).flatMap((org: OrgData) => org.documents);
   for (const doc of documents) {
+    // Normalize references to an array (legacy rows can hold a non-array JSONB
+    // value, e.g. {}). Runs before the content skip so it applies to every doc.
+    if (!Array.isArray((doc as any).references)) (doc as any).references = [];
+
     const content = doc.content as any;
     if (!content || typeof content !== 'object') continue;
 

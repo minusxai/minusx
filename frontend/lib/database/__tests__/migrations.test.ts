@@ -350,6 +350,50 @@ describe('fixData', () => {
     const viz = (result.documents![0].content as any).vizSettings;
     expect(viz.styleConfig.colors).toEqual(colors);
   });
+
+  it('normalizes a non-array references to an empty array', () => {
+    const data: InitData = {
+      version: LATEST_DATA_VERSION,
+      users: [],
+      documents: [makeDoc(1000, { references: {} as any })],
+    };
+    const result = fixData(data);
+    expect(result.documents![0].references).toEqual([]);
+  });
+
+  it('normalizes references even on a doc with no content (runs before the content skip)', () => {
+    const data: InitData = {
+      version: LATEST_DATA_VERSION,
+      users: [],
+      documents: [makeDoc(1000, { content: null as any, references: {} as any })],
+    };
+    const result = fixData(data);
+    expect(result.documents![0].references).toEqual([]);
+  });
+
+  it('leaves a valid references array untouched', () => {
+    const data: InitData = {
+      version: LATEST_DATA_VERSION,
+      users: [],
+      documents: [makeDoc(1000, { references: [5, 6] })],
+    };
+    const result = fixData(data);
+    expect(result.documents![0].references).toEqual([5, 6]);
+  });
+});
+
+// fixData runs unconditionally at the end of applyMigrations, so references are
+// normalized even when no versioned migration runs (e.g. a DB already at latest).
+describe('applyMigrations — references normalized when no migration runs', () => {
+  it('normalizes a non-array references at the latest version (V36 skipped)', () => {
+    const data: InitData = {
+      version: LATEST_DATA_VERSION,
+      users: [],
+      documents: [makeDoc(1500, { references: {} as any })],
+    };
+    const result = applyMigrations(data, LATEST_DATA_VERSION);
+    expect(result.documents![0].references).toEqual([]);
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
