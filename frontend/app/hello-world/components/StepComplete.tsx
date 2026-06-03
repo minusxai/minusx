@@ -96,13 +96,13 @@ const GUIDE_SECTIONS: GuideSectionConfig[] = [
         icon: LuFileText,
         title: 'Read the docs',
         description: 'Learn about {agentName}\'s features, configuration options, and best practices.',
-        link: { label: 'Open Docs', href: 'https://docsv2.minusx.ai/docs' },
+        link: { label: 'Open Docs', href: 'https://docs.minusx.ai/docs' },
       },
       {
         icon: LuBookOpen,
         title: 'Follow step-by-step guides',
         description: 'Practical walkthroughs for common workflows.',
-        link: { label: 'Open Guides', href: 'https://docsv2.minusx.ai/guides' },
+        link: { label: 'Open Guides', href: 'https://docs.minusx.ai/guides' },
       },
     ],
   },
@@ -110,7 +110,7 @@ const GUIDE_SECTIONS: GuideSectionConfig[] = [
 
 const QUICK_ACTIONS = [
   { label: 'Start exploring', icon: LuSparkles, href: '/explore', variant: 'solid' as const },
-  { label: 'Read the docs', icon: LuRocket, href: 'https://docsv2.minusx.ai/docs', variant: 'outline' as const },
+  { label: 'Read the docs', icon: LuRocket, href: 'https://docs.minusx.ai/docs', variant: 'outline' as const },
 ];
 
 // ── Components ───────────────────────────────────────────────────────

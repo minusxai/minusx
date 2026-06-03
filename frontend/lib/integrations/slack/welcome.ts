@@ -76,7 +76,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
         {
           type: 'button',
           text: { type: 'plain_text', text: ':book:  Documentation', emoji: true },
-          url: 'https://docsv2.minusx.ai/docs',
+          url: 'https://docs.minusx.ai/docs',
           action_id: 'home_open_docs',
         },
       ],
