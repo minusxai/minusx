@@ -375,6 +375,7 @@ export interface UseQueryResultReturn {
   loading: boolean;              // Currently fetching
   error: string | null;          // Error message if fetch failed
   isStale: boolean;              // Data exists but is stale (being refetched)
+  refetch: () => Promise<void>;  // Force a fresh fetch, bypassing the TTL cache (for retry buttons)
 }
 
 /**
@@ -397,7 +398,7 @@ function useQueryResultSelector(
   query: string,
   params: Record<string, any>,
   database: string,
-): UseQueryResultReturn {
+): Omit<UseQueryResultReturn, 'refetch'> {
   return useAppSelector(
     state => {
       const result = selectQueryResult(state, query, params, database);
@@ -451,7 +452,16 @@ export function useQueryResult(
     getQueryResult({ query, params, database, references, parameterTypes, filePath }, { ttl }).catch(() => {});
   }, [query, params, database, references, parameterTypes, filePath, ttl, skip]);
 
-  return useQueryResultSelector(query, params, database);
+  // Force a fresh fetch, bypassing the TTL cache — used by retry buttons after a
+  // transient network failure. Swallows rejection (error already lands in Redux).
+  const refetch = useCallback(
+    () => getQueryResult({ query, params, database, references, parameterTypes, filePath }, { ttl, forceLoad: true })
+      .then(() => {})
+      .catch(() => {}),
+    [query, params, database, references, parameterTypes, filePath, ttl],
+  );
+
+  return { ...useQueryResultSelector(query, params, database), refetch };
 }
 
 
