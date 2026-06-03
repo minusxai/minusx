@@ -5,6 +5,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
 import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
@@ -157,16 +158,16 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         composedQuery = CTEfyQuery(query, resolvedRefs);
       }
 
-      // Derive dialect from connection type for IR-based None param removal
+      // Derive dialect from connection type for IR-based None param removal.
+      // Use the lightweight getRawByName (single getByPath, no loader) rather
+      // than FilesAPI.loadFile — loadFile on a connection runs the
+      // connectionLoader, which can trigger a full schema profiling refresh on
+      // a stale/missing cache. On a dashboard firing N parallel queries that
+      // refresh storm serializes the DB and surfaces as "Failed to fetch".
       let queryDialect = 'duckdb';
       try {
-        const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
-        const conn = connectionsResult.data.find((f: any) => f.name === connection_name);
-        if (conn) {
-          const fullConn = await FilesAPI.loadFile(conn.id, user);
-          const connType = (fullConn.data?.content as any)?.type;
-          if (connType) queryDialect = connectionTypeToDialect(connType);
-        }
+        const { type } = await ConnectionsAPI.getRawByName(connection_name, user.mode);
+        if (type) queryDialect = connectionTypeToDialect(type);
       } catch { /* dialect defaults to duckdb */ }
 
       // Apply None params: remove filter conditions or substitute with NULL
