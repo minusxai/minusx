@@ -4,35 +4,20 @@
  * Auth codes: in-memory Map (5-min lifetime, ephemeral by design — lost on
  *   restart is acceptable; user simply re-authorizes).
  *
- * Access tokens: short-lived JWTs (1 hour) signed with NEXTAUTH_SECRET.
+ * Access tokens: short-lived JWTs (1 hour, type: 'access') signed with NEXTAUTH_SECRET.
  *   Stateless — validated by signature check, no DB lookup.
  *
- * Refresh tokens: opaque random tokens (30-day lifetime), stored in-memory
- *   via globalThis so they survive HMR. Lost on full server restart — clients
- *   re-run OAuth in that case, which is acceptable.
- *   Token rotation: each refresh issues a new refresh token and invalidates the old one.
+ * Refresh tokens: long-lived JWTs (30 days, type: 'refresh') signed with the same
+ *   secret. Also stateless — survive restarts and work across instances with no
+ *   store. Tradeoff vs. opaque tokens: no server-side revocation or single-use
+ *   rotation (a leaked refresh token is valid until it expires). The `type` claim
+ *   keeps access and refresh tokens from being used in place of one another.
  */
 
 import 'server-only';
 import { randomBytes, createHash } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { NEXTAUTH_SECRET } from '@/lib/config';
-
-// ---------------------------------------------------------------------------
-// In-memory refresh token store (survives HMR via globalThis)
-// ---------------------------------------------------------------------------
-
-interface RefreshTokenEntry {
-  userId: number;
-  scope: string | null;
-  expiresAt: number; // ms since epoch
-}
-
-/* eslint-disable no-restricted-syntax -- globalThis used to survive HMR; in-process singleton is intentional */
-const refreshTokenStore: Map<string, RefreshTokenEntry> = (
-  (globalThis as Record<string, unknown>).__oauthRefreshTokens ??= new Map<string, RefreshTokenEntry>()
-) as Map<string, RefreshTokenEntry>;
-/* eslint-enable no-restricted-syntax */
 
 // ---------------------------------------------------------------------------
 // In-memory auth code store (survives HMR via globalThis)
@@ -140,7 +125,9 @@ export class OAuthTokenDB {
     extra?: Record<string, unknown>,
   ): Promise<OAuthTokenPair> {
     const expiresIn = 3600; // 1 hour
-    const payload = { jti: randomBytes(16).toString('hex'), userId, scope: scope ?? null, ...extra };
+    // `type: 'access'` is set last so it can't be overridden by `extra` — a
+    // refresh token must never validate as an access token (see validateAccessToken).
+    const payload = { jti: randomBytes(16).toString('hex'), userId, scope: scope ?? null, ...extra, type: 'access' };
     const accessToken = jwt.sign(payload, OAuthTokenDB.secret, { expiresIn });
     return { accessToken, expiresIn, tokenType: 'Bearer' };
   }
@@ -150,7 +137,11 @@ export class OAuthTokenDB {
     accessToken: string,
   ): Promise<{ userId: number; scope: string | null; [key: string]: unknown } | null> {
     try {
-      const decoded = jwt.verify(accessToken, OAuthTokenDB.secret) as { userId: number; scope: string | null; [key: string]: unknown };
+      const decoded = jwt.verify(accessToken, OAuthTokenDB.secret) as { userId: number; scope: string | null; type?: string; [key: string]: unknown };
+      // A refresh token is a valid JWT under the same secret — reject it here so
+      // it can never be used to authenticate. (Tokens predating the `type` claim
+      // have no `type` and are still accepted.)
+      if (decoded.type === 'refresh') return null;
       return decoded;
     } catch {
       return null;
@@ -159,44 +150,38 @@ export class OAuthTokenDB {
 }
 
 // ---------------------------------------------------------------------------
-// OAuthRefreshDB — long-lived opaque refresh tokens (30-day, single-use with rotation)
+// OAuthRefreshDB — long-lived refresh tokens as stateless JWTs (30-day)
 // ---------------------------------------------------------------------------
 
-const REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 export class OAuthRefreshDB {
-  /** Issue a new refresh token for the given user. Returns the plaintext token. */
+  private static get secret(): string {
+    return NEXTAUTH_SECRET || 'dev-insecure-secret';
+  }
+
+  /** Issue a signed JWT refresh token for the given user. */
   static async create(userId: number, scope: string | null): Promise<string> {
-    const token = randomBytes(32).toString('hex');
-    refreshTokenStore.set(token, {
-      userId,
-      scope,
-      expiresAt: Date.now() + REFRESH_TOKEN_TTL,
-    });
-    return token;
+    const payload = { jti: randomBytes(16).toString('hex'), userId, scope, type: 'refresh' as const };
+    return jwt.sign(payload, OAuthRefreshDB.secret, { expiresIn: REFRESH_TOKEN_TTL_SECONDS });
   }
 
   /**
-   * Consume a refresh token: validate, delete (single-use / rotation), and return its data.
-   * Returns null if the token is invalid or expired.
+   * Validate a refresh token by signature + expiry and return its data.
+   * Returns null if invalid, expired, or not a refresh-type token (e.g. an
+   * access token replayed against the refresh grant).
+   *
+   * Note: JWTs are stateless, so this is NOT single-use — a valid refresh token
+   * can be redeemed repeatedly until it expires. Revocation/rotation would
+   * require server-side state (see header).
    */
   static async consume(token: string): Promise<{ userId: number; scope: string | null } | null> {
-    const entry = refreshTokenStore.get(token);
-    if (!entry) return null;
-
-    // Always delete — prevents replay even on failed validation
-    refreshTokenStore.delete(token);
-
-    if (Date.now() > entry.expiresAt) return null;
-
-    return { userId: entry.userId, scope: entry.scope };
-  }
-
-  /** Prune stale entries (bounded by 30-day TTL, so this is just housekeeping). */
-  static async cleanupExpired(): Promise<void> {
-    const now = Date.now();
-    for (const [token, entry] of refreshTokenStore) {
-      if (now > entry.expiresAt) refreshTokenStore.delete(token);
+    try {
+      const decoded = jwt.verify(token, OAuthRefreshDB.secret) as { userId: number; scope: string | null; type?: string };
+      if (decoded.type !== 'refresh') return null;
+      return { userId: decoded.userId, scope: decoded.scope ?? null };
+    } catch {
+      return null;
     }
   }
 }
