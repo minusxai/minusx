@@ -291,9 +291,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         )}
         <Text color="fg.muted" fontSize="sm">
           {isDone
-            ? 'MinusX created questions and assembled them into a dashboard for you.'
+            ? 'Done! Go check out your awesome new dashboard.'
             : isGenerating
-              ? 'MinusX is exploring your data, writing queries, and building visualizations.'
+              ? 'MinusX is writing queries, and building visualizations and assembling a fantastic dashboard for you.'
               : 'MinusX will analyze your schema and create a dashboard with interesting queries automatically.'
           }
         </Text>

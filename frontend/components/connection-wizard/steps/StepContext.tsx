@@ -614,10 +614,10 @@ export default function StepContext({
       {/* Header */}
       <Box>
         <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
-          Data Documentation
+          Auto Documentation
         </Heading>
         <Text color="fg.muted" fontSize="sm">
-          This is where you can describe your dataset, key metrics, and any other info the agent should know when querying this data.
+          Documentation is where you describe your dataset, key metrics, and any other info the agent should know when querying this data.
         </Text>
       </Box>
 
