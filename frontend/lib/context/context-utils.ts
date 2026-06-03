@@ -257,6 +257,49 @@ export function convertDatabaseContextToWhitelist(legacyDbs: DatabaseContext[]):
 }
 
 /**
+ * Union two WhitelistNodes of the same name. Whitelist semantics are
+ * additive: `children: undefined` means "expose everything", so it is the most
+ * permissive and always wins. Otherwise children are unioned by name, recursing
+ * into shared children. The merge only ever EXPANDS access, never removes it.
+ */
+function mergeWhitelistNode(existing: WhitelistNode, incoming: WhitelistNode): WhitelistNode {
+  // undefined children = expose all → most permissive wins
+  if (existing.children === undefined || incoming.children === undefined) {
+    return { ...existing, children: undefined };
+  }
+  const byName = new Map<string, WhitelistNode>();
+  for (const c of existing.children) byName.set(c.name, c);
+  for (const c of incoming.children) {
+    const prev = byName.get(c.name);
+    byName.set(c.name, prev ? mergeWhitelistNode(prev, c) : c);
+  }
+  return { ...existing, children: [...byName.values()] };
+}
+
+/**
+ * Merge incoming whitelist nodes into an existing whitelist, unioning access.
+ *
+ * Used by the onboarding wizard when adding a dataset: the newly selected
+ * schemas/tables are folded into the context's existing whitelist instead of
+ * replacing it, so connections/schemas other users' dashboards depend on are
+ * never silently dropped.
+ *
+ * - existing `'*'` (expose all) stays `'*'` — the new data is already covered.
+ * - matching connection nodes are unioned (see mergeWhitelistNode).
+ * - connections present on only one side are kept as-is.
+ */
+export function mergeWhitelist(existing: Whitelist, incoming: WhitelistNode[]): Whitelist {
+  if (existing === '*') return '*';
+  const byName = new Map<string, WhitelistNode>();
+  for (const n of existing) byName.set(n.name, n);
+  for (const n of incoming) {
+    const prev = byName.get(n.name);
+    byName.set(n.name, prev ? mergeWhitelistNode(prev, n) : n);
+  }
+  return [...byName.values()];
+}
+
+/**
  * Resolve the whitelist from a ContextVersion, handling backward compatibility.
  *
  * Older data stored the whitelist as `version.databases: DatabaseContext[]` before the

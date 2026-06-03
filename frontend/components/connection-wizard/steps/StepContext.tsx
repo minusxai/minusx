@@ -15,6 +15,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { mergeWhitelist } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
@@ -299,11 +300,18 @@ export default function StepContext({
           children: tables.map(t => ({ name: t.name, type: 'table' as const } as WhitelistNode)),
         } as WhitelistNode)),
       ];
-      const wl: Whitelist = [{
+      const newConnNode: WhitelistNode = {
         name: connectionName,
         type: 'connection' as const,
         children: schemaChildren.length > 0 ? schemaChildren : undefined,
-      }];
+      };
+      // Merge into the existing whitelist instead of overwriting it. Overwriting
+      // silently narrowed access and broke dashboards on other connections/schemas
+      // for everyone in the workspace. The onboarding agent is already told which
+      // dataset is new, so we don't need to restrict the context to just it.
+      const existingWhitelist: Whitelist =
+        effectiveContent?.versions?.[effectiveContent.versions.length - 1]?.whitelist ?? '*';
+      const wl: Whitelist = mergeWhitelist(existingWhitelist, [newConnNode]);
       // Preserve existing docs and include the new doc (last in array) if non-empty
       const allDocs = effectiveContent?.versions?.[effectiveContent.versions.length - 1]?.docs ?? [];
       const docsToSave = allDocs.filter(d => d.content.trim());
@@ -749,6 +757,7 @@ export default function StepContext({
               </Button>
             )}
             <Button
+              aria-label="Save context and continue"
               {...(showAgentFeed
                 ? { bg: 'accent.teal', color: 'white', _hover: { opacity: 0.9 } }
                 : { variant: 'outline' as const }
