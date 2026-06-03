@@ -61,7 +61,7 @@ export default function StepConnection({ onComplete, onStaticSelect, greeting }:
       <VStack align="stretch" gap={8} pb={4}>
         <VStack align="start" gap={2}>
           <Text fontSize="2xl" fontWeight="900" letterSpacing="-0.02em" fontFamily="mono">
-            {greeting || 'Add Connection'}
+            {greeting || 'Add Dataset'}
           </Text>
           {!greeting && (
             <Text color="fg.muted" fontSize="sm">Select a database type to connect to</Text>

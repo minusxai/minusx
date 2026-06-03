@@ -50,7 +50,7 @@ const GUIDE_SECTIONS: GuideSectionConfig[] = [
         icon: LuDatabase,
         title: 'Connect a database',
         description: 'Add a database connection so {agentName} can query your data. Supports DuckDB, PostgreSQL, BigQuery, etc.',
-        link: { label: 'Add Connection', href: '/new/connection' },
+        link: { label: 'Add Dataset', href: '/new/connection' },
       },
       {
         icon: LuNotebookText,

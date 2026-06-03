@@ -711,7 +711,7 @@ export default function ConnectionFormV2({
             ) : (
               <>
                 <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
-                  Add Connection
+                  Add Dataset
                 </Heading>
                 <Text color="fg.muted" fontSize="sm">
                   Select a database type to connect to
@@ -754,7 +754,7 @@ export default function ConnectionFormV2({
               </Button>
             )}
             <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
-              {mode === 'create' ? 'Add Connection' : fileName}
+              {mode === 'create' ? 'Add Dataset' : fileName}
             </Heading>
             {mode === 'view' && (
               <Box

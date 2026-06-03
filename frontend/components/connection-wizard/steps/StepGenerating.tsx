@@ -293,7 +293,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           {isDone
             ? 'Done! Go check out your awesome new dashboard.'
             : isGenerating
-              ? 'MinusX is writing queries, and building visualizations and assembling a fantastic dashboard for you.'
+              ? 'MinusX is writing queries, building visualizations and assembling a fantastic dashboard for you.'
               : 'MinusX will analyze your schema and create a dashboard with interesting queries automatically.'
           }
         </Text>
