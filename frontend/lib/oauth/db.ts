@@ -6,7 +6,11 @@
  *
  * Access tokens: short-lived JWTs signed with NEXTAUTH_SECRET.
  *   Stateless — validated by signature check, no DB lookup.
- *   No refresh tokens in v1; clients re-run OAuth when the JWT expires.
+ *
+ * Refresh tokens: opaque 32-byte random tokens with 30-day lifetime.
+ *   Stored in-memory via globalThis (survives HMR). Single-use with rotation:
+ *   each refresh consumes the old token and issues a new one.
+ *   Lost on server restart — clients must re-authorize (same as auth codes).
  */
 
 import 'server-only';
@@ -88,6 +92,59 @@ export class OAuthCodeDB {
     const now = Date.now();
     for (const [code, entry] of codeStore) {
       if (now > entry.expiresAt) codeStore.delete(code);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// OAuthRefreshDB — opaque refresh tokens (30-day, single-use with rotation)
+// ---------------------------------------------------------------------------
+
+interface RefreshEntry {
+  userId: number;
+  scope: string | null;
+  expiresAt: number; // ms since epoch
+}
+
+/* eslint-disable no-restricted-syntax -- globalThis used to survive HMR; in-process singleton is intentional */
+const refreshStore: Map<string, RefreshEntry> = (
+  (globalThis as Record<string, unknown>).__oauthRefreshTokens ??= new Map<string, RefreshEntry>()
+) as Map<string, RefreshEntry>;
+/* eslint-enable no-restricted-syntax */
+
+export class OAuthRefreshDB {
+  /** Issue a new 30-day refresh token. */
+  static async create(userId: number, scope?: string | null): Promise<string> {
+    const token = randomBytes(32).toString('hex');
+    refreshStore.set(token, {
+      userId,
+      scope: scope ?? null,
+      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    });
+    return token;
+  }
+
+  /**
+   * Consume a refresh token (single-use). Returns associated user data or null
+   * if the token is invalid, expired, or already used.
+   */
+  static async consume(token: string): Promise<{ userId: number; scope: string | null } | null> {
+    const entry = refreshStore.get(token);
+    if (!entry) return null;
+
+    // Always delete — prevents replay even on failed validation
+    refreshStore.delete(token);
+
+    if (Date.now() > entry.expiresAt) return null;
+
+    return { userId: entry.userId, scope: entry.scope };
+  }
+
+  /** Prune stale entries (bounded by 30-day TTL, so this is housekeeping). */
+  static async cleanupExpired(): Promise<void> {
+    const now = Date.now();
+    for (const [token, entry] of refreshStore) {
+      if (now > entry.expiresAt) refreshStore.delete(token);
     }
   }
 }
