@@ -2,9 +2,17 @@ import { memo, type ReactNode, type RefObject } from 'react'
 import { Box } from '@chakra-ui/react'
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
+import { E2E_MODE } from '@/lib/constants'
 import { EChart } from './EChart'
 
-export const DEFAULT_CHART_SETTINGS = { useCoarsePointer: true, renderer: 'canvas' as const }
+// Production renders to canvas (perf). E2E builds render to SVG so charts are
+// real DOM nodes Playwright can assert on (Tests/QA/Evals Arch V2). To make SVG
+// the production default later, change this to a literal 'svg' — large-data
+// charts would then need a per-chart canvas override.
+export const DEFAULT_CHART_SETTINGS = {
+  useCoarsePointer: true,
+  renderer: (E2E_MODE ? 'svg' : 'canvas') as 'svg' | 'canvas',
+}
 
 const DEFAULT_CHART_STYLE = { width: '100%', height: '100%', minHeight: '300px' } as const
 

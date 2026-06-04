@@ -22,8 +22,9 @@ import {
 // Features for label layout (pie outside labels) and animated transitions
 import { LabelLayout, UniversalTransition } from 'echarts/features';
 
-// Canvas renderer — all charts use renderer: 'canvas'
-import { CanvasRenderer } from 'echarts/renderers';
+// Renderers. Canvas is the production default; SVG is registered too so E2E
+// builds can render charts as DOM-assertable SVG (Tests/QA/Evals Arch V2).
+import { CanvasRenderer, SVGRenderer } from 'echarts/renderers';
 
 echarts.use([
   LineChart,
@@ -42,4 +43,5 @@ echarts.use([
   LabelLayout,
   UniversalTransition,
   CanvasRenderer,
+  SVGRenderer,
 ]);

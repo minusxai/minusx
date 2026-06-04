@@ -63,6 +63,13 @@ export function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsC
 
 export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
 
+/**
+ * E2E test mode (Tests/QA/Evals Arch V2). When set, the client exposes the Redux
+ * store on `window.__MX_STORE__` and charts render as SVG (DOM-assertable). Drives
+ * Playwright local/CI runs; never enabled in normal production builds.
+ */
+export const E2E_MODE = process.env.NEXT_PUBLIC_E2E === 'true';
+
 
 export const PROTECTED_FILE_PATHS = [
   // System-managed internals DuckDB connection — read-only, cannot be modified or deleted
