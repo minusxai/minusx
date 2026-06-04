@@ -57,3 +57,12 @@ next-env.d.ts
 /benchmarks/*.md
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Playwright E2E (Tests/QA/Evals Arch V2)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/test/e2e/.auth/
+/data/pglite-e2e/
+/.next-e2e/

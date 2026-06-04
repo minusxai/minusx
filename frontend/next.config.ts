@@ -17,10 +17,19 @@ function readGitCommitSha(): string {
 const GIT_COMMIT_SHA = readGitCommitSha();
 
 const nextConfig: NextConfig = {
+  // Build output dir. Overridable so the E2E server (Playwright webServer) can use
+  // its own dir and not collide with a running `next dev` (`.next/dev/lock`).
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Embed git commit SHA and build time at build time — available as process.env.* everywhere
   env: {
     GIT_COMMIT_SHA,
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+    // Explicitly inline the E2E flag into the client bundle (Turbopack dev does
+    // not reliably inline ambient NEXT_PUBLIC_* set via the process env). Empty
+    // string ⇒ E2E_MODE false for normal dev/prod; the Playwright webServer sets
+    // it to 'true'. eslint-disable: next.config reads process.env by design.
+    // eslint-disable-next-line no-restricted-syntax
+    NEXT_PUBLIC_E2E: process.env.NEXT_PUBLIC_E2E || '',
   },
   // Enable standalone output for optimized Docker deployments (60% smaller images)
   output: 'standalone',

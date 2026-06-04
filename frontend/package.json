@@ -14,6 +14,8 @@
     "test:main": "vitest run --project=node",
     "test:orchestrator": "vitest run --project=orchestrator",
     "test:ui": "vitest run --project=ui",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",
     "postinstall": "node scripts/copy-duckdb-wasm.mjs && patch-package --error-on-fail",
     "benchmark:dab": "node --env-file=.env --max-old-space-size=8192 node_modules/.bin/tsx --conditions react-server benchmarks/dataanalystbench.ts",
@@ -86,6 +88,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

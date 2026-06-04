@@ -83,6 +83,12 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // postinstall-generated third-party WASM worker bundles (not project code)
     "public/duckdb/**",
+    // Playwright E2E build output + run artifacts (not project code)
+    ".next-e2e/**",
+    "test-results/**",
+    "playwright-report/**",
+    "blob-report/**",
+    "playwright/.cache/**",
     // Plain-CJS worker entry points (run inside worker_threads). The
     // next/eslint config injects React rules into all JS — these workers
     // have no React surface, so we skip them rather than carry the plugin.
@@ -151,9 +157,17 @@ const eslintConfig = defineConfig([
   },
   // Allow process.env in the two centralized config files, scripts, and test bootstrap
   {
-    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts"],
+    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts", "playwright.config.ts"],
     rules: {
       "no-restricted-syntax": ["error", BASE_RESTRICTED_SYNTAX[0], BASE_RESTRICTED_SYNTAX[1]],
+    },
+  },
+  // Playwright E2E: the fixture API names its callback `use`, which the react-hooks
+  // plugin mistakes for a Hook. Not React code.
+  {
+    files: ["test/e2e/**", "playwright.config.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
     },
   },
   // API routes must use handleApiError() for 500s — ensures all errors reach internal Slack.
