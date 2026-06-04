@@ -31,6 +31,24 @@ collides with a `next dev` you already have running on 3000.
 
 Specs use `aria-label` locators (`getByLabel`) per the project convention.
 
+## Runtime E2E opt-in (Phase 5 — QA against a prod build)
+
+Local/CI builds turn on E2E affordances via the **build-time** `NEXT_PUBLIC_E2E` flag.
+A **production** deployment isn't built that way, so to run QA against prod (real LLM,
+no faux channel) there's a **runtime** opt-in for exposing `window.__MX_STORE__`:
+
+1. Set `E2E_RUNTIME_SECRET=<strong-secret>` on the deployment.
+2. A QA session navigates with `?e2e=<secret>` once. Middleware (`create-middleware.ts`)
+   validates it (`lib/auth/e2e-runtime.ts`), stamps `x-e2e-enabled`, and sets a 1-day
+   cookie so it persists across navigation. SSR reads the header → `ReduxProvider`
+   exposes the store. Real users (no secret) are unaffected.
+
+This is a **hygiene gate only** — exposing the store reveals just the current session's
+own Redux state (already in the user's browser), never another user's data. If the
+secret leaks, rotate it. The faux channel (`/api/test/faux`) stays E2E-build-only and is
+404 on prod, so prod QA uses the **real** LLM with DOM/Redux outcome assertions (no
+`assertLLMReceived`), in `?mode=tutorial` for isolation.
+
 ## jsdom `ui` project — migration status (READ BEFORE DELETING)
 
 The plan was to port the `*.ui.test.tsx` suite to Playwright and remove the jsdom

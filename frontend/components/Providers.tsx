@@ -26,6 +26,7 @@ interface ProvidersProps {
     analyticsConfig?: AnalyticsConfig;
     disableAppStateImages?: boolean;  // Server runtime env flag (DISABLE_APP_STATE_IMAGES)
     maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
+    e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
   };
 }
 
@@ -61,7 +62,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
   };
 
   return (
-    <ReduxProvider preloadedState={preloadedState}>
+    <ReduxProvider preloadedState={preloadedState} e2eEnabled={initialData?.e2eEnabled}>
       <SessionProvider refetchOnWindowFocus={false}>
         <ChakraProvider value={system}>
           <AuthProvider>

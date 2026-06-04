@@ -17,6 +17,9 @@ interface EnvironmentConfig {
   BASE_DUCKDB_DATA_PATH: string;
   NEXTAUTH_SECRET: string;
   ADMIN_PWD: string | undefined;
+  // E2E QA: when set, `?e2e=<this>` opts a session into runtime E2E mode
+  // (exposes window.__MX_STORE__). Hygiene gate only — see lib/auth/e2e-runtime.ts.
+  E2E_RUNTIME_SECRET: string | undefined;
   DB_TYPE: 'postgres' | 'pglite';
   DATABASE_URL: string;
   PGLITE_DATA_DIR: string | undefined;
@@ -104,6 +107,7 @@ const config: EnvironmentConfig = {
   NEXTAUTH_SECRET: requireSecret('NEXTAUTH_SECRET', process.env.NEXTAUTH_SECRET),
 
   ADMIN_PWD: process.env.ADMIN_PWD,
+  E2E_RUNTIME_SECRET: process.env.E2E_RUNTIME_SECRET,
 
   DB_TYPE: getOptional(process.env.DB_TYPE, 'pglite') as 'postgres' | 'pglite',
   DATABASE_URL: getOptional(process.env.DATABASE_URL, ''),
@@ -186,6 +190,7 @@ export const AUTH_URL = config.AUTH_URL;
 export const BASE_DUCKDB_DATA_PATH = config.BASE_DUCKDB_DATA_PATH;
 export const NEXTAUTH_SECRET = config.NEXTAUTH_SECRET;
 export const ADMIN_PWD = config.ADMIN_PWD;
+export const E2E_RUNTIME_SECRET = config.E2E_RUNTIME_SECRET;
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;
