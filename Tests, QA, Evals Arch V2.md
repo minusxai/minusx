@@ -291,32 +291,48 @@ gradient. CI stays faux-LLM + deterministic + fast; evals are real-LLM + judged 
 Phased and independently shippable. Each phase has an **exit criterion** (how we know it's done) and lists
 its **dependency**. Follow the repo TDD rule (red → green for new code, blue → red → blue for refactors).
 
-### Phase 0 — Foundations · *no dependency*
-- [ ] Switch ECharts to `renderer: 'svg'` (keep `canvas` path for large-point charts).
-- [ ] Expose `window.__MX_STORE__ = store`, gated behind `NEXT_PUBLIC_E2E`.
-- [ ] Audit/add `aria-label`s on the chat input, send button, and key chat/question/dashboard controls.
-- [ ] Confirm `POST /api/admin/reset-tutorial` is callable from a test fixture (admin creds path).
-- **Exit:** charts render as SVG DOM; store readable in an `NEXT_PUBLIC_E2E` build; target controls have aria-labels.
+> **Status (branch `feature/e2e-qa-system`, PR #437):** Phases 0–3 ✅ landed and CI-green.
+> Phase 1 `4253ac0`, Phase 2 `f172d02`, Phase 0 `cb03a95`, Phase 3 `01b6cea`.
+> Phases 4–6 are not started — they need browser CI infra, per-deployment test-admin credentials,
+> prod URLs, GitHub Actions secrets, and an evals rubric (owner input required).
 
-### Phase 1 — Pure faux matcher (TDD, node-only, no app wiring) · *depends on: none*
-- [ ] `lastUserText(req)` extractor (the make-or-break line) + unit tests for app-state/image-wrapped requests.
-- [ ] `lastToolName(req)` extractor + tests (incl. `undefined` at turn start).
-- [ ] `findResponse`, `matchesMessage`, `matchesAfter` (`string | string[]`, exact default, **no regex**).
-- [ ] Registration-time duplicate-key rejection; `UnexpectedError` on no-match.
-- [ ] `respondTo(msg, response, opts?)` constructor + `messages.ts` named constants.
-- **Exit:** matcher fully unit-tested in the `node` project; never silently mis-routes (dup→reject, miss→throw).
+### Phase 0 — Foundations · *no dependency* ✅
+- [x] Switch ECharts to `renderer: 'svg'` — `SVGRenderer` registered; renderer is `E2E_MODE ? 'svg' : 'canvas'`
+      (canvas stays the **production** default to avoid an unreviewed visual/perf change — flipping to SVG
+      everywhere is a one-line follow-up + per-chart canvas override for large data).
+- [x] Expose `window.__MX_STORE__ = store`, gated behind `NEXT_PUBLIC_E2E` (`E2E_MODE`), via an effect.
+- [x] `aria-label`s: chat input (`LexicalMentionEditor` forwards `ariaLabel`, default "Chat message input");
+      send button already had `aria-label="Send message"`.
+- [x] Confirmed `POST /api/admin/reset-tutorial` exists and is admin-gated (`withAuth` + `isAdmin`).
+- **Exit:** ✅ charts render as SVG DOM under E2E; store readable in an `NEXT_PUBLIC_E2E` build; controls have aria-labels.
 
-### Phase 2 — Adopt matcher in node + compress existing node tests · *depends on: Phase 1*
-- [ ] Replace sequential `setResponses` with the matcher in the node faux path.
-- [ ] Extract flow+verify helpers: `sendChat`, `assertRedux`, `runQueryTest`, `runLlmTest`, `expectResult` (`flows/node.ts`).
-- [ ] Migrate `storeE2E.test.ts` (+ peers) to the helpers; verify ~40–60% body reduction.
-- **Exit:** node suite green on the matcher; new tests ~3 lines; no ordering-dependent faux left.
+### Phase 1 — Pure faux matcher (TDD, node-only, no app wiring) · *depends on: none* ✅
+- [x] `lastUserText(ctx)` extractor (the make-or-break line) + tests for app-state-wrapped + tool-loop requests.
+- [x] `lastToolName(ctx)` extractor + tests (incl. `undefined` at turn start, turn-boundary scoping).
+- [x] `findResponse`, `matchesMessage`, `matchesAfter` (`string | string[]`, exact default, **no regex**).
+- [x] Registration-time duplicate-key rejection; `UnexpectedFauxLLMError` on no-match; `AmbiguousFauxLLMError` on >1.
+- [x] `respondTo(msg, response, opts?)` constructor + `fauxMatcher` factory. (Named-constant `messages.ts` deferred
+      to Phase 4 where the chat flows that consume them live.)
+- **Exit:** ✅ 25 unit tests in the `orchestrator` project; never silently mis-routes (dup→reject, miss→throw, ambiguous→throw).
 
-### Phase 3 — Test-only faux channel · *depends on: Phase 1*
-- [ ] `E2E_MODE`-gated `/api/test/faux` route: `POST` (register), `GET /received`, `POST /reset` (404 otherwise).
-- [ ] Install the **one global** faux provider at server boot when `E2E_MODE=1`.
-- [ ] Playwright helpers `setFauxLLM`, `assertLLMReceived` mirroring node vocabulary.
-- **Exit:** a Playwright test can register responses, drive a real chat turn, and assert recorded LLM requests.
+### Phase 2 — Adopt matcher in node + compress existing node tests · *depends on: Phase 1* ✅
+- [x] `setFauxMatches` bridge over the consuming faux queue; matcher API re-exported from the pi-ai boundary module.
+- [x] Extract flow+verify helpers: `runEval`, `buildQueryTest`, `buildLlmTest`, `expectResult`, `queryRows` (`test/flows/node.ts`).
+      (`sendChat`/`assertRedux` deferred to the chat-flow consumers in Phase 4 — avoid unused helpers.)
+- [x] Migrate `storeE2E.test.ts`: query tests compressed (~15→3 lines each); LLM tests moved to the matcher (keyed on the eval prompt).
+- [x] Added an integration test driving the real orchestrator through a multi-step tool loop (`after:` disambiguation).
+- **Exit:** ✅ node 1938 + orchestrator 477 green on the matcher; new tests ~3 lines; ordering-dependent faux removed from the migrated tests.
+
+### Phase 3 — Test-only faux channel · *depends on: Phase 1* ✅
+- [x] `E2E_MODE`-gated routes `/api/test/faux` (POST register), `/api/test/faux/received` (GET), `/api/test/faux/reset` (POST); 404 otherwise.
+- [x] Channel applies the matcher to the chat agents' faux providers + records each request. **Note:** agents use
+      *per-agent* faux providers (not one global), so the channel targets a list of chat-reachable agents
+      (`web-analyst`, `analyst`, `benchmark-analyst`, `onboarding`) — append new chat agents there.
+- [x] `model-config`: under `E2E_MODE`, agents resolve to faux even on a real server (explicit flag; prod invariant intact).
+- [x] Serializable wire DTO (`FauxMatchDTO`) + `dtoToFauxMatch` (Playwright can't send functions over HTTP).
+- [x] Playwright helpers `setFauxLLM` / `assertLLMReceived` / `resetFauxLLM` (`test/flows/e2e-faux.ts`).
+- **Exit:** ✅ node test drives the **real** `/api/chat` route via a DTO, records the request, and fails loud on an unregistered call.
+  (End-to-end over HTTP from a browser is exercised in Phase 4.)
 
 ### Phase 4 — Playwright harness (local/CI) + retire jsdom · *depends on: Phases 0, 3*
 - [ ] Playwright config: `webServer` boots the app with `E2E_MODE=1`; browser-binary CI cache.
