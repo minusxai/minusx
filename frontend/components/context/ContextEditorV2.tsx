@@ -19,7 +19,7 @@ import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader'
 import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
-import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
+import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolvedWhitelist } from '@/lib/context/context-utils';
 import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -489,10 +489,16 @@ export default function ContextEditorV2({
     }
   };
 
-  // Count total whitelisted items ('*' = all available)
-  const totalWhitelisted = content.databases === '*'
-    ? availableDatabases.reduce((sum: number, db) => sum + db.schemas.reduce((s: number, sc) => s + sc.tables.length, 0), 0)
-    : (content.databases || []).reduce((sum: number, db: DatabaseSelection) => sum + db.whitelist.length, 0);
+  // Count whitelisted items, resolved against the live schema so deleted
+  // datasets don't inflate the count. The agent sees `fullSchema`, so we count
+  // against that ('*' = everything currently available).
+  const resolvedCounts = content.databases === '*'
+    ? {
+        databases: availableDatabases.length,
+        items: availableDatabases.reduce((sum: number, db) => sum + db.schemas.reduce((s: number, sc) => s + sc.tables.length, 0), 0),
+      }
+    : countResolvedWhitelist(content.databases || [], content.fullSchema || []);
+  const totalWhitelisted = resolvedCounts.items;
 
   // Version management helpers
   const getVersionLabel = (version: ContextVersion) => {
@@ -1151,7 +1157,7 @@ export default function ContextEditorV2({
               <HStack gap={2} fontSize="sm" color="fg.muted">
                 <LuCircleCheck color="var(--chakra-colors-accent-success)" />
                 <Text>
-                  <strong>{content.databases?.length || 0}</strong> databases configured with{' '}
+                  <strong>{resolvedCounts.databases}</strong> databases configured with{' '}
                   <strong>{totalWhitelisted}</strong> total whitelisted items
                 </Text>
               </HStack>

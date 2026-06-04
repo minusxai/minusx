@@ -1,5 +1,38 @@
 import yaml from 'js-yaml';
-import { ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode } from '../types';
+import { ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode, WhitelistItem, DatabaseWithSchema } from '../types';
+
+/**
+ * Count whitelist items (schemas/tables) that still exist in the loader-resolved
+ * `fullSchema`. Stale entries — pointing at a deleted connection, schema, or
+ * table — are excluded, so the count reflects what the agent actually sees
+ * (the agent receives `fullSchema`, not the raw stored whitelist).
+ *
+ * Returns the number of databases with at least one surviving item, plus the
+ * total surviving item count.
+ */
+export function countResolvedWhitelist(
+  databases: Array<{ databaseName: string; whitelist: WhitelistItem[] }>,
+  fullSchema: DatabaseWithSchema[],
+): { databases: number; items: number } {
+  let databaseCount = 0;
+  let itemCount = 0;
+  for (const selection of databases) {
+    const db = fullSchema.find(d => d.databaseName === selection.databaseName);
+    if (!db) continue; // connection deleted → all its items are stale
+    let resolved = 0;
+    for (const item of selection.whitelist) {
+      const exists = item.type === 'schema'
+        ? db.schemas.some(s => s.schema === item.name)
+        : db.schemas.some(s => s.schema === item.schema && s.tables.some(t => t.table === item.name));
+      if (exists) resolved++;
+    }
+    if (resolved > 0) {
+      databaseCount++;
+      itemCount += resolved;
+    }
+  }
+  return { databases: databaseCount, items: itemCount };
+}
 
 export function mergeSkillsByName(...skillGroups: SkillEntry[][]): SkillEntry[] {
   const byName = new Map<string, SkillEntry>();
