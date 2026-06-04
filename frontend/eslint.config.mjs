@@ -85,6 +85,7 @@ const eslintConfig = defineConfig([
     "public/duckdb/**",
     // Playwright E2E build output + run artifacts (not project code)
     ".next-e2e/**",
+    ".next-qa/**",
     "test-results/**",
     "playwright-report/**",
     "blob-report/**",
@@ -157,7 +158,7 @@ const eslintConfig = defineConfig([
   },
   // Allow process.env in the two centralized config files, scripts, and test bootstrap
   {
-    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts", "playwright.config.ts"],
+    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts", "playwright.config.ts", "playwright.qa.config.ts"],
     rules: {
       "no-restricted-syntax": ["error", BASE_RESTRICTED_SYNTAX[0], BASE_RESTRICTED_SYNTAX[1]],
     },
