@@ -65,6 +65,16 @@ npm run update-workspace-template  # Re-run migrations on the seed template afte
 
 **IMPORTANT: Frontend tests run on Vitest (`npm test` → `vitest run`), configured via `frontend/vitest.config.ts` with three projects: `node` (integration/server tests, node env), `ui` (`*.ui.test.tsx` component tests, jsdom env), and `orchestrator` (the headless orchestrator/agents tree). Run a single project with `npm run test:main` / `test:ui` / `test:orchestrator`, or `npx vitest run --project=<name> <pattern>`. (The repo previously used Jest; that has been fully migrated to Vitest — there is no `jest.config.*` or `npx jest`.)**
 
+### Test taxonomy — which layer for what (Tests/QA/Evals Arch V2)
+
+Four distinct layers; pick by what you're testing, not by habit:
+- **`node` (Vitest, node env)** — integration/server tests with **no DOM**. Drive Redux by dispatch, hit real API route handlers in-process (`mock-fetch`), faux LLM. Fastest full-stack layer.
+- **`ui` (Vitest, jsdom)** — **component & hook UNIT tests** (`*.ui.test.tsx`). Mount one component / `renderHook` with specific props, assert DOM/behavior. These are **unit tests, not e2e** — keep them here. jsdom is the right tool (fast, direct props, many cases). Do **not** move these to Playwright: hook-identity/render-count tests have no browser-observable equivalent, and component-isolation tests would be far slower/flakier as full-app flows. (`agent-e2e.ui.test.tsx` / `onboarding-wizard-e2e.ui.test.tsx` are misnamed — they're jsdom component tests, candidates to migrate to Playwright since they're flow-shaped.)
+- **`orchestrator` (Vitest, node env)** — the headless orchestrator/agents tree.
+- **Playwright (`test/e2e/*.spec.ts`, `npm run test:e2e`)** — **full-app E2E**: real browser drives the booted app under `E2E_MODE` (faux LLM via `/api/test/faux`, store on `window.__MX_STORE__`, SVG charts). Use ONLY for genuine cross-page user flows. See `frontend/test/e2e/README.md`.
+
+> If real *rendering* fidelity is ever needed for a component test (e.g. real SVG/canvas, which jsdom stubs), the right tool is **Vitest browser mode** (component-in-real-browser), NOT full-app Playwright e2e — a separate opt-in project, not a default.
+
 ### Backend
 
 There is no separate backend service. The AI chat/agent orchestration runs
