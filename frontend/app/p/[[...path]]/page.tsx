@@ -158,7 +158,6 @@ export default function PathPage({ params }: PathPageProps) {
     const mode = user?.mode || DEFAULT_MODE;
     const elements: React.ReactNode[] = [];
 
-    // Add Connection button for /database path
     if (fullPath === resolvePath(mode, SYSTEM_FOLDERS.database)) {
       elements.push(
         <Button
@@ -170,7 +169,7 @@ export default function PathPage({ params }: PathPageProps) {
           _hover={{ transform: 'translateY(-1px)', shadow: 'md' }}
         >
           <LuPlus />
-          Add Connection
+          Add Dataset
         </Button>
       );
     }

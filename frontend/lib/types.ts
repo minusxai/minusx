@@ -262,6 +262,8 @@ export interface WhitelistItem {
 
 export interface DocEntry {
   content: string;           // Markdown documentation content
+  title?: string;            // Optional: short human-readable title for this doc entry
+  description?: string;      // Optional: one-line summary of what this doc covers
   childPaths?: string[];     // Optional: which child paths inherit this doc
   draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
 }

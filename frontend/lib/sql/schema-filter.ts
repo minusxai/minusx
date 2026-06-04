@@ -2,7 +2,7 @@
  * Shared schema filtering logic
  * Used by both client-side (useContext hook) and server-side (ContextHelpers)
  */
-import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode } from '../types';
+import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode, DocEntry } from '../types';
 import { getPublishedVersionForUser } from '../context/context-utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,10 +235,21 @@ export function getDocumentationForUser(
   contextContent: ContextContent,
   userId: number
 ): string | undefined {
+  // Serialize a doc entry to its agent-facing string, prepending the optional
+  // title/description when present (both default to absent and are skipped).
+  const docToString = (doc: DocEntry | string): string => {
+    if (typeof doc === 'string') return doc;
+    const header = [
+      doc.title ? `# ${doc.title}` : null,
+      doc.description ? doc.description : null,
+    ].filter(Boolean).join('\n\n');
+    return header ? `${header}\n\n${doc.content}` : doc.content;
+  };
+
   // Collect inherited docs (fullDocs) filtered by childPaths (already filtered by loader)
   const inheritedDocStrings = (contextContent.fullDocs || [])
     .filter(doc => typeof doc === 'string' || doc.draft !== true)
-    .map(doc => typeof doc === 'string' ? doc : doc.content);
+    .map(docToString);
 
   // Get user's published version and return its docs
   if (contextContent.versions && contextContent.versions.length > 0) {
@@ -249,7 +260,7 @@ export function getDocumentationForUser(
       // Handle DocEntry[] format (post-migration v11)
       const ownDocStrings = publishedVersion.docs
         .filter(doc => typeof doc === 'string' || doc.draft !== true)
-        .map(doc => typeof doc === 'string' ? doc : doc.content);
+        .map(docToString);
       const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
       return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
     }

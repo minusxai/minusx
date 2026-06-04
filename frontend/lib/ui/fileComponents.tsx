@@ -41,7 +41,7 @@ export interface FileComponentProps {
  * Maps file types to their container components
  *
  * Phase 1: Only question, dashboard, presentation
- * Phase 2: Add connection, context, users, connector, etc.
+ * Phase 2: Add dataset, context, users, connector, etc.
  */
 export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps>>> = {
   question: QuestionContainerV2,
