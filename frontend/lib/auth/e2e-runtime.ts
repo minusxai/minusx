@@ -15,7 +15,6 @@
  */
 import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
-import { E2E_RUNTIME_SECRET } from '@/lib/config';
 
 export const E2E_PARAM = 'e2e';
 export const E2E_COOKIE = 'mx_e2e';
@@ -28,8 +27,20 @@ function constantTimeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-/** True iff `value` matches the configured runtime secret (and a secret is set). */
+/**
+ * True iff `value` matches the runtime secret.
+ *
+ * The secret is read **at call time** here — NOT via a module-level constant
+ * (e.g. from `lib/config.ts`). This function runs in the **middleware** bundle,
+ * where a module-level `process.env` read can be evaluated at build time — when
+ * `E2E_RUNTIME_SECRET` is absent — and frozen to `undefined` for the life of the
+ * process. Reading at call time picks up the real runtime value, exactly the way
+ * NextAuth reads its own secret in middleware (which is why login works but a
+ * module-level read did not). Off by default: unset secret ⇒ always false.
+ */
 export function matchesE2ESecret(value: string | null | undefined): boolean {
-  if (!E2E_RUNTIME_SECRET || !value) return false;
-  return constantTimeEqual(value, E2E_RUNTIME_SECRET);
+  // eslint-disable-next-line no-restricted-syntax -- runtime-only secret; MUST be read at call time in the middleware bundle (a module-level read freezes at build)
+  const secret = process.env.E2E_RUNTIME_SECRET;
+  if (!secret || !value) return false;
+  return constantTimeEqual(value, secret);
 }

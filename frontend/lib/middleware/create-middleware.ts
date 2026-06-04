@@ -118,11 +118,25 @@ export function createMiddleware() {
       requestHeaders.set(vHeader.key, vHeader.value);
     }
 
-    // Runtime E2E opt-in (QA): `?e2e=<secret>` enables this session; a cookie
-    // (set below) persists it across navigations. SSR reads x-e2e-enabled.
+    // Runtime E2E opt-in (QA): `?e2e=<secret>` enables this session. On a match,
+    // redirect to the same URL minus the param and set a persistent cookie — a
+    // *middleware* redirect reliably delivers Set-Cookie, so the opt-in survives
+    // later render-phase redirects (e.g. onboarding `/`→`/hello-world`) and reloads.
+    // Subsequent requests carry the cookie, which stamps x-e2e-enabled for SSR.
     const e2eParam = req.nextUrl.searchParams.get(E2E_PARAM);
-    const e2eFromParam = matchesE2ESecret(e2eParam);
-    if (e2eFromParam || matchesE2ESecret(req.cookies.get(E2E_COOKIE)?.value)) {
+    if (matchesE2ESecret(e2eParam)) {
+      const target = req.nextUrl.clone();
+      target.searchParams.delete(E2E_PARAM);
+      const e2eRedirect = NextResponse.redirect(target);
+      e2eRedirect.cookies.set(E2E_COOKIE, e2eParam as string, {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24, // 1 day
+      });
+      return e2eRedirect;
+    }
+    if (matchesE2ESecret(req.cookies.get(E2E_COOKIE)?.value)) {
       requestHeaders.set(E2E_HEADER, '1');
     }
 
@@ -151,16 +165,6 @@ export function createMiddleware() {
     }
 
     const response = NextResponse.next({ request: { headers: requestHeaders } });
-
-    // Persist the E2E opt-in so QA flows survive client-side navigation/reloads.
-    if (e2eFromParam && e2eParam) {
-      response.cookies.set(E2E_COOKIE, e2eParam, {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24, // 1 day
-      });
-    }
 
     if (isApiPath) {
       void logNetworkRequest(requestId, reqInfo, {
