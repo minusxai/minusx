@@ -118,15 +118,13 @@ export function createMiddleware() {
       requestHeaders.set(vHeader.key, vHeader.value);
     }
 
-    // Runtime E2E opt-in (QA): `?e2e=<secret>` enables this session. On a match,
-    // redirect to the same URL minus the param and set a persistent cookie — a
-    // *middleware* redirect reliably delivers Set-Cookie, so the opt-in survives
-    // later render-phase redirects (e.g. onboarding `/`→`/hello-world`) and reloads.
-    // Subsequent requests carry the cookie, which stamps x-e2e-enabled for SSR.
     const e2eParam = req.nextUrl.searchParams.get(E2E_PARAM);
     if (matchesE2ESecret(e2eParam)) {
-      const target = req.nextUrl.clone();
-      target.searchParams.delete(E2E_PARAM);
+      const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
+      const target = new URL(`${protocol}://${hostname}${pathname}`);
+      req.nextUrl.searchParams.forEach((value, key) => {
+        if (key !== E2E_PARAM) target.searchParams.set(key, value);
+      });
       const e2eRedirect = NextResponse.redirect(target);
       e2eRedirect.cookies.set(E2E_COOKIE, e2eParam as string, {
         httpOnly: true,
