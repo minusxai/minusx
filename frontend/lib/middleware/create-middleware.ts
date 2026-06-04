@@ -6,6 +6,7 @@ import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode } from '@/lib/mode/mode-types';
 import { logNetworkRequest } from '@/lib/network-logging';
 import { getModules } from '@/lib/modules/registry';
+import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/e2e-runtime';
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
@@ -117,6 +118,14 @@ export function createMiddleware() {
       requestHeaders.set(vHeader.key, vHeader.value);
     }
 
+    // Runtime E2E opt-in (QA): `?e2e=<secret>` enables this session; a cookie
+    // (set below) persists it across navigations. SSR reads x-e2e-enabled.
+    const e2eParam = req.nextUrl.searchParams.get(E2E_PARAM);
+    const e2eFromParam = matchesE2ESecret(e2eParam);
+    if (e2eFromParam || matchesE2ESecret(req.cookies.get(E2E_COOKIE)?.value)) {
+      requestHeaders.set(E2E_HEADER, '1');
+    }
+
     const hasContext = await getModules().auth.addHeaders(req as AuthReq, requestHeaders);
     if (!hasContext) {
       const response = NextResponse.redirect(new URL('/login', req.url));
@@ -142,6 +151,16 @@ export function createMiddleware() {
     }
 
     const response = NextResponse.next({ request: { headers: requestHeaders } });
+
+    // Persist the E2E opt-in so QA flows survive client-side navigation/reloads.
+    if (e2eFromParam && e2eParam) {
+      response.cookies.set(E2E_COOKIE, e2eParam, {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24, // 1 day
+      });
+    }
 
     if (isApiPath) {
       void logNetworkRequest(requestId, reqInfo, {

@@ -18,6 +18,8 @@ import type { ChatMentionData, DatabaseWithSchema, SkillMention, SlashCommand } 
 
 interface LexicalMentionEditorProps {
   placeholder?: string;
+  /** Accessible name for the editable input (E2E tests locate it via aria-label). */
+  ariaLabel?: string;
   databaseName?: string;
   disabled?: boolean;
   onSubmit?: () => void;
@@ -246,6 +248,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
   function LexicalMentionEditor(
     {
       placeholder = 'Ask a question...',
+      ariaLabel = 'Chat message input',
       databaseName,
       disabled = false,
       onSubmit,
@@ -334,7 +337,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
           <Box position="relative">
             <RichTextPlugin
               contentEditable={
-                <ContentEditable style={singleLine ? SINGLE_LINE_STYLES : MULTI_LINE_STYLES} />
+                <ContentEditable aria-label={ariaLabel} style={singleLine ? SINGLE_LINE_STYLES : MULTI_LINE_STYLES} />
               }
               placeholder={
                 <Box

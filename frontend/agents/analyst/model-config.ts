@@ -1,5 +1,6 @@
 import { getModel } from '@/orchestrator/llm';
 import type { Api, Model } from '@/orchestrator/llm';
+import { E2E_MODE } from '@/lib/constants';
 
 /**
  * Shape of `ANALYST_AGENT_MODEL_CONFIG` env JSON.
@@ -54,6 +55,10 @@ function isTestEnv(): boolean {
  * (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY) at call time — not part of this config.
  */
 export function getAnalystModelConfig(): AnalystModelConfig | null {
+  // E2E builds force every agent onto its faux provider (controlled via the
+  // /api/test/faux channel) — even on a real server. This is a deliberate,
+  // explicit opt-in flag, so the "no faux in production" invariant still holds.
+  if (E2E_MODE) return null;
   // eslint-disable-next-line no-restricted-syntax -- analyst-agent module is intentionally standalone; reads its own scoped env var directly
   const raw = process.env.ANALYST_AGENT_MODEL_CONFIG;
   if (raw) return JSON.parse(raw) as AnalystModelConfig;
@@ -88,7 +93,7 @@ export function getAnalystModel(): Model<Api> | null {
 export function getAgentModelOrTestFallback(testFallback: Model<Api>): Model<Api> {
   const model = getAnalystModel();
   if (model) return model;
-  if (!isTestEnv()) {
+  if (!isTestEnv() && !E2E_MODE) {
     throw new Error(
       'Agent model unavailable: ANALYST_AGENT_MODEL_CONFIG is unset and ' +
       'no production default could be resolved. Refusing to silently fall ' +

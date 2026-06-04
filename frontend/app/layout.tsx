@@ -7,6 +7,7 @@ import { Providers } from "@/components/Providers";
 import LayoutWrapper from "@/components/LayoutWrapper";
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
+import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES } from '@/lib/config';
@@ -57,6 +58,7 @@ async function loadInitialState(): Promise<{
   analyticsConfig: AnalyticsConfig;
   disableAppStateImages: boolean;
   maxConcurrentQueries: number;
+  e2eEnabled: boolean;
 }> {
   const user = await getEffectiveUserCached();
   let config: OrgConfig = DEFAULT_CONFIG;
@@ -79,6 +81,9 @@ async function loadInitialState(): Promise<{
     analyticsConfig: parseAnalyticsConfig(ANALYTICS_CONFIG),
     disableAppStateImages: DISABLE_APP_STATE_IMAGES,
     maxConcurrentQueries: MAX_CONCURRENT_QUERIES,
+    // QA runtime E2E opt-in: middleware stamps this header when `?e2e=<secret>`
+    // (or its persisted cookie) matches. Exposes the store on the client.
+    e2eEnabled: (await headers()).get(E2E_HEADER) === '1',
   };
 }
 

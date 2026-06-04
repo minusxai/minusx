@@ -18,18 +18,16 @@ vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
 }));
 
-import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
 import { getTestDbPath } from './test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
-import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
+import { fauxAssistantMessage, fauxToolCall, setFauxMatches, respondTo } from '@/orchestrator/llm/testing';
 import { fauxRegistration as evalFaux } from '@/agents/eval/eval-agent';
-import { NextRequest } from 'next/server';
 import {
   compareValues,
   extractCellValue,
   resolveRowIndex,
 } from '@/lib/tests/index';
-import type { Test } from '@/lib/types';
+import { runEval, buildQueryTest, buildLlmTest, expectResult, queryRows } from '@/test/flows/node';
 import { getModules } from '@/lib/modules/registry';
 
 // ─── testRunnerE2E ────────────────────────────────────────────────────────────
@@ -37,14 +35,6 @@ import { getModules } from '@/lib/modules/registry';
 const TEST_RUNNER_DB_PATH = getTestDbPath('test_runner_e2e');
 // Fixed high IDs that won't collide with seed data
 const Q = { total: 99001, cnt: 99002, users: 99003, status: 99004, series: 99005 };
-
-function createEvalsRequest(body: Record<string, unknown>): NextRequest {
-  return new NextRequest('http://localhost:3000/api/jobs/test', {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
 
 describe('compareValues — shared utility', () => {
   describe('binary', () => {
@@ -122,78 +112,41 @@ describe('Query Test Runner E2E', () => {
   });
 
   it('query test — constant = match → passed', async () => {
-    mockRunQuery.mockResolvedValue({ columns: ['total'], types: ['number'], rows: [{ total: 42 }] });
-    const test: Test = {
-      type: 'query',
-      subject: { type: 'query', question_id: Q.total, column: 'total', row: 0 },
-      answerType: 'number', operator: '=',
-      value: { type: 'constant', value: 42 },
-    };
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(true);
-    expect(data.actualValue).toBeCloseTo(42, 4);
-    expect(data.expectedValue).toBe(42);
+    mockRunQuery.mockResolvedValue(queryRows(['total'], [{ total: 42 }]));
+    const data = await runEval(buildQueryTest({ questionId: Q.total, column: 'total', row: 0, op: '=', expected: 42 }));
+    expectResult(data, { passed: true, actual: 42, expected: 42 });
   });
 
   it('query test — constant = mismatch → failed', async () => {
-    mockRunQuery.mockResolvedValue({ columns: ['cnt'], types: ['number'], rows: [{ cnt: 5 }] });
-    const test: Test = {
-      type: 'query',
-      subject: { type: 'query', question_id: Q.cnt, column: 'cnt' },
-      answerType: 'number', operator: '=',
-      value: { type: 'constant', value: 999 },
-    };
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(false);
-    expect(data.actualValue).toBeCloseTo(5, 4);
-    expect(data.expectedValue).toBe(999);
+    mockRunQuery.mockResolvedValue(queryRows(['cnt'], [{ cnt: 5 }]));
+    const data = await runEval(buildQueryTest({ questionId: Q.cnt, column: 'cnt', op: '=', expected: 999 }));
+    expectResult(data, { passed: false, actual: 5, expected: 999 });
   });
 
   it('query test — > operator passes when actual > expected', async () => {
-    mockRunQuery.mockResolvedValue({ columns: ['users'], types: ['number'], rows: [{ users: 100 }] });
-    const test: Test = {
-      type: 'query',
-      subject: { type: 'query', question_id: Q.users },
-      answerType: 'number', operator: '>',
-      value: { type: 'constant', value: 50 },
-    };
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(true);
-    expect(data.actualValue).toBeCloseTo(100, 4);
+    mockRunQuery.mockResolvedValue(queryRows(['users'], [{ users: 100 }]));
+    const data = await runEval(buildQueryTest({ questionId: Q.users, op: '>', expected: 50 }));
+    expectResult(data, { passed: true, actual: 100 });
   });
 
   it('query test — string regex match ~ → passed', async () => {
-    mockRunQuery.mockResolvedValue({ columns: ['status'], types: ['varchar'], rows: [{ status: 'active' }] });
-    const test: Test = {
-      type: 'query',
-      subject: { type: 'query', question_id: Q.status, column: 'status' },
-      answerType: 'string', operator: '~',
-      value: { type: 'constant', value: '^act' },
-    };
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(true);
-    expect(data.actualValue).toBe('active');
+    mockRunQuery.mockResolvedValue(queryRows(['status'], [{ status: 'active' }], ['varchar']));
+    const data = await runEval(
+      buildQueryTest({ questionId: Q.status, column: 'status', answerType: 'string', op: '~', expected: '^act' }),
+    );
+    expectResult(data, { passed: true, actual: 'active' });
   });
 
   it('query test — last row (-1) extraction', async () => {
-    mockRunQuery.mockResolvedValue({
-      columns: ['day', 'value'], types: ['varchar', 'number'],
-      rows: [{ day: '2024-01-01', value: 10 }, { day: '2024-01-02', value: 20 }, { day: '2024-01-03', value: 30 }],
-    });
-    const test: Test = {
-      type: 'query',
-      subject: { type: 'query', question_id: Q.series, column: 'value', row: -1 },
-      answerType: 'number', operator: '=',
-      value: { type: 'constant', value: 30 },
-    };
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(true);
-    expect(data.actualValue).toBeCloseTo(30, 4);
+    mockRunQuery.mockResolvedValue(
+      queryRows(
+        ['day', 'value'],
+        [{ day: '2024-01-01', value: 10 }, { day: '2024-01-02', value: 20 }, { day: '2024-01-03', value: 30 }],
+        ['varchar', 'number'],
+      ),
+    );
+    const data = await runEval(buildQueryTest({ questionId: Q.series, column: 'value', row: -1, op: '=', expected: 30 }));
+    expectResult(data, { passed: true, actual: 30 });
   });
 });
 
@@ -202,44 +155,27 @@ describe('LLM Test Runner E2E (in-process v2 eval agent)', () => {
 
   beforeEach(() => evalFaux.setResponses([]));
 
-  function submitFaux(toolName: string, args: Record<string, unknown>): void {
-    evalFaux.setResponses([
-      fauxAssistantMessage([fauxToolCall(toolName, args, { id: 'sub_1' })], { stopReason: 'toolUse' }),
+  /** Faux SubmitBinary keyed on the eval prompt (content-keyed matcher). */
+  function submitBinary(prompt: string, answer: boolean): void {
+    setFauxMatches(evalFaux, [
+      respondTo(prompt, fauxAssistantMessage([fauxToolCall('SubmitBinary', { answer }, { id: 'sub_1' })], {
+        stopReason: 'toolUse',
+      })),
     ]);
   }
 
   it('llm binary test — SubmitBinary(true) against expected true → passed', async () => {
-    submitFaux('SubmitBinary', { answer: true });
-
-    const test: Test = {
-      type: 'llm',
-      subject: { type: 'llm', prompt: 'Does the dashboard show any charts?', context: { type: 'explore' } },
-      answerType: 'binary', operator: '=',
-      value: { type: 'constant', value: true },
-    };
-
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(true);
-    expect(data.actualValue).toBe(true);
-    expect(data.expectedValue).toBe(true);
+    const prompt = 'Does the dashboard show any charts?';
+    submitBinary(prompt, true);
+    const data = await runEval(buildLlmTest({ prompt, op: '=', expected: true }));
+    expectResult(data, { passed: true, actual: true, expected: true });
   }, 60000);
 
   it('llm binary test — SubmitBinary(false) against expected true → failed', async () => {
-    submitFaux('SubmitBinary', { answer: false });
-
-    const test: Test = {
-      type: 'llm',
-      subject: { type: 'llm', prompt: 'Is the revenue chart showing an upward trend?', context: { type: 'explore' } },
-      answerType: 'binary', operator: '=',
-      value: { type: 'constant', value: true },
-    };
-
-    const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
-    const data = await resp.json();
-    expect(data.passed).toBe(false);
-    expect(data.actualValue).toBe(false);
-    expect(data.expectedValue).toBe(true);
+    const prompt = 'Is the revenue chart showing an upward trend?';
+    submitBinary(prompt, false);
+    const data = await runEval(buildLlmTest({ prompt, op: '=', expected: true }));
+    expectResult(data, { passed: false, actual: false, expected: true });
   }, 60000);
 });
 
