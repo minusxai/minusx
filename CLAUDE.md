@@ -212,6 +212,9 @@ Connection schemas are enriched with column-level metadata (category, null count
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
 
+**UI Design — avoid "AI slop" patterns**
+- **Never use a colored accent bar on the left edge of a card/panel** (e.g. `borderLeft="3px solid <accent>"` to signal state). It reads as generic AI-generated design. Convey state with existing affordances instead (badges, toggles, text color, subtle bg tint).
+
 ### AI Orchestration & Tool Calling Architecture
 
 The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`V2_REGISTRABLES`); execution streams to the client via Server-Sent Events.

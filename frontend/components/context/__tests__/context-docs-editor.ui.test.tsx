@@ -82,4 +82,64 @@ describe('ContextDocsEditor', () => {
       expect(onChange).toHaveBeenCalledWith([{ content: 'Alpha edited' }]);
     }, { timeout: 1000 });
   });
+
+  it('commits a title edit on blur', async () => {
+    const onChange = vi.fn();
+    renderWithProviders(<Harness initial={[{ content: 'Alpha' }]} onChange={onChange} />);
+
+    const titleInput = await screen.findByLabelText('Documentation Entry 1 title');
+    await userEvent.type(titleInput, 'Metrics');
+    fireEvent.blur(titleInput);
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith([{ content: 'Alpha', title: 'Metrics' }]);
+    });
+  });
+
+  it('commits a description edit on blur', async () => {
+    const onChange = vi.fn();
+    renderWithProviders(<Harness initial={[{ content: 'Alpha' }]} onChange={onChange} />);
+
+    const descInput = await screen.findByLabelText('Documentation Entry 1 description');
+    await userEvent.type(descInput, 'Key revenue metrics');
+    fireEvent.blur(descInput);
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith([{ content: 'Alpha', description: 'Key revenue metrics' }]);
+    });
+  });
+
+  it('clears the title to undefined when emptied', async () => {
+    const onChange = vi.fn();
+    renderWithProviders(<Harness initial={[{ content: 'Alpha', title: 'Old' }]} onChange={onChange} />);
+
+    const titleInput = await screen.findByLabelText('Documentation Entry 1 title');
+    await userEvent.clear(titleInput);
+    fireEvent.blur(titleInput);
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith([{ content: 'Alpha', title: undefined }]);
+    });
+  });
+
+  it('seeds the title input from the existing entry', async () => {
+    renderWithProviders(<Harness initial={[{ content: 'Alpha', title: 'Seeded' }]} />);
+    const titleInput = await screen.findByLabelText('Documentation Entry 1 title') as HTMLInputElement;
+    expect(titleInput.value).toBe('Seeded');
+  });
+
+  it('hides the title/description inputs when showTitleDescription is false', async () => {
+    renderWithProviders(
+      <ContextDocsEditor
+        docs={[{ content: 'Alpha' }]}
+        onDocsChange={() => {}}
+        showTitleDescription={false}
+        showChildPaths={false}
+        showDraftToggle={false}
+      />,
+    );
+    // The entry card renders, but no title input.
+    expect(await screen.findByLabelText('Remove Documentation Entry 1')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Documentation Entry 1 title')).not.toBeInTheDocument();
+  });
 });

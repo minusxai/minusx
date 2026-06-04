@@ -14,8 +14,8 @@
  * sense on a saved context (draft state, child paths, diff).
  */
 
-import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, Switch } from '@chakra-ui/react';
-import { useState, useRef, useCallback } from 'react';
+import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, Switch, Input } from '@chakra-ui/react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { LuTrash2, LuPlus, LuImage, LuChevronDown, LuChevronRight, LuCircleAlert } from 'react-icons/lu';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import type { DocEntry } from '@/lib/types';
@@ -26,6 +26,49 @@ import Markdown from '../Markdown';
 import ChildPathSelector from '../ChildPathSelector';
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
+
+/**
+ * Inline-edit styling: the field reads as plain text (transparent border/bg),
+ * and only reveals an editable affordance — a soft tinted fill — on hover and
+ * focus. Two scales: a bold `title` and a muted `description` subtitle.
+ */
+const INLINE_FIELD_BASE = {
+  border: '1px solid',
+  borderColor: 'transparent',
+  bg: 'transparent',
+  borderRadius: 'md',
+  outline: 'none',
+  transition: 'background 0.12s ease, border-color 0.12s ease',
+  _hover: { bg: 'bg.emphasized' },
+  _focusVisible: { bg: 'bg.subtle', borderColor: 'border.emphasized', outline: 'none', boxShadow: 'none' },
+  _placeholder: { color: 'fg.subtle', fontWeight: 'normal' },
+  _disabled: { opacity: 1, cursor: 'default', _hover: { bg: 'transparent' } },
+} as const;
+
+const INLINE_TITLE_STYLE = { ...INLINE_FIELD_BASE, h: 7, px: 1.5, fontSize: 'sm', fontWeight: '600' } as const;
+const INLINE_DESC_STYLE = { ...INLINE_FIELD_BASE, h: 6, px: 1.5, fontSize: 'xs', color: 'fg.muted' } as const;
+
+/**
+ * An uncontrolled text input that lets the DOM own the buffer while typing and
+ * only commits upward on blur — so persisting `onDocsChange` (which writes the
+ * whole file) doesn't fire on every keystroke. Keying on `value` remounts the
+ * field when it changes externally (e.g. entry reindex after add/remove),
+ * re-seeding `defaultValue`.
+ */
+function DocTextField({
+  value,
+  onCommit,
+  ...inputProps
+}: { value: string; onCommit: (next: string) => void } & React.ComponentProps<typeof Input>) {
+  return (
+    <Input
+      {...inputProps}
+      key={value}
+      defaultValue={value}
+      onBlur={(e) => { if (e.target.value !== value) onCommit(e.target.value); }}
+    />
+  );
+}
 
 interface ContextDocsEditorProps {
   /** Editable doc entries (controlled). */
@@ -50,6 +93,8 @@ interface ContextDocsEditorProps {
   showDraftToggle?: boolean;
   showChildPaths?: boolean;
   showImageUpload?: boolean;
+  /** Show the optional per-entry title + description inputs. */
+  showTitleDescription?: boolean;
   /** Seed for the (uncontrolled) expanded set. Default: first entry open. */
   defaultExpandedIndices?: number[];
   /** Controlled expanded indices. When provided, the parent owns expand/collapse. */
@@ -75,6 +120,7 @@ export default function ContextDocsEditor({
   showDraftToggle = true,
   showChildPaths = true,
   showImageUpload = true,
+  showTitleDescription = true,
   defaultExpandedIndices,
   expandedIndices,
   onExpandedChange,
@@ -97,9 +143,11 @@ export default function ContextDocsEditor({
 
   // Debounced markdown edits — Monaco owns its buffer, so we read latest docs via ref.
   const onChangeRef = useRef(onDocsChange);
-  onChangeRef.current = onDocsChange;
   const docsRef = useRef(docs);
-  docsRef.current = docs;
+  useEffect(() => {
+    onChangeRef.current = onDocsChange;
+    docsRef.current = docs;
+  });
   const markdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggleDoc = (index: number) => {
@@ -143,6 +191,19 @@ export default function ContextDocsEditor({
   const handleChildPathsChange = (index: number, childPaths: string[] | undefined) => {
     const newDocs = [...(docs || [])];
     newDocs[index] = { ...newDocs[index], childPaths };
+    onDocsChange(newDocs);
+  };
+
+  // Empty title/description normalize to undefined so "not given" stays clean.
+  const handleTitleChange = (index: number, value: string) => {
+    const newDocs = [...(docs || [])];
+    newDocs[index] = { ...newDocs[index], title: value.trim() === '' ? undefined : value };
+    onDocsChange(newDocs);
+  };
+
+  const handleDescriptionChange = (index: number, value: string) => {
+    const newDocs = [...(docs || [])];
+    newDocs[index] = { ...newDocs[index], description: value.trim() === '' ? undefined : value };
     onDocsChange(newDocs);
   };
 
@@ -216,6 +277,12 @@ export default function ContextDocsEditor({
                 bg="bg.muted"
                 opacity={0.7}
               >
+                {docEntry.title?.trim() && (
+                  <Text fontSize="sm" fontWeight="600" mb={1}>{docEntry.title}</Text>
+                )}
+                {docEntry.description?.trim() && (
+                  <Text fontSize="xs" color="fg.muted" mb={2}>{docEntry.description}</Text>
+                )}
                 <Markdown context="mainpage">{docEntry.content}</Markdown>
               </Box>
             ))}
@@ -230,7 +297,9 @@ export default function ContextDocsEditor({
           const hasDiff = originalDocs?.[index] != null && originalDocs[index].content !== docEntry.content;
           const rawDocView = docViewModes[index] ?? null;
           const docView = rawDocView === 'diff' && !hasDiff ? null : rawDocView;
-          const previewLine = docEntry.content.trim().split('\n')[0]?.slice(0, 80) || 'Empty';
+          const previewLine = docEntry.description?.trim()
+            || docEntry.content.trim().split('\n')[0]?.slice(0, 80)
+            || 'Empty';
 
           return (
             <Box
@@ -247,22 +316,60 @@ export default function ContextDocsEditor({
                   <Box
                     aria-label={`Toggle ${entryLabel} ${index + 1}`}
                     px={3}
-                    py={2}
+                    py={showTitleDescription ? 1.5 : 2}
                     bg="bg.muted"
                     cursor="pointer"
                     _hover={{ bg: 'bg.emphasized' }}
                     {...(isDocExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
                   >
-                    <HStack justify="space-between">
-                      <HStack gap={2}>
-                        <Icon as={isDocExpanded ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
-                        <Text fontSize="sm" fontWeight="600">
-                          {entryLabel} {index + 1}
-                        </Text>
-                        {!isDocExpanded && (
-                          <Text fontSize="xs" color="fg.muted" truncate maxW="400px">
-                            {previewLine}
-                          </Text>
+                    <HStack justify="space-between" gap={2}>
+                      <HStack gap={2} flex={1} minW={0}>
+                        <Icon as={isDocExpanded ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
+                        {showTitleDescription && editMode ? (
+                          // Inline-editable title + description. stopPropagation so
+                          // clicking/typing here doesn't toggle the collapsible.
+                          <VStack gap={0} align="stretch" flex={1} minW={0} onClick={(e) => e.stopPropagation()}>
+                            <DocTextField
+                              {...INLINE_TITLE_STYLE}
+                              aria-label={`${entryLabel} ${index + 1} title`}
+                              placeholder="Add title"
+                              value={docEntry.title ?? ''}
+                              onCommit={(v) => handleTitleChange(index, v)}
+                            />
+                            <DocTextField
+                              {...INLINE_DESC_STYLE}
+                              aria-label={`${entryLabel} ${index + 1} description`}
+                              placeholder="Add a description"
+                              value={docEntry.description ?? ''}
+                              onCommit={(v) => handleDescriptionChange(index, v)}
+                            />
+                          </VStack>
+                        ) : showTitleDescription ? (
+                          // Read-only: title and description on one line — "Title - description".
+                          <HStack gap={2} flex={1} minW={0}>
+                            <Text fontSize="sm" fontWeight="600" flexShrink={0}>
+                              {docEntry.title?.trim() || `${entryLabel} ${index + 1}`}
+                            </Text>
+                            {docEntry.description?.trim() && (
+                              <>
+                                <Text fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
+                                <Text fontSize="xs" color="fg.muted" truncate>
+                                  {docEntry.description}
+                                </Text>
+                              </>
+                            )}
+                          </HStack>
+                        ) : (
+                          <>
+                            <Text fontSize="sm" fontWeight="600">
+                              {docEntry.title?.trim() || `${entryLabel} ${index + 1}`}
+                            </Text>
+                            {!isDocExpanded && (
+                              <Text fontSize="xs" color="fg.muted" truncate maxW="400px">
+                                {previewLine}
+                              </Text>
+                            )}
+                          </>
                         )}
                       </HStack>
                       <HStack gap={3} onClick={(e) => e.stopPropagation()}>
