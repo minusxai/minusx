@@ -28,8 +28,16 @@ function constantTimeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-/** True iff `value` matches the configured runtime secret (and a secret is set). */
+/**
+ * True iff `value` matches the configured runtime secret.
+ *
+ * `.trim()` the configured secret: a stray trailing newline/space from how the
+ * env var was set on a deployment (a common docker/compose gotcha) would
+ * otherwise fail the length-guarded compare even when the value is "right".
+ * Off by default: unset secret ⇒ always false.
+ */
 export function matchesE2ESecret(value: string | null | undefined): boolean {
-  if (!E2E_RUNTIME_SECRET || !value) return false;
-  return constantTimeEqual(value, E2E_RUNTIME_SECRET);
+  const secret = E2E_RUNTIME_SECRET?.trim();
+  if (!secret || !value) return false;
+  return constantTimeEqual(value, secret);
 }
