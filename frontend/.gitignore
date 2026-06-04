@@ -66,3 +66,6 @@ next-env.d.ts
 /test/e2e/.auth/
 /data/pglite-e2e/
 /.next-e2e/
+/.next-qa/
+/data/pglite-qa/
+/test/qa/.auth/
