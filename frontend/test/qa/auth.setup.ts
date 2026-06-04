@@ -10,7 +10,9 @@ import { test as setup } from '@playwright/test';
 import path from 'node:path';
 
 const AUTH_FILE = path.join(process.cwd(), 'test/qa/.auth/qa.json');
-const EXTERNAL = !!process.env.QA_BASE_URL;
+// A localhost target (a local prod build under test) still needs seeding + onboarding,
+// like the webServer case; only a real remote deployment is treated as pre-provisioned.
+const EXTERNAL = !!process.env.QA_BASE_URL && !/localhost|127\.0\.0\.1/.test(process.env.QA_BASE_URL);
 const EMAIL = process.env.QA_EMAIL || 'qa-admin@test.local';
 const PASSWORD = process.env.QA_PASSWORD || EMAIL;
 
