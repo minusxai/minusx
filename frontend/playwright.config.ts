@@ -52,6 +52,8 @@ export default defineConfig({
     env: {
       ...process.env,
       PORT: String(PORT),
+      AUTH_URL: BASE_URL,
+      NEXTAUTH_URL: BASE_URL,
       NEXT_PUBLIC_E2E: 'true',
       E2E_MODE: 'true',
       // Own build dir so this server doesn't fight a running `next dev` for .next/dev/lock.
