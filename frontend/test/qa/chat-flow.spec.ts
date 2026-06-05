@@ -27,8 +27,9 @@ import {
 
 test.describe('real-LLM chat flows', () => {
   test.skip(!hasLlm(), 'no ANTHROPIC_API_KEY — real-LLM QA flows disabled');
-  // Real model round-trips (+ page load + seed) need more than the default 60s.
-  test.describe.configure({ timeout: 180_000 });
+  // Real model round-trips (+ page load + seed) need more than the default 60s;
+  // serial keeps concurrent real chats off the single cold prod server.
+  test.describe.configure({ timeout: 180_000, mode: 'serial' });
 
   /** Run a flow; on any failure mark the test skipped (not failed) with the reason. */
   async function runOrSkip(label: string, flow: () => Promise<void>): Promise<void> {
@@ -40,6 +41,18 @@ test.describe('real-LLM chat flows', () => {
     }
     test.skip(!!reason, reason);
   }
+
+  // Cold-start warmup: the first chat on a freshly-built prod server waits on the
+  // connections/context cache, which leaves the composer's Send disabled. Drive it
+  // once up front (best-effort) so the real flows below run against a warm server.
+  test('warm up the chat composer', async ({ page }) => {
+    await runOrSkip('warmup', async () => {
+      await page.goto(e2eUrl('/explore'), { waitUntil: 'domcontentloaded' });
+      await waitForStore(page);
+      if (!(await sendChat(page, 'hello'))) throw new Error('composer not driveable yet');
+      await assertChatReplied(page, 1);
+    });
+  });
 
   test('explore: ask a question, get a reply, then follow up', async ({ page }) => {
     await runOrSkip('explore flow', async () => {

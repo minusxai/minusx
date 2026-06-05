@@ -248,7 +248,7 @@ export function hasLlm(): boolean {
 /** Wait until the e2e gate has exposed the Redux store on the page. */
 export async function waitForStore(page: Page): Promise<void> {
   await expect
-    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 15_000 })
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 30_000 })
     .toBe(true);
 }
 
@@ -288,8 +288,9 @@ export async function sendChat(page: Page, message: string): Promise<boolean> {
     // updates the React state that gates the Send button (a plain fill/type doesn't).
     await editor.pressSequentially(message, { delay: 15 });
     const send = chatSend(page);
-    // Generous: connections/contexts must finish loading before Send enables.
-    await expect(send).toBeEnabled({ timeout: 30_000 });
+    // Generous: connections + context must finish loading before Send enables,
+    // which can be slow on a cold prod build.
+    await expect(send).toBeEnabled({ timeout: 90_000 });
     await send.click();
     return true;
   } catch {
