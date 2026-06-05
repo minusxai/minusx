@@ -275,6 +275,28 @@ export const POSTGRES_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
   CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(created_at);
+  -- Enrich the per-call stats now that LLM usage is recorded locally (no proxy).
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS provider              VARCHAR;
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS mode                  VARCHAR;
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS cached_tokens         BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS cache_creation_tokens BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS reasoning_tokens      BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS stream                BOOLEAN NOT NULL DEFAULT false;
+
+  -- Raw pi-format request/response per LLM call, for debugging. Stored LOCALLY
+  -- only (never forwarded). Keyed by the same call id the conversation links to
+  -- (lllm_call_id). Blobs are JSON text (TOAST-compressed by Postgres).
+  CREATE TABLE IF NOT EXISTS llm_logs (
+    call_id        VARCHAR PRIMARY KEY,
+    user_id        INTEGER,
+    provider       VARCHAR,
+    model          VARCHAR,
+    request_json   TEXT,
+    response_json  TEXT,
+    error          TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_llm_logs_ts ON llm_logs(created_at);
 
   CREATE TABLE IF NOT EXISTS queries (
     query_hash      VARCHAR PRIMARY KEY,

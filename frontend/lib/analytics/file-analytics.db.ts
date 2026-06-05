@@ -17,18 +17,34 @@ export interface InsertFileEventParams {
 export interface InsertLlmCallEventParams {
   conversationId: number;
   llmCallId?: string | null;
+  provider?: string | null;
   model: string;
+  mode?: string | null;
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
+  cachedTokens?: number;
+  cacheCreationTokens?: number;
+  reasoningTokens?: number;
   systemPromptTokens?: number;
   appStateTokens?: number;
   totalToolCalls?: number;
   cost: number;
   durationS: number;
+  stream?: boolean;
   finishReason?: string | null;
   trigger?: string | null;
   userId?: number | null;
+}
+
+export interface InsertLlmLogParams {
+  callId: string;
+  userId?: number | null;
+  provider?: string | null;
+  model?: string | null;
+  requestJson: string;
+  responseJson: string;
+  error?: string | null;
 }
 
 export interface InsertFeedbackEventParams {
@@ -117,19 +133,72 @@ export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
     const requestId = await getRequestId();
     await getModules().db.exec(
       `INSERT INTO llm_call_events
-         (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens,
+         (conversation_id, llm_call_id, provider, model, mode,
+          total_tokens, prompt_tokens, completion_tokens,
+          cached_tokens, cache_creation_tokens, reasoning_tokens,
           system_prompt_tokens, app_state_tokens, total_tool_calls,
-          cost, duration_s, finish_reason, trigger, user_id, request_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::uuid)`,
+          cost, duration_s, stream, finish_reason, trigger, user_id, request_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::uuid)`,
       [
-        p.conversationId, p.llmCallId ?? null, p.model,
+        p.conversationId, p.llmCallId ?? null, p.provider ?? null, p.model, p.mode ?? null,
         p.totalTokens, p.promptTokens, p.completionTokens,
+        p.cachedTokens ?? 0, p.cacheCreationTokens ?? 0, p.reasoningTokens ?? 0,
         p.systemPromptTokens ?? 0, p.appStateTokens ?? 0, p.totalToolCalls ?? 0,
-        p.cost, p.durationS, p.finishReason ?? null, p.trigger ?? null,
+        p.cost, p.durationS, p.stream ?? false, p.finishReason ?? null, p.trigger ?? null,
         p.userId ?? null, requestId,
       ]
     );
   })());
+}
+
+/**
+ * Persist the raw pi-format request/response for one LLM call. Local only —
+ * these blobs are for debugging and are never forwarded. Fire-and-forget.
+ */
+export function insertLlmLog(p: InsertLlmLogParams): void {
+  fireAndForget(
+    getModules().db.exec(
+      `INSERT INTO llm_logs (call_id, user_id, provider, model, request_json, response_json, error)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (call_id) DO NOTHING`,
+      [
+        p.callId, p.userId ?? null, p.provider ?? null, p.model ?? null,
+        p.requestJson, p.responseJson, p.error ?? null,
+      ]
+    )
+  );
+}
+
+/** Read one LLM log blob row by call id (for the Debug UI). */
+export async function getLlmLog(callId: string): Promise<Record<string, unknown> | null> {
+  const res = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT call_id, provider, model, request_json, response_json, error, created_at
+       FROM llm_logs WHERE call_id = $1`,
+    [callId]
+  );
+  return res.rows[0] ?? null;
+}
+
+/** Read one per-call stats row by call id (for the Debug UI). */
+export async function getLlmCallStats(callId: string): Promise<Record<string, unknown> | null> {
+  const res = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT llm_call_id, provider, model, mode, total_tokens, prompt_tokens, completion_tokens,
+            cached_tokens, cache_creation_tokens, reasoning_tokens, cost, duration_s, stream,
+            finish_reason, trigger, created_at
+       FROM llm_call_events WHERE llm_call_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+    [callId]
+  );
+  return res.rows[0] ?? null;
+}
+
+/** Delete LLM log blobs created strictly before `before`. Returns rows removed. */
+export async function clearLlmLogsBefore(before: Date): Promise<number> {
+  const res = await getModules().db.exec<{ call_id: string }>(
+    `DELETE FROM llm_logs WHERE created_at < $1 RETURNING call_id`,
+    [before.toISOString()]
+  );
+  return res.rows.length;
 }
 
 export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): void {
