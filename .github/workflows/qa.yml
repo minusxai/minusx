@@ -68,6 +68,11 @@ jobs:
         env:
           NEXTAUTH_SECRET: qa-ci-secret-not-used-in-prod-0000000000000000=
           CI: 'true'
+          # No S3 in CI, so chart→image attachments would otherwise become
+          # http://localhost URLs, which the Claude API rejects ("Only HTTPS URLs
+          # are supported"). Embedding charts as base64 data URLs lets the real-LLM
+          # flows exercise the chart-image pipeline faithfully. (Prod uses S3 → HTTPS.)
+          USE_BASE64_UPLOADS: 'true'
           # Real-LLM QA flows (test/qa/chat-flow.spec.ts) run only when a provider
           # key is present; a Haiku model keeps the calls cheap + fast in CI.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

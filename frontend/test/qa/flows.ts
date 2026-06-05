@@ -288,9 +288,11 @@ export async function sendChat(page: Page, message: string): Promise<boolean> {
     // updates the React state that gates the Send button (a plain fill/type doesn't).
     await editor.pressSequentially(message, { delay: 15 });
     const send = chatSend(page);
-    // Generous: connections + context must finish loading before Send enables,
-    // which can be slow on a cold prod build.
-    await expect(send).toBeEnabled({ timeout: 90_000 });
+    // Send stays disabled until connections + context finish loading. With no
+    // warmup priming the cache, the first flow to reach the composer on a cold
+    // prod build pays that load here — so this is deliberately generous (the
+    // first parallel wave absorbs the cold start); every later send enables in ~1s.
+    await expect(send).toBeEnabled({ timeout: 240_000 });
     await send.click();
     return true;
   } catch {
@@ -312,11 +314,22 @@ export async function assertChatReplied(page: Page, minUserTurns = 1): Promise<v
         if (c.executionState !== 'FINISHED') return false;
         const msgs: any[] = c.messages ?? [];
         const userTurns = msgs.filter((m) => m.role === 'user').length;
-        const replied = msgs.some((m) => m.role && m.role !== 'user');
+        // A LEGIT reply, not a vacuous pass: an assistant message that did not
+        // error and carries real text. (Without this, an LLM failure that still
+        // lands a non-user message — e.g. the chart-image "Only HTTPS URLs"
+        // 400 — could green a flow that never actually answered.)
+        const replied = msgs.some((m) => {
+          if (!m.role || m.role === 'user') return false;
+          if (m.stopReason === 'error' || m.errorMessage) return false;
+          const text = Array.isArray(m.content)
+            ? m.content.filter((b: any) => b?.type === 'text').map((b: any) => b?.text ?? '').join('')
+            : typeof m.content === 'string' ? m.content : '';
+          return text.trim().length > 0;
+        });
         return userTurns >= minUserTurns && replied;
       });
     },
-    { message: `chat did not finish with ${minUserTurns} user turn(s) + a reply`, timeout: 120_000 },
+    { message: `chat did not finish with ${minUserTurns} user turn(s) + a non-empty, non-error reply`, timeout: 120_000 },
   );
 }
 
