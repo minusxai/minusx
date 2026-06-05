@@ -109,10 +109,11 @@ export async function openFileByClick(
     const sectionLabel = type === 'question' ? 'Questions section' : 'Dashboards section';
     await page.getByLabel(sectionLabel).first().click().catch(() => {}); // expand if collapsed
   }
-  // Wait for the listing to render the tile before clicking (cold first loads can be slow).
-  await tile.waitFor({ state: 'visible', timeout: 30_000 });
-  await tile.click({ timeout: 30_000 });
-  await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
+  // Wait for the listing to render the tile before clicking — remote deployments
+  // are slower than a local prod server, so keep these generous.
+  await tile.waitFor({ state: 'visible', timeout: 45_000 });
+  await tile.click({ timeout: 45_000 });
+  await page.waitForURL(/\/f\/\d+/, { timeout: 40_000 });
 }
 
 /** Click the question's Run-query control if present; else rely on auto-execute. */
@@ -184,7 +185,7 @@ export async function assertTutorialMode(page: Page): Promise<void> {
 export async function createDashboard(page: Page): Promise<number> {
   await page.getByLabel('Create').first().click();
   await page.getByLabel('New Dashboard').click();
-  await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
+  await page.waitForURL(/\/f\/\d+/, { timeout: 40_000 });
   return Number(new URL(page.url()).pathname.split('/f/')[1]);
 }
 
@@ -205,7 +206,7 @@ export async function saveDraft(page: Page, name: string): Promise<void> {
 export async function createQuestion(page: Page): Promise<number> {
   await page.getByLabel('Create').first().click();
   await page.getByLabel('New Question').click();
-  await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
+  await page.waitForURL(/\/f\/\d+/, { timeout: 40_000 });
   return Number(new URL(page.url()).pathname.split('/f/')[1]);
 }
 
