@@ -63,7 +63,7 @@ import {
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { insertLlmLog } from '@/lib/analytics/file-analytics.db';
+import { recordLlmLog, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
 import { takeLlmCallRequest } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
@@ -570,7 +570,7 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
  * boundary by response-message identity (`takeLlmCallRequest`); the call id and
  * duration are the ones the engine already stamps onto each message. Best-effort.
  */
-function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): void {
+async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};
@@ -585,11 +585,12 @@ function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: Effe
       if (!callId) continue;
 
       const u = msg.usage;
+      const duration = typeof meta['_duration'] === 'number' ? (meta['_duration'] as number) : 0;
       llmCalls[callId] = {
         llm_call_id: callId,
         provider: msg.provider,
         model: msg.model,
-        duration: typeof meta['_duration'] === 'number' ? (meta['_duration'] as number) : 0,
+        duration,
         total_tokens: u?.totalTokens ?? 0,
         prompt_tokens: u?.input ?? 0,
         completion_tokens: u?.output ?? 0,
@@ -600,9 +601,29 @@ function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: Effe
         finish_reason: msg.stopReason,
       };
 
+      // LOCAL writes are AWAITED so they persist before the handler returns
+      // (a standalone prod build won't keep fire-and-forget promises alive).
+      await recordLlmCallEvent({
+        conversationId,
+        llmCallId: callId,
+        provider: msg.provider,
+        model: msg.model,
+        mode: user.mode,
+        totalTokens: u?.totalTokens ?? 0,
+        promptTokens: u?.input ?? 0,
+        completionTokens: u?.output ?? 0,
+        cachedTokens: u?.cacheRead ?? 0,
+        cacheCreationTokens: u?.cacheWrite ?? 0,
+        cost: u?.cost?.total ?? 0,
+        durationS: duration,
+        stream: true,
+        finishReason: msg.stopReason,
+        userId,
+      });
+
       const captured = takeLlmCallRequest(msg);
       if (captured) {
-        insertLlmLog({
+        await recordLlmLog({
           callId,
           userId,
           provider: msg.provider,
@@ -613,6 +634,7 @@ function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: Effe
       }
     }
     if (Object.keys(llmCalls).length === 0) return;
+    // Best-effort central forward (stats → mx-llm-provider via notifyAppEvent).
     appEventRegistry.publish(AppEvents.LLM_CALL, {
       mode: user.mode,
       conversationId,
@@ -741,9 +763,10 @@ async function persistAndBuildLegacyResponse(
     console.error('[v2/chat] failed to append error log entry:', e);
   }
 
-  // Record LLM usage (stats → llm_call_events + central forward) and raw
-  // pi-format request/response blobs (llm_logs, local only) out-of-band.
-  recordLlmCalls(piDiff, finalConversationId, user);
+  // Record LLM usage (stats → llm_call_events) and raw pi-format request/
+  // response blobs (llm_logs, local only); awaited so the rows persist before
+  // the handler returns. Also forwards stats centrally (best-effort).
+  await recordLlmCalls(piDiff, finalConversationId, user);
 
   // Translate the FULL log to legacy shape so completed_tool_calls / debug
   // / log_index reflect the legacy view, then slice to the new diff for

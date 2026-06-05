@@ -128,8 +128,14 @@ export function insertFileEvents(events: InsertFileEventParams[]): void {
   })());
 }
 
-export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
-  fireAndForget((async () => {
+/**
+ * Awaitable INSERT into llm_call_events. Errors are caught + logged (never
+ * thrown), so callers can `await` it to guarantee the row is persisted (e.g.
+ * before a request handler returns — unawaited promises aren't kept alive in a
+ * standalone prod build) without risking the request.
+ */
+export async function recordLlmCallEvent(p: InsertLlmCallEventParams): Promise<void> {
+  try {
     const requestId = await getRequestId();
     await getModules().db.exec(
       `INSERT INTO llm_call_events
@@ -148,16 +154,23 @@ export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
         p.userId ?? null, requestId,
       ]
     );
-  })());
+  } catch (err) {
+    console.error('[analytics] llm_call_events insert failed:', err);
+  }
+}
+
+export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
+  fireAndForget(recordLlmCallEvent(p));
 }
 
 /**
- * Persist the raw pi-format request/response for one LLM call. Local only —
- * these blobs are for debugging and are never forwarded. Fire-and-forget.
+ * Awaitable INSERT of the raw pi-format request/response for one LLM call.
+ * Local only — never forwarded. Errors caught + logged. `await` to guarantee
+ * the blob persists before the handler returns.
  */
-export function insertLlmLog(p: InsertLlmLogParams): void {
-  fireAndForget(
-    getModules().db.exec(
+export async function recordLlmLog(p: InsertLlmLogParams): Promise<void> {
+  try {
+    await getModules().db.exec(
       `INSERT INTO llm_logs (call_id, user_id, provider, model, request_json, response_json, error)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (call_id) DO NOTHING`,
@@ -165,8 +178,14 @@ export function insertLlmLog(p: InsertLlmLogParams): void {
         p.callId, p.userId ?? null, p.provider ?? null, p.model ?? null,
         p.requestJson, p.responseJson, p.error ?? null,
       ]
-    )
-  );
+    );
+  } catch (err) {
+    console.error('[analytics] llm_logs insert failed:', err);
+  }
+}
+
+export function insertLlmLog(p: InsertLlmLogParams): void {
+  fireAndForget(recordLlmLog(p));
 }
 
 /** Read one LLM log blob row by call id (for the Debug UI). */
