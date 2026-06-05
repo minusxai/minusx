@@ -906,63 +906,86 @@ export async function* runChatTurnStreamV2(
     return;
   }
   let runError: string | undefined;
-  try {
-    if (setup.rawStream) {
-      for await (const ev of setup.rawStream) {
-        // Capture orchestrator error events (e.g. LLM auth failures, network
-        // errors). EventStream.result() never throws — errors surface only as
-        // stream events — so we must intercept them here or they are silently
-        // dropped by piStreamEventToLegacy returning null.
-        const evType = (ev as { type?: string }).type;
-        if (evType === 'error') {
-          const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
-          if (errMsg && !runError) {
-            runError = errMsg;
-            console.error('[v2/stream] orchestrator error event:', errMsg);
-          }
-          continue;
-        }
-        const translated = piStreamEventToLegacy(ev as StreamEvent, setup.conversationId);
-        if (translated) {
-          yield { wire: 'streaming_event', data: translated };
-        }
-      }
-      await setup.rawStream.result();
-    }
-  } catch (err) {
-    console.error('[v2/stream] orchestrator run threw:', err);
-    runError = err instanceof Error ? err.message : String(err);
-    // Tag the error so any escape paths (e.g. dangling microtasks that reject
-    // after the route returns) route to the right conversation via the
-    // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
-    if (err && typeof err === 'object') {
-      (err as { conversationId?: number }).conversationId = setup.conversationId;
-    }
-  }
-
-  let response: V2LegacyChatResponse;
-  try {
-    response = await persistAndBuildLegacyResponse(
+  // Persist exactly once. The user message is in orch.log from run() (synchronous),
+  // so calling this in the `finally` guarantees it survives a client abort; the
+  // normal path also calls it to build the `done` response.
+  let persisted = false;
+  const persistOnce = async (): Promise<V2LegacyChatResponse | undefined> => {
+    if (persisted) return undefined;
+    persisted = true;
+    return persistAndBuildLegacyResponse(
       setup.conversationId,
       setup.expectedLogIndex,
       setup.orchestrator,
       user,
       runError,
     );
-  } catch (persistErr) {
-    console.error('[v2/stream] persist threw:', persistErr);
-    const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
-    response = {
-      conversationID: setup.conversationId,
-      log_index: setup.expectedLogIndex,
-      pending_tool_calls: [],
-      completed_tool_calls: [],
-      debug: [],
-      error: runError ?? persistError,
-    };
-  }
-  yield {
-    wire: 'done',
-    data: { ...response, type: 'done', timestamp: new Date().toISOString() },
   };
+
+  try {
+    try {
+      if (setup.rawStream) {
+        for await (const ev of setup.rawStream) {
+          // Capture orchestrator error events (e.g. LLM auth failures, network
+          // errors). EventStream.result() never throws — errors surface only as
+          // stream events — so we must intercept them here or they are silently
+          // dropped by piStreamEventToLegacy returning null.
+          const evType = (ev as { type?: string }).type;
+          if (evType === 'error') {
+            const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
+            if (errMsg && !runError) {
+              runError = errMsg;
+              console.error('[v2/stream] orchestrator error event:', errMsg);
+            }
+            continue;
+          }
+          const translated = piStreamEventToLegacy(ev as StreamEvent, setup.conversationId);
+          if (translated) {
+            yield { wire: 'streaming_event', data: translated };
+          }
+        }
+        await setup.rawStream.result();
+      }
+    } catch (err) {
+      console.error('[v2/stream] orchestrator run threw:', err);
+      runError = err instanceof Error ? err.message : String(err);
+      // Tag the error so any escape paths (e.g. dangling microtasks that reject
+      // after the route returns) route to the right conversation via the
+      // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
+      if (err && typeof err === 'object') {
+        (err as { conversationId?: number }).conversationId = setup.conversationId;
+      }
+    }
+
+    let response: V2LegacyChatResponse;
+    try {
+      response = (await persistOnce())!;
+    } catch (persistErr) {
+      console.error('[v2/stream] persist threw:', persistErr);
+      const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
+      response = {
+        conversationID: setup.conversationId,
+        log_index: setup.expectedLogIndex,
+        pending_tool_calls: [],
+        completed_tool_calls: [],
+        debug: [],
+        error: runError ?? persistError,
+      };
+    }
+    yield {
+      wire: 'done',
+      data: { ...response, type: 'done', timestamp: new Date().toISOString() },
+    };
+  } finally {
+    // If the client aborted mid-stream the generator is abandoned before the
+    // persist above runs (its `yield`s never resume) — persist here so the user's
+    // message and partial turn survive the interrupt instead of being lost.
+    if (!persisted) {
+      try {
+        await persistOnce();
+      } catch (e) {
+        console.error('[v2/stream] abort-persist failed:', e);
+      }
+    }
+  }
 }
