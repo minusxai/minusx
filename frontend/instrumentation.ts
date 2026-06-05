@@ -41,6 +41,27 @@ export async function register() {
     process.on('unhandledRejection', (reason) => {
       void logTaggedRejection(reason, systemUser);
     });
+
+    // Boot-warm the heavy chat runtime so the FIRST chat request doesn't pay the
+    // module load + JIT-parse cost on a cold Node process (the DB is already
+    // warmed by db.init() above). Non-blocking: the server starts serving
+    // immediately and this loads concurrently. Best-effort — never crashes boot.
+    // Opt out with BOOT_WARM_CHAT=false.
+    // eslint-disable-next-line no-restricted-syntax
+    if (process.env.BOOT_WARM_CHAT !== 'false') {
+      void (async () => {
+        try {
+          const t0 = Date.now();
+          // Pulls in the orchestrator engine, every agent/tool, and pi-ai, and
+          // runs V2 registrable registration — the bulk of the first-request cost.
+          // eslint-disable-next-line no-restricted-syntax
+          await import('./lib/chat-orchestration-v2.server');
+          console.log(`[boot-warm] chat runtime warmed in ${Date.now() - t0}ms`);
+        } catch (e) {
+          console.warn('[boot-warm] chat runtime warm skipped (non-fatal):', e);
+        }
+      })();
+    }
   }
 }
 

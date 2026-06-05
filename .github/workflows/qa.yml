@@ -68,6 +68,18 @@ jobs:
         env:
           NEXTAUTH_SECRET: qa-ci-secret-not-used-in-prod-0000000000000000=
           CI: 'true'
+          # QA worker count in CI (config defaults to 2 when unset). 3 fans the
+          # flows out a little wider without over-pressuring the runner / LLM rate limits.
+          QA_PARALLELISM: '3'
+          # No S3 in CI, so chart→image attachments would otherwise become
+          # http://localhost URLs, which the Claude API rejects ("Only HTTPS URLs
+          # are supported"). Embedding charts as base64 data URLs lets the real-LLM
+          # flows exercise the chart-image pipeline faithfully. (Prod uses S3 → HTTPS.)
+          USE_BASE64_UPLOADS: 'true'
+          # Real-LLM QA flows (test/qa/chat-flow.spec.ts) run only when a provider
+          # key is present; a Haiku model keeps the calls cheap + fast in CI.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANALYST_AGENT_MODEL_CONFIG: ${{ secrets.ANALYST_AGENT_MODEL_CONFIG }}
         run: npm run test:qa
 
       - name: Upload QA report

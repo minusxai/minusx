@@ -4,7 +4,6 @@ import type { Session } from 'next-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode } from '@/lib/mode/mode-types';
-import { logNetworkRequest } from '@/lib/network-logging';
 import { getModules } from '@/lib/modules/registry';
 import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/e2e-runtime';
 
@@ -33,14 +32,6 @@ export function createMiddleware() {
     const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
     const requestId = crypto.randomUUID();
-    const isApiPath = pathname.startsWith('/api/');
-
-    const reqProtocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
-    const reqHeaders: Record<string, string> = {};
-    if (isApiPath) {
-      req.headers.forEach((value, key) => { reqHeaders[key] = value; });
-    }
-    const reqInfo = { method: req.method, protocol: reqProtocol, domain: hostname, path: pathname, headers: reqHeaders };
 
     if (
       isPublicRoute ||
@@ -62,13 +53,10 @@ export function createMiddleware() {
 
       await getModules().auth.addHeaders(req as AuthReq, requestHeaders);
 
-      const response = NextResponse.next({ request: { headers: requestHeaders } });
-      if (isApiPath) void logNetworkRequest(requestId, reqInfo, null);
-      return response;
+      return NextResponse.next({ request: { headers: requestHeaders } });
     }
 
     if (!req.auth) {
-      if (isApiPath) void logNetworkRequest(requestId, reqInfo, null);
       const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
       const loginUrl = new URL(`${protocol}://${hostname}/login`);
       loginUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
@@ -82,7 +70,6 @@ export function createMiddleware() {
         currentVersion: CURRENT_TOKEN_VERSION,
         email: req.auth.user?.email,
       });
-      if (isApiPath) void logNetworkRequest(requestId, reqInfo, null);
       const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
       const loginUrl = new URL(`${protocol}://${hostname}/login`);
       loginUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
@@ -162,15 +149,6 @@ export function createMiddleware() {
       return NextResponse.redirect(target);
     }
 
-    const response = NextResponse.next({ request: { headers: requestHeaders } });
-
-    if (isApiPath) {
-      void logNetworkRequest(requestId, reqInfo, {
-        userId: req.auth.user?.userId,
-        mode: effectiveMode,
-      });
-    }
-
-    return response;
+    return NextResponse.next({ request: { headers: requestHeaders } });
   });
 }

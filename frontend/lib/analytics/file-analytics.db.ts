@@ -17,18 +17,33 @@ export interface InsertFileEventParams {
 export interface InsertLlmCallEventParams {
   conversationId: number;
   llmCallId?: string | null;
+  provider?: string | null;
   model: string;
+  mode?: string | null;
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
+  cachedTokens?: number;
+  cacheCreationTokens?: number;
+  reasoningTokens?: number;
   systemPromptTokens?: number;
   appStateTokens?: number;
   totalToolCalls?: number;
   cost: number;
   durationS: number;
+  stream?: boolean;
   finishReason?: string | null;
   trigger?: string | null;
   userId?: number | null;
+}
+
+export interface RecordLlmResponseParams {
+  callId: string;
+  userId?: number | null;
+  provider?: string | null;
+  model?: string | null;
+  responseJson: string;
+  error?: string | null;
 }
 
 export interface InsertFeedbackEventParams {
@@ -112,24 +127,108 @@ export function insertFileEvents(events: InsertFileEventParams[]): void {
   })());
 }
 
-export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
-  fireAndForget((async () => {
+/**
+ * Awaitable INSERT into llm_call_events. Errors are caught + logged (never
+ * thrown), so callers can `await` it to guarantee the row is persisted (e.g.
+ * before a request handler returns — unawaited promises aren't kept alive in a
+ * standalone prod build) without risking the request.
+ */
+export async function recordLlmCallEvent(p: InsertLlmCallEventParams): Promise<void> {
+  try {
     const requestId = await getRequestId();
     await getModules().db.exec(
       `INSERT INTO llm_call_events
-         (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens,
+         (conversation_id, llm_call_id, provider, model, mode,
+          total_tokens, prompt_tokens, completion_tokens,
+          cached_tokens, cache_creation_tokens, reasoning_tokens,
           system_prompt_tokens, app_state_tokens, total_tool_calls,
-          cost, duration_s, finish_reason, trigger, user_id, request_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::uuid)`,
+          cost, duration_s, stream, finish_reason, trigger, user_id, request_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::uuid)`,
       [
-        p.conversationId, p.llmCallId ?? null, p.model,
+        p.conversationId, p.llmCallId ?? null, p.provider ?? null, p.model, p.mode ?? null,
         p.totalTokens, p.promptTokens, p.completionTokens,
+        p.cachedTokens ?? 0, p.cacheCreationTokens ?? 0, p.reasoningTokens ?? 0,
         p.systemPromptTokens ?? 0, p.appStateTokens ?? 0, p.totalToolCalls ?? 0,
-        p.cost, p.durationS, p.finishReason ?? null, p.trigger ?? null,
+        p.cost, p.durationS, p.stream ?? false, p.finishReason ?? null, p.trigger ?? null,
         p.userId ?? null, requestId,
       ]
     );
-  })());
+  } catch (err) {
+    console.error('[analytics] llm_call_events insert failed:', err);
+  }
+}
+
+/**
+ * Write the pi-format REQUEST for one LLM call (called when the call is made,
+ * before the response exists). The response is filled in later by
+ * `recordLlmResponse`. Upserts by call_id so the two writes are order-
+ * independent. Local only — never forwarded. Errors caught + logged.
+ */
+export async function recordLlmRequest(callId: string, requestJson: string): Promise<void> {
+  try {
+    await getModules().db.exec(
+      `INSERT INTO llm_logs (call_id, request_json) VALUES ($1, $2)
+       ON CONFLICT (call_id) DO UPDATE SET request_json = EXCLUDED.request_json`,
+      [callId, requestJson]
+    );
+  } catch (err) {
+    console.error('[analytics] llm_logs request write failed:', err);
+  }
+}
+
+/**
+ * Fill in the RESPONSE (and user/provider/model/error) for a call once the turn
+ * completes. Upserts so it works whether or not the request row already exists.
+ * `await` to guarantee the row persists before the handler returns.
+ */
+export async function recordLlmResponse(p: RecordLlmResponseParams): Promise<void> {
+  try {
+    await getModules().db.exec(
+      `INSERT INTO llm_logs (call_id, user_id, provider, model, response_json, error)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (call_id) DO UPDATE SET
+         user_id       = EXCLUDED.user_id,
+         provider      = EXCLUDED.provider,
+         model         = EXCLUDED.model,
+         response_json = EXCLUDED.response_json,
+         error         = EXCLUDED.error`,
+      [p.callId, p.userId ?? null, p.provider ?? null, p.model ?? null, p.responseJson, p.error ?? null]
+    );
+  } catch (err) {
+    console.error('[analytics] llm_logs response write failed:', err);
+  }
+}
+
+/** Read one LLM log blob row by call id (for the Debug UI). */
+export async function getLlmLog(callId: string): Promise<Record<string, unknown> | null> {
+  const res = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT call_id, provider, model, request_json, response_json, error, created_at
+       FROM llm_logs WHERE call_id = $1`,
+    [callId]
+  );
+  return res.rows[0] ?? null;
+}
+
+/** Read one per-call stats row by call id (for the Debug UI). */
+export async function getLlmCallStats(callId: string): Promise<Record<string, unknown> | null> {
+  const res = await getModules().db.exec<Record<string, unknown>>(
+    `SELECT llm_call_id, provider, model, mode, total_tokens, prompt_tokens, completion_tokens,
+            cached_tokens, cache_creation_tokens, reasoning_tokens, cost, duration_s, stream,
+            finish_reason, trigger, created_at
+       FROM llm_call_events WHERE llm_call_id = $1
+       ORDER BY created_at DESC LIMIT 1`,
+    [callId]
+  );
+  return res.rows[0] ?? null;
+}
+
+/** Delete LLM log blobs created strictly before `before`. Returns rows removed. */
+export async function clearLlmLogsBefore(before: Date): Promise<number> {
+  const res = await getModules().db.exec<{ call_id: string }>(
+    `DELETE FROM llm_logs WHERE created_at < $1 RETURNING call_id`,
+    [before.toISOString()]
+  );
+  return res.rows.length;
 }
 
 export function insertQueryExecutionEvent(p: InsertQueryExecutionEventParams): void {

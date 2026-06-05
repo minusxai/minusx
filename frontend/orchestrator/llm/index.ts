@@ -32,7 +32,6 @@ import type {
   AssistantMessageDiagnostic,
 } from '@mariozechner/pi-ai';
 import type { TSchema } from 'typebox';
-import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
 
 // ─── Opaque handle types (aliased to pi; never inspected outside this boundary) ──
 
@@ -208,23 +207,30 @@ export interface StreamOptions {
 export class EventStream<T, R = T> extends PiEventStream<T, R> {}
 
 /**
- * Resolve a provider model handle. When the MX proxy is configured, rewrite the
- * base URL + headers so the call is routed (and cost-tracked) through it; OSS
- * deployments (no proxy) call the provider directly.
+ * Resolve a provider model handle. Providers are called directly; LLM usage is
+ * recorded out-of-band after each call (see `callLLM` → `AppEvents.LLM_CALL`),
+ * so there is no request-path proxy.
  */
 export function getModel<P extends string, M extends string>(provider: P, model: M): Model<Api> {
-  const base = piGetModel(provider as never, model as never);
-  if (!MX_API_BASE_URL) return base;
-  const originalBaseUrl = (base as unknown as { baseUrl?: string }).baseUrl;
-  return {
-    ...base,
-    baseUrl: `${MX_API_BASE_URL}/proxy`,
-    headers: {
-      ...((base as unknown as { headers?: Record<string, string> }).headers ?? {}),
-      'mx-api-key': MX_API_KEY,
-      ...(originalBaseUrl ? { 'x-original-base-url': originalBaseUrl } : {}),
-    },
-  } as typeof base;
+  return piGetModel(provider as never, model as never);
+}
+
+/**
+ * Hooks the app registers to persist a call's request when it's made, and its
+ * error if the call fails — the boundary stays free of any DB/app dependency
+ * (dependency inversion). Headless / benchmark runs register none, so nothing
+ * is recorded there. (Successful responses are written by the caller after the
+ * turn, where the user context lives; the error message is only available here
+ * because the engine discards the failed message.)
+ */
+export interface LlmCallRecorder {
+  recordRequest(callId: string, request: Context): void;
+  recordError(callId: string, errorMessage: string, responseJson: string): void;
+}
+const CALL_ID_HEADER = 'X-MX-Request-Call-ID';
+let llmCallRecorder: LlmCallRecorder | null = null;
+export function setLlmCallRecorder(recorder: LlmCallRecorder | null): void {
+  llmCallRecorder = recorder;
 }
 
 /** Stream a single model call. Returns a stream of our owned `AssistantMessageEvent`s. */
@@ -233,9 +239,20 @@ export function streamSimple(
   context: Context,
   options?: StreamOptions,
 ): EventStream<AssistantMessageEvent, AssistantMessage> {
-  return piStreamSimple(
+  const stream = piStreamSimple(
     model,
     context as unknown as PiContext,
     options as PiSimpleStreamOptions | undefined,
   ) as unknown as EventStream<AssistantMessageEvent, AssistantMessage>;
+  const callId = (options?.headers as Record<string, string> | undefined)?.[CALL_ID_HEADER];
+  if (callId && llmCallRecorder) {
+    const recorder = llmCallRecorder;
+    recorder.recordRequest(callId, context);
+    // Persist the error if the call fails. result() resolves with the error
+    // message (it never rejects); success responses are written after the turn.
+    void stream.result().then((msg) => {
+      if (msg?.stopReason === 'error') recorder.recordError(callId, msg.errorMessage ?? 'error', JSON.stringify(msg));
+    });
+  }
+  return stream;
 }

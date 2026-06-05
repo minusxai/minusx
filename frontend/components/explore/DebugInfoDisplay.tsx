@@ -18,7 +18,7 @@ interface DebugInfoDisplayProps {
 function StatsTable({ stats }: { stats: Record<string, unknown> }) {
   const rows = Object.entries(stats).filter(([k]) => k !== 'id');
   return (
-    <Box overflowX="auto">
+    <Box overflowX="auto" aria-label="LLM call stats">
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <tbody>
           {rows.map(([key, value]) => (
@@ -43,7 +43,7 @@ function JsonSection({ title, raw }: { title: string; raw: string }) {
   try { parsed = JSON.parse(raw); } catch { parsed = raw; }
   const jsonString = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
   return (
-    <Box>
+    <Box aria-label={`${title} body`}>
       <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>{title}</Text>
       <Box border="1px solid" borderColor="border.default" borderRadius="sm" overflow="hidden">
         <Editor
@@ -107,8 +107,8 @@ function LLMCallMXDetails({ llmCallId }: { llmCallId: string }) {
     );
   }
 
-  const requestBody = data.logs?.request_body as string | undefined;
-  const responseBody = data.logs?.response_body as string | undefined;
+  const requestBody = data.logs?.request_json as string | undefined;
+  const responseBody = data.logs?.response_json as string | undefined;
 
   return (
     <VStack gap={2} align="stretch">

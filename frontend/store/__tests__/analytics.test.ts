@@ -119,11 +119,11 @@ describe('Analytics write + read', () => {
   // Write path — insertLlmCallEvent
   // -------------------------------------------------------------------------
 
-  describe('insertLlmCallEvent', () => {
+  describe('recordLlmCallEvent', () => {
     it('inserts an LLM call row with correct fields', async () => {
-      const { insertLlmCallEvent } = await import('@/lib/analytics/file-analytics.db');
+      const { recordLlmCallEvent } = await import('@/lib/analytics/file-analytics.db');
 
-      insertLlmCallEvent({
+      await recordLlmCallEvent({
         conversationId: 10,
         llmCallId: 'call-abc',
         model: 'claude-3-5-sonnet',
@@ -280,14 +280,12 @@ describe('Analytics write + read', () => {
   describe('getConversationAnalytics', () => {
     it('returns correct model breakdown from seeded llm_call_events', async () => {
       const { getConversationAnalytics } = await import('@/lib/analytics/file-analytics.server');
-      const { insertLlmCallEvent } = await import('@/lib/analytics/file-analytics.db');
+      const { recordLlmCallEvent } = await import('@/lib/analytics/file-analytics.db');
       const CONV_ID = 200;
 
-      insertLlmCallEvent({ conversationId: CONV_ID, model: 'claude-sonnet', totalTokens: 400, promptTokens: 300, completionTokens: 100, cost: 0.001, durationS: 1, userId: 1 });
-      insertLlmCallEvent({ conversationId: CONV_ID, model: 'claude-sonnet', totalTokens: 600, promptTokens: 400, completionTokens: 200, cost: 0.002, durationS: 2, userId: 1 });
-      insertLlmCallEvent({ conversationId: CONV_ID, model: 'claude-opus',   totalTokens: 800, promptTokens: 500, completionTokens: 300, cost: 0.010, durationS: 3, userId: 1 });
-
-      await new Promise(r => setTimeout(r, 200));
+      await recordLlmCallEvent({ conversationId: CONV_ID, model: 'claude-sonnet', totalTokens: 400, promptTokens: 300, completionTokens: 100, cost: 0.001, durationS: 1, userId: 1 });
+      await recordLlmCallEvent({ conversationId: CONV_ID, model: 'claude-sonnet', totalTokens: 600, promptTokens: 400, completionTokens: 200, cost: 0.002, durationS: 2, userId: 1 });
+      await recordLlmCallEvent({ conversationId: CONV_ID, model: 'claude-opus',   totalTokens: 800, promptTokens: 500, completionTokens: 300, cost: 0.010, durationS: 3, userId: 1 });
 
       const analytics = await getConversationAnalytics(CONV_ID);
 

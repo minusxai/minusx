@@ -25,12 +25,18 @@ const AUTH_FILE = path.join(process.cwd(), 'test/qa/.auth/qa.json');
 const PGLITE_DIR = path.join(process.cwd(), 'data/pglite-qa');
 if (!EXTERNAL) fs.mkdirSync(PGLITE_DIR, { recursive: true });
 
+// Worker count. Defaults to 2 (CI leaves QA_PARALLELISM unset → stays at 2);
+// set QA_PARALLELISM locally (e.g. in frontend/.env) to fan out wider. Falls
+// back to 2 for unset/0/non-numeric values.
+const QA_WORKERS = Number(process.env.QA_PARALLELISM) || 2;
+
 export default defineConfig({
   testDir: './test/qa',
   // QA flows are read-only and run entirely in tutorial mode (reset once up front
-  // via the setup chain), so they parallelize safely. Start conservative at 2.
+  // via the setup chain), so they parallelize safely. Defaults to 2; override
+  // locally with QA_PARALLELISM (see QA_WORKERS above).
   fullyParallel: true,
-  workers: 2,
+  workers: QA_WORKERS,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',

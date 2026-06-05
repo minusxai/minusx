@@ -83,6 +83,42 @@ describe('POST /api/chat — errors persisted to conversation.errors[]', () => {
     expect(typeof entry.timestamp).toBe('number');
   });
 
+  it('LLM call failure fills the error column on the failed call\'s llm_logs row', async () => {
+    onboardingFaux.setResponses([
+      () => { throw new Error('synthetic LLM failure'); },
+    ]);
+
+    const res = await chatPostHandler(
+      makeRequest('http://localhost/api/chat?v=2', {
+        agent: 'OnboardingContextAgent',
+        user_message: 'Document the schema',
+        agent_args: {
+          connection_id: 'db',
+          schema: [{ schema: 'main', tables: ['orders'] }],
+          context: '',
+          app_state: { type: 'file' },
+        },
+      }),
+    );
+    expect((await res.json()).error).toBeTruthy();
+
+    // The request was written when the call was made; the error column is filled
+    // in from the boundary (the engine discards the failed message). The writes
+    // are fire-and-forget, so poll briefly.
+    const { getModules } = await import('@/lib/modules/registry');
+    let row: Record<string, unknown> | undefined;
+    for (let i = 0; i < 40 && !row; i++) {
+      const r = await getModules().db.exec<Record<string, unknown>>(
+        `SELECT request_json, error FROM llm_logs WHERE error IS NOT NULL ORDER BY created_at DESC LIMIT 1`,
+      );
+      row = r.rows[0];
+      if (!row) await new Promise((res) => setTimeout(res, 25));
+    }
+    expect(row, 'a failed call should leave an llm_logs row with the error column set').toBeTruthy();
+    expect(String(row!['error'])).toContain('synthetic LLM failure');
+    expect(row!['request_json'], 'the request is stored even on failure').toBeTruthy();
+  });
+
   it('Cycle 2: server-tool error (unknown tool) is mirrored with source:"server-tool"', async () => {
     // LLM calls a tool the agent doesn't have — orchestrator writes a
     // toolResult{isError:true, content:"Unknown tool ..."} to the pi-ai log,

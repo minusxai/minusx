@@ -286,6 +286,7 @@ function TabsLayout({
             py={1}
             px={2.5}
             cursor="pointer"
+            aria-label="Open chat"
             onClick={() => { setLastTab('chat'); onSetActiveSection('chat'); }}
             bg={activeTab === 'chat' ? 'bg.surface' : 'transparent'}
             borderRadius="md"
@@ -585,6 +586,7 @@ export default function RightSidebar({
             borderBottom="1px solid"
             borderColor="border.default"
             cursor="pointer"
+            aria-label="Expand sidebar"
             onClick={handleToggle}
             _hover={HOVER_BG_ELEVATED}
             transition="all 0.2s"

@@ -7,7 +7,7 @@
  * surfaces with the runtime `?e2e` opt-in and assert against the exposed Redux store.
  */
 import { expect, type Page, type APIRequestContext } from '@playwright/test';
-import { assertRedux } from '@/test/flows/e2e';
+import { assertRedux, getState } from '@/test/flows/e2e';
 
 const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
 
@@ -101,19 +101,29 @@ export async function openFileByClick(
       : `/${QA_MODE}`;
   await page.goto(e2eUrl(`/p${parent}`));
   await expect
-    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 15_000 })
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 45_000 })
     .toBe(true);
 
   const tile = page.getByLabel(file.name, { exact: true }).first();
-  if (!(await tile.isVisible().catch(() => false))) {
-    const sectionLabel = type === 'question' ? 'Questions section' : 'Dashboards section';
-    await page.getByLabel(sectionLabel).first().click().catch(() => {}); // expand if collapsed
+  // Only the Questions section is collapsed by default (FilesList: collapsedSections
+  // = ['question', '_other']); Dashboards are OPEN by default. So we expand ONLY for
+  // questions — and only after the header has rendered, so the click isn't swallowed.
+  // We must NOT click the Dashboards header: on a cold/contended listing the tile
+  // hasn't rendered yet, and clicking the already-open section would COLLAPSE it and
+  // hide the tile forever (the real cause of the 3-worker dashboard failures).
+  if (type === 'question') {
+    const section = page.getByLabel('Questions section').first();
+    await section.waitFor({ state: 'visible', timeout: 60_000 });
+    if (!(await tile.isVisible().catch(() => false))) {
+      await section.click().catch(() => {}); // expand the collapsed-by-default section
+    }
   }
-  // Wait for the listing to render the tile before clicking — remote deployments
-  // are slower than a local prod server, so keep these generous.
-  await tile.waitFor({ state: 'visible', timeout: 45_000 });
-  await tile.click({ timeout: 45_000 });
-  await page.waitForURL(/\/f\/\d+/, { timeout: 40_000 });
+  // Wait for the listing to render the tile. With no warmup, the first flow to open
+  // a folder pays the cold file-listing load — and under higher parallelism several
+  // do at once — so keep cold-start headroom (it lost the 45s race at 3 workers).
+  await tile.waitFor({ state: 'visible', timeout: 120_000 });
+  await tile.click({ timeout: 60_000 });
+  await page.waitForURL(/\/f\/\d+/, { timeout: 90_000 });
 }
 
 /** Click the question's Run-query control if present; else rely on auto-execute. */
@@ -230,6 +240,211 @@ export async function assertQuestionSaved(page: Page, questionId: number): Promi
       return inTutorial && typeof content.query === 'string' && content.query.trim().length > 0;
     },
     { message: `question ${questionId} not saved under /tutorial with a query`, timeout: 20_000 },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Real-LLM chat flows. These drive actual conversations (no faux channel), so
+// they only run when an LLM key is present (see `hasLlm()`); CI supplies it via
+// secrets. Assertions are STRUCTURAL (a reply landed, a web search ran) — never
+// on specific generated text — so they're stable under a real model.
+// ---------------------------------------------------------------------------
+
+/** Whether real-LLM flows can run (a provider key is configured for the server). */
+export function hasLlm(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY;
+}
+
+/** Wait until the e2e gate has exposed the Redux store on the page. */
+export async function waitForStore(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 30_000 })
+    .toBe(true);
+}
+
+// A floating composer and the main/sidebar composer can both be mounted; the
+// main one (the one we want) is rendered last. Take the last *visible* match.
+export function chatInput(page: Page) {
+  return page.getByLabel('Chat message input').filter({ visible: true }).last();
+}
+
+export function chatSend(page: Page) {
+  return page.getByLabel('Send message').filter({ visible: true }).last();
+}
+
+/** Open the chat: expand the right sidebar if collapsed, select the Chat tab, await the composer. */
+export async function openSideChat(page: Page): Promise<void> {
+  await page.getByLabel('Expand sidebar').click({ timeout: 5_000 }).catch(() => {});
+  await page.getByLabel('Open chat').click({ timeout: 5_000 }).catch(() => {});
+  await chatInput(page).waitFor({ state: 'visible', timeout: 20_000 });
+}
+
+/**
+ * Send a chat message. The composer is a Lexical contenteditable, so we *type*
+ * real keystrokes (a plain `fill()` doesn't register, leaving Send disabled);
+ * then wait for Send to enable before clicking.
+ */
+/**
+ * Returns true if the message was sent; false if the composer couldn't be driven
+ * to a sendable state in this environment (so callers can `test.skip` rather than
+ * fail — e.g. a prod tutorial build where connections never finish loading).
+ */
+export async function sendChat(page: Page, message: string): Promise<boolean> {
+  try {
+    const editor = chatInput(page);
+    await editor.waitFor({ state: 'visible', timeout: 20_000 });
+    await editor.click();
+    // pressSequentially fires real key events char-by-char so Lexical's onChange
+    // updates the React state that gates the Send button (a plain fill/type doesn't).
+    await editor.pressSequentially(message, { delay: 15 });
+    const send = chatSend(page);
+    // Send stays disabled until connections + context finish loading. With no
+    // warmup priming the cache, the first flow to reach the composer on a cold
+    // prod build pays that load here — so this is deliberately generous (the
+    // first parallel wave absorbs the cold start); every later send enables in ~1s.
+    await expect(send).toBeEnabled({ timeout: 240_000 });
+    await send.click();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Assert a conversation has FINISHED with at least `minUserTurns` user message(s)
+ * and at least one non-user reply. Generous timeout — a real model call is slower
+ * than the faux channel.
+ */
+export async function assertChatReplied(page: Page, minUserTurns = 1): Promise<void> {
+  await assertRedux(
+    page,
+    (s: any) => {
+      const convs = Object.values(s?.chat?.conversations ?? {}) as any[];
+      return convs.some((c) => {
+        if (c.executionState !== 'FINISHED') return false;
+        const msgs: any[] = c.messages ?? [];
+        const userTurns = msgs.filter((m) => m.role === 'user').length;
+        // A LEGIT reply, not a vacuous pass: an assistant message that did not
+        // error and carries real text. (Without this, an LLM failure that still
+        // lands a non-user message — e.g. the chart-image "Only HTTPS URLs"
+        // 400 — could green a flow that never actually answered.)
+        const replied = msgs.some((m) => {
+          if (!m.role || m.role === 'user') return false;
+          if (m.stopReason === 'error' || m.errorMessage) return false;
+          const text = Array.isArray(m.content)
+            ? m.content.filter((b: any) => b?.type === 'text').map((b: any) => b?.text ?? '').join('')
+            : typeof m.content === 'string' ? m.content : '';
+          return text.trim().length > 0;
+        });
+        return userTurns >= minUserTurns && replied;
+      });
+    },
+    { message: `chat did not finish with ${minUserTurns} user turn(s) + a non-empty, non-error reply`, timeout: 120_000 },
+  );
+}
+
+/** Assert a finished conversation that actually invoked web search (structural). */
+export async function assertWebSearchRan(page: Page): Promise<void> {
+  await assertRedux(
+    page,
+    (s: any) => {
+      const convs = Object.values(s?.chat?.conversations ?? {}) as any[];
+      return convs.some(
+        (c) => c.executionState === 'FINISHED' && JSON.stringify(c.messages ?? []).includes('web_search'),
+      );
+    },
+    { message: 'no web_search activity found in the conversation', timeout: 120_000 },
+  );
+}
+
+/**
+ * Pull an LLM call id out of the exposed Redux state. Debug rows carry
+ * `lllm_call_id`; some paths stamp `_lllmCallId` / `llm_call_id`. Match any.
+ */
+export async function firstLlmCallId(page: Page): Promise<string | null> {
+  const json = JSON.stringify((await getState(page)) ?? {});
+  const m = json.match(/"(?:lllm_call_id|llm_call_id|_lllmCallId)":\s*"([^"]+)"/);
+  return m ? m[1] : null;
+}
+
+/** The id of the highest-numbered conversation currently in Redux (the latest one). */
+export async function latestConversationId(page: Page): Promise<number | null> {
+  const state = await getState<{ chat?: { conversations?: Record<string, unknown> } }>(page);
+  const ids = Object.keys(state?.chat?.conversations ?? {}).map(Number).filter((n) => !Number.isNaN(n));
+  return ids.length ? Math.max(...ids) : null;
+}
+
+/** Wait for the agent to be running, then click Stop. Returns false if it finished first. */
+export async function stopAgent(page: Page): Promise<boolean> {
+  const stop = page.getByLabel('Stop agent');
+  try {
+    await stop.waitFor({ state: 'visible', timeout: 20_000 });
+  } catch {
+    return false; // the model replied before we could interrupt
+  }
+  await stop.click();
+  return true;
+}
+
+/** Assert nothing is actively running (no conversation in STREAMING/EXECUTING). */
+export async function assertAgentStopped(page: Page): Promise<void> {
+  await assertRedux(
+    page,
+    (s: { chat?: { conversations?: Record<string, { executionState?: string }> } }) => {
+      const convs = Object.values(s?.chat?.conversations ?? {});
+      return convs.length > 0 && convs.every((c) => c.executionState !== 'STREAMING' && c.executionState !== 'EXECUTING');
+    },
+    { message: 'agent did not stop after clicking Stop', timeout: 30_000 },
+  );
+}
+
+/**
+ * Assert the PERSISTED conversation log (server-side, via /api/files) contains a
+ * user message matching `needle`. Catches the interrupt-drops-the-first-message
+ * bug: an aborted turn never wrote its user message to the log, so a later
+ * "Continue" resumed an empty conversation and the model saw no history.
+ */
+export async function assertUserMessagePersisted(
+  request: APIRequestContext,
+  conversationId: number,
+  needle: string,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/files/${conversationId}?mode=${QA_MODE}`);
+        if (!res.ok()) return false;
+        const log: unknown[] = (await res.json())?.data?.content?.log ?? [];
+        return log.some(
+          (e) => typeof (e as { args?: { user_message?: unknown } })?.args?.user_message === 'string'
+            && ((e as { args: { user_message: string } }).args.user_message).includes(needle),
+        );
+      },
+      { message: `conversation ${conversationId} has no persisted user message containing "${needle}"`, timeout: 30_000 },
+    )
+    .toBe(true);
+}
+
+/** Turn on the admin debug view: devMode + advanced + expanded messages (the
+ * detailed view is where the per-message debug card surfaces). */
+export async function enableDebugUi(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const store = (window as unknown as { __MX_STORE__?: { dispatch(a: unknown): void } }).__MX_STORE__;
+    store?.dispatch({ type: 'ui/setShowAdvanced', payload: true });
+    store?.dispatch({ type: 'ui/setDevMode', payload: true });
+    store?.dispatch({ type: 'ui/setShowExpandedMessages', payload: true });
+  });
+}
+
+/** Assert a conversation (by id) has loaded its messages (≥ minMessages). */
+export async function assertConversationLoaded(page: Page, id: number, minMessages = 2): Promise<void> {
+  await assertRedux(
+    page,
+    (s: { chat?: { conversations?: Record<number, { messages?: unknown[] }> } }) => {
+      const conv = s?.chat?.conversations?.[id];
+      return Array.isArray(conv?.messages) && conv!.messages!.length >= minMessages;
+    },
+    { message: `conversation ${id} did not load ${minMessages}+ messages`, timeout: 30_000 },
   );
 }
 

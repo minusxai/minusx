@@ -62,6 +62,11 @@ import {
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
+import { setLlmCallRecorder } from '@/orchestrator/llm';
+import type { AssistantMessage } from '@/orchestrator/llm';
+import type { LLMCallDetail } from '@/lib/chat-orchestration';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
 import type {
@@ -75,6 +80,18 @@ import type {
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
+
+// Persist each LLM call's pi-format request the moment it's made; the response
+// is filled into the same row after the turn (see recordLlmCalls), and a failed
+// call's error is written here (the engine discards the failed message, so it's
+// only available at the boundary). Registered once — headless / benchmark runs
+// don't import this module, so they don't log.
+setLlmCallRecorder({
+  recordRequest: (callId, request) => { void recordLlmRequest(callId, JSON.stringify(request)); },
+  recordError: (callId, errorMessage, responseJson) => {
+    void recordLlmResponse({ callId, responseJson, error: errorMessage });
+  },
+});
 
 /**
  * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
@@ -557,6 +574,91 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
   return null;
 }
 
+/**
+ * Record this turn's LLM calls out-of-band, from the turn's new log entries:
+ * write per-call stats to `llm_call_events` and fill the response into the
+ * `llm_logs` row whose request was already written when the call was made
+ * (LOCAL only — never forwarded), then publish `AppEvents.LLM_CALL` for the
+ * best-effort central stats forward. The call id + duration are the ones the
+ * engine already stamps onto each message. Best-effort.
+ */
+async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
+  try {
+    const userId = typeof user.userId === 'number' ? user.userId : null;
+    const llmCalls: Record<string, LLMCallDetail> = {};
+    for (const entry of piDiff) {
+      const msg = entry as unknown as AssistantMessage;
+      if (msg.role !== 'assistant') continue;
+      // The engine stamps `_lllmCallId` / `_duration` onto the message (or its
+      // first tool-call block); mirror that lookup to recover them.
+      const firstTool = msg.content?.find((c) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+      const meta = (firstTool ?? msg) as unknown as Record<string, unknown>;
+      const callId = meta['_lllmCallId'] as string | undefined;
+      if (!callId) continue;
+
+      const u = msg.usage;
+      const duration = typeof meta['_duration'] === 'number' ? (meta['_duration'] as number) : 0;
+      llmCalls[callId] = {
+        llm_call_id: callId,
+        provider: msg.provider,
+        model: msg.model,
+        duration,
+        total_tokens: u?.totalTokens ?? 0,
+        prompt_tokens: u?.input ?? 0,
+        completion_tokens: u?.output ?? 0,
+        cached_tokens: u?.cacheRead ?? 0,
+        cache_creation_tokens: u?.cacheWrite ?? 0,
+        cost: u?.cost?.total ?? 0,
+        stream: true,
+        finish_reason: msg.stopReason,
+      };
+
+      // LOCAL writes are AWAITED so they persist before the handler returns
+      // (a standalone prod build won't keep fire-and-forget promises alive).
+      await recordLlmCallEvent({
+        conversationId,
+        llmCallId: callId,
+        provider: msg.provider,
+        model: msg.model,
+        mode: user.mode,
+        totalTokens: u?.totalTokens ?? 0,
+        promptTokens: u?.input ?? 0,
+        completionTokens: u?.output ?? 0,
+        cachedTokens: u?.cacheRead ?? 0,
+        cacheCreationTokens: u?.cacheWrite ?? 0,
+        cost: u?.cost?.total ?? 0,
+        durationS: duration,
+        stream: true,
+        finishReason: msg.stopReason,
+        userId,
+      });
+
+      // The request row was written when the call was made; fill in the
+      // response (or the error message + error column for a failed call).
+      await recordLlmResponse({
+        callId,
+        userId,
+        provider: msg.provider,
+        model: msg.model,
+        responseJson: JSON.stringify(msg),
+        error: msg.stopReason === 'error' ? (msg.errorMessage ?? 'error') : null,
+      });
+    }
+    if (Object.keys(llmCalls).length === 0) return;
+    // Best-effort central forward (stats → mx-llm-provider via notifyAppEvent).
+    appEventRegistry.publish(AppEvents.LLM_CALL, {
+      mode: user.mode,
+      conversationId,
+      llmCalls,
+      userId: userId ?? undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
+  } catch (e) {
+    console.error('[v2/chat] failed to record LLM calls:', e);
+  }
+}
+
 /** Persist the new entries and build the legacy ChatResponse. */
 async function persistAndBuildLegacyResponse(
   conversationId: number,
@@ -671,6 +773,11 @@ async function persistAndBuildLegacyResponse(
   } catch (e) {
     console.error('[v2/chat] failed to append error log entry:', e);
   }
+
+  // Record LLM usage (stats → llm_call_events) and raw pi-format request/
+  // response blobs (llm_logs, local only); awaited so the rows persist before
+  // the handler returns. Also forwards stats centrally (best-effort).
+  await recordLlmCalls(piDiff, finalConversationId, user);
 
   // Translate the FULL log to legacy shape so completed_tool_calls / debug
   // / log_index reflect the legacy view, then slice to the new diff for
@@ -799,63 +906,86 @@ export async function* runChatTurnStreamV2(
     return;
   }
   let runError: string | undefined;
-  try {
-    if (setup.rawStream) {
-      for await (const ev of setup.rawStream) {
-        // Capture orchestrator error events (e.g. LLM auth failures, network
-        // errors). EventStream.result() never throws — errors surface only as
-        // stream events — so we must intercept them here or they are silently
-        // dropped by piStreamEventToLegacy returning null.
-        const evType = (ev as { type?: string }).type;
-        if (evType === 'error') {
-          const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
-          if (errMsg && !runError) {
-            runError = errMsg;
-            console.error('[v2/stream] orchestrator error event:', errMsg);
-          }
-          continue;
-        }
-        const translated = piStreamEventToLegacy(ev as StreamEvent, setup.conversationId);
-        if (translated) {
-          yield { wire: 'streaming_event', data: translated };
-        }
-      }
-      await setup.rawStream.result();
-    }
-  } catch (err) {
-    console.error('[v2/stream] orchestrator run threw:', err);
-    runError = err instanceof Error ? err.message : String(err);
-    // Tag the error so any escape paths (e.g. dangling microtasks that reject
-    // after the route returns) route to the right conversation via the
-    // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
-    if (err && typeof err === 'object') {
-      (err as { conversationId?: number }).conversationId = setup.conversationId;
-    }
-  }
-
-  let response: V2LegacyChatResponse;
-  try {
-    response = await persistAndBuildLegacyResponse(
+  // Persist exactly once. The user message is in orch.log from run() (synchronous),
+  // so calling this in the `finally` guarantees it survives a client abort; the
+  // normal path also calls it to build the `done` response.
+  let persisted = false;
+  const persistOnce = async (): Promise<V2LegacyChatResponse | undefined> => {
+    if (persisted) return undefined;
+    persisted = true;
+    return persistAndBuildLegacyResponse(
       setup.conversationId,
       setup.expectedLogIndex,
       setup.orchestrator,
       user,
       runError,
     );
-  } catch (persistErr) {
-    console.error('[v2/stream] persist threw:', persistErr);
-    const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
-    response = {
-      conversationID: setup.conversationId,
-      log_index: setup.expectedLogIndex,
-      pending_tool_calls: [],
-      completed_tool_calls: [],
-      debug: [],
-      error: runError ?? persistError,
-    };
-  }
-  yield {
-    wire: 'done',
-    data: { ...response, type: 'done', timestamp: new Date().toISOString() },
   };
+
+  try {
+    try {
+      if (setup.rawStream) {
+        for await (const ev of setup.rawStream) {
+          // Capture orchestrator error events (e.g. LLM auth failures, network
+          // errors). EventStream.result() never throws — errors surface only as
+          // stream events — so we must intercept them here or they are silently
+          // dropped by piStreamEventToLegacy returning null.
+          const evType = (ev as { type?: string }).type;
+          if (evType === 'error') {
+            const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
+            if (errMsg && !runError) {
+              runError = errMsg;
+              console.error('[v2/stream] orchestrator error event:', errMsg);
+            }
+            continue;
+          }
+          const translated = piStreamEventToLegacy(ev as StreamEvent, setup.conversationId);
+          if (translated) {
+            yield { wire: 'streaming_event', data: translated };
+          }
+        }
+        await setup.rawStream.result();
+      }
+    } catch (err) {
+      console.error('[v2/stream] orchestrator run threw:', err);
+      runError = err instanceof Error ? err.message : String(err);
+      // Tag the error so any escape paths (e.g. dangling microtasks that reject
+      // after the route returns) route to the right conversation via the
+      // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
+      if (err && typeof err === 'object') {
+        (err as { conversationId?: number }).conversationId = setup.conversationId;
+      }
+    }
+
+    let response: V2LegacyChatResponse;
+    try {
+      response = (await persistOnce())!;
+    } catch (persistErr) {
+      console.error('[v2/stream] persist threw:', persistErr);
+      const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
+      response = {
+        conversationID: setup.conversationId,
+        log_index: setup.expectedLogIndex,
+        pending_tool_calls: [],
+        completed_tool_calls: [],
+        debug: [],
+        error: runError ?? persistError,
+      };
+    }
+    yield {
+      wire: 'done',
+      data: { ...response, type: 'done', timestamp: new Date().toISOString() },
+    };
+  } finally {
+    // If the client aborted mid-stream the generator is abandoned before the
+    // persist above runs (its `yield`s never resume) — persist here so the user's
+    // message and partial turn survive the interrupt instead of being lost.
+    if (!persisted) {
+      try {
+        await persistOnce();
+      } catch (e) {
+        console.error('[v2/stream] abort-persist failed:', e);
+      }
+    }
+  }
 }
