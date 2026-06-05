@@ -27,6 +27,7 @@ import {
   hasLlm, waitForStore, openSideChat, sendChat,
   assertChatReplied, assertWebSearchRan, firstLlmCallId,
   stopAgent, assertAgentStopped, enableDebugUi, latestConversationId, assertConversationLoaded,
+  assertUserMessagePersisted,
 } from './flows';
 
 test.describe('real-LLM chat flows', () => {
@@ -148,6 +149,29 @@ test.describe('real-LLM chat flows', () => {
     ).toBe(true);
     expect(await stopAgent(page), 'agent should still be running when Stop is clicked').toBe(true);
     await assertAgentStopped(page);
+  });
+
+  test('interrupt then resume keeps the first message in the persisted log', async ({ page, request }) => {
+    await page.goto(e2eUrl('/explore'), { waitUntil: 'domcontentloaded' });
+    await waitForStore(page);
+
+    // A distinctive first message + a long-running prompt so we can interrupt it
+    // mid-run (before the turn would normally persist at completion).
+    const marker = 'Eiffel Tower';
+    expect(
+      await sendChat(page, `Search the web for facts about the ${marker}, then write a long multi-paragraph history of it.`),
+      'composer should be driveable',
+    ).toBe(true);
+    expect(await stopAgent(page), 'agent should still be running when Stop is clicked').toBe(true);
+    await assertAgentStopped(page);
+
+    const id = await latestConversationId(page);
+    expect(id, 'the interrupted turn should have created a conversation').toBeTruthy();
+
+    // THE BUG: an interrupted turn never persisted its user message, so resuming
+    // ("Continue") saw an empty log and the model treated it as a new conversation.
+    // The first message MUST survive the interrupt in the persisted log.
+    await assertUserMessagePersisted(request, id!, marker);
   });
 
   test('resume: reload a conversation and continue it', async ({ page }) => {

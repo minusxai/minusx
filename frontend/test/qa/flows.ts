@@ -398,6 +398,33 @@ export async function assertAgentStopped(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Assert the PERSISTED conversation log (server-side, via /api/files) contains a
+ * user message matching `needle`. Catches the interrupt-drops-the-first-message
+ * bug: an aborted turn never wrote its user message to the log, so a later
+ * "Continue" resumed an empty conversation and the model saw no history.
+ */
+export async function assertUserMessagePersisted(
+  request: APIRequestContext,
+  conversationId: number,
+  needle: string,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/files/${conversationId}?mode=${QA_MODE}`);
+        if (!res.ok()) return false;
+        const log: unknown[] = (await res.json())?.data?.content?.log ?? [];
+        return log.some(
+          (e) => typeof (e as { args?: { user_message?: unknown } })?.args?.user_message === 'string'
+            && ((e as { args: { user_message: string } }).args.user_message).includes(needle),
+        );
+      },
+      { message: `conversation ${conversationId} has no persisted user message containing "${needle}"`, timeout: 30_000 },
+    )
+    .toBe(true);
+}
+
 /** Turn on the admin debug view: devMode + advanced + expanded messages (the
  * detailed view is where the per-message debug card surfaces). */
 export async function enableDebugUi(page: Page): Promise<void> {
