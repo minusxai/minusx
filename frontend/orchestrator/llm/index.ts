@@ -32,7 +32,6 @@ import type {
   AssistantMessageDiagnostic,
 } from '@mariozechner/pi-ai';
 import type { TSchema } from 'typebox';
-import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
 
 // ─── Opaque handle types (aliased to pi; never inspected outside this boundary) ──
 
@@ -208,23 +207,12 @@ export interface StreamOptions {
 export class EventStream<T, R = T> extends PiEventStream<T, R> {}
 
 /**
- * Resolve a provider model handle. When the MX proxy is configured, rewrite the
- * base URL + headers so the call is routed (and cost-tracked) through it; OSS
- * deployments (no proxy) call the provider directly.
+ * Resolve a provider model handle. Providers are called directly; LLM usage is
+ * recorded out-of-band after each call (see `callLLM` → `AppEvents.LLM_CALL`),
+ * so there is no request-path proxy.
  */
 export function getModel<P extends string, M extends string>(provider: P, model: M): Model<Api> {
-  const base = piGetModel(provider as never, model as never);
-  if (!MX_API_BASE_URL) return base;
-  const originalBaseUrl = (base as unknown as { baseUrl?: string }).baseUrl;
-  return {
-    ...base,
-    baseUrl: `${MX_API_BASE_URL}/proxy`,
-    headers: {
-      ...((base as unknown as { headers?: Record<string, string> }).headers ?? {}),
-      'mx-api-key': MX_API_KEY,
-      ...(originalBaseUrl ? { 'x-original-base-url': originalBaseUrl } : {}),
-    },
-  } as typeof base;
+  return piGetModel(provider as never, model as never);
 }
 
 /** Stream a single model call. Returns a stream of our owned `AssistantMessageEvent`s. */

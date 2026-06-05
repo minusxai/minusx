@@ -7,7 +7,6 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { ApiResponse, ErrorCode, ErrorCodes } from './api-types';
 import { UserFacingError, FileExistsError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
-import { logNetworkResponse } from '@/lib/network-logging';
 
 async function getRequestId(): Promise<string | null> {
   try {
@@ -16,32 +15,6 @@ async function getRequestId(): Promise<string | null> {
   } catch {
     // Not in a Next.js request context (e.g. tests or build time)
     return null;
-  }
-}
-
-async function getRequestPath(): Promise<string | undefined> {
-  try {
-    const h = await headers();
-    return h.get('x-request-path') ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-interface RequestUserContext {
-  userId: string | null;
-  mode: string | null;
-}
-
-async function getRequestUser(): Promise<RequestUserContext> {
-  try {
-    const h = await headers();
-    return {
-      userId: h.get('x-user-id'),
-      mode: h.get('x-mode'),
-    };
-  } catch {
-    return { userId: null, mode: null };
   }
 }
 
@@ -69,8 +42,7 @@ export async function errorResponse(
   status: number = 500,
   details?: unknown
 ): Promise<NextResponse<ApiResponse>> {
-  const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
-  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, requestUser, requestPath);
+  const requestId = await getRequestId();
   return NextResponse.json({
     success: false,
     error: {
@@ -174,8 +146,7 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
       code = ErrorCodes.CONFLICT;
     }
 
-    const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
-    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, requestUser, requestPath);
+    const requestId = await getRequestId();
     return NextResponse.json({
       success: false,
       error: {

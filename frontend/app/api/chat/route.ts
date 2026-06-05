@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withResponseLogging } from '@/lib/api/with-response-logging';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { ToolCall } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
@@ -30,7 +29,7 @@ interface ChatResponse {
  * are continued in place; a legacy (v1) conversation file is forked to a fresh
  * v2 conversation and continued there.
  */
-export const POST = withResponseLogging(async function POST(request: NextRequest) {
+export async function POST(request: NextRequest) {
   let body: ChatRequest | undefined;
   let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
@@ -111,4 +110,4 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
       { status: 500 },
     );
   }
-});
+}
