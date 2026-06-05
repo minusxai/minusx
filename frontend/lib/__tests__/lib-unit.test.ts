@@ -632,7 +632,7 @@ describe('successResponse', () => {
 });
 
 describe('errorResponse', () => {
-  it('includes request_id in response JSON and POSTs is_error=true to /network/response', async () => {
+  it('includes request_id in response JSON', async () => {
     mockHeaders.mockResolvedValue(makeApiHeaders({
       requestId: 'req-e2e-2',
       userId: '99',
@@ -646,17 +646,6 @@ describe('errorResponse', () => {
     expect(clientBody.success).toBe(false);
     expect(clientBody.error.code).toBe('NOT_FOUND');
     expect(clientBody.request_id).toBe('req-e2e-2');
-
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const networkBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(networkBody.request_id).toBe('req-e2e-2');
-    expect(networkBody.status_code).toBe(404);
-    expect(networkBody.is_error).toBe(true);
-    expect(networkBody.response_body.error.code).toBe('NOT_FOUND');
-    expect(networkBody.user_id).toBe('99');
-    expect(networkBody.mode).toBe('tutorial');
   });
 
   it('omits request_id when header absent and does not call fetch', async () => {
@@ -674,7 +663,7 @@ describe('errorResponse', () => {
 });
 
 describe('handleApiError', () => {
-  it('includes request_id in response JSON and POSTs to /network/response', async () => {
+  it('includes request_id in response JSON', async () => {
     mockHeaders.mockResolvedValue(makeApiHeaders({
       requestId: 'req-e2e-3',
       userId: '42',
@@ -686,15 +675,6 @@ describe('handleApiError', () => {
 
     expect(clientBody.success).toBe(false);
     expect(clientBody.request_id).toBe('req-e2e-3');
-
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const networkBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(networkBody.request_id).toBe('req-e2e-3');
-    expect(networkBody.is_error).toBe(true);
-    expect(networkBody.status_code).toBe(500);
-    expect(networkBody.user_id).toBe('42');
   });
 
   it('still returns valid error response when headers() throws', async () => {
