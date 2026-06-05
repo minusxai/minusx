@@ -62,6 +62,9 @@ import {
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { insertLlmLog } from '@/lib/analytics/file-analytics.db';
+import type { LLMCallDetail } from '@/lib/chat-orchestration';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
 import type {
@@ -557,6 +560,57 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
   return null;
 }
 
+/**
+ * Drain the orchestrator's per-call records: publish `AppEvents.LLM_CALL`
+ * (stats → `llm_call_events` locally + forwarded centrally) and write the raw
+ * pi-format request/response blobs to `llm_logs` (LOCAL only — never forwarded).
+ * Best-effort: never throws into the response path.
+ */
+function recordLlmCalls(orch: Orchestrator, conversationId: number, user: EffectiveUser): void {
+  const records = orch.llmCallRecords;
+  if (records.length === 0) return;
+  try {
+    const userId = typeof user.userId === 'number' ? user.userId : null;
+    const llmCalls: Record<string, LLMCallDetail> = {};
+    for (const r of records) {
+      const u = r.response.usage;
+      llmCalls[r.callId] = {
+        llm_call_id: r.callId,
+        provider: r.provider,
+        model: r.model,
+        duration: r.durationSec,
+        total_tokens: u.totalTokens,
+        prompt_tokens: u.input,
+        completion_tokens: u.output,
+        cached_tokens: u.cacheRead,
+        cache_creation_tokens: u.cacheWrite,
+        cost: u.cost.total,
+        stream: true,
+        finish_reason: r.response.stopReason,
+      };
+      insertLlmLog({
+        callId: r.callId,
+        userId,
+        provider: r.provider,
+        model: r.model,
+        requestJson: JSON.stringify(r.request),
+        responseJson: JSON.stringify(r.response),
+        error: r.errored ? (r.response.errorMessage ?? 'error') : null,
+      });
+    }
+    appEventRegistry.publish(AppEvents.LLM_CALL, {
+      mode: user.mode,
+      conversationId,
+      llmCalls,
+      userId: userId ?? undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
+  } catch (e) {
+    console.error('[v2/chat] failed to record LLM calls:', e);
+  }
+}
+
 /** Persist the new entries and build the legacy ChatResponse. */
 async function persistAndBuildLegacyResponse(
   conversationId: number,
@@ -671,6 +725,10 @@ async function persistAndBuildLegacyResponse(
   } catch (e) {
     console.error('[v2/chat] failed to append error log entry:', e);
   }
+
+  // Record LLM usage (stats → llm_call_events + central forward) and raw
+  // pi-format request/response blobs (llm_logs, local only) out-of-band.
+  recordLlmCalls(orch, finalConversationId, user);
 
   // Translate the FULL log to legacy shape so completed_tool_calls / debug
   // / log_index reflect the legacy view, then slice to the new diff for
