@@ -101,7 +101,7 @@ export async function openFileByClick(
       : `/${QA_MODE}`;
   await page.goto(e2eUrl(`/p${parent}`));
   await expect
-    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 15_000 })
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 45_000 })
     .toBe(true);
 
   const tile = page.getByLabel(file.name, { exact: true }).first();
@@ -109,11 +109,13 @@ export async function openFileByClick(
     const sectionLabel = type === 'question' ? 'Questions section' : 'Dashboards section';
     await page.getByLabel(sectionLabel).first().click().catch(() => {}); // expand if collapsed
   }
-  // Wait for the listing to render the tile before clicking — remote deployments
-  // are slower than a local prod server, so keep these generous.
-  await tile.waitFor({ state: 'visible', timeout: 45_000 });
-  await tile.click({ timeout: 45_000 });
-  await page.waitForURL(/\/f\/\d+/, { timeout: 40_000 });
+  // Wait for the folder's file listing to render the tile before clicking. With no
+  // warmup, the first flow to open a folder pays the cold file-listing load — and
+  // under higher parallelism several do so at once — so this needs the same
+  // cold-start headroom as the chat composer (it loses the 45s race at 3 workers).
+  await tile.waitFor({ state: 'visible', timeout: 120_000 });
+  await tile.click({ timeout: 60_000 });
+  await page.waitForURL(/\/f\/\d+/, { timeout: 90_000 });
 }
 
 /** Click the question's Run-query control if present; else rely on auto-execute. */
