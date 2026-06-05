@@ -215,26 +215,17 @@ export function getModel<P extends string, M extends string>(provider: P, model:
   return piGetModel(provider as never, model as never);
 }
 
-/** The pi-format request captured for one model call, for out-of-band logging. */
-export interface LlmCallRequestCapture {
-  request: Context;
-}
-
-// Header the orchestrator stamps with the per-call id (mirrors callLLM). The
-// capture is keyed by that id — NOT by response-object identity, which isn't
-// preserved across the streaming/persist path.
+/**
+ * Optional hook the app registers to persist the pi-format request the moment a
+ * call is made — the boundary stays free of any DB/app dependency (dependency
+ * inversion). Headless / benchmark runs don't register one, so nothing is
+ * recorded there. Header the orchestrator stamps the per-call id into.
+ */
+export type LlmRequestRecorder = (callId: string, request: Context) => void;
 const CALL_ID_HEADER = 'X-MX-Request-Call-ID';
-// Bounded so headless / benchmark runs (which never drain) can't grow unbounded;
-// the Next server drains every entry per request so it normally stays tiny.
-const MAX_LLM_CALL_CAPTURES = 256;
-// eslint-disable-next-line no-restricted-syntax -- keyed by globally-unique per-call UUIDs (the call-id header), drained per request and size-bounded; not a cross-request cache
-const llmCallRequests = new Map<string, LlmCallRequestCapture>();
-
-/** Take (read-and-clear) the captured request for a call id, if any. */
-export function takeLlmCallRequest(callId: string): LlmCallRequestCapture | undefined {
-  const captured = llmCallRequests.get(callId);
-  if (captured) llmCallRequests.delete(callId);
-  return captured;
+let llmRequestRecorder: LlmRequestRecorder | null = null;
+export function setLlmRequestRecorder(recorder: LlmRequestRecorder | null): void {
+  llmRequestRecorder = recorder;
 }
 
 /** Stream a single model call. Returns a stream of our owned `AssistantMessageEvent`s. */
@@ -243,16 +234,10 @@ export function streamSimple(
   context: Context,
   options?: StreamOptions,
 ): EventStream<AssistantMessageEvent, AssistantMessage> {
-  // Capture the pi-format request synchronously, keyed by the call id, so the
-  // app can log it out-of-band. Side-effect-free for the caller.
+  // Persist the request as the call is made (response is filled in after the
+  // turn). Side-effect-free for the caller; no-op when no recorder is registered.
   const callId = (options?.headers as Record<string, string> | undefined)?.[CALL_ID_HEADER];
-  if (callId) {
-    if (llmCallRequests.size >= MAX_LLM_CALL_CAPTURES) {
-      const oldest = llmCallRequests.keys().next().value;
-      if (oldest !== undefined) llmCallRequests.delete(oldest);
-    }
-    llmCallRequests.set(callId, { request: context });
-  }
+  if (callId && llmRequestRecorder) llmRequestRecorder(callId, context);
   return piStreamSimple(
     model,
     context as unknown as PiContext,

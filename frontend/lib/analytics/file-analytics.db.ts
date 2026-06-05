@@ -37,12 +37,11 @@ export interface InsertLlmCallEventParams {
   userId?: number | null;
 }
 
-export interface InsertLlmLogParams {
+export interface RecordLlmResponseParams {
   callId: string;
   userId?: number | null;
   provider?: string | null;
   model?: string | null;
-  requestJson: string;
   responseJson: string;
   error?: string | null;
 }
@@ -164,28 +163,44 @@ export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
 }
 
 /**
- * Awaitable INSERT of the raw pi-format request/response for one LLM call.
- * Local only — never forwarded. Errors caught + logged. `await` to guarantee
- * the blob persists before the handler returns.
+ * Write the pi-format REQUEST for one LLM call (called when the call is made,
+ * before the response exists). The response is filled in later by
+ * `recordLlmResponse`. Upserts by call_id so the two writes are order-
+ * independent. Local only — never forwarded. Errors caught + logged.
  */
-export async function recordLlmLog(p: InsertLlmLogParams): Promise<void> {
+export async function recordLlmRequest(callId: string, requestJson: string): Promise<void> {
   try {
     await getModules().db.exec(
-      `INSERT INTO llm_logs (call_id, user_id, provider, model, request_json, response_json, error)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (call_id) DO NOTHING`,
-      [
-        p.callId, p.userId ?? null, p.provider ?? null, p.model ?? null,
-        p.requestJson, p.responseJson, p.error ?? null,
-      ]
+      `INSERT INTO llm_logs (call_id, request_json) VALUES ($1, $2)
+       ON CONFLICT (call_id) DO UPDATE SET request_json = EXCLUDED.request_json`,
+      [callId, requestJson]
     );
   } catch (err) {
-    console.error('[analytics] llm_logs insert failed:', err);
+    console.error('[analytics] llm_logs request write failed:', err);
   }
 }
 
-export function insertLlmLog(p: InsertLlmLogParams): void {
-  fireAndForget(recordLlmLog(p));
+/**
+ * Fill in the RESPONSE (and user/provider/model/error) for a call once the turn
+ * completes. Upserts so it works whether or not the request row already exists.
+ * `await` to guarantee the row persists before the handler returns.
+ */
+export async function recordLlmResponse(p: RecordLlmResponseParams): Promise<void> {
+  try {
+    await getModules().db.exec(
+      `INSERT INTO llm_logs (call_id, user_id, provider, model, response_json, error)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (call_id) DO UPDATE SET
+         user_id       = EXCLUDED.user_id,
+         provider      = EXCLUDED.provider,
+         model         = EXCLUDED.model,
+         response_json = EXCLUDED.response_json,
+         error         = EXCLUDED.error`,
+      [p.callId, p.userId ?? null, p.provider ?? null, p.model ?? null, p.responseJson, p.error ?? null]
+    );
+  } catch (err) {
+    console.error('[analytics] llm_logs response write failed:', err);
+  }
 }
 
 /** Read one LLM log blob row by call id (for the Debug UI). */

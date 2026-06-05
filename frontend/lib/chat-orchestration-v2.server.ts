@@ -63,8 +63,8 @@ import {
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { recordLlmLog, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
-import { takeLlmCallRequest } from '@/orchestrator/llm';
+import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
+import { setLlmRequestRecorder } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
@@ -80,6 +80,11 @@ import type {
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
+
+// Persist each LLM call's pi-format request the moment it's made; the response
+// is filled into the same row after the turn (see recordLlmCalls). Registered
+// once — headless / benchmark runs don't import this module, so they don't log.
+setLlmRequestRecorder((callId, request) => { void recordLlmRequest(callId, JSON.stringify(request)); });
 
 /**
  * Default v=2 registrables. The DB tools here (`ExecuteQuery`,
@@ -621,17 +626,16 @@ async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user
         userId,
       });
 
-      const captured = takeLlmCallRequest(callId);
-      if (captured) {
-        await recordLlmLog({
-          callId,
-          userId,
-          provider: msg.provider,
-          model: msg.model,
-          requestJson: JSON.stringify(captured.request),
-          responseJson: JSON.stringify(msg),
-        });
-      }
+      // The request row was written when the call was made; fill in the
+      // response (or the error message + error column for a failed call).
+      await recordLlmResponse({
+        callId,
+        userId,
+        provider: msg.provider,
+        model: msg.model,
+        responseJson: JSON.stringify(msg),
+        error: msg.stopReason === 'error' ? (msg.errorMessage ?? 'error') : null,
+      });
     }
     if (Object.keys(llmCalls).length === 0) return;
     // Best-effort central forward (stats → mx-llm-provider via notifyAppEvent).
