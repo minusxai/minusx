@@ -294,6 +294,7 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
               <Box>
                 <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={2}>Name</Text>
                 <Input
+                  aria-label="File name"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
@@ -343,6 +344,7 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
                 Cancel
               </Button>
               <Button
+                aria-label="Confirm save"
                 size="sm"
                 bg="accent.teal"
                 color="white"

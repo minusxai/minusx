@@ -27,8 +27,10 @@ if (!EXTERNAL) fs.mkdirSync(PGLITE_DIR, { recursive: true });
 
 export default defineConfig({
   testDir: './test/qa',
-  fullyParallel: false,
-  workers: 1,
+  // QA flows are read-only and run entirely in tutorial mode (reset once up front
+  // via the setup chain), so they parallelize safely. Start conservative at 2.
+  fullyParallel: true,
+  workers: 2,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
@@ -39,12 +41,20 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
+  // Ordered setup chain: log in → reset tutorial → run flows. The reset uses the
+  // admin storageState and is best-effort (skips on a non-admin account).
   projects: [
-    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    {
+      name: 'reset',
+      testMatch: /reset\.setup\.ts/,
+      use: { storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
     {
       name: 'qa',
       use: { ...devices['Desktop Chrome'], storageState: AUTH_FILE },
-      dependencies: ['setup'],
+      dependencies: ['reset'],
     },
   ],
   // Local-only: a prod-ish server (build-time E2E flag OFF, runtime secret ON),
@@ -52,19 +62,23 @@ export default defineConfig({
   webServer: EXTERNAL
     ? undefined
     : {
-        command: 'npm run dev',
+        // A real PROD build + start (not `next dev`): precompiled routes are stable
+        // under parallel workers — the dev server compiles on-demand and races cold
+        // builds → page.goto timeouts. Also genuinely "prod-ish" (the config's intent).
+        command: 'npm run build && npm run start',
         url: LOCAL_URL,
-        timeout: 180_000,
+        timeout: 600_000, // a cold prod build can take several minutes
         reuseExistingServer: !process.env.CI,
         env: {
           ...process.env,
           PORT: String(PORT),
           AUTH_URL: LOCAL_URL,
           NEXTAUTH_URL: LOCAL_URL,
-          // deliberately NO NEXT_PUBLIC_E2E → E2E_MODE off (simulates prod).
+          // deliberately NO NEXT_PUBLIC_E2E → E2E_MODE off (the runtime gate does the work).
           NEXT_DIST_DIR: '.next-qa',
           DB_TYPE: 'pglite',
           PGLITE_DATA_DIR: PGLITE_DIR,
+          NODE_OPTIONS: '--max-old-space-size=4096',
           E2E_RUNTIME_SECRET: process.env.QA_E2E_SECRET || 'local-qa-secret',
         },
       },

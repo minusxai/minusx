@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
+import DataPrepBanner from './DataPrepBanner';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { clearViewStack } from '@/store/uiSlice';
@@ -48,6 +49,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         transition="margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
         minH="100vh"
       >
+        <DataPrepBanner />
         {children}
       </Box>
     </RecordingProvider>

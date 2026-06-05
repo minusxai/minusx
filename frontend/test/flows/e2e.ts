@@ -7,9 +7,16 @@
  */
 import { expect, type Page } from '@playwright/test';
 
-/** Read the exposed Redux state (E2E_MODE puts the store on window). */
+/**
+ * Read the exposed Redux state (the e2e gate puts the store on window).
+ * Null-safe: returns null before the store is exposed so pollers retry cleanly
+ * instead of throwing on `undefined.getState()`.
+ */
 export async function getState<T = unknown>(page: Page): Promise<T> {
-  return page.evaluate(() => (window as unknown as { __MX_STORE__: { getState(): unknown } }).__MX_STORE__.getState() as unknown) as Promise<T>;
+  return page.evaluate(() => {
+    const store = (window as unknown as { __MX_STORE__?: { getState(): unknown } }).__MX_STORE__;
+    return (store?.getState() ?? null) as unknown;
+  }) as Promise<T>;
 }
 
 /** Poll the Redux state until `predicate` holds (or time out). */

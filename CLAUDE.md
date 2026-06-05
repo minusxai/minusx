@@ -75,6 +75,23 @@ Four distinct layers; pick by what you're testing, not by habit:
 
 > If real *rendering* fidelity is ever needed for a component test (e.g. real SVG/canvas, which jsdom stubs), the right tool is **Vitest browser mode** (component-in-real-browser), NOT full-app Playwright e2e — a separate opt-in project, not a default.
 
+### QA flows (`test/qa/*.spec.ts`, `npm run test:qa`)
+
+A separate Playwright project (`playwright.qa.config.ts`) that drives the **real app, real LLM-free flows, real data** — for portability across a local prod build *and* live deployments. Distinct from `test/e2e` (faux LLM, `E2E_MODE`): QA flows assert deterministic outcomes (query results, saved files) with **no faux channel**.
+
+**How it runs:**
+- **Locally / in CI (no `QA_BASE_URL`):** the config **builds + starts a prod server** (`npm run build && npm run start`, `output: standalone`-style), with the build-time E2E flag OFF and the runtime e2e gate ON. The CI job is `.github/workflows/qa.yml` (`QA Flows (prod build)`) — it runs in PR CI, so QA flows gate merges. **Always prod build, never `next dev`** — the dev server compiles routes on demand and races cold builds under parallel workers (`page.goto` timeouts).
+- **Against a deployment:** set `QA_BASE_URL` (+ `QA_EMAIL`/`QA_PASSWORD`/`QA_E2E_SECRET`); the webServer is skipped and flows hit that URL. (The `deploys` repo's `qa.yml` action does this.)
+
+**Non-negotiable rules for QA flows:**
+- **Tutorial mode only — never org/production.** Every navigation and `/api/files` discovery carries `mode=tutorial` (helpers `e2eUrl`/`modeUrl`/`QA_MODE` in `test/qa/flows.ts`). Mutating flows additionally `assertTutorialMode(page)` before writing and hard-assert created paths start with `/tutorial`. The system default is `org`, so tutorial is opt-in on *every* request — a missing `mode=tutorial` silently writes to production.
+- **Real clicks/types, not API/URL shortcuts.** Open files by clicking their tile (`openFileByClick`), create via the Create menu, type SQL into the editor, click Save. Locate elements by **`aria-label` only** (`getByLabel`) — if a control lacks one, add it to the component (don't work around it).
+- **Setup chain is serial: login → reset tutorial → wait for data → flows.** `auth.setup` (registers + logs in locally), `reset.setup` (resets tutorial to pristine seed, then `waitForTutorialData`). Flows themselves run with `workers > 1` (read-only + reset-once-up-front = race-free).
+
+**Tutorial sample data:** registration seeds mxfood data fire-and-forget (`lib/modules/auth/index.ts` → `copySeedMxfoodForMode`), so it's briefly unavailable. Readiness is exposed via `GET /api/orgs/seed-status` (`getMxfoodSeedStatus` + `ObjectStore.exists`); the `DataPrepBanner` shows a progress indicator until ready, and QA setup polls it (`waitForTutorialData`) before data-asserting flows.
+
+**Adding a QA flow:** add a `*.spec.ts` under `test/qa/`, compose helpers from `flows.ts` (or add new ones there), stay in tutorial mode, drive via clicks/`getByLabel`, assert against the exposed Redux store (`window.__MX_STORE__`, via `assertRedux`). Verify with `npm run test:qa <pattern>` (builds a local prod server).
+
 ### Backend
 
 There is no separate backend service. The AI chat/agent orchestration runs

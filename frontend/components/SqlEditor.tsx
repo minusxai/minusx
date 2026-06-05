@@ -754,6 +754,8 @@ export default function SqlEditor({
               }}
               options={{
                 readOnly,
+                // Names Monaco's internal textarea so it's reachable via getByLabel.
+                ariaLabel: 'SQL editor',
                 fontFamily: 'var(--font-jetbrains-mono)',
                 lineNumbers: 'on',
                 folding: true,

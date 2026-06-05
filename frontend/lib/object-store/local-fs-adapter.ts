@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { mkdirSync, writeFileSync, unlinkSync, copyFileSync } from 'fs';
+import { mkdirSync, writeFileSync, unlinkSync, copyFileSync, existsSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { LOCAL_UPLOAD_PATH } from '@/lib/config';
 import type { ObjectStore, UploadUrlResult } from './index';
@@ -57,5 +57,9 @@ export class LocalFsAdapter implements ObjectStore {
     const dest = this.resolvePath(destKey);
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(src, dest);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    return existsSync(this.resolvePath(key));
   }
 }
