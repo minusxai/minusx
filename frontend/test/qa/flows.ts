@@ -105,14 +105,22 @@ export async function openFileByClick(
     .toBe(true);
 
   const tile = page.getByLabel(file.name, { exact: true }).first();
-  if (!(await tile.isVisible().catch(() => false))) {
-    const sectionLabel = type === 'question' ? 'Questions section' : 'Dashboards section';
-    await page.getByLabel(sectionLabel).first().click().catch(() => {}); // expand if collapsed
+  // Only the Questions section is collapsed by default (FilesList: collapsedSections
+  // = ['question', '_other']); Dashboards are OPEN by default. So we expand ONLY for
+  // questions — and only after the header has rendered, so the click isn't swallowed.
+  // We must NOT click the Dashboards header: on a cold/contended listing the tile
+  // hasn't rendered yet, and clicking the already-open section would COLLAPSE it and
+  // hide the tile forever (the real cause of the 3-worker dashboard failures).
+  if (type === 'question') {
+    const section = page.getByLabel('Questions section').first();
+    await section.waitFor({ state: 'visible', timeout: 60_000 });
+    if (!(await tile.isVisible().catch(() => false))) {
+      await section.click().catch(() => {}); // expand the collapsed-by-default section
+    }
   }
-  // Wait for the folder's file listing to render the tile before clicking. With no
-  // warmup, the first flow to open a folder pays the cold file-listing load — and
-  // under higher parallelism several do so at once — so this needs the same
-  // cold-start headroom as the chat composer (it loses the 45s race at 3 workers).
+  // Wait for the listing to render the tile. With no warmup, the first flow to open
+  // a folder pays the cold file-listing load — and under higher parallelism several
+  // do at once — so keep cold-start headroom (it lost the 45s race at 3 workers).
   await tile.waitFor({ state: 'visible', timeout: 120_000 });
   await tile.click({ timeout: 60_000 });
   await page.waitForURL(/\/f\/\d+/, { timeout: 90_000 });
