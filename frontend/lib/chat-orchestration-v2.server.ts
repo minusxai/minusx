@@ -64,6 +64,8 @@ import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { insertLlmLog } from '@/lib/analytics/file-analytics.db';
+import { takeLlmCallRequest } from '@/orchestrator/llm';
+import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
@@ -561,43 +563,56 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
 }
 
 /**
- * Drain the orchestrator's per-call records: publish `AppEvents.LLM_CALL`
- * (stats → `llm_call_events` locally + forwarded centrally) and write the raw
- * pi-format request/response blobs to `llm_logs` (LOCAL only — never forwarded).
- * Best-effort: never throws into the response path.
+ * Record this turn's LLM calls out-of-band, from the turn's new log entries:
+ * publish `AppEvents.LLM_CALL` (stats → `llm_call_events` locally + forwarded
+ * centrally) and write the raw pi-format request/response to `llm_logs` (LOCAL
+ * only — never forwarded). The pi-format request is read back from the LLM
+ * boundary by response-message identity (`takeLlmCallRequest`); the call id and
+ * duration are the ones the engine already stamps onto each message. Best-effort.
  */
-function recordLlmCalls(orch: Orchestrator, conversationId: number, user: EffectiveUser): void {
-  const records = orch.llmCallRecords;
-  if (records.length === 0) return;
+function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): void {
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};
-    for (const r of records) {
-      const u = r.response.usage;
-      llmCalls[r.callId] = {
-        llm_call_id: r.callId,
-        provider: r.provider,
-        model: r.model,
-        duration: r.durationSec,
-        total_tokens: u.totalTokens,
-        prompt_tokens: u.input,
-        completion_tokens: u.output,
-        cached_tokens: u.cacheRead,
-        cache_creation_tokens: u.cacheWrite,
-        cost: u.cost.total,
+    for (const entry of piDiff) {
+      const msg = entry as unknown as AssistantMessage;
+      if (msg.role !== 'assistant') continue;
+      // The engine stamps `_lllmCallId` / `_duration` onto the message (or its
+      // first tool-call block); mirror that lookup to recover them.
+      const firstTool = msg.content?.find((c) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+      const meta = (firstTool ?? msg) as unknown as Record<string, unknown>;
+      const callId = meta['_lllmCallId'] as string | undefined;
+      if (!callId) continue;
+
+      const u = msg.usage;
+      llmCalls[callId] = {
+        llm_call_id: callId,
+        provider: msg.provider,
+        model: msg.model,
+        duration: typeof meta['_duration'] === 'number' ? (meta['_duration'] as number) : 0,
+        total_tokens: u?.totalTokens ?? 0,
+        prompt_tokens: u?.input ?? 0,
+        completion_tokens: u?.output ?? 0,
+        cached_tokens: u?.cacheRead ?? 0,
+        cache_creation_tokens: u?.cacheWrite ?? 0,
+        cost: u?.cost?.total ?? 0,
         stream: true,
-        finish_reason: r.response.stopReason,
+        finish_reason: msg.stopReason,
       };
-      insertLlmLog({
-        callId: r.callId,
-        userId,
-        provider: r.provider,
-        model: r.model,
-        requestJson: JSON.stringify(r.request),
-        responseJson: JSON.stringify(r.response),
-        error: r.errored ? (r.response.errorMessage ?? 'error') : null,
-      });
+
+      const captured = takeLlmCallRequest(msg);
+      if (captured) {
+        insertLlmLog({
+          callId,
+          userId,
+          provider: msg.provider,
+          model: msg.model,
+          requestJson: JSON.stringify(captured.request),
+          responseJson: JSON.stringify(msg),
+        });
+      }
     }
+    if (Object.keys(llmCalls).length === 0) return;
     appEventRegistry.publish(AppEvents.LLM_CALL, {
       mode: user.mode,
       conversationId,
@@ -728,7 +743,7 @@ async function persistAndBuildLegacyResponse(
 
   // Record LLM usage (stats → llm_call_events + central forward) and raw
   // pi-format request/response blobs (llm_logs, local only) out-of-band.
-  recordLlmCalls(orch, finalConversationId, user);
+  recordLlmCalls(piDiff, finalConversationId, user);
 
   // Translate the FULL log to legacy shape so completed_tool_calls / debug
   // / log_index reflect the legacy view, then slice to the new diff for

@@ -32,26 +32,8 @@ const llmSemaphore = createSemaphore(
   parseConcurrencyLimit(process.env.MAX_LLM_CONCURRENCY),
 );
 
-/**
- * Raw record of one LLM call captured during a run, for out-of-band local
- * logging (pi-format request/response blobs + per-call stats). The chat server
- * reads these after the run to write `llm_logs` + publish `AppEvents.LLM_CALL`.
- */
-export interface LLMCallRecord {
-  callId: string;
-  provider: string;
-  model: string;
-  request: Context;
-  response: AssistantMessage;
-  durationSec: number;
-  errored: boolean;
-}
-
 export class Orchestrator {
   log: ConversationLog;
-  /** Per-call records captured this run (request/response + stats), drained by
-   *  the chat server for local logging. Append-only; never sent to the LLM. */
-  readonly llmCallRecords: LLMCallRecord[] = [];
   /** Optional activity callback for observability. Fires on LLM, tool,
    *  and sub-agent lifecycle events so callers (e.g. benchmark runner)
    *  can render live status without parsing the stream. */
@@ -160,17 +142,6 @@ export class Orchestrator {
           const target = firstTool ?? (result as unknown as Record<string, unknown>);
           target['_duration'] = durationSec;
           target['_lllmCallId'] = callId;
-          // Capture the raw pi-format request + response for out-of-band local
-          // logging (drained by the chat server). Never sent to the LLM.
-          this.llmCallRecords.push({
-            callId,
-            provider: result.provider,
-            model: result.model,
-            request: context,
-            response: result,
-            durationSec,
-            errored,
-          });
         }
       }
       if (!result) {

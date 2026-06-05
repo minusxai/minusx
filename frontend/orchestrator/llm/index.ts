@@ -215,15 +215,45 @@ export function getModel<P extends string, M extends string>(provider: P, model:
   return piGetModel(provider as never, model as never);
 }
 
+/** The pi-format request captured alongside one model call, for out-of-band logging. */
+export interface LlmCallRequestCapture {
+  request: Context;
+  durationMs: number;
+}
+
+/**
+ * Associates each response message with the request that produced it, so the
+ * app can log calls out-of-band without the engine knowing. Keyed *weakly* by
+ * the response object: captures that are never read (headless / benchmark runs)
+ * are garbage-collected with the message — no buffer to drain, no leak.
+ */
+const llmCallRequests = new WeakMap<AssistantMessage, LlmCallRequestCapture>();
+
+/** Take (read-and-clear) the captured request for a response message, if any. */
+export function takeLlmCallRequest(response: AssistantMessage): LlmCallRequestCapture | undefined {
+  const captured = llmCallRequests.get(response);
+  if (captured) llmCallRequests.delete(response);
+  return captured;
+}
+
 /** Stream a single model call. Returns a stream of our owned `AssistantMessageEvent`s. */
 export function streamSimple(
   model: Model<Api>,
   context: Context,
   options?: StreamOptions,
 ): EventStream<AssistantMessageEvent, AssistantMessage> {
-  return piStreamSimple(
+  const stream = piStreamSimple(
     model,
     context as unknown as PiContext,
     options as PiSimpleStreamOptions | undefined,
   ) as unknown as EventStream<AssistantMessageEvent, AssistantMessage>;
+  // Remember the request for its eventual response message. Best-effort and
+  // side-effect-free for the caller; errored calls resolve via the error event
+  // and simply aren't captured.
+  const startedAt = Date.now();
+  void stream.result().then(
+    (response) => { llmCallRequests.set(response, { request: context, durationMs: Date.now() - startedAt }); },
+    () => { /* errored call — surfaced via the conversation error log, not here */ },
+  );
+  return stream;
 }
