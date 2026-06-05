@@ -7,7 +7,7 @@
  * surfaces with the runtime `?e2e` opt-in and assert against the exposed Redux store.
  */
 import { expect, type Page, type APIRequestContext } from '@playwright/test';
-import { assertRedux } from '@/test/flows/e2e';
+import { assertRedux, getState, enterSideChatMessage } from '@/test/flows/e2e';
 
 const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
 
@@ -231,6 +231,80 @@ export async function assertQuestionSaved(page: Page, questionId: number): Promi
     },
     { message: `question ${questionId} not saved under /tutorial with a query`, timeout: 20_000 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Real-LLM chat flows. These drive actual conversations (no faux channel), so
+// they only run when an LLM key is present (see `hasLlm()`); CI supplies it via
+// secrets. Assertions are STRUCTURAL (a reply landed, a web search ran) — never
+// on specific generated text — so they're stable under a real model.
+// ---------------------------------------------------------------------------
+
+/** Whether real-LLM flows can run (a provider key is configured for the server). */
+export function hasLlm(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY;
+}
+
+/** Wait until the e2e gate has exposed the Redux store on the page. */
+export async function waitForStore(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 15_000 })
+    .toBe(true);
+}
+
+/** Open the chat: expand the right sidebar if collapsed, select the Chat tab, await the composer. */
+export async function openSideChat(page: Page): Promise<void> {
+  await page.getByLabel('Expand sidebar').click({ timeout: 5_000 }).catch(() => {});
+  await page.getByLabel('Open chat').click({ timeout: 5_000 }).catch(() => {});
+  await page.getByLabel('Chat message input').waitFor({ state: 'visible', timeout: 20_000 });
+}
+
+/** Send a chat message (composable wrapper over the shared e2e helper). */
+export async function sendChat(page: Page, message: string): Promise<void> {
+  await enterSideChatMessage(page, message);
+}
+
+/**
+ * Assert a conversation has FINISHED with at least `minUserTurns` user message(s)
+ * and at least one non-user reply. Generous timeout — a real model call is slower
+ * than the faux channel.
+ */
+export async function assertChatReplied(page: Page, minUserTurns = 1): Promise<void> {
+  await assertRedux(
+    page,
+    (s: any) => {
+      const convs = Object.values(s?.chat?.conversations ?? {}) as any[];
+      return convs.some((c) => {
+        if (c.executionState !== 'FINISHED') return false;
+        const msgs: any[] = c.messages ?? [];
+        const userTurns = msgs.filter((m) => m.role === 'user').length;
+        const replied = msgs.some((m) => m.role && m.role !== 'user');
+        return userTurns >= minUserTurns && replied;
+      });
+    },
+    { message: `chat did not finish with ${minUserTurns} user turn(s) + a reply`, timeout: 120_000 },
+  );
+}
+
+/** Assert a finished conversation that actually invoked web search (structural). */
+export async function assertWebSearchRan(page: Page): Promise<void> {
+  await assertRedux(
+    page,
+    (s: any) => {
+      const convs = Object.values(s?.chat?.conversations ?? {}) as any[];
+      return convs.some(
+        (c) => c.executionState === 'FINISHED' && JSON.stringify(c.messages ?? []).includes('web_search'),
+      );
+    },
+    { message: 'no web_search activity found in the conversation', timeout: 120_000 },
+  );
+}
+
+/** Pull an `lllm_call_id` out of the exposed Redux state (debug rows carry it). */
+export async function firstLlmCallId(page: Page): Promise<string | null> {
+  const state = await getState(page);
+  const m = JSON.stringify(state ?? {}).match(/"lllm_call_id":"([^"]+)"/);
+  return m ? m[1] : null;
 }
 
 /** Assert a dashboard is saved (not draft), under /tutorial, and holds a question. */
