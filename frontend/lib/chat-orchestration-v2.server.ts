@@ -64,7 +64,7 @@ import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
-import { setLlmRequestRecorder } from '@/orchestrator/llm';
+import { setLlmCallRecorder } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
@@ -82,9 +82,16 @@ import type { DebugMessage } from '@/store/chatSlice';
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
 
 // Persist each LLM call's pi-format request the moment it's made; the response
-// is filled into the same row after the turn (see recordLlmCalls). Registered
-// once — headless / benchmark runs don't import this module, so they don't log.
-setLlmRequestRecorder((callId, request) => { void recordLlmRequest(callId, JSON.stringify(request)); });
+// is filled into the same row after the turn (see recordLlmCalls), and a failed
+// call's error is written here (the engine discards the failed message, so it's
+// only available at the boundary). Registered once — headless / benchmark runs
+// don't import this module, so they don't log.
+setLlmCallRecorder({
+  recordRequest: (callId, request) => { void recordLlmRequest(callId, JSON.stringify(request)); },
+  recordError: (callId, errorMessage, responseJson) => {
+    void recordLlmResponse({ callId, responseJson, error: errorMessage });
+  },
+});
 
 /**
  * Default v=2 registrables. The DB tools here (`ExecuteQuery`,

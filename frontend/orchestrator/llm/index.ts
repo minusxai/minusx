@@ -216,16 +216,21 @@ export function getModel<P extends string, M extends string>(provider: P, model:
 }
 
 /**
- * Optional hook the app registers to persist the pi-format request the moment a
- * call is made — the boundary stays free of any DB/app dependency (dependency
- * inversion). Headless / benchmark runs don't register one, so nothing is
- * recorded there. Header the orchestrator stamps the per-call id into.
+ * Hooks the app registers to persist a call's request when it's made, and its
+ * error if the call fails — the boundary stays free of any DB/app dependency
+ * (dependency inversion). Headless / benchmark runs register none, so nothing
+ * is recorded there. (Successful responses are written by the caller after the
+ * turn, where the user context lives; the error message is only available here
+ * because the engine discards the failed message.)
  */
-export type LlmRequestRecorder = (callId: string, request: Context) => void;
+export interface LlmCallRecorder {
+  recordRequest(callId: string, request: Context): void;
+  recordError(callId: string, errorMessage: string, responseJson: string): void;
+}
 const CALL_ID_HEADER = 'X-MX-Request-Call-ID';
-let llmRequestRecorder: LlmRequestRecorder | null = null;
-export function setLlmRequestRecorder(recorder: LlmRequestRecorder | null): void {
-  llmRequestRecorder = recorder;
+let llmCallRecorder: LlmCallRecorder | null = null;
+export function setLlmCallRecorder(recorder: LlmCallRecorder | null): void {
+  llmCallRecorder = recorder;
 }
 
 /** Stream a single model call. Returns a stream of our owned `AssistantMessageEvent`s. */
@@ -234,13 +239,20 @@ export function streamSimple(
   context: Context,
   options?: StreamOptions,
 ): EventStream<AssistantMessageEvent, AssistantMessage> {
-  // Persist the request as the call is made (response is filled in after the
-  // turn). Side-effect-free for the caller; no-op when no recorder is registered.
-  const callId = (options?.headers as Record<string, string> | undefined)?.[CALL_ID_HEADER];
-  if (callId && llmRequestRecorder) llmRequestRecorder(callId, context);
-  return piStreamSimple(
+  const stream = piStreamSimple(
     model,
     context as unknown as PiContext,
     options as PiSimpleStreamOptions | undefined,
   ) as unknown as EventStream<AssistantMessageEvent, AssistantMessage>;
+  const callId = (options?.headers as Record<string, string> | undefined)?.[CALL_ID_HEADER];
+  if (callId && llmCallRecorder) {
+    const recorder = llmCallRecorder;
+    recorder.recordRequest(callId, context);
+    // Persist the error if the call fails. result() resolves with the error
+    // message (it never rejects); success responses are written after the turn.
+    void stream.result().then((msg) => {
+      if (msg?.stopReason === 'error') recorder.recordError(callId, msg.errorMessage ?? 'error', JSON.stringify(msg));
+    });
+  }
+  return stream;
 }
