@@ -1,31 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
+import { getLlmCallStats, getLlmLog } from '@/lib/analytics/file-analytics.db';
+import { handleApiError } from '@/lib/api/api-responses';
 
+/**
+ * Debug UI data source for one LLM call. Reads the per-call stats
+ * (`llm_call_events`) and the raw pi-format request/response blobs (`llm_logs`)
+ * from the LOCAL document DB — recorded out-of-band by the chat server. Returns
+ * the same `{ stats, logs }` shape the client already consumes.
+ */
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ callId: string }> }
 ) {
-  if (!MX_API_BASE_URL) {
-    return NextResponse.json({});
+  try {
+    const { callId } = await params;
+    const [stats, logs] = await Promise.all([getLlmCallStats(callId), getLlmLog(callId)]);
+    return NextResponse.json({ stats, logs });
+  } catch (error) {
+    return handleApiError(error);
   }
-
-  const { callId } = await params;
-  const headers: HeadersInit = MX_API_KEY ? { 'mx-api-key': MX_API_KEY } : {};
-  const base = `${MX_API_BASE_URL}/calls/${callId}`;
-
-  const [statsRes, logsRes] = await Promise.allSettled([
-    fetch(base, { headers }),
-    fetch(`${base}?mode=all`, { headers }),
-  ]);
-
-  const stats =
-    statsRes.status === 'fulfilled' && statsRes.value.ok
-      ? await statsRes.value.json()
-      : null;
-  const logs =
-    logsRes.status === 'fulfilled' && logsRes.value.ok
-      ? await logsRes.value.json()
-      : null;
-
-  return NextResponse.json({ stats, logs });
 }
