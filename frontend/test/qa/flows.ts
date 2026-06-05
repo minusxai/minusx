@@ -11,10 +11,18 @@ import { assertRedux } from '@/test/flows/e2e';
 
 const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
 
-/** A path with the runtime e2e opt-in appended. */
+/**
+ * QA flows operate EXCLUSIVELY on tutorial mode — never production (org) files.
+ * Every page nav and `/api/files` discovery call carries `mode=tutorial`, so
+ * discovery, navigation, and query execution all stay inside the isolated
+ * tutorial filesystem + seed warehouse.
+ */
+const QA_MODE = 'tutorial';
+
+/** A path with the runtime e2e opt-in + tutorial mode appended. */
 function e2eUrl(path: string): string {
   const sep = path.includes('?') ? '&' : '?';
-  return `${path}${sep}e2e=${encodeURIComponent(E2E_SECRET)}`;
+  return `${path}${sep}e2e=${encodeURIComponent(E2E_SECRET)}&mode=${QA_MODE}`;
 }
 
 /**
@@ -34,11 +42,11 @@ export async function resetTutorial(request: APIRequestContext): Promise<boolean
 }
 
 /**
- * Discover an existing file of `type` on the deployment (in the QA user's mode).
+ * Discover an existing file of `type` in tutorial mode on the deployment.
  * For questions, prefers one with a SQL query. Returns its id, or null if none.
  */
 export async function findFileOfType(request: APIRequestContext, type: 'question' | 'dashboard'): Promise<number | null> {
-  const res = await request.get(`/api/files?type=${type}&depth=10&includeContent=true`);
+  const res = await request.get(`/api/files?type=${type}&depth=10&includeContent=true&mode=${QA_MODE}`);
   if (!res.ok()) return null;
   const files: any[] = (await res.json())?.data ?? [];
   if (type === 'question') {

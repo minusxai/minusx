@@ -39,12 +39,20 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
+  // Ordered setup chain: log in → reset tutorial → run flows. The reset uses the
+  // admin storageState and is best-effort (skips on a non-admin account).
   projects: [
-    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    {
+      name: 'reset',
+      testMatch: /reset\.setup\.ts/,
+      use: { storageState: AUTH_FILE },
+      dependencies: ['setup'],
+    },
     {
       name: 'qa',
       use: { ...devices['Desktop Chrome'], storageState: AUTH_FILE },
-      dependencies: ['setup'],
+      dependencies: ['reset'],
     },
   ],
   // Local-only: a prod-ish server (build-time E2E flag OFF, runtime secret ON),
