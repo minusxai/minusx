@@ -621,7 +621,7 @@ async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user
         userId,
       });
 
-      const captured = takeLlmCallRequest(msg);
+      const captured = takeLlmCallRequest(callId);
       if (captured) {
         await recordLlmLog({
           callId,

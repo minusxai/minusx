@@ -105,8 +105,14 @@ test.describe('real-LLM chat flows', () => {
       const callId = await firstLlmCallId(page);
       expect(callId, 'the conversation should expose an lllm_call_id').toBeTruthy();
 
-      // Recording is out-of-band (fire-and-forget) → poll until the local tables
-      // (llm_call_events + llm_logs) hold the row that feeds the chat debug view.
+      // Diagnostic: report exactly what the endpoint returns for this call id.
+      const probe = await request.get(`/api/llm-calls/${callId}`);
+      const pbody = probe.ok() ? await probe.json() : null;
+      // eslint-disable-next-line no-console
+      console.log(`[QA DEBUG] callId=${callId} ok=${probe.ok()} stats=${Boolean(pbody?.stats)} logs=${Boolean(pbody?.logs)} body=${JSON.stringify(pbody).slice(0, 200)}`);
+
+      // The chat debug view reads stats (llm_call_events) + logs (llm_logs) from
+      // the LOCAL tables, keyed by the same call id.
       await expect
         .poll(
           async () => {
