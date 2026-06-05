@@ -2,8 +2,11 @@
  * Admin-only API endpoint for resetting tutorial and internals modes to pristine template state
  * POST /api/admin/reset-tutorial
  *
- * Wipes all tutorial-mode and internals-mode documents and re-inserts
- * the canonical seed docs from workspace-template.json.
+ * Wipes ALL /tutorial and /internals documents (including user-created ones —
+ * these modes are disposable demo/admin sandboxes) and re-inserts the canonical
+ * seed docs for those two modes from workspace-template.json. It deliberately
+ * NEVER touches /org, so real company state (e.g. /org/configs/config — branding,
+ * setup-wizard status) is left untouched.
  * Useful for demos, onboarding resets, and testing.
  * Requires admin role.
  */
@@ -13,7 +16,6 @@ import { withAuth } from '@/lib/api/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { getModules } from '@/lib/modules/registry';
-import { sqlArray } from '@/lib/database/adapter/types';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
@@ -56,29 +58,30 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       ? (initData.orgs ?? initData.companies as any[]).flatMap((c: any) => c.documents ?? [])
       : (initData.documents ?? []);
 
-    const seedDocs = allDocs;
-    // Delete by explicit template ID list — safe for existing DBs where user files
-    // may have IDs < 1000 (created before the 1000-floor was introduced).
-    const templateIds = seedDocs.map(d => d.id);
-    // Also delete by template *path*: on drifted deployments a doc can sit at a seed
-    // path under a non-template id. The id-only delete misses it, so re-inserting the
-    // seed would collide on UNIQUE(path) and 500. Seed paths are system-owned
-    // (/tutorial/*, /internals/*); user files live elsewhere, so this is non-destructive.
-    const templatePaths = seedDocs.map(d => d.path);
+    // Scope STRICTLY to tutorial + internals — never /org. The seed template also
+    // contains /org docs (incl. /org/configs/config, which holds the company's
+    // setup-wizard + branding); resetting those would clobber real company state.
+    const isTutorialOrInternals = (p: string) =>
+      p === '/tutorial' || p.startsWith('/tutorial/') ||
+      p === '/internals' || p.startsWith('/internals/');
+    const seedDocs = allDocs.filter(d => isTutorialOrInternals(d.path));
 
     const db = getModules().db;
 
-    if (templateIds.length > 0) {
-      await db.exec(
-        `DELETE FROM files WHERE id = ANY($1::int[]) OR path = ANY($2::text[])`,
-        [sqlArray(templateIds), sqlArray(templatePaths)]
-      );
-    }
+    // Wipe both modes wholesale (including any user-created files in them — these
+    // modes are disposable demo/admin sandboxes), then re-seed.
+    await db.exec(
+      `DELETE FROM files
+         WHERE path = '/tutorial' OR path LIKE '/tutorial/%'
+            OR path = '/internals' OR path LIKE '/internals/%'`,
+      []
+    );
 
-    // Re-insert all template documents
+    // Re-insert the seed docs. ON CONFLICT DO NOTHING keeps this idempotent and
+    // crash-free even if a template id/path drifted onto an existing row.
     for (const doc of seedDocs) {
       await db.exec(
-        'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING',
         [
           doc.id,
           doc.name,

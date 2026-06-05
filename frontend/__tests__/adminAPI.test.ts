@@ -363,7 +363,8 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(68);
+    // Only /tutorial + /internals seed docs are (re)created.
+    expect(body.documentsCreated).toBe(55);
 
     const db = getModules().db;
 
@@ -371,14 +372,15 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    // 30 template docs + 1 user-created question at /tutorial (id=500, preserved)
-    expect(tutorialResult.rows[0].count).toBe(31);
+    // Exactly the 30 template tutorial docs — these modes are wiped wholesale, so
+    // the user-created tutorial question (id=500) is NOT preserved.
+    expect(tutorialResult.rows[0].count).toBe(30);
 
     const userFileResult = await db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE id = 500",
       []
     );
-    expect(userFileResult.rows[0].count).toBe(1); // user-created file is preserved
+    expect(userFileResult.rows[0].count).toBe(0); // user-created tutorial file is wiped
 
     const rootResult = await db.exec<{ id: number; path: string; name: string }>(
       "SELECT id, path, name FROM files WHERE id = 1",
@@ -402,7 +404,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(id11Result.rows).toHaveLength(1);
     expect(id11Result.rows[0].path).toBe('/tutorial/top-level-metrics');
 
-    // ids 100/101 are user-like files (no longer template IDs) — preserved by reset
+    // ids 100/101 are user /org files — preserved (reset never touches /org)
     const orgResult = await db.exec<{ id: number; path: string }>(
       "SELECT id, path FROM files WHERE id IN (100, 101) ORDER BY id",
       []
@@ -410,14 +412,12 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(orgResult.rows).toHaveLength(2);
     expect(orgResult.rows[0]).toMatchObject({ id: 100, path: '/org/custom-folder' });
     expect(orgResult.rows[1]).toMatchObject({ id: 101, path: '/org/custom-folder/report' });
-    // The actual /org and /org/database template docs now live at ids 1003 and 1006
-    const orgFolderResult = await db.exec<{ id: number; path: string }>(
-      "SELECT id, path FROM files WHERE id IN (1003, 1006) ORDER BY id",
+    // Reset is scoped to /tutorial + /internals — it must NOT (re)seed any /org docs.
+    const orgSeedResult = await db.exec<{ count: number }>(
+      "SELECT COUNT(*) as count FROM files WHERE path IN ('/org', '/org/database', '/org/configs/config')",
       []
     );
-    expect(orgFolderResult.rows).toHaveLength(2);
-    expect(orgFolderResult.rows[0]).toMatchObject({ id: 1003, path: '/org' });
-    expect(orgFolderResult.rows[1]).toMatchObject({ id: 1006, path: '/org/database' });
+    expect(orgSeedResult.rows[0].count).toBe(0); // /org left entirely untouched
   });
 
   it('should deny access to non-admin', async () => {
@@ -471,8 +471,8 @@ describe('POST /api/admin/reset-tutorial', () => {
   it('resets cleanly when a doc has drifted to a non-template id at a template path', async () => {
     // Real-world drift: on long-lived deployments a doc can end up sitting at a
     // template path (here /tutorial/top-level-metrics, the seed's id=11) but under a
-    // *non-template* id. The id-only delete misses it, so re-inserting the seed used
-    // to collide on UNIQUE(path) and 500. Reset must delete by id OR path and recover.
+    // *non-template* id. The wholesale /tutorial path wipe removes it, and the
+    // re-seed (ON CONFLICT DO NOTHING) restores the template without a 500.
     const now = new Date().toISOString();
     const db = getModules().db;
     await db.exec(
@@ -489,7 +489,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(68);
+    expect(body.documentsCreated).toBe(55);
 
     // The template doc is restored at that path under its template id (11), drift gone.
     const pathResult = await db.exec<{ id: number }>(
@@ -506,24 +506,51 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(driftedResult.rows[0].count).toBe(0);
   });
 
-  it('should be idempotent — second call also returns 30 docs', async () => {
+  it('should be idempotent — second call also returns 55 docs', async () => {
     const request1 = createResetRequest();
     const response1 = await resetTutorialHandler(request1, {} as any);
     expect(response1.status).toBe(200);
     const body1 = await response1.json();
-    expect(body1.documentsCreated).toBe(68);
+    expect(body1.documentsCreated).toBe(55);
 
     const request2 = createResetRequest();
     const response2 = await resetTutorialHandler(request2, {} as any);
     expect(response2.status).toBe(200);
     const body2 = await response2.json();
     expect(body2.success).toBe(true);
-    expect(body2.documentsCreated).toBe(68);
+    expect(body2.documentsCreated).toBe(55);
 
     const result = await getModules().db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(result.rows[0].count).toBe(31); // 30 template + 1 preserved user file (id=500)
+    expect(result.rows[0].count).toBe(30); // exactly the 30 template tutorial docs
+  });
+
+  it('never resets /org — preserves the company config / setup-wizard state', async () => {
+    // The seed template contains /org/configs/config (setupWizard: pending). Reset
+    // must NOT touch it, or a QA/demo reset would wipe a company's real setup state.
+    const now = new Date().toISOString();
+    const db = getModules().db;
+    await db.exec(
+      'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [
+        9100, 'config', '/org/configs/config', 'config',
+        JSON.stringify({ setupWizard: { status: 'complete' }, branding: { displayName: 'Acme' } }),
+        JSON.stringify([]), now, now,
+      ]
+    );
+
+    const response = await resetTutorialHandler(createResetRequest(), {} as any);
+    expect(response.status).toBe(200);
+
+    const cfg = await db.exec<{ content: any }>(
+      "SELECT content FROM files WHERE path = '/org/configs/config'",
+      []
+    );
+    expect(cfg.rows).toHaveLength(1);
+    const content = typeof cfg.rows[0].content === 'string' ? JSON.parse(cfg.rows[0].content) : cfg.rows[0].content;
+    expect(content.setupWizard.status).toBe('complete'); // untouched, not reset to "pending"
+    expect(content.branding.displayName).toBe('Acme');
   });
 });
