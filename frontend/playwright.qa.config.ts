@@ -52,9 +52,18 @@ export default defineConfig({
       dependencies: ['setup'],
     },
     {
-      name: 'qa',
+      // Warms the prod server's connection/context cache with one real chat so
+      // the parallel flows below never race a cold start (Send stays disabled
+      // until connections load). Best-effort; no-op without an LLM key.
+      name: 'warmup',
+      testMatch: /warmup\.setup\.ts/,
       use: { ...devices['Desktop Chrome'], storageState: AUTH_FILE },
       dependencies: ['reset'],
+    },
+    {
+      name: 'qa',
+      use: { ...devices['Desktop Chrome'], storageState: AUTH_FILE },
+      dependencies: ['warmup'],
     },
   ],
   // Local-only: a prod-ish server (build-time E2E flag OFF, runtime secret ON),

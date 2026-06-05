@@ -344,6 +344,60 @@ export async function firstLlmCallId(page: Page): Promise<string | null> {
   return m ? m[1] : null;
 }
 
+/** The id of the highest-numbered conversation currently in Redux (the latest one). */
+export async function latestConversationId(page: Page): Promise<number | null> {
+  const state = await getState<{ chat?: { conversations?: Record<string, unknown> } }>(page);
+  const ids = Object.keys(state?.chat?.conversations ?? {}).map(Number).filter((n) => !Number.isNaN(n));
+  return ids.length ? Math.max(...ids) : null;
+}
+
+/** Wait for the agent to be running, then click Stop. Returns false if it finished first. */
+export async function stopAgent(page: Page): Promise<boolean> {
+  const stop = page.getByLabel('Stop agent');
+  try {
+    await stop.waitFor({ state: 'visible', timeout: 20_000 });
+  } catch {
+    return false; // the model replied before we could interrupt
+  }
+  await stop.click();
+  return true;
+}
+
+/** Assert nothing is actively running (no conversation in STREAMING/EXECUTING). */
+export async function assertAgentStopped(page: Page): Promise<void> {
+  await assertRedux(
+    page,
+    (s: { chat?: { conversations?: Record<string, { executionState?: string }> } }) => {
+      const convs = Object.values(s?.chat?.conversations ?? {});
+      return convs.length > 0 && convs.every((c) => c.executionState !== 'STREAMING' && c.executionState !== 'EXECUTING');
+    },
+    { message: 'agent did not stop after clicking Stop', timeout: 30_000 },
+  );
+}
+
+/** Turn on the admin debug view: devMode + advanced + expanded messages (the
+ * detailed view is where the per-message debug card surfaces). */
+export async function enableDebugUi(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const store = (window as unknown as { __MX_STORE__?: { dispatch(a: unknown): void } }).__MX_STORE__;
+    store?.dispatch({ type: 'ui/setShowAdvanced', payload: true });
+    store?.dispatch({ type: 'ui/setDevMode', payload: true });
+    store?.dispatch({ type: 'ui/setShowExpandedMessages', payload: true });
+  });
+}
+
+/** Assert a conversation (by id) has loaded its messages (≥ minMessages). */
+export async function assertConversationLoaded(page: Page, id: number, minMessages = 2): Promise<void> {
+  await assertRedux(
+    page,
+    (s: { chat?: { conversations?: Record<number, { messages?: unknown[] }> } }) => {
+      const conv = s?.chat?.conversations?.[id];
+      return Array.isArray(conv?.messages) && conv!.messages!.length >= minMessages;
+    },
+    { message: `conversation ${id} did not load ${minMessages}+ messages`, timeout: 30_000 },
+  );
+}
+
 /** Assert a dashboard is saved (not draft), under /tutorial, and holds a question. */
 export async function assertDashboardSavedWithQuestion(page: Page, dashboardId: number): Promise<void> {
   await assertRedux(

@@ -75,6 +75,29 @@ describe('llm_logs storage', () => {
     expect(log?.request_json).toBe('{"q":1}');
   });
 
+  it('stores a large request blob intact and TOAST-compresses it on disk', async () => {
+    // A realistic, compressible pi-format request (big system prompt + many messages).
+    const big = JSON.stringify({
+      systemPrompt: 'You are an analyst. '.repeat(200),
+      messages: Array.from({ length: 400 }, (_, i) => ({ role: 'user', content: `message number ${i} about orders `.repeat(8) })),
+    });
+    await recordLlmRequest('c-big', big);
+
+    // Round-trips byte-for-byte regardless of storage.
+    expect((await getLlmLog('c-big'))?.request_json).toBe(big);
+
+    // TEXT defaults to EXTENDED storage → Postgres moves large values out-of-line
+    // and compresses them. pg_column_size reports the on-disk (compressed) size,
+    // which is smaller than the raw length for a compressible blob.
+    const res = await getModules().db.exec<{ stored: number; raw: number }>(
+      `SELECT pg_column_size(request_json) AS stored, length(request_json) AS raw FROM llm_logs WHERE call_id = $1`,
+      ['c-big'],
+    );
+    const { stored, raw } = res.rows[0];
+    expect(Number(raw)).toBeGreaterThan(10_000);
+    expect(Number(stored)).toBeLessThan(Number(raw));
+  });
+
   it('clearLlmLogsBefore deletes only logs strictly older than the cutoff', async () => {
     await insertLog('c-old', '2020-01-01T00:00:00.000Z');
     await insertLog('c-new', '2030-01-01T00:00:00.000Z');
