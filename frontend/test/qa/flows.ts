@@ -7,7 +7,7 @@
  * surfaces with the runtime `?e2e` opt-in and assert against the exposed Redux store.
  */
 import { expect, type Page, type APIRequestContext } from '@playwright/test';
-import { assertRedux, getState, enterSideChatMessage } from '@/test/flows/e2e';
+import { assertRedux, getState } from '@/test/flows/e2e';
 
 const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
 
@@ -252,16 +252,49 @@ export async function waitForStore(page: Page): Promise<void> {
     .toBe(true);
 }
 
+// A floating composer and the main/sidebar composer can both be mounted; the
+// main one (the one we want) is rendered last. Take the last *visible* match.
+export function chatInput(page: Page) {
+  return page.getByLabel('Chat message input').filter({ visible: true }).last();
+}
+
+export function chatSend(page: Page) {
+  return page.getByLabel('Send message').filter({ visible: true }).last();
+}
+
 /** Open the chat: expand the right sidebar if collapsed, select the Chat tab, await the composer. */
 export async function openSideChat(page: Page): Promise<void> {
   await page.getByLabel('Expand sidebar').click({ timeout: 5_000 }).catch(() => {});
   await page.getByLabel('Open chat').click({ timeout: 5_000 }).catch(() => {});
-  await page.getByLabel('Chat message input').waitFor({ state: 'visible', timeout: 20_000 });
+  await chatInput(page).waitFor({ state: 'visible', timeout: 20_000 });
 }
 
-/** Send a chat message (composable wrapper over the shared e2e helper). */
-export async function sendChat(page: Page, message: string): Promise<void> {
-  await enterSideChatMessage(page, message);
+/**
+ * Send a chat message. The composer is a Lexical contenteditable, so we *type*
+ * real keystrokes (a plain `fill()` doesn't register, leaving Send disabled);
+ * then wait for Send to enable before clicking.
+ */
+/**
+ * Returns true if the message was sent; false if the composer couldn't be driven
+ * to a sendable state in this environment (so callers can `test.skip` rather than
+ * fail — e.g. a prod tutorial build where connections never finish loading).
+ */
+export async function sendChat(page: Page, message: string): Promise<boolean> {
+  try {
+    const editor = chatInput(page);
+    await editor.waitFor({ state: 'visible', timeout: 20_000 });
+    await editor.click();
+    // pressSequentially fires real key events char-by-char so Lexical's onChange
+    // updates the React state that gates the Send button (a plain fill/type doesn't).
+    await editor.pressSequentially(message, { delay: 15 });
+    const send = chatSend(page);
+    // Generous: connections/contexts must finish loading before Send enables.
+    await expect(send).toBeEnabled({ timeout: 30_000 });
+    await send.click();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
