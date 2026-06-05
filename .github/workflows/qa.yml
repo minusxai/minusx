@@ -1,0 +1,79 @@
+name: QA Flows
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    name: QA Flows (prod build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+
+      # Share the node_modules cache with the test/e2e workflows (same key).
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-deps
+        with:
+          path: ./frontend/node_modules
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
+
+      - name: Install frontend dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        working-directory: ./frontend
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: cache-browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright Chromium
+        working-directory: ./frontend
+        run: npx playwright install --with-deps chromium
+
+      # No QA_BASE_URL → the QA config builds + starts a local prod-ish server
+      # (runtime e2e gate ON, build-time E2E flag OFF) and runs every flow against
+      # it in tutorial mode. mxfood sample data seeds via the public release
+      # download (no S3 creds in CI → local object store).
+      - name: Run QA flows
+        working-directory: ./frontend
+        env:
+          NEXTAUTH_SECRET: qa-ci-secret-not-used-in-prod-0000000000000000=
+          CI: 'true'
+        run: npm run test:qa
+
+      - name: Upload QA report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-report
+          path: ./frontend/playwright-report/
+          retention-days: 7

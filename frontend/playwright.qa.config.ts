@@ -62,19 +62,23 @@ export default defineConfig({
   webServer: EXTERNAL
     ? undefined
     : {
-        command: 'npm run dev',
+        // A real PROD build + start (not `next dev`): precompiled routes are stable
+        // under parallel workers — the dev server compiles on-demand and races cold
+        // builds → page.goto timeouts. Also genuinely "prod-ish" (the config's intent).
+        command: 'npm run build && npm run start',
         url: LOCAL_URL,
-        timeout: 180_000,
+        timeout: 600_000, // a cold prod build can take several minutes
         reuseExistingServer: !process.env.CI,
         env: {
           ...process.env,
           PORT: String(PORT),
           AUTH_URL: LOCAL_URL,
           NEXTAUTH_URL: LOCAL_URL,
-          // deliberately NO NEXT_PUBLIC_E2E → E2E_MODE off (simulates prod).
+          // deliberately NO NEXT_PUBLIC_E2E → E2E_MODE off (the runtime gate does the work).
           NEXT_DIST_DIR: '.next-qa',
           DB_TYPE: 'pglite',
           PGLITE_DATA_DIR: PGLITE_DIR,
+          NODE_OPTIONS: '--max-old-space-size=4096',
           E2E_RUNTIME_SECRET: process.env.QA_E2E_SECRET || 'local-qa-secret',
         },
       },

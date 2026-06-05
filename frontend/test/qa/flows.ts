@@ -51,22 +51,66 @@ export async function resetTutorial(request: APIRequestContext): Promise<boolean
 }
 
 /**
- * Discover an existing file of `type` in tutorial mode on the deployment.
- * For questions, prefers one with a SQL query. Returns its id, or null if none.
+ * Wait until the tutorial mxfood sample data has finished copying (registration
+ * kicks that off fire-and-forget). Polls /api/orgs/seed-status. Returns true once
+ * ready; returns true immediately if the endpoint is absent (older deployment —
+ * assume its long-lived data already exists). Returns false on timeout.
  */
-export async function findFileOfType(request: APIRequestContext, type: 'question' | 'dashboard'): Promise<number | null> {
+export async function waitForTutorialData(request: APIRequestContext, timeoutMs = 120_000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await request.get(`/api/orgs/seed-status?mode=${QA_MODE}`);
+    if (res.status() === 404) return true; // endpoint not deployed — assume data already seeded
+    if (res.ok() && (await res.json())?.data?.ready) return true;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return false;
+}
+
+/**
+ * Discover an existing file of `type` in tutorial mode on the deployment.
+ * For questions, prefers one with a SQL query. Returns { id, name }, or null.
+ * The name lets flows open the file by *clicking* its tile (real navigation).
+ */
+export async function findFile(
+  request: APIRequestContext,
+  type: 'question' | 'dashboard',
+): Promise<{ id: number; name: string; path: string } | null> {
   const res = await request.get(`/api/files?type=${type}&depth=10&includeContent=true&mode=${QA_MODE}`);
   if (!res.ok()) return null;
   const files: any[] = (await res.json())?.data ?? [];
-  if (type === 'question') {
-    return (files.find((f) => f?.content?.query) ?? files[0])?.id ?? null;
-  }
-  return files[0]?.id ?? null;
+  const file = type === 'question' ? (files.find((f) => f?.content?.query) ?? files[0]) : files[0];
+  return file ? { id: file.id, name: file.name, path: file.path } : null;
 }
 
-/** Open a file (question or dashboard) by id with the store exposed. */
-export async function openFile(page: Page, id: number): Promise<void> {
-  await page.goto(e2eUrl(`/f/${id}`));
+/**
+ * Open a file by navigating to its parent folder, then CLICKING its tile — real
+ * user navigation, not a URL jump to /f/{id}. Opening the parent folder (derived
+ * from the file's path) keeps this robust to nested files across deployments.
+ * Expands the file's section first if collapsed (Questions is collapsed by
+ * default). Mode is preserved by e2eUrl + the tile href.
+ */
+export async function openFileByClick(
+  page: Page,
+  type: 'question' | 'dashboard',
+  file: { name: string; path: string },
+): Promise<void> {
+  const parent =
+    file.path && file.path.lastIndexOf('/') > 0
+      ? file.path.slice(0, file.path.lastIndexOf('/'))
+      : `/${QA_MODE}`;
+  await page.goto(e2eUrl(`/p${parent}`));
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), { timeout: 15_000 })
+    .toBe(true);
+
+  const tile = page.getByLabel(file.name, { exact: true }).first();
+  if (!(await tile.isVisible().catch(() => false))) {
+    const sectionLabel = type === 'question' ? 'Questions section' : 'Dashboards section';
+    await page.getByLabel(sectionLabel).first().click().catch(() => {}); // expand if collapsed
+  }
+  await tile.click({ timeout: 15_000 });
+  await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
 }
 
 /** Click the question's Run-query control if present; else rely on auto-execute. */

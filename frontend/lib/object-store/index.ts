@@ -47,6 +47,8 @@ export interface ObjectStore {
   delete(key: string): Promise<void>;
   /** Server-side S3 copy — no data transfer through Node.js. */
   copyObject(sourceKey: string, destKey: string): Promise<void>;
+  /** True if an object exists at `key`. */
+  exists(key: string): Promise<boolean>;
 }
 
 /** True when S3 credentials are absent — local filesystem is used instead. */
@@ -134,6 +136,23 @@ export async function copySeedMxfoodForMode(
   }));
 
   return copied;
+}
+
+/**
+ * Readiness of a mode's mxfood seed copy: how many destination tables exist yet.
+ * Registration kicks off `copySeedMxfoodForMode` fire-and-forget, so callers
+ * (progress UI, QA setup) poll this until `ready` to know the sample data landed.
+ */
+export async function getMxfoodSeedStatus(
+  mode: string,
+  tableNames: readonly string[],
+): Promise<{ ready: boolean; present: number; total: number }> {
+  const store = createObjectStore();
+  const flags = await Promise.all(
+    tableNames.map((t) => store.exists(getMxfoodTutorialKey(mode, t)).catch(() => false)),
+  );
+  const present = flags.filter(Boolean).length;
+  return { ready: present === tableNames.length, present, total: tableNames.length };
 }
 
 export { S3Adapter };

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   OBJECT_STORE_BUCKET,
@@ -89,5 +89,14 @@ export class S3Adapter implements ObjectStore {
       CopySource: `${this.bucket}/${sourceKey}`,
       Key: destKey,
     }));
+  }
+
+  async exists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

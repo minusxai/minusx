@@ -9,8 +9,15 @@
  * whatever tutorial content exists. Uses the auth storageState (admin session).
  */
 import { test as setup } from '@playwright/test';
-import { resetTutorial } from './flows';
+import { resetTutorial, waitForTutorialData } from './flows';
 
 setup('reset tutorial to pristine seed', async ({ request }) => {
   await resetTutorial(request);
+  // mxfood sample data copies in fire-and-forget after reset/registration; wait for
+  // it so the data-asserting flows (query/dashboard) run against ready data.
+  const ready = await waitForTutorialData(request);
+  if (!ready) {
+    // eslint-disable-next-line no-console
+    console.warn('[qa] tutorial sample data not ready within timeout — data flows may fail');
+  }
 });
