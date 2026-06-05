@@ -8,12 +8,11 @@
  */
 import { test, expect } from '@playwright/test';
 import { getState } from '@/test/flows/e2e';
-
-const SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
+import { e2eUrl } from './flows';
 
 test('deployment is healthy: authenticated, store hydrated, chat surface present', async ({ page }) => {
-  // Opt into store exposure for this session.
-  await page.goto(`/?e2e=${encodeURIComponent(SECRET)}`);
+  // Opt into store exposure for this session (tutorial mode).
+  await page.goto(e2eUrl('/'));
   await expect(page).not.toHaveURL(/\/login/);
 
   // Redux hydrated with the logged-in user + config (no LLM involved).
@@ -23,6 +22,6 @@ test('deployment is healthy: authenticated, store hydrated, chat surface present
   expect(state.configs?.config).toBeTruthy();
 
   // The chat surface is reachable.
-  await page.goto(`/explore?e2e=${encodeURIComponent(SECRET)}`);
+  await page.goto(e2eUrl('/explore'));
   await expect(page.getByLabel('Chat message input')).toBeVisible();
 });

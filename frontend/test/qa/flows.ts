@@ -17,12 +17,21 @@ const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
  * discovery, navigation, and query execution all stay inside the isolated
  * tutorial filesystem + seed warehouse.
  */
-const QA_MODE = 'tutorial';
+export const QA_MODE = 'tutorial';
+
+/** Append a query param to a path, picking `?` or `&` automatically. */
+function withParam(path: string, kv: string): string {
+  return `${path}${path.includes('?') ? '&' : '?'}${kv}`;
+}
+
+/** A path pinned to tutorial mode (no e2e opt-in) — for gate/negative checks. */
+export function modeUrl(path: string): string {
+  return withParam(path, `mode=${QA_MODE}`);
+}
 
 /** A path with the runtime e2e opt-in + tutorial mode appended. */
-function e2eUrl(path: string): string {
-  const sep = path.includes('?') ? '&' : '?';
-  return `${path}${sep}e2e=${encodeURIComponent(E2E_SECRET)}&mode=${QA_MODE}`;
+export function e2eUrl(path: string): string {
+  return withParam(modeUrl(path), `e2e=${encodeURIComponent(E2E_SECRET)}`);
 }
 
 /**

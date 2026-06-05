@@ -27,8 +27,10 @@ if (!EXTERNAL) fs.mkdirSync(PGLITE_DIR, { recursive: true });
 
 export default defineConfig({
   testDir: './test/qa',
-  fullyParallel: false,
-  workers: 1,
+  // QA flows are read-only and run entirely in tutorial mode (reset once up front
+  // via the setup chain), so they parallelize safely. Start conservative at 2.
+  fullyParallel: true,
+  workers: 2,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',

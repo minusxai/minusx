@@ -7,30 +7,29 @@
  * a real deployment.
  */
 import { test, expect } from '@playwright/test';
-
-const SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
+import { e2eUrl, modeUrl } from './flows';
 
 const storeExposed = (page: import('@playwright/test').Page) =>
   page.evaluate(() => typeof (window as unknown as { __MX_STORE__?: { getState?: unknown } }).__MX_STORE__?.getState === 'function');
 
 test('store is NOT exposed without ?e2e (prod build, no opt-in)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto(modeUrl('/'));
   await expect(page).not.toHaveURL(/\/login/);
   await page.waitForTimeout(500); // let the mount effect run
   expect(await storeExposed(page)).toBe(false);
 });
 
 test('?e2e=<secret> exposes the store and persists across navigation', async ({ page }) => {
-  await page.goto(`/?e2e=${encodeURIComponent(SECRET)}`);
+  await page.goto(e2eUrl('/'));
   await expect.poll(() => storeExposed(page), { timeout: 15_000 }).toBe(true);
 
   // The opt-in cookie persists it on a subsequent navigation (no param).
-  await page.goto('/explore');
+  await page.goto(modeUrl('/explore'));
   await expect.poll(() => storeExposed(page), { timeout: 15_000 }).toBe(true);
 });
 
 test('a wrong ?e2e value does NOT expose the store', async ({ page }) => {
-  await page.goto('/?e2e=definitely-not-the-secret');
+  await page.goto(modeUrl('/?e2e=definitely-not-the-secret'));
   await page.waitForTimeout(500);
   expect(await storeExposed(page)).toBe(false);
 });
