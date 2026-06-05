@@ -29,9 +29,12 @@ import {
 test.describe('real-LLM chat flows', () => {
   test.skip(!hasLlm(), 'no ANTHROPIC_API_KEY — real-LLM QA flows disabled');
   // Real model round-trips (+ page load + seed) need more than the default 60s.
-  // Flows run in parallel (the config's workers); the warmup + the generous
-  // send-enable wait absorb the cold prod-build connection load.
-  test.describe.configure({ timeout: 180_000 });
+  // Flows run in parallel (the config's workers) sharing one Haiku budget, so the
+  // heaviest flow (dashboard side-chat: folder nav + tile click + dashboard render
+  // + large-context reply) needs generous headroom on top of the per-reply waits —
+  // it runs ~100s solo and slows under contention. The warmup setup primes the
+  // server's connection/context cache so none of these race a cold start.
+  test.describe.configure({ timeout: 300_000 });
 
   /** Run a flow; on any failure mark the test skipped (not failed) with the reason. */
   async function runOrSkip(label: string, flow: () => Promise<void>): Promise<void> {
