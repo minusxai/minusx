@@ -1,3 +1,43 @@
+diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/amazon-bedrock.js b/node_modules/@mariozechner/pi-ai/dist/providers/amazon-bedrock.js
+index c783f3b..2d20a14 100644
+--- a/node_modules/@mariozechner/pi-ai/dist/providers/amazon-bedrock.js
++++ b/node_modules/@mariozechner/pi-ai/dist/providers/amazon-bedrock.js
+@@ -80,8 +80,11 @@ export const streamBedrock = (model, context, options = {}) => {
+                     httpsAgent: agent,
+                 });
+             }
+-            else if (process.env.AWS_BEDROCK_FORCE_HTTP1 === "1") {
+-                // Some custom endpoints require HTTP/1.1 instead of HTTP/2
++            else if (process.env.AWS_BEDROCK_FORCE_HTTP1 === "1" ||
++                (model.headers && model.headers["x-original-base-url"])) {
++                // Some custom endpoints require HTTP/1.1 instead of HTTP/2.
++                // MX patch: force HTTP/1.1 when an x-original-base-url handle header
++                // is present (routed via a custom endpoint that needs HTTP/1.1).
+                 const nodeHttpHandler = await import("@smithy/node-http-handler");
+                 config.requestHandler = new nodeHttpHandler.NodeHttpHandler();
+             }
+@@ -98,6 +101,21 @@ export const streamBedrock = (model, context, options = {}) => {
+         }
+         try {
+             const client = new BedrockRuntimeClient(config);
++            // MX patch: the AWS SDK builds its own request and drops the model
++            // handle's custom headers. Re-inject them via a build-step middleware
++            // so they reach the configured endpoint as with fetch-based providers.
++            if (model.headers && Object.keys(model.headers).length > 0) {
++                client.middlewareStack.add((next) => async (args) => {
++                    const req = args.request;
++                    if (req && typeof req === "object" && req.headers) {
++                        for (const [k, v] of Object.entries(model.headers)) {
++                            if (v != null)
++                                req.headers[k] = v;
++                        }
++                    }
++                    return next(args);
++                }, { step: "build", name: "mxInjectHandleHeaders", override: true });
++            }
+             const cacheRetention = resolveCacheRetention(options.cacheRetention);
+             let commandInput = {
+                 modelId: model.id,
 diff --git a/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js b/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
 index 3f0cc9a..b15009b 100644
 --- a/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js
