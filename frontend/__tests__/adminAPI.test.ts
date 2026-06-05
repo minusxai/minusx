@@ -468,6 +468,44 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(orgResult.rows[0].count).toBe(2);
   });
 
+  it('resets cleanly when a doc has drifted to a non-template id at a template path', async () => {
+    // Real-world drift: on long-lived deployments a doc can end up sitting at a
+    // template path (here /tutorial/top-level-metrics, the seed's id=11) but under a
+    // *non-template* id. The id-only delete misses it, so re-inserting the seed used
+    // to collide on UNIQUE(path) and 500. Reset must delete by id OR path and recover.
+    const now = new Date().toISOString();
+    const db = getModules().db;
+    await db.exec(
+      'INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [
+        7777, 'drifted-dashboard', '/tutorial/top-level-metrics',
+        'dashboard', JSON.stringify({ name: 'drifted-dashboard', layout: [] }),
+        JSON.stringify([]), now, now
+      ]
+    );
+
+    const request = createResetRequest();
+    const response = await resetTutorialHandler(request, {} as any);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.documentsCreated).toBe(68);
+
+    // The template doc is restored at that path under its template id (11), drift gone.
+    const pathResult = await db.exec<{ id: number }>(
+      "SELECT id FROM files WHERE path = '/tutorial/top-level-metrics'",
+      []
+    );
+    expect(pathResult.rows).toHaveLength(1);
+    expect(pathResult.rows[0].id).toBe(11);
+
+    const driftedResult = await db.exec<{ count: number }>(
+      'SELECT COUNT(*) as count FROM files WHERE id = 7777',
+      []
+    );
+    expect(driftedResult.rows[0].count).toBe(0);
+  });
+
   it('should be idempotent — second call also returns 30 docs', async () => {
     const request1 = createResetRequest();
     const response1 = await resetTutorialHandler(request1, {} as any);

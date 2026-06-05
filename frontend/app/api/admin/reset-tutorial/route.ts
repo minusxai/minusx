@@ -60,13 +60,18 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
     // Delete by explicit template ID list — safe for existing DBs where user files
     // may have IDs < 1000 (created before the 1000-floor was introduced).
     const templateIds = seedDocs.map(d => d.id);
+    // Also delete by template *path*: on drifted deployments a doc can sit at a seed
+    // path under a non-template id. The id-only delete misses it, so re-inserting the
+    // seed would collide on UNIQUE(path) and 500. Seed paths are system-owned
+    // (/tutorial/*, /internals/*); user files live elsewhere, so this is non-destructive.
+    const templatePaths = seedDocs.map(d => d.path);
 
     const db = getModules().db;
 
     if (templateIds.length > 0) {
       await db.exec(
-        `DELETE FROM files WHERE id = ANY($1::int[])`,
-        [sqlArray(templateIds)]
+        `DELETE FROM files WHERE id = ANY($1::int[]) OR path = ANY($2::text[])`,
+        [sqlArray(templateIds), sqlArray(templatePaths)]
       );
     }
 
