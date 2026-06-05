@@ -334,10 +334,13 @@ export async function assertWebSearchRan(page: Page): Promise<void> {
   );
 }
 
-/** Pull an `lllm_call_id` out of the exposed Redux state (debug rows carry it). */
+/**
+ * Pull an LLM call id out of the exposed Redux state. Debug rows carry
+ * `lllm_call_id`; some paths stamp `_lllmCallId` / `llm_call_id`. Match any.
+ */
 export async function firstLlmCallId(page: Page): Promise<string | null> {
-  const state = await getState(page);
-  const m = JSON.stringify(state ?? {}).match(/"lllm_call_id":"([^"]+)"/);
+  const json = JSON.stringify((await getState(page)) ?? {});
+  const m = json.match(/"(?:lllm_call_id|llm_call_id|_lllmCallId)":\s*"([^"]+)"/);
   return m ? m[1] : null;
 }
 
