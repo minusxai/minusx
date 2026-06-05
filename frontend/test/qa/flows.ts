@@ -109,7 +109,9 @@ export async function openFileByClick(
     const sectionLabel = type === 'question' ? 'Questions section' : 'Dashboards section';
     await page.getByLabel(sectionLabel).first().click().catch(() => {}); // expand if collapsed
   }
-  await tile.click({ timeout: 15_000 });
+  // Wait for the listing to render the tile before clicking (cold first loads can be slow).
+  await tile.waitFor({ state: 'visible', timeout: 30_000 });
+  await tile.click({ timeout: 30_000 });
   await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
 }
 
