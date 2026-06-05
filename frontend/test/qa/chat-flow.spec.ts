@@ -38,6 +38,8 @@ test.describe('real-LLM chat flows', () => {
       await flow();
     } catch (e) {
       reason = `${label} could not complete in this environment: ${String(e).split('\n')[0]}`;
+      // eslint-disable-next-line no-console
+      console.log(`[QA SKIP] ${reason}`);
     }
     test.skip(!!reason, reason);
   }
