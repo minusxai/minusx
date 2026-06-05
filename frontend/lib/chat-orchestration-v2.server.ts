@@ -569,11 +569,11 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
 
 /**
  * Record this turn's LLM calls out-of-band, from the turn's new log entries:
- * publish `AppEvents.LLM_CALL` (stats → `llm_call_events` locally + forwarded
- * centrally) and write the raw pi-format request/response to `llm_logs` (LOCAL
- * only — never forwarded). The pi-format request is read back from the LLM
- * boundary by response-message identity (`takeLlmCallRequest`); the call id and
- * duration are the ones the engine already stamps onto each message. Best-effort.
+ * write per-call stats to `llm_call_events` and fill the response into the
+ * `llm_logs` row whose request was already written when the call was made
+ * (LOCAL only — never forwarded), then publish `AppEvents.LLM_CALL` for the
+ * best-effort central stats forward. The call id + duration are the ones the
+ * engine already stamps onto each message. Best-effort.
  */
 async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
   try {

@@ -158,10 +158,6 @@ export async function recordLlmCallEvent(p: InsertLlmCallEventParams): Promise<v
   }
 }
 
-export function insertLlmCallEvent(p: InsertLlmCallEventParams): void {
-  fireAndForget(recordLlmCallEvent(p));
-}
-
 /**
  * Write the pi-format REQUEST for one LLM call (called when the call is made,
  * before the response exists). The response is filled in later by

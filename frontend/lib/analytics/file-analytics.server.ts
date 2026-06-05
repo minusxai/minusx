@@ -1,12 +1,11 @@
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';
 import { sqlArray } from '@/lib/database/adapter/types';
-import { FileEventType, insertFileEvent, insertFileEvents, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent } from './file-analytics.db';
+import { FileEventType, insertFileEvent, insertFileEvents, insertFeedbackEvent, insertQueryExecutionEvent } from './file-analytics.db';
 import type { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
-import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
 export { FileEventType } from './file-analytics.db';
-export { insertFileEvent, insertFileEvents, insertFeedbackEvent, insertLlmCallEvent, insertQueryExecutionEvent };
+export { insertFileEvent, insertFileEvents, insertFeedbackEvent, insertQueryExecutionEvent };
 
 /**
  * Track a single file event. Fire-and-forget.
@@ -250,41 +249,6 @@ export function trackQueryExecutionEvent(event: QueryExecutionEvent): void {
     error: event.error ?? null,
     userId: event.userId ?? null,
   });
-}
-
-/**
- * Track LLM call events for a conversation. Fire-and-forget; errors logged only.
- */
-export function trackLLMCallEvents(
-  llmCalls: Record<string, LLMCallDetail>,
-  conversationId: number,
-  userId: number | null,
-  mode: string | null = null,
-): void {
-  for (const call of Object.values(llmCalls)) {
-    insertLlmCallEvent({
-      conversationId,
-      llmCallId: call.llm_call_id ?? null,
-      provider: call.provider ?? null,
-      model: call.model,
-      mode,
-      totalTokens: call.total_tokens,
-      promptTokens: call.prompt_tokens,
-      completionTokens: call.completion_tokens,
-      cachedTokens: call.cached_tokens ?? 0,
-      cacheCreationTokens: call.cache_creation_tokens ?? 0,
-      reasoningTokens: call.reasoning_tokens ?? 0,
-      systemPromptTokens: call.system_prompt_tokens ?? 0,
-      appStateTokens: call.app_state_tokens ?? 0,
-      totalToolCalls: call.total_tool_calls ?? 0,
-      cost: call.cost,
-      durationS: call.duration,
-      stream: call.stream ?? false,
-      finishReason: call.finish_reason ?? null,
-      trigger: call.trigger ?? null,
-      userId: userId ?? null,
-    });
-  }
 }
 
 const CONV_AGG_SQL = `
