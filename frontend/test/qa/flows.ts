@@ -6,7 +6,7 @@
  * portable across deployments with different data. They drive the question/dashboard
  * surfaces with the runtime `?e2e` opt-in and assert against the exposed Redux store.
  */
-import { type Page, type APIRequestContext } from '@playwright/test';
+import { expect, type Page, type APIRequestContext } from '@playwright/test';
 import { assertRedux } from '@/test/flows/e2e';
 
 const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
@@ -101,5 +101,104 @@ export async function assertDashboardRendered(page: Page, dashboardId: number, m
       return withRows.length >= minQuestions;
     },
     { message: `dashboard ${dashboardId} did not render ${minQuestions}+ question result(s)`, timeout: 45_000 },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mutating flows (create / edit / save). These author NEW files, so they:
+//   1. enter via a tutorial-mode page (so auth.user.mode === 'tutorial'),
+//   2. assert that mode before mutating (assertTutorialMode), and
+//   3. hard-assert created paths start with /tutorial — a loud safety net so a
+//      regression in mode-preservation can never silently write to production.
+// They create uniquely-named artifacts and assert by their own id, so they are
+// safe under parallel workers (reset runs once up front; nothing is shared).
+// ---------------------------------------------------------------------------
+
+/** Land on the tutorial home with the store exposed + mode=tutorial established. */
+export async function gotoTutorialHome(page: Page): Promise<void> {
+  await page.goto(e2eUrl('/p/tutorial'));
+  // Wait for the e2e gate to expose the store before any Redux assertion.
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).__MX_STORE__?.getState === 'function'), {
+      timeout: 15_000,
+    })
+    .toBe(true);
+}
+
+/** Safety guard: refuse to mutate unless Redux confirms we're in tutorial mode. */
+export async function assertTutorialMode(page: Page): Promise<void> {
+  await assertRedux(
+    page,
+    (s) => s?.auth?.user?.mode === QA_MODE,
+    { message: `expected auth.user.mode === '${QA_MODE}' before mutating`, timeout: 15_000 },
+  );
+}
+
+/** Click Create → New Dashboard; returns the new draft dashboard's file id. */
+export async function createDashboard(page: Page): Promise<number> {
+  await page.getByLabel('Create').first().click();
+  await page.getByLabel('New Dashboard').click();
+  await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
+  return Number(new URL(page.url()).pathname.split('/f/')[1]);
+}
+
+/** Add the first available tutorial question to the open dashboard via its panel. */
+export async function addFirstQuestion(page: Page): Promise<void> {
+  await page.getByLabel('Add to dashboard').first().click({ timeout: 20_000 });
+}
+
+/** Save a draft via the header Save → SaveFileModal (name + confirm). */
+export async function saveDraft(page: Page, name: string): Promise<void> {
+  // exact: 'Save' would otherwise also match "Review N unsaved changes".
+  await page.getByLabel('Save', { exact: true }).click();
+  await page.getByLabel('File name').fill(name);
+  await page.getByLabel('Confirm save').click();
+}
+
+/** Click Create → New Question; returns the new draft question's file id. */
+export async function createQuestion(page: Page): Promise<number> {
+  await page.getByLabel('Create').first().click();
+  await page.getByLabel('New Question').click();
+  await page.waitForURL(/\/f\/\d+/, { timeout: 20_000 });
+  return Number(new URL(page.url()).pathname.split('/f/')[1]);
+}
+
+/** Type SQL into the Monaco editor (located via its ariaLabel) and dismiss popups. */
+export async function typeQuery(page: Page, sql: string): Promise<void> {
+  // Focus (not click) — Monaco's render layers intercept pointer events on the input.
+  await page.getByLabel('SQL editor').focus();
+  await page.keyboard.type(sql);
+  await page.keyboard.press('Escape'); // dismiss any autocomplete suggestion popup
+}
+
+/** Assert a question is saved (not draft), under /tutorial, with a non-empty query. */
+export async function assertQuestionSaved(page: Page, questionId: number): Promise<void> {
+  await assertRedux(
+    page,
+    (s) => {
+      const f = s?.files?.files?.[questionId];
+      if (!f || f.draft) return false;
+      const content = { ...(f.content ?? {}), ...(f.persistableChanges ?? {}) };
+      const inTutorial = typeof f.path === 'string' && f.path.startsWith('/tutorial');
+      return inTutorial && typeof content.query === 'string' && content.query.trim().length > 0;
+    },
+    { message: `question ${questionId} not saved under /tutorial with a query`, timeout: 20_000 },
+  );
+}
+
+/** Assert a dashboard is saved (not draft), under /tutorial, and holds a question. */
+export async function assertDashboardSavedWithQuestion(page: Page, dashboardId: number): Promise<void> {
+  await assertRedux(
+    page,
+    (s) => {
+      const f = s?.files?.files?.[dashboardId];
+      if (!f || f.draft) return false;
+      const content = { ...(f.content ?? {}), ...(f.persistableChanges ?? {}) };
+      const assets: any[] = content?.assets ?? [];
+      const hasQuestion = assets.some((a) => a?.type === 'question');
+      const inTutorial = typeof f.path === 'string' && f.path.startsWith('/tutorial');
+      return hasQuestion && inTutorial;
+    },
+    { message: `dashboard ${dashboardId} not saved under /tutorial with a question`, timeout: 20_000 },
   );
 }

@@ -8,7 +8,7 @@
  * - FolderView (empty folder state)
  * - MobileNewFileSheet (mobile bottom sheet)
  */
-import { Box, HStack, VStack, Text, Icon, Menu, Portal, Button } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, Menu, Portal } from '@chakra-ui/react';
 import { LuPlus, LuRocket } from 'react-icons/lu';
 import { useState } from 'react';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
@@ -244,53 +244,62 @@ export default function CreateMenu({
   return (
     <>
       <Menu.Root positioning={{ placement: menuPlacement }}>
-        <Menu.Trigger asChild>
-          {variant === 'sidebar' ? (
-            <Box
-              px={isCollapsed ? 0 : 3}
-              py={2}
-              borderRadius="md"
-              cursor="pointer"
-              _hover={HOVER_LIFT}
-              transition="all 0.2s"
-              display="flex"
-              alignItems="center"
-              justifyContent={isCollapsed ? 'center' : 'flex-start'}
-              gap={3}
-              bg="accent.teal"
-              shadow="sm"
-              transform="translateY(0)"
-            >
-              <Box color="white" display="flex" alignItems="center" fontSize="lg">
-                <LuPlus />
-              </Box>
-              {!isCollapsed && (
-                <Text
-                  fontSize="sm"
-                  color="white"
-                  fontFamily="mono"
-                  fontWeight="600"
-                  opacity={isCollapsed ? 0 : 1}
-                  transition="opacity 0.2s"
-                >
-                  New
-                </Text>
-              )}
+        {/* Trigger is a real <button> (not asChild) so it has an accessible
+            name ("Create") and is reachable via getByLabel. */}
+        {variant === 'sidebar' ? (
+          <Menu.Trigger
+            aria-label="Create"
+            border="none"
+            w="full"
+            textAlign="left"
+            px={isCollapsed ? 0 : 3}
+            py={2}
+            borderRadius="md"
+            cursor="pointer"
+            _hover={HOVER_LIFT}
+            transition="all 0.2s"
+            display="flex"
+            alignItems="center"
+            justifyContent={isCollapsed ? 'center' : 'flex-start'}
+            gap={3}
+            bg="accent.teal"
+            shadow="sm"
+            transform="translateY(0)"
+          >
+            <Box color="white" display="flex" alignItems="center" fontSize="lg">
+              <LuPlus />
             </Box>
-          ) : (
-            <Button
-              bg="accent.teal"
-              color="white"
-              size="md"
-              fontWeight="600"
-              _hover={HOVER_OPACITY_DIM}
-              gap={2}
-            >
-              <Icon as={LuPlus} />
-              Create
-            </Button>
-          )}
-        </Menu.Trigger>
+            {!isCollapsed && (
+              <Text
+                fontSize="sm"
+                color="white"
+                fontFamily="mono"
+                fontWeight="600"
+                opacity={isCollapsed ? 0 : 1}
+                transition="opacity 0.2s"
+              >
+                New
+              </Text>
+            )}
+          </Menu.Trigger>
+        ) : (
+          <Menu.Trigger
+            aria-label="Create"
+            bg="accent.teal"
+            color="white"
+            fontWeight="600"
+            _hover={HOVER_OPACITY_DIM}
+            display="flex"
+            alignItems="center"
+            gap={2}
+            px={4}
+            py={2}
+            borderRadius="md"
+          >
+            <Icon as={LuPlus} />
+            Create
+          </Menu.Trigger>
+        )}
         <Portal>
           <Menu.Positioner>
             <Menu.Content
@@ -325,6 +334,7 @@ export default function CreateMenu({
                 <Menu.Item
                   key={type}
                   value={type}
+                  aria-label={`New ${FILE_TYPE_METADATA[type].label}`}
                   cursor="pointer"
                   borderRadius="md"
                   px={3}
