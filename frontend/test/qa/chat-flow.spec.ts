@@ -31,7 +31,11 @@ import {
 } from './flows';
 
 test.describe('real-LLM chat flows', () => {
-  test.skip(!hasLlm(), 'no ANTHROPIC_API_KEY — real-LLM QA flows disabled');
+  // Run whenever a model is reachable: a provider credential is present (local prod
+  // build / CI secrets) OR we're driving a live deployment that has its own LLM
+  // (QA_BASE_URL set, e.g. the deploys repo). Fork PRs get neither — GitHub withholds
+  // secrets from forks — so they skip here instead of failing a build with no LLM.
+  test.skip(!hasLlm() && !process.env.QA_BASE_URL, 'no provider credential and not targeting a deployment — real-LLM QA disabled');
   // Real model round-trips (+ page load + seed) need far more than the default 60s.
   // With no warmup, the first parallel wave absorbs the cold prod-build start
   // (connections/context load can take a couple of minutes before Send enables —
