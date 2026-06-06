@@ -245,14 +245,20 @@ export async function assertQuestionSaved(page: Page, questionId: number): Promi
 
 // ---------------------------------------------------------------------------
 // Real-LLM chat flows. These drive actual conversations (no faux channel), so
-// they only run when an LLM key is present (see `hasLlm()`); CI supplies it via
-// secrets. Assertions are STRUCTURAL (a reply landed, a web search ran) — never
-// on specific generated text — so they're stable under a real model.
+// they run when a model is reachable: a provider credential is present (see
+// `hasLlm()`; CI supplies it via secrets) OR we're driving a live deployment that
+// has its own LLM (QA_BASE_URL set) — see the describe gate in chat-flow.spec.ts.
+// Assertions are STRUCTURAL (a reply landed, a web search ran) — never on specific
+// generated text — so they're stable under a real model.
 // ---------------------------------------------------------------------------
 
 /** Whether real-LLM flows can run (a provider key is configured for the server). */
 export function hasLlm(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+  // True when ANY supported provider credential is present, so the real-LLM flows
+  // run whether the agent is configured for Anthropic-direct (ANTHROPIC_API_KEY)
+  // or Bedrock (AWS_BEARER_TOKEN_BEDROCK). Lets CI drop ANTHROPIC_API_KEY once it
+  // runs on Bedrock without the flows silently skipping.
+  return !!(process.env.ANTHROPIC_API_KEY || process.env.AWS_BEARER_TOKEN_BEDROCK);
 }
 
 /** Wait until the e2e gate has exposed the Redux store on the page. */

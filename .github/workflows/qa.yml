@@ -76,9 +76,12 @@ jobs:
           # are supported"). Embedding charts as base64 data URLs lets the real-LLM
           # flows exercise the chart-image pipeline faithfully. (Prod uses S3 → HTTPS.)
           USE_BASE64_UPLOADS: 'true'
-          # Real-LLM QA flows (test/qa/chat-flow.spec.ts) run only when a provider
-          # key is present; a Haiku model keeps the calls cheap + fast in CI.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Real-LLM QA flows (test/qa/chat-flow.spec.ts) run when a provider
+          # credential is present. We run them on Bedrock — the SAME provider as
+          # prod — so the standalone build + AWS SDK packaging + Bedrock auth are
+          # exercised end-to-end (this is the path that broke in prod and CI missed
+          # while it ran Anthropic-direct). A Haiku model keeps calls cheap + fast.
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           ANALYST_AGENT_MODEL_CONFIG: ${{ secrets.ANALYST_AGENT_MODEL_CONFIG }}
         run: npm run test:qa
 
