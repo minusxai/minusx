@@ -426,7 +426,9 @@ export async function assertUserMessagePersisted(
             && ((e as { args: { user_message: string } }).args.user_message).includes(needle),
         );
       },
-      { message: `conversation ${conversationId} has no persisted user message containing "${needle}"`, timeout: 30_000 },
+      // Generous: against a live deployment the abort-persist must round-trip over
+      // the network under real load, so 30s occasionally raced it on the first try.
+      { message: `conversation ${conversationId} has no persisted user message containing "${needle}"`, timeout: 60_000 },
     )
     .toBe(true);
 }
