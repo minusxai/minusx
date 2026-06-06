@@ -1,9 +1,10 @@
 name: QA Flows
 
+# PRs only. The same code is validated on the PR before merge, and QA Flows is the
+# slow + real-LLM (cost) job — re-running it on the post-merge main push is pure
+# redundancy. The deploy ("Publish Docker Images") is a separate workflow not gated
+# by this one, and the deploys repo runs QA against the live deployment after deploy.
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
