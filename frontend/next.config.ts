@@ -34,6 +34,19 @@ const nextConfig: NextConfig = {
   // Enable standalone output for optimized Docker deployments (60% smaller images)
   output: 'standalone',
 
+  // pi-ai (external, below) loads its LLM providers via a fully dynamic `import()`,
+  // so the standalone tracer cannot see the AWS SDK the Bedrock provider pulls in —
+  // and the Bedrock credential chain then lazily `require()`s @aws-sdk/token-providers
+  // (+ @smithy utils). Those are absent from the container's node_modules, so the
+  // first Bedrock LLM call dies with MODULE_NOT_FOUND in prod (works locally only
+  // because the full node_modules is present). Force the AWS SDK + smithy into the
+  // trace for every route that can make an LLM call. Files land once in the shared
+  // standalone node_modules, so listing extra routes does not duplicate them.
+  outputFileTracingIncludes: {
+    '/api/chat': ['./node_modules/@aws-sdk/**/*', './node_modules/@smithy/**/*'],
+    '/api/chat/stream': ['./node_modules/@aws-sdk/**/*', './node_modules/@smithy/**/*'],
+  },
+
   // Exclude heavy packages from the server bundle — they are loaded from node_modules
   // at runtime instead of being compiled into server chunks by Turbopack.
   // '@duckdb/duckdb-wasm'  — browser WASM, should never be in server bundle
