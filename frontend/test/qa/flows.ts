@@ -252,7 +252,11 @@ export async function assertQuestionSaved(page: Page, questionId: number): Promi
 
 /** Whether real-LLM flows can run (a provider key is configured for the server). */
 export function hasLlm(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+  // True when ANY supported provider credential is present, so the real-LLM flows
+  // run whether the agent is configured for Anthropic-direct (ANTHROPIC_API_KEY)
+  // or Bedrock (AWS_BEARER_TOKEN_BEDROCK). Lets CI drop ANTHROPIC_API_KEY once it
+  // runs on Bedrock without the flows silently skipping.
+  return !!(process.env.ANTHROPIC_API_KEY || process.env.AWS_BEARER_TOKEN_BEDROCK);
 }
 
 /** Wait until the e2e gate has exposed the Redux store on the page. */
