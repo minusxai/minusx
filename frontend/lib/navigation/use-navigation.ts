@@ -8,7 +8,7 @@
 'use client';
 
 import { useRouter as useNextRouter } from 'next/navigation';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { preserveParams } from './url-utils';
 
 /**
@@ -42,12 +42,12 @@ export function useRouter() {
     [router]
   );
 
-  const updatedRouter = {
-    ...router,
-    push,
-    replace,
-  };
-  setRouter(updatedRouter)
+  const updatedRouter = useMemo(() => {
+    const r = { ...router, push, replace };
+    setRouter(r);
+    return r;
+  }, [router, push, replace]);
+
   return updatedRouter
 }
 
