@@ -1,15 +1,15 @@
 'use client';
 
 import { Box, Text, IconButton, HStack, Portal, MenuRoot, MenuTrigger, MenuPositioner, MenuContent, MenuItem } from '@chakra-ui/react';
-import { LuPlus, LuX, LuGripVertical, LuPresentation, LuFileText, LuChevronDown, LuCheck } from 'react-icons/lu';
+import { LuPlus, LuX, LuGripVertical, LuPresentation, LuFileText, LuChevronDown, LuCheck, LuLayoutDashboard, LuLayers } from 'react-icons/lu';
 import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import ReportOverlay from '../ReportOverlay';
+import DockView from './DockView';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
-import { Tooltip } from '@/components/ui/tooltip';
 import ParameterRow from '../ParameterRow';
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -281,6 +281,9 @@ export default function DashboardView({
   const activeVersionLabel = dashboardVersionOptions.find(o => o.value === dashboardVersion)?.label ?? 'Live';
   const isLive = dashboardVersion === 'live';
 
+  // In-page view: the asset dock vs the dashboard grid.
+  const [currentView, setCurrentView] = useState<'dashboard' | 'dock'>('dashboard');
+
   // Presentation / Report mode
   const [isPresenting, setIsPresenting] = useState(false);
   const [isReporting, setIsReporting] = useState(false);
@@ -531,6 +534,45 @@ export default function DashboardView({
     setActions(
       <>
         <style>{livePulseAnimation}</style>
+        {/* View switcher: Dock / Dashboard / Report / Present over one asset pool */}
+        <HStack
+          gap={0.5}
+          p={0.5}
+          borderRadius="full"
+          bg="bg.muted"
+          borderWidth="1px"
+          borderColor="border.muted"
+        >
+          <ViewSwitchSegment
+            label="Dock"
+            icon={<LuLayers size={13} />}
+            active={currentView === 'dock'}
+            onClick={() => setCurrentView('dock')}
+          />
+          <ViewSwitchSegment
+            label="Dashboard"
+            icon={<LuLayoutDashboard size={13} />}
+            active={currentView === 'dashboard'}
+            onClick={() => setCurrentView('dashboard')}
+          />
+          {!editMode && (
+            <>
+              <Box w="1px" h="14px" bg="border.default" mx={0.5} />
+              <ViewSwitchSegment
+                label="Report"
+                icon={<LuFileText size={13} />}
+                active={false}
+                onClick={() => setIsReporting(true)}
+              />
+              <ViewSwitchSegment
+                label="Present"
+                icon={<LuPresentation size={13} />}
+                active={false}
+                onClick={() => setIsPresenting(true)}
+              />
+            </>
+          )}
+        </HStack>
         <MenuRoot positioning={{ placement: 'bottom-start' }}>
           <MenuTrigger asChild>
             <HStack
@@ -603,31 +645,7 @@ export default function DashboardView({
             </MenuPositioner>
           </Portal>
         </MenuRoot>
-        {!editMode && slides.length > 1 && (
-          <>
-            <Tooltip content="Report">
-              <IconButton
-                onClick={() => setIsReporting(true)}
-                aria-label="Report"
-                variant="subtle"
-                size="xs"
-              >
-                <LuFileText size={14} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip content="Present">
-              <IconButton
-                onClick={() => setIsPresenting(true)}
-                aria-label="Present"
-                variant="subtle"
-                size="xs"
-              >
-                <LuPresentation size={14} />
-              </IconButton>
-            </Tooltip>
-          </>
-        )}
-        {editMode && layoutableAssets.length > 0 && (
+        {editMode && currentView === 'dashboard' && layoutableAssets.length > 0 && (
           <IconButton
             onClick={() => addPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
             aria-label="Add content"
@@ -642,7 +660,7 @@ export default function DashboardView({
       </>
     );
     return () => setActions(null);
-  }, [editMode, slides.length, layoutableAssets.length, setActions, dashboardVersion]);
+  }, [editMode, slides.length, layoutableAssets.length, setActions, dashboardVersion, currentView]);
 
   // Memoize the grid items (questions + text blocks) to prevent re-rendering on every keystroke
   const gridItems = useMemo(() => {
@@ -813,8 +831,19 @@ export default function DashboardView({
         />
       )}
 
+      {/* Dock view: the master asset repository */}
+      {activeTab === 'visual' && currentView === 'dock' && (
+        <Box pt={2}>
+          <DockView
+            assets={document?.assets || []}
+            onRemoveAsset={handleRemoveAsset}
+            onOpenQuestion={(questionId) => dispatch(pushView({ type: 'question', fileId: questionId, dashboardId: fileId, dashboardParamValues: effectiveSubmittedValues }))}
+          />
+        </Box>
+      )}
+
       {/* Visual View */}
-      {activeTab === 'visual' && (
+      {activeTab === 'visual' && currentView === 'dashboard' && (
         <>
           {/* Dashboard-level Parameters */}
           {parameterValuesForDisplay.length > 0 && (
@@ -961,5 +990,41 @@ export default function DashboardView({
         />
       )}
     </Box>
+  );
+}
+
+/** A single segment in the header view switcher (Dock / Dashboard / Report / Present). */
+function ViewSwitchSegment({
+  label,
+  icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <HStack
+      as="button"
+      onClick={onClick}
+      aria-label={label}
+      gap={1}
+      px={2}
+      py={0.5}
+      borderRadius="full"
+      cursor="pointer"
+      transition="all 0.12s"
+      bg={active ? 'bg.surface' : 'transparent'}
+      boxShadow={active ? 'xs' : undefined}
+      color={active ? 'fg.default' : 'fg.muted'}
+      _hover={{ color: 'fg.default', bg: active ? 'bg.surface' : 'bg.subtle' }}
+    >
+      {icon}
+      <Text fontSize="xs" fontWeight={active ? 700 : 500} fontFamily="mono">
+        {label}
+      </Text>
+    </HStack>
   );
 }
