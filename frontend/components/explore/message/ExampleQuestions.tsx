@@ -200,7 +200,7 @@ function PickStep({ firstName, onLaunch }: { firstName: string; onLaunch: (agent
                   </VStack>
                 </HStack>
 
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" lineHeight="1.55">
+                <Text fontSize="sm" color="fg.muted" fontFamily="mono" lineHeight="1.55">
                   {agent.description}
                 </Text>
 
