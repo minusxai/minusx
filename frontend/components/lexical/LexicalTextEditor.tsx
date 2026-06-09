@@ -410,9 +410,13 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
 // --- Read-only Viewer ---
 interface LexicalTextViewerProps {
   markdown: string;
+  /** CSS padding for the content (default roomy; pass a tighter value for slides). */
+  padding?: string;
+  /** Base font size (default 14px). */
+  fontSize?: string;
 }
 
-export function LexicalTextViewer({ markdown }: LexicalTextViewerProps) {
+export function LexicalTextViewer({ markdown, padding = '40px 32px', fontSize = '14px' }: LexicalTextViewerProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   const initialConfig = {
@@ -436,9 +440,9 @@ export function LexicalTextViewer({ markdown }: LexicalTextViewerProps) {
             <ContentEditable
               style={{
                 outline: 'none',
-                padding: '40px 32px',
+                padding,
                 minHeight: '100%',
-                fontSize: '14px',
+                fontSize,
                 lineHeight: 1.6,
                 fontFamily: 'var(--font-jetbrains-mono), monospace',
               }}

@@ -1,8 +1,8 @@
 'use client';
 
 import { memo, useMemo } from 'react';
-import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem } from '@chakra-ui/react';
-import { LuSparkles, LuSearch, LuChartLine } from 'react-icons/lu';
+import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem, SimpleGrid } from '@chakra-ui/react';
+import { LuTrendingUp, LuWallet, LuMegaphone } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectCompanyName, selectEffectiveUser } from '@/store/authSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -21,22 +21,40 @@ const greetings = [
   (name: string) => `What's on your mind today, ${name}?`,
 ];
 
-const suggestedPrompts = [
+const agents = [
   {
-    icon: LuSparkles,
-    text: "What all can you do?",
-    category: "Capability"
+    icon: LuTrendingUp,
+    name: "CEO Agent",
+    role: "Strategy & Growth",
+    color: "accent.teal",
+    questions: [
+      "How is overall revenue trending this quarter?",
+      "Which business segments are growing fastest?",
+      "What are our biggest risks right now?",
+    ],
   },
   {
-    icon: LuSearch,
-    text: "Describe our main dashboards / questions",
-    category: "Search"
+    icon: LuWallet,
+    name: "CFO Agent",
+    role: "Finance & Margins",
+    color: "accent.success",
+    questions: [
+      "What's our current burn rate and runway?",
+      "How are gross margins trending by product?",
+      "Where are costs increasing fastest?",
+    ],
   },
   {
-    icon: LuChartLine,
-    text: "Show me an interesting visualization",
-    category: "Analysis"
-  }
+    icon: LuMegaphone,
+    name: "CMO Agent",
+    role: "Marketing & Acquisition",
+    color: "accent.secondary",
+    questions: [
+      "Which channels drive the best CAC?",
+      "How is our conversion funnel performing?",
+      "What's our customer retention by cohort?",
+    ],
+  },
 ];
 
 function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: ExampleQuestionsProps) {
@@ -56,9 +74,14 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
     return greetings[index](firstName);
   }, [firstName]);
 
+  // Widen the layout for the 3-agent grid so the columns have room (the
+  // narrow chat colSpan/colStart is meant for the single-column input below).
+  const wideColSpan = container === 'sidebar' ? 12 : { base: 12, md: 10, lg: 10 };
+  const wideColStart = container === 'sidebar' ? 1 : { base: 1, md: 2, lg: 2 };
+
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
-      <GridItem colSpan={colSpan} colStart={colStart}>
+      <GridItem colSpan={wideColSpan} colStart={wideColStart}>
         <VStack gap={6} align="center" justify="center" flex="1" py={6}>
           {/* Welcome Header */}
           <VStack gap={2}>
@@ -117,7 +140,7 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
             </Text>
           </VStack>
 
-          {/* Suggested Prompts Grid */}
+          {/* Agent Verticals */}
             <Box width="100%">
               <Text
                 fontSize="xs"
@@ -125,61 +148,77 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
                 color="fg.subtle"
                 textTransform="uppercase"
                 letterSpacing="0.05em"
-                mb={2}
+                mb={3}
                 fontFamily="mono"
               >
-                Try these questions
+                Ask one of your agents
               </Text>
-              <VStack gap={2} align="stretch">
-                {suggestedPrompts.map((prompt, index) => (
-                  <Box
-                    key={index}
-                    p={3}
-                    borderRadius="md"
-                    border="1px solid"
-                    borderColor="border.default"
-                    bg="bg.muted"
-                    cursor="pointer"
-                    transition="all 0.2s"
-                    onClick={() => onPromptClick(prompt.text)}
-                    _hover={{
-                      borderColor: 'accent.teal',
-                      bg: 'accent.teal/5',
-                      transform: 'translateX(4px)'
-                    }}
-                  >
-                    <HStack gap={2.5}>
+              <SimpleGrid columns={{ base: 1, md: 3 }} gap={3} alignItems="start">
+                {agents.map((agent) => (
+                  <VStack key={agent.name} gap={2} align="stretch">
+                    {/* Agent header */}
+                    <HStack gap={2} px={1}>
                       <Box
                         p={1.5}
                         borderRadius="md"
-                        bg="accent.teal/10"
+                        bg={`${agent.color}/10`}
                       >
-                        <Icon as={prompt.icon} boxSize={3.5} color="accent.teal" />
+                        <Icon as={agent.icon} boxSize={4} color={agent.color} />
                       </Box>
-                      <VStack gap={0} align="start" flex="1">
+                      <VStack gap={0} align="start">
+                        <Text
+                          fontSize="sm"
+                          fontWeight="700"
+                          color="fg.default"
+                          fontFamily="mono"
+                        >
+                          {agent.name}
+                        </Text>
                         <Text
                           fontSize="2xs"
                           fontWeight="600"
-                          color="accent.teal"
+                          color={agent.color}
                           textTransform="uppercase"
                           letterSpacing="0.05em"
                           fontFamily="mono"
                         >
-                          {prompt.category}
+                          {agent.role}
                         </Text>
+                      </VStack>
+                    </HStack>
+
+                    {/* Agent questions */}
+                    {agent.questions.map((question, qIndex) => (
+                      <Box
+                        key={qIndex}
+                        p={3}
+                        borderRadius="md"
+                        border="1px solid"
+                        borderColor="border.default"
+                        bg="bg.muted"
+                        cursor="pointer"
+                        transition="all 0.2s"
+                        onClick={() => onPromptClick(question)}
+                        _hover={{
+                          borderColor: agent.color,
+                          bg: `${agent.color}/5`,
+                          transform: 'translateY(-2px)'
+                        }}
+                      >
                         <Text
                           fontSize="sm"
                           fontWeight="500"
                           color="fg.default"
                           fontFamily="mono"
+                          lineHeight="1.4"
                         >
-                          {prompt.text}
+                          {question}
                         </Text>
-                      </VStack>
-                    </HStack>
-                  </Box>
+                      </Box>
+                    ))}
+                  </VStack>
                 ))}
-              </VStack>
+              </SimpleGrid>
             </Box>
         </VStack>
       </GridItem>

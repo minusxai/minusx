@@ -2,12 +2,12 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { Box, HStack, VStack, Text, IconButton, Button } from '@chakra-ui/react';
-import { LuPlus, LuTrash2, LuType, LuPresentation, LuChevronLeft, LuChevronRight, LuX, LuScanSearch, LuPencil } from 'react-icons/lu';
+import { LuPlus, LuTrash2, LuType, LuPresentation, LuChevronLeft, LuChevronRight, LuX, LuPencil } from 'react-icons/lu';
 import Moveable from 'react-moveable';
 
 import { AssetReference, InlineAsset, DeckSlide } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
-import TextBlockCard from '../TextBlockCard';
+import LexicalTextEditor, { LexicalTextViewer } from '../lexical/LexicalTextEditor';
 import ChartPicker, { PickableQuestion } from './ChartPicker';
 import { useAppSelector } from '@/store/hooks';
 
@@ -19,6 +19,10 @@ const assetKey = (a: AssetReference): string =>
   a.type === 'question' ? String((a as { id: number }).id) : (a as InlineAsset).id || '';
 
 const blankSlide = (): DeckSlide => ({ id: crypto.randomUUID(), items: [] });
+
+/** Strip light markdown for a tiny text preview in slide thumbnails. */
+const thumbTextPreview = (md: string): string =>
+  md.replace(/^#+\s*/gm, '').replace(/[*_`>#]/g, '').trim().slice(0, 220) || 'Text';
 
 export interface DeckChange {
   deck?: DeckSlide[];
@@ -349,8 +353,16 @@ function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSele
               <SmartEmbeddedQuestionContainer questionId={(asset as { id: number }).id} showTitle={false} />
             </Box>
           ) : (
-            <Box height="100%" pointerEvents={editingText ? 'auto' : 'none'}>
-              <TextBlockCard id={itemKey} content={(asset as InlineAsset).content || ''} editMode={editingText} onContentChange={(id, content) => onUpdateText?.(id, content)} onRemove={() => onRemoveItem?.(itemKey)} />
+            <Box height="100%" overflow="auto" pointerEvents={editingText ? 'auto' : 'none'}>
+              {editingText ? (
+                <LexicalTextEditor
+                  initialMarkdown={(asset as InlineAsset).content || ''}
+                  onChange={(md) => onUpdateText?.(itemKey, md)}
+                  renderToolbar={() => null}
+                />
+              ) : (
+                <LexicalTextViewer markdown={(asset as InlineAsset).content || ''} padding="10px 14px" fontSize="15px" />
+              )}
             </Box>
           )}
         </Box>
@@ -387,11 +399,18 @@ function SlideThumb({ slide, assetByKey, index, active, editMode, onSelect, onDe
         {(slide.items || []).map(it => {
           const asset = assetByKey.get(String(it.id));
           if (!asset) return null;
-          const isText = asset.type === 'text';
           return (
-            <Box key={String(it.id)} position="absolute" left={`${it.xPct}%`} top={`${it.yPct}%`} width={`${it.wPct}%`} height={`${it.hPct}%`} p="1px">
-              <Box w="100%" h="100%" borderRadius="2px" display="flex" alignItems="center" justifyContent="center" bg={isText ? 'bg.muted' : 'accent.primary/15'} borderWidth="1px" borderColor={isText ? 'border.muted' : 'accent.primary/30'}>
-                <Box color={isText ? 'fg.subtle' : 'accent.primary'}>{isText ? <LuType size={9} /> : <LuScanSearch size={9} />}</Box>
+            <Box key={String(it.id)} position="absolute" left={`${it.xPct}%`} top={`${it.yPct}%`} width={`${it.wPct}%`} height={`${it.hPct}%`} p="1px" pointerEvents="none">
+              <Box w="100%" h="100%" borderRadius="2px" overflow="hidden" bg="bg.surface" borderWidth="1px" borderColor="border.muted">
+                {asset.type === 'question' ? (
+                  <Box height="100%" css={{ '& > div': { height: '100%' } }}>
+                    <SmartEmbeddedQuestionContainer questionId={(asset as { id: number }).id} showTitle={false} />
+                  </Box>
+                ) : (
+                  <Text fontSize="6px" lineHeight={1.25} color="fg.muted" p="2px" lineClamp={6} overflow="hidden" textAlign="left">
+                    {thumbTextPreview((asset as InlineAsset).content || '')}
+                  </Text>
+                )}
               </Box>
             </Box>
           );

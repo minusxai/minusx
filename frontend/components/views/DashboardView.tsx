@@ -833,6 +833,9 @@ export default function DashboardView({
         <Box pt={2}>
           <DockView
             assets={document?.assets || []}
+            layout={document?.layout}
+            report={document?.report}
+            deck={document?.deck}
             onRemoveAsset={handleRemoveAsset}
             onOpenQuestion={(questionId) => dispatch(pushView({ type: 'question', fileId: questionId, dashboardId: fileId, dashboardParamValues: effectiveSubmittedValues }))}
           />
