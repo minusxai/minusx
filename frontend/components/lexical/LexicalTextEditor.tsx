@@ -65,7 +65,7 @@ import { ALL_TRANSFORMERS } from './markdown-transformers';
 // interferes with editing. Needs a decorator-node approach instead.
 
 // --- Shared config ---
-const EDITOR_NODES = [
+export const EDITOR_NODES = [
   HeadingNode,
   QuoteNode,
   ListNode,
@@ -79,7 +79,7 @@ const EDITOR_NODES = [
 ];
 
 // --- Theme ---
-const editorTheme = {
+export const editorTheme = {
   heading: {
     h1: 'lexical-h1',
     h2: 'lexical-h2',
@@ -112,7 +112,7 @@ const editorTheme = {
 };
 
 /** Shared CSS for the Lexical editor content — used in both edit and read-only modes. */
-const LEXICAL_CONTENT_CSS = {
+export const LEXICAL_CONTENT_CSS = {
   // Paragraphs
   '& p': { marginBottom: '1em', lineHeight: 1.8 },
   '& p:last-child': { marginBottom: 0 },
@@ -233,7 +233,7 @@ const LEXICAL_CONTENT_CSS = {
 } as const;
 
 // --- Toolbar Plugin ---
-function ToolbarPlugin() {
+export function ToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
 
   const formatHeading = useCallback((level: 'h1' | 'h2' | 'h3') => {

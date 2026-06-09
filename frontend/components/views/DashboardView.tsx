@@ -5,6 +5,7 @@ import { LuPlus, LuX, LuGripVertical, LuPresentation, LuFileText, LuChevronDown,
 import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import ReportOverlay from '../ReportOverlay';
 import DockView from './DockView';
+import ReportDocView from './ReportDocView';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -281,8 +282,8 @@ export default function DashboardView({
   const activeVersionLabel = dashboardVersionOptions.find(o => o.value === dashboardVersion)?.label ?? 'Live';
   const isLive = dashboardVersion === 'live';
 
-  // In-page view: the asset dock vs the dashboard grid.
-  const [currentView, setCurrentView] = useState<'dashboard' | 'dock'>('dashboard');
+  // In-page view: the asset dock, the dashboard grid, or the report document.
+  const [currentView, setCurrentView] = useState<'dashboard' | 'dock' | 'report'>('dashboard');
 
   // Presentation / Report mode
   const [isPresenting, setIsPresenting] = useState(false);
@@ -555,15 +556,15 @@ export default function DashboardView({
             active={currentView === 'dashboard'}
             onClick={() => setCurrentView('dashboard')}
           />
+          <ViewSwitchSegment
+            label="Report"
+            icon={<LuFileText size={13} />}
+            active={currentView === 'report'}
+            onClick={() => setCurrentView('report')}
+          />
           {!editMode && (
             <>
               <Box w="1px" h="14px" bg="border.default" mx={0.5} />
-              <ViewSwitchSegment
-                label="Report"
-                icon={<LuFileText size={13} />}
-                active={false}
-                onClick={() => setIsReporting(true)}
-              />
               <ViewSwitchSegment
                 label="Present"
                 icon={<LuPresentation size={13} />}
@@ -838,6 +839,19 @@ export default function DashboardView({
             assets={document?.assets || []}
             onRemoveAsset={handleRemoveAsset}
             onOpenQuestion={(questionId) => dispatch(pushView({ type: 'question', fileId: questionId, dashboardId: fileId, dashboardParamValues: effectiveSubmittedValues }))}
+          />
+        </Box>
+      )}
+
+      {/* Report view: a Google-Docs-style document of text + charts.
+          Negative margins bleed the gray canvas past the FileLayout padding. */}
+      {activeTab === 'visual' && currentView === 'report' && (
+        <Box mx={{ base: -4, md: -8, lg: -12 }}>
+          <ReportDocView
+            report={document?.report}
+            editMode={editMode}
+            assets={document?.assets || []}
+            onChange={(serialized) => editFile({ fileId, changes: { content: { report: serialized } } })}
           />
         </Box>
       )}

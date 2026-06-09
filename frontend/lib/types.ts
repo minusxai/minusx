@@ -506,6 +506,8 @@ export interface DocumentContent extends BaseFileContent {
   assets: AssetReference[];
   layout?: any;  // Type-specific layout (DashboardLayout, etc.)
   parameterValues?: Record<string, any>;  // Persisted parameter values (saved with file)
+  /** Report view: markdown (rich text + `:::chart{id=N}` embeds). Agent-authorable. */
+  report?: string | null;
 }
 
 /**
