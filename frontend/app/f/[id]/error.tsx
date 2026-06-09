@@ -5,6 +5,7 @@ import { Box, Button, Text, VStack } from '@chakra-ui/react';
 import { captureError } from '@/lib/messaging/capture-error';
 import { isHydrationError } from '@/lib/utils/error-utils';
 import { IS_DEV, IS_TEST, SEND_ERRORS_IN_DEV } from '@/lib/constants';
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Route-scoped error boundary for /f/[id]. Renders inline in place of the
@@ -26,6 +27,10 @@ export default function FileError({
     console.error('File page error:', error);
     if ((!IS_DEV || IS_TEST || SEND_ERRORS_IN_DEV) && !isHydrationError(error.message)) {
       void captureError('file-page-error', error);
+      // Also report to Sentry: this nested boundary catches the error and renders
+      // a fallback, so it never reaches global-error.tsx (the only other place
+      // that calls Sentry.captureException).
+      Sentry.captureException(error);
     }
   }, [error]);
 
