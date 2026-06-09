@@ -6,6 +6,7 @@ import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import ReportOverlay from '../ReportOverlay';
 import DockView from './DockView';
 import ReportDocView from './ReportDocView';
+import DeckView from './DeckView';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -282,8 +283,8 @@ export default function DashboardView({
   const activeVersionLabel = dashboardVersionOptions.find(o => o.value === dashboardVersion)?.label ?? 'Live';
   const isLive = dashboardVersion === 'live';
 
-  // In-page view: the asset dock, the dashboard grid, or the report document.
-  const [currentView, setCurrentView] = useState<'dashboard' | 'dock' | 'report'>('dashboard');
+  // In-page view: the asset dock, the dashboard grid, the report doc, or the deck.
+  const [currentView, setCurrentView] = useState<'dashboard' | 'dock' | 'report' | 'presentation'>('dashboard');
 
   // Presentation / Report mode
   const [isPresenting, setIsPresenting] = useState(false);
@@ -562,17 +563,12 @@ export default function DashboardView({
             active={currentView === 'report'}
             onClick={() => setCurrentView('report')}
           />
-          {!editMode && (
-            <>
-              <Box w="1px" h="14px" bg="border.default" mx={0.5} />
-              <ViewSwitchSegment
-                label="Present"
-                icon={<LuPresentation size={13} />}
-                active={false}
-                onClick={() => setIsPresenting(true)}
-              />
-            </>
-          )}
+          <ViewSwitchSegment
+            label="Presentation"
+            icon={<LuPresentation size={13} />}
+            active={currentView === 'presentation'}
+            onClick={() => setCurrentView('presentation')}
+          />
         </HStack>
         <MenuRoot positioning={{ placement: 'bottom-start' }}>
           <MenuTrigger asChild>
@@ -852,6 +848,18 @@ export default function DashboardView({
             editMode={editMode}
             assets={document?.assets || []}
             onChange={(serialized) => editFile({ fileId, changes: { content: { report: serialized } } })}
+          />
+        </Box>
+      )}
+
+      {/* Presentation view: a slide deck of text + charts. */}
+      {activeTab === 'visual' && currentView === 'presentation' && (
+        <Box mx={{ base: -4, md: -8, lg: -12 }}>
+          <DeckView
+            deck={document?.deck || []}
+            editMode={editMode}
+            assets={document?.assets || []}
+            onChange={(changes) => editFile({ fileId, changes: { content: changes } })}
           />
         </Box>
       )}

@@ -508,6 +508,16 @@ export interface DocumentContent extends BaseFileContent {
   parameterValues?: Record<string, any>;  // Persisted parameter values (saved with file)
   /** Report view: markdown (rich text + `:::chart{id=N}` embeds). Agent-authorable. */
   report?: string | null;
+  /** Presentation view: ordered deck slides. Like the report, this is a *view* over the
+   *  master `assets` pool — a slide only stores which pooled assets it shows and where. */
+  deck?: DeckSlide[] | null;
+}
+
+/** One slide in the presentation deck: layout only. Items reference master-pool asset ids.
+ *  Positions are free-form percentages of the 16:9 canvas (0–100). */
+export interface DeckSlide {
+  id: string;
+  items: { id: number | string; xPct: number; yPct: number; wPct: number; hPct: number }[];
 }
 
 /**
