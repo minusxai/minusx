@@ -1,10 +1,11 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem, SimpleGrid, Flex, Button } from '@chakra-ui/react';
 import { LuArrowRight, LuArrowLeft, LuCheck, LuRefreshCw } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import {
   DEMO_AGENTS,
   BUSINESS_UNITS,
@@ -71,9 +72,16 @@ function ExampleQuestionsImpl({
 
   const pendingAgent = getDemoAgent(pendingAgentId || '');
 
-  // Widen the layout for the multi-column grids.
-  const wideColSpan = container === 'sidebar' ? 12 : { base: 12, md: 10, lg: 10 };
-  const wideColStart = container === 'sidebar' ? 1 : { base: 1, md: 2, lg: 2 };
+  // The multi-step agent picker is a page-only experience — the 3-column grid is
+  // far too cramped in the narrow sidebar. There we show a simple greeting and
+  // let the user start typing (the agent dropdown still lives in the input).
+  if (container === 'sidebar') {
+    return <SidebarGreeting firstName={firstName} />;
+  }
+
+  // Widen the layout for the multi-column grids (page-only — sidebar returned above).
+  const wideColSpan = { base: 12, md: 10, lg: 10 };
+  const wideColStart = { base: 1, md: 2, lg: 2 };
 
   const handleLaunch = (agent: DemoAgent) => {
     setPendingAgentId(agent.id);
@@ -125,6 +133,57 @@ function ExampleQuestionsImpl({
         </VStack>
       </GridItem>
     </Grid>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sidebar — original welcome header (the full picker is page-only)
+// ─────────────────────────────────────────────────────────────────────────────
+const greetings = [
+  (name: string) => `Hi ${name}, what would you like to explore today?`,
+  (name: string) => `Hey ${name}, ready to dig into some data?`,
+  (name: string) => `Welcome back ${name}! What can I help you find?`,
+  (name: string) => `What's on your mind today, ${name}?`,
+];
+
+function SidebarGreeting({ firstName }: { firstName: string }) {
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
+  const isMinusx = agentName.toLowerCase() === 'minusx';
+  // Re-randomise on firstName change only (matches the original behaviour).
+  const greeting = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
+    const index = Math.floor(Math.random() * greetings.length);
+    return greetings[index](firstName);
+  }, [firstName]);
+
+  return (
+    <VStack gap={6} align="center" justify="center" flex="1" py={8} px={4}>
+      <VStack gap={2}>
+        {isMinusx ? (
+          <Box position="relative" borderRadius="lg" overflow="hidden" p={4}>
+            <img
+              src={colorMode === 'light' ? '/minusx_explore_dark.svg' : '/minusx_explore.svg'}
+              alt="minusx explore"
+              style={{ width: '100%', maxWidth: '320px', height: 'auto', position: 'relative' }}
+            />
+          </Box>
+        ) : (
+          <>
+            <Box p={3} borderRadius="full" bg="accent.teal/10" border="2px solid" borderColor="accent.teal/30">
+              <Box aria-label="Workspace logo" role="img" boxSize={6} flexShrink={0} />
+            </Box>
+            <Heading fontSize="xl" fontWeight="800" fontFamily="mono" color="fg.default" letterSpacing="-0.02em">
+              Ask {agentName} anything
+            </Heading>
+          </>
+        )}
+        <Text color="fg.muted" fontSize="sm" fontFamily="mono" textAlign="center">
+          {greeting}
+        </Text>
+      </VStack>
+    </VStack>
   );
 }
 
