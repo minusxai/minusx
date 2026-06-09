@@ -2,8 +2,8 @@
 
 import { Box, HStack, VStack, Text, IconButton, SimpleGrid } from '@chakra-ui/react';
 import { LuLayoutDashboard, LuFileText, LuPresentation, LuTrash2, LuScanSearch, LuType, LuLayers, LuMaximize2 } from 'react-icons/lu';
-import { useMemo, useState } from 'react';
-import { AssetReference, InlineAsset } from '@/lib/types';
+import { useMemo } from 'react';
+import { AssetReference, InlineAsset, DashboardLayoutItem, DeckSlide } from '@/lib/types';
 import { useAppSelector } from '@/store/hooks';
 import { Tooltip } from '@/components/ui/tooltip';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
@@ -12,11 +12,13 @@ import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionC
  * DockView — the master asset repository ("dock").
  *
  * Renders every asset on the document as a card, independent of any single
- * view's layout. From here an asset can be placed into / removed from each of
- * the three views (Dashboard / Report / Presentation).
+ * view's layout. Each card shows which of the three views (Dashboard / Report /
+ * Presentation) the asset currently appears in.
  *
- * NOTE (demo): per-view membership is currently local state. The next step is
- * to back it with real per-view layouts (layout / reportLayout / presentationLayout).
+ * Membership is *derived* (read-only) from the document's real view data:
+ *   - Dashboard:    the asset key appears in `layout.items`
+ *   - Report:       a `:::chart{id=N}` embed for the question exists in `report`
+ *   - Presentation: the asset id appears in some `deck` slide's items
  */
 
 type ViewKey = 'dashboard' | 'report' | 'presentation';
@@ -33,29 +35,34 @@ const assetKey = (asset: AssetReference): string =>
 
 interface DockViewProps {
   assets: AssetReference[];
+  /** Dashboard grid layout — its `items` determine dashboard membership. */
+  layout?: { items?: DashboardLayoutItem[] } | null;
+  /** Report markdown — `:::chart{id=N}` embeds determine report membership. */
+  report?: string | null;
+  /** Presentation deck — slide items determine presentation membership. */
+  deck?: DeckSlide[] | null;
   onRemoveAsset: (key: string) => void;
   onOpenQuestion?: (questionId: number) => void;
 }
 
-export default function DockView({ assets, onRemoveAsset, onOpenQuestion }: DockViewProps) {
-  // Per-view membership for the demo. Everything starts in all three views.
-  const [membership, setMembership] = useState<Record<string, Set<ViewKey>>>(() => {
-    const init: Record<string, Set<ViewKey>> = {};
-    for (const a of assets) {
-      init[assetKey(a)] = new Set<ViewKey>(['dashboard', 'report', 'presentation']);
+export default function DockView({ assets, layout, report, deck, onRemoveAsset, onOpenQuestion }: DockViewProps) {
+  // Derive per-view membership (read-only) from the document's real view data.
+  const membershipFor = useMemo(() => {
+    const inDashboard = new Set((layout?.items ?? []).map(i => String(i.id)));
+    const inPresentation = new Set((deck ?? []).flatMap(s => (s.items ?? []).map(i => String(i.id))));
+    // Report embeds questions by id as `:::chart{id=N}`; text isn't a pooled ref there.
+    const reportIds = new Set<string>();
+    if (report) {
+      for (const m of report.matchAll(/:::chart\{id=(\d+)\}/g)) reportIds.add(m[1]);
     }
-    return init;
-  });
-
-  const toggleMembership = (key: string, view: ViewKey) => {
-    setMembership(prev => {
-      const next = { ...prev };
-      const set = new Set(next[key] ?? ['dashboard', 'report', 'presentation']);
-      if (set.has(view)) set.delete(view); else set.add(view);
-      next[key] = set;
-      return next;
-    });
-  };
+    return (key: string): Set<ViewKey> => {
+      const set = new Set<ViewKey>();
+      if (inDashboard.has(key)) set.add('dashboard');
+      if (reportIds.has(key)) set.add('report');
+      if (inPresentation.has(key)) set.add('presentation');
+      return set;
+    };
+  }, [layout, report, deck]);
 
   // Only real assets (questions / text); dividers are layout sugar, not pool members.
   const dockAssets = useMemo(
@@ -76,7 +83,7 @@ export default function DockView({ assets, onRemoveAsset, onOpenQuestion }: Dock
         </Text>
       </HStack>
       <Text fontSize="xs" color="fg.muted" mb={5} maxW="600px">
-        The master repository of assets for this document. Choose which views each asset appears in.
+        The master repository of assets for this document. Each card shows which views the asset currently appears in.
       </Text>
 
       {dockAssets.length === 0 ? (
@@ -104,8 +111,7 @@ export default function DockView({ assets, onRemoveAsset, onOpenQuestion }: Dock
             <DockCard
               key={assetKey(asset)}
               asset={asset}
-              membership={membership[assetKey(asset)] ?? new Set<ViewKey>(['dashboard', 'report', 'presentation'])}
-              onToggleView={(view) => toggleMembership(assetKey(asset), view)}
+              membership={membershipFor(assetKey(asset))}
               onRemove={() => onRemoveAsset(assetKey(asset))}
               onOpen={asset.type === 'question' && onOpenQuestion
                 ? () => onOpenQuestion((asset as { id: number }).id)
@@ -121,12 +127,11 @@ export default function DockView({ assets, onRemoveAsset, onOpenQuestion }: Dock
 interface DockCardProps {
   asset: AssetReference;
   membership: Set<ViewKey>;
-  onToggleView: (view: ViewKey) => void;
   onRemove: () => void;
   onOpen?: () => void;
 }
 
-function DockCard({ asset, membership, onToggleView, onRemove, onOpen }: DockCardProps) {
+function DockCard({ asset, membership, onRemove, onOpen }: DockCardProps) {
   const isQuestion = asset.type === 'question';
 
   return (
@@ -193,7 +198,6 @@ function DockCard({ asset, membership, onToggleView, onRemove, onOpen }: DockCar
               key={view}
               view={view}
               active={membership.has(view)}
-              onClick={() => onToggleView(view)}
             />
           ))}
         </HStack>
@@ -214,14 +218,12 @@ function DockCard({ asset, membership, onToggleView, onRemove, onOpen }: DockCar
   );
 }
 
-function ViewChip({ view, active, onClick }: { view: ViewKey; active: boolean; onClick: () => void }) {
+function ViewChip({ view, active }: { view: ViewKey; active: boolean }) {
   const meta = VIEW_META[view];
   const Icon = meta.icon;
   return (
     <Tooltip content={`${active ? 'In' : 'Not in'} ${meta.label}`}>
       <Box
-        as="button"
-        onClick={onClick}
         aria-label={`${meta.label}: ${active ? 'included' : 'excluded'}`}
         display="flex"
         alignItems="center"
@@ -229,14 +231,12 @@ function ViewChip({ view, active, onClick }: { view: ViewKey; active: boolean; o
         w="20px"
         h="20px"
         borderRadius="md"
-        cursor="pointer"
         borderWidth="1px"
         transition="all 0.12s"
         bg={active ? `${meta.color}/10` : 'transparent'}
         borderColor={active ? `${meta.color}/25` : 'border.muted'}
         color={active ? meta.color : 'fg.subtle'}
-        opacity={active ? 1 : 0.5}
-        _hover={{ opacity: 1, borderColor: active ? `${meta.color}/40` : 'border.emphasized' }}
+        opacity={active ? 1 : 0.4}
       >
         <Icon size={11} />
       </Box>
