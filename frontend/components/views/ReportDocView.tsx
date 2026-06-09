@@ -69,7 +69,8 @@ export default function ReportDocView({ report, editMode, assets, onChange }: Re
     if (!el) return;
     const compute = () => {
       const top = el.getBoundingClientRect().top;
-      setContainerHeight(`${Math.max(360, window.innerHeight - top - 12)}px`);
+      // Fill exactly to the viewport bottom — no gap, so no gray canvas peeks through.
+      setContainerHeight(`${Math.max(360, window.innerHeight - top)}px`);
     };
     compute();
     const raf = requestAnimationFrame(compute);
@@ -110,8 +111,7 @@ export default function ReportDocView({ report, editMode, assets, onChange }: Re
             display="flex"
             justifyContent="center"
             py={3}
-            css={{ backdropFilter: 'blur(6px)' }}
-            bg="bg.surface/70"
+            bg="bg.surface"
           >
             <HStack
               gap={0.5}
