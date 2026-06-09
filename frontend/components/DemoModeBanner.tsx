@@ -5,6 +5,7 @@ import { LuGraduationCap, LuArrowLeft } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import FileSearchBar from './FileSearchBar';
 
 const containerQueryStyles = `
@@ -33,6 +34,7 @@ interface DemoModeBannerProps {
 
 export default function DemoModeBanner({ children, unsavedChangesButton }: DemoModeBannerProps) {
   const effectiveUser = useAppSelector(selectEffectiveUser);
+  const { config } = useConfigs();
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
 
   if (!isTutorialMode) {
@@ -76,7 +78,7 @@ export default function DemoModeBanner({ children, unsavedChangesButton }: DemoM
             </Flex>
             {unsavedChangesButton ? null : (
               <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap" className="demo-description">
-                You're exploring MinusX with Sample Data
+                You're exploring {config.branding.agentName} with Sample Data
               </Text>
             )}
             <Button

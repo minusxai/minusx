@@ -51,7 +51,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
   const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
-  const hasDarkBanner = !!bannerColor; // only custom bannerColor is dark; demo banner is light
+  const hasDarkBanner = !!bannerColor && !isTutorialMode; // only custom bannerColor is dark; demo banner is light
   const hasBanner = isTutorialMode || !!bannerColor;
   const { unrelatedDirtyCount, isPublishModalOpen, openPublishModal, closePublishModal } = useSaveDecision(currentFileId);
   const isLastItem = (index: number) => index === items.length - 1;
