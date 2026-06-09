@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Box, HStack, VStack, Text, IconButton, Button } from '@chakra-ui/react';
-import { LuPlus, LuTrash2, LuType, LuPresentation, LuChevronLeft, LuChevronRight, LuX, LuPencil } from 'react-icons/lu';
+import { LuPlus, LuTrash2, LuType, LuPresentation, LuChevronLeft, LuChevronRight, LuX, LuPlay } from 'react-icons/lu';
 import Moveable from 'react-moveable';
 
 import { AssetReference, InlineAsset, DeckSlide } from '@/lib/types';
@@ -12,6 +13,10 @@ import ChartPicker, { PickableQuestion } from './ChartPicker';
 import { useAppSelector } from '@/store/hooks';
 
 const CANVAS_MAX_W = 960;
+// Floor so the slide keeps a usable size instead of collapsing on narrow
+// stages — the stage scrolls past this min rather than shrinking fully
+// (same idea as the dock grid / AgentTurnContainer carousel).
+const CANVAS_MIN_W = 560;
 
 type DeckItem = DeckSlide['items'][number];
 
@@ -19,10 +24,6 @@ const assetKey = (a: AssetReference): string =>
   a.type === 'question' ? String((a as { id: number }).id) : (a as InlineAsset).id || '';
 
 const blankSlide = (): DeckSlide => ({ id: crypto.randomUUID(), items: [] });
-
-/** Strip light markdown for a tiny text preview in slide thumbnails. */
-const thumbTextPreview = (md: string): string =>
-  md.replace(/^#+\s*/gm, '').replace(/[*_`>#]/g, '').trim().slice(0, 220) || 'Text';
 
 export interface DeckChange {
   deck?: DeckSlide[];
@@ -45,6 +46,12 @@ export default function DeckView({ deck, editMode, assets, onChange }: DeckViewP
   const [activeIdx, setActiveIdx] = useState(0);
   const [presenting, setPresenting] = useState(false);
   const safeIdx = Math.min(activeIdx, Math.max(0, slides.length - 1));
+
+  // Host node for the text-formatting toolbar. When a text box is being edited,
+  // its Lexical toolbar is portaled here (into the top bar) so it isn't clipped
+  // by the free-form canvas. State (not a ref) so children re-render once it mounts.
+  const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
+  const [isEditingText, setIsEditingText] = useState(false);
 
   const assetByKey = useMemo(() => {
     const m = new Map<string, AssetReference>();
@@ -181,26 +188,62 @@ export default function DeckView({ deck, editMode, assets, onChange }: DeckViewP
 
       {/* Stage */}
       <VStack flex={1} minW={0} align="stretch" gap={0} bg="bg.canvas" overflow="auto">
-        <HStack justify="space-between" px={4} py={2} borderBottomWidth="1px" borderColor="border.muted" bg="bg.surface" flexShrink={0}>
-          <Text fontSize="xs" fontFamily="mono" color="fg.muted">Slide {safeIdx + 1} / {slides.length}</Text>
-          <HStack gap={1}>
+        <HStack justify="space-between" px={3} py={1.5} borderBottomWidth="1px" borderColor="border.muted" bg="bg.surface" flexShrink={0} minH="44px">
+          <HStack gap={3} flex={1} minW={0}>
+            {/* Text-formatting toolbar portals in here while editing a text box */}
+            <HStack
+              ref={setToolbarHost}
+              gap={1}
+              align="center"
+              borderRadius="md"
+              bg={isEditingText ? 'bg.muted' : 'transparent'}
+              borderWidth={isEditingText ? '1px' : '0'}
+              borderColor="border.muted"
+              px={isEditingText ? 1 : 0}
+              transition="background 0.15s"
+              minW={0}
+              overflowX="auto"
+            />
+          </HStack>
+
+          <HStack gap={1.5} flexShrink={0}>
             {editMode && (
-              <>
-                <Button size="2xs" variant="ghost" onClick={addText} aria-label="Add text" px={2} gap={1.5} h="24px" fontWeight={600} _hover={{ bg: 'bg.emphasized' }}>
-                  <Box color="accent.secondary" display="flex"><LuType size={13} /></Box> Add text
+              <HStack
+                gap={0.5}
+                p={0.5}
+                borderRadius="md"
+                bg="bg.muted"
+                borderWidth="1px"
+                borderColor="border.muted"
+              >
+                <Button size="2xs" variant="ghost" onClick={addText} aria-label="Add text" px={2} gap={1.5} h="26px" fontWeight={600} color="fg.muted" _hover={{ bg: 'bg.emphasized', color: 'fg.default' }}>
+                  <Box color="accent.secondary" display="flex"><LuType size={13} /></Box> Text
                 </Button>
                 <ChartPicker questions={questions} onPick={addChart} />
-                <Box w="1px" h="16px" bg="border.default" mx={1} />
-              </>
+              </HStack>
             )}
-            <Button size="2xs" onClick={() => setPresenting(true)} aria-label="Present" px={2.5} gap={1.5} h="24px" fontWeight={600} borderRadius="md" bg="fg.default" color="bg.surface" _hover={{ bg: 'fg.muted' }}>
-              <LuPresentation size={13} /> Present
+            <Button
+              size="2xs"
+              onClick={() => setPresenting(true)}
+              aria-label="Present"
+              px={3}
+              gap={1.5}
+              h="28px"
+              fontWeight={700}
+              borderRadius="md"
+              bg="accent.teal"
+              color="white"
+              boxShadow="xs"
+              _hover={{ bg: 'accent.teal/85' }}
+              _active={{ bg: 'accent.teal/90' }}
+            >
+              <LuPlay size={12} fill="currentColor" /> Present
             </Button>
           </HStack>
         </HStack>
 
-        <Box flex={1} display="flex" alignItems="flex-start" justifyContent="center" p={6}>
-          <SlideCanvas slide={activeSlide} assetByKey={assetByKey} editMode={editMode} maxW={CANVAS_MAX_W} onUpdateItem={updateItem} onRemoveItem={removeFromSlide} onUpdateText={updateText} />
+        <Box flex={1} display="flex" alignItems="flex-start" justifyContent="safe center" p={6}>
+          <SlideCanvas slide={activeSlide} assetByKey={assetByKey} editMode={editMode} maxW={CANVAS_MAX_W} onUpdateItem={updateItem} onRemoveItem={removeFromSlide} onUpdateText={updateText} toolbarHost={toolbarHost} onEditingChange={setIsEditingText} />
         </Box>
       </VStack>
 
@@ -232,11 +275,25 @@ interface SlideCanvasProps {
   onUpdateItem?: (key: string, partial: Partial<DeckItem>) => void;
   onRemoveItem?: (key: string) => void;
   onUpdateText?: (textId: string, content: string) => void;
+  toolbarHost?: HTMLElement | null;
+  onEditingChange?: (editing: boolean) => void;
 }
 
-function SlideCanvas({ slide, assetByKey, editMode, present, maxW, onUpdateItem, onRemoveItem, onUpdateText }: SlideCanvasProps) {
+function SlideCanvas({ slide, assetByKey, editMode, present, maxW, onUpdateItem, onRemoveItem, onUpdateText, toolbarHost, onEditingChange }: SlideCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // Which text box is being edited. Owned here (not per-item) so changing the
+  // selection — including deselecting — implicitly exits editing without an
+  // effect, and only one box ever owns the shared toolbar host.
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+
+  const selectItem = useCallback((key: string) => {
+    setSelectedKey(prev => {
+      if (prev !== key) setEditingKey(null);
+      return key;
+    });
+  }, []);
+  const clearSelection = useCallback(() => { setSelectedKey(null); setEditingKey(null); }, []);
 
   const liveItems = (slide.items || []).filter(it => assetByKey.has(String(it.id)));
 
@@ -245,6 +302,7 @@ function SlideCanvas({ slide, assetByKey, editMode, present, maxW, onUpdateItem,
       ref={canvasRef}
       w="100%"
       maxW={present ? '100%' : `${maxW}px`}
+      minW={present ? undefined : `${CANVAS_MIN_W}px`}
       bg="bg.surface"
       borderWidth={present ? '0' : '1px'}
       borderColor="border.default"
@@ -253,7 +311,7 @@ function SlideCanvas({ slide, assetByKey, editMode, present, maxW, onUpdateItem,
       css={{ aspectRatio: '16 / 9' }}
       overflow="hidden"
       position="relative"
-      onMouseDown={() => editMode && setSelectedKey(null)}
+      onMouseDown={() => editMode && clearSelection()}
     >
       {liveItems.map(it => {
         const key = String(it.id);
@@ -265,11 +323,15 @@ function SlideCanvas({ slide, assetByKey, editMode, present, maxW, onUpdateItem,
             asset={assetByKey.get(key)!}
             editMode={editMode}
             selected={selectedKey === key}
+            editing={editMode && editingKey === key}
             canvasRef={canvasRef}
-            onSelect={() => setSelectedKey(key)}
+            onSelect={() => selectItem(key)}
+            onStartEdit={() => setEditingKey(key)}
             onUpdateItem={onUpdateItem}
             onRemoveItem={onRemoveItem}
             onUpdateText={onUpdateText}
+            toolbarHost={toolbarHost}
+            onEditingChange={onEditingChange}
           />
         );
       })}
@@ -277,21 +339,38 @@ function SlideCanvas({ slide, assetByKey, editMode, present, maxW, onUpdateItem,
   );
 }
 
-function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSelect, onUpdateItem, onRemoveItem, onUpdateText }: {
+function SlideItem({ itemKey, item, asset, editMode, selected, editing, canvasRef, onSelect, onStartEdit, onUpdateItem, onRemoveItem, onUpdateText, toolbarHost, onEditingChange }: {
   itemKey: string;
   item: DeckItem;
   asset: AssetReference;
   editMode: boolean;
   selected: boolean;
+  editing: boolean;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   onSelect: () => void;
+  onStartEdit: () => void;
   onUpdateItem?: (key: string, partial: Partial<DeckItem>) => void;
   onRemoveItem?: (key: string) => void;
   onUpdateText?: (textId: string, content: string) => void;
+  toolbarHost?: HTMLElement | null;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const targetRef = useRef<HTMLDivElement>(null);
-  const [editingText, setEditingText] = useState(false);
+  // Mirror the node into state so <Moveable> can read it without touching a ref
+  // during render. Stable callback ref → fires only on mount/unmount.
+  const [targetEl, setTargetEl] = useState<HTMLDivElement | null>(null);
+  const setRefs = useCallback((el: HTMLDivElement | null) => {
+    targetRef.current = el;
+    setTargetEl(el);
+  }, []);
   const isText = asset.type === 'text';
+
+  // Report editing state up so the top bar can frame the formatting toolbar.
+  useEffect(() => {
+    if (!editing) return;
+    onEditingChange?.(true);
+    return () => onEditingChange?.(false);
+  }, [editing, onEditingChange]);
 
   // Convert the element's on-screen rect → % of the canvas, and commit.
   const commit = useCallback(() => {
@@ -311,12 +390,12 @@ function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSele
     el.style.height = '';
   }, [itemKey, canvasRef, onUpdateItem]);
 
-  const showMoveable = editMode && selected && !editingText;
+  const showMoveable = editMode && selected && !editing;
 
   return (
     <>
       <Box
-        ref={targetRef}
+        ref={setRefs}
         position="absolute"
         left={`${item.xPct}%`}
         top={`${item.yPct}%`}
@@ -331,16 +410,11 @@ function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSele
         flexDirection="column"
         boxShadow={selected && editMode ? '0 0 0 1px var(--chakra-colors-accent-teal)' : undefined}
         onMouseDown={editMode ? (e) => { e.stopPropagation(); onSelect(); } : undefined}
-        onDoubleClick={isText && editMode ? () => setEditingText(true) : undefined}
+        onDoubleClick={isText && editMode ? onStartEdit : undefined}
       >
         {/* Per-item controls (edit mode) */}
         {editMode && selected && (
           <HStack position="absolute" top={1} right={1} zIndex={2} gap={0.5}>
-            {isText && (
-              <IconButton aria-label={editingText ? 'Done editing' : 'Edit text'} size="2xs" variant="solid" bg="bg.surface" color="fg.muted" _hover={{ color: 'fg.default' }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setEditingText(v => !v)}>
-                <LuPencil size={11} />
-              </IconButton>
-            )}
             <IconButton aria-label="Remove from slide" size="2xs" variant="solid" bg="bg.surface" color="fg.muted" _hover={{ color: 'accent.danger' }} onMouseDown={(e) => e.stopPropagation()} onClick={() => onRemoveItem?.(itemKey)}>
               <LuTrash2 size={11} />
             </IconButton>
@@ -353,12 +427,15 @@ function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSele
               <SmartEmbeddedQuestionContainer questionId={(asset as { id: number }).id} showTitle={false} />
             </Box>
           ) : (
-            <Box height="100%" overflow="auto" pointerEvents={editingText ? 'auto' : 'none'}>
-              {editingText ? (
+            <Box height="100%" overflow="auto" pointerEvents={editing ? 'auto' : 'none'}>
+              {editing ? (
                 <LexicalTextEditor
                   initialMarkdown={(asset as InlineAsset).content || ''}
                   onChange={(md) => onUpdateText?.(itemKey, md)}
-                  renderToolbar={() => null}
+                  // Portal the formatting toolbar up into the top bar (the canvas
+                  // clips overflow, so it can't live above the small text box).
+                  // Portals preserve the Lexical context, so the buttons stay wired.
+                  renderToolbar={(toolbar) => (toolbarHost ? createPortal(toolbar, toolbarHost) : null)}
                 />
               ) : (
                 <LexicalTextViewer markdown={(asset as InlineAsset).content || ''} padding="10px 14px" fontSize="15px" />
@@ -368,11 +445,10 @@ function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSele
         </Box>
       </Box>
 
-      {/* Moveable controller — accessing targetRef during render is intentional */}
-      {/* eslint-disable-next-line react-hooks/refs */}
-      {showMoveable && targetRef.current && (
+      {/* Moveable controller — reads the node from state, not a render-time ref. */}
+      {showMoveable && targetEl && (
         <Moveable
-          target={targetRef.current}
+          target={targetEl}
           draggable
           resizable
           origin={false}
@@ -389,32 +465,52 @@ function SlideItem({ itemKey, item, asset, editMode, selected, canvasRef, onSele
 
 // --- Slide thumbnail (rail) ---
 
+// Render the whole slide at this reference size, then scale it into the rail
+// thumbnail — so charts/text keep slide proportions instead of cramming their
+// axes into a tiny box (same trick as the dock card mini chart).
+const THUMB_REF_W = 480;
+const THUMB_REF_H = THUMB_REF_W * 9 / 16;
+
 function SlideThumb({ slide, assetByKey, index, active, editMode, onSelect, onDelete }: {
   slide: DeckSlide; assetByKey: Map<string, AssetReference>; index: number; active: boolean; editMode: boolean; onSelect: () => void; onDelete: () => void;
 }) {
+  const boxRef = useRef<HTMLButtonElement>(null);
+  const [scale, setScale] = useState(0);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setScale(el.clientWidth / THUMB_REF_W));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <HStack gap={1.5} align="center" role="group">
       <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" w="14px" textAlign="right" flexShrink={0}>{index + 1}</Text>
-      <Box as="button" aria-label={`Slide ${index + 1}`} onClick={onSelect} flex={1} position="relative" bg="bg.surface" borderWidth="2px" borderColor={active ? 'accent.teal' : 'border.default'} borderRadius="md" overflow="hidden" css={{ aspectRatio: '16 / 9' }} _hover={{ borderColor: active ? 'accent.teal' : 'accent.teal/40' }} transition="border-color 0.12s">
-        {(slide.items || []).map(it => {
-          const asset = assetByKey.get(String(it.id));
-          if (!asset) return null;
-          return (
-            <Box key={String(it.id)} position="absolute" left={`${it.xPct}%`} top={`${it.yPct}%`} width={`${it.wPct}%`} height={`${it.hPct}%`} p="1px" pointerEvents="none">
-              <Box w="100%" h="100%" borderRadius="2px" overflow="hidden" bg="bg.surface" borderWidth="1px" borderColor="border.muted">
-                {asset.type === 'question' ? (
-                  <Box height="100%" css={{ '& > div': { height: '100%' } }}>
-                    <SmartEmbeddedQuestionContainer questionId={(asset as { id: number }).id} showTitle={false} />
-                  </Box>
-                ) : (
-                  <Text fontSize="6px" lineHeight={1.25} color="fg.muted" p="2px" lineClamp={6} overflow="hidden" textAlign="left">
-                    {thumbTextPreview((asset as InlineAsset).content || '')}
-                  </Text>
-                )}
+      <Box as="button" ref={boxRef} aria-label={`Slide ${index + 1}`} onClick={onSelect} flex={1} position="relative" bg="bg.surface" borderWidth="2px" borderColor={active ? 'accent.teal' : 'border.default'} borderRadius="md" overflow="hidden" css={{ aspectRatio: '16 / 9' }} _hover={{ borderColor: active ? 'accent.teal' : 'accent.teal/40' }} transition="border-color 0.12s">
+        {/* Reference-sized slide, scaled to fit. Both this box and the outer box
+            are 16/9, so scale = width/REF makes the scaled content fill exactly. */}
+        <Box position="absolute" top={0} left={0} width={`${THUMB_REF_W}px`} height={`${THUMB_REF_H}px`} transformOrigin="top left" transform={`scale(${scale})`} pointerEvents="none" opacity={scale ? 1 : 0}>
+          {(slide.items || []).map(it => {
+            const asset = assetByKey.get(String(it.id));
+            if (!asset) return null;
+            return (
+              <Box key={String(it.id)} position="absolute" left={`${it.xPct}%`} top={`${it.yPct}%`} width={`${it.wPct}%`} height={`${it.hPct}%`}>
+                <Box w="100%" h="100%" borderRadius="md" overflow="hidden" bg="bg.subtle" borderWidth="1px" borderColor="border.default" display="flex" flexDirection="column">
+                  {asset.type === 'question' ? (
+                    <Box flex={1} minH={0} css={{ '& > div': { height: '100%' } }}>
+                      <SmartEmbeddedQuestionContainer questionId={(asset as { id: number }).id} showTitle={false} />
+                    </Box>
+                  ) : (
+                    <Box flex={1} minH={0} overflow="hidden">
+                      <LexicalTextViewer markdown={(asset as InlineAsset).content || ''} padding="10px 14px" fontSize="15px" />
+                    </Box>
+                  )}
+                </Box>
               </Box>
-            </Box>
-          );
-        })}
+            );
+          })}
+        </Box>
       </Box>
       {editMode && (
         <IconButton aria-label={`Delete slide ${index + 1}`} size="2xs" variant="ghost" color="fg.subtle" opacity={0} _groupHover={{ opacity: 1 }} _hover={{ color: 'accent.danger' }} onClick={onDelete} flexShrink={0}>

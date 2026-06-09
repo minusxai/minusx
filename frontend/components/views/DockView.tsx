@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, HStack, VStack, Text, IconButton, SimpleGrid } from '@chakra-ui/react';
-import { LuLayoutDashboard, LuFileText, LuPresentation, LuTrash2, LuScanSearch, LuType, LuLayers, LuMaximize2 } from 'react-icons/lu';
+import { LuLayoutDashboard, LuFileText, LuPresentation, LuTrash2, LuScanSearch, LuLayers, LuMaximize2 } from 'react-icons/lu';
 import { useMemo } from 'react';
 import { AssetReference, InlineAsset, DashboardLayoutItem, DeckSlide } from '@/lib/types';
 import { useAppSelector } from '@/store/hooks';
@@ -64,9 +64,9 @@ export default function DockView({ assets, layout, report, deck, onRemoveAsset, 
     };
   }, [layout, report, deck]);
 
-  // Only real assets (questions / text); dividers are layout sugar, not pool members.
+  // Only charts (questions); text blocks and dividers aren't shown in the dock.
   const dockAssets = useMemo(
-    () => assets.filter(a => a.type === 'question' || a.type === 'text'),
+    () => assets.filter(a => a.type === 'question'),
     [assets],
   );
 
@@ -102,7 +102,7 @@ export default function DockView({ assets, layout, report, deck, onRemoveAsset, 
             The dock is empty
           </Text>
           <Text fontSize="sm" color="fg.muted" mt={1}>
-            Add questions or text to start building your story.
+            Add questions to start building your story.
           </Text>
         </Box>
       ) : (
@@ -173,13 +173,7 @@ function DockCard({ asset, membership, onRemove, onOpen }: DockCardProps) {
             <LuMaximize2 size={11} />
           </Box>
         )}
-        {isQuestion
-          ? <QuestionCardBody questionId={(asset as { id: number }).id} />
-          : (
-            <Box flex={1} p={2.5} minH="100px">
-              <TextCardBody content={(asset as InlineAsset).content || ''} />
-            </Box>
-          )}
+        {isQuestion && <QuestionCardBody questionId={(asset as { id: number }).id} />}
       </Box>
 
       {/* Footer: view membership + remove */}
@@ -277,22 +271,3 @@ function QuestionCardBody({ questionId }: { questionId: number }) {
   );
 }
 
-function TextCardBody({ content }: { content: string }) {
-  // Cheap markdown-ish strip for a preview.
-  const preview = content
-    .replace(/^#+\s*/gm, '')
-    .replace(/[*_`>#-]/g, '')
-    .trim()
-    .slice(0, 160) || 'Empty text block';
-
-  return (
-    <HStack gap={1.5} align="flex-start" height="100%">
-      <Box color="accent.secondary" mt={0.5} flexShrink={0}>
-        <LuType size={13} />
-      </Box>
-      <Text fontSize="xs" color="fg.muted" lineClamp={3}>
-        {preview}
-      </Text>
-    </HStack>
-  );
-}
