@@ -8,6 +8,7 @@ import { getStore } from '@/store/store';
 import { selectDevMode } from '@/store/uiSlice';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
 import { IS_DEV, IS_TEST, SEND_ERRORS_IN_DEV } from '@/lib/constants';
+import * as Sentry from '@sentry/nextjs';
 
 export default function Error({
   error,
@@ -25,6 +26,10 @@ export default function Error({
     // Report to bug reporting channel (skip hydration noise; skip dev unless DEBUG flag is on)
     if ((!IS_DEV || IS_TEST || SEND_ERRORS_IN_DEV) && !isHydrationError(error.message)) {
       void captureError('page-error', error);
+      // Also report to Sentry: this nested error boundary catches the error and
+      // renders a fallback, so it never propagates to global-error.tsx (the only
+      // other place that calls Sentry.captureException).
+      Sentry.captureException(error);
     }
 
     // Suppress hydration errors unless admin has opted into seeing all error toasts

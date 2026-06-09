@@ -36,6 +36,40 @@ export class EchoTool extends MXTool<typeof EchoToolParams> {
   }
 }
 
+const TypedToolParams = Type.Object({
+  ids: Type.Array(Type.Number()),
+  count: Type.Optional(Type.Number()),
+  flag: Type.Optional(Type.Boolean()),
+});
+
+/**
+ * Echoes back the runtime types of its arguments, so tests can assert the tool
+ * received schema-typed values even when the model emitted stringified args.
+ */
+export class TypedTool extends MXTool<typeof TypedToolParams> {
+  static readonly schema: Tool<typeof TypedToolParams> = {
+    name: 'TypedTool',
+    description: 'Echoes the runtime types of its (typed) arguments.',
+    parameters: TypedToolParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    const { ids, count, flag } = this.parameters;
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          idsIsArray: Array.isArray(ids),
+          idsElemTypes: (ids ?? []).map((v) => typeof v),
+          countType: typeof count,
+          flagType: typeof flag,
+        }),
+      }],
+      isError: false,
+    };
+  }
+}
+
 const PendingToolParams = Type.Object({
   prompt: Type.String(),
 });
@@ -116,6 +150,7 @@ export class TestAgent extends MXAgent<typeof TestAgentParams> {
   };
   static readonly tools: Tool<TSchema>[] = [
     EchoTool.schema,
+    TypedTool.schema,
     PendingTool.schema,
     ErrorTool.schema,
     NestedAgent.schema,

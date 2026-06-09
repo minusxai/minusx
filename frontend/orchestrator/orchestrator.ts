@@ -18,7 +18,7 @@ import {
   type ToolMessage,
   type ToolResponse,
 } from './types';
-import { normalizeParameters, synthErrorAssistantMessage, validateParameters } from './utils';
+import { coerceParameters, normalizeParameters, synthErrorAssistantMessage, validateParameters } from './utils';
 import { createSemaphore, parseConcurrencyLimit } from './concurrency';
 
 // Optional process-wide cap on concurrent LLM calls. Set via the
@@ -275,7 +275,7 @@ export class Orchestrator {
   }
 
   async dispatch(
-    message: AssistantMessage,
+    rawMessage: AssistantMessage,
     parent: MXAgent,
     opts?: {
       threadHistoryByToolCallId?: Record<string, Message[]>;
@@ -289,6 +289,12 @@ export class Orchestrator {
       contextOverridesByToolCallId?: Record<string, Record<string, unknown>>;
     },
   ): Promise<void> {
+    // Coerce tool-call arguments to their schema types BEFORE storing or
+    // dispatching. Models sometimes emit stringified args (e.g.
+    // `fileIds: "[2158]"` instead of `[2158]`); persisting them verbatim makes
+    // both the stored log and downstream consumers (validation, the tool, and
+    // the chat UI that renders `args.fileIds.map(...)`) choke on a non-array.
+    const message = this.coerceToolCallArguments(rawMessage);
     this.log.push({ ...message, parent_id: parent.id });
     parent.toolThread.push(message);
 
@@ -503,6 +509,24 @@ export class Orchestrator {
       throw new Error(`No callable with schema.name='${name}' in orchestrator registrables`);
     }
     return cls;
+  }
+
+  /**
+   * Return a copy of the assistant message with each tool-call's arguments
+   * coerced to its tool schema's types (see `coerceParameters`). Tool calls for
+   * unknown tools are left untouched — the dispatch loop reports those as errors.
+   */
+  protected coerceToolCallArguments(message: AssistantMessage): AssistantMessage {
+    if (!message.content.some((c) => c.type === 'toolCall')) return message;
+    return {
+      ...message,
+      content: message.content.map((c) => {
+        if (c.type !== 'toolCall') return c;
+        const cls = this.registrables.find((r) => r.schema?.name === c.name);
+        if (!cls) return c;
+        return { ...c, arguments: coerceParameters(cls.schema.parameters, c.arguments) };
+      }),
+    };
   }
 
   protected instantiate(
