@@ -207,6 +207,19 @@ export default function DashboardView({
 
   const questionCount = document?.assets?.filter(a => a.type === 'question').length || 0;
 
+  // Assets that actually appear in THIS view (the dashboard grid).
+  // Per the one-pool/many-views model: a view renders only the assets named in
+  // its own layout. Assets that live in the dock but were never placed in the
+  // dashboard layout are intentionally NOT shown here. When the dashboard has no
+  // layout yet (legacy / freshly-created), fall back to showing the whole pool.
+  const dashboardAssets = useMemo(() => {
+    const all = getLayoutableAssets(document?.assets || []);
+    const items = document?.layout?.items;
+    if (!items) return all;
+    const layoutIds = new Set(items.map((item: DashboardLayoutItem) => String(item.id)));
+    return all.filter(asset => layoutIds.has(getAssetLayoutKey(asset)));
+  }, [document?.assets, document?.layout]);
+
   // Compute layouts for all breakpoints from document
   // Desktop layout (12 cols) is the source of truth, mobile layouts are scaled
   const layouts = useMemo(() => {
@@ -215,28 +228,17 @@ export default function DashboardView({
     let baseLayout: Layout[];
     if (document.layout?.items) {
       const layoutMap = new Map<string, DashboardLayoutItem>(document.layout.items.map((item: DashboardLayoutItem) => [String(item.id), item]));
-      const layoutableAssets = getLayoutableAssets(document.assets);
 
-      // Find the bottom of the existing layout to place missing assets below
-      const maxY = document.layout.items.reduce((max: number, item: DashboardLayoutItem) => Math.max(max, item.y + item.h), 0);
-
-      let missingCount = 0;
-      baseLayout = layoutableAssets.map((asset) => {
+      // dashboardAssets is already filtered to assets present in the layout, so
+      // every entry resolves to a layout item below.
+      baseLayout = dashboardAssets.map((asset) => {
         const id = getAssetLayoutKey(asset);
-        const item = layoutMap.get(id);
+        const item = layoutMap.get(id)!;
         const isDivider = asset.type === 'divider';
         const isText = asset.type === 'text';
         const minW = isDivider ? 12 : isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W;
         const minH = isDivider ? 1 : isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H;
-        if (item) {
-          return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW, minH };
-        }
-        // Asset exists but has no layout entry — place below existing items with default size
-        const w = isDivider ? 12 : isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
-        const h = isDivider ? 1 : isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
-        const result = { i: id, x: 0, y: maxY + Math.floor(missingCount / 2) * h, w, h, minW, minH };
-        missingCount++;
-        return result;
+        return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW, minH };
       });
     } else {
       baseLayout = generateDefaultLayout(document.assets);
@@ -252,7 +254,7 @@ export default function DashboardView({
       xs: mobileLayout, // 6 cols - vertically stacked
       xxs: mobileLayout // 6 cols - vertically stacked
     };
-  }, [document?.layout, document?.assets]);
+  }, [document?.layout, document?.assets, dashboardAssets]);
 
   // Apply expanded text block heights to layouts (view-only, not persisted)
   const effectiveLayouts = useMemo(() => {
@@ -527,8 +529,9 @@ export default function DashboardView({
     );
   }, [editMode, layouts.lg, currentCols]);
 
-  // All assets that participate in the grid
-  const layoutableAssets = useMemo(() => getLayoutableAssets(document?.assets || []), [document?.assets]);
+  // All assets that participate in the grid (only those placed in the dashboard
+  // layout — dock-only assets are not rendered in this view).
+  const layoutableAssets = dashboardAssets;
 
   // Register header actions (Present button in view mode, Add Content in edit mode)
   const setActions = useSetDashboardHeaderActions();
