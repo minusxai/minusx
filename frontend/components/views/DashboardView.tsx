@@ -6,7 +6,7 @@ import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import ReportOverlay from '../ReportOverlay';
 import DockView from './DockView';
 import ReportDocView from './ReportDocView';
-import DeckView from './DeckView';
+import DeckView from './deck/DeckView';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -17,8 +17,8 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, addDividerToDashboard, updateTextBlockContent } from '@/store/filesSlice';
-import { editFile } from '@/lib/api/file-state';
+import { selectMergedContent, selectPersistableContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, addDividerToDashboard, updateTextBlockContent } from '@/store/filesSlice';
+import { editFile, replaceFileContent } from '@/lib/api/file-state';
 import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
@@ -144,6 +144,7 @@ export default function DashboardView({
 
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
+  // eslint-disable-next-line react-hooks/refs
   documentRef.current = document;
 
   const addPanelRef = useRef<HTMLDivElement>(null);
@@ -182,6 +183,8 @@ export default function DashboardView({
 
   // Read current parameter values from merged content (persisted in file)
   const mergedDashboardContent = useAppSelector(state => selectMergedContent(state, fileId)) as any;
+  // Persistable content (no ephemeral keys) — what the JSON view edits/saves
+  const persistableContent = useAppSelector(state => selectPersistableContent(state, fileId));
   const paramValues = mergedDashboardContent?.parameterValues || EMPTY_PARAMS;
 
   // Local state for in-progress edits (not submitted yet, does not trigger execution)
@@ -821,12 +824,15 @@ export default function DashboardView({
   return (
     <Box flex="1" data-file-id={fileId} role="region" aria-label="Dashboard">
 
-      {/* JSON View */}
+      {/* JSON View — edits the persistable content (never ephemeral keys);
+          full replace so deleting keys works. Saves via the normal Save flow. */}
       {activeTab === 'json' && (
         <JsonEditor
-          value={JSON.stringify(document, null, 2)}
+          value={JSON.stringify(persistableContent ?? document, null, 2)}
+          readOnly={!editMode}
           onChange={(value) => {
-            // TODO: Handle JSON edits
+            const result = replaceFileContent({ fileId, content: JSON.parse(value) });
+            return result.success ? null : result.error;
           }}
         />
       )}
@@ -858,13 +864,12 @@ export default function DashboardView({
         </Box>
       )}
 
-      {/* Presentation view: a slide deck of text + charts. */}
+      {/* Presentation view: a deck of agent-authored HTML slides. */}
       {activeTab === 'visual' && currentView === 'presentation' && (
         <Box mx={{ base: -4, md: -8, lg: -12 }}>
           <DeckView
             deck={document?.deck || []}
             editMode={editMode}
-            assets={document?.assets || []}
             onChange={(changes) => editFile({ fileId, changes: { content: changes } })}
           />
         </Box>

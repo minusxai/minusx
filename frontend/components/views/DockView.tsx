@@ -4,6 +4,7 @@ import { Box, HStack, VStack, Text, IconButton, SimpleGrid } from '@chakra-ui/re
 import { LuLayoutDashboard, LuFileText, LuPresentation, LuTrash2, LuScanSearch, LuLayers, LuMaximize2 } from 'react-icons/lu';
 import { useMemo } from 'react';
 import { AssetReference, InlineAsset, DashboardLayoutItem, DeckSlide } from '@/lib/types';
+import { extractQuestionIds } from '@/lib/deck/deck-utils';
 import { useAppSelector } from '@/store/hooks';
 import { Tooltip } from '@/components/ui/tooltip';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
@@ -18,7 +19,7 @@ import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionC
  * Membership is *derived* (read-only) from the document's real view data:
  *   - Dashboard:    the asset key appears in `layout.items`
  *   - Report:       a `:::chart{id=N}` embed for the question exists in `report`
- *   - Presentation: the asset id appears in some `deck` slide's items
+ *   - Presentation: a `data-question-id` chart embed exists in some `deck` slide's HTML
  */
 
 type ViewKey = 'dashboard' | 'report' | 'presentation';
@@ -39,7 +40,7 @@ interface DockViewProps {
   layout?: { items?: DashboardLayoutItem[] } | null;
   /** Report markdown — `:::chart{id=N}` embeds determine report membership. */
   report?: string | null;
-  /** Presentation deck — slide items determine presentation membership. */
+  /** Presentation deck — chart embeds in slide HTML determine presentation membership. */
   deck?: DeckSlide[] | null;
   onRemoveAsset: (key: string) => void;
   onOpenQuestion?: (questionId: number) => void;
@@ -49,7 +50,7 @@ export default function DockView({ assets, layout, report, deck, onRemoveAsset, 
   // Derive per-view membership (read-only) from the document's real view data.
   const membershipFor = useMemo(() => {
     const inDashboard = new Set((layout?.items ?? []).map(i => String(i.id)));
-    const inPresentation = new Set((deck ?? []).flatMap(s => (s.items ?? []).map(i => String(i.id))));
+    const inPresentation = new Set((deck ?? []).flatMap(s => extractQuestionIds(s.html ?? '')).map(String));
     // Report embeds questions by id as `:::chart{id=N}`; text isn't a pooled ref there.
     const reportIds = new Set<string>();
     if (report) {

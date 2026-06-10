@@ -270,11 +270,24 @@ export const DashboardLayout = Type.Object({
 }, { title: 'DashboardLayout' });
 export type DashboardLayout = Static<typeof DashboardLayout>;
 
+export const DeckSlide = Type.Object({
+  id: Type.String({ description: 'Stable short unique slide id, e.g. "s1"' }),
+  html: Type.String({ description:
+    'Self-contained HTML for one slide on a fixed 1280x720 px canvas. Use inline style attributes only — ' +
+    '<style> and <script> tags, event-handler attributes, and iframes are stripped at render time. ' +
+    'Absolute px positioning is encouraged. Embed a live chart with ' +
+    '<div data-question-id="N" style="position:absolute;left:..;top:..;width:600px;height:340px"></div> ' +
+    'where N is a question id that is also in assets; the chart fills the div, so size it explicitly.' }),
+}, { title: 'DeckSlide' });
+export type DeckSlide = Static<typeof DeckSlide>;
+
 export const DashboardContent = Type.Object({
   description: Nullable(Type.String()),
   assets: Type.Array(AssetReference, { description: 'ordered list of questions in the dashboard' }),
   layout: Nullable(DashboardLayout),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
+  deck: Nullable(Type.Array(DeckSlide, {
+    description: 'Presentation slides. Each slide is standalone HTML rendered on a 1280x720 canvas; chart embeds reference question ids that MUST also be in assets.' })),
 }, { title: 'DashboardContent' });
 export type DashboardContent = Static<typeof DashboardContent>;
 
