@@ -24,6 +24,8 @@ import { selectEffectiveName } from '@/store/filesSlice';
 import { useFile, useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { selectViewStackDepth, selectDashboardEditMode } from '@/store/uiSlice';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
 import ViewStackOverlay from './ViewStack';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
@@ -43,6 +45,9 @@ interface FileLayoutProps {
 export default function FileLayout(props: FileLayoutProps) {
   const { filePath, fileName, fileType, fileId, rightSidebar, sourceDashboardId } = props;
   const user = useAppSelector(state => state.auth.user);
+  const view = useAppSelector(selectView);
+  const hideTopChrome = viewAtLeast(view, 'file');       // hide breadcrumb
+  const hideRightSidebar = viewAtLeast(view, 'contentonly');
   const isDashboardEditing = useAppSelector(state =>
     fileType === 'dashboard' && fileId ? selectDashboardEditMode(state, fileId) : false
   );
@@ -94,7 +99,9 @@ export default function FileLayout(props: FileLayoutProps) {
   // Type-based rendering is now handled by FileView component via fileComponents mapping
   const content = props.children;
   const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
-  const shouldShowFloatingChat = shouldShowRightSidebar;
+  // view=contentonly hides the right sidebar, so the floating chat bar (which opens
+  // into it) is dead weight — drop it (and its bottom padding) too.
+  const shouldShowFloatingChat = shouldShowRightSidebar && !hideRightSidebar;
   const metadata = getFileTypeMetadata(fileType);
   const dispatch = useAppDispatch();
   const viewStackDepth = useAppSelector(selectViewStackDepth);
@@ -128,17 +135,19 @@ export default function FileLayout(props: FileLayoutProps) {
               pt={{ base: 3, md: 4, lg: 5 }}
               pb={shouldShowFloatingChat ? { base: '60px', md: '60px' } : { base: 4, md: 6, lg: 8 }}
               align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'auto'} minHeight="0">
-            <Flex justify="space-between" align="center" mb={4} gap={4}>
-              <Box flex="1" minW={0}>
-                <Breadcrumb
-                  items={breadcrumbItems}
-                  siblingFiles={fileId ? siblingFiles : undefined}
-                  currentFileId={fileId}
-                  bannerColor={isDashboardEditing ? 'accent.primary/90' : undefined}
-                  bannerLabel={isDashboardEditing ? 'Editing Dashboard' : undefined}
-                />
-              </Box>
-            </Flex>
+            {!hideTopChrome && (
+              <Flex justify="space-between" align="center" mb={4} gap={4}>
+                <Box flex="1" minW={0}>
+                  <Breadcrumb
+                    items={breadcrumbItems}
+                    siblingFiles={fileId ? siblingFiles : undefined}
+                    currentFileId={fileId}
+                    bannerColor={isDashboardEditing ? 'accent.primary/90' : undefined}
+                    bannerLabel={isDashboardEditing ? 'Editing Dashboard' : undefined}
+                  />
+                </Box>
+              </Flex>
+            )}
             {content}
           </VStack>
         </Box>
@@ -161,7 +170,7 @@ export default function FileLayout(props: FileLayoutProps) {
         {/* Content stack — absolute overlay, clipped to this VStack */}
         <ViewStackOverlay />
       </VStack>
-      {shouldShowRightSidebar && rightSidebar && (
+      {shouldShowRightSidebar && rightSidebar && !hideRightSidebar && (
         <>
           {/* Conditionally render based on device - not just hide with CSS */}
           {isMobile === false && (

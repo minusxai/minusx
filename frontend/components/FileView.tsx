@@ -15,6 +15,9 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { getFileComponent, hasFileComponent } from '@/lib/ui/fileComponents';
 import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
 import { type FileId } from '@/store/filesSlice';
+import { useAppSelector } from '@/store/hooks';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
 import FileHeader from './FileHeader';
 
 export interface FileViewProps {
@@ -25,9 +28,13 @@ export interface FileViewProps {
   hideHeader?: boolean;
 }
 
-export default function FileView({ fileId, mode = 'view', defaultFolder, hideHeader }: FileViewProps) {
+export default function FileView({ fileId, mode = 'view', defaultFolder, hideHeader: hideHeaderProp }: FileViewProps) {
   // Load file using useFile hook (no useEffect in component!)
   const { fileState: file } = useFile(fileId) ?? {};
+
+  // view >= content strips the file header (title + save/publish actions) too.
+  const view = useAppSelector(selectView);
+  const hideHeader = hideHeaderProp || viewAtLeast(view, 'content');
 
   // Loading state
   if (!file || file.loading) {

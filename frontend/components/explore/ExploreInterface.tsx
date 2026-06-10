@@ -8,6 +8,8 @@ import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import Breadcrumb from '@/components/Breadcrumb';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
 import { shallowEqual } from 'react-redux';
 import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
@@ -25,6 +27,9 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   const dispatch = useAppDispatch();
   const router = useRouter();
   const user = useAppSelector(state => state.auth.user);
+  const view = useAppSelector(selectView);
+  const hideTopChrome = viewAtLeast(view, 'file');       // hide breadcrumb
+  const hideRightSidebar = viewAtLeast(view, 'contentonly');
 
   // Read context stored in Redux conversation (available synchronously on navigation)
   const storedContextPath = useAppSelector(state =>
@@ -142,13 +147,15 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
       display="flex" flexDirection="column" overflow="hidden">
         <VStack gap={0} align="stretch" height="100%">
           {/* Breadcrumb */}
-          <Box px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }}>
-            <Flex justify="space-between" align="center" gap={4}>
-              <Box flex="1" minW={0}>
-                <Breadcrumb items={breadcrumbItems} />
-              </Box>
-            </Flex>
-          </Box>
+          {!hideTopChrome && (
+            <Box px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }}>
+              <Flex justify="space-between" align="center" gap={4}>
+                <Box flex="1" minW={0}>
+                  <Breadcrumb items={breadcrumbItems} />
+                </Box>
+              </Flex>
+            </Box>
+          )}
           {/* Chat Interface */}
           <Box flex="1" overflow="hidden">
             <ChatInterface
@@ -165,7 +172,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
           </Box>
         </VStack>
       </Box>
-      {isMobile === false && (
+      {!hideRightSidebar && isMobile === false && (
         <RightSidebar
             title="Exploration Context"
             filePath={contextPath}
@@ -178,7 +185,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
             showChat={false}
         />
       )}
-      {isMobile === true && (
+      {!hideRightSidebar && isMobile === true && (
         <MobileRightSidebar
             title="Exploration Context"
             filePath={contextPath}

@@ -6,6 +6,7 @@ import { UserRole } from '../types';
 import { isAdmin } from './role-helpers';
 import { CURRENT_TOKEN_VERSION, TOKEN_REFRESH_THRESHOLD } from './auth-constants';
 import { Mode, DEFAULT_MODE, isValidMode } from '@/lib/mode/mode-types';
+import { View, DEFAULT_VIEW, isValidView } from '@/lib/view/view-types';
 
 /**
  * Check if a token should be refreshed based on age
@@ -33,6 +34,9 @@ export interface EffectiveUser {
   role: UserRole;
   home_folder: string;
   mode: Mode;
+  // Optional: only the HTTP request builders populate it (from the x-view header);
+  // background builders (MCP/Slack) and tests omit it → treated as 'full'.
+  view?: View;
 }
 
 /**
@@ -45,6 +49,18 @@ export const getMode = cache(async (): Promise<Mode> => {
     return modeHeader as Mode;
   }
   return DEFAULT_MODE;
+});
+
+/**
+ * Get the current view from request headers (chrome-stripping for embedding).
+ */
+export const getView = cache(async (): Promise<View> => {
+  const headersList = await headers();
+  const viewHeader = headersList.get('x-view');
+  if (viewHeader && isValidView(viewHeader)) {
+    return viewHeader as View;
+  }
+  return DEFAULT_VIEW;
 });
 
 /**
@@ -61,6 +77,7 @@ export async function getServerSession() {
 export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> => {
   const headersList = await headers();
   const mode = await getMode();
+  const view = await getView();
   const session = await auth();
 
   if (!session?.user) return null;
@@ -77,6 +94,7 @@ export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> =>
           role: impersonatedUser.role,
           home_folder: impersonatedUser.home_folder,
           mode,
+          view,
         };
       }
     } catch (error) {
@@ -96,6 +114,7 @@ export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> =>
     role: session.user.role || 'viewer',
     home_folder: session.user.home_folder,
     mode,
+    view,
   };
 });
 
@@ -116,5 +135,6 @@ export async function getUserEffectiveUser(
     role: user.role,
     home_folder: user.home_folder,
     mode,
+    view: DEFAULT_VIEW,
   };
 }
