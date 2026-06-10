@@ -7,12 +7,23 @@ import { DisplayProps } from '@/lib/types';
 import Markdown from '../../Markdown';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/store/store';
+import { selectConversation } from '@/store/chatSlice';
 import FeedbackBlock from '../message/FeedbackBlock';
 
 
 
 export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode, conversationID, userMessageLogIndex, isLastAssistantMessage }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
+
+  // Feedback is only offered once the agent turn is fully done — while the
+  // answer is still streaming (or tools are executing) the thumbs would
+  // appear mid-stream under a half-written reply.
+  const agentDone = useSelector((state: RootState) =>
+    selectConversation(state, conversationID)?.executionState === 'FINISHED'
+  );
+
   let content;
   let citations: any[] = [];
   const nativeThinkingBlocks: string[] = [];
@@ -258,8 +269,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
             {/* Show citations with answer if answer exists */}
             {showCitationsWithAnswer && renderCitations(false)}
 
-            {/* Feedback thumbs up/down */}
-            {hasAnswer && conversationID !== undefined && userMessageLogIndex !== undefined && (
+            {/* Feedback thumbs up/down — only on the last assistant message, once the agent is done */}
+            {hasAnswer && agentDone && isLastAssistantMessage && conversationID !== undefined && userMessageLogIndex !== undefined && (
               <GridItem colSpan={12} colStart={1}>
                 <Box px={3}>
                   <FeedbackBlock
