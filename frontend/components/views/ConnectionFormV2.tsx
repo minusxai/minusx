@@ -17,7 +17,6 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import {
   Box,
   VStack,
@@ -27,11 +26,9 @@ import {
   Heading,
   HStack,
   Progress,
-  Switch,
-  Textarea,
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck, LuPlus, LuLayoutDashboard, LuCompass } from 'react-icons/lu';
+import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck } from 'react-icons/lu';
 import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types';
 import { testConnection } from '@/lib/backend/connection-test';
 import TabSwitcher from '../TabSwitcher';
@@ -898,7 +895,7 @@ export default function ConnectionFormV2({
             </VStack>
 
             {/* Right: Quick Actions — hide for static (context is per-dataset) and duckdb */}
-            {content.type !== 'duckdb' && !isStaticConnection && (
+            {/* {content.type !== 'duckdb' && !isStaticConnection && (
               <Box
                 w="300px"
                 flexShrink={0}
@@ -912,7 +909,6 @@ export default function ConnectionFormV2({
                   Quick Actions
                 </Text>
                 <VStack align="stretch" gap={1}>
-                  {/* 1. Whitelist Tables — toggle */}
                   <HStack
                     gap={2.5}
                     px={3}
@@ -949,7 +945,6 @@ export default function ConnectionFormV2({
                     </Switch.Root>
                   </HStack>
 
-                  {/* 2. Add Context — expandable inline form */}
                   <VStack align="stretch" gap={0} px={3} py={2}>
                     {contextAdded ? (
                       <>
@@ -1030,7 +1025,6 @@ export default function ConnectionFormV2({
 
                   <Box h="1px" bg="border.default" my={2} />
 
-                  {/* 3. New Question */}
                   <Link href={`/new/question?databaseName=${encodeURIComponent(fileName)}`}>
                     <HStack
                       gap={2.5}
@@ -1046,7 +1040,6 @@ export default function ConnectionFormV2({
                     </HStack>
                   </Link>
 
-                  {/* 4. Auto Dashboard */}
                   <Link href={`/new/dashboard`}>
                     <HStack
                       gap={2.5}
@@ -1062,7 +1055,6 @@ export default function ConnectionFormV2({
                     </HStack>
                   </Link>
 
-                  {/* 5. Explore */}
                   <Link href={`/explore`}>
                     <HStack
                       gap={2.5}
@@ -1080,7 +1072,7 @@ export default function ConnectionFormV2({
 
                 </VStack>
               </Box>
-            )}
+            )} */}
           </HStack>
 
           {/* Enriched Schema JSON (dev mode only) */}
