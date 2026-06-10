@@ -17,7 +17,6 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import {
   Box,
   VStack,
@@ -27,11 +26,9 @@ import {
   Heading,
   HStack,
   Progress,
-  Switch,
-  Textarea,
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck, LuPlus, LuLayoutDashboard, LuCompass } from 'react-icons/lu';
+import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuTable, LuSettings, LuArrowLeft, LuCircleAlert, LuCheck } from 'react-icons/lu';
 import { ConnectionContent, ContextContent, DatabaseContext } from '@/lib/types';
 import { testConnection } from '@/lib/backend/connection-test';
 import TabSwitcher from '../TabSwitcher';
