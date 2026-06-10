@@ -60,6 +60,18 @@ export default function SlideHtml({ html }: { html: string }) {
         overflow="hidden"
         bg="white"
         color="black"
+        // Pin every inheritable typography property inline: the same slide
+        // renders on the stage, the rail thumbs, and present mode, and must
+        // lay out identically in all of them regardless of wrapper context
+        // (e.g. UA styles that don't inherit, like a <button>'s font).
+        style={{
+          fontFamily: 'Helvetica, Arial, sans-serif',
+          fontSize: '16px',
+          fontWeight: 'normal',
+          lineHeight: 1.4,
+          letterSpacing: 'normal',
+          textAlign: 'left',
+        }}
         dangerouslySetInnerHTML={innerHtml}
       />
       {targets.map((t, i) => createPortal(

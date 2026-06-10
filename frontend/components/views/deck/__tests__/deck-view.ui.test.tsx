@@ -45,6 +45,16 @@ describe('DeckView', () => {
     await within(stage).findByLabelText('Embedded question 7');
   });
 
+  it('renders thumbnail slide content outside any button so it lays out identically to the stage', () => {
+    // UA button styles (font-family/size, line-height, text-align: center) do
+    // NOT inherit — slide HTML rendered inside a <button> lays out differently
+    // from the stage. Thumbs must render slides in plain divs.
+    const { container } = renderWithProviders(<DeckView deck={DECK} editMode={false} onChange={vi.fn()} />);
+    const headings = [...container.querySelectorAll('h1')];
+    expect(headings.length).toBeGreaterThanOrEqual(2); // stage copy + rail thumbs
+    headings.forEach(h => expect(h.closest('button')).toBeNull());
+  });
+
   it('filters out legacy slides that have no html string', () => {
     const legacy = [
       { id: 'old', items: [{ id: 1, xPct: 0, yPct: 0, wPct: 10, hPct: 10 }] } as any,

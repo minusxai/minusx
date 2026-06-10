@@ -83,9 +83,6 @@ export default function DeckView({ deck, editMode, onChange }: DeckViewProps) {
           <HStack key={slide.id} gap={1.5} align="center" role="group">
             <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" w="14px" textAlign="right" flexShrink={0}>{idx + 1}</Text>
             <Box
-              as="button"
-              aria-label={`Slide ${idx + 1}`}
-              onClick={() => setActiveIdx(idx)}
               flex={1}
               minW={0}
               position="relative"
@@ -97,11 +94,23 @@ export default function DeckView({ deck, editMode, onChange }: DeckViewProps) {
               _hover={{ borderColor: idx === safeIdx ? 'accent.teal' : 'accent.teal/40' }}
               transition="border-color 0.12s"
             >
-              <Box pointerEvents="none">
-                <ScaledSlideFrame>
-                  <SlideHtml html={slide.html} />
-                </ScaledSlideFrame>
-              </Box>
+              <ScaledSlideFrame>
+                <SlideHtml html={slide.html} />
+              </ScaledSlideFrame>
+              {/* Transparent click overlay — the slide HTML must NOT live
+                  inside the <button>: UA button styles (font, text-align)
+                  don't inherit and would change its layout vs the stage. */}
+              <Box
+                as="button"
+                aria-label={`Slide ${idx + 1}`}
+                onClick={() => setActiveIdx(idx)}
+                position="absolute"
+                inset={0}
+                w="100%"
+                h="100%"
+                cursor="pointer"
+                bg="transparent"
+              />
             </Box>
             {editMode && (
               <IconButton aria-label={`Delete slide ${idx + 1}`} size="2xs" variant="ghost" color="fg.subtle" opacity={0} _groupHover={{ opacity: 1 }} _hover={{ color: 'accent.danger' }} onClick={() => deleteSlide(idx)} flexShrink={0}>

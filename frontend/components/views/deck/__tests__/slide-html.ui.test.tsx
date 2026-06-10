@@ -49,8 +49,25 @@ describe('SlideHtml', () => {
     const { container } = renderWithProviders(
       <SlideHtml html={'<div style="position:absolute;left:40px">Styled</div>'} />
     );
-    const el = [...container.querySelectorAll('div[style]')].find(d => d.textContent === 'Styled');
+    const el = [...container.querySelectorAll('div[style]')].find(
+      d => d.textContent === 'Styled' && d.children.length === 0,
+    );
     expect(el?.getAttribute('style')).toContain('position');
+  });
+
+  it('pins baseline typography inline on the host so wrapper context cannot change slide layout', () => {
+    // The same slide renders on the stage, the rail thumbs, and present mode —
+    // it must lay out identically everywhere, so inheritable typography is
+    // pinned with inline styles instead of leaking in from the wrapper.
+    const { container } = renderWithProviders(<SlideHtml html={'<div>Plain</div>'} />);
+    const probe = [...container.querySelectorAll('div')].find(
+      d => d.textContent === 'Plain' && d.children.length === 0,
+    ) as HTMLElement;
+    const host = probe.parentElement as HTMLElement;
+    expect(host.style.fontSize).toBe('16px');
+    expect(host.style.textAlign).toBe('left');
+    expect(host.style.fontFamily).not.toBe('');
+    expect(host.style.lineHeight).not.toBe('');
   });
 
   it('hydrates chart placeholders and clears their fallback content', async () => {
