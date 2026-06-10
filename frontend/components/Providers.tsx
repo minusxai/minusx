@@ -53,6 +53,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
           role: initialData.user.role,
           home_folder: initialData.user.home_folder,
           mode: initialData.user.mode,
+          view: initialData.user.view,
         },
         loading: false,
       }

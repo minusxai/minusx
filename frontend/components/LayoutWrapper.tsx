@@ -10,6 +10,8 @@ import DataPrepBanner from './DataPrepBanner';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { clearViewStack } from '@/store/uiSlice';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -17,6 +19,7 @@ interface LayoutWrapperProps {
 
 export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   const leftSidebarCollapsed = useAppSelector((state) => state.ui.leftSidebarCollapsed);
+  const view = useAppSelector(selectView);
   const pathname = usePathname();
   const dispatch = useAppDispatch();
 
@@ -35,6 +38,13 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   // If it's a public route, render children without sidebar (and without recording)
   if (isPublicRoute) {
     return <>{children}</>;
+  }
+
+  // view >= file: bare embed — render only the page content (no left sidebar,
+  // mobile nav, data-prep banner, or sidebar margin). Keep RecordingProvider so
+  // file/chat surfaces that depend on its context still work.
+  if (viewAtLeast(view, 'file')) {
+    return <RecordingProvider>{children}</RecordingProvider>;
   }
 
   return (

@@ -19,9 +19,10 @@ export function getAsUserFromUrl(url: URL): string | null {
 }
 
 /**
- * Preserve `as_user`, `mode`, and `v` parameters from current URL to target URL (client-side).
- * The `v` parameter gates chat-v2 surfaces (`v=2` switches the sidebar from
- * Conversations to Chats; same machinery as as_user / mode).
+ * Preserve `as_user`, `mode`, `v`, and `view` parameters from current URL to
+ * target URL (client-side). The `v` parameter gates chat-v2 surfaces (`v=2`
+ * switches the sidebar from Conversations to Chats); `view=file` strips app
+ * chrome for embedding. Same machinery as as_user / mode.
  * @param targetUrl - The URL to navigate to
  * @returns URL with parameters preserved if they exist
  */
@@ -36,9 +37,10 @@ export function preserveParams(targetUrl: string): string {
   const asUser = currentParams.get('as_user');
   const mode = currentParams.get('mode');
   const v = currentParams.get('v');
+  const view = currentParams.get('view');
 
   // If no parameters to preserve, return as-is
-  if (!asUser && !mode && !v) {
+  if (!asUser && !mode && !v && !view) {
     return targetUrl;
   }
 
@@ -56,6 +58,11 @@ export function preserveParams(targetUrl: string): string {
 
   if (v) {
     targetURL.searchParams.set('v', v);
+  }
+
+  // Don't add the default view ('full') — keeps URLs clean, like mode=org.
+  if (view && view !== 'full') {
+    targetURL.searchParams.set('view', view);
   }
 
   return targetURL.pathname + targetURL.search;

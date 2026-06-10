@@ -2,6 +2,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import type { UserRole } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
+import { type View, DEFAULT_VIEW } from '@/lib/view/view-types';
 
 interface AuthUser {
   id: number;  // Required - every authenticated user has an ID
@@ -10,6 +11,7 @@ interface AuthUser {
   role: UserRole;
   home_folder?: string;
   mode: Mode;  // Mode parameter from URL (org, tutorial, etc.)
+  view?: View; // View parameter from URL ('file' strips app chrome for embedding)
 }
 
 interface AuthState {
@@ -49,5 +51,7 @@ export const {
 // Simplified selectors - effectiveUser is now just the user
 export const selectEffectiveUser = (state: RootState) => state.auth.user;
 export const selectCompanyName = (_state: RootState) => undefined;
+/** Current view; defaults to 'full' (normal chrome) when unset. */
+export const selectView = (state: RootState): View => state.auth.user?.view ?? DEFAULT_VIEW;
 
 export default authSlice.reducer;

@@ -4,6 +4,7 @@ import type { Session } from 'next-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode } from '@/lib/mode/mode-types';
+import { isValidView, DEFAULT_VIEW } from '@/lib/view/view-types';
 import { getModules } from '@/lib/modules/registry';
 import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/e2e-runtime';
 import { EMBED_FRAME_ANCESTORS } from '@/lib/config';
@@ -110,6 +111,10 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
     } else {
       requestHeaders.set('x-mode', 'org');
     }
+
+    // Forward `view` (chrome-stripping for embedding) the same way as mode.
+    const view = req.nextUrl.searchParams.get('view');
+    requestHeaders.set('x-view', view && isValidView(view) ? view : DEFAULT_VIEW);
 
     // Forward `v` (chat-v2 toggle) the same way as_user / mode are forwarded.
     const vHeader = extractVHeader(req.nextUrl.searchParams);
