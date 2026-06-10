@@ -31,7 +31,9 @@ export function aggregatePivotData(
   rows: Record<string, any>[],
   config: PivotConfig
 ): PivotData {
-  const { rows: rowDims, columns: colDims, values: valueConfigs } = config
+  // Default each axis to [] — the schema requires them, but legacy / LLM-generated
+  // pivotConfigs can omit a field, and a missing array would throw on `.map`/`.length`.
+  const { rows: rowDims = [], columns: colDims = [], values: valueConfigs = [] } = config ?? {}
 
   if (valueConfigs.length === 0) {
     return {
