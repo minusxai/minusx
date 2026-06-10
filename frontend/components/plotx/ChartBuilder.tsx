@@ -341,7 +341,20 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
 
   // Pivot config — always derived from props so agent edits immediately take effect
-  const pivotConfig = initialPivotConfig
+  // Guarantee the three axis arrays exist — a malformed/legacy pivotConfig can omit
+  // one (e.g. `columns`), which would throw on `.map`/`.length` here and in the
+  // aggregator / PivotAxisBuilder. Keep undefined-when-absent so `!pivotConfig` holds.
+  const pivotConfig = useMemo(
+    () => initialPivotConfig
+      ? {
+          ...initialPivotConfig,
+          rows: initialPivotConfig.rows ?? [],
+          columns: initialPivotConfig.columns ?? [],
+          values: initialPivotConfig.values ?? [],
+        }
+      : initialPivotConfig,
+    [initialPivotConfig],
+  )
 
   const handlePivotConfigChange = useCallback((config: PivotConfig) => {
     onPivotConfigChange?.(config)
