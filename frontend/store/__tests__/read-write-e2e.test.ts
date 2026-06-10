@@ -12,7 +12,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, editFileStr, editFile } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, editFile, replaceFileContent } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, compressQueryResult, APP_STATE_LIMIT_CHARS, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage, AugmentedFile, QueryResult } from '@/lib/types';
@@ -25,7 +25,7 @@ import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { GET as filesListGetHandler } from '@/app/api/files/route';
 import { readFilesByCriteria } from '@/lib/api/file-state';
-import { selectContextFromPath } from '@/store/filesSlice';
+import { selectContextFromPath, selectMergedContent, selectIsDirty } from '@/store/filesSlice';
 import { NextRequest } from 'next/server';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -1721,6 +1721,105 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Ancestor context IS found via server's isAncestorContext logic
       expect(ctx).toBeDefined();
       expect(ctx?.path).toBe('/org/context');
+    });
+  });
+
+  describe('Full-content replace: deleting optional top-level keys', () => {
+    let deckDashboardId: number;
+
+    beforeEach(async () => {
+      deckDashboardId = await DocumentDB.create(
+        'Deck Dashboard',
+        '/org/deck-dashboard',
+        'dashboard',
+        {
+          description: 'Has a deck',
+          assets: [],
+          layout: null,
+          deck: [{ id: 's1', html: '<h1>Hello</h1>' }],
+        } as DocumentContent,
+        []
+      );
+      await readFiles([deckDashboardId]);
+    });
+
+    afterEach(async () => {
+      await DocumentDB.deleteByIds([deckDashboardId]);
+    });
+
+    it('editFileStr can delete a top-level key, and publish persists the deletion', async () => {
+      const state = (store.getState() as RootState).files.files[deckDashboardId];
+      // Locate the serialized deck entry in the file string the agent edits
+      const deckMatch = JSON.stringify(state.content).match(/"deck":\[[^\]]*\],?/);
+      expect(deckMatch).toBeTruthy();
+
+      const result = await editFileStr({
+        fileId: deckDashboardId,
+        oldMatch: deckMatch![0],
+        newMatch: '',
+      });
+      expect(result.success).toBe(true);
+
+      // Merged (effective) content must no longer contain the key
+      const merged = selectMergedContent(store.getState() as RootState, deckDashboardId) as DocumentContent;
+      expect(merged.deck).toBeUndefined();
+      expect(merged.description).toBe('Has a deck');
+
+      // And the deletion must survive a save round-trip
+      await publishFile({ fileId: deckDashboardId });
+      const saved = await DocumentDB.getById(deckDashboardId);
+      expect((saved!.content as DocumentContent).deck).toBeUndefined();
+      expect((saved!.content as DocumentContent).description).toBe('Has a deck');
+    });
+
+    it('replaceFileContent replaces content wholesale and persists through publish', async () => {
+      const result = replaceFileContent({
+        fileId: deckDashboardId,
+        content: {
+          description: 'Deck removed by hand',
+          assets: [],
+          layout: null,
+        } as DocumentContent,
+      });
+      expect(result.success).toBe(true);
+
+      expect(selectIsDirty(store.getState() as RootState, deckDashboardId)).toBe(true);
+      const merged = selectMergedContent(store.getState() as RootState, deckDashboardId) as DocumentContent;
+      expect(merged.deck).toBeUndefined();
+      expect(merged.description).toBe('Deck removed by hand');
+
+      await publishFile({ fileId: deckDashboardId });
+      const saved = await DocumentDB.getById(deckDashboardId);
+      expect((saved!.content as DocumentContent).deck).toBeUndefined();
+      expect((saved!.content as DocumentContent).description).toBe('Deck removed by hand');
+    });
+
+    it('replaceFileContent rejects schema-invalid content and stays clean', async () => {
+      const result = replaceFileContent({
+        fileId: deckDashboardId,
+        // assets is required on dashboards
+        content: { description: 'oops' } as unknown as DocumentContent,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/assets/);
+      expect(selectIsDirty(store.getState() as RootState, deckDashboardId)).toBe(false);
+    });
+
+    it('editFile (partial merge) still works after a full replace', async () => {
+      replaceFileContent({
+        fileId: deckDashboardId,
+        content: { description: 'replaced', assets: [], layout: null } as DocumentContent,
+      });
+      await editFile({ fileId: deckDashboardId, changes: { content: { description: 'merged on top' } } });
+
+      const merged = selectMergedContent(store.getState() as RootState, deckDashboardId) as DocumentContent;
+      expect(merged.description).toBe('merged on top');
+      expect(merged.deck).toBeUndefined();
+
+      await publishFile({ fileId: deckDashboardId });
+      const saved = await DocumentDB.getById(deckDashboardId);
+      expect((saved!.content as DocumentContent).description).toBe('merged on top');
+      expect((saved!.content as DocumentContent).deck).toBeUndefined();
     });
   });
 });
