@@ -99,7 +99,9 @@ export default function FileLayout(props: FileLayoutProps) {
   // Type-based rendering is now handled by FileView component via fileComponents mapping
   const content = props.children;
   const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
-  const shouldShowFloatingChat = shouldShowRightSidebar;
+  // view=contentonly hides the right sidebar, so the floating chat bar (which opens
+  // into it) is dead weight — drop it (and its bottom padding) too.
+  const shouldShowFloatingChat = shouldShowRightSidebar && !hideRightSidebar;
   const metadata = getFileTypeMetadata(fileType);
   const dispatch = useAppDispatch();
   const viewStackDepth = useAppSelector(selectViewStackDepth);

@@ -44,6 +44,8 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectView } from '@/store/authSlice';
+import { viewAtLeast } from '@/lib/view/view-types';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
@@ -128,11 +130,15 @@ export default function QuestionViewV2({
   const dialect = connectionTypeToDialect(connectionType ?? '');
 
   // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
-  // Default: open in page mode, collapsed in toolcall/embedded mode.
+  // Default: open in page mode, collapsed in toolcall/embedded mode. In an embedded
+  // content view (view >= content), default to collapsed too so the viz shows expanded
+  // instead of the query. This is only the DEFAULT — the user can still toggle it open.
   // When questionId is undefined (e.g. toolcall mode), use local state as fallback.
-  const [localSqlEditorCollapsed, setLocalSqlEditorCollapsed] = useState(!fullMode);
+  const view = useAppSelector(selectView);
+  const defaultSqlCollapsed = !fullMode || viewAtLeast(view, 'content');
+  const [localSqlEditorCollapsed, setLocalSqlEditorCollapsed] = useState(defaultSqlCollapsed);
   const reduxSqlEditorCollapsed = useAppSelector(
-    state => selectSqlEditorCollapsed(state, questionId, !fullMode)
+    state => selectSqlEditorCollapsed(state, questionId, defaultSqlCollapsed)
   );
   const sqlEditorCollapsed = questionId !== undefined ? reduxSqlEditorCollapsed : localSqlEditorCollapsed;
   // editMode and viewMode sourced from Redux (managed by FileHeader)
