@@ -88,6 +88,11 @@ describe('DeckView', () => {
     expect(onChange).toHaveBeenCalledWith({ deck: [DECK[1], DECK[2]] });
   });
 
+  it('shows the Add template button in the stage toolbar', () => {
+    renderWithProviders(<DeckView deck={DECK} editMode={false} onChange={vi.fn()} />);
+    expect(screen.getByLabelText('Add template')).toBeInTheDocument();
+  });
+
   it('hides delete buttons outside edit mode', () => {
     renderWithProviders(<DeckView deck={DECK} editMode={false} onChange={vi.fn()} />);
     expect(screen.queryByLabelText('Delete slide 1')).toBeNull();

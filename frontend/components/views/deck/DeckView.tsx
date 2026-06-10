@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, HStack, VStack, Text, IconButton, Button } from '@chakra-ui/react';
-import { LuTrash2, LuPresentation, LuChevronLeft, LuChevronRight, LuX, LuPlay } from 'react-icons/lu';
+import { LuTrash2, LuPresentation, LuChevronLeft, LuChevronRight, LuX, LuPlay, LuLayoutTemplate } from 'react-icons/lu';
 
 import { DeckSlide } from '@/lib/types';
 import SlideHtml from './SlideHtml';
@@ -123,7 +123,23 @@ export default function DeckView({ deck, editMode, onChange }: DeckViewProps) {
 
       {/* Stage */}
       <VStack flex={1} minW={0} align="stretch" gap={0} bg="bg.canvas" overflow="auto">
-        <HStack justify="flex-end" px={3} py={1.5} borderBottomWidth="1px" borderColor="border.muted" bg="bg.surface" flexShrink={0} minH="44px">
+        <HStack justify="space-between" px={3} py={1.5} borderBottomWidth="1px" borderColor="border.muted" bg="bg.surface" flexShrink={0} minH="44px">
+          <Button
+            aria-label="Add template"
+            size="2xs"
+            px={3}
+            gap={1.5}
+            h="28px"
+            fontWeight={700}
+            borderRadius="md"
+            bg="accent.teal"
+            color="white"
+            boxShadow="xs"
+            _hover={{ bg: 'accent.teal/85' }}
+            _active={{ bg: 'accent.teal/90' }}
+          >
+            <LuLayoutTemplate size={13} /> Add template
+          </Button>
           <Button
             size="2xs"
             onClick={() => setPresenting(true)}
