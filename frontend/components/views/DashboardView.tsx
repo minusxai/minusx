@@ -1,12 +1,13 @@
 'use client';
 
 import { Box, Text, IconButton, HStack, Portal, MenuRoot, MenuTrigger, MenuPositioner, MenuContent, MenuItem } from '@chakra-ui/react';
-import { LuPlus, LuX, LuGripVertical, LuPresentation, LuFileText, LuChevronDown, LuCheck, LuLayoutDashboard, LuLayers } from 'react-icons/lu';
+import { LuPlus, LuX, LuGripVertical, LuPresentation, LuFileText, LuChevronDown, LuCheck, LuLayoutDashboard, LuLayers, LuBookOpen } from 'react-icons/lu';
 import PresentationOverlay, { splitIntoSlides } from '../PresentationOverlay';
 import ReportOverlay from '../ReportOverlay';
 import DockView from './DockView';
 import ReportDocView from './ReportDocView';
 import DeckView from './deck/DeckView';
+import StoryView from './story/StoryView';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -288,8 +289,8 @@ export default function DashboardView({
   const activeVersionLabel = dashboardVersionOptions.find(o => o.value === dashboardVersion)?.label ?? 'Live';
   const isLive = dashboardVersion === 'live';
 
-  // In-page view: the asset dock, the dashboard grid, the report doc, or the deck.
-  const [currentView, setCurrentView] = useState<'dashboard' | 'dock' | 'report' | 'presentation'>('dashboard');
+  // In-page view: the asset dock, the dashboard grid, the report doc, the story page, or the deck.
+  const [currentView, setCurrentView] = useState<'dashboard' | 'dock' | 'report' | 'story' | 'presentation'>('dashboard');
 
   // Presentation / Report mode
   const [isPresenting, setIsPresenting] = useState(false);
@@ -568,6 +569,12 @@ export default function DashboardView({
             icon={<LuFileText size={13} />}
             active={currentView === 'report'}
             onClick={() => setCurrentView('report')}
+          />
+          <ViewSwitchSegment
+            label="Story"
+            icon={<LuBookOpen size={13} />}
+            active={currentView === 'story'}
+            onClick={() => setCurrentView('story')}
           />
           <ViewSwitchSegment
             label="Presentation"
@@ -861,6 +868,13 @@ export default function DashboardView({
             assets={document?.assets || []}
             onChange={(serialized) => editFile({ fileId, changes: { content: { report: serialized } } })}
           />
+        </Box>
+      )}
+
+      {/* Story view: a single-page scrolling agent-authored HTML data story. */}
+      {activeTab === 'visual' && currentView === 'story' && (
+        <Box mx={{ base: -4, md: -8, lg: -12 }}>
+          <StoryView story={document?.story} />
         </Box>
       )}
 

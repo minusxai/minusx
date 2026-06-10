@@ -288,6 +288,14 @@ export const DashboardContent = Type.Object({
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   deck: Nullable(Type.Array(DeckSlide, {
     description: 'Presentation slides. Each slide is standalone HTML rendered on a 1280x720 canvas; chart embeds reference question ids that MUST also be in assets.' })),
+  story: Nullable(Type.String({ description:
+    'Story view: one self-contained HTML document rendered as a single scrolling data-story page on a fixed ' +
+    '1280px-wide canvas (height unlimited — the page scrolls). Use inline style attributes only — <style> and ' +
+    '<script> tags, event-handler attributes, and iframes are stripped at render time. Flow layout (stacked ' +
+    'full-width sections) is encouraged; write it like a long-form editorial piece: narrative prose between ' +
+    'charts, big pull-quote numbers, section headers. Embed a live chart with ' +
+    '<div data-question-id="N" style="width:1120px;height:420px"></div> where N is a question id that is also ' +
+    'in assets; the chart fills the div, so size it explicitly.' })),
 }, { title: 'DashboardContent' });
 export type DashboardContent = Static<typeof DashboardContent>;
 

@@ -511,6 +511,9 @@ export interface DocumentContent extends BaseFileContent {
   /** Presentation view: ordered deck slides. Each slide is standalone agent-authored HTML
    *  rendered on a fixed 1280x720 canvas; charts embed via `<div data-question-id="N">`. */
   deck?: DeckSlide[] | null;
+  /** Story view: a single agent-authored HTML document rendered as one scrolling data-story
+   *  page on a fixed 1280px-wide canvas; charts embed via `<div data-question-id="N">`. */
+  story?: string | null;
 }
 
 /**
