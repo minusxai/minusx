@@ -6,7 +6,8 @@ import { verifyVerifiedToken } from '@/lib/auth/otp-utils';
 import { IS_DEV } from '@/lib/constants';
 import type { UserRole } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { ADMIN_PWD } from '@/lib/config';
+import { ADMIN_PWD, EMBED_ENABLED } from '@/lib/config';
+import { buildEmbedCookieConfig } from '@/lib/auth/embed';
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { appEventRegistry } from '@/lib/app-event-registry/registry';
 import { AppEvents } from '@/lib/app-event-registry/events';
@@ -159,6 +160,11 @@ export function createAuthConfig(options: AuthConfigOptions = {}) {
     pages: {
       signIn: '/login',
     },
+    // When iframe-embedding is enabled, auth cookies must be SameSite=None;Secure
+    // so the browser sends them inside a cross-site iframe (otherwise the CSRF
+    // cookie is missing on the login POST → `?error=MissingCSRF`). undefined keeps
+    // NextAuth's defaults (SameSite=Lax) on non-embedding deploys.
+    cookies: buildEmbedCookieConfig(EMBED_ENABLED, IS_DEV),
     trustHost: true,
   });
 }

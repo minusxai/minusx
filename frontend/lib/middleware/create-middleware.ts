@@ -6,6 +6,7 @@ import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode } from '@/lib/mode/mode-types';
 import { getModules } from '@/lib/modules/registry';
 import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/e2e-runtime';
+import { EMBED_FRAME_ANCESTORS } from '@/lib/config';
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
@@ -23,6 +24,17 @@ export function extractVHeader(searchParams: URLSearchParams): { key: 'x-v'; val
 
 export function createMiddleware() {
   return auth(async (req) => {
+    const response = await routeRequest(req as AuthReq);
+    // Restrict who may iframe-embed the app, when configured (frame-ancestors).
+    // Empty for the disabled / '*' cases, leaving the app embeddable from anywhere.
+    if (EMBED_FRAME_ANCESTORS) {
+      response.headers.set('Content-Security-Policy', `frame-ancestors ${EMBED_FRAME_ANCESTORS}`);
+    }
+    return response;
+  });
+}
+
+async function routeRequest(req: AuthReq): Promise<NextResponse> {
     const { pathname } = req.nextUrl;
 
     const hostname = req.headers.get('host') || '';
@@ -150,5 +162,4 @@ export function createMiddleware() {
     }
 
     return NextResponse.next({ request: { headers: requestHeaders } });
-  });
 }
