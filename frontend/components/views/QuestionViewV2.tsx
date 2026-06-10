@@ -163,6 +163,15 @@ export default function QuestionViewV2({
     dispatch(setQuestionCollapsedPanel(panel));
   }, [dispatch]);
 
+  // Embedded content view (view >= content): default the full-page split to showing
+  // the viz expanded (collapse the left/query panel) on mount. This sets real state
+  // so the panel toggles keep working — the user can re-open the query if they want.
+  useEffect(() => {
+    if (viewAtLeast(view, 'content')) {
+      dispatch(setQuestionCollapsedPanel('left'));
+    }
+  }, [view, dispatch]);
+
   const handleSqlEditorToggle = useCallback(() => {
     if (questionId !== undefined) {
       dispatch(setSqlEditorCollapsed({ fileId: questionId, collapsed: !sqlEditorCollapsed }));
