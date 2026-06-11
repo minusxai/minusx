@@ -198,6 +198,11 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     try {
       await publishAll([fileId]);
       exitEditMode(fileId, file?.type);
+    } catch (err) {
+      // A failed save (network blip, deploy restart, 5xx) must surface — this
+      // was an unhandled rejection in prod: spinner stopped, file stayed
+      // dirty, and the user got no feedback at all.
+      setPublishError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
     } finally {
       setPublishingSingleId(null);
     }
@@ -243,20 +248,25 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     if (saveModalFileId === null) return;
     const file = dirtyFiles.find(f => f.id === saveModalFileId);
     const slug = name.toLowerCase().replace(/\s+/g, '-');
-    await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
-    setSaveModalFileId(null);
-    await publishAll([saveModalFileId]);
-    exitEditMode(saveModalFileId, file?.type);
-    // If this was triggered by Save All, continue saving remaining files
-    if (pendingSaveAllIds !== null) {
-      if (pendingSaveAllIds.length > 0) {
-        await publishAll(pendingSaveAllIds);
-        pendingSaveAllIds.forEach(id => {
-          const f = dirtyFiles.find(df => df.id === id);
-          exitEditMode(id, f?.type);
-        });
+    try {
+      await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
+      setSaveModalFileId(null);
+      await publishAll([saveModalFileId]);
+      exitEditMode(saveModalFileId, file?.type);
+      // If this was triggered by Save All, continue saving remaining files
+      if (pendingSaveAllIds !== null) {
+        if (pendingSaveAllIds.length > 0) {
+          await publishAll(pendingSaveAllIds);
+          pendingSaveAllIds.forEach(id => {
+            const f = dirtyFiles.find(df => df.id === id);
+            exitEditMode(id, f?.type);
+          });
+        }
+        setPendingSaveAllIds(null);
       }
-      setPendingSaveAllIds(null);
+    } catch (err) {
+      // Same surface as handleSaveAll: a failed save must never be silent.
+      setPublishError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
     }
   }, [saveModalFileId, dirtyFiles, exitEditMode, pendingSaveAllIds]);
 
