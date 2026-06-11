@@ -148,6 +148,7 @@ function streamChatSSE(
   signal: AbortSignal,
   onStreamingEvent: (data: any) => Promise<void>,
   onUserInputRequest: (data: any) => void,
+  onSeq?: (seq: number) => void,
 ): Promise<SSEStreamResult> {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
@@ -186,6 +187,7 @@ function streamChatSSE(
         if (!parsed) continue;
 
         const { event, data } = parsed;
+        if (typeof data?.seq === 'number') onSeq?.(data.seq);
 
         if (event === 'streaming_event') {
           const captured = data;
@@ -208,6 +210,12 @@ function streamChatSSE(
 
     xhr.onerror = () => {
       signal.removeEventListener('abort', onAbort);
+      // If the done frame already arrived, the turn's result is complete — a
+      // socket dying during teardown is not an error worth surfacing/retrying.
+      if (doneData) {
+        processingChain.then(() => resolve({ doneData, errorData }));
+        return;
+      }
       reject(new Error('Network error'));
     };
 
@@ -220,6 +228,53 @@ function streamChatSSE(
 
     xhr.send(JSON.stringify(body));
   });
+}
+
+// Bounded reconnect+resume for transport drops mid-stream. The server keeps the
+// turn running and buffers sequence-numbered frames (lib/chat/run-registry.server),
+// so after a drop we reconnect with `resume.afterSeq` and replay what we missed —
+// the user never sees an error for a turn that is still completing.
+const RESUME_BACKOFF_MS = [1000, 2000, 4000];
+
+async function streamChatSSEWithResume(
+  logLabel: string,
+  body: object,
+  conversationID: number | null | undefined,
+  signal: AbortSignal,
+  onStreamingEvent: (data: any) => Promise<void>,
+  onUserInputRequest: (data: any) => void,
+): Promise<SSEStreamResult> {
+  let lastSeq = 0;
+  const onSeq = (seq: number) => { lastSeq = Math.max(lastSeq, seq); };
+  let requestBody: object = body;
+  let originalError: Error | null = null;
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await streamChatSSE(logLabel, requestBody, signal, onStreamingEvent, onUserInputRequest, onSeq);
+      // resume_miss: nothing to attach to (server restarted / run evicted) —
+      // surface the ORIGINAL transport error; the turn's fate is unknown.
+      if ((result.doneData as { resume_miss?: boolean } | null)?.resume_miss) {
+        throw originalError ?? new Error('Network error');
+      }
+      return result;
+    } catch (error: any) {
+      const isTransport = error instanceof Error && error.message === 'Network error';
+      const canResume = typeof conversationID === 'number' && conversationID > 0;
+      if (!isTransport || !canResume || attempt >= RESUME_BACKOFF_MS.length) throw error;
+      originalError = originalError ?? error;
+
+      const delay = RESUME_BACKOFF_MS[attempt];
+      console.warn(`[chat/stream ${logLabel}] transport drop — resuming after seq ${lastSeq} in ${delay}ms (attempt ${attempt + 1}/${RESUME_BACKOFF_MS.length})`);
+      await new Promise((r) => setTimeout(r, delay));
+      if (signal.aborted) {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        throw err;
+      }
+      requestBody = { conversationID, resume: { afterSeq: lastSeq } };
+    }
+  }
 }
 
 /**
@@ -428,9 +483,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#1 createConversation',
         { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -472,9 +528,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#2 sendMessage',
         { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -517,9 +574,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#3 editAndFork',
         { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -575,9 +633,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#4 toolResults',
         { conversationID, log_index: conversation.log_index, user_message: userMessage, completed_tool_calls, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController!.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
