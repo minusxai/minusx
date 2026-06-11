@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { showAdminToast } from '@/lib/utils/toast-helpers';
 import { isHydrationError } from '@/lib/utils/error-utils';
 import { captureError } from '@/lib/messaging/capture-error';
+import { decideRecoveryAction, hardReload } from '@/lib/utils/error-recovery';
 import { getStore } from '@/store/store';
 import { selectDevMode } from '@/store/uiSlice';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
@@ -18,6 +19,9 @@ export default function Error({
   reset: () => void;
 }) {
   const isDev = IS_DEV;
+  // Set when auto-recovery is exhausted: a deterministic error survived the
+  // capped resets and the guarded reload, so we render a manual fallback.
+  const [exhausted, setExhausted] = useState(false);
 
   useEffect(() => {
     // Log error to console for debugging
@@ -46,9 +50,21 @@ export default function Error({
       duration: 5000,
     });
 
-    // Attempt automatic recovery ONLY in production
+    // Attempt automatic recovery ONLY in production. A deterministic render
+    // error remounts this boundary on every reset(), so an unconditional
+    // reset() loops forever (and a stale tab never picks up a fixed build) —
+    // decideRecoveryAction caps the resets, then tries one guarded hard
+    // reload, then gives up to the manual fallback below.
     if (!isDev) {
-      reset();
+      const action = decideRecoveryAction(error.message);
+      if (action === 'reset') {
+        reset();
+      } else if (action === 'reload') {
+        hardReload();
+      } else {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setExhausted(true);
+      }
     }
   }, [error, reset, isDev]);
 
@@ -83,6 +99,23 @@ export default function Error({
     );
   }
 
-  // In production, return null - the toast is shown and the component will reset
-  return null;
+  // In production, render nothing while auto-recovery is in flight — once it
+  // is exhausted, show a manual fallback instead of looping.
+  if (!exhausted) return null;
+
+  return (
+    <Box display="flex" alignItems="center" justifyContent="center" minH="50vh" p={8}>
+      <VStack gap={4} textAlign="center" maxW="md">
+        <Text fontSize="2xl" fontWeight="bold">
+          Something went wrong
+        </Text>
+        <Text color="fg.muted">
+          This page keeps running into an error and could not recover automatically.
+        </Text>
+        <Button aria-label="Reload page" onClick={() => hardReload()}>
+          Reload page
+        </Button>
+      </VStack>
+    </Box>
+  );
 }
