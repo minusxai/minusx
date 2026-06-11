@@ -18,6 +18,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
+import { beginNavigation } from './nav-progress';
 import { clearFileChanges } from '@/lib/api/file-state';
 import { selectDirtyFiles } from '@/store/filesSlice';
 import { selectUnrestrictedMode } from '@/store/uiSlice';
@@ -242,6 +243,10 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
         // Preserve URL parameters
         const preservedHref = preserveParams(href);
         openGuardModal(preservedHref);
+      } else {
+        // Navigation is proceeding — pause non-critical churn (tile mounts,
+        // query-result dispatches) so the router transition isn't starved.
+        beginNavigation();
       }
     };
 

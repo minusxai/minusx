@@ -9,6 +9,7 @@ import MobileBottomNav from './MobileBottomNav';
 import DataPrepBanner from './DataPrepBanner';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
+import { endNavigation } from '@/lib/navigation/nav-progress';
 import { clearViewStack } from '@/store/uiSlice';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
@@ -29,6 +30,8 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   // Clear view stack on navigation so overlaid question editors don't persist
   useEffect(() => {
     dispatch(clearViewStack());
+    // Route committed — flush updates deferred while the navigation was in flight.
+    endNavigation();
   }, [pathname, dispatch]);
 
   // Public routes that should not show sidebar

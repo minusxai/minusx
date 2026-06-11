@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
@@ -10,6 +10,7 @@ import { Box, Spinner, Text, HStack, IconButton, Menu, Portal, Icon } from '@cha
 import { Link } from '@/components/ui/Link';
 import { LuEllipsis, LuSparkles, LuExternalLink, LuTrash2, LuPencil } from 'react-icons/lu';
 import { useExplainQuestion } from '@/lib/hooks/useExplainQuestion';
+import { runOrDefer } from '@/lib/navigation/nav-progress';
 
 interface SmartEmbeddedQuestionContainerProps {
   questionId: number;
@@ -31,9 +32,28 @@ function SmartEmbeddedQuestionContainerInner({
   editMode = false,
   onEdit,
   onRemove,
+  index = 0,
   dashboardId,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
+
+  // Stagger the heavy tile body onto browser idle time. Mounting all of a
+  // dashboard's tile bodies in one go produces a series of long main-thread
+  // tasks (React render + style computation + layout) that block input — a
+  // click on a tile title wouldn't navigate until the whole dashboard finished
+  // mounting. Gating each body on requestIdleCallback (staggered fallback
+  // timeout per index) makes each mount its own short task with yields in
+  // between, so clicks and navigation stay responsive during load. The title
+  // link renders immediately either way.
+  const [bodyReady, setBodyReady] = useState(false);
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(() => runOrDefer(() => setBodyReady(true)), { timeout: 500 + index * 150 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(() => runOrDefer(() => setBodyReady(true)), 20 + index * 20);
+    return () => window.clearTimeout(id);
+  }, [index]);
 
   // Load question file
   const { fileState: file } = useFile(questionId) ?? {};
@@ -200,13 +220,19 @@ function SmartEmbeddedQuestionContainerInner({
           )}
         </Box>
       )}
-      <EmbeddedQuestionContainer
-        question={mergedContent}
-        questionId={questionId}
-        filePath={file?.path}
-        externalParameters={parametersToUse}
-        externalParamValues={externalParamValues}
-      />
+      {bodyReady ? (
+        <EmbeddedQuestionContainer
+          question={mergedContent}
+          questionId={questionId}
+          filePath={file?.path}
+          externalParameters={parametersToUse}
+          externalParamValues={externalParamValues}
+        />
+      ) : (
+        <Box flex="1" display="flex" alignItems="center" justifyContent="center" minH="120px">
+          <Spinner size="md" />
+        </Box>
+      )}
       {/* Edit mode: overlay makes entire card draggable, blocks chart interaction */}
       {editMode && (
         <>
