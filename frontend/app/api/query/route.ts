@@ -1,6 +1,6 @@
 import type { QuestionReference, QuestionContent, QueryResult } from '@/lib/types';
 import { connectionTypeToDialect } from '@/lib/types';
-import { handleApiError } from '@/lib/api/api-responses';
+import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
@@ -206,7 +206,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         error: execError instanceof Error ? execError.message : String(execError),
         mode: user.mode, userId: user.userId, userEmail: user.email,
       });
-      throw execError;
+      // Query EXECUTION failures are the query's problem (bad SQL, missing
+      // table, warehouse permissions) — return 400, not 500. The client shows
+      // the message in the question UI and (correctly) does NOT page the team
+      // via capture-error for 4xx; the failure stays observable through the
+      // QUERY_EXECUTED analytics event published above.
+      return ApiErrors.badRequest(execError instanceof Error ? execError.message : String(execError));
     } finally {
       queryInflight.delete(serverCacheKey);
     }

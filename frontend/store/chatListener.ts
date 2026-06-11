@@ -842,6 +842,23 @@ chatListenerMiddleware.startListening({
     } else {
       console.warn(`[interruptChat] No AbortController found for conversation ${conversationID}`);
     }
+
+    // Also cancel the run server-side. The run registry decouples turns from
+    // connections (so transport drops can resume) — which means aborting the
+    // local stream alone would leave the engine running (and billing tokens)
+    // to completion in the background. Best-effort: if the server misses it,
+    // the turn just completes as before.
+    if (conversationID > 0) {
+      try {
+        await fetch(patchApiUrl(`${API_BASE_URL}/api/chat/interrupt`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationID }),
+        });
+      } catch (err) {
+        console.warn('[interruptChat] server-side interrupt failed (best-effort):', err);
+      }
+    }
   }
 });
 

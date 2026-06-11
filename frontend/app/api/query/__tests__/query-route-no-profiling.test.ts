@@ -119,4 +119,25 @@ describe('POST /api/query — no schema profiling on the query path', () => {
     // The hot path must NOT trigger schema profiling/refresh.
     expect(getSchemaSpy).not.toHaveBeenCalled();
   });
+
+  it('returns 400 (not 500) when the warehouse rejects the query — SQL errors must not page the team', async () => {
+    // SQL/user errors (bad syntax, params-as-table-names, Access Denied) used
+    // to fall into handleApiError's generic 500; the client reports >=500 via
+    // captureError -> Slack/Sentry, so every user typo alerted. 4xx is the
+    // contract for "the query's problem" (client shows it in the UI, skips
+    // reporting; QUERY_EXECUTED analytics still records it server-side).
+    querySpy.mockImplementationOnce(async () => {
+      throw new Error('Query parameters cannot be used in place of table names at [1:374]');
+    });
+
+    const res = await callPost({
+      connection_name: CONNECTION_NAME,
+      query: 'SELECT * FROM bad_table',
+      parameters: {},
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error?.message ?? body.error).toContain('Query parameters cannot be used');
+  });
 });

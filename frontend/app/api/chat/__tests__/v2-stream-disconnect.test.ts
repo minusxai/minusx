@@ -19,6 +19,7 @@ vi.mock('@/lib/database/db-config', () => ({
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { POST as chatStreamPostHandler } from '@/app/api/chat/stream/route';
+import { POST as chatInterruptPostHandler } from '@/app/api/chat/interrupt/route';
 import { __clearAllRuns } from '@/lib/chat/run-registry.server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -207,6 +208,65 @@ describe('mid-stream disconnect: persistence + resume', () => {
     expect(seqs.length).toBeGreaterThan(0);
     expect([...seqs].sort((a, b) => a - b)).toEqual(seqs);
   }, 15000);
+
+  it('interrupt stops the engine server-side and the user message persists promptly', async () => {
+    const conversationId = await seedConversation('disconnect-interrupt');
+
+    // Gate the LLM so the turn is provably in flight when we interrupt.
+    const gate = deferred();
+    let llmCalls = 0;
+    webAnalystFaux.setResponses([
+      async () => {
+        llmCalls += 1;
+        await gate.promise;
+        return fauxAssistantMessage('Full answer that should never be needed.', { stopReason: 'stop' });
+      },
+      async () => {
+        llmCalls += 1;
+        return fauxAssistantMessage('A second turn that must never run.', { stopReason: 'stop' });
+      },
+    ]);
+
+    const res = await chatStreamPostHandler(
+      streamRequest({ conversationID: conversationId, user_message: 'INTERRUPT-MARKER question' }),
+    );
+    const reader = res.body!.getReader();
+    await reader.read();
+    // The user clicks Stop: the client aborts its connection AND tells the
+    // server to cancel the run.
+    await reader.cancel();
+    // The run registers asynchronously (processStreamV2 runs after POST returns);
+    // a real Stop click arrives much later — poll briefly like a client would.
+    let interrupted = false;
+    const tInt = Date.now();
+    while (!interrupted && Date.now() - tInt < 3000) {
+      const interruptRes = await chatInterruptPostHandler(
+        streamRequest({ conversationID: conversationId }),
+      );
+      expect(interruptRes.status).toBe(200);
+      interrupted = (await interruptRes.json()).interrupted;
+      if (!interrupted) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(interrupted).toBe(true);
+
+    // Engine unblocks after the cancel — its result must be discarded, not
+    // treated as a fresh step.
+    gate.resolve();
+
+    // The QA guarantee: the interrupted turn's USER MESSAGE persists promptly.
+    const logText = await waitForPersisted(conversationId, 'INTERRUPT-MARKER question');
+    expect(logText).toContain('INTERRUPT-MARKER question');
+    // And the engine actually stopped: no second LLM step ran after the cancel.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(llmCalls).toBe(1);
+  }, 15000);
+
+  it('interrupt with no live run reports interrupted: false', async () => {
+    const conversationId = await seedConversation('disconnect-interrupt-none');
+    const res = await chatInterruptPostHandler(streamRequest({ conversationID: conversationId }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).interrupted).toBe(false);
+  });
 
   it('resume for an unknown run signals a miss instead of hanging', async () => {
     const conversationId = await seedConversation('disconnect-miss');

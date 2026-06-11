@@ -35,6 +35,10 @@ interface RunEntry {
   done: boolean;
   waiters: Array<() => void>;
   evictTimer: ReturnType<typeof setTimeout> | null;
+  /** Cancels the underlying orchestrator run (registered once setup completes). */
+  cancel: (() => void) | null;
+  /** True if an interrupt arrived before the cancel hook was registered. */
+  cancelRequested: boolean;
 }
 
 const RETENTION_MS = 5 * 60 * 1000;
@@ -59,7 +63,7 @@ export function startRun(
   const previous = runs.get(conversationId);
   if (previous?.evictTimer) clearTimeout(previous.evictTimer);
 
-  const entry: RunEntry = { frames: [], done: false, waiters: [], evictTimer: null };
+  const entry: RunEntry = { frames: [], done: false, waiters: [], evictTimer: null, cancel: null, cancelRequested: false };
   runs.set(conversationId, entry);
 
   void (async () => {
@@ -87,6 +91,31 @@ export function startRun(
 /** True if the conversation has a live or recently-finished run to attach to. */
 export function hasRun(conversationId: number): boolean {
   return runs.has(conversationId);
+}
+
+/**
+ * Register the cancel hook for a conversation's live run (called from inside
+ * the turn generator once the orchestrator exists). If an interrupt already
+ * arrived, fire it immediately.
+ */
+export function registerCancel(conversationId: number, cancel: () => void): void {
+  const entry = runs.get(conversationId);
+  if (!entry || entry.done) return;
+  entry.cancel = cancel;
+  if (entry.cancelRequested) cancel();
+}
+
+/**
+ * Interrupt a conversation's live run: cancels the orchestrator (aborting
+ * in-flight LLM/tool work), after which the turn winds down and persists its
+ * partial log normally. Returns true if there was a live run to interrupt.
+ */
+export function interruptRun(conversationId: number): boolean {
+  const entry = runs.get(conversationId);
+  if (!entry || entry.done) return false;
+  entry.cancelRequested = true;
+  entry.cancel?.();
+  return true;
 }
 
 /**
