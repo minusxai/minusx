@@ -23,6 +23,8 @@ vi.mock('@/lib/constants', async () => {
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { POST as chatStreamPostHandler } from '@/app/api/chat/stream/route';
+import { GET as fileGetHandler } from '@/app/api/files/[id]/route';
+import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { __clearAllRuns } from '@/lib/chat/run-registry.server';
 import { createConversation, sendMessage, selectConversation } from '@/store/chatSlice';
 import { makeStore } from '@/store/store';
@@ -60,6 +62,7 @@ vi.mock('@/lib/auth/auth-helpers', async () => {
 // a severed connection looks like to the chatListener.
 
 let severNextRequest = false;
+let severFirstBytes = false; // sever on the first bytes (before any frame) instead of after streaming_event
 let severedCount = 0;
 const seenRequestBodies: any[] = [];
 
@@ -115,7 +118,7 @@ class MockXHR {
         if (done) break;
         this.responseText += decoder.decode(value, { stream: true });
         this.onprogress?.();
-        if (shouldSever && this.responseText.includes('event: streaming_event')) {
+        if (shouldSever && (severFirstBytes || this.responseText.includes('event: streaming_event'))) {
           // Connection severed mid-stream: no more bytes, transport error.
           severNextRequest = false;
           severedCount += 1;
@@ -141,6 +144,21 @@ class MockXHR {
 describe('chatListener reconnect+resume after a mid-stream transport drop', () => {
   setupTestDb(TEST_DB_PATH);
 
+  // The file-recovery fallback fetches GET /api/files/:id — route it to the
+  // real handler in-process (getEffectiveUser is mocked above).
+  setupMockFetch({
+    additionalInterceptors: [
+      async (urlStr: string, init?: any) => {
+        const m = urlStr.match(/\/api\/files\/(\d+)/);
+        if (!m || (init?.method && init.method !== 'GET')) return null;
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const req = new NextRequest(fullUrl, { method: 'GET' });
+        const res = await fileGetHandler(req, { params: Promise.resolve({ id: m[1] }) });
+        return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+      },
+    ],
+  });
+
   let originalXHR: typeof XMLHttpRequest | undefined;
 
   beforeAll(() => {
@@ -160,6 +178,7 @@ describe('chatListener reconnect+resume after a mid-stream transport drop', () =
   beforeEach(() => {
     __clearAllRuns();
     severNextRequest = false;
+    severFirstBytes = false;
     severedCount = 0;
     seenRequestBodies.length = 0;
   });
@@ -223,5 +242,70 @@ describe('chatListener reconnect+resume after a mid-stream transport drop', () =
     expect(conv.executionState).toBe('FINISHED');
     const allMessages = JSON.stringify(conv.messages);
     expect(allMessages).toContain('The connection may drop but this answer must arrive intact.');
+  }, 30000);
+
+  it('resume_miss with a persisted turn: recovers from the conversation file instead of erroring', async () => {
+    const created = await FilesAPI.createFile(
+      {
+        name: 'miss-recover-test',
+        path: '/org/logs/conversations/1/miss-recover-test.chat.json',
+        type: 'conversation',
+        content: {
+          metadata: { userId: '1', name: 'miss-recover-test', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z', logLength: 0 },
+          log: [],
+        } as never,
+        meta: { version: 2 },
+        options: { createPath: true, returnExisting: false },
+      },
+      ADMIN,
+    );
+    const conversationId = created.data.id;
+
+    // Gate the reply so the sever provably happens before any frame.
+    let releaseTurn!: () => void;
+    const gate = new Promise<void>((r) => { releaseTurn = r; });
+    webAnalystFaux.setResponses([
+      async () => {
+        await gate;
+        return fauxAssistantMessage('Recovered from the file after restart.', { stopReason: 'stop' });
+      },
+    ]);
+
+    const store = makeStore();
+    Object.defineProperty(globalThis, 'window', {
+      value: { location: { search: '?v=2', origin: 'http://localhost:3000' } },
+      writable: true,
+      configurable: true,
+    });
+
+    store.dispatch(createConversation({ conversationID: conversationId, agent: 'AnalystAgent', agent_args: {} }));
+
+    // Sever on first bytes — the client got NOTHING; the turn keeps running.
+    severNextRequest = true;
+    severFirstBytes = true;
+    store.dispatch(sendMessage({ conversationID: conversationId, message: 'Recover me from the file' }));
+
+    // Wait for the sever, then simulate a server restart: registry state gone.
+    const tSever = Date.now();
+    while (severedCount === 0 && Date.now() - tSever < 5000) await new Promise((r) => setTimeout(r, 20));
+    expect(severedCount).toBe(1);
+    releaseTurn();              // turn completes + persists server-side
+    await new Promise((r) => setTimeout(r, 300)); // let persistence land
+    __clearAllRuns();           // "server restarted": nothing to resume
+
+    // Desired: the client's resume gets resume_miss, falls back to the
+    // conversation FILE, finds the completed turn, and renders it — no error.
+    const t0 = Date.now();
+    for (;;) {
+      const conv = selectConversation(store.getState() as RootState, conversationId);
+      if (conv && (conv.executionState === 'FINISHED' || conv.error)) break;
+      if (Date.now() - t0 > 20000) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    const conv = selectConversation(store.getState() as RootState, conversationId)!;
+    expect(conv.error).toBeUndefined();
+    expect(conv.executionState).toBe('FINISHED');
+    expect(JSON.stringify(conv.messages)).toContain('Recovered from the file after restart.');
   }, 30000);
 });

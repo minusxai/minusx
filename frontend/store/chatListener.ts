@@ -18,12 +18,16 @@ import {
   clearStreamingContent,
   interruptChat,
   setUserInputResult,
-  addUserInputRequest
+  addUserInputRequest,
+  loadConversation
 } from './chatSlice';
 import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
+import { FilesAPI } from '@/lib/data/files';
+import { parseLogToMessages } from '@/lib/conversations-utils';
+import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
 import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
 import { getCurrentMode } from '@/lib/mode/mode-utils';
 import type { AgentSkillSelection } from '@/lib/types';
@@ -358,13 +362,59 @@ function classifyError(error: { name?: string; httpStatus?: number }): { source:
   return { source: 'transport', httpStatus: error?.httpStatus };
 }
 
-function handleStreamError(
+/**
+ * Last-resort recovery for transport failures: the turn may have completed and
+ * been PERSISTED server-side even though every live reconnect failed (e.g. the
+ * server restarted after finishing the turn — resume_miss). Reload the
+ * conversation file; if its log advanced past where it was before this send,
+ * the turn landed — render it instead of surfacing a false error.
+ */
+async function tryRecoverConversationFromFile(
+  conversationID: number,
+  stableId: string,
+  preSendLogIndex: number,
+  dispatch: AppDispatch,
+): Promise<boolean> {
+  try {
+    const result = await FilesAPI.loadFile(conversationID);
+    const content = result.data?.content as ConversationFileContent | undefined;
+    if (!content?.log || content.log.length <= preSendLogIndex) return false;
+
+    const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
+    const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
+    dispatch(loadConversation({
+      conversation: {
+        _id: stableId,
+        conversationID,
+        log_index: content.log.length,
+        messages: parseLogToMessages(content.log),
+        executionState: 'FINISHED',
+        pending_tool_calls: [],
+        streamedCompletedToolCalls: [],
+        streamedThinking: '',
+        agent: firstTask?.agent || 'DefaultAgent',
+        agent_args: firstTask?.args || {},
+        version,
+      },
+      setAsActive: false,
+    }));
+    dispatch(clearStreamingContent({ conversationID }));
+    abortControllers.delete(stableId);
+    console.warn(`[chat/stream] transport failed but the turn persisted server-side — recovered conversation ${conversationID} from its file`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function handleStreamError(
   error: any,
   captureLabel: string,
   conversationID: number,
   stableId: string,
   dispatch: AppDispatch,
-): boolean {
+  preSendLogIndex?: number,
+): Promise<boolean> {
   if (!error || typeof error !== 'object') {
     void captureError(captureLabel, new Error(String(error)), { conversationID: String(conversationID) });
     dispatch(setError({ conversationID, error: String(error) }));
@@ -374,11 +424,22 @@ function handleStreamError(
     return false;
   }
   if (error.name === 'AbortError') return true;
+  const { source, httpStatus } = classifyError(error);
+  // Transport failure: before declaring an error, check whether the turn
+  // actually completed and persisted (see tryRecoverConversationFromFile).
+  if (
+    source === 'transport'
+    && error.message === 'Network error'
+    && typeof preSendLogIndex === 'number'
+    && conversationID > 0
+    && await tryRecoverConversationFromFile(conversationID, stableId, preSendLogIndex, dispatch)
+  ) {
+    return true;
+  }
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
-  const { source, httpStatus } = classifyError(error);
   reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
   return false;
 }
@@ -495,7 +556,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:createConversation', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:createConversation', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
@@ -540,7 +601,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
@@ -586,7 +647,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
@@ -645,7 +706,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:completeToolCall', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:completeToolCall', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
