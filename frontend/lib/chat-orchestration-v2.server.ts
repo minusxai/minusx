@@ -889,8 +889,13 @@ export async function* runChatTurnStreamV2(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,
+  onCancel?: (cancel: () => void) => void,
 ): AsyncGenerator<V2LegacyStreamingEvent, void, unknown> {
   const setup = await setupOrchestration(body, user, conversationId);
+  // Expose the run's cancel hook (used by POST /api/chat/interrupt via the run
+  // registry) so "Stop" actually halts the engine server-side instead of just
+  // closing the client's connection.
+  onCancel?.(() => setup.orchestrator.cancel());
   if (setup.fatalError) {
     const response = await persistAndBuildLegacyResponse(
       setup.conversationId,

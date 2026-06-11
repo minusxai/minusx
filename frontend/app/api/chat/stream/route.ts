@@ -6,7 +6,7 @@ import {
   validateV2Mode,
   forkV1ConversationToV2,
 } from '@/lib/chat-orchestration-v2.server';
-import { startRun, attach, type SequencedFrame } from '@/lib/chat/run-registry.server';
+import { startRun, attach, registerCancel, type SequencedFrame } from '@/lib/chat/run-registry.server';
 import { createNewConversation } from '@/lib/conversations';
 
 export const runtime = 'nodejs';
@@ -171,7 +171,10 @@ async function processStreamV2(
 
     // The registry pump owns the generator (and thus persistence); this
     // connection observes from the start.
-    startRun(conversationId, runChatTurnStreamV2(body, user, conversationId));
+    startRun(
+      conversationId,
+      runChatTurnStreamV2(body, user, conversationId, (cancel) => registerCancel(conversationId, cancel)),
+    );
     const observer = attach(conversationId, 0)!;
     await forwardFrames(observer, writer, encoder);
   } catch (err) {
