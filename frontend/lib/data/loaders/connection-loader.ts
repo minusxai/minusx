@@ -9,6 +9,7 @@ import { updateCachedSchema } from '@/lib/data/connections.server';
 import { CustomLoader } from './types';
 import { getNodeConnector } from '@/lib/connections';
 import { profileDatabase } from '@/lib/connections/statistics-engine';
+import { getSafeConfig } from '@/lib/data/helpers/connections';
 
 /**
  * Check if schema is stale (older than 24 hours)
@@ -30,7 +31,19 @@ function isSchemaStale(updatedAt: string): boolean {
  *
  * Schema staleness: 24 hours (configurable)
  */
-export const connectionLoader: CustomLoader = async (file: DbFile, user: EffectiveUser, options?) => {
+function redactConfig(file: DbFile): DbFile {
+  if (file.content === null) return file;
+  const content = file.content as ConnectionContent;
+  return {
+    ...file,
+    content: { ...content, config: getSafeConfig(content.type, content.config) },
+  };
+}
+
+export const connectionLoader: CustomLoader = async (file, user, options) =>
+  redactConfig(await loadConnectionSchema(file, user, options));
+
+const loadConnectionSchema: CustomLoader = async (file: DbFile, user: EffectiveUser, options?) => {
   // Skip if metadata-only
   if (file.content === null) {
     return file;
