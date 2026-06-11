@@ -42,6 +42,8 @@ export interface FauxMatchDTO {
   userMessage: string;
   after?: string | string[];
   response: FauxResponseDTO;
+  /** Hold the LLM reply for this long — lets e2e tests act mid-turn (e.g. sever the stream). */
+  delayMs?: number;
 }
 
 function dtoToResponse(dto: FauxResponseDTO) {
@@ -57,6 +59,10 @@ function dtoToResponse(dto: FauxResponseDTO) {
 export function dtoToFauxMatch(dto: FauxMatchDTO): FauxMatch {
   return { userMessage: dto.userMessage, after: dto.after, response: dtoToResponse(dto.response) };
 }
+
+/** Per-userMessage delays, installed alongside the matcher by configureFauxFromDTO. */
+// eslint-disable-next-line no-restricted-syntax -- test-only channel state (like `received` below); replaced wholesale on every configureFauxFromDTO call
+let delayByUserMessage = new Map<string, number>();
 
 // ─── Channel state ────────────────────────────────────────────────────────────
 
@@ -92,11 +98,14 @@ export function configureFaux(matches: FauxMatch[]): void {
   received = [];
   const match = fauxMatcher(matches); // validates keys once
   const recording = (async (ctx: Context) => {
+    const userMessage = lastUserText(ctx);
     received.push({
-      userMessage: lastUserText(ctx),
+      userMessage,
       lastTool: lastToolName(ctx) ?? null,
       messageCount: ctx.messages?.length ?? 0,
     });
+    const delay = delayByUserMessage.get(userMessage);
+    if (delay) await new Promise((r) => setTimeout(r, delay));
     return match(ctx);
   }) as unknown as FauxResponseStep;
   for (const t of targets) t.setResponses(Array.from({ length: MAX_CALLS }, () => recording));
@@ -104,6 +113,9 @@ export function configureFaux(matches: FauxMatch[]): void {
 
 /** Build matches from the serializable wire DTOs and install them. */
 export function configureFauxFromDTO(dtos: FauxMatchDTO[]): void {
+  delayByUserMessage = new Map(
+    dtos.filter((d) => d.delayMs).map((d) => [d.userMessage, d.delayMs!]),
+  );
   configureFaux(dtos.map(dtoToFauxMatch));
 }
 
