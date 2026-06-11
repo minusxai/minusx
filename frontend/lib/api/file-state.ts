@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setFullContent, mergedPersistableContent, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
@@ -412,7 +412,7 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
     return { success: false, error: `File ${fileId} has no content` };
   }
   const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
-    ? { ...baseContent, ...fileState.persistableChanges }
+    ? mergedPersistableContent(fileState)
     : baseContent;
   const currentName = selectEffectiveName(state, fileId) || '';
   let queryResultId = fileState.queryResultId;
@@ -524,9 +524,12 @@ export async function editFileStr(
   }
 
   if (contentChanged) {
-    getStore().dispatch(setEdit({
+    // Full replace, NOT a merge: the edited string is the complete new content,
+    // so deletions of optional keys must hold (a setEdit merge would resurrect
+    // keys that still exist in the saved content).
+    getStore().dispatch(setFullContent({
       fileId,
-      edits: editedFile.content
+      content: editedFile.content
     }));
   }
 
@@ -534,6 +537,41 @@ export async function editFileStr(
   const diff = generateDiff(fullFileStr, editedStr);
 
   return { success: true, diff };
+}
+
+/**
+ * Options for replaceFileContent
+ */
+export interface ReplaceFileContentOptions {
+  fileId: number;
+  content: FileState['content'];
+}
+
+/**
+ * ReplaceFileContent - Replace a file's entire content (JSON editors)
+ *
+ * Unlike editFile (deep merge), this swaps the full content object, so
+ * deleting keys works. Validates against the file-type schema first; the
+ * change lands in persistableChanges (dirty state) and saves via publishFile.
+ */
+export function replaceFileContent(
+  options: ReplaceFileContentOptions
+): { success: boolean; error?: string } {
+  const { fileId, content } = options;
+  const state = getStore().getState();
+
+  const fileState = selectFile(state, fileId);
+  if (!fileState) {
+    return { success: false, error: `File ${fileId} not found` };
+  }
+
+  const error = validateFileState({ type: fileState.type as FileType, content });
+  if (error) {
+    return { success: false, error: `Invalid ${fileState.type} content: ${error}` };
+  }
+
+  getStore().dispatch(setFullContent({ fileId, content }));
+  return { success: true };
 }
 
 /**
@@ -587,7 +625,7 @@ export async function publishFile(
   // Prepare content for saving: merge only persistable changes, NOT ephemeral
   // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted
   const contentToSave = fileState.persistableChanges
-    ? { ...fileState.content, ...fileState.persistableChanges }
+    ? mergedPersistableContent(fileState)
     : fileState.content;
 
   if (!contentToSave) {
@@ -636,7 +674,11 @@ export async function publishFile(
       // (persistableChanges) on top of the server's latest content.
       const serverFile = firstError.currentFile;
       getStore().dispatch(setFile({ file: serverFile }));
-      const retryContent = { ...serverFile.content, ...fileState.persistableChanges } as typeof saveContent;
+      const retryContent = mergedPersistableContent({
+        content: serverFile.content,
+        persistableChanges: fileState.persistableChanges,
+        contentReplace: fileState.contentReplace,
+      }) as typeof saveContent;
       const result = await FilesAPI.saveFile(
         fileId,
         serverFile.name,
@@ -690,7 +732,7 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
     for (const id of [...scopedIds]) {
       const f = state.files.files[id];
       if (!f) continue;
-      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const merged = mergedPersistableContent(f);
       const refs = extractReferencesFromContent(merged as any, f.type as FileType);
       for (const refId of refs) {
         if (selectIsDirty(state, refId)) scopedIds.add(refId);
@@ -703,7 +745,7 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
   if (allDirty.length === 0) return {};
 
   const toSave = allDirty.map(f => {
-    const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+    const merged = mergedPersistableContent(f);
     return {
       id: f.id,
       name: f.metadataChanges?.name || f.name,
@@ -951,7 +993,7 @@ export function discardAll(fileIds?: number[]): void {
     for (const id of [...scopedIds]) {
       const f = state.files.files[id];
       if (!f) continue;
-      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const merged = mergedPersistableContent(f);
       const refs = extractReferencesFromContent(merged as any, f.type as FileType);
       for (const refId of refs) {
         if (selectIsDirty(state, refId)) scopedIds.add(refId);
@@ -1093,7 +1135,7 @@ export async function dryRunSave(fileIds?: number[]): Promise<DryRunSaveResult> 
   if (allDirty.length === 0) return { success: true, errors: [] };
 
   const toSave = allDirty.map(f => {
-    const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+    const merged = mergedPersistableContent(f);
     return {
       id: f.id,
       name: f.metadataChanges?.name || f.name,

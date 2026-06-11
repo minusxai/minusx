@@ -23,6 +23,25 @@ import type {
 
 const LIMIT_CHARS = 50_000;
 
+/**
+ * Compute the effective persistable content of a file: persistableChanges
+ * spread over the saved content — or, when `contentReplace` is set (JSON
+ * editors / editFileStr), persistableChanges ALONE, so key deletions hold.
+ * Single source of truth — every "current content" computation (selectors,
+ * publish, file-string building) must go through this.
+ */
+export function mergedPersistableContent(
+  file: Pick<FileState, 'content' | 'persistableChanges' | 'contentReplace'>
+): DbFile['content'] {
+  if (file.contentReplace && file.persistableChanges) {
+    // Shallow copy — callers may mutate the result (and always received a
+    // fresh object from the merge spread), while persistableChanges itself
+    // is frozen Redux state.
+    return { ...file.persistableChanges } as DbFile['content'];
+  }
+  return { ...(file.content || {}), ...(file.persistableChanges || {}) } as DbFile['content'];
+}
+
 export const APP_STATE_LIMIT_CHARS    = 2_000;    // Always-on context — keep small
 export const TOOL_DEFAULT_LIMIT_CHARS = 10_000;   // ReadFiles / ExecuteQuery default
 export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can request
@@ -122,7 +141,7 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
 }
 
 function compressFileState(fs: FileState): CompressedFileState {
-  const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
+  const mergedContent = mergedPersistableContent(fs) as FileState['content'];
   const isDirty = !!(
     (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
     fs.metadataChanges?.name !== undefined ||

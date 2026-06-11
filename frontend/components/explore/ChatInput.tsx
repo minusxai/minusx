@@ -9,6 +9,8 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
 import DatabaseSelector from '@/components/DatabaseSelector';
+import AgentSelector from './AgentSelector';
+import { DEFAULT_AGENT_SELECTION, type AgentSelection } from './demo-agents';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
@@ -41,6 +43,8 @@ interface ChatInputProps {
   availableCommands?: SlashCommand[];
   onCommandExecute?: (command: SlashCommand) => void;
   prefillText?: string;
+  agentSelection?: AgentSelection;
+  onAgentChange?: (selection: AgentSelection) => void;
 }
 
 function ChatInputInner({
@@ -66,6 +70,8 @@ function ChatInputInner({
   availableCommands,
   onCommandExecute,
   prefillText,
+  agentSelection = DEFAULT_AGENT_SELECTION,
+  onAgentChange,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
   const companyName = useAppSelector(selectCompanyName);
@@ -438,7 +444,7 @@ function ChatInputInner({
                   justify="space-between"
                   gap={2}
                   >
-                  {/* Left controls - Context + Database status indicators */}
+                  {/* Left controls - Context + Database + Agent status indicators */}
                   <HStack gap={1.5} align="center">
                     <ContextSelector
                       selectedContextPath={selectedContextPath || null}
@@ -452,6 +458,9 @@ function ChatInputInner({
                       size="sm"
                       compact
                     />
+                    {onAgentChange && (
+                      <AgentSelector value={agentSelection} onChange={onAgentChange} />
+                    )}
                   </HStack>
 
                   <HStack gap={1}>
@@ -513,7 +522,7 @@ const chatInputPropsEqual = (prev: ChatInputProps, next: ChatInputProps): boolea
   if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
   return shallowEqualExcept(prev, next, [
     'availableSkills', 'availableCommands', 'whitelistedSchemas',
-    'onSend', 'onStop', 'onDatabaseChange', 'onContextChange', 'onCommandExecute',
+    'onSend', 'onStop', 'onDatabaseChange', 'onContextChange', 'onCommandExecute', 'onAgentChange',
   ]);
 };
 

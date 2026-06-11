@@ -22,6 +22,7 @@ import { selectShowExpandedMessages, selectUnrestrictedMode } from '@/store/uiSl
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
+import { DEFAULT_AGENT_SELECTION, type AgentSelection } from './demo-agents';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
@@ -215,6 +216,13 @@ export default function ChatInterface({
   const viewMode = showExpandedMessages ? 'detailed' : 'compact';
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
+
+  // Demo-only persona selection shared between the agent picker (ExampleQuestions)
+  // and the chat-input agent dropdown. Cosmetic — does not change the engine.
+  const [agentSelection, setAgentSelection] = useState<AgentSelection>(DEFAULT_AGENT_SELECTION);
+  const handleAgentChange = useCallback((selection: AgentSelection) => {
+    setAgentSelection(selection);
+  }, []);
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
@@ -908,6 +916,8 @@ export default function ChatInterface({
               container={container}
               colSpan={colSpan}
               colStart={colStart}
+              selection={agentSelection}
+              onSelect={handleAgentChange}
             />
           ) : (
             <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
@@ -1250,6 +1260,8 @@ export default function ChatInterface({
               selectedContextPath={contextPath}
               selectedVersion={contextVersion}
               onContextChange={onContextChange}
+              agentSelection={agentSelection}
+              onAgentChange={handleAgentChange}
               whitelistedSchemas={databases}
               availableSkills={chatSkills}
               availableCommands={availableCommands}

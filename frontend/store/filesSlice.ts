@@ -5,9 +5,12 @@ import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/a
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
-import { dbFileToFileState } from '@/lib/api/compress-augmented';
+import { dbFileToFileState, mergedPersistableContent } from '@/lib/api/compress-augmented';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+
+// Re-export for consumers that reach file state through the slice
+export { mergedPersistableContent };
 
 // System file types that save in-place and are excluded from bulk Publish.
 // Defined as a Set here (instead of importing from file-metadata) to avoid
@@ -46,6 +49,10 @@ export interface FileState extends DbFile {
 
   // Change tracking (Phase 2)
   persistableChanges: Partial<DbFile['content']>;
+  /** When true, persistableChanges holds the FULL replacement content (set via
+   *  setFullContent) — effective/saved content is persistableChanges alone, not
+   *  merged over `content`. This is the only way edits can DELETE a key. */
+  contentReplace?: boolean;
   ephemeralChanges: EphemeralChanges;
   metadataChanges: { name?: string; path?: string }; // Phase 5: Metadata edits
 
@@ -371,6 +378,7 @@ const filesSlice = createSlice({
         // Store the full new content as persistableChanges
         // On save, this replaces file.content entirely
         state.files[fileId].persistableChanges = sortObjectKeysDeep(content) as any;
+        state.files[fileId].contentReplace = true;
       }
     },
 
@@ -380,6 +388,7 @@ const filesSlice = createSlice({
     clearEdits(state, action: PayloadAction<FileId>) {
       if (state.files[action.payload]) {
         state.files[action.payload].persistableChanges = {};
+        state.files[action.payload].contentReplace = false;
       }
     },
 
@@ -760,6 +769,48 @@ const filesSlice = createSlice({
       };
     },
 
+    addDividerToDashboard(state, action: PayloadAction<{ dashboardId: number }>) {
+      const { dashboardId } = action.payload;
+      const dashboard = state.files[dashboardId];
+      if (!dashboard || dashboard.type !== 'dashboard') return;
+
+      const content = dashboard.content as DocumentContent | null;
+      const changes = dashboard.persistableChanges as Partial<DocumentContent> | undefined;
+      if (!content) return;
+
+      const currentAssets = changes?.assets ?? content.assets ?? [];
+      const currentLayout = changes?.layout ?? content.layout ?? { columns: 12, items: [] };
+
+      const dividerId = crypto.randomUUID();
+
+      const newAsset: AssetReference = {
+        type: 'divider',
+        id: dividerId,
+        content: null,
+      };
+
+      const maxY = currentLayout.items?.reduce((max: number, item: any) => {
+        return Math.max(max, (item.y ?? 0) + (item.h ?? 4));
+      }, 0) ?? 0;
+
+      const newLayoutItem = {
+        id: dividerId,
+        x: 0,
+        y: maxY,
+        w: 12,
+        h: 1,
+      };
+
+      state.files[dashboardId].persistableChanges = {
+        ...changes,
+        assets: [...currentAssets, newAsset],
+        layout: {
+          columns: 12,
+          items: [...(currentLayout.items || []), newLayoutItem]
+        }
+      };
+    },
+
     /**
      * Update the content of a text block in a dashboard
      */
@@ -869,6 +920,7 @@ export const {
   addFile,
   addQuestionToDashboard,
   addTextBlockToDashboard,
+  addDividerToDashboard,
   updateTextBlockContent,
   addReferenceToQuestion,
   removeReferenceFromQuestion,
@@ -924,9 +976,10 @@ export const selectMergedContent = createSelector(
   [
     (state: RootState, id: FileId) => state.files.files[id]?.content,
     (state: RootState, id: FileId) => state.files.files[id]?.persistableChanges,
-    (state: RootState, id: FileId) => state.files.files[id]?.ephemeralChanges
+    (state: RootState, id: FileId) => state.files.files[id]?.ephemeralChanges,
+    (state: RootState, id: FileId) => state.files.files[id]?.contentReplace
   ],
-  (content, persistableChanges, ephemeralChanges): DbFile['content'] | undefined => {
+  (content, persistableChanges, ephemeralChanges, contentReplace): DbFile['content'] | undefined => {
     if (!content) return undefined;
 
     // Only create new object if there are changes to merge
@@ -936,10 +989,26 @@ export const selectMergedContent = createSelector(
 
     // Merge: content <- persistableChanges <- ephemeralChanges
     return {
-      ...content,
-      ...persistableChanges,
+      ...mergedPersistableContent({ content, persistableChanges, contentReplace }),
       ...ephemeralChanges
     } as DbFile['content'];
+  }
+);
+
+/**
+ * Get persistable content only (content + persistableChanges, NO ephemeral).
+ * This is what publishFile saves — JSON editors must render/edit this, not
+ * selectMergedContent, or ephemeral keys would get baked into saved content.
+ */
+export const selectPersistableContent = createSelector(
+  [
+    (state: RootState, id: FileId) => state.files.files[id]?.content,
+    (state: RootState, id: FileId) => state.files.files[id]?.persistableChanges,
+    (state: RootState, id: FileId) => state.files.files[id]?.contentReplace
+  ],
+  (content, persistableChanges, contentReplace): DbFile['content'] | undefined => {
+    if (!content) return undefined;
+    return mergedPersistableContent({ content, persistableChanges, contentReplace });
   }
 );
 

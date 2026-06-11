@@ -33,15 +33,20 @@ import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 import SaveFileModal from './SaveFileModal';
+import { useDashboardHeaderActions } from '@/lib/context/dashboard-header-actions';
+
 
 interface FileHeaderProps {
   fileId: number;
   fileType: string;
   mode?: 'view' | 'create' | 'preview';
+  /** Extra action buttons rendered in the header bar (e.g. Present, Add Content). */
+  extraActions?: React.ReactNode;
 }
 
-export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHeaderProps) {
+export default function FileHeader({ fileId, fileType, mode = 'view', extraActions }: FileHeaderProps) {
   const dispatch = useAppDispatch();
+  const dashboardActions = useDashboardHeaderActions();
   const router = useRouter();
 
   const isDraft = useAppSelector(state => selectFile(state, fileId)?.draft === true);
@@ -217,6 +222,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
+        extraActions={extraActions ?? dashboardActions}
         additionalBadges={(
           <>
             {questionCount !== undefined && (

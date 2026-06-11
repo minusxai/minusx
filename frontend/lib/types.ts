@@ -3,7 +3,7 @@ import type { FileState } from '@/store/filesSlice';
 // Atlas file content types — single source of truth is the TypeBox schemas in
 // lib/validation/atlas-schemas.ts.
 import type {
-  QuestionContent, FileReference, InlineAsset, VizSettings,
+  QuestionContent, FileReference, InlineAsset, VizSettings, DeckSlide,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -18,7 +18,7 @@ export type {
   QuestionParameter, QuestionReference,
   QuestionContent,
   FileReference, InlineAsset,
-  DashboardContent, DashboardLayout, DashboardLayoutItem,
+  DashboardContent, DashboardLayout, DashboardLayoutItem, DeckSlide,
   AtlasQuestionFile, AtlasDashboardFile,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
@@ -506,6 +506,14 @@ export interface DocumentContent extends BaseFileContent {
   assets: AssetReference[];
   layout?: any;  // Type-specific layout (DashboardLayout, etc.)
   parameterValues?: Record<string, any>;  // Persisted parameter values (saved with file)
+  /** Report view: markdown (rich text + `:::chart{id=N}` embeds). Agent-authorable. */
+  report?: string | null;
+  /** Presentation view: ordered deck slides. Each slide is standalone agent-authored HTML
+   *  rendered on a fixed 1280x720 canvas; charts embed via `<div data-question-id="N">`. */
+  deck?: DeckSlide[] | null;
+  /** Story view: a single agent-authored HTML document rendered as one scrolling data-story
+   *  page on a fixed 1280px-wide canvas; charts embed via `<div data-question-id="N">`. */
+  story?: string | null;
 }
 
 /**

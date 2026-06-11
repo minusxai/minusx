@@ -12,6 +12,7 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFiles } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
@@ -82,6 +83,9 @@ export interface DocumentHeaderProps {
   // Optional highlight color for the header background (e.g. dashboard edit mode)
   highlightColor?: string;
   highlightLabel?: string;  // Label shown next to title when highlighted (e.g. "Editing Dashboard")
+
+  // Extra action buttons rendered before the edit/save buttons
+  extraActions?: ReactNode;
 }
 
 export default function DocumentHeader({
@@ -109,6 +113,7 @@ export default function DocumentHeader({
   saveCount = 1,
   highlightColor,
   highlightLabel,
+  extraActions,
 }: DocumentHeaderProps) {
   const metadata = getFileTypeMetadata(fileType);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -261,6 +266,9 @@ export default function DocumentHeader({
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
+            {/* Extra actions from parent */}
+            {extraActions}
+
             {/* Review unsaved changes — muted text link, informational */}
             {onReviewChanges && dirtyFileCount > 0 && (
               <HStack
@@ -299,16 +307,28 @@ export default function DocumentHeader({
 
             {/* Edit/Cancel Button */}
             {!hideEditToggle && (
-            <IconButton
-              onClick={onEditModeToggle}
-              aria-label={editMode ? 'Cancel editing' : 'Edit'}
-              variant={editMode ? 'outline' : 'subtle'}
-              size="xs"
-              px={2}
-            >
-              {!editMode && <LuPencil />}
-              {editMode ? 'Cancel' : 'Edit'}
-            </IconButton>
+              editMode ? (
+                <IconButton
+                  onClick={onEditModeToggle}
+                  aria-label="Cancel editing"
+                  variant="outline"
+                  size="xs"
+                  px={2}
+                >
+                  Cancel
+                </IconButton>
+              ) : (
+                <Tooltip content="Edit">
+                  <IconButton
+                    onClick={onEditModeToggle}
+                    aria-label="Edit"
+                    variant="subtle"
+                    size="xs"
+                  >
+                    <LuPencil />
+                  </IconButton>
+                </Tooltip>
+              )
             )}
             {/* JSON View Toggle (shown only when showJson setting is enabled) */}
             {onViewModeChange && showJson && (
