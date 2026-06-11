@@ -23,6 +23,7 @@ import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, s
 import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
+import { runOrDefer } from '@/lib/navigation/nav-progress';
 import { selectMaxConcurrentQueries } from '@/store/configsSlice';
 import { Semaphore } from '@/lib/utils/semaphore';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -1424,26 +1425,29 @@ export async function getQueryResult(
       const apiResponse: { data: QueryResult; finalQuery?: string } = await response.json();
       const result = { ...apiResponse.data, ...(apiResponse.finalQuery && { finalQuery: apiResponse.finalQuery }) };
 
-      // Update Redux cache with result (clears loading state)
-      getStore().dispatch(setQueryResult({
+      // Update Redux cache with result (clears loading state). Deferred while a
+      // navigation is in flight — these urgent updates otherwise preempt and
+      // restart the router transition (clicking a dashboard tile while its
+      // queries stream results felt dead until the dashboard settled).
+      runOrDefer(() => getStore().dispatch(setQueryResult({
         query,
         params: queryParams,
         database,
         data: result
-      }));
+      })));
 
       return result;
     } catch (error) {
       console.error('[getQueryResult] Query execution failed:', error);
 
-      // Store error in Redux
+      // Store error in Redux (deferred during navigation — see setQueryResult above)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      getStore().dispatch(setQueryError({
+      runOrDefer(() => getStore().dispatch(setQueryError({
         query,
         params: queryParams,
         database,
         error: errorMessage
-      }));
+      })));
 
       // Report network/5xx failures (invisible server-side); skip 4xx SQL errors.
       if (responseStatus === undefined || responseStatus >= 500) {

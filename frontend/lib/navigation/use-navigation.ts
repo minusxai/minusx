@@ -10,6 +10,7 @@
 import { useRouter as useNextRouter } from 'next/navigation';
 import { useCallback, useMemo } from 'react';
 import { preserveParams } from './url-utils';
+import { beginNavigation } from './nav-progress';
 
 /**
  * Enhanced router hook with automatic parameter preservation
@@ -28,6 +29,7 @@ export function useRouter() {
 
   const push = useCallback(
     (href: string, options?: any) => {
+      beginNavigation();
       const preservedHref = preserveParams(href);
       return router.push(preservedHref, options);
     },
@@ -36,6 +38,7 @@ export function useRouter() {
 
   const replace = useCallback(
     (href: string, options?: any) => {
+      beginNavigation();
       const preservedHref = preserveParams(href);
       return router.replace(preservedHref, options);
     },
