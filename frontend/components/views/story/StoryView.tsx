@@ -27,13 +27,17 @@ export default function StoryView({ story }: StoryViewProps) {
     );
   }
 
-  // Full-bleed: unlike slides, the story is a web page — the 1280 logical
-  // canvas scales to fill the entire content width, edge to edge, no card.
+  // The story is a web page, not a slide: a centered reading column — 70% of
+  // the content width on large screens, full width on small. The story HTML
+  // never cares: it's authored on a fixed 1280px logical canvas and
+  // ScaledStoryFrame scales it to whatever width this container resolves to.
   return (
-    <Box aria-label="Story page" w="100%" minH="420px">
-      <ScaledStoryFrame>
-        <AgentHtml html={story} width={STORY_W} />
-      </ScaledStoryFrame>
+    <Box aria-label="Story page" w="100%" minH="420px" display="flex" justifyContent="center">
+      <Box w={{ base: '100%', lg: '70%' }}>
+        <ScaledStoryFrame>
+          <AgentHtml html={story} width={STORY_W} />
+        </ScaledStoryFrame>
+      </Box>
     </Box>
   );
 }
