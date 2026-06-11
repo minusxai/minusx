@@ -6,6 +6,7 @@ import {
   validateV2Mode,
   forkV1ConversationToV2,
 } from '@/lib/chat-orchestration-v2.server';
+import { startRun, attach, type SequencedFrame } from '@/lib/chat/run-registry.server';
 import { createNewConversation } from '@/lib/conversations';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,26 @@ export const dynamic = 'force-dynamic';
 /** Format an SSE event frame. */
 function formatSSE(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+/**
+ * Forward sequence-numbered frames from a registry observer to this
+ * connection's writer. Each frame's data carries `seq` so the client can
+ * resume from the last frame it received after a transport drop. A write
+ * failure here means THIS client disconnected — stop forwarding; the run
+ * itself is owned by the registry pump and is unaffected.
+ */
+async function forwardFrames(
+  observer: AsyncGenerator<SequencedFrame, void, unknown>,
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+): Promise<void> {
+  for await (const { seq, frame } of observer) {
+    if (frame.wire === 'streaming_event' && !frame.data) continue;
+    await writer.write(
+      encoder.encode(formatSSE(frame.wire, { ...(frame.data as object), seq })),
+    );
+  }
 }
 
 /**
@@ -92,6 +113,12 @@ export async function POST(request: NextRequest) {
  * (`event: streaming_event` + `event: done`) so the frontend listener parses
  * them unchanged. Continues an existing v2 conversation, forks a legacy file to
  * v2, or creates a fresh v2 conversation.
+ *
+ * The turn itself is owned by the run registry: a detached pump drains the turn
+ * generator into a sequence-numbered buffer, and this connection merely
+ * OBSERVES it. A client disconnect breaks only the observer loop — the run (and
+ * its persistence) always completes — and the client can reconnect with
+ * `body.resume.afterSeq` to replay what it missed and tail the rest.
  */
 async function processStreamV2(
   writer: WritableStreamDefaultWriter<Uint8Array>,
@@ -100,6 +127,33 @@ async function processStreamV2(
   user: NonNullable<Awaited<ReturnType<typeof getEffectiveUser>>>,
 ): Promise<void> {
   try {
+    // Resume path: attach to an in-flight/recently-finished run — never starts
+    // a new turn. If there's nothing to attach to (server restarted, or the run
+    // was evicted), say so explicitly so the client can fall back.
+    if (body.resume) {
+      const conversationId = body.conversationID ?? 0;
+      const observer = attach(conversationId, body.resume.afterSeq);
+      if (!observer) {
+        await writer.write(
+          encoder.encode(
+            formatSSE('done', {
+              type: 'done',
+              conversationID: conversationId,
+              log_index: 0,
+              pending_tool_calls: [],
+              completed_tool_calls: [],
+              debug: [],
+              resume_miss: true,
+              timestamp: new Date().toISOString(),
+            }),
+          ),
+        );
+        return;
+      }
+      await forwardFrames(observer, writer, encoder);
+      return;
+    }
+
     let conversationId: number;
     if (body.conversationID) {
       const check = await validateV2Mode(body.conversationID, user, true);
@@ -115,17 +169,11 @@ async function processStreamV2(
       conversationId = created.fileId;
     }
 
-    for await (const frame of runChatTurnStreamV2(body, user, conversationId)) {
-      if (frame.wire === 'streaming_event') {
-        if (frame.data) {
-          await writer.write(encoder.encode(formatSSE('streaming_event', frame.data)));
-        }
-      } else if (frame.wire === 'done') {
-        await writer.write(encoder.encode(formatSSE('done', frame.data)));
-      } else if (frame.wire === 'error') {
-        await writer.write(encoder.encode(formatSSE('error', frame.data)));
-      }
-    }
+    // The registry pump owns the generator (and thus persistence); this
+    // connection observes from the start.
+    startRun(conversationId, runChatTurnStreamV2(body, user, conversationId));
+    const observer = attach(conversationId, 0)!;
+    await forwardFrames(observer, writer, encoder);
   } catch (err) {
     // The frontend chatListener expects a `done` frame even on error — without
     // one it throws "Stream ended without done event" instead of surfacing the

@@ -18,12 +18,16 @@ import {
   clearStreamingContent,
   interruptChat,
   setUserInputResult,
-  addUserInputRequest
+  addUserInputRequest,
+  loadConversation
 } from './chatSlice';
 import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
+import { FilesAPI } from '@/lib/data/files';
+import { parseLogToMessages } from '@/lib/conversations-utils';
+import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
 import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
 import { getCurrentMode } from '@/lib/mode/mode-utils';
 import type { AgentSkillSelection } from '@/lib/types';
@@ -148,6 +152,7 @@ function streamChatSSE(
   signal: AbortSignal,
   onStreamingEvent: (data: any) => Promise<void>,
   onUserInputRequest: (data: any) => void,
+  onSeq?: (seq: number) => void,
 ): Promise<SSEStreamResult> {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
@@ -186,6 +191,7 @@ function streamChatSSE(
         if (!parsed) continue;
 
         const { event, data } = parsed;
+        if (typeof data?.seq === 'number') onSeq?.(data.seq);
 
         if (event === 'streaming_event') {
           const captured = data;
@@ -208,6 +214,12 @@ function streamChatSSE(
 
     xhr.onerror = () => {
       signal.removeEventListener('abort', onAbort);
+      // If the done frame already arrived, the turn's result is complete — a
+      // socket dying during teardown is not an error worth surfacing/retrying.
+      if (doneData) {
+        processingChain.then(() => resolve({ doneData, errorData }));
+        return;
+      }
       reject(new Error('Network error'));
     };
 
@@ -220,6 +232,53 @@ function streamChatSSE(
 
     xhr.send(JSON.stringify(body));
   });
+}
+
+// Bounded reconnect+resume for transport drops mid-stream. The server keeps the
+// turn running and buffers sequence-numbered frames (lib/chat/run-registry.server),
+// so after a drop we reconnect with `resume.afterSeq` and replay what we missed —
+// the user never sees an error for a turn that is still completing.
+const RESUME_BACKOFF_MS = [1000, 2000, 4000];
+
+async function streamChatSSEWithResume(
+  logLabel: string,
+  body: object,
+  conversationID: number | null | undefined,
+  signal: AbortSignal,
+  onStreamingEvent: (data: any) => Promise<void>,
+  onUserInputRequest: (data: any) => void,
+): Promise<SSEStreamResult> {
+  let lastSeq = 0;
+  const onSeq = (seq: number) => { lastSeq = Math.max(lastSeq, seq); };
+  let requestBody: object = body;
+  let originalError: Error | null = null;
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await streamChatSSE(logLabel, requestBody, signal, onStreamingEvent, onUserInputRequest, onSeq);
+      // resume_miss: nothing to attach to (server restarted / run evicted) —
+      // surface the ORIGINAL transport error; the turn's fate is unknown.
+      if ((result.doneData as { resume_miss?: boolean } | null)?.resume_miss) {
+        throw originalError ?? new Error('Network error');
+      }
+      return result;
+    } catch (error: any) {
+      const isTransport = error instanceof Error && error.message === 'Network error';
+      const canResume = typeof conversationID === 'number' && conversationID > 0;
+      if (!isTransport || !canResume || attempt >= RESUME_BACKOFF_MS.length) throw error;
+      originalError = originalError ?? error;
+
+      const delay = RESUME_BACKOFF_MS[attempt];
+      console.warn(`[chat/stream ${logLabel}] transport drop — resuming after seq ${lastSeq} in ${delay}ms (attempt ${attempt + 1}/${RESUME_BACKOFF_MS.length})`);
+      await new Promise((r) => setTimeout(r, delay));
+      if (signal.aborted) {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        throw err;
+      }
+      requestBody = { conversationID, resume: { afterSeq: lastSeq } };
+    }
+  }
 }
 
 /**
@@ -303,13 +362,59 @@ function classifyError(error: { name?: string; httpStatus?: number }): { source:
   return { source: 'transport', httpStatus: error?.httpStatus };
 }
 
-function handleStreamError(
+/**
+ * Last-resort recovery for transport failures: the turn may have completed and
+ * been PERSISTED server-side even though every live reconnect failed (e.g. the
+ * server restarted after finishing the turn — resume_miss). Reload the
+ * conversation file; if its log advanced past where it was before this send,
+ * the turn landed — render it instead of surfacing a false error.
+ */
+async function tryRecoverConversationFromFile(
+  conversationID: number,
+  stableId: string,
+  preSendLogIndex: number,
+  dispatch: AppDispatch,
+): Promise<boolean> {
+  try {
+    const result = await FilesAPI.loadFile(conversationID);
+    const content = result.data?.content as ConversationFileContent | undefined;
+    if (!content?.log || content.log.length <= preSendLogIndex) return false;
+
+    const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
+    const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
+    dispatch(loadConversation({
+      conversation: {
+        _id: stableId,
+        conversationID,
+        log_index: content.log.length,
+        messages: parseLogToMessages(content.log),
+        executionState: 'FINISHED',
+        pending_tool_calls: [],
+        streamedCompletedToolCalls: [],
+        streamedThinking: '',
+        agent: firstTask?.agent || 'DefaultAgent',
+        agent_args: firstTask?.args || {},
+        version,
+      },
+      setAsActive: false,
+    }));
+    dispatch(clearStreamingContent({ conversationID }));
+    abortControllers.delete(stableId);
+    console.warn(`[chat/stream] transport failed but the turn persisted server-side — recovered conversation ${conversationID} from its file`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function handleStreamError(
   error: any,
   captureLabel: string,
   conversationID: number,
   stableId: string,
   dispatch: AppDispatch,
-): boolean {
+  preSendLogIndex?: number,
+): Promise<boolean> {
   if (!error || typeof error !== 'object') {
     void captureError(captureLabel, new Error(String(error)), { conversationID: String(conversationID) });
     dispatch(setError({ conversationID, error: String(error) }));
@@ -319,11 +424,22 @@ function handleStreamError(
     return false;
   }
   if (error.name === 'AbortError') return true;
+  const { source, httpStatus } = classifyError(error);
+  // Transport failure: before declaring an error, check whether the turn
+  // actually completed and persisted (see tryRecoverConversationFromFile).
+  if (
+    source === 'transport'
+    && error.message === 'Network error'
+    && typeof preSendLogIndex === 'number'
+    && conversationID > 0
+    && await tryRecoverConversationFromFile(conversationID, stableId, preSendLogIndex, dispatch)
+  ) {
+    return true;
+  }
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
-  const { source, httpStatus } = classifyError(error);
   reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
   return false;
 }
@@ -428,9 +544,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#1 createConversation',
         { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -439,7 +556,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:createConversation', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:createConversation', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
@@ -472,9 +589,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#2 sendMessage',
         { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -483,7 +601,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
@@ -517,9 +635,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#3 editAndFork',
         { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -528,7 +647,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });
@@ -575,9 +694,10 @@ chatListenerMiddleware.startListening({
         return;
       }
 
-      const { doneData, errorData } = await streamChatSSE(
+      const { doneData, errorData } = await streamChatSSEWithResume(
         '#4 toolResults',
         { conversationID, log_index: conversation.log_index, user_message: userMessage, completed_tool_calls, agent: conversation.agent, agent_args: conversation.agent_args },
+        conversationID,
         abortController.signal,
         (data) => handleStreamingEvent(data, dispatch, abortController!.signal),
         (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
@@ -586,7 +706,7 @@ chatListenerMiddleware.startListening({
       if (errorData) throw new Error(errorData.error);
       applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
     } catch (error: any) {
-      if (handleStreamError(error, 'chatListener:completeToolCall', conversationID, conversation._id, dispatch)) return;
+      if (await handleStreamError(error, 'chatListener:completeToolCall', conversationID, conversation._id, dispatch, conversation.log_index)) return;
     }
   }
 });

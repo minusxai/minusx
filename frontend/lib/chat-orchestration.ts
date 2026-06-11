@@ -33,6 +33,12 @@ export interface ChatRequest {
       user_catalog?: import('@/lib/types').AgentUserSkillCatalogItem[];
     };
   };
+  /**
+   * Reconnect to an in-flight (or recently finished) turn instead of starting a
+   * new one. The server replays buffered SSE frames with `seq > afterSeq`, then
+   * tails the live run. Used by the client after a transport drop mid-stream.
+   */
+  resume?: { afterSeq: number };
 }
 
 /**
