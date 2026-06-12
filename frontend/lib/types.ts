@@ -3,7 +3,7 @@ import type { FileState } from '@/store/filesSlice';
 // Atlas file content types — single source of truth is the TypeBox schemas in
 // lib/validation/atlas-schemas.ts.
 import type {
-  QuestionContent, FileReference, InlineAsset, VizSettings,
+  QuestionContent, StoryContent, FileReference, InlineAsset, VizSettings,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -19,7 +19,8 @@ export type {
   QuestionContent,
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,
-  AtlasQuestionFile, AtlasDashboardFile,
+  StoryContent,
+  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -842,7 +843,7 @@ export interface JobRunnerInput {
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
+  content: QuestionContent | DocumentContent | StoryContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
 }
 
 /**
