@@ -49,11 +49,12 @@ import {
   LuCircleAlert,
   LuDatabase,
 } from 'react-icons/lu';
-import { CsvFileInfo } from '@/lib/types';
+import { CsvFileInfo, JobSchedule } from '@/lib/types';
 import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
 import { importGoogleSheets, reimportGoogleSheets } from '@/lib/backend/google-sheets';
 import { sanitizeTableName, validateIdentifier } from '@/lib/csv-utils';
 import { BaseConfigProps } from './types';
+import { SheetsAutoSyncSection } from './SheetsAutoSyncSection';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,11 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   singleTab?: 'csv' | 'sheets';
   /** Called when pending (un-uploaded) files change — true if files are staged but not yet uploaded. */
   onPendingChange?: (hasPending: boolean) => void;
+  /** Google Sheets auto-sync schedule (connection content level). Section renders only when onAutoSyncChange is provided and sheet groups exist. */
+  autoSync?: JobSchedule;
+  onAutoSyncChange?: (autoSync: JobSchedule | undefined) => void;
+  lastSyncedAt?: string;
+  lastSyncError?: string;
 }
 
 interface PendingFile {
@@ -307,6 +313,10 @@ export default function StaticConnectionConfig({
   initialTab,
   singleTab,
   onPendingChange,
+  autoSync,
+  onAutoSyncChange,
+  lastSyncedAt,
+  lastSyncError,
 }: StaticConnectionConfigProps) {
   // ── Panel toggle ──────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
@@ -998,6 +1008,18 @@ export default function StaticConnectionConfig({
           </Box>
         )}
       </Box>
+
+      {/* ── Google Sheets auto-sync schedule ── */}
+      {onAutoSyncChange && sheetsGroups.size > 0 && (
+        <Box borderRadius="lg" border="1px solid" borderColor="border.subtle" px={4} py={3}>
+          <SheetsAutoSyncSection
+            autoSync={autoSync}
+            onChange={onAutoSyncChange}
+            lastSyncedAt={lastSyncedAt}
+            lastSyncError={lastSyncError}
+          />
+        </Box>
+      )}
 
       {/* ── Registered tables (collapsible, default closed) ── */}
       {hasFiles && (
