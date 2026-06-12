@@ -23,13 +23,13 @@ function isSchemaStale(updatedAt: string): boolean {
 /**
  * Connection loader - Adds schema with caching
  *
- * Caching strategy:
- * 1. If schema exists and is fresh → return cached schema
- * 2. If schema is stale OR refresh=true → fetch fresh schema via the connector
- * 3. Save updated schema back to database file
- * 4. Return file with fresh schema
- *
- * Schema staleness: 24 hours (configurable)
+ * Caching strategy (stale-while-revalidate):
+ * 1. Fresh cached schema → return it, no fetch
+ * 2. Stale cached schema (>24h) or backgroundRefresh → return it NOW, refresh
+ *    + persist in the background (introspection can take minutes)
+ * 3. No schema at all → block on the first introspection
+ * 4. refresh=true (user-initiated) → block until fresh
+ * Concurrent loads of the same connection share one in-flight introspection.
  */
 function redactConfig(file: DbFile): DbFile {
   if (file.content === null) return file;
@@ -43,7 +43,22 @@ function redactConfig(file: DbFile): DbFile {
 export const connectionLoader: CustomLoader = async (file, user, options) =>
   redactConfig(await loadConnectionSchema(file, user, options));
 
-const loadConnectionSchema: CustomLoader = async (file: DbFile, user: EffectiveUser, options?) => {
+// In-flight introspections by file id: concurrent loads of the same connection
+// share ONE schema fetch instead of stampeding the warehouse/DuckDB.
+// Cross-request sharing is the point — the schema is connection-scoped (file id
+// IS the scope key), not user-scoped; per-user redaction happens after loading.
+// eslint-disable-next-line no-restricted-syntax
+const inflightRefreshes = new Map<number, Promise<DbFile>>();
+
+function refreshSchema(file: DbFile): Promise<DbFile> {
+  const existing = inflightRefreshes.get(file.id);
+  if (existing) return existing;
+  const refresh = fetchAndPersistSchema(file).finally(() => inflightRefreshes.delete(file.id));
+  inflightRefreshes.set(file.id, refresh);
+  return refresh;
+}
+
+const loadConnectionSchema: CustomLoader = async (file: DbFile, _user: EffectiveUser, options?) => {
   // Skip if metadata-only
   if (file.content === null) {
     return file;
@@ -51,18 +66,35 @@ const loadConnectionSchema: CustomLoader = async (file: DbFile, user: EffectiveU
 
   const content = file.content as ConnectionContent;
 
-  // Check if we need to refresh schema
   const hasSchema = content.schema && content.schema.schemas;
   const hasTimestamp = content.schema?.updated_at;
   // If no timestamp, schema is from old version (pre-migration) - treat as stale
   const isStale = hasTimestamp ? isSchemaStale(hasTimestamp) : true;
-  const needsRefresh = options?.refresh || !hasSchema || isStale;
 
-  // Return cached schema if fresh
-  if (!needsRefresh && hasSchema) {
-    const ageMinutes = hasTimestamp ? Math.round((Date.now() - new Date(hasTimestamp).getTime()) / 1000 / 60) : '?';
+  // Explicit refresh is user-initiated: block until the fresh schema is ready
+  if (options?.refresh) {
+    return refreshSchema(file);
+  }
+
+  if (hasSchema) {
+    // Stale-while-revalidate: serve the cached schema immediately; introspection
+    // (which can take minutes on large connections) runs in the background and
+    // persists via updateCachedSchema for the next load.
+    if (isStale || options?.backgroundRefresh) {
+      void refreshSchema(file).catch((error) => {
+        console.error(`[connectionLoader] Background schema refresh failed for ${file.name}:`, error);
+      });
+    }
     return file;
   }
+
+  // No schema at all — nothing to serve, block on the first introspection
+  return refreshSchema(file);
+};
+
+async function fetchAndPersistSchema(file: DbFile): Promise<DbFile> {
+  const content = file.content as ConnectionContent;
+  const hasSchema = content.schema && content.schema.schemas;
 
   // Fetch fresh schema via the Node.js connector for the connection's type.
   let freshSchema: DatabaseSchema;
@@ -124,4 +156,4 @@ const loadConnectionSchema: CustomLoader = async (file: DbFile, user: EffectiveU
       schema: freshSchema
     }
   };
-};
+}

@@ -25,6 +25,7 @@ vi.mock('@/lib/connections', () => ({
   getNodeConnector: () => ({
     getSchema: mockGetSchema,
     query: vi.fn().mockResolvedValue({ columns: [], types: [], rows: [] }),
+    testConnection: vi.fn().mockResolvedValue({ success: true, message: 'ok' }),
   }),
 }));
 
@@ -133,24 +134,29 @@ describe('connectionLoader — stale or missing schema', () => {
     expect(reloadedContent.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
   });
 
-  it('fetches and persists schema when schema is stale (> 24 hours old)', async () => {
-    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
+  it('serves a stale schema immediately and refreshes it in the background', async () => {
+    // Stale-while-revalidate: a slow introspection must NOT block the response.
+    let resolveSchema!: (s: DatabaseSchema['schemas']) => void;
+    mockGetSchema.mockReturnValue(new Promise((r) => { resolveSchema = r; }));
     const staleSchema: DatabaseSchema = {
       schemas: [{ schema: 'old', tables: [] }],
       updated_at: staleTimestamp(),
     };
     const file = await createConnection('conn_stale', '/org/database/conn_stale', staleSchema);
 
+    // Returns the STALE schema right away, while getSchema is still pending
     const result = await connectionLoader(file!, testUser);
-
-    expect(mockGetSchema).toHaveBeenCalledTimes(1);
     const content = result.content as ConnectionContent;
-    expect(content.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+    expect(content.schema?.schemas).toEqual(staleSchema.schemas);
+    expect(mockGetSchema).toHaveBeenCalledTimes(1); // background refresh kicked off
 
-    // Verify the updated schema was persisted
-    const reloaded = await DocumentDB.getById(file!.id);
-    const reloadedContent = reloaded?.content as ConnectionContent;
-    expect(reloadedContent.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+    // Once introspection completes, the fresh schema is persisted
+    resolveSchema(FRESH_SCHEMA.schemas);
+    await vi.waitFor(async () => {
+      const reloaded = await DocumentDB.getById(file!.id);
+      const reloadedContent = reloaded?.content as ConnectionContent;
+      expect(reloadedContent.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+    });
   });
 
   it('fetches schema when refresh=true even if schema is fresh', async () => {
@@ -161,9 +167,57 @@ describe('connectionLoader — stale or missing schema', () => {
     };
     const file = await createConnection('conn_forcerefresh', '/org/database/conn_forcerefresh', alreadyFreshSchema);
 
-    await connectionLoader(file!, testUser, { refresh: true });
+    // Explicit refresh is user-initiated → blocks and returns the FRESH schema
+    const result = await connectionLoader(file!, testUser, { refresh: true });
 
     expect(mockGetSchema).toHaveBeenCalledTimes(1);
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+  });
+
+  it('deduplicates concurrent loads: one introspection serves all callers', async () => {
+    let resolveSchema!: (s: DatabaseSchema['schemas']) => void;
+    mockGetSchema.mockReturnValue(new Promise((r) => { resolveSchema = r; }));
+    const file = await createConnection('conn_dedup', '/org/database/conn_dedup');
+
+    // Three concurrent loads of a schema-less connection (each must block on
+    // the fetch) — but only ONE introspection runs
+    const loads = Promise.all([
+      connectionLoader(file!, testUser),
+      connectionLoader(file!, testUser),
+      connectionLoader(file!, testUser),
+    ]);
+    await vi.waitFor(() => expect(mockGetSchema).toHaveBeenCalled());
+    resolveSchema(FRESH_SCHEMA.schemas);
+    const results = await loads;
+
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
+    for (const r of results) {
+      expect((r.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+    }
+  });
+
+  it('backgroundRefresh: serves the current schema now and re-profiles behind the scenes', async () => {
+    // Post-save path: schema may be FRESH by timestamp but stale in fact
+    // (tables just changed) — backgroundRefresh forces a refresh without blocking.
+    let resolveSchema!: (s: DatabaseSchema['schemas']) => void;
+    mockGetSchema.mockReturnValue(new Promise((r) => { resolveSchema = r; }));
+    const cached: DatabaseSchema = {
+      schemas: [{ schema: 'pre_save', tables: [] }],
+      updated_at: freshTimestamp(),
+    };
+    const file = await createConnection('conn_bgrefresh', '/org/database/conn_bgrefresh', cached);
+
+    const result = await connectionLoader(file!, testUser, { backgroundRefresh: true });
+
+    // Served immediately with the cached schema; refresh started
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual(cached.schemas);
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
+
+    resolveSchema(FRESH_SCHEMA.schemas);
+    await vi.waitFor(async () => {
+      const reloaded = await DocumentDB.getById(file!.id);
+      expect((reloaded?.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+    });
   });
 });
 
@@ -196,6 +250,50 @@ describe('connectionLoader — schema fetch failure', () => {
     const content = result.content as ConnectionContent;
     expect(content.schema?.schemas).toEqual([]);
     expect(content.schema?.updated_at).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Saving a connection must not block on re-introspection
+// ---------------------------------------------------------------------------
+
+describe('FilesAPI.saveFile — connection save is non-blocking', () => {
+  it('returns before introspection completes, preserves the previous schema, refreshes in background', async () => {
+    const { FilesAPI } = await import('@/lib/data/files.server');
+
+    const previousSchema: DatabaseSchema = {
+      schemas: [{ schema: 'before_save', tables: [] }],
+      updated_at: freshTimestamp(),
+    };
+    const file = await createConnection('conn_save', '/org/database/conn_save', previousSchema);
+
+    // Introspection hangs until we release it — the save must return anyway
+    let resolveSchema!: (s: DatabaseSchema['schemas']) => void;
+    mockGetSchema.mockReturnValue(new Promise((r) => { resolveSchema = r; }));
+
+    const newContent: ConnectionContent = {
+      type: 'postgresql',
+      config: { host: 'localhost', port: 5433 },
+      // Client-sent schema must be ignored (server-managed field)
+      schema: { schemas: [{ schema: 'client_junk', tables: [] }], updated_at: freshTimestamp() },
+    };
+    const saved = await FilesAPI.saveFile(
+      file!.id, 'conn_save', '/org/database/conn_save', newContent, [], testUser,
+    );
+
+    // Save returned while getSchema is still pending — and serves the PREVIOUS schema
+    const savedContent = saved.data.content as ConnectionContent;
+    expect(savedContent.schema?.schemas).toEqual(previousSchema.schemas);
+    expect(savedContent.config.port).toBe(5433);
+    // Background refresh was kicked off
+    expect(mockGetSchema).toHaveBeenCalled();
+
+    // Once introspection completes, the fresh schema lands in the DB
+    resolveSchema(FRESH_SCHEMA.schemas);
+    await vi.waitFor(async () => {
+      const reloaded = await DocumentDB.getById(file!.id);
+      expect((reloaded?.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+    });
   });
 });
 
