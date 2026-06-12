@@ -46,7 +46,7 @@ export const FILE_TYPE_METADATA = {
     icon: LuBookOpen,
     color: 'accent.cyan',         // Turquoise cyan (#1abc9c)
     category: 'analytics',
-    supported: true,
+    supported: false,
     h: 'none',
   },
   notebook: {
