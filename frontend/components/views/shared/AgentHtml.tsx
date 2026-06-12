@@ -20,8 +20,19 @@ interface AgentHtmlProps {
   height?: number;
 }
 
-// The chart portal wrapper + its child must fill the agent's placeholder div.
-const APP_STYLES_BASE_CSS = `.mx-chart-fill, .mx-chart-fill > div { width: 100%; height: 100%; }`;
+// Fallback sizing for the portaled tile: the chart stack is built for a
+// FIXED-HEIGHT FLEX COLUMN parent (QuestionVisualization is flex:1 / minH:0
+// all the way down). The Chakra tile Box already declares this; the class
+// guarantees it even before emotion's lazily-injected styles are mirrored in.
+const APP_STYLES_BASE_CSS =
+  `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }`;
+
+// Placeholder sizing floors/defaults: title bar (~40px) + chart minHeight
+// (300px, ChartHost DEFAULT_CHART_STYLE) is the smallest tile that renders
+// without clipping.
+const MIN_CHART_W = 320;
+const MIN_CHART_H = 340;
+const DEFAULT_CHART_H = 400;
 
 /**
  * Fill the shadow root's dedicated app-styles tag with the document's
@@ -117,6 +128,17 @@ export default function AgentHtml({ html, width, height }: AgentHtmlProps) {
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       el.replaceChildren(); // drop authored fallback content; the portal takes over
+      // Sizing contract (dashboards enforce the same idea via
+      // DashboardLayoutItem min w/h grid units): honor explicit px sizes,
+      // default a missing height, and clamp below-minimum boxes — the tile
+      // (title bar + the chart's built-in 300px minHeight) can't physically
+      // render smaller, it would just clip.
+      const px = (v: string) => (v.endsWith('px') ? parseFloat(v) : NaN);
+      const w = px(el.style.width);
+      if (Number.isFinite(w)) el.style.width = `${Math.max(w, MIN_CHART_W)}px`;
+      else if (!el.style.width) el.style.width = '100%';
+      const h = px(el.style.height);
+      el.style.height = `${Number.isFinite(h) ? Math.max(h, MIN_CHART_H) : DEFAULT_CHART_H}px`;
       found.push({ el, questionId });
     });
     // Portal targets only exist after the shadow-root write, so discovery is
@@ -167,9 +189,20 @@ export default function AgentHtml({ html, width, height }: AgentHtmlProps) {
         }}
       />
       {targets.map((t, i) => createPortal(
-        <div className="mx-chart-fill">
-          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={false} />
-        </div>,
+        // The same tile the dashboard renders (DashboardView grid item):
+        // flex-column box + SmartEmbedded with clickable title and actions.
+        <Box
+          className="mx-chart-fill"
+          bg="bg.subtle"
+          borderWidth="1px"
+          borderColor="border.default"
+          borderRadius="md"
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
+        >
+          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={true} index={i} />
+        </Box>,
         t.el,
         `${i}-${t.questionId}`,
       ))}
