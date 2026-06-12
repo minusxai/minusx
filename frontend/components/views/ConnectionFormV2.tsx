@@ -1305,6 +1305,7 @@ export default function ConnectionFormV2({
             size="sm"
             bg="accent.teal"
             color="white"
+            aria-label="Save connection"
           >
             <LuSave />
             {wizardMode ? 'Save & Continue' : 'Save Connection'}

@@ -676,6 +676,7 @@ export default function StaticConnectionConfig({
             bg={activePanel === 'sheets-add' ? 'bg.surface' : 'bg.muted'}
             _hover={{ bg: 'bg.surface' }}
             transition="all 0.1s"
+            aria-label="Add Google Sheet tab"
             onClick={() => {
               setActivePanel(activePanel === 'sheets-add' ? null : 'sheets-add');
               setImportProgress('idle');
@@ -891,6 +892,7 @@ export default function StaticConnectionConfig({
                     setPendingSheets((p) => p.map((s) => ({ ...s, schema: v })));
                   }}
                   placeholder="e.g. survey_results"
+                  aria-label="Dataset name"
                 />
                 <Text fontSize="2xs" color="fg.muted" mt={1}>
                   Groups imported sheets together. Lowercase, underscores only.
@@ -939,6 +941,7 @@ export default function StaticConnectionConfig({
                         setImportProgress('idle');
                       }}
                       placeholder="https://docs.google.com/spreadsheets/d/..."
+                      aria-label="Spreadsheet URL"
                     />
                     <Box w="1px" h="12px" bg="border.subtle" />
                     <Text fontSize="2xs" color="fg.muted" whiteSpace="nowrap">table:</Text>
@@ -978,6 +981,7 @@ export default function StaticConnectionConfig({
                 size="sm"
                 bg="accent.teal"
                 color="white"
+                aria-label="Import sheets"
               >
                 Import
               </Button>
