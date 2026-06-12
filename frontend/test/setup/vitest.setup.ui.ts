@@ -169,6 +169,20 @@ vi.mock('echarts', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// mirrorAppStyles → no-op
+// AgentHtml (story/slide canvas) copies the document's stylesheet rules into
+// its shadow root so portaled charts inherit Chakra styling. In jsdom that
+// read (cssRules/cssText) is a slow JS reimplementation, and the injected
+// emotion/Chakra <style> tags accumulate across a test file's shared document,
+// so re-serializing every rule on each render goes O(n²) — it turned a 9-test
+// story-view file into ~13 minutes. The mirror has no observable effect in
+// tests (charts are mocked), so faking it to a no-op is free.
+// ---------------------------------------------------------------------------
+vi.mock('@/lib/html/mirror-app-styles', () => ({
+  mirrorAppStyles: () => {},
+}));
+
+// ---------------------------------------------------------------------------
 // Next.js navigation
 // ---------------------------------------------------------------------------
 vi.mock('next/navigation', () => ({
