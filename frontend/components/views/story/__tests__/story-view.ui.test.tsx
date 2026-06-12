@@ -25,8 +25,14 @@ vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', () => ({
 
 import StoryView from '@/components/views/story/StoryView';
 
+// Real-world Google Fonts @import — note the SEMICOLONS inside the URL
+// (wght@0,700;0,900): the hoister must not cut the import short there, or the
+// leftover URL garbage poisons the next CSS rule.
+const FONT_IMPORT =
+  "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900&family=Space+Mono:wght@400;700&display=swap');";
+
 const STORY =
-  '<style>@import url("https://fonts.example/lora.css");\n.hs h1{font-size:64px;color:#c8781a;}</style>' +
+  `<style>${FONT_IMPORT}\n.hs{--ink:#e8dfc8;background:#06090e;color:var(--ink);}\n.hs h1{font-size:64px;color:#c8781a;}</style>` +
   '<div class="hs" style="padding:80px"><h1>The year demand went vertical</h1>' +
   '<p>Narrative paragraph.</p>' +
   '<div data-question-id="14" style="width:1100px;height:420px"></div></div>';
@@ -68,14 +74,19 @@ describe('StoryView', () => {
     });
   });
 
-  it('hoists @import (web fonts) to document.head and out of the shadow styles', async () => {
+  it('hoists the COMPLETE @import (web fonts) to document.head and out of the shadow styles', async () => {
     const { unmount } = renderWithProviders(<StoryView content={content} />);
     await waitFor(() => {
       const fontTag = document.head.querySelector('style[data-mx-story-fonts]');
-      expect(fontTag?.textContent).toContain('fonts.example/lora.css');
+      // The full import survives, including the part after the in-URL semicolons
+      expect(fontTag?.textContent).toContain(FONT_IMPORT);
     });
-    const styles = Array.from(storyRoot().querySelectorAll('style'));
-    expect(styles.some(s => s.textContent?.includes('@import'))).toBe(false);
+    const storyStyle = Array.from(storyRoot().querySelectorAll('style'))
+      .find(s => s.textContent?.includes('.hs h1'));
+    // No import remnants left behind to poison the following rules
+    expect(storyStyle?.textContent).not.toContain('@import');
+    expect(storyStyle?.textContent).not.toContain('fonts.googleapis.com');
+    expect(storyStyle?.textContent).toContain('.hs{--ink:#e8dfc8;');
     unmount();
     expect(document.head.querySelector('style[data-mx-story-fonts]')).toBeNull();
   });
