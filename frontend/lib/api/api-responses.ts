@@ -19,6 +19,23 @@ async function getRequestId(): Promise<string | null> {
 }
 
 /**
+ * True when an error means the CLIENT hung up mid-request (tab closed,
+ * navigation away, fetch cancelled) rather than the server failing:
+ * `await request.json()` throws `Error: aborted` (Node http, code
+ * ECONNRESET) or an `AbortError`. These must not be reported to the bug
+ * channel (Slack/Sentry) — they are routine client behavior, not faults.
+ * Matched exactly (not substring) so real errors that mention "aborted"
+ * (e.g. deadlock messages) still get reported.
+ */
+export function isClientAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === 'AbortError') return true;
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'ECONNRESET') return true;
+  return error.message === 'aborted';
+}
+
+/**
  * Create a success response
  */
 export async function successResponse<T>(
