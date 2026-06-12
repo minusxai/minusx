@@ -5,7 +5,7 @@
  */
 import Ajv from 'ajv';
 import { atlasSchema } from './atlas-json-schemas';
-import type { FileType, QuestionContent, DashboardContent } from '@/lib/types';
+import type { FileType, QuestionContent, DashboardContent, StoryContent } from '@/lib/types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
 
 const ajv = new Ajv({ allErrors: true });
@@ -15,6 +15,7 @@ ajv.addSchema(atlasSchema, 'atlas');
 const validators: Record<string, Ajv.ValidateFunction> = {
   QuestionContent: ajv.compile({ $ref: 'atlas#/$defs/QuestionContent' }),
   DashboardContent: ajv.compile({ $ref: 'atlas#/$defs/DashboardContent' }),
+  StoryContent: ajv.compile({ $ref: 'atlas#/$defs/StoryContent' }),
 };
 
 function formatErrors(errors: Ajv.ErrorObject[] | null | undefined): string {
@@ -24,7 +25,8 @@ function formatErrors(errors: Ajv.ErrorObject[] | null | undefined): string {
 
 type ContentValidationInput =
   | { type: 'QuestionContent'; data: QuestionContent }
-  | { type: 'DashboardContent'; data: DashboardContent };
+  | { type: 'DashboardContent'; data: DashboardContent }
+  | { type: 'StoryContent'; data: StoryContent };
 
 function validateContent(input: ContentValidationInput): string | null {
   const validate = validators[input.type];
@@ -36,6 +38,14 @@ function validateContent(input: ContentValidationInput): string | null {
     const viz = input.data.vizSettings;
     if (viz?.type === 'pivot' && viz?.pivotConfig == null) {
       return 'vizSettings.pivotConfig is required when type is "pivot"';
+    }
+  }
+  if (input.type === 'StoryContent') {
+    const assetIds = new Set(input.data.assets.map(a => a.id));
+    for (const m of (input.data.story ?? '').matchAll(/data-question-id="(\d+)"/g)) {
+      if (!assetIds.has(Number(m[1]))) {
+        return `story embeds question ${m[1]} which is not in assets`;
+      }
     }
   }
   return null;
@@ -55,6 +65,8 @@ export function validateFileState(file: {
     return validateContent({ type: 'QuestionContent', data: file.content as QuestionContent });
   if (file.type === 'dashboard')
     return validateContent({ type: 'DashboardContent', data: file.content as DashboardContent });
+  if (file.type === 'story')
+    return validateContent({ type: 'StoryContent', data: file.content as StoryContent });
   if (file.type === 'config')
     return validateOrgConfig(file.content) ? null : 'Invalid config structure';
   if (file.type === 'connection') {

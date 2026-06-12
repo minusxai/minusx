@@ -1,7 +1,7 @@
 import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
+import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, StoryContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
 import { IFilesDataLayer } from './files.interface';
 import {
   LoadFileResult,
@@ -690,6 +690,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
           description: '',
           assets: [],
           layout: { columns: 12, items: [] }
+        };
+
+        return {
+          content,
+          fileName: ''
+        };
+      }
+
+      case 'story': {
+        const content: StoryContent = {
+          description: '',
+          assets: [],
+          story: null
         };
 
         return {

@@ -278,6 +278,22 @@ export const DashboardContent = Type.Object({
 }, { title: 'DashboardContent' });
 export type DashboardContent = Static<typeof DashboardContent>;
 
+export const StoryContent = Type.Object({
+  description: Nullable(Type.String()),
+  assets: Type.Array(FileReference, { description:
+    'questions embeddable in the story. Every data-question-id used in the story HTML MUST have a matching id here.' }),
+  story: NullableD(Type.String(),
+    'One self-contained HTML document rendered as a single scrolling data-story page on a fixed ' +
+    '1280px-wide canvas (height unlimited — the page scrolls; it is scaled to fit the viewer). It renders in an ' +
+    'isolated frame, so go all-out on design: <style> blocks, CSS classes, web fonts (@import in a <style> tag), ' +
+    'gradients and CSS animations are all allowed and encouraged. <script> tags, event-handler attributes, and ' +
+    'iframes are stripped at render time. Flow layout (stacked full-width sections) is encouraged; write it like ' +
+    'a designed long-form editorial piece: narrative prose between charts, big pull-quote numbers, section ' +
+    'headers. Embed a live chart with <div data-question-id="N" style="width:1120px;height:420px"></div> where ' +
+    'N is a question id that is also in assets; the chart fills the div, so size it explicitly.'),
+}, { title: 'StoryContent' });
+export type StoryContent = Static<typeof StoryContent>;
+
 // ============================================================================
 // Top-level discriminated file models
 // ============================================================================
@@ -302,5 +318,15 @@ export const AtlasDashboardFile = Type.Object({
 }, { title: 'AtlasDashboardFile' });
 export type AtlasDashboardFile = Static<typeof AtlasDashboardFile>;
 
-export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile]);
+export const AtlasStoryFile = Type.Object({
+  id: Nullable(Type.Integer()),
+  name: Type.String(),
+  path: Type.String(),
+  type: Type.Literal('story'),
+  content: StoryContent,
+  references: Nullable(Type.Array(Type.Integer())),
+}, { title: 'AtlasStoryFile' });
+export type AtlasStoryFile = Static<typeof AtlasStoryFile>;
+
+export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile]);
 export type AtlasFile = Static<typeof AtlasFile>;
