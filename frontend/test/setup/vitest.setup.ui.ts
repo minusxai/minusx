@@ -73,7 +73,8 @@ vi.mock('@monaco-editor/react', () => {
       'aria-label': 'SQL editor',
       value: value ?? '',
       onChange: (e: any) => onChange?.(e.target.value),
-      readOnly: !onChange,
+      // Honor an explicit options.readOnly (JsonEditor); else infer from onChange
+      readOnly: props.options?.readOnly ?? !onChange,
     });
   };
   // __esModule: true is required so that `import Editor from '@monaco-editor/react'`

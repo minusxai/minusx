@@ -376,6 +376,15 @@ describe('createDraftFile', () => {
     const all = await DocumentDB.listAll('question', ['/org/draft-test-4']);
     expect(all.find(f => f.id === id)).toBeUndefined();
   });
+
+  it('creates a story draft with the empty story template', async () => {
+    const id = await createDraftFile('story', { folder: '/org/draft-test-1' });
+    expect(id).toBeGreaterThan(0);
+
+    const dbFile = await DocumentDB.getById(id);
+    expect(dbFile!.type).toBe('story');
+    expect(dbFile!.content).toEqual({ description: '', assets: [], story: null });
+  });
 });
 
 // ============================================================================
