@@ -4,6 +4,7 @@ import { alertJobHandler } from './handlers/alert-handler';
 import { transformationJobHandler } from './handlers/transformation-handler';
 import { contextJobHandler } from './handlers/context-handler';
 import { reportJobHandler } from './handlers/report-handler';
+import { sheetsSyncJobHandler } from './handlers/sheets-sync-handler';
 
 export interface JobHandler {
   execute(input: JobRunnerInput, user: EffectiveUser): Promise<JobHandlerResult>;
@@ -14,4 +15,5 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   transformation: transformationJobHandler,
   context: contextJobHandler,
   report: reportJobHandler,
+  sheets_sync: sheetsSyncJobHandler,
 };

@@ -135,15 +135,15 @@ async function runForOrg(
 
       if (jobDef.job_type === 'alert') {
         const alert = content as AlertContent;
-        if (!alert.schedule?.cron) { skipped++; continue; }
         if (!alert.tests || alert.tests.length === 0) { skipped++; continue; }
       }
 
       const jobId = String(jobFile.id);
 
-      const cronExpr = jobDef.job_type === 'alert'
-        ? (content as AlertContent).schedule!.cron!
-        : null;
+      // Job types with a getCron accessor only fire inside their schedule
+      // window; a defined accessor returning null means "no schedule" → skip.
+      const cronExpr = jobDef.getCron ? jobDef.getCron(content) : null;
+      if (jobDef.getCron && !cronExpr) { skipped++; continue; }
       const prevFire = cronExpr ? getPrevFireTime(cronExpr, now) : null;
 
       // Skip if no prev fire time found (cron expression never matches).
@@ -207,8 +207,11 @@ async function runForOrg(
         );
 
         const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
+        // Respect the handler's status override (same contract as /api/jobs/run):
+        // a handler can complete without throwing yet still report failure.
+        const runStatus = result.status === 'failure' ? 'failure' : 'success';
         const successContent: RunFileContent = {
-          job_type: jobDef.job_type, status: 'success', startedAt,
+          job_type: jobDef.job_type, status: runStatus, startedAt,
           completedAt: new Date().toISOString(), output: result.output, messages,
         };
         await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], jobUser);
@@ -257,8 +260,13 @@ async function runForOrg(
           await FilesAPI.saveFile(runFileId, runFileName, runFilePath, { ...successContent, messages }, [jobFile.id], jobUser);
         }
 
-        await JobRunsDB.complete(runId, 'SUCCESS');
-        triggered++;
+        if (runStatus === 'failure') {
+          await JobRunsDB.complete(runId, 'FAILURE', 'Handler reported failure — see run file output');
+          failed++;
+        } else {
+          await JobRunsDB.complete(runId, 'SUCCESS');
+          triggered++;
+        }
       } catch (execError) {
         const errorMessage = execError instanceof Error ? execError.message : 'Unknown error';
         const failureContent: RunFileContent = {
