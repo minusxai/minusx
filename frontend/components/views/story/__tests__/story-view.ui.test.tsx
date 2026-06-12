@@ -8,9 +8,10 @@
  * <div data-question-id="N"> placeholders hydrate into live charts via
  * portals into the shadow root. @import lines (web fonts) are hoisted to
  * document.head — font-faces don't load inside shadow trees.
- * Also hosts the read-only JSON view (header eye/code toggle), like
- * DashboardView/PresentationView. All element queries by aria-label per repo
- * convention (the Monaco mock renders a textarea labeled "SQL editor").
+ * Also hosts the JSON view (header eye/code toggle), like DashboardView —
+ * read-only without a fileId, editable with one (full-content edits). All
+ * element queries by aria-label per repo convention (the Monaco mock labels
+ * the JsonEditor textarea "JSON editor").
  */
 import React from 'react';
 import { screen, within, waitFor } from '@testing-library/react';
@@ -110,17 +111,24 @@ describe('StoryView', () => {
     expect((window as any).__pwned).toBeUndefined();
   });
 
-  it('shows the read-only JSON view when viewMode is json', () => {
+  it('shows a read-only JSON view when no fileId is supplied', () => {
     renderWithProviders(<StoryView content={content} viewMode="json" />);
-    const editor = screen.getByLabelText('SQL editor') as HTMLTextAreaElement;
+    const editor = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(editor.value).toContain('data-question-id');
     expect(editor.readOnly).toBe(true);
     expect(screen.queryByLabelText('Story page')).not.toBeInTheDocument();
   });
 
+  it('shows an editable JSON view when a fileId is supplied', () => {
+    renderWithProviders(<StoryView content={content} fileId={14} viewMode="json" />);
+    const editor = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
+    expect(editor.value).toContain('data-question-id');
+    expect(editor.readOnly).toBe(false);
+  });
+
   it('shows the story (not JSON) when viewMode is visual', () => {
     renderWithProviders(<StoryView content={content} viewMode="visual" />);
     expect(screen.getByLabelText('Story page')).toBeInTheDocument();
-    expect(screen.queryByLabelText('SQL editor')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('JSON editor')).not.toBeInTheDocument();
   });
 });

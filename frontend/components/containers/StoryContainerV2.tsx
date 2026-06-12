@@ -3,10 +3,10 @@
 /**
  * StoryContainer V2 — smart component for data-story pages.
  *
- * v0 is a pure viewer: the story HTML is authored by the agent (EditFile on
- * `content.story` / `content.assets`), so there is no onChange plumbing here.
- * Rendering through selectMergedContent means unpublished agent edits show
- * live before Publish, same as dashboards.
+ * The visual canvas is a viewer: the story HTML is authored by the agent
+ * (EditFile on `content.story` / `content.assets`). Rendering through
+ * selectMergedContent means unpublished agent edits show live before Publish,
+ * same as dashboards. The JSON tab is editable (StoryView wires it by fileId).
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
@@ -25,5 +25,5 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
     return <div>Loading story...</div>;
   }
 
-  return <StoryView content={mergedContent} viewMode={viewMode} />;
+  return <StoryView content={mergedContent} fileId={typeof fileId === 'number' ? fileId : undefined} viewMode={viewMode} />;
 }

@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setFullContent, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, persistableContentOf, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
@@ -537,6 +537,45 @@ export async function editFileStr(
 }
 
 /**
+ * ApplyJsonContentEdit - Full-content edit from the JSON view
+ *
+ * Takes the complete new content as a JSON string (what the JSON editor holds),
+ * parses + validates it, and stores it via setFullContent (replace, not merge —
+ * so key deletions persist on save). Changes are saved on the next PublishFile.
+ */
+export function applyJsonContentEdit(options: { fileId: number; jsonString: string }): { success: boolean; error?: string } {
+  const { fileId, jsonString } = options;
+  const state = getStore().getState();
+  const fileState = selectFile(state, fileId);
+  if (!fileState) {
+    return { success: false, error: `File ${fileId} not found` };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch (error) {
+    return { success: false, error: `Invalid JSON: ${error instanceof Error ? error.message : 'parse error'}` };
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { success: false, error: 'Content must be a JSON object' };
+  }
+
+  const validationError = validateFileState({
+    type: fileState.type as FileType,
+    content: parsed,
+    name: selectEffectiveName(state, fileId),
+    path: fileState.metadataChanges?.path ?? fileState.path,
+  });
+  if (validationError) {
+    return { success: false, error: `Invalid ${fileState.type} content: ${validationError}` };
+  }
+
+  getStore().dispatch(setFullContent({ fileId, content: parsed as DbFile['content'] }));
+  return { success: true };
+}
+
+/**
  * Options for publishFile
  */
 export interface PublishFileOptions {
@@ -584,11 +623,11 @@ export async function publishFile(
     return { id: fileId, name: fileState.name };
   }
 
-  // Prepare content for saving: merge only persistable changes, NOT ephemeral
-  // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted
-  const contentToSave = fileState.persistableChanges
-    ? { ...fileState.content, ...fileState.persistableChanges }
-    : fileState.content;
+  // Prepare content for saving: merge only persistable changes, NOT ephemeral.
+  // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted.
+  // When contentReplaced is set (JSON-view edits via setFullContent), the
+  // persistableChanges ARE the full content — no merge, so deletions persist.
+  const contentToSave = persistableContentOf(fileState);
 
   if (!contentToSave) {
     throw new Error(`File ${fileId} has no content to save`);
@@ -636,7 +675,9 @@ export async function publishFile(
       // (persistableChanges) on top of the server's latest content.
       const serverFile = firstError.currentFile;
       getStore().dispatch(setFile({ file: serverFile }));
-      const retryContent = { ...serverFile.content, ...fileState.persistableChanges } as typeof saveContent;
+      const retryContent = (fileState.contentReplaced
+        ? fileState.persistableChanges
+        : { ...serverFile.content, ...fileState.persistableChanges }) as typeof saveContent;
       const result = await FilesAPI.saveFile(
         fileId,
         serverFile.name,
@@ -690,7 +731,7 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
     for (const id of [...scopedIds]) {
       const f = state.files.files[id];
       if (!f) continue;
-      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const merged = persistableContentOf(f) ?? {};
       const refs = extractReferencesFromContent(merged as any, f.type as FileType);
       for (const refId of refs) {
         if (selectIsDirty(state, refId)) scopedIds.add(refId);
@@ -703,7 +744,7 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
   if (allDirty.length === 0) return {};
 
   const toSave = allDirty.map(f => {
-    const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+    const merged = persistableContentOf(f) ?? {};
     return {
       id: f.id,
       name: f.metadataChanges?.name || f.name,
@@ -951,7 +992,7 @@ export function discardAll(fileIds?: number[]): void {
     for (const id of [...scopedIds]) {
       const f = state.files.files[id];
       if (!f) continue;
-      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const merged = persistableContentOf(f) ?? {};
       const refs = extractReferencesFromContent(merged as any, f.type as FileType);
       for (const refId of refs) {
         if (selectIsDirty(state, refId)) scopedIds.add(refId);
@@ -1093,7 +1134,7 @@ export async function dryRunSave(fileIds?: number[]): Promise<DryRunSaveResult> 
   if (allDirty.length === 0) return { success: true, errors: [] };
 
   const toSave = allDirty.map(f => {
-    const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+    const merged = persistableContentOf(f) ?? {};
     return {
       id: f.id,
       name: f.metadataChanges?.name || f.name,

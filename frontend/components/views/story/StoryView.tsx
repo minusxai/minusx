@@ -1,15 +1,21 @@
 'use client';
 
+import { useState } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import { LuBookOpen } from 'react-icons/lu';
 
 import AgentHtml from '@/components/views/shared/AgentHtml';
 import JsonEditor from '@/components/slides/JsonEditor';
 import { StoryContent } from '@/lib/types';
+import { useAppSelector } from '@/store/hooks';
+import { selectPersistableContent } from '@/store/filesSlice';
+import { applyJsonContentEdit } from '@/lib/api/file-state';
 import ScaledStoryFrame, { STORY_W } from './ScaledStoryFrame';
 
 interface StoryViewProps {
   content: StoryContent;
+  /** File id — enables JSON-tab editing (same as question/dashboard). */
+  fileId?: number;
   /** Header eye/code toggle (uiSlice fileViewMode) — same as dashboards. */
   viewMode?: 'visual' | 'json';
 }
@@ -17,15 +23,29 @@ interface StoryViewProps {
 /**
  * Story view: a single-page scrolling data story — one agent-authored HTML
  * document on a fixed 1280px-wide canvas (any height), with live chart embeds.
- * v0 is a viewer: the story is written/edited by the agent (via EditFile on
- * the file's `content.story`); the JSON view is read-only.
+ * The visual canvas is a viewer (the story is written by the agent via EditFile
+ * on `content.story`); the JSON tab is an editable full-content editor — same as
+ * question/dashboard — when a `fileId` is supplied.
  */
-export default function StoryView({ content, viewMode = 'visual' }: StoryViewProps) {
+export default function StoryView({ content, fileId, viewMode = 'visual' }: StoryViewProps) {
+  // JSON tab edits the persistable content (content + persistableChanges, no ephemerals)
+  const persistableContent = useAppSelector(state =>
+    fileId !== undefined ? selectPersistableContent(state, fileId) : undefined
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const jsonEditable = fileId !== undefined;
+
   if (viewMode === 'json') {
     return (
       <JsonEditor
-        value={JSON.stringify(content, null, 2)}
-        onChange={() => { /* read-only in v0 — edits come from the agent */ }}
+        value={JSON.stringify(persistableContent ?? content, null, 2)}
+        readOnly={!jsonEditable}
+        error={jsonError}
+        onChange={(value) => {
+          if (fileId === undefined) return;
+          const result = applyJsonContentEdit({ fileId, jsonString: value });
+          setJsonError(result.success ? null : result.error ?? null);
+        }}
       />
     );
   }

@@ -70,8 +70,9 @@ vi.mock('@monaco-editor/react', () => {
       onMount?.(editorStub, monacoStub);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
     return React.createElement('textarea', {
-      'aria-label': 'SQL editor',
-      value: value ?? '',
+      // Honor an explicit options.ariaLabel (JsonEditor); SqlEditor doesn't set one
+      'aria-label': props.options?.ariaLabel ?? 'SQL editor',
+      value: value ?? props.defaultValue ?? '',
       onChange: (e: any) => onChange?.(e.target.value),
       // Honor an explicit options.readOnly (JsonEditor); else infer from onChange
       readOnly: props.options?.readOnly ?? !onChange,

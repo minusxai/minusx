@@ -42,7 +42,8 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
+import { addReferenceToQuestion, removeReferenceFromQuestion, setFile, selectPersistableContent } from '@/store/filesSlice';
+import { applyJsonContentEdit } from '@/lib/api/file-state';
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
@@ -145,6 +146,12 @@ export default function QuestionViewV2({
   const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
   const editMode = (isPreview || readOnly) ? false : reduxEditMode;
   const activeTab = useAppSelector(state => selectFileViewMode(state, questionId));
+  // JSON tab edits the persistable content (content + persistableChanges, no ephemerals)
+  const persistableContent = useAppSelector(state =>
+    questionId !== undefined ? selectPersistableContent(state, questionId) : undefined
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const jsonEditable = questionId !== undefined && !isPreview && !readOnly;
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
@@ -524,10 +531,13 @@ export default function QuestionViewV2({
         {activeTab === 'json' && (
           <Box p={4}>
             <JsonEditor
-              value={JSON.stringify(content, null, 2)}
+              value={JSON.stringify(persistableContent ?? content, null, 2)}
+              readOnly={!jsonEditable}
+              error={jsonError}
               onChange={(value) => {
-                // TODO: Handle JSON edits
-                console.log('JSON changed:', value);
+                if (questionId === undefined) return;
+                const result = applyJsonContentEdit({ fileId: questionId, jsonString: value });
+                setJsonError(result.success ? null : result.error ?? null);
               }}
             />
           </Box>

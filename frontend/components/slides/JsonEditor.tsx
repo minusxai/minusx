@@ -9,12 +9,16 @@ interface JsonEditorProps {
   value: string;
   onChange: (value: string) => void;
   originalValue?: string; // If provided, shows diff view
+  readOnly?: boolean;
+  /** External error (e.g. schema validation from the parent) shown in the banner */
+  error?: string | null;
 }
 
-export default function JsonEditor({ value, onChange, originalValue }: JsonEditorProps) {
+export default function JsonEditor({ value, onChange, originalValue, readOnly = true, error }: JsonEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const [error, setError] = useState<string | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
   const isDiffMode = originalValue !== undefined;
+  const displayError = parseError ?? error ?? null;
 
   const handleChange = (newValue: string | undefined) => {
     if (!newValue) return;
@@ -22,17 +26,17 @@ export default function JsonEditor({ value, onChange, originalValue }: JsonEdito
     try {
       // Validate JSON
       JSON.parse(newValue);
-      setError(null);
+      setParseError(null);
       onChange(newValue);
     } catch (e) {
       // Show error but don't update state
-      setError(e instanceof Error ? e.message : 'Invalid JSON');
-      console.error('Invalid JSON:', e);
+      setParseError(e instanceof Error ? e.message : 'Invalid JSON');
     }
   };
 
   const editorOptions = {
-    readOnly: true,
+    readOnly,
+    ariaLabel: 'JSON editor',
     minimap: { enabled: false },
     fontFamily: 'var(--font-jetbrains-mono)',
     formatOnPaste: true,
@@ -52,16 +56,17 @@ export default function JsonEditor({ value, onChange, originalValue }: JsonEdito
 
   return (
     <Box>
-      {error && (
+      {displayError && (
         <Box
+          aria-label="JSON editor error"
           mb={2}
           p={2}
-          bg="accent.danger"
+          bg="accent.danger/10"
           color="accent.danger"
           borderRadius="md"
           fontSize="sm"
         >
-          {error}
+          {displayError}
         </Box>
       )}
       <Box
@@ -100,7 +105,9 @@ export default function JsonEditor({ value, onChange, originalValue }: JsonEdito
           <Editor
             height="100%"
             defaultLanguage="json"
-            value={value}
+            // Editable mode keeps Monaco's own buffer (defaultValue): re-rendering
+            // with a re-serialized `value` on every keystroke would reset the cursor.
+            {...(readOnly ? { value } : { defaultValue: value })}
             onChange={handleChange}
             theme={colorMode === 'dark' ? 'vs-dark' : 'vs-light'}
             onMount={(editor, monaco) => {
