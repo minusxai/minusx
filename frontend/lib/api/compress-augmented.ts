@@ -33,7 +33,7 @@ export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can req
 
 /** Extract referenced file IDs from a DbFile's content */
 export function extractReferences(file: DbFile): number[] {
-  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'notebook') {
+  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'notebook' || file.type === 'story') {
     const content = file.content as any;
     return content.assets
       ?.filter((a: any) => a.type === 'question')

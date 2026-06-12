@@ -10,6 +10,7 @@ import { FileType } from './file-metadata';
 import { type FileId } from '@/store/filesSlice';
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
+import StoryContainerV2 from '@/components/containers/StoryContainerV2';
 import PresentationContainerV2 from '@/components/containers/PresentationContainerV2';
 import ContextContainerV2 from '@/components/containers/ContextContainerV2';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
@@ -46,6 +47,7 @@ export interface FileComponentProps {
 export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps>>> = {
   question: QuestionContainerV2,
   dashboard: DashboardContainerV2,
+  story: StoryContainerV2,
   presentation: PresentationContainerV2,
   context: ContextContainerV2,
   connection: ConnectionContainerV2,

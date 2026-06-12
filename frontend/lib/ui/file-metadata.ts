@@ -1,4 +1,4 @@
-import { LuFileText, LuNotebook, LuScanSearch, LuPresentation, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuBell, LuArrowRightLeft } from 'react-icons/lu';
+import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuPresentation, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuBell, LuArrowRightLeft } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -39,6 +39,14 @@ export const FILE_TYPE_METADATA = {
     color: 'accent.danger',       // Pomegranate red (#c0392b)
     category: 'analytics',
     supported: true,
+    h: 'none',
+  },
+  story: {
+    label: 'Data Story',
+    icon: LuBookOpen,
+    color: 'accent.cyan',         // Turquoise cyan (#1abc9c)
+    category: 'analytics',
+    supported: false,
     h: 'none',
   },
   notebook: {

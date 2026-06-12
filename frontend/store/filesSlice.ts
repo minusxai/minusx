@@ -46,6 +46,11 @@ export interface FileState extends DbFile {
 
   // Change tracking (Phase 2)
   persistableChanges: Partial<DbFile['content']>;
+  // When true, persistableChanges holds the FULL content (set via setFullContent,
+  // e.g. JSON editors) and replaces file.content on save instead of merging —
+  // this is what lets key deletions persist. Subsequent setEdit merges keep the
+  // invariant (merging onto full content yields full content).
+  contentReplaced?: boolean;
   ephemeralChanges: EphemeralChanges;
   metadataChanges: { name?: string; path?: string }; // Phase 5: Metadata edits
 
@@ -371,6 +376,7 @@ const filesSlice = createSlice({
         // Store the full new content as persistableChanges
         // On save, this replaces file.content entirely
         state.files[fileId].persistableChanges = sortObjectKeysDeep(content) as any;
+        state.files[fileId].contentReplaced = true;
       }
     },
 
@@ -380,6 +386,7 @@ const filesSlice = createSlice({
     clearEdits(state, action: PayloadAction<FileId>) {
       if (state.files[action.payload]) {
         state.files[action.payload].persistableChanges = {};
+        state.files[action.payload].contentReplaced = false;
       }
     },
 
@@ -941,6 +948,35 @@ export const selectMergedContent = createSelector(
       ...ephemeralChanges
     } as DbFile['content'];
   }
+);
+
+/**
+ * Compute the content that would be persisted on save for a file state:
+ * the full persistableChanges when content was replaced (setFullContent),
+ * otherwise content merged with persistableChanges. Never includes ephemerals.
+ */
+export function persistableContentOf(file: Pick<FileState, 'content' | 'persistableChanges' | 'contentReplaced'>): DbFile['content'] | undefined {
+  const hasEdits = file.persistableChanges && Object.keys(file.persistableChanges).length > 0;
+  if (file.contentReplaced && hasEdits) {
+    return file.persistableChanges as DbFile['content'];
+  }
+  if (!file.content) return undefined;
+  return hasEdits ? { ...file.content, ...file.persistableChanges } as DbFile['content'] : file.content;
+}
+
+/**
+ * Get the persistable content (content + persistableChanges, NO ephemerals).
+ * This is what the JSON view edits and what publishFile saves.
+ * Memoized to prevent unnecessary re-renders.
+ */
+export const selectPersistableContent = createSelector(
+  [
+    (state: RootState, id: FileId) => state.files.files[id]?.content,
+    (state: RootState, id: FileId) => state.files.files[id]?.persistableChanges,
+    (state: RootState, id: FileId) => state.files.files[id]?.contentReplaced
+  ],
+  (content, persistableChanges, contentReplaced): DbFile['content'] | undefined =>
+    persistableContentOf({ content, persistableChanges: persistableChanges ?? {}, contentReplaced })
 );
 
 /**

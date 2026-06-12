@@ -70,10 +70,12 @@ vi.mock('@monaco-editor/react', () => {
       onMount?.(editorStub, monacoStub);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
     return React.createElement('textarea', {
-      'aria-label': 'SQL editor',
-      value: value ?? '',
+      // Honor an explicit options.ariaLabel (JsonEditor); SqlEditor doesn't set one
+      'aria-label': props.options?.ariaLabel ?? 'SQL editor',
+      value: value ?? props.defaultValue ?? '',
       onChange: (e: any) => onChange?.(e.target.value),
-      readOnly: !onChange,
+      // Honor an explicit options.readOnly (JsonEditor); else infer from onChange
+      readOnly: props.options?.readOnly ?? !onChange,
     });
   };
   // __esModule: true is required so that `import Editor from '@monaco-editor/react'`
@@ -164,6 +166,20 @@ vi.mock('echarts', () => ({
   use: vi.fn(),
   registerTheme: vi.fn(),
   graphic: { LinearGradient: vi.fn() },
+}));
+
+// ---------------------------------------------------------------------------
+// mirrorAppStyles → no-op
+// AgentHtml (story/slide canvas) copies the document's stylesheet rules into
+// its shadow root so portaled charts inherit Chakra styling. In jsdom that
+// read (cssRules/cssText) is a slow JS reimplementation, and the injected
+// emotion/Chakra <style> tags accumulate across a test file's shared document,
+// so re-serializing every rule on each render goes O(n²) — it turned a 9-test
+// story-view file into ~13 minutes. The mirror has no observable effect in
+// tests (charts are mocked), so faking it to a no-op is free.
+// ---------------------------------------------------------------------------
+vi.mock('@/lib/html/mirror-app-styles', () => ({
+  mirrorAppStyles: () => {},
 }));
 
 // ---------------------------------------------------------------------------
