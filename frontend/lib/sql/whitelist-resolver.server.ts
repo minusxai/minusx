@@ -12,6 +12,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ContextContent } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
+import { getPublishedVersion } from '@/lib/context/context-utils';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 
 export type WhitelistSchema = Array<{ schema: string; tables: Array<{ table: string }> }>;
@@ -65,8 +66,20 @@ export async function getWhitelistForPath(
     const nearest = matching[0];
     if (!nearest) return null;
 
-    const result = await FilesAPI.loadFile(nearest.id, user);
-    const contextContent = result.data?.content as ContextContent | undefined;
+    // A chain of '*' whitelists all the way to the root means "expose
+    // everything" — return null (unrestricted) rather than enumerating through
+    // the cached connection schema, which can lag behind reality (e.g. a sheet
+    // imported seconds ago whose schema refresh is still in flight).
+    const { data: chainFiles } = await FilesAPI.loadFiles(matching.map((c) => c.id), user);
+    const allWildcard = chainFiles.length === matching.length && chainFiles.every((f) => {
+      const c = f.content as ContextContent | undefined;
+      if (!c?.versions) return false;
+      const published = c.versions.find((v) => v.version === getPublishedVersion(c));
+      return published?.whitelist === '*';
+    });
+    if (allWildcard) return null;
+
+    const contextContent = chainFiles.find((f) => f.id === nearest.id)?.content as ContextContent | undefined;
     if (!contextContent) return null;
 
     // Use the file's parent directory as the scope path for childPaths filtering.
