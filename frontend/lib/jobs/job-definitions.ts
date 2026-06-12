@@ -5,17 +5,10 @@ export interface JobDefinition {
   job_type: string;
   file_type: FileType;
   isActive: (content: ScheduledJobContent) => boolean;
-  /**
-   * Returns the cron expression gating this job, or null when the job has none.
-   * When defined, the cron route only fires the job inside its schedule window
-   * (and skips it entirely if this returns null). Job types without getCron
-   * keep the legacy behavior of running on every cron tick while active.
-   */
+  /** Cron expression gating this job (null → skip). Without getCron, the job runs on every cron tick while active. */
   getCron?: (content: ScheduledJobContent) => string | null;
 }
 
-/** A connection participates in sheets auto-sync when it has an autoSync
- *  schedule and at least one Google Sheets-sourced file to resync. */
 function isSheetsSyncActive(content: ScheduledJobContent): boolean {
   const conn = content as unknown as ConnectionContent;
   if (!conn.autoSync?.cron || !conn.config) return false;

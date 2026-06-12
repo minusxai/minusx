@@ -13,15 +13,9 @@ interface SheetSyncResult {
 }
 
 /**
- * Resyncs every Google Sheets-sourced file group in a connection from its
- * live spreadsheet. Mirrors the manual reimport flow
- * (app/api/google-sheets/reimport/route.ts) with the same atomicity rule:
- * new data is fetched and validated BEFORE old S3 files are deleted, so a
- * failed sync always leaves the previous data intact.
- *
- * On top of manual reimport, this preserves user table renames across syncs
- * by matching files on `filename` (the sheet tab) — an unattended 3am sync
- * must not silently break saved questions that reference a renamed table.
+ * Resyncs each Google Sheets group in a connection from its live spreadsheet.
+ * Same atomicity rule as manual reimport: new data is validated before old S3
+ * files are deleted, so a failed sync keeps the previous data.
  */
 export const sheetsSyncJobHandler: JobHandler = {
   async execute({ jobId, file }: JobRunnerInput, user): Promise<JobHandlerResult> {
@@ -32,8 +26,6 @@ export const sheetsSyncJobHandler: JobHandler = {
 
     const allFiles = ((connection.config?.files ?? []) as CsvFileInfo[]);
 
-    // Group sheet-sourced files by spreadsheet (one connection can hold
-    // several imported spreadsheets alongside plain CSV uploads)
     const groups = new Map<string, CsvFileInfo[]>();
     for (const f of allFiles) {
       if (f.source_type === 'google_sheets' && f.spreadsheet_id) {
@@ -57,7 +49,7 @@ export const sheetsSyncJobHandler: JobHandler = {
         const registered = await processFilesFromS3(user.mode, connFile.name, incoming);
 
         const newFiles: CsvFileInfo[] = registered.map((f) => {
-          // Same tab (filename) as before → keep the user's table/schema names
+          // Same tab as before → keep the user's table/schema renames
           const previous = groupFiles.find((old) => old.filename === f.filename);
           return {
             ...f,
@@ -69,14 +61,13 @@ export const sheetsSyncJobHandler: JobHandler = {
           };
         });
 
-        // Replace the group in place, keeping its position in the file list
         const firstIdx = updatedFiles.findIndex((f) => f.spreadsheet_id === spreadsheetId);
         const unchanged = updatedFiles.filter((f) => f.spreadsheet_id !== spreadsheetId);
         updatedFiles = firstIdx === -1
           ? [...newFiles, ...unchanged]
           : [...unchanged.slice(0, firstIdx), ...newFiles, ...unchanged.slice(firstIdx)];
 
-        // New data confirmed — delete old S3 objects (best-effort, non-fatal)
+        // Best-effort cleanup, only after new data is confirmed
         await Promise.allSettled(oldS3Keys.map((key) => deleteS3File(key)));
 
         results.push({
@@ -106,9 +97,7 @@ export const sheetsSyncJobHandler: JobHandler = {
         ? failures.map((f) => `${f.spreadsheet_url}: ${f.error}`).join('; ')
         : undefined,
     };
-    // FilesAPI.saveFile owns the schema cache for connections: it strips the
-    // cached schema and re-introspects with refresh=true, so the new tables
-    // are profiled immediately after the sync.
+    // saveFile re-introspects connection schemas, so new tables are profiled here
     await FilesAPI.saveFile(fileId, connFile.name, connFile.path, updatedContent, connFile.references ?? [], user);
 
     return {

@@ -1,19 +1,5 @@
 /**
- * Google Sheets Auto-Sync E2E Tests
- *
- * Tests the sheets_sync scheduled job through the real cron route:
- *   - POST /api/jobs/cron picks up connections with `autoSync.cron` set and
- *     google_sheets-sourced files, and resyncs each spreadsheet group.
- *
- * Contract under test:
- *   - Connection content gains `autoSync?: JobSchedule`, `lastSyncedAt?`, `lastSyncError?`
- *   - New files replace the old spreadsheet group (atomic: old kept on failure)
- *   - Table renames are preserved by matching `filename` across reimports
- *   - Non-sheets files (CSV uploads) in the same connection are untouched
- *   - Old S3 keys are deleted only after a successful reimport
- *   - Partial failure (one of two spreadsheets) → run FAILURE, successful
- *     group still updated, failed group untouched, lastSyncError recorded
- *
+ * Google Sheets auto-sync (sheets_sync job) through the real cron route.
  * `@/lib/csv-processor` is mocked — no network/S3/DuckDB involved.
  */
 
@@ -49,10 +35,7 @@ vi.mock('@/lib/csv-processor', () => ({
   deleteConnectionFiles: vi.fn(),
 }));
 
-// ─── Node connector mock ──────────────────────────────────────────────────────
-// Saving a connection live-tests it (validateFileStateServer → testConnection)
-// and the connection loader introspects schemas — neither should hit real
-// DuckDB/S3 in this suite.
+// ─── Node connector mock (connection save live-tests + loader introspection) ──
 vi.mock('@/lib/connections', () => ({
   getNodeConnector: vi.fn().mockReturnValue({
     query: vi.fn().mockResolvedValue({ columns: [], types: [], rows: [], finalQuery: '' }),
@@ -124,8 +107,7 @@ function baseConnectionContent(): ConnectionContent {
       ],
     },
     autoSync: { cron: '* * * * *', timezone: 'UTC' },
-    // Simulates a cached introspection schema that must be dropped after sync
-    schema: { databases: [] } as any,
+    schema: { databases: [] } as any,  // stale cached schema, replaced on sync
   } as ConnectionContent;
 }
 
@@ -231,8 +213,7 @@ describe('Google Sheets Auto-Sync E2E', () => {
     // Sync bookkeeping
     expect(conn.lastSyncedAt).toBeTruthy();
     expect(conn.lastSyncError).toBeUndefined();
-    // Stale cached schema replaced — saveFile re-introspects connections on
-    // save, so the placeholder `{ databases: [] }` must be gone
+    // saveFile re-introspects on save, so the stale placeholder must be gone
     expect((conn.schema as any)?.databases).toBeUndefined();
     if (conn.schema) expect(conn.schema.updated_at).toBeTruthy();
     // autoSync schedule preserved

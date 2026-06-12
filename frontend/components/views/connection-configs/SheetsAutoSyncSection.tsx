@@ -22,10 +22,7 @@ interface SheetsAutoSyncSectionProps {
   editMode?: boolean;
 }
 
-/**
- * Auto-sync controls for Google Sheets-backed connections: an on/off toggle,
- * a schedule picker while enabled, and the outcome of the most recent sync.
- */
+/** Auto-sync toggle + schedule + last-sync status for Google Sheets-backed connections. */
 export function SheetsAutoSyncSection({
   autoSync,
   onChange,

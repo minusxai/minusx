@@ -923,11 +923,9 @@ export interface ConnectionContent extends BaseFileContent {
   config: Record<string, any>;
   description?: string;
   schema?: DatabaseSchema;  // Added by connection loader via introspection
-  // Google Sheets auto-sync (sheets_sync scheduled job; only meaningful when
-  // config.files contains google_sheets-sourced entries)
-  autoSync?: JobSchedule;
-  lastSyncedAt?: string;    // ISO timestamp of the last successful sync
-  lastSyncError?: string;   // Error(s) from the most recent sync attempt; cleared on full success
+  autoSync?: JobSchedule;   // Google Sheets auto-sync schedule (sheets_sync job)
+  lastSyncedAt?: string;    // Last successful sync
+  lastSyncError?: string;   // Most recent sync error; cleared on full success
 }
 
 // Connector (Meltano/Singer pipeline) types (stored as file in /connectors/)

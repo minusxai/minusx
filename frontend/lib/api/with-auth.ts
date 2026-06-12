@@ -50,8 +50,7 @@ export function withAuth(handler: AuthHandler) {
     try {
       return await handler(request, user, context);
     } catch (e) {
-      // Client disconnects (tab closed, navigation, cancelled fetch) are not
-      // server faults — rethrow so the request dies, but don't page anyone.
+      // Client disconnects are not server faults — rethrow without reporting
       if (!isClientAbortError(e)) {
         appEventRegistry.publish(AppEvents.ERROR, {
           mode: user.mode ?? 'org',

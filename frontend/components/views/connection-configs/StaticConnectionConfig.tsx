@@ -69,7 +69,7 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   singleTab?: 'csv' | 'sheets';
   /** Called when pending (un-uploaded) files change — true if files are staged but not yet uploaded. */
   onPendingChange?: (hasPending: boolean) => void;
-  /** Google Sheets auto-sync schedule (connection content level). Section renders only when onAutoSyncChange is provided and sheet groups exist. */
+  /** Google Sheets auto-sync (content level); section renders only when onAutoSyncChange is set and sheet groups exist. */
   autoSync?: JobSchedule;
   onAutoSyncChange?: (autoSync: JobSchedule | undefined) => void;
   lastSyncedAt?: string;

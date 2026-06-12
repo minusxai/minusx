@@ -140,8 +140,6 @@ async function runForOrg(
 
       const jobId = String(jobFile.id);
 
-      // Job types with a getCron accessor only fire inside their schedule
-      // window; a defined accessor returning null means "no schedule" → skip.
       const cronExpr = jobDef.getCron ? jobDef.getCron(content) : null;
       if (jobDef.getCron && !cronExpr) { skipped++; continue; }
       const prevFire = cronExpr ? getPrevFireTime(cronExpr, now) : null;
@@ -207,8 +205,7 @@ async function runForOrg(
         );
 
         const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
-        // Respect the handler's status override (same contract as /api/jobs/run):
-        // a handler can complete without throwing yet still report failure.
+        // Handlers can report failure without throwing (same contract as /api/jobs/run)
         const runStatus = result.status === 'failure' ? 'failure' : 'success';
         const successContent: RunFileContent = {
           job_type: jobDef.job_type, status: runStatus, startedAt,

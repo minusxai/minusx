@@ -1,13 +1,4 @@
-/**
- * SheetsAutoSyncSection unit tests (jsdom)
- *
- * The section controls a connection's Google Sheets auto-sync schedule:
- *   - Toggle off (no autoSync): schedule hidden; enabling emits a sensible
- *     default schedule (every 3 hours, UTC)
- *   - Toggle on: SchedulePicker shown with the connection's cron; disabling
- *     emits undefined (clears the schedule)
- *   - Shows last-sync status: timestamp on success, error text on failure
- */
+/** SheetsAutoSyncSection + its wiring into StaticConnectionConfig (jsdom). */
 
 import React from 'react';
 import { fireEvent, waitFor } from '@testing-library/react';

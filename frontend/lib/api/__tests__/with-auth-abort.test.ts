@@ -1,15 +1,6 @@
 /**
- * withAuth — client-abort errors must not be reported to the bug channel.
- *
- * When a browser disconnects mid-request (tab closed, navigation away,
- * Playwright teardown), `await request.json()` throws `Error: aborted`
- * (Node http, code ECONNRESET) or an `AbortError`. That's a client hangup,
- * not a server fault — withAuth must rethrow it (so the route 500s and the
- * connection closes) but must NOT publish AppEvents.ERROR, which fans out to
- * Slack + Sentry (see Sentry MINUSX-BI-1Q: QA flows spamming `Error: aborted`
- * from /api/validate-sql).
- *
- * Real server errors must keep being published exactly as before.
+ * withAuth must rethrow client-abort errors without publishing AppEvents.ERROR
+ * (Slack/Sentry); real server errors keep being published. (Sentry MINUSX-BI-1Q)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
