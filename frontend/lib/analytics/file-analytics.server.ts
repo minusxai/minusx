@@ -321,6 +321,7 @@ WITH scored AS (
   WHERE fi.type IN ('question', 'dashboard')
     AND fi.draft = false
     AND u.email = $2
+    AND (fi.path = $4 OR fi.path LIKE $4 || '/%')
   GROUP BY fe.file_id, fi.type, fi.name, fi.path
 ),
 ranked AS (
@@ -336,13 +337,14 @@ ORDER BY "score" DESC, "lastVisited" DESC
 
 export async function getRelevantFiles(
   userEmail: string,
+  mode: string,
   days: number = 30,
   perType: number = 3,
 ): Promise<import('./file-analytics.types').RecentFile[]> {
   try {
     const result = await getModules().db.exec<Record<string, unknown>>(
       RELEVANT_FILES_SQL,
-      [days, userEmail, perType],
+      [days, userEmail, perType, `/${mode}`],
     );
     return result.rows.map(row => ({
       fileId: Number(row['fileId']),

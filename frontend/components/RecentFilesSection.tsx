@@ -162,9 +162,19 @@ function QuestionChartCard({ file }: { file: RecentFile }) {
   );
 }
 
+// Chart types we want surfaced first in the carousel — they read best as
+// standalone visuals. Lower number = higher priority. Everything else
+// (table, pivot, single_value, pie, funnel, …) falls into the default tier.
+const VIZ_PRIORITY: Record<string, number> = { area: 0, bar: 1, line: 2, funnel: 3, pie: 4 };
+const DEFAULT_VIZ_PRIORITY = 10;
+const vizPriority = (f: RecentFile) => VIZ_PRIORITY[f.vizType ?? ''] ?? DEFAULT_VIZ_PRIORITY;
+
 /** Carousel with nav dots for questions */
-function QuestionCarousel({ questions }: { questions: RecentFile[] }) {
+function QuestionCarousel({ questions: unsorted }: { questions: RecentFile[] }) {
   const [activeIdx, setActiveIdx] = useState(0);
+
+  // Stable sort: bar/line/area first, relevance order preserved within each tier.
+  const questions = [...unsorted].sort((a, b) => vizPriority(a) - vizPriority(b));
 
   const prev = useCallback(() => setActiveIdx(i => (i - 1 + questions.length) % questions.length), [questions.length]);
   const next = useCallback(() => setActiveIdx(i => (i + 1) % questions.length), [questions.length]);
