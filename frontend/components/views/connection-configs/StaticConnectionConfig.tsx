@@ -653,6 +653,7 @@ export default function StaticConnectionConfig({
             bg={activePanel === 'csv-upload' ? 'bg.surface' : 'bg.muted'}
             _hover={{ bg: 'bg.surface' }}
             transition="all 0.1s"
+            aria-label="Upload CSV tab"
             onClick={() => {
               setActivePanel(activePanel === 'csv-upload' ? null : 'csv-upload');
               setUploadProgress('idle');
@@ -700,7 +701,7 @@ export default function StaticConnectionConfig({
                 {/* Success feedback + compact add-more */}
                 {uploadProgress === 'done' && (
                   <VStack align="stretch" gap={2}>
-                    <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30">
+                    <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30" aria-label="Upload succeeded">
                       <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
                       <Text fontSize="xs" color="accent.teal" fontWeight="600">
                         Uploaded successfully. Save connection to persist.
@@ -745,6 +746,7 @@ export default function StaticConnectionConfig({
                     type="file"
                     accept=".csv,.parquet,.pq,.xlsx"
                     multiple
+                    aria-label="CSV file input"
                     onChange={(e) => handleFilesSelected(Array.from(e.target.files ?? []))}
                     style={{ display: 'none' }}
                   />
@@ -766,6 +768,7 @@ export default function StaticConnectionConfig({
                       setPendingFiles((p) => p.map((pf) => ({ ...pf, schemaName: v })));
                     }}
                     placeholder="e.g. marketing_data"
+                    aria-label="CSV dataset name"
                   />
                   <Text fontSize="2xs" color="fg.muted" mt={1}>
                     Groups these files together. Lowercase, underscores only.
@@ -852,6 +855,7 @@ export default function StaticConnectionConfig({
                   size="sm"
                   bg="accent.teal"
                   color="white"
+                  aria-label="Upload files"
                 >
                   <LuUpload size={14} /> Upload
                 </Button>
