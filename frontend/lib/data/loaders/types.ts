@@ -10,7 +10,8 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
  * Options for custom loaders
  */
 export interface LoaderOptions {
-  refresh?: boolean;  // Force refresh of cached data (e.g., connection schemas)
+  refresh?: boolean;            // Force refresh of cached data and WAIT for it (user-initiated)
+  backgroundRefresh?: boolean;  // Serve cached data now, refresh behind the scenes (e.g. post-save)
 }
 
 /**

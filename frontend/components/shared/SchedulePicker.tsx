@@ -1,26 +1,24 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Box, Text, HStack, Input, Portal, createListCollection } from '@chakra-ui/react';
 import { LuClock } from 'react-icons/lu';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { immutableSet } from '@/lib/utils/immutable-collections';
 
-const CRON_PRESETS = [
+export interface CronPreset {
+  value: string;
+  label: string;
+}
+
+const CRON_PRESETS: CronPreset[] = [
   { value: '0 9 * * *',   label: 'Daily at 9am' },
   { value: '0 9 * * 1',   label: 'Weekly on Monday' },
   { value: '0 9 * * 1-5', label: 'Weekdays at 9am' },
   { value: '0 9 1 * *',   label: 'Monthly on 1st' },
   { value: '0 17 * * 5',  label: 'Fridays at 5pm' },
-  { value: '__custom__',  label: 'Custom Schedule' },
 ];
 
-const CRON_PRESET_VALUES = immutableSet(
-  CRON_PRESETS.filter(p => p.value !== '__custom__').map(p => p.value)
-);
-
-const cronCollection = createListCollection({
-  items: CRON_PRESETS.map(p => ({ value: p.value, label: p.label })),
-});
+const CUSTOM_PRESET: CronPreset = { value: '__custom__', label: 'Custom Schedule' };
 
 const TIMEZONES = [
   { value: 'America/New_York',    label: 'ET' },
@@ -43,10 +41,18 @@ interface SchedulePickerProps {
   schedule: { cron: string; timezone: string };
   onChange: (schedule: { cron: string; timezone: string }) => void;
   editMode?: boolean;
+  /** Override the cron presets (a "Custom Schedule" entry is always appended). */
+  presets?: CronPreset[];
+  /** Section title shown in the header chip. */
+  title?: string;
 }
 
-export function SchedulePicker({ schedule, onChange, editMode = true }: SchedulePickerProps) {
-  const presetValue = CRON_PRESET_VALUES.has(schedule.cron) ? schedule.cron : '__custom__';
+export function SchedulePicker({ schedule, onChange, editMode = true, presets = CRON_PRESETS, title = 'Schedule' }: SchedulePickerProps) {
+  const cronCollection = useMemo(
+    () => createListCollection({ items: [...presets, CUSTOM_PRESET] }),
+    [presets]
+  );
+  const presetValue = presets.some(p => p.value === schedule.cron) ? schedule.cron : '__custom__';
 
   return (
     <Box
@@ -62,7 +68,7 @@ export function SchedulePicker({ schedule, onChange, editMode = true }: Schedule
       <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.teal" borderLeftRadius="md" />
       <HStack mb={2} gap={1.5}>
         <LuClock size={14} color="var(--chakra-colors-accent-teal)" />
-        <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Schedule</Text>
+        <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">{title}</Text>
       </HStack>
 
       <HStack gap={2}>
@@ -100,6 +106,7 @@ export function SchedulePicker({ schedule, onChange, editMode = true }: Schedule
             value={schedule.cron}
             onChange={(e) => onChange({ ...schedule, cron: e.target.value })}
             placeholder="cron"
+            aria-label="Cron expression"
             disabled={!editMode}
             size="sm"
             fontFamily="mono"

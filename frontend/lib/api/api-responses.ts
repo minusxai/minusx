@@ -19,6 +19,19 @@ async function getRequestId(): Promise<string | null> {
 }
 
 /**
+ * True when the client hung up mid-request (tab closed, fetch cancelled)
+ * rather than the server failing. Matched exactly, not by substring, so real
+ * errors that mention "aborted" still get reported.
+ */
+export function isClientAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === 'AbortError') return true;
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'ECONNRESET') return true;
+  return error.message === 'aborted';
+}
+
+/**
  * Create a success response
  */
 export async function successResponse<T>(

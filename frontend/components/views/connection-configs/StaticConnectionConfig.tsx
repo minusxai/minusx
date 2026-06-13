@@ -49,11 +49,12 @@ import {
   LuCircleAlert,
   LuDatabase,
 } from 'react-icons/lu';
-import { CsvFileInfo } from '@/lib/types';
+import { CsvFileInfo, JobSchedule } from '@/lib/types';
 import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
 import { importGoogleSheets, reimportGoogleSheets } from '@/lib/backend/google-sheets';
 import { sanitizeTableName, validateIdentifier } from '@/lib/csv-utils';
 import { BaseConfigProps } from './types';
+import { SheetsAutoSyncSection } from './SheetsAutoSyncSection';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,11 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   singleTab?: 'csv' | 'sheets';
   /** Called when pending (un-uploaded) files change — true if files are staged but not yet uploaded. */
   onPendingChange?: (hasPending: boolean) => void;
+  /** Google Sheets auto-sync (content level); section renders only when onAutoSyncChange is set and sheet groups exist. */
+  autoSync?: JobSchedule;
+  onAutoSyncChange?: (autoSync: JobSchedule | undefined) => void;
+  lastSyncedAt?: string;
+  lastSyncError?: string;
 }
 
 interface PendingFile {
@@ -307,6 +313,10 @@ export default function StaticConnectionConfig({
   initialTab,
   singleTab,
   onPendingChange,
+  autoSync,
+  onAutoSyncChange,
+  lastSyncedAt,
+  lastSyncError,
 }: StaticConnectionConfigProps) {
   // ── Panel toggle ──────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
@@ -643,6 +653,7 @@ export default function StaticConnectionConfig({
             bg={activePanel === 'csv-upload' ? 'bg.surface' : 'bg.muted'}
             _hover={{ bg: 'bg.surface' }}
             transition="all 0.1s"
+            aria-label="Upload CSV tab"
             onClick={() => {
               setActivePanel(activePanel === 'csv-upload' ? null : 'csv-upload');
               setUploadProgress('idle');
@@ -666,6 +677,7 @@ export default function StaticConnectionConfig({
             bg={activePanel === 'sheets-add' ? 'bg.surface' : 'bg.muted'}
             _hover={{ bg: 'bg.surface' }}
             transition="all 0.1s"
+            aria-label="Add Google Sheet tab"
             onClick={() => {
               setActivePanel(activePanel === 'sheets-add' ? null : 'sheets-add');
               setImportProgress('idle');
@@ -689,7 +701,7 @@ export default function StaticConnectionConfig({
                 {/* Success feedback + compact add-more */}
                 {uploadProgress === 'done' && (
                   <VStack align="stretch" gap={2}>
-                    <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30">
+                    <HStack gap={1.5} px={3} py={2} borderRadius="md" bg="accent.teal/10" border="1px solid" borderColor="accent.teal/30" aria-label="Upload succeeded">
                       <LuCheck size={14} color="var(--chakra-colors-accent-teal)" />
                       <Text fontSize="xs" color="accent.teal" fontWeight="600">
                         Uploaded successfully. Save connection to persist.
@@ -734,6 +746,7 @@ export default function StaticConnectionConfig({
                     type="file"
                     accept=".csv,.parquet,.pq,.xlsx"
                     multiple
+                    aria-label="CSV file input"
                     onChange={(e) => handleFilesSelected(Array.from(e.target.files ?? []))}
                     style={{ display: 'none' }}
                   />
@@ -755,6 +768,7 @@ export default function StaticConnectionConfig({
                       setPendingFiles((p) => p.map((pf) => ({ ...pf, schemaName: v })));
                     }}
                     placeholder="e.g. marketing_data"
+                    aria-label="CSV dataset name"
                   />
                   <Text fontSize="2xs" color="fg.muted" mt={1}>
                     Groups these files together. Lowercase, underscores only.
@@ -841,6 +855,7 @@ export default function StaticConnectionConfig({
                   size="sm"
                   bg="accent.teal"
                   color="white"
+                  aria-label="Upload files"
                 >
                   <LuUpload size={14} /> Upload
                 </Button>
@@ -881,6 +896,7 @@ export default function StaticConnectionConfig({
                     setPendingSheets((p) => p.map((s) => ({ ...s, schema: v })));
                   }}
                   placeholder="e.g. survey_results"
+                  aria-label="Dataset name"
                 />
                 <Text fontSize="2xs" color="fg.muted" mt={1}>
                   Groups imported sheets together. Lowercase, underscores only.
@@ -929,6 +945,7 @@ export default function StaticConnectionConfig({
                         setImportProgress('idle');
                       }}
                       placeholder="https://docs.google.com/spreadsheets/d/..."
+                      aria-label="Spreadsheet URL"
                     />
                     <Box w="1px" h="12px" bg="border.subtle" />
                     <Text fontSize="2xs" color="fg.muted" whiteSpace="nowrap">table:</Text>
@@ -968,6 +985,7 @@ export default function StaticConnectionConfig({
                 size="sm"
                 bg="accent.teal"
                 color="white"
+                aria-label="Import sheets"
               >
                 Import
               </Button>
@@ -998,6 +1016,18 @@ export default function StaticConnectionConfig({
           </Box>
         )}
       </Box>
+
+      {/* ── Google Sheets auto-sync schedule ── */}
+      {onAutoSyncChange && sheetsGroups.size > 0 && (
+        <Box borderRadius="lg" border="1px solid" borderColor="border.subtle" px={4} py={3}>
+          <SheetsAutoSyncSection
+            autoSync={autoSync}
+            onChange={onAutoSyncChange}
+            lastSyncedAt={lastSyncedAt}
+            lastSyncError={lastSyncError}
+          />
+        </Box>
+      )}
 
       {/* ── Registered tables (collapsible, default closed) ── */}
       {hasFiles && (

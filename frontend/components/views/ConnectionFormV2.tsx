@@ -1194,6 +1194,10 @@ export default function ConnectionFormV2({
             onError={setNameError}
             onPendingDeletion={onPendingDeletion}
             onSave={onSave}
+            autoSync={content.autoSync}
+            onAutoSyncChange={(autoSync) => onChange({ autoSync })}
+            lastSyncedAt={content.lastSyncedAt}
+            lastSyncError={content.lastSyncError}
           />
         )}
 
@@ -1301,6 +1305,7 @@ export default function ConnectionFormV2({
             size="sm"
             bg="accent.teal"
             color="white"
+            aria-label="Save connection"
           >
             <LuSave />
             {wizardMode ? 'Save & Continue' : 'Save Connection'}

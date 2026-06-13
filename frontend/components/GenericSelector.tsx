@@ -400,6 +400,7 @@ function GenericSelectorInner({
           borderColor="border.default"
           shadow="lg"
           p={0}
+          aria-label={label ? `${label} options` : undefined}
         >
           <VStack gap={0} align="stretch">
             <Box p={size === 'sm' ? 1.5 : 2}>
@@ -419,6 +420,7 @@ function GenericSelectorInner({
                       bg={option.value === value ? `${color}/10` : 'transparent'}
                       _hover={{ bg: option.value === value ? `${color}/20` : 'bg.muted' }}
                       onClick={() => stableOnChange(option.value)}
+                      aria-label={option.label}
                     >
                       <HStack gap={sizeStyles.gap} justify="space-between">
                         <HStack gap={sizeStyles.gap}>

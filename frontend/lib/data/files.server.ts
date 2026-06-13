@@ -532,10 +532,15 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Strip server-managed fields from client content before saving
     let contentToSave = content;
 
-    // For connections: strip schema (server-managed field)
+    // For connections: the schema is server-managed — ignore the client copy but
+    // keep the previously cached schema, so post-save loads can serve it
+    // stale-while-revalidating instead of blocking on a full re-introspection.
     if (existingFile.type === 'connection') {
       const { schema, ...connectionContentWithoutSchema } = content as ConnectionContent;
-      contentToSave = connectionContentWithoutSchema as BaseFileContent;
+      const previousSchema = (existingFile.content as ConnectionContent | null)?.schema;
+      contentToSave = (previousSchema
+        ? { ...connectionContentWithoutSchema, schema: previousSchema }
+        : connectionContentWithoutSchema) as BaseFileContent;
     }
 
     // For contexts: strip fullSchema/fullDocs (server-computed) and normalize version format.
@@ -611,9 +616,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       mode: user.mode,
     });
 
-    // For connections, reload through loader with refresh=true to update schema
+    // For connections, return immediately with the previous schema; the config
+    // change may have altered tables, so re-introspect in the background
     if (existingFile.type === 'connection') {
-      return this.loadFile(id, user, { refresh: true });
+      return this.loadFile(id, user, { backgroundRefresh: true });
     }
 
     // For contexts, reload through loader to recompute fullSchema and fullDocs

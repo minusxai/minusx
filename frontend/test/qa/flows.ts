@@ -84,6 +84,27 @@ export async function findFile(
 }
 
 /**
+ * Discover a connection by name in tutorial mode. Returns { id, name, path } or null.
+ */
+export async function findConnection(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: number; name: string; path: string } | null> {
+  const res = await request.get(`/api/files?type=connection&depth=10&mode=${QA_MODE}`);
+  if (!res.ok()) return null;
+  const files: any[] = (await res.json())?.data ?? [];
+  const file = files.find((f) => f?.name === name);
+  return file ? { id: file.id, name: file.name, path: file.path } : null;
+}
+
+// Sections that FilesList collapses by default, per file type. Connections are
+// NOT here: /p/<mode>/database renders a dedicated Databases view with the
+// connection tiles already visible.
+const COLLAPSED_SECTION_LABEL: Partial<Record<string, string>> = {
+  question: 'Questions section',
+};
+
+/**
  * Open a file by navigating to its parent folder, then CLICKING its tile — real
  * user navigation, not a URL jump to /f/{id}. Opening the parent folder (derived
  * from the file's path) keeps this robust to nested files across deployments.
@@ -92,7 +113,7 @@ export async function findFile(
  */
 export async function openFileByClick(
   page: Page,
-  type: 'question' | 'dashboard',
+  type: 'question' | 'dashboard' | 'connection',
   file: { name: string; path: string },
 ): Promise<void> {
   const parent =
@@ -105,14 +126,15 @@ export async function openFileByClick(
     .toBe(true);
 
   const tile = page.getByLabel(file.name, { exact: true }).first();
-  // Only the Questions section is collapsed by default (FilesList: collapsedSections
-  // = ['question', '_other']); Dashboards are OPEN by default. So we expand ONLY for
-  // questions — and only after the header has rendered, so the click isn't swallowed.
-  // We must NOT click the Dashboards header: on a cold/contended listing the tile
-  // hasn't rendered yet, and clicking the already-open section would COLLAPSE it and
-  // hide the tile forever (the real cause of the 3-worker dashboard failures).
-  if (type === 'question') {
-    const section = page.getByLabel('Questions section').first();
+  // Expand ONLY sections that are collapsed by default (questions, connections) —
+  // and only after the header has rendered, so the click isn't swallowed.
+  // We must NOT click an already-open section header (e.g. Dashboards): on a
+  // cold/contended listing the tile hasn't rendered yet, and clicking would
+  // COLLAPSE the section and hide the tile forever (the real cause of the
+  // 3-worker dashboard failures).
+  const sectionLabel = COLLAPSED_SECTION_LABEL[type];
+  if (sectionLabel) {
+    const section = page.getByLabel(sectionLabel).first();
     await section.waitFor({ state: 'visible', timeout: 60_000 });
     if (!(await tile.isVisible().catch(() => false))) {
       await section.click().catch(() => {}); // expand the collapsed-by-default section
@@ -132,7 +154,7 @@ export async function runQuery(page: Page): Promise<void> {
 }
 
 /** Assert at least one query result in Redux has rows (a query ran and returned data). */
-export async function assertSomeQueryHasRows(page: Page): Promise<void> {
+export async function assertSomeQueryHasRows(page: Page, timeout = 45_000): Promise<void> {
   await assertRedux(
     page,
     (s) => {
@@ -141,7 +163,7 @@ export async function assertSomeQueryHasRows(page: Page): Promise<void> {
         (r: any) => !r.loading && Array.isArray(r?.data?.rows) && r.data.rows.length > 0,
       );
     },
-    { message: 'no query result with rows landed in Redux', timeout: 45_000 },
+    { message: 'no query result with rows landed in Redux', timeout },
   );
 }
 
@@ -220,12 +242,50 @@ export async function createQuestion(page: Page): Promise<number> {
   return Number(new URL(page.url()).pathname.split('/f/')[1]);
 }
 
+/**
+ * Ensure the open question targets connection `name`. No-op when it's already
+ * selected (a new question auto-selects the default connection; with a single
+ * connection the selector renders as a non-clickable indicator), else pick it
+ * from the Database selector dropdown.
+ */
+export async function selectDatabase(page: Page, name: string): Promise<void> {
+  const fileId = parseInt(new URL(page.url()).pathname.split('/f/')[1], 10);
+  let selected: string | undefined;
+  await expect
+    .poll(async () => {
+      const s: any = await getState(page);
+      const f = s?.files?.files?.[fileId];
+      if (!f) return false;
+      selected = ({ ...(f.content ?? {}), ...(f.persistableChanges ?? {}) } as any).connection_name;
+      return true;
+    }, { message: `question ${fileId} never loaded into Redux`, timeout: 30_000 })
+    .toBe(true);
+  if (selected === name) return;
+
+  await page.getByLabel('Database selector').click();
+  await page.getByLabel('Database selector options').getByLabel(name, { exact: true }).click();
+}
+
 /** Type SQL into the Monaco editor (located via its ariaLabel) and dismiss popups. */
 export async function typeQuery(page: Page, sql: string): Promise<void> {
   // Focus (not click) — Monaco's render layers intercept pointer events on the input.
   await page.getByLabel('SQL editor').focus();
   await page.keyboard.type(sql);
   await page.keyboard.press('Escape'); // dismiss any autocomplete suggestion popup
+  // The editor's onChange is debounced (150ms). Wait until the typed SQL lands
+  // in Redux — an immediate Run would otherwise execute the stale (empty)
+  // query and the run silently no-ops.
+  const fileId = parseInt(new URL(page.url()).pathname.split('/f/')[1], 10);
+  const needle = sql.slice(0, 24);
+  await assertRedux(
+    page,
+    (s: any) => {
+      const f = s?.files?.files?.[fileId];
+      const content = { ...(f?.content ?? {}), ...(f?.persistableChanges ?? {}) };
+      return typeof content.query === 'string' && content.query.includes(needle);
+    },
+    { message: 'typed SQL did not land in Redux (editor debounce)', timeout: 15_000 },
+  );
 }
 
 /** Assert a question is saved (not draft), under /tutorial, with a non-empty query. */

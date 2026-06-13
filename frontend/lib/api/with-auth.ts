@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { ApiErrors, isClientAbortError } from '@/lib/api/api-responses';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 type AuthHandler = (
@@ -50,13 +50,15 @@ export function withAuth(handler: AuthHandler) {
     try {
       return await handler(request, user, context);
     } catch (e) {
-      appEventRegistry.publish(AppEvents.ERROR, {
-        
-        mode: user.mode ?? 'org',
-        source: `server:${request.nextUrl.pathname}`,
-        message: e instanceof Error ? e.message : String(e),
-        context: { user: user.email },
-      });
+      // Client disconnects are not server faults — rethrow without reporting
+      if (!isClientAbortError(e)) {
+        appEventRegistry.publish(AppEvents.ERROR, {
+          mode: user.mode ?? 'org',
+          source: `server:${request.nextUrl.pathname}`,
+          message: e instanceof Error ? e.message : String(e),
+          context: { user: user.email },
+        });
+      }
       throw e;
     }
   };
