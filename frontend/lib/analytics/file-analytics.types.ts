@@ -31,6 +31,8 @@ export interface RecentFile {
   lastVisited: string;
   viewCount?: number;
   uniqueViewers?: number;
+  /** Visualization type for question files (e.g. 'bar', 'line', 'table'). Used to prioritize chart-y questions in the carousel. */
+  vizType?: string;
 }
 
 export interface FileAnalyticsSummary {

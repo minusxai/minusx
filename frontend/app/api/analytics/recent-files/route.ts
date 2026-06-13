@@ -7,12 +7,13 @@ import type { RecentFile } from '@/lib/analytics/file-analytics.types';
 
 export const GET = withAuth(async (_request: NextRequest, user) => {
   try {
-    const recent = await getRelevantFiles(user.email, 30, 3);
+    const recent = await getRelevantFiles(user.email, user.mode, 30, 5);
 
     // Cross-reference against live DB — filter out deleted/draft files, update names
     const fileIds = recent.map(f => f.fileId);
     const publishedFileIds = new Set<number>();
     const fileNameMap = new Map<number, string>();
+    const vizTypeMap = new Map<number, string>();
     if (fileIds.length > 0) {
       const result = await loadFiles(fileIds, user);
       for (const file of result.data) {
@@ -20,12 +21,14 @@ export const GET = withAuth(async (_request: NextRequest, user) => {
           publishedFileIds.add(file.id);
         }
         fileNameMap.set(file.id, file.name);
+        const vizType = (file.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
+        if (vizType) vizTypeMap.set(file.id, vizType);
       }
     }
 
     const filtered: RecentFile[] = recent
       .filter(f => publishedFileIds.has(f.fileId))
-      .map(f => ({ ...f, fileName: fileNameMap.get(f.fileId) ?? f.fileName }));
+      .map(f => ({ ...f, fileName: fileNameMap.get(f.fileId) ?? f.fileName, vizType: vizTypeMap.get(f.fileId) }));
 
     return successResponse({
       recent: filtered,
