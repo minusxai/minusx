@@ -1174,6 +1174,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
+            mentions={{ whitelistedSchemas: availableDatabases }}
             editMode={editMode}
           />
           ) : (
