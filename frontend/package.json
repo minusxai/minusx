@@ -90,6 +90,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@lexical/headless": "^0.40.0",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
