@@ -27,6 +27,12 @@ interface MentionsPluginProps {
   availableSkills?: SkillMention[];
   availableCommands?: SlashCommand[];
   onCommandExecute?: (command: SlashCommand) => void;
+  /**
+   * When true, anchor the dropdown at the text caret and drop it below (for
+   * in-document editors like docs). Default false keeps the chat-input behavior
+   * of anchoring above the input box.
+   */
+  anchorToCaret?: boolean;
 }
 
 type MentionOption = MentionItem | SkillMention | SlashCommand;
@@ -121,7 +127,7 @@ function getMentionMetaText(mention: MentionOption) {
   return undefined;
 }
 
-export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute }: MentionsPluginProps) {
+export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute, anchorToCaret = false }: MentionsPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [mentions, setMentions] = useState<MentionOption[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -393,15 +399,26 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
 
   // Track dropdown position in state, updated via effect
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  // Caret-anchored position (docs editors) — recomputed as the query/caret moves.
+  const [caretPos, setCaretPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     if (!showDropdown || filteredMentions.length === 0) return;
+    if (anchorToCaret) {
+      const domSel = window.getSelection();
+      if (domSel && domSel.rangeCount > 0) {
+        const rect = domSel.getRangeAt(0).getBoundingClientRect();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCaretPos({ top: rect.bottom + 4, left: rect.left });
+      }
+      return;
+    }
     const el = anchorRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-     
+
     setDropdownPos({ top: rect.top - 4, left: rect.left, width: rect.width });
-  }, [showDropdown, filteredMentions.length]);
+  }, [showDropdown, filteredMentions.length, anchorToCaret, query]);
 
   if (!showDropdown || filteredMentions.length === 0) {
     return <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />;
@@ -413,10 +430,11 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       <Portal>
         <Box
           position="fixed"
-          top={dropdownPos ? `${dropdownPos.top}px` : 0}
-          left={dropdownPos ? `${dropdownPos.left}px` : 0}
-          width={dropdownPos ? `${dropdownPos.width}px` : undefined}
-          transform="translateY(-100%)"
+          top={anchorToCaret ? (caretPos ? `${caretPos.top}px` : 0) : (dropdownPos ? `${dropdownPos.top}px` : 0)}
+          left={anchorToCaret ? (caretPos ? `${caretPos.left}px` : 0) : (dropdownPos ? `${dropdownPos.left}px` : 0)}
+          width={anchorToCaret ? undefined : (dropdownPos ? `${dropdownPos.width}px` : undefined)}
+          minW={anchorToCaret ? '280px' : undefined}
+          transform={anchorToCaret ? undefined : 'translateY(-100%)'}
           bg="bg.panel"
           border="1px solid"
           borderColor="border.default"
