@@ -62,6 +62,14 @@ describe('mention-transformer', () => {
     expect(result).toContain(QUESTION_MENTION);
   });
 
+  it('round-trips a column mention (type + table + schema)', () => {
+    const COLUMN_MENTION = '@{"type":"column","name":"amount","schema":"public","table":"orders"}';
+    const nodes = parse(`Revenue uses ${COLUMN_MENTION}.`);
+    const mention = nodes.find((n) => n.type === 'mention');
+    expect(mention?.mentionData).toMatchObject({ type: 'column', name: 'amount', table: 'orders', schema: 'public' });
+    expect(roundTrip(`Revenue uses ${COLUMN_MENTION}.`)).toContain(COLUMN_MENTION);
+  });
+
   it('leaves surrounding markdown formatting intact alongside a mention', () => {
     const result = roundTrip(`## Heading\n\n**bold** and ${TABLE_MENTION}`);
     expect(result).toContain('## Heading');

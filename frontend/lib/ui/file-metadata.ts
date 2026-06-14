@@ -1,4 +1,4 @@
-import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuPresentation, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuBell, LuArrowRightLeft } from 'react-icons/lu';
+import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuPresentation, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuBell, LuArrowRightLeft } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -317,6 +317,15 @@ export const TABLE_MENTION_METADATA = {
   label: 'TABLE',
   icon: LuTable,
   color: ACCENT_HEX.cyan,
+};
+
+/**
+ * Column mention metadata (a column within a table).
+ */
+export const COLUMN_MENTION_METADATA = {
+  label: 'COLUMN',
+  icon: LuColumns3,
+  color: ACCENT_HEX.secondary,
 };
 
 /**

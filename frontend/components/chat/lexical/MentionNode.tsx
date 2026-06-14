@@ -1,7 +1,7 @@
 import React from 'react';
 import { DecoratorNode, LexicalNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
 import { Box, Icon } from '@chakra-ui/react';
-import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
+import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
 import type { ChatMentionData } from '@/lib/types';
 
 /**
@@ -16,6 +16,13 @@ export function getMentionChipMetadata(
     return {
       icon: TABLE_MENTION_METADATA.icon,
       colors: getMentionColors(TABLE_MENTION_METADATA.color),
+    };
+  }
+
+  if (data.type === 'column') {
+    return {
+      icon: COLUMN_MENTION_METADATA.icon,
+      colors: getMentionColors(COLUMN_MENTION_METADATA.color),
     };
   }
 
@@ -87,7 +94,11 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
   decorate(): React.ReactElement {
     const data = this.__mentionData;
     const displayText = data.name;
-    const metaText = data.type === 'table' ? data.schema : undefined;
+    const metaText = data.type === 'table'
+      ? data.schema
+      : data.type === 'column'
+        ? (data.schema ? `${data.schema}.${data.table}` : data.table)
+        : undefined;
     const isSkill = data.type === 'skill';
 
     const colorMap: Record<string, string> = {
@@ -107,6 +118,7 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
     // Map mention type to Chakra semantic color token for the icon
     const iconColorToken = isSkill ? 'accent.teal'
       : data.type === 'table' ? 'accent.cyan'
+      : data.type === 'column' ? 'accent.secondary'
       : data.type === 'question' ? 'accent.primary'
       : data.type === 'dashboard' ? 'accent.danger'
       : 'fg.muted';
@@ -154,9 +166,9 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
   getTextContent(): string {
     // For plain text export
     const data = this.__mentionData;
-    return data.type === 'table'
-      ? `@${data.schema}.${data.name}`
-      : `@@${data.name}`;
+    if (data.type === 'table') return `@${data.schema}.${data.name}`;
+    if (data.type === 'column') return data.schema ? `@${data.schema}.${data.table}.${data.name}` : `@${data.table}.${data.name}`;
+    return `@@${data.name}`;
   }
 }
 

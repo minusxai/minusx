@@ -77,7 +77,11 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
           // Render mention chip
           const data = part.data!;
           const displayText = data.name;
-          const metaText = data.type === 'table' ? data.schema : undefined;
+          const metaText = data.type === 'table'
+            ? data.schema
+            : data.type === 'column'
+              ? (data.schema ? `${data.schema}.${data.table}` : data.table)
+              : undefined;
           const isSkill = data.type === 'skill';
 
           const colorMap: Record<string, string> = {
@@ -96,6 +100,7 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
           // Map mention type to Chakra semantic color token for the icon
           const iconColorToken = isSkill ? 'accent.teal'
             : data.type === 'table' ? 'accent.cyan'
+            : data.type === 'column' ? 'accent.secondary'
             : data.type === 'question' ? 'accent.primary'
             : data.type === 'dashboard' ? 'accent.danger'
             : 'fg.muted';

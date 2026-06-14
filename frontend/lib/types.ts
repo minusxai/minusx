@@ -187,8 +187,10 @@ export interface ChatMentionData {
   id?: number;
   name: string;
   schema?: string;
+  /** For column mentions: the table the column belongs to. */
+  table?: string;
   source?: 'system' | 'user';
-  type: 'table' | 'question' | 'dashboard' | 'skill';
+  type: 'table' | 'question' | 'dashboard' | 'skill' | 'column';
 }
 
 export type SkillMention =
