@@ -20,7 +20,7 @@ function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[]):
     const head = `- ${a.schema}.${a.table}${a.description ? ` — ${a.description}` : ''}`;
     return [head, ...cols.map((c) => `  - ${c.name}: ${c.description}`)];
   });
-  if (annLines.length > 0) lines.push('### Tables & Columns', ...annLines);
+  if (annLines.length > 0) lines.push('### Tables & Columns', 'Note: These descriptions were specially noted by the context authors.', ...annLines);
 
   const metricLines = metrics.map((m) => {
     const loc = m.schema && m.table ? ` [${m.schema}.${m.table}]` : '';
@@ -28,7 +28,7 @@ function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[]):
     const sql = m.sql ? `\n  \`\`\`sql\n  ${m.sql.replace(/\n/g, '\n  ')}\n  \`\`\`` : '';
     return `- ${m.name}${loc}${desc}${sql}`;
   });
-  if (metricLines.length > 0) lines.push('### Metrics', ...metricLines);
+  if (metricLines.length > 0) lines.push('### Metrics', 'Note: These metrics were specially noted by the context authors. Pay attention to the SQL definitions, if available.', ...metricLines);
 
   return lines.length > 0 ? `## Schema Notes\n\n${lines.join('\n')}` : undefined;
 }
