@@ -236,6 +236,8 @@ export function createServerFileState(user: EffectiveUser): IFileStateRead {
 export interface ReadFilesServerOptions {
   /** Execute queries for question files. Default: false */
   executeQueries?: boolean;
+  /** Max characters of compressed text per file (truncates query-result markdown). Default: LIMIT_CHARS. */
+  maxChars?: number;
 }
 
 /**
@@ -247,11 +249,12 @@ export async function readFilesServer(
   user: EffectiveUser,
   options: ReadFilesServerOptions = {}
 ): Promise<CompressedAugmentedFile[]> {
-  const { executeQueries = false } = options;
+  const { executeQueries = false, maxChars } = options;
 
   if (!executeQueries) {
     const augmented = await readFilesImpl(fileIds, user);
-    return augmented.map(compressAugmentedFile);
+    // Explicit arrow: `.map(compressAugmentedFile)` would pass the array index as maxChars.
+    return augmented.map(a => compressAugmentedFile(a, maxChars));
   }
 
   // With query execution: re-run augmentation with actual query results
@@ -271,7 +274,7 @@ export async function readFilesServer(
       );
 
       const queryResults = await executeQueriesForFile(file, refs, inheritedParams, user);
-      results.push(compressAugmentedFile({ fileState, references: refFileStates, queryResults }));
+      results.push(compressAugmentedFile({ fileState, references: refFileStates, queryResults }, maxChars));
     } catch {
       // Skip files that fail to load
     }

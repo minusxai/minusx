@@ -1252,6 +1252,16 @@ export interface CompressedAugmentedFile {
 }
 
 /**
+ * Unified `ReadFiles` tool output — the single shape every read path emits (frontend-bridge
+ * and server/headless), identical in structure to the AppState `file` payload. Imported by
+ * both `agents/analyst/file-tools.ts` and `lib/api/tool-handlers.ts` so the envelope can't drift.
+ */
+export interface ReadFilesResult {
+  success: boolean;
+  files: CompressedAugmentedFile[];
+}
+
+/**
  * EditFile Tool - Range-based file editing
  */
 export interface EditFileInput {

@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -457,7 +457,7 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   const result = await readFiles(fileIds, { runQueries });
-  const textContent = { success: true, files: result.map(f => compressAugmentedFile(f, maxChars)) };
+  const textContent: ReadFilesResult = { success: true, files: result.map(f => compressAugmentedFile(f, maxChars)) };
   const imageBlocks = await renderFileChartImageBlocks(result);
   if (imageBlocks.length === 0) {
     return { content: textContent, details: { success: true } };
