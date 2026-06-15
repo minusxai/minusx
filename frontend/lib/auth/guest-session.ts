@@ -23,6 +23,19 @@ export const GUEST_COOKIE = 'mx-guest';
 /** Short TTL: a leaked link grants at most a day of access. */
 export const GUEST_TTL_SECONDS = 24 * 60 * 60;
 
+/**
+ * Paths on which the anonymous guest cookie is honored. A share guest may only:
+ *  - load the `/l/<id>` share page itself, and
+ *  - call the data/chat APIs that page needs (all further confined by canAccessFile /
+ *    role / canChat downstream).
+ * On every other route (the main app pages — `/`, `/home`, `/explore`, `/f/...`, etc.)
+ * the guest cookie is ignored, so a share link never logs the visitor into the app UI.
+ */
+export function isShareGuestPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return pathname.startsWith('/l/') || pathname.startsWith('/api/');
+}
+
 export interface GuestSessionPayload {
   scope: 'share';
   fileId: number;

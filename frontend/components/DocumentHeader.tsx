@@ -60,6 +60,7 @@ export interface DocumentHeaderProps {
 
   // Optional customization
   additionalBadges?: ReactNode;  // Additional badges to show next to type badge
+  headerActions?: ReactNode;     // Extra controls in the always-visible Actions row (both edit + view mode)
   readOnlyName?: boolean;        // If true, name cannot be edited
   hideDescription?: boolean;     // If true, description field is not shown
   hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
@@ -97,6 +98,7 @@ export default function DocumentHeader({
   onEditModeToggle,
   onSave,
   additionalBadges,
+  headerActions,
   readOnlyName = false,
   hideDescription = false,
   hideEditToggle = false,
@@ -256,6 +258,9 @@ export default function DocumentHeader({
 
           {/* Actions */}
           <HStack gap={2} flexShrink={0}>
+            {/* Always-visible extra actions (e.g. Make public for stories) */}
+            {headerActions}
+
             {/* Explain Button (show in view mode for questions) */}
             {!editMode && questionId !== undefined && (
               <ExplainButton questionId={questionId} size="xs" />

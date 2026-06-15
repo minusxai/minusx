@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import { UserDB } from '../database/user-db';
 import { cache } from 'react';
 import { headers, cookies } from 'next/headers';
-import { GUEST_COOKIE, verifyGuestToken, guestToEffectiveUser } from './guest-session';
+import { GUEST_COOKIE, verifyGuestToken, guestToEffectiveUser, isShareGuestPath } from './guest-session';
 import { UserRole } from '../types';
 import { isAdmin } from './role-helpers';
 import { CURRENT_TOKEN_VERSION, TOKEN_REFRESH_THRESHOLD } from './auth-constants';
@@ -86,9 +86,11 @@ export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> =>
   const session = await auth();
 
   if (!session?.user) {
-    // No NextAuth session: fall back to an anonymous public-share guest, if present.
-    // The guest's scope (folder + mode + role) comes ONLY from the verified cookie —
-    // x-mode / x-impersonate-user are deliberately ignored, so there is no escalation path.
+    // No NextAuth session: fall back to an anonymous public-share guest, but ONLY on the
+    // share pages + the APIs they call (isShareGuestPath). The guest's scope (folder + mode
+    // + role) comes ONLY from the verified cookie — x-mode / x-impersonate-user are ignored,
+    // so there is no escalation path, and the cookie never authorizes the main app UI.
+    if (!isShareGuestPath(headersList.get('x-request-path'))) return null;
     const guestToken = (await cookies()).get(GUEST_COOKIE)?.value;
     const guest = verifyGuestToken(guestToken);
     return guest ? guestToEffectiveUser(guest) : null;

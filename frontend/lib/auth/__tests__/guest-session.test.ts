@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { NEXTAUTH_SECRET } from '@/lib/config';
 import {
   createGuestToken, verifyGuestToken, guestToEffectiveUser, deriveGuestUid,
-  storyHomeFolder, guestChatDenialReason, GUEST_TTL_SECONDS,
+  storyHomeFolder, guestChatDenialReason, isShareGuestPath, GUEST_TTL_SECONDS,
 } from '@/lib/auth/guest-session';
 import { canAccessFile } from '@/lib/data/helpers/permissions';
 import type { DbFile } from '@/lib/types';
@@ -81,6 +81,25 @@ describe('guest scoping via canAccessFile', () => {
 
   it('CANNOT cross into another mode', () => {
     expect(canAccessFile(file('/tutorial/demos/acme/the-story', 'story'), guest)).toBe(false);
+  });
+});
+
+describe('isShareGuestPath — guest cookie scope', () => {
+  it('honors the guest cookie ONLY on share pages + the APIs they call', () => {
+    expect(isShareGuestPath('/l/some-story--token')).toBe(true);
+    expect(isShareGuestPath('/api/files/1263')).toBe(true);
+    expect(isShareGuestPath('/api/query')).toBe(true);
+    expect(isShareGuestPath('/api/chat/stream')).toBe(true);
+  });
+
+  it('ignores the guest cookie on the main app UI (no login leakage)', () => {
+    expect(isShareGuestPath('/')).toBe(false);
+    expect(isShareGuestPath('/home')).toBe(false);
+    expect(isShareGuestPath('/explore')).toBe(false);
+    expect(isShareGuestPath('/f/1263')).toBe(false);
+    expect(isShareGuestPath('/files')).toBe(false);
+    expect(isShareGuestPath(null)).toBe(false);
+    expect(isShareGuestPath(undefined)).toBe(false);
   });
 });
 
