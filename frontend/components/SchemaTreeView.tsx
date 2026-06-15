@@ -5,6 +5,32 @@ import { Box, VStack, HStack, Text, Icon, Collapsible, IconButton, Input } from 
 import { LuTable, LuChevronRight, LuChevronDown, LuColumns3, LuSearch, LuX, LuDatabase, LuEye, LuRefreshCw } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 import ChildPathSelector from './ChildPathSelector';
+import TableMetricsEditor from './context/TableMetricsEditor';
+import type { TableAnnotation, MetricDef } from '@/lib/types';
+
+/**
+ * Uncontrolled description input — the DOM owns the buffer while typing and only
+ * commits on blur, so editing one description doesn't re-render the whole tree on
+ * every keystroke. Keyed on `value` to re-seed when it changes externally.
+ */
+function AnnInput({ value, placeholder, ariaLabel, onCommit }: {
+  value: string; placeholder?: string; ariaLabel: string; onCommit: (next: string) => void;
+}) {
+  return (
+    <Input
+      key={value}
+      defaultValue={value}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      size="xs"
+      h="22px"
+      fontSize="xs"
+      variant="subtle"
+      onClick={(e) => e.stopPropagation()}
+      onBlur={(e) => { if (e.target.value !== value) onCommit(e.target.value); }}
+    />
+  );
+}
 
 // Types for the component
 export interface SchemaTreeItem {
@@ -54,6 +80,22 @@ interface SchemaTreeViewProps {
 
   /** When true, the entire connection is wildcarded (databases === '*') */
   connectionWhitelisted?: boolean;
+
+  // Annotations (table/column descriptions)
+  /** Context-authored table/column descriptions for this connection. */
+  annotations?: TableAnnotation[];
+  /** When provided, descriptions become editable and edits are emitted here. */
+  onAnnotationsChange?: (next: TableAnnotation[]) => void;
+  /** Inherited descriptions (read-only) used as a fallback for the effective value. */
+  inheritedAnnotations?: TableAnnotation[];
+
+  // Metrics (per-table, edited inline in the tree)
+  /** All context metrics. */
+  metrics?: MetricDef[];
+  /** When provided, metrics become editable and edits are emitted here. */
+  onMetricsChange?: (next: MetricDef[]) => void;
+  /** Inherited metrics (read-only). */
+  inheritedMetrics?: MetricDef[];
 }
 
 const TABLES_PER_PAGE = 25;
@@ -74,7 +116,61 @@ export default function SchemaTreeView({
   onRetry,
   defaultExpandedSchemas = false,
   connectionWhitelisted = false,
+  annotations = [],
+  onAnnotationsChange,
+  inheritedAnnotations = [],
+  metrics = [],
+  onMetricsChange,
+  inheritedMetrics = [],
 }: SchemaTreeViewProps) {
+  const annotationsEditable = !!onAnnotationsChange;
+
+  // Match by connection (when known) so the same schema.table across two connections
+  // doesn't collide; legacy entries without a connection still match (lenient).
+  const matchesTable = (a: TableAnnotation, schema: string, table: string) =>
+    a.schema === schema && a.table === table && (a.connection == null || a.connection === connectionName);
+
+  const findTableAnn = (list: TableAnnotation[], schema: string, table: string) =>
+    list.find(a => matchesTable(a, schema, table));
+
+  const effectiveTableDescription = (schema: string, table: string): string | undefined =>
+    findTableAnn(annotations, schema, table)?.description
+      ?? findTableAnn(inheritedAnnotations, schema, table)?.description;
+
+  const effectiveColumnDescription = (schema: string, table: string, col: string, profiled?: string): string | undefined =>
+    findTableAnn(annotations, schema, table)?.columns?.find(c => c.name === col)?.description
+      ?? findTableAnn(inheritedAnnotations, schema, table)?.columns?.find(c => c.name === col)?.description
+      ?? profiled;
+
+  // Drop empty table-annotation entries (no description and no described columns).
+  const pruneAnnotations = (list: TableAnnotation[]): TableAnnotation[] =>
+    list
+      .map(a => ({ ...a, columns: (a.columns || []).filter(c => c.description) }))
+      .filter(a => a.description || (a.columns && a.columns.length > 0))
+      .map(a => (a.columns && a.columns.length === 0 ? { schema: a.schema, table: a.table, description: a.description } : a));
+
+  const setTableDescription = (schema: string, table: string, desc: string) => {
+    const d = desc.trim() || undefined;
+    const next = [...annotations];
+    const i = next.findIndex(a => matchesTable(a, schema, table));
+    if (i >= 0) next[i] = { ...next[i], description: d };
+    else next.push({ connection: connectionName, schema, table, description: d });
+    onAnnotationsChange?.(pruneAnnotations(next));
+  };
+
+  const setColumnDescription = (schema: string, table: string, col: string, desc: string) => {
+    const d = desc.trim() || undefined;
+    const next = [...annotations];
+    let i = next.findIndex(a => matchesTable(a, schema, table));
+    if (i < 0) { next.push({ connection: connectionName, schema, table, columns: [] }); i = next.length - 1; }
+    const cols = [...(next[i].columns || [])];
+    const ci = cols.findIndex(c => c.name === col);
+    if (ci >= 0) cols[ci] = { ...cols[ci], description: d };
+    else cols.push({ name: col, description: d });
+    next[i] = { ...next[i], columns: cols };
+    onAnnotationsChange?.(pruneAnnotations(next));
+  };
+
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(() =>
     defaultExpandedSchemas ? new Set(schemas.map(s => s.schema)) : new Set()
   );
@@ -692,7 +788,10 @@ export default function SchemaTreeView({
                                 opacity={schemaWL ? 0.6 : 1}
                                 justify="space-between"
                               >
-                                <HStack gap={1.5} flex={1} minW={0}>
+                                {(() => {
+                                  const tableHasDesc = annotationsEditable || !!effectiveTableDescription(schemaItem.schema, table.table);
+                                  return (
+                                <HStack gap={1.5} flex={tableHasDesc ? undefined : 1} w={tableHasDesc ? '220px' : undefined} flexShrink={0} minW={0}>
                                   {showColumns && (
                                     <Icon
                                       as={isTableExpanded ? LuChevronDown : LuChevronRight}
@@ -736,6 +835,22 @@ export default function SchemaTreeView({
                                     {table.table}
                                   </Text>
                                 </HStack>
+                                  );
+                                })()}
+                                {annotationsEditable ? (
+                                  <Box flex={1} minW={0} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                                    <AnnInput
+                                      ariaLabel={`${schemaItem.schema}.${table.table} description`}
+                                      value={findTableAnn(annotations, schemaItem.schema, table.table)?.description ?? ''}
+                                      placeholder={findTableAnn(inheritedAnnotations, schemaItem.schema, table.table)?.description || 'Describe this table…'}
+                                      onCommit={(v) => setTableDescription(schemaItem.schema, table.table, v)}
+                                    />
+                                  </Box>
+                                ) : effectiveTableDescription(schemaItem.schema, table.table) ? (
+                                  <Text flex={1} minW={0} fontSize="xs" color="fg.muted" truncate title={effectiveTableDescription(schemaItem.schema, table.table)}>
+                                    {effectiveTableDescription(schemaItem.schema, table.table)}
+                                  </Text>
+                                ) : null}
                                 <HStack gap={2} flexShrink={0}>
                                   {onTablePreview && (
                                     <Box
@@ -807,20 +922,34 @@ export default function SchemaTreeView({
                                       borderLeft="1px solid"
                                       borderColor="border.muted"
                                     >
-                                      {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => (
-                                        <HStack
+                                      {/* Per-table metrics (edited inline) */}
+                                      {(onMetricsChange || metrics.length > 0 || inheritedMetrics.length > 0) && (
+                                        <Box borderBottom="1px solid" borderColor="border.muted">
+                                          <TableMetricsEditor
+                                            connection={connectionName}
+                                            schema={schemaItem.schema}
+                                            table={table.table}
+                                            metrics={metrics}
+                                            onMetricsChange={onMetricsChange}
+                                            inheritedMetrics={inheritedMetrics}
+                                          />
+                                        </Box>
+                                      )}
+                                      {filteredColumns.slice(0, getVisibleColumnCount(tableKey, filteredColumns.length)).map((column) => {
+                                        const profiledDesc = (column as { meta?: { description?: string } }).meta?.description;
+                                        const colDesc = effectiveColumnDescription(schemaItem.schema, table.table, column.name, profiledDesc);
+                                        return (
+                                        <VStack
                                           key={column.name}
-                                          pl={3}
-                                          pr={3}
-                                          py={1}
-                                          gap={2}
+                                          align="stretch"
+                                          gap={0}
                                           borderBottom="1px solid"
                                           borderColor="border.muted"
                                           _hover={{ bg: 'bg.muted' }}
                                           transition="background 0.1s"
-                                          justify="space-between"
                                         >
-                                          <HStack gap={1.5} flex={1} minW={0}>
+                                        <HStack pl={3} pr={3} py={1} gap={2}>
+                                          <HStack gap={1.5} w="160px" flexShrink={0} minW={0}>
                                             <Icon
                                               as={LuColumns3}
                                               boxSize={3}
@@ -835,13 +964,26 @@ export default function SchemaTreeView({
                                               textOverflow="ellipsis"
                                               overflow="hidden"
                                               whiteSpace="nowrap"
-                                              flex={1}
                                               minW={0}
                                               title={column.name}
                                             >
                                               {column.name}
                                             </Text>
                                           </HStack>
+                                          {annotationsEditable ? (
+                                            <Box flex={1} minW={0}>
+                                              <AnnInput
+                                                ariaLabel={`${schemaItem.schema}.${table.table}.${column.name} description`}
+                                                value={findTableAnn(annotations, schemaItem.schema, table.table)?.columns?.find(c => c.name === column.name)?.description ?? ''}
+                                                placeholder={profiledDesc || 'Describe column…'}
+                                                onCommit={(v) => setColumnDescription(schemaItem.schema, table.table, column.name, v)}
+                                              />
+                                            </Box>
+                                          ) : (
+                                            <Text flex={1} minW={0} fontSize="2xs" color="fg.muted" truncate title={colDesc}>
+                                              {colDesc || ''}
+                                            </Text>
+                                          )}
                                           <Text
                                             fontSize="10px"
                                             fontWeight="600"
@@ -852,7 +994,16 @@ export default function SchemaTreeView({
                                             {column.type}
                                           </Text>
                                         </HStack>
-                                      ))}
+                                        {/* Persistent source hint while editing, so the profiled
+                                            description stays visible even after an override. */}
+                                        {annotationsEditable && profiledDesc && (
+                                          <Text pl="172px" pr={3} pb={1} fontSize="2xs" color="fg.subtle" truncate title={profiledDesc}>
+                                            source: {profiledDesc}
+                                          </Text>
+                                        )}
+                                        </VStack>
+                                        );
+                                      })}
 
                                       {/* Show More Columns Button */}
                                       {filteredColumns.length > getVisibleColumnCount(tableKey, filteredColumns.length) && (

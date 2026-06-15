@@ -2,8 +2,36 @@
  * Shared schema filtering logic
  * Used by both client-side (useContext hook) and server-side (ContextHelpers)
  */
-import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode, DocEntry } from '../types';
+import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode, DocEntry, MetricDef, TableAnnotation } from '../types';
 import { getPublishedVersionForUser } from '../context/context-utils';
+
+/**
+ * Build an agent-facing "Schema Notes" markdown section from context-authored
+ * table/column descriptions and metrics. Returns undefined when there's nothing
+ * to say. (Profiled column descriptions/stats reach the agent separately via the
+ * SearchDBSchema tool; this surfaces the editorial context layer + metrics.)
+ */
+function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[]): string | undefined {
+  const lines: string[] = [];
+
+  const annLines = annotations.flatMap((a) => {
+    const cols = (a.columns || []).filter((c) => c.description);
+    if (!a.description && cols.length === 0) return [];
+    const head = `- ${a.schema}.${a.table}${a.description ? ` — ${a.description}` : ''}`;
+    return [head, ...cols.map((c) => `  - ${c.name}: ${c.description}`)];
+  });
+  if (annLines.length > 0) lines.push('### Tables & Columns', ...annLines);
+
+  const metricLines = metrics.map((m) => {
+    const loc = m.schema && m.table ? ` [${m.schema}.${m.table}]` : '';
+    const desc = m.description ? ` — ${m.description}` : '';
+    const sql = m.sql ? `\n  \`\`\`sql\n  ${m.sql.replace(/\n/g, '\n  ')}\n  \`\`\`` : '';
+    return `- ${m.name}${loc}${desc}${sql}`;
+  });
+  if (metricLines.length > 0) lines.push('### Metrics', ...metricLines);
+
+  return lines.length > 0 ? `## Schema Notes\n\n${lines.join('\n')}` : undefined;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NEW API: Whitelist tree filtering (WhitelistNode / Whitelist)
@@ -251,21 +279,20 @@ export function getDocumentationForUser(
     .filter(doc => typeof doc === 'string' || doc.draft !== true)
     .map(docToString);
 
-  // Get user's published version and return its docs
-  if (contextContent.versions && contextContent.versions.length > 0) {
-    const publishedVersionNum = getPublishedVersionForUser(contextContent, userId);
-    const publishedVersion = contextContent.versions.find(v => v.version === publishedVersionNum);
+  // Resolve the user's published version (for own docs + annotations + metrics).
+  const publishedVersion = contextContent.versions && contextContent.versions.length > 0
+    ? contextContent.versions.find(v => v.version === getPublishedVersionForUser(contextContent, userId))
+    : undefined;
 
-    if (publishedVersion && publishedVersion.docs) {
-      // Handle DocEntry[] format (post-migration v11)
-      const ownDocStrings = publishedVersion.docs
-        .filter(doc => typeof doc === 'string' || doc.draft !== true)
-        .map(docToString);
-      const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
-      return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
-    }
-  }
+  const ownDocStrings = (publishedVersion?.docs || [])
+    .filter(doc => typeof doc === 'string' || doc.draft !== true)
+    .map(docToString);
 
-  // Legacy fallback or no own docs — return inherited only
-  return inheritedDocStrings.length > 0 ? inheritedDocStrings.join('\n\n---\n\n') : undefined;
+  // Schema Notes: context-authored descriptions + metrics (own + inherited).
+  const annotations = [...(contextContent.fullAnnotations || []), ...(publishedVersion?.annotations || [])];
+  const metrics = [...(contextContent.fullMetrics || []), ...(publishedVersion?.metrics || [])];
+  const schemaNotes = buildSchemaNotes(annotations, metrics);
+
+  const allDocStrings = [...inheritedDocStrings, ...ownDocStrings, schemaNotes].filter(Boolean);
+  return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
 }

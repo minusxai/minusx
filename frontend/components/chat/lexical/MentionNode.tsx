@@ -1,7 +1,7 @@
 import React from 'react';
 import { DecoratorNode, LexicalNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
 import { Box, Icon } from '@chakra-ui/react';
-import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
+import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, METRIC_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
 import type { ChatMentionData } from '@/lib/types';
 
 /**
@@ -23,6 +23,13 @@ export function getMentionChipMetadata(
     return {
       icon: COLUMN_MENTION_METADATA.icon,
       colors: getMentionColors(COLUMN_MENTION_METADATA.color),
+    };
+  }
+
+  if (data.type === 'metric') {
+    return {
+      icon: METRIC_MENTION_METADATA.icon,
+      colors: getMentionColors(METRIC_MENTION_METADATA.color),
     };
   }
 
@@ -96,8 +103,8 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
     const displayText = data.name;
     const metaText = data.type === 'table'
       ? data.schema
-      : data.type === 'column'
-        ? (data.schema ? `${data.schema}.${data.table}` : data.table)
+      : (data.type === 'column' || data.type === 'metric')
+        ? (data.schema && data.table ? `${data.schema}.${data.table}` : data.table)
         : undefined;
     const isSkill = data.type === 'skill';
 
@@ -119,6 +126,7 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
     const iconColorToken = isSkill ? 'accent.teal'
       : data.type === 'table' ? 'accent.cyan'
       : data.type === 'column' ? 'accent.secondary'
+      : data.type === 'metric' ? 'accent.teal'
       : data.type === 'question' ? 'accent.primary'
       : data.type === 'dashboard' ? 'accent.danger'
       : 'fg.muted';
@@ -168,6 +176,7 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
     const data = this.__mentionData;
     if (data.type === 'table') return `@${data.schema}.${data.name}`;
     if (data.type === 'column') return data.schema ? `@${data.schema}.${data.table}.${data.name}` : `@${data.table}.${data.name}`;
+    if (data.type === 'metric') return `@metric:${data.name}`;
     return `@@${data.name}`;
   }
 }

@@ -79,8 +79,8 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
           const displayText = data.name;
           const metaText = data.type === 'table'
             ? data.schema
-            : data.type === 'column'
-              ? (data.schema ? `${data.schema}.${data.table}` : data.table)
+            : (data.type === 'column' || data.type === 'metric')
+              ? (data.schema && data.table ? `${data.schema}.${data.table}` : data.table)
               : undefined;
           const isSkill = data.type === 'skill';
 
@@ -101,6 +101,7 @@ export function MessageWithMentions({ content, context = 'sidebar', textAlign = 
           const iconColorToken = isSkill ? 'accent.teal'
             : data.type === 'table' ? 'accent.cyan'
             : data.type === 'column' ? 'accent.secondary'
+            : data.type === 'metric' ? 'accent.teal'
             : data.type === 'question' ? 'accent.primary'
             : data.type === 'dashboard' ? 'accent.danger'
             : 'fg.muted';

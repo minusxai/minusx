@@ -19,8 +19,8 @@ import { $createMentionNode, MentionData } from './MentionNode';
 import { Box, HStack, VStack, Text, Icon, Portal } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
-import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
-import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
+import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, METRIC_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
+import type { DatabaseWithSchema, MetricDef, SkillMention, SlashCommand } from '@/lib/types';
 import { LuTerminal, LuChevronRight } from 'react-icons/lu';
 
 interface MentionsPluginProps {
@@ -29,6 +29,8 @@ interface MentionsPluginProps {
   availableSkills?: SkillMention[];
   availableCommands?: SlashCommand[];
   onCommandExecute?: (command: SlashCommand) => void;
+  /** Context metrics — surfaced in a table's column drill-down. */
+  metrics?: MetricDef[];
   /**
    * When true, anchor the dropdown at the text caret and drop it below (for
    * in-document editors like docs). Default false keeps the chat-input behavior
@@ -133,6 +135,25 @@ function getTableColumns(
   return [];
 }
 
+/** Metrics attached to a given table. */
+function getTableMetrics(metrics: MetricDef[] | undefined, schema: string | undefined, table: string): MetricDef[] {
+  if (!metrics) return [];
+  return metrics.filter((m) => m.table === table && (!schema || !m.schema || m.schema === schema));
+}
+
+type SubItem = { kind: 'metric'; metric: MetricDef } | { kind: 'column'; column: ColumnInfo };
+
+/** The combined drill-down items for a table: its metrics first, then its columns. */
+function getSubmenuItems(
+  table: MentionItem,
+  whitelistedSchemas: DatabaseWithSchema[] | undefined,
+  metrics: MetricDef[] | undefined,
+): SubItem[] {
+  const ms: SubItem[] = getTableMetrics(metrics, table.schema, table.name).map((m) => ({ kind: 'metric', metric: m }));
+  const cs: SubItem[] = getTableColumns(whitelistedSchemas, table.schema, table.name).map((c) => ({ kind: 'column', column: c }));
+  return [...ms, ...cs];
+}
+
 function getMentionPrimaryText(mention: MentionOption) {
   if (isSlashCommand(mention)) return mention.label;
   return 'display_text' in mention ? mention.display_text : mention.name;
@@ -149,7 +170,7 @@ function getMentionMetaText(mention: MentionOption) {
   return undefined;
 }
 
-export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute, anchorToCaret = false }: MentionsPluginProps) {
+export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkills = [], availableCommands = [], onCommandExecute, metrics, anchorToCaret = false }: MentionsPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [mentions, setMentions] = useState<MentionOption[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -241,6 +262,19 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     if (table.schema) mentionData.schema = table.schema;
     insertMentionData(mentionData, triggerLength);
   }, [insertMentionData]);
+
+  // Insert a metric mention drilled into from a table row.
+  const insertMetric = useCallback((metric: MetricDef, table: MentionItem, triggerLength: number) => {
+    const mentionData: MentionData = { type: 'metric', name: metric.name, table: table.name };
+    if (table.schema) mentionData.schema = table.schema;
+    insertMentionData(mentionData, triggerLength);
+  }, [insertMentionData]);
+
+  // Insert the selected drill-down item (metric or column).
+  const insertSubItem = useCallback((item: SubItem, table: MentionItem, triggerLength: number) => {
+    if (item.kind === 'metric') insertMetric(item.metric, table, triggerLength);
+    else insertColumn(item.column, table, triggerLength);
+  }, [insertMetric, insertColumn]);
 
   useEffect(() => {
     // Monitor text changes to detect @ and / triggers
@@ -340,20 +374,20 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       const sel = fm[selectedIndex];
       if (sel && !isSlashCommand(sel) && sel.type === 'table') {
         const table = sel as MentionItem;
-        return { fm, table, cols: getTableColumns(whitelistedSchemas, table.schema, table.name) };
+        return { fm, table, items: getSubmenuItems(table, whitelistedSchemas, metrics) };
       }
-      return { fm, table: null as MentionItem | null, cols: [] as ColumnInfo[] };
+      return { fm, table: null as MentionItem | null, items: [] as SubItem[] };
     };
 
     // Register keyboard commands for dropdown navigation
     const removeArrowDown = editor.registerCommand(
       KEY_ARROW_DOWN_COMMAND,
       (event) => {
-        const { fm, cols } = getActive();
+        const { fm, items } = getActive();
         if (!showDropdown || fm.length === 0) return false;
         event?.preventDefault();
-        if (inSubmenu && cols.length > 0) {
-          setColumnIndex((prev) => (prev + 1) % cols.length);
+        if (inSubmenu && items.length > 0) {
+          setColumnIndex((prev) => (prev + 1) % items.length);
         } else {
           setSelectedIndex((prev) => (prev + 1) % fm.length);
         }
@@ -365,11 +399,11 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     const removeArrowUp = editor.registerCommand(
       KEY_ARROW_UP_COMMAND,
       (event) => {
-        const { fm, cols } = getActive();
+        const { fm, items } = getActive();
         if (!showDropdown || fm.length === 0) return false;
         event?.preventDefault();
-        if (inSubmenu && cols.length > 0) {
-          setColumnIndex((prev) => (prev - 1 + cols.length) % cols.length);
+        if (inSubmenu && items.length > 0) {
+          setColumnIndex((prev) => (prev - 1 + items.length) % items.length);
         } else {
           setSelectedIndex((prev) => (prev - 1 + fm.length) % fm.length);
         }
@@ -378,13 +412,13 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       COMMAND_PRIORITY_CRITICAL
     );
 
-    // ArrowRight enters the column submenu of the active table.
+    // ArrowRight enters the table's drill-down submenu (metrics + columns).
     const removeArrowRight = editor.registerCommand(
       KEY_ARROW_RIGHT_COMMAND,
       (event) => {
         if (!showDropdown || inSubmenu) return false;
-        const { cols } = getActive();
-        if (cols.length === 0) return false;
+        const { items } = getActive();
+        if (items.length === 0) return false;
         event?.preventDefault();
         setInSubmenu(true);
         setColumnIndex(0);
@@ -408,16 +442,16 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     const removeEnter = editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event) => {
-        const { fm, table, cols } = getActive();
+        const { fm, table, items } = getActive();
         if (!showDropdown || fm.length === 0) return false;
         const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
 
-        // In the column submenu: insert the highlighted column.
+        // In the drill-down submenu: insert the highlighted metric or column.
         if (inSubmenu) {
-          const col = cols[columnIndex];
-          if (col && table) {
+          const item = items[columnIndex];
+          if (item && table) {
             event?.preventDefault();
-            insertColumn(col, table, triggerLength);
+            insertSubItem(item, table, triggerLength);
             return true;
           }
           return false;
@@ -472,7 +506,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       removeEnter();
       removeEscape();
     };
-  }, [editor, showDropdown, mentions, selectedIndex, mentionType, query, insertMention, insertColumn, onCommandExecute, inSubmenu, columnIndex, whitelistedSchemas]);
+  }, [editor, showDropdown, mentions, selectedIndex, mentionType, query, insertMention, insertSubItem, onCommandExecute, inSubmenu, columnIndex, whitelistedSchemas, metrics]);
 
   const filteredMentions = getFilteredMentions(mentions, mentionType);
 
@@ -511,12 +545,12 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
     return <Box ref={anchorRef} position="absolute" top={0} left={0} right={0} pointerEvents="none" />;
   }
 
-  // Column drill-down: the highlighted table's columns, if any are known.
+  // Drill-down: the highlighted table's metrics + columns, if any are known.
   const activeMention = filteredMentions[selectedIndex];
   const activeTable = activeMention && !isSlashCommand(activeMention) && activeMention.type === 'table'
     ? (activeMention as MentionItem) : null;
-  const activeColumns = activeTable ? getTableColumns(whitelistedSchemas, activeTable.schema, activeTable.name) : [];
-  const showSubmenu = !!activeTable && activeColumns.length > 0;
+  const activeItems = activeTable ? getSubmenuItems(activeTable, whitelistedSchemas, metrics) : [];
+  const showSubmenu = !!activeTable && activeItems.length > 0;
 
   return (
     <>
@@ -670,7 +704,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
                           )}
                         </VStack>
                         {!isSlashCommand(mention) && mention.type === 'table'
-                          && getTableColumns(whitelistedSchemas, mention.schema, mention.name).length > 0 && (
+                          && getSubmenuItems(mention as MentionItem, whitelistedSchemas, metrics).length > 0 && (
                           <Icon as={LuChevronRight} boxSize={3.5} color="fg.subtle" flexShrink={0} alignSelf="center" />
                         )}
                       </HStack>
@@ -684,11 +718,11 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           </Box>
         </Box>
 
-        {/* Column drill-down submenu for the highlighted table */}
+        {/* Drill-down submenu (metrics + columns) for the highlighted table */}
         {showSubmenu && activeTable && (
           <Box
-            minW="200px"
-            maxW="280px"
+            minW="210px"
+            maxW="300px"
             bg="bg.panel"
             border="1px solid"
             borderColor={inSubmenu ? 'accent.secondary' : 'border.default'}
@@ -699,41 +733,60 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
             fontFamily="mono"
           >
             <Box px={3} py={2} borderBottom="1px solid" borderColor="border.muted" bg="bg.subtle">
-              <HStack justify="space-between" gap={2}>
-                <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0" truncate>
-                  {activeTable.name} columns
-                </Text>
-                <Text fontSize="xs" color="fg.subtle">{activeColumns.length}</Text>
-              </HStack>
+              <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0" truncate>
+                {activeTable.name}
+              </Text>
             </Box>
             <Box maxH="312px" overflowY="auto">
               <VStack align="stretch" gap={0}>
-                {activeColumns.map((col, i) => (
-                  <HStack
-                    key={`${col.name}-${i}`}
-                    px={3}
-                    py={2}
-                    gap={2}
-                    justify="space-between"
-                    cursor="pointer"
-                    bg={inSubmenu && i === columnIndex ? 'bg.muted' : 'transparent'}
-                    _hover={{ bg: 'bg.muted' }}
-                    borderBottom="1px solid"
-                    borderColor="border.muted"
-                    _last={{ borderBottom: 'none' }}
-                    onMouseEnter={() => { setInSubmenu(true); setColumnIndex(i); }}
-                    onClick={() => {
-                      const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
-                      insertColumn(col, activeTable, triggerLength);
-                    }}
-                  >
-                    <HStack gap={1.5} minW={0}>
-                      <Icon as={COLUMN_MENTION_METADATA.icon} boxSize={3} color={COLUMN_MENTION_METADATA.color} flexShrink={0} />
-                      <Text fontSize="sm" fontWeight="600" color="fg.default" truncate>{col.name}</Text>
-                    </HStack>
-                    <Text fontSize="2xs" color="fg.subtle" flexShrink={0}>{col.type}</Text>
-                  </HStack>
-                ))}
+                {activeItems.map((item, i) => {
+                  const prevKind = i > 0 ? activeItems[i - 1].kind : null;
+                  const showHeader = prevKind !== item.kind;
+                  const isMetric = item.kind === 'metric';
+                  const label = isMetric ? item.metric.name : item.column.name;
+                  return (
+                    <React.Fragment key={`${item.kind}-${label}-${i}`}>
+                      {showHeader && (
+                        <Box px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
+                          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">
+                            {isMetric ? 'Metrics' : 'Columns'}
+                          </Text>
+                        </Box>
+                      )}
+                      <HStack
+                        aria-label={`Insert ${item.kind} ${label}`}
+                        px={3}
+                        py={2}
+                        gap={2}
+                        justify="space-between"
+                        cursor="pointer"
+                        bg={inSubmenu && i === columnIndex ? 'bg.muted' : 'transparent'}
+                        _hover={{ bg: 'bg.muted' }}
+                        borderBottom="1px solid"
+                        borderColor="border.muted"
+                        _last={{ borderBottom: 'none' }}
+                        onMouseEnter={() => { setInSubmenu(true); setColumnIndex(i); }}
+                        onClick={() => {
+                          const triggerLength = (mentionType === 'questions' ? 2 : 1) + query.length;
+                          insertSubItem(item, activeTable, triggerLength);
+                        }}
+                      >
+                        <HStack gap={1.5} minW={0}>
+                          <Icon
+                            as={isMetric ? METRIC_MENTION_METADATA.icon : COLUMN_MENTION_METADATA.icon}
+                            boxSize={3}
+                            color={isMetric ? METRIC_MENTION_METADATA.color : COLUMN_MENTION_METADATA.color}
+                            flexShrink={0}
+                          />
+                          <Text fontSize="sm" fontWeight="600" color="fg.default" truncate>{label}</Text>
+                        </HStack>
+                        <Text fontSize="2xs" color="fg.subtle" flexShrink={0}>
+                          {isMetric ? 'metric' : item.column.type}
+                        </Text>
+                      </HStack>
+                    </React.Fragment>
+                  );
+                })}
               </VStack>
             </Box>
           </Box>

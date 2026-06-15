@@ -202,6 +202,8 @@ export default function ContextContainerV2({
       version: newVersionNumber,
       whitelist: JSON.parse(JSON.stringify(sourceVersion.whitelist)),  // Deep copy
       docs: sourceVersion.docs.map((doc: DocEntry) => ({ ...doc, childPaths: doc.childPaths ? [...doc.childPaths] : undefined })),
+      metrics: sourceVersion.metrics ? JSON.parse(JSON.stringify(sourceVersion.metrics)) : undefined,
+      annotations: sourceVersion.annotations ? JSON.parse(JSON.stringify(sourceVersion.annotations)) : undefined,
       createdAt: new Date().toISOString(),
       createdBy: user.id,
       description: description || ''
@@ -314,8 +316,8 @@ export default function ContextContainerV2({
   const handleChange = useCallback((updates: Partial<ContextContent>) => {
     if (!currentContent || !currentVersionContent || !user?.id) return;
 
-    // If updating databases or docs, update the selected version
-    if (updates.databases !== undefined || updates.docs !== undefined) {
+    // If updating databases, docs, metrics, or annotations, update the selected version
+    if (updates.databases !== undefined || updates.docs !== undefined || updates.metrics !== undefined || updates.annotations !== undefined) {
       // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
       const newWhitelist: Whitelist | undefined = updates.databases !== undefined
         ? updates.databases === '*'
@@ -329,6 +331,8 @@ export default function ContextContainerV2({
             ...v,
             ...(newWhitelist !== undefined ? { whitelist: newWhitelist } : {}),
             docs: updates.docs ?? v.docs,
+            metrics: updates.metrics ?? v.metrics,
+            annotations: updates.annotations ?? v.annotations,
             lastEditedAt: new Date().toISOString(),
             lastEditedBy: user.id
           };
@@ -395,6 +399,8 @@ export default function ContextContainerV2({
       // Expose selected version's whitelist as databases for editor backward compat
       databases: editorDatabases,
       docs: currentVersionContent.docs,
+      metrics: currentVersionContent.metrics,
+      annotations: currentVersionContent.annotations,
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);

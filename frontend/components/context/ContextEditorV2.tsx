@@ -1104,6 +1104,13 @@ export default function ContextEditorV2({
                                   showPathFilter={true}
                                   availableChildPaths={availableChildPaths}
                                   connectionWhitelisted={isConnectionWildcard}
+                                  connectionName={database.databaseName}
+                                  annotations={content.annotations || []}
+                                  onAnnotationsChange={editMode ? (next) => onChange({ annotations: next }) : undefined}
+                                  inheritedAnnotations={content.fullAnnotations}
+                                  metrics={content.metrics || []}
+                                  onMetricsChange={editMode ? (next) => onChange({ metrics: next }) : undefined}
+                                  inheritedMetrics={content.fullMetrics}
                                 />
                               </Box>
                             </Collapsible.Content>
@@ -1174,7 +1181,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
-            mentions={{ whitelistedSchemas: availableDatabases }}
+            mentions={{ whitelistedSchemas: availableDatabases, metrics: [...(content.fullMetrics || []), ...(content.metrics || [])] }}
             editMode={editMode}
           />
           ) : (

@@ -70,6 +70,14 @@ describe('mention-transformer', () => {
     expect(roundTrip(`Revenue uses ${COLUMN_MENTION}.`)).toContain(COLUMN_MENTION);
   });
 
+  it('round-trips a metric mention (type + table + schema)', () => {
+    const METRIC_MENTION = '@{"type":"metric","name":"Monthly Revenue","schema":"public","table":"orders"}';
+    const nodes = parse(`Key measure: ${METRIC_MENTION}.`);
+    const mention = nodes.find((n) => n.type === 'mention');
+    expect(mention?.mentionData).toMatchObject({ type: 'metric', name: 'Monthly Revenue', table: 'orders', schema: 'public' });
+    expect(roundTrip(`Key measure: ${METRIC_MENTION}.`)).toContain(METRIC_MENTION);
+  });
+
   it('leaves surrounding markdown formatting intact alongside a mention', () => {
     const result = roundTrip(`## Heading\n\n**bold** and ${TABLE_MENTION}`);
     expect(result).toContain('## Heading');

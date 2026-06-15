@@ -4,7 +4,7 @@
  * Supports versioning - each user sees their published version
  */
 
-import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, SkillEntry } from '@/lib/types';
+import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
@@ -48,8 +48,8 @@ export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveU
     throw new Error(`Published version ${publishedVersionNumber} not found in context ${file.path}`);
   }
 
-  // Compute fullSchema, parentSchema, fullDocs and fullSkills based on the published version
-  const { fullSchema, parentSchema, fullDocs, fullSkills } = await computeSchemaFromVersion(
+  // Compute fullSchema, parentSchema, fullDocs, fullMetrics and fullSkills based on the published version
+  const { fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullSkills } = await computeSchemaFromVersion(
     { ...publishedVersion, whitelist: resolveVersionWhitelist(publishedVersion) },
     file.path,
     user
@@ -64,6 +64,8 @@ export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveU
         fullSchema,
         parentSchema,
         fullDocs,
+        fullMetrics,
+        fullAnnotations,
         fullSkills
       }
     };
@@ -78,6 +80,8 @@ export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveU
         fullSchema,
         parentSchema,
         fullDocs,
+        fullMetrics,
+        fullAnnotations,
         fullSkills
       }
     };
@@ -94,11 +98,11 @@ async function computeSchemaFromVersion(
   version: ContextVersion,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullSkills: SkillEntry[] }> {
-  const { fullSchema, parentSchema, fullDocs, fullSkills } = await computeSchemaFromWhitelist(version.whitelist, contextPath, user);
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[], fullMetrics: MetricDef[], fullAnnotations: TableAnnotation[], fullSkills: SkillEntry[] }> {
+  const { fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullSkills } = await computeSchemaFromWhitelist(version.whitelist, contextPath, user);
 
-  // fullDocs already includes inherited docs (computed in context-loader-utils)
-  // Root contexts get empty fullDocs (no parent to inherit from)
-  // Child contexts get parent.fullDocs + parent.docs (filtered by childPaths)
-  return { fullSchema, parentSchema, fullDocs, fullSkills };
+  // fullDocs/fullMetrics already include inherited values (computed in context-loader-utils)
+  // Root contexts get empty inherited values (no parent to inherit from)
+  // Child contexts get parent.full* + parent.own (filtered by childPaths)
+  return { fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullSkills };
 }

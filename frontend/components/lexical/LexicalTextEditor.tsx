@@ -60,7 +60,7 @@ import {
 import { $setBlocksType } from '@lexical/selection';
 
 import { useAppSelector } from '@/store/hooks';
-import type { DatabaseWithSchema } from '@/lib/types';
+import type { DatabaseWithSchema, MetricDef } from '@/lib/types';
 import { $createImageNode } from './ImageNode';
 import { $createMetricNode } from './MetricNode';
 import { MentionsPlugin } from '@/components/chat/lexical/MentionsPlugin';
@@ -71,6 +71,8 @@ import { InsertMenuPlugin } from './InsertMenuPlugin';
 export interface MentionsConfig {
   databaseName?: string;
   whitelistedSchemas?: DatabaseWithSchema[];
+  /** Context metrics, surfaced in a table's @ drill-down. */
+  metrics?: MetricDef[];
 }
 
 // --- Theme ---
@@ -412,7 +414,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
     >
       <LexicalComposer initialConfig={initialConfig}>
         {renderToolbar ? (
-          renderToolbar(<ToolbarPlugin onImageUpload={onImageUpload} enableMetric={insertMenu} />)
+          renderToolbar(<ToolbarPlugin onImageUpload={onImageUpload} />)
         ) : (
           <Box
             borderBottomWidth="1px"
@@ -420,7 +422,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             bg="bg.muted"
             flexShrink={0}
           >
-            <ToolbarPlugin onImageUpload={onImageUpload} enableMetric={insertMenu} />
+            <ToolbarPlugin onImageUpload={onImageUpload} />
           </Box>
         )}
 
@@ -486,12 +488,13 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           <MentionsPlugin
             databaseName={mentions.databaseName}
             whitelistedSchemas={mentions.whitelistedSchemas}
+            metrics={mentions.metrics}
             availableSkills={[]}
             availableCommands={[]}
             anchorToCaret
           />
         )}
-        {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} enableMetric />}
+        {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} />}
       </LexicalComposer>
     </Box>
   );
