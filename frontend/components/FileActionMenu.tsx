@@ -1,13 +1,16 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks } from 'react-icons/lu';
+import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { FileType } from '@/lib/types';
 import { deleteFile } from '@/lib/api/file-state';
+import { useAppSelector } from '@/store/hooks';
+import { isAdmin } from '@/lib/auth/role-helpers';
 import MoveFileModal from './MoveFileModal';
+import ShareModal from './share/ShareModal';
 
 interface FileActionMenuProps {
   fileId: number;
@@ -23,9 +26,13 @@ interface FileActionMenuProps {
 export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm', onSelect, canDelete }: FileActionMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const { canDeleteFileType } = useAccessRules();
   const canDeleteOrMove = canDeleteFileType(fileType);
   const canDeleteFile = canDelete !== undefined ? canDelete : canDeleteOrMove;
+  // Public sharing is admin-only and story-only in v1.
+  const userRole = useAppSelector(state => state.auth.user?.role);
+  const canShare = fileType === 'story' && isAdmin(userRole || 'viewer');
 
   const handleDeleteClick = () => {
     setIsDeleteDialogOpen(true);
@@ -112,6 +119,23 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 </HStack>
               </Menu.Item>
             )}
+            {canShare && (
+              <Menu.Item
+                value="share"
+                cursor="pointer"
+                borderRadius="sm"
+                px={3}
+                py={2}
+                _hover={{ bg: 'bg.muted' }}
+                onClick={() => setIsShareModalOpen(true)}
+                aria-label="Make public"
+              >
+                <HStack gap={2}>
+                  <Icon as={LuGlobe} boxSize={4} />
+                  <span>Make public</span>
+                </HStack>
+              </Menu.Item>
+            )}
             {canDeleteOrMove && (
               <Menu.Item
                 value="move"
@@ -157,6 +181,15 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
         fileName={fileName}
         filePath={filePath}
       />
+
+      {canShare && (
+        <ShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          fileId={fileId}
+          fileName={fileName}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog.Root open={isDeleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>

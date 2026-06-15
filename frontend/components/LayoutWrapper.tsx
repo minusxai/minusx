@@ -43,6 +43,12 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     return <>{children}</>;
   }
 
+  // Public story shares (/l/...) own their full chrome (no app nav / data-prep banner),
+  // but keep RecordingProvider so the embedded chat surface works for guests.
+  if (pathname.startsWith('/l/')) {
+    return <RecordingProvider>{children}</RecordingProvider>;
+  }
+
   // view >= file: bare embed — render only the page content (no left sidebar,
   // mobile nav, data-prep banner, or sidebar margin). Keep RecordingProvider so
   // file/chat surfaces that depend on its context still work.

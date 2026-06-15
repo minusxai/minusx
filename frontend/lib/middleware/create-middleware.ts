@@ -8,6 +8,7 @@ import { isValidView, DEFAULT_VIEW } from '@/lib/view/view-types';
 import { getModules } from '@/lib/modules/registry';
 import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/e2e-runtime';
 import { EMBED_FRAME_ANCESTORS } from '@/lib/config';
+import { GUEST_COOKIE, verifyGuestToken } from '@/lib/auth/guest-session';
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
@@ -46,8 +47,19 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
 
     const requestId = crypto.randomUUID();
 
+    // Public story shares: the `/l/...` page and the guest-session mint route are always
+    // public (they establish the anonymous session). Once a valid `mx-guest` cookie exists,
+    // admit the data/chat APIs the share page drives WITHOUT a NextAuth session — the guest's
+    // scope is enforced downstream by getEffectiveUser (folder-scoped viewer) + canAccessFile,
+    // and ?mode / ?as_user are ignored for guests, so there is no escalation via this admit.
+    const isSharePublicPath =
+      pathname.startsWith('/l/') || pathname.startsWith('/api/share/guest-session');
+    const hasGuestSession = !req.auth && verifyGuestToken(req.cookies.get(GUEST_COOKIE)?.value) !== null;
+
     if (
       isPublicRoute ||
+      isSharePublicPath ||
+      hasGuestSession ||
       pathname.startsWith('/api/auth') ||
       pathname.startsWith('/api/public/slack-chart') ||
       pathname.startsWith('/api/orgs/register') ||

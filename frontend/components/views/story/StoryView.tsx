@@ -18,6 +18,8 @@ interface StoryViewProps {
   fileId?: number;
   /** Header eye/code toggle (uiSlice fileViewMode) — same as dashboards. */
   viewMode?: 'visual' | 'json';
+  /** Public read-only render (shared story): embedded charts hide actions + auth-gated links. */
+  readOnly?: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface StoryViewProps {
  * on `content.story`); the JSON tab is an editable full-content editor — same as
  * question/dashboard — when a `fileId` is supplied.
  */
-export default function StoryView({ content, fileId, viewMode = 'visual' }: StoryViewProps) {
+export default function StoryView({ content, fileId, viewMode = 'visual', readOnly = false }: StoryViewProps) {
   // JSON tab edits the persistable content (content + persistableChanges, no ephemerals)
   const persistableContent = useAppSelector(state =>
     fileId !== undefined ? selectPersistableContent(state, fileId) : undefined
@@ -69,7 +71,7 @@ export default function StoryView({ content, fileId, viewMode = 'visual' }: Stor
     <Box aria-label="Story page" w="100%" minH="420px" display="flex" justifyContent="center">
       <Box w="100%" maxW="960px">
         <ScaledStoryFrame>
-          <AgentHtml html={content.story} width={STORY_W} />
+          <AgentHtml html={content.story} width={STORY_W} readOnly={readOnly} />
         </ScaledStoryFrame>
       </Box>
     </Box>

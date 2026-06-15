@@ -22,6 +22,7 @@ interface SmartEmbeddedQuestionContainerProps {
   onRemove?: () => void;  // Callback for remove button
   index?: number;  // Optional index for numbering (e.g., #01, #02)
   dashboardId?: number;  // Source dashboard ID (appended as ?dashboard= to question links)
+  readOnly?: boolean;  // Public read-only view (e.g. shared story): no actions menu, plain title (no auth-gated link)
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -34,6 +35,7 @@ function SmartEmbeddedQuestionContainerInner({
   onRemove,
   index = 0,
   dashboardId,
+  readOnly = false,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
 
@@ -117,31 +119,38 @@ function SmartEmbeddedQuestionContainerInner({
           alignItems="center"
         >
           <Box flex="1" mr={2}>
-            <Link
-              href={questionHref}
-              prefetch={true}
-              onClick={(e) => {
-                if (editMode) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }
-              }}
-              style={{ pointerEvents: editMode ? 'none' : 'auto' }}
-            >
-              <Text
-                fontSize="sm"
-                fontWeight="600"
-                color="fg.default"
-                lineClamp={1}
-                fontFamily="mono"
-                cursor={editMode ? 'move' : 'pointer'}
-                _hover={{ color: editMode ? 'fg.default' : 'accent.primary', textDecoration: editMode ? 'none' : 'underline' }}
-              >
+            {readOnly ? (
+              // Public viewers can't open /f/<id> (auth-gated) — show a plain title.
+              <Text fontSize="sm" fontWeight="600" color="fg.default" lineClamp={1} fontFamily="mono">
                 {effectiveName || file.name}
               </Text>
-            </Link>
+            ) : (
+              <Link
+                href={questionHref}
+                prefetch={true}
+                onClick={(e) => {
+                  if (editMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }}
+                style={{ pointerEvents: editMode ? 'none' : 'auto' }}
+              >
+                <Text
+                  fontSize="sm"
+                  fontWeight="600"
+                  color="fg.default"
+                  lineClamp={1}
+                  fontFamily="mono"
+                  cursor={editMode ? 'move' : 'pointer'}
+                  _hover={{ color: editMode ? 'fg.default' : 'accent.primary', textDecoration: editMode ? 'none' : 'underline' }}
+                >
+                  {effectiveName || file.name}
+                </Text>
+              </Link>
+            )}
           </Box>
-          {!editMode && (
+          {!editMode && !readOnly && (
             <Box onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
               <Menu.Root>
                 <Menu.Trigger asChild>
@@ -299,6 +308,7 @@ const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainer
   prev.showTitle === next.showTitle &&
   prev.editMode === next.editMode &&
   prev.index === next.index &&
-  prev.dashboardId === next.dashboardId
+  prev.dashboardId === next.dashboardId &&
+  prev.readOnly === next.readOnly
 );
 export default SmartEmbeddedQuestionContainer;

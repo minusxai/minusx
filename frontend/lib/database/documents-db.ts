@@ -290,6 +290,19 @@ export class DocumentDB {
     return result.rowCount > 0;
   }
 
+  /**
+   * Overwrite the `meta` JSONB blob for a file (read-modify-write the whole object at the
+   * call site). Does NOT bump version or touch content — meta is sidebar-cheap, out-of-band
+   * file-level metadata (e.g. public share records). Returns false if the file doesn't exist.
+   */
+  static async updateMeta(id: number, meta: Record<string, unknown> | null): Promise<boolean> {
+    const result = await getModules().db.exec(
+      'UPDATE files SET meta = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [meta ?? null, id]
+    );
+    return result.rowCount > 0;
+  }
+
   static async moveFolderAndChildren(
     folderId: number,
     descendantIds: number[],
