@@ -17,8 +17,9 @@ import {
 } from '../analyst-agent';
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import { FilesAPI } from '@/lib/data/files.server';
+import { readFilesServer } from '@/lib/api/file-state.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { QuestionContent, FolderContent } from '@/lib/types';
+import type { QuestionContent, FolderContent, CompressedAugmentedFile } from '@/lib/types';
 import {
   cleanupTestDatabase,
   getTestDbPath,
@@ -98,10 +99,32 @@ describe('ReadFiles', () => {
     const res = await tool.run();
     expect(res.isError).toBe(false);
     const text = (res.content[0] as { text: string }).text;
-    const parsed = JSON.parse(text) as Array<{ id: number; name: string }>;
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0].id).toBe(created.data.id);
-    expect(parsed[0].name).toBe('monthly-revenue');
+    // Unified shape: { success, files: CompressedAugmentedFile[] } — same as AppState
+    // and the frontend-bridge ReadFiles (content lives under fileState).
+    const parsed = JSON.parse(text) as { success: boolean; files: CompressedAugmentedFile[] };
+    expect(parsed.success).toBe(true);
+    expect(parsed.files).toHaveLength(1);
+    expect(parsed.files[0].fileState.id).toBe(created.data.id);
+    expect(parsed.files[0].fileState.name).toBe('monthly-revenue');
+  });
+
+  it('emits the SAME CompressedAugmentedFile shape as AppState (readFilesServer parity)', async () => {
+    const dash = await FilesAPI.createFile(
+      { name: 'sales-q', path: `${TEST_FOLDER}/sales-q`, type: 'question', content: makeQuestion('SELECT 1') },
+      ADMIN,
+    );
+    const orch = new Orchestrator([]);
+    const tool = new ReadFiles(orch, { fileIds: [dash.data.id] }, {
+      userId: '1', mode: 'org', effectiveUser: ADMIN,
+    } as AnalystAgentContext);
+
+    const res = await tool.run();
+    const parsed = JSON.parse((res.content[0] as { text: string }).text) as { files: CompressedAugmentedFile[] };
+    // The tool output must be byte-identical to the certified app-state-equivalent
+    // server builder (readFilesServer is what file-state-server-parity.test.ts ties to
+    // the live client AppState).
+    const appStateEquivalent = await readFilesServer([dash.data.id], ADMIN);
+    expect(parsed.files).toEqual(appStateEquivalent);
   });
 
   it('enforces ACL — restricted viewer cannot read a file outside their home folder', async () => {
@@ -122,8 +145,8 @@ describe('ReadFiles', () => {
     // ACL enforcement: the restricted user gets back an empty array.
     const res = await tool.run();
     expect(res.isError).toBe(false);
-    const parsed = JSON.parse((res.content[0] as { text: string }).text) as unknown[];
-    expect(parsed).toHaveLength(0);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text) as { success: boolean; files: unknown[] };
+    expect(parsed.files).toHaveLength(0);
   });
 
   it('errors when effectiveUser is missing from context', async () => {
