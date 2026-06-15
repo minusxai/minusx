@@ -1,10 +1,11 @@
 import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import { FilesAPI } from '@/lib/data/files.server';
 import { searchFilesInFolder } from '@/lib/search/file-search';
+import { readFilesServer } from '@/lib/api/file-state.server';
+import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { FileType } from '@/lib/types';
+import type { FileType, ReadFilesResult } from '@/lib/types';
 import type { AnalystAgentContext } from './types';
 
 /**
@@ -39,14 +40,18 @@ async function tryRun<TDetails = Record<string, unknown>>(
 
 // ─── ReadFiles ───────────────────────────────────────────────────────────────
 
+// Params mirror the frontend-bridge ReadFiles (lib/api/tool-handlers.ts) so the model
+// sees one tool regardless of where it executes.
 const ReadFilesParams = Type.Object({
-  fileIds: Type.Array(Type.Number()),
+  fileIds: Type.Array(Type.Number(), { description: 'IDs of files to load.' }),
+  maxChars: Type.Optional(Type.Number({ description: 'Max characters of compressed text per file (default 10,000).' })),
+  runQueries: Type.Optional(Type.Boolean({ description: 'When true, executes saved queries and returns their results (default false).' })),
 });
 
 export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContext> {
   static readonly schema: Tool<typeof ReadFilesParams> = {
     name: 'ReadFiles',
-    description: 'Load one or more files by integer ID. Returns full file objects with content.',
+    description: 'Load one or more files by integer ID with their references and (optionally) executed query results. Returns the same compressed file shape as AppState.',
     parameters: ReadFilesParams,
   };
 
@@ -54,8 +59,15 @@ export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContex
     const user = requireUser(this.context, 'ReadFiles');
     if ('isError' in user) return user;
     return tryRun(async () => {
-      const result = await FilesAPI.loadFiles(this.parameters.fileIds, user);
-      return { content: [{ type: 'text', text: JSON.stringify(result.data) }], isError: false };
+      const maxChars = Math.min(this.parameters.maxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
+      // Route through readFilesServer — the canonical server builder that
+      // file-state-server-parity.test.ts certifies as identical to the live client AppState.
+      const files = await readFilesServer(this.parameters.fileIds, user, {
+        executeQueries: this.parameters.runQueries ?? false,
+        maxChars,
+      });
+      const result: ReadFilesResult = { success: true, files };
+      return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
     });
   }
 }

@@ -18,8 +18,9 @@ import {
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import { FilesAPI } from '@/lib/data/files.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
+import { TOOL_DEFAULT_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { QuestionContent, FolderContent, CompressedAugmentedFile } from '@/lib/types';
+import type { QuestionContent, FolderContent, DocumentContent, CompressedAugmentedFile, ReadFilesResult } from '@/lib/types';
 import {
   cleanupTestDatabase,
   getTestDbPath,
@@ -108,23 +109,48 @@ describe('ReadFiles', () => {
     expect(parsed.files[0].fileState.name).toBe('monthly-revenue');
   });
 
-  it('emits the SAME CompressedAugmentedFile shape as AppState (readFilesServer parity)', async () => {
-    const dash = await FilesAPI.createFile(
-      { name: 'sales-q', path: `${TEST_FOLDER}/sales-q`, type: 'question', content: makeQuestion('SELECT 1') },
+  it('emits the SAME CompressedAugmentedFile shape as AppState, including resolved references', async () => {
+    // A dashboard referencing a question exercises the effective-reference path —
+    // the interesting case where shapes could diverge.
+    const q = await FilesAPI.createFile(
+      { name: 'parity-q', path: `${TEST_FOLDER}/parity-q`, type: 'question', content: makeQuestion('SELECT 1') },
       ADMIN,
     );
+    const dashContent = {
+      description: 'parity dashboard',
+      assets: [{ type: 'question', id: q.data.id }],
+      layout: null,
+      parameterValues: null,
+    } as unknown as DocumentContent;
+    const dash = await FilesAPI.createFile(
+      { name: 'parity-dash', path: `${TEST_FOLDER}/parity-dash`, type: 'dashboard', content: dashContent, references: [q.data.id] },
+      ADMIN,
+    );
+
     const orch = new Orchestrator([]);
     const tool = new ReadFiles(orch, { fileIds: [dash.data.id] }, {
       userId: '1', mode: 'org', effectiveUser: ADMIN,
     } as AnalystAgentContext);
-
     const res = await tool.run();
-    const parsed = JSON.parse((res.content[0] as { text: string }).text) as { files: CompressedAugmentedFile[] };
-    // The tool output must be byte-identical to the certified app-state-equivalent
-    // server builder (readFilesServer is what file-state-server-parity.test.ts ties to
-    // the live client AppState).
-    const appStateEquivalent = await readFilesServer([dash.data.id], ADMIN);
-    expect(parsed.files).toEqual(appStateEquivalent);
+    const out = JSON.parse((res.content[0] as { text: string }).text) as ReadFilesResult;
+
+    // 1) Unified CompressedAugmentedFile contract — exactly the AppState `file` payload keys.
+    expect(out.success).toBe(true);
+    expect(out.files).toHaveLength(1);
+    const f = out.files[0];
+    expect(Object.keys(f).sort()).toEqual(['fileState', 'queryResults', 'references']);
+    expect(f.fileState.id).toBe(dash.data.id);
+    expect(f.fileState.type).toBe('dashboard');
+    // 2) The referenced question is resolved into `references` (effective-ref path).
+    expect(f.references).toHaveLength(1);
+    expect(f.references[0].id).toBe(q.data.id);
+
+    // 3) Byte-identical to the certified app-state-equivalent server builder. The
+    //    transitive guarantee: file-state-server-parity.test.ts proves
+    //    readFilesServer === compressAugmentedFile(selectAugmentedFiles(...)) (live AppState),
+    //    so tool output === readFilesServer === live AppState.
+    const appState = await readFilesServer([dash.data.id], ADMIN, { maxChars: TOOL_DEFAULT_LIMIT_CHARS });
+    expect(out.files).toEqual(appState);
   });
 
   it('enforces ACL — restricted viewer cannot read a file outside their home folder', async () => {
