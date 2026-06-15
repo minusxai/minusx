@@ -6,6 +6,25 @@
  * Per repo convention these queries use aria-labels only.
  */
 
+// The docs editor uses the Lexical WYSIWYG editor, which can't be meaningfully
+// driven in jsdom (real markdown round-trip is covered by the headless transformer
+// tests). Mock it with a textarea so this component-level test can assert the
+// controlled wiring: edits flow up through onChange → onDocsChange.
+vi.mock('@/components/lexical/LexicalTextEditor', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ initialMarkdown, onChange }: { initialMarkdown: string; onChange: (md: string) => void }) =>
+      React.createElement('textarea', {
+        'aria-label': 'Documentation editor',
+        defaultValue: initialMarkdown,
+        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value),
+      }),
+    LexicalTextViewer: ({ markdown }: { markdown: string }) =>
+      React.createElement('div', { 'aria-label': 'Documentation preview' }, markdown),
+  };
+});
+
 import { useState } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -70,12 +89,12 @@ describe('ContextDocsEditor', () => {
     expect(onExpandedChange).toHaveBeenCalledWith([1]);
   });
 
-  it('debounces markdown edits into onDocsChange', async () => {
+  it('flows markdown edits up through onDocsChange', async () => {
     const onChange = vi.fn();
     renderWithProviders(<Harness initial={[{ content: 'Alpha' }]} onChange={onChange} />);
 
     // First entry is expanded by default → its editor (mocked textarea) is mounted.
-    const editor = (await screen.findAllByLabelText('SQL editor'))[0];
+    const editor = (await screen.findAllByLabelText('Documentation editor'))[0];
     fireEvent.change(editor, { target: { value: 'Alpha edited' } });
 
     await waitFor(() => {

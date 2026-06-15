@@ -80,10 +80,10 @@ function RelativeTime({ iso }: { iso: string }) {
 function SectionHeader({ label }: { label: string }) {
   return (
     <HStack gap={2}>
-      <Box flex="1" h="1px" bg="border.default" />
       <Text fontSize="2xs" fontFamily="mono" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="wider" flexShrink={0}>
         {label}
       </Text>
+      <Box flex="1" h="1px" bg="border.default" />
     </HStack>
   );
 }

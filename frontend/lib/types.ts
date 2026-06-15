@@ -187,8 +187,10 @@ export interface ChatMentionData {
   id?: number;
   name: string;
   schema?: string;
+  /** For column mentions: the table the column belongs to. */
+  table?: string;
   source?: 'system' | 'user';
-  type: 'table' | 'question' | 'dashboard' | 'skill';
+  type: 'table' | 'question' | 'dashboard' | 'skill' | 'column' | 'metric';
 }
 
 export type SkillMention =
@@ -269,6 +271,39 @@ export interface DocEntry {
   draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
 }
 
+/**
+ * A named metric defined in a context. Metrics belong to the context (versioned,
+ * inheritable) and are attached to a table so they surface in that table's @
+ * mention drill-down and can be referenced from docs.
+ */
+export interface MetricDef {
+  name: string;
+  description?: string;
+  sql?: string;
+  connection?: string;       // owning table's connection (database) name
+  schema?: string;           // owning table's schema
+  table?: string;            // owning table name
+}
+
+/** Editorial description for a column, layered over any profiled description. */
+export interface ColumnAnnotation {
+  name: string;
+  description?: string;
+}
+
+/**
+ * Context-authored annotations for a table and its columns. These augment the
+ * connection's raw schema (and profiled ColumnMeta) — the effective description
+ * is the context annotation if present, else the profiled one.
+ */
+export interface TableAnnotation {
+  connection?: string;       // connection (database) name — disambiguates same schema.table across connections
+  schema: string;
+  table: string;
+  description?: string;
+  columns?: ColumnAnnotation[];
+}
+
 export interface SkillEntry {
   name: string;
   description: string;
@@ -289,6 +324,8 @@ export interface ContextVersion {
   version: number;                   // Version number (non-sequential, gaps allowed)
   whitelist: Whitelist;              // Schema whitelist for this version (replaces databases[])
   docs: DocEntry[];                  // Documentation entries with optional childPaths
+  metrics?: MetricDef[];             // Named metrics attached to tables
+  annotations?: TableAnnotation[];   // Editorial table/column descriptions
   createdAt: string;                 // ISO timestamp
   createdBy: number;                 // User ID who created version
   lastEditedAt?: string;             // ISO timestamp of last edit
@@ -335,11 +372,15 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullSchema?: DatabaseWithSchema[];   // Computed by loader - what this context actually exposes (own whitelist applied)
   parentSchema?: DatabaseWithSchema[]; // Computed by loader - what parent offers (before own whitelist); used by editor
   fullDocs?: DocEntry[];               // Computed by loader - inherited docs
+  fullMetrics?: MetricDef[];           // Computed by loader - inherited + own metrics
+  fullAnnotations?: TableAnnotation[]; // Computed by loader - inherited + own annotations
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
 
   // Working fields (exposed by container for editing current version)
   databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all
   docs?: DocEntry[];                  // Current version's docs (container only)
+  metrics?: MetricDef[];             // Current version's metrics (container only)
+  annotations?: TableAnnotation[];   // Current version's annotations (container only)
 
   // Evals (stored at content level, independent of versions)
   evals?: Test[];
