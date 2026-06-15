@@ -19,6 +19,8 @@ interface AgentHtmlProps {
   width: number;
   /** Fixed canvas height in px; omit for content-driven height (story pages). */
   height?: number;
+  /** Public read-only render (shared story): embedded charts hide actions + auth-gated links. */
+  readOnly?: boolean;
 }
 
 // Placeholder sizing floors/defaults: title bar (~40px) + chart minHeight
@@ -41,7 +43,7 @@ const DEFAULT_CHART_H = 400;
  * document's <style> blocks (web fonts) are hoisted to document.head —
  * font-faces declared inside shadow trees don't load.
  */
-export default function AgentHtml({ html, width, height }: AgentHtmlProps) {
+export default function AgentHtml({ html, width, height, readOnly = false }: AgentHtmlProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fontTagRef = useRef<HTMLStyleElement | null>(null);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
@@ -163,7 +165,7 @@ export default function AgentHtml({ html, width, height }: AgentHtmlProps) {
           display="flex"
           flexDirection="column"
         >
-          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={true} index={i} />
+          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={true} index={i} readOnly={readOnly} />
         </Box>,
         t.el,
         `${i}-${t.questionId}`,

@@ -1,7 +1,8 @@
 import { auth } from '@/auth';
 import { UserDB } from '../database/user-db';
 import { cache } from 'react';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
+import { GUEST_COOKIE, verifyGuestToken, guestToEffectiveUser, isShareGuestPath } from './guest-session';
 import { UserRole } from '../types';
 import { isAdmin } from './role-helpers';
 import { CURRENT_TOKEN_VERSION, TOKEN_REFRESH_THRESHOLD } from './auth-constants';
@@ -37,6 +38,10 @@ export interface EffectiveUser {
   // Optional: only the HTTP request builders populate it (from the x-view header);
   // background builders (MCP/Slack) and tests omit it → treated as 'full'.
   view?: View;
+  // Present only for anonymous public-share guests (no NextAuth session). Downstream
+  // file/query access treats a guest as a normal folder-scoped viewer; only the chat
+  // routes special-case it (gate on `canChat` + SHARE_GUEST_CHAT_ENABLED).
+  guest?: { canChat: boolean; shareFileId: number; nonce: string };
 }
 
 /**
@@ -80,7 +85,16 @@ export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> =>
   const view = await getView();
   const session = await auth();
 
-  if (!session?.user) return null;
+  if (!session?.user) {
+    // No NextAuth session: fall back to an anonymous public-share guest, but ONLY on the
+    // share pages + the APIs they call (isShareGuestPath). The guest's scope (folder + mode
+    // + role) comes ONLY from the verified cookie — x-mode / x-impersonate-user are ignored,
+    // so there is no escalation path, and the cookie never authorizes the main app UI.
+    if (!isShareGuestPath(headersList.get('x-request-path'))) return null;
+    const guestToken = (await cookies()).get(GUEST_COOKIE)?.value;
+    const guest = verifyGuestToken(guestToken);
+    return guest ? guestToEffectiveUser(guest) : null;
+  }
 
   const asUserEmail = headersList.get('x-impersonate-user');
   if (asUserEmail && isAdmin(session.user.role || 'viewer')) {

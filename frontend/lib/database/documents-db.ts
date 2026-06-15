@@ -92,6 +92,21 @@ export class DocumentDB {
     return rowToDbFile(result.rows[0], includeContent);
   }
 
+  /**
+   * Find the file holding a given public-share nonce in its `meta.shares[]`.
+   * Uses a JSONB containment match (`@>`), accelerated by the GIN index on
+   * `(meta -> 'shares')`. Nonces are globally unique random keys, so at most one matches.
+   */
+  static async findByShareNonce(nonce: string): Promise<DbFile | null> {
+    const db = getModules().db;
+    const result = await db.exec<DbRow>(
+      `SELECT * FROM files WHERE meta -> 'shares' @> $1::jsonb LIMIT 1`,
+      [JSON.stringify([{ nonce }])]
+    );
+    if (result.rows.length === 0) return null;
+    return rowToDbFile(result.rows[0], true);
+  }
+
   static async getByIds(ids: number[], includeContent: boolean = true): Promise<DbFile[]> {
     // Drop virtual/placeholder IDs (negative, from pathToVirtualId) and any other
     // non-positive-integer values: they have no DB row and can exceed int4 range,
@@ -286,6 +301,19 @@ export class DocumentDB {
     const result = await getModules().db.exec(
       'UPDATE files SET name = $1, path = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
       [name, path, id]
+    );
+    return result.rowCount > 0;
+  }
+
+  /**
+   * Overwrite the `meta` JSONB blob for a file (read-modify-write the whole object at the
+   * call site). Does NOT bump version or touch content — meta is sidebar-cheap, out-of-band
+   * file-level metadata (e.g. public share records). Returns false if the file doesn't exist.
+   */
+  static async updateMeta(id: number, meta: Record<string, unknown> | null): Promise<boolean> {
+    const result = await getModules().db.exec(
+      'UPDATE files SET meta = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [meta ?? null, id]
     );
     return result.rowCount > 0;
   }

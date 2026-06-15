@@ -8,6 +8,9 @@ import {
 } from '@/lib/chat-orchestration-v2.server';
 import { startRun, attach, registerCancel, type SequencedFrame } from '@/lib/chat/run-registry.server';
 import { createNewConversation } from '@/lib/conversations';
+import { guestChatDenialReason } from '@/lib/auth/guest-session';
+import { checkGuestChatRateLimit } from '@/lib/auth/guest-rate-limit';
+import { SHARE_GUEST_CHAT_ENABLED } from '@/lib/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -72,6 +75,22 @@ export async function POST(request: NextRequest) {
       JSON.stringify({ error: 'Unauthorized' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } },
     );
+  }
+
+  // Anonymous public-share guests: enforce the chat gate (kill-switch + lead capture)
+  // and a per-guest rate limit before spending any LLM tokens.
+  if (user.guest) {
+    const denial = guestChatDenialReason(user, SHARE_GUEST_CHAT_ENABLED);
+    if (denial) {
+      return new Response(JSON.stringify({ error: denial }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    const rl = checkGuestChatRateLimit(user.userId);
+    if (!rl.allowed) {
+      return new Response(
+        JSON.stringify({ error: rl.reason }),
+        { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(rl.retryAfter ?? 60) } },
+      );
+    }
   }
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();

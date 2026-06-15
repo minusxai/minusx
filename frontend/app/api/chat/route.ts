@@ -6,6 +6,9 @@ import { ChatRequest, CompletedToolCallResult } from '@/lib/chat-orchestration';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { runChatTurnV2, validateV2Mode, forkV1ConversationToV2 } from '@/lib/chat-orchestration-v2.server';
 import { createNewConversation } from '@/lib/conversations';
+import { guestChatDenialReason } from '@/lib/auth/guest-session';
+import { checkGuestChatRateLimit } from '@/lib/auth/guest-rate-limit';
+import { SHARE_GUEST_CHAT_ENABLED } from '@/lib/config';
 
 /**
  * Chat response to frontend
@@ -52,6 +55,24 @@ export async function POST(request: NextRequest) {
         } as ChatResponse,
         { status: 401 },
       );
+    }
+
+    // Anonymous public-share guests: enforce the chat gate + per-guest rate limit.
+    if (user.guest) {
+      const denial = guestChatDenialReason(user, SHARE_GUEST_CHAT_ENABLED);
+      if (denial) {
+        return NextResponse.json(
+          { conversationID: 0, log_index: 0, pending_tool_calls: [], completed_tool_calls: [], debug: [], error: denial } as ChatResponse,
+          { status: 403 },
+        );
+      }
+      const rl = checkGuestChatRateLimit(user.userId);
+      if (!rl.allowed) {
+        return NextResponse.json(
+          { conversationID: 0, log_index: 0, pending_tool_calls: [], completed_tool_calls: [], debug: [], error: rl.reason } as ChatResponse,
+          { status: 429, headers: { 'Retry-After': String(rl.retryAfter ?? 60) } },
+        );
+      }
     }
 
     // Resolve the conversation: continue an existing v2 file, fork a legacy file
