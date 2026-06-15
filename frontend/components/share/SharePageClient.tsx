@@ -2,16 +2,20 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { shallowEqual } from 'react-redux';
 import { Box, Center, Flex, Spinner, Text } from '@chakra-ui/react';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setUser } from '@/store/authSlice';
 import { selectMergedContent } from '@/store/filesSlice';
+import { selectAugmentedFiles } from '@/lib/store/file-selectors';
+import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import StoryView from '@/components/views/story/StoryView';
 import ChatInterface from '@/components/explore/ChatInterface';
 import ShareLeadGate from './ShareLeadGate';
 import { StoryContent } from '@/lib/types';
+import type { AppState } from '@/lib/appState';
 import type { Mode } from '@/lib/mode/mode-types';
 
 interface ShareSession {
@@ -81,6 +85,18 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
     applySession(s);
   };
 
+  // Build the "file is open" app state for the shared story, so the chat knows what
+  // "this report" refers to (the route-based selector doesn't recognize /l/ pages).
+  const fileId = session?.fileId;
+  const augmented = useAppSelector(
+    state => (fileId !== undefined ? selectAugmentedFiles(state, [fileId])[0] : undefined),
+    shallowEqual,
+  );
+  const storyAppState = useMemo<AppState | null>(
+    () => (augmented ? { type: 'file', state: compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS) } : null),
+    [augmented],
+  );
+
   if (status === 'minting') {
     return <Center h="100vh" bg="bg.canvas"><Spinner size="xl" color="primary" /></Center>;
   }
@@ -111,7 +127,7 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
           h="100vh"
         >
           {session.canChat ? (
-            <ChatInterface contextPath={session.folderPath} container="sidebar" />
+            <ChatInterface contextPath={session.folderPath} container="sidebar" appState={storyAppState} />
           ) : (
             <ShareLeadGate onSubmit={handleLead} />
           )}
