@@ -1,37 +1,28 @@
 /**
- * Shareable-link tokens for public file shares.
+ * Shareable-link ids for public file shares.
  *
- * A share link encodes `{ fileId, nonce }` in a signed JWT (same secret + lib as
- * `lib/auth/otp-utils.ts`). The `nonce` is the per-link revocation key, stored on the
- * file's `meta.shares[]` — decoding only recovers the fileId/nonce; a link is only valid
- * if its nonce is still present (and not revoked) on the target file.
+ * A share id is `<slug>-<nonce>` (e.g. `marigold-demo-story-3k2j9x7qm4p8w1n5t2`), where
+ * `slug` is a cosmetic, human-readable prefix from the file name and `nonce` is a random,
+ * unguessable, URL-safe key. The nonce is the ONLY secret: it is stored on the target file's
+ * `meta.shares[]` and resolved by lookup (DocumentDB.findByShareNonce) — so there is no need
+ * for a self-contained signed token. Validation already loads the file and checks the nonce
+ * is present and not revoked, which is what authorizes the link (and enables revocation).
  *
- * URL shape: `<slug>--<jwt>` where `slug` is a cosmetic, human-readable prefix derived
- * from the file name (e.g. `acme-demo-story--<token>`). `slugify` collapses runs of
- * non-alphanumerics to a single hyphen, so it can never emit the `--` sentinel — making
- * the split between slug and token unambiguous.
+ * `nonce` is base36 (chars 0-9a-z only) so it never contains the `-` separator — the id
+ * splits unambiguously on its LAST `-`, regardless of how many hyphens the slug has.
  */
 import 'server-only';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { NEXTAUTH_SECRET } from '@/lib/config';
 import { slugify } from '@/lib/slug-utils';
 
-const SHARE_TOKEN_TYPE = 'share' as const;
-const SENTINEL = '--';
-
-/** JWT payload for a share link. No `exp` — links live until the nonce is revoked. */
-export interface SharePayload {
-  fileId: number;
-  nonce: string;
-  type: typeof SHARE_TOKEN_TYPE;
-}
+const NONCE_BYTES = 12; // 96 bits — unguessable + collision-free as a global lookup key
+const NONCE_RE = /^[0-9a-z]{8,40}$/;
 
 /** Per-link record persisted on `file.meta.shares[]`. */
 export interface ShareRecord {
   nonce: string;
   slug: string;
-  /** Full `<slug>--<jwt>` id, stored so admins can re-copy the link later. */
+  /** Full `<slug>-<nonce>` id, stored so admins can re-copy the link later. */
   shareableId: string;
   label?: string;
   createdAt: string;
@@ -39,23 +30,23 @@ export interface ShareRecord {
   revoked?: boolean;
 }
 
+function generateNonce(): string {
+  // base36 of the random bytes → compact, lowercase-alphanumeric, no `-`/`_`.
+  return BigInt('0x' + crypto.randomBytes(NONCE_BYTES).toString('hex')).toString(36);
+}
+
 /**
- * Create a new share link for a file.
- * Returns the URL-safe `shareableId` (`<slug>--<jwt>`) and the `ShareRecord` to persist.
+ * Create a new share link.
+ * Returns the URL-safe `shareableId` (`<slug>-<nonce>`) and the `ShareRecord` to persist.
  */
 export function createShareLink(
-  fileId: number,
   name: string,
   createdBy: number,
   label?: string,
 ): { shareableId: string; record: ShareRecord } {
-  const nonce = crypto.randomBytes(12).toString('base64url');
+  const nonce = generateNonce();
   const slug = slugify(name);
-  const token = jwt.sign(
-    { fileId, nonce, type: SHARE_TOKEN_TYPE } satisfies SharePayload,
-    NEXTAUTH_SECRET,
-  );
-  const shareableId = `${slug}${SENTINEL}${token}`;
+  const shareableId = slug ? `${slug}-${nonce}` : nonce;
   const record: ShareRecord = {
     nonce,
     slug,
@@ -68,24 +59,17 @@ export function createShareLink(
 }
 
 /**
- * Decode a `shareableId` back to `{ fileId, nonce }`.
- * Returns null for any malformed / tampered / wrong-type token.
- * NOTE: this does NOT check the nonce against the file — callers must still validate
- * the nonce is present and not revoked on `file.meta.shares`.
+ * Extract the nonce from a `shareableId` (`<slug>-<nonce>`). The nonce is the final segment;
+ * the slug is cosmetic and ignored. Returns null for anything that isn't a plausible nonce.
+ * NOTE: this does NOT prove the nonce is valid — callers must still resolve it to a live,
+ * non-revoked share (DocumentDB.findByShareNonce + isLiveShareNonce).
  */
-export function decodeShareLink(shareableId: string): { fileId: number; nonce: string } | null {
-  const sep = shareableId.indexOf(SENTINEL);
-  if (sep < 0) return null;
-  const token = shareableId.slice(sep + SENTINEL.length);
-  if (!token) return null;
-  try {
-    const payload = jwt.verify(token, NEXTAUTH_SECRET) as SharePayload;
-    if (payload.type !== SHARE_TOKEN_TYPE) return null;
-    if (typeof payload.fileId !== 'number' || typeof payload.nonce !== 'string') return null;
-    return { fileId: payload.fileId, nonce: payload.nonce };
-  } catch {
-    return null;
-  }
+export function decodeShareLink(shareableId: string): { nonce: string } | null {
+  if (!shareableId) return null;
+  const i = shareableId.lastIndexOf('-');
+  const nonce = i >= 0 ? shareableId.slice(i + 1) : shareableId;
+  if (!NONCE_RE.test(nonce)) return null;
+  return { nonce };
 }
 
 /** True if `nonce` corresponds to a live (non-revoked) share in the given records. */

@@ -10,7 +10,7 @@ vi.mock('@/lib/database/db-config', () => ({
   getDbType: () => 'pglite' as const,
 }));
 
-import { addShare, getShares, revokeShare, createFile } from '@/lib/data/files.server';
+import { addShare, getShares, revokeShare, resolveShare, createFile } from '@/lib/data/files.server';
 import { decodeShareLink, isLiveShareNonce } from '@/lib/auth/share-tokens';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -67,16 +67,30 @@ async function makeQuestion(): Promise<number> {
 describe('FilesAPI share management', () => {
   setupTestDb(TEST_DB_PATH);
 
-  it('addShare mints a decodable link bound to the file and persists a record', async () => {
+  it('addShare mints a decodable link and persists a record', async () => {
     const fileId = await makeStory();
     const { shareableId, record } = await addShare(fileId, ADMIN);
 
-    expect(decodeShareLink(shareableId)).toEqual({ fileId, nonce: record.nonce });
+    expect(decodeShareLink(shareableId)).toEqual({ nonce: record.nonce });
 
     const shares = await getShares(fileId, ADMIN);
     expect(shares).toHaveLength(1);
     expect(shares[0].nonce).toBe(record.nonce);
     expect(isLiveShareNonce(record.nonce, shares)).toBe(true);
+  });
+
+  it('resolveShare looks the story up by nonce (no fileId in the link)', async () => {
+    const fileId = await makeStory();
+    const { shareableId } = await addShare(fileId, ADMIN);
+
+    const resolved = await resolveShare(shareableId);
+    expect(resolved?.file.id).toBe(fileId);
+    expect(resolved?.file.type).toBe('story');
+
+    // garbage, and a revoked link, both fail to resolve
+    expect(await resolveShare('does-not-exist-abcdefghij')).toBeNull();
+    await revokeShare(fileId, ADMIN, resolved!.nonce);
+    expect(await resolveShare(shareableId)).toBeNull();
   });
 
   it('accumulates multiple links and revokeShare soft-revokes by nonce', async () => {

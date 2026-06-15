@@ -92,6 +92,21 @@ export class DocumentDB {
     return rowToDbFile(result.rows[0], includeContent);
   }
 
+  /**
+   * Find the file holding a given public-share nonce in its `meta.shares[]`.
+   * Uses a JSONB containment match (`@>`), accelerated by the GIN index on
+   * `(meta -> 'shares')`. Nonces are globally unique random keys, so at most one matches.
+   */
+  static async findByShareNonce(nonce: string): Promise<DbFile | null> {
+    const db = getModules().db;
+    const result = await db.exec<DbRow>(
+      `SELECT * FROM files WHERE meta -> 'shares' @> $1::jsonb LIMIT 1`,
+      [JSON.stringify([{ nonce }])]
+    );
+    if (result.rows.length === 0) return null;
+    return rowToDbFile(result.rows[0], true);
+  }
+
   static async getByIds(ids: number[], includeContent: boolean = true): Promise<DbFile[]> {
     // Drop virtual/placeholder IDs (negative, from pathToVirtualId) and any other
     // non-positive-integer values: they have no DB row and can exceed int4 range,

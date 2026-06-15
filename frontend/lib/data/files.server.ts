@@ -1067,7 +1067,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async resolveShare(shareableId: string): Promise<{ file: DbFile; nonce: string } | null> {
     const decoded = decodeShareLink(shareableId);
     if (!decoded) return null;
-    const file = await DocumentDB.getById(decoded.fileId);
+    const file = await DocumentDB.findByShareNonce(decoded.nonce);
     if (!file || file.type !== 'story') return null;
     if (!isLiveShareNonce(decoded.nonce, this._readShares(file))) return null;
     return { file, nonce: decoded.nonce };
@@ -1086,7 +1086,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     label?: string,
   ): Promise<{ shareableId: string; record: ShareRecord }> {
     const file = await this._loadStoryForShareAdmin(fileId, user);
-    const { shareableId, record } = createShareLink(fileId, file.name, user.userId, label);
+    const { shareableId, record } = createShareLink(file.name, user.userId, label);
     await this._writeShares(file, [...this._readShares(file), record]);
     return { shareableId, record };
   }

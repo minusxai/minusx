@@ -179,6 +179,8 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_files_type_updated ON files(type, updated_at DESC);
+  -- Public-share lookup: resolve a story by the nonce stored in meta.shares[] via jsonb containment.
+  CREATE INDEX IF NOT EXISTS idx_files_meta_shares ON files USING gin ((meta -> 'shares') jsonb_path_ops);
 
   -- Trigger to auto-update updated_at for files
   CREATE OR REPLACE FUNCTION update_files_updated_at()
