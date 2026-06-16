@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Box, Portal } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './explore/slash-commands';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -55,10 +55,13 @@ export default function FloatingChatWrapper({
 
   const clearChat = useClearChat();
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState });
-  const handleSend = useCallback((message: string, _attachments: Attachment[]) => {
+  const handleSend = useCallback((message: string, attachments: Attachment[]) => {
     if (!message.trim()) return;
     if (tryExecuteSlashCommand(message.trim(), availableCommands, handleCommandExecute)) return;
     clearChat();
+    // clearChat() clears chatAttachments — re-add the ones being sent so the sidebar
+    // hand-off (which reads chatAttachments) carries the user's attachments through.
+    attachments.forEach(a => dispatch(addChatAttachment(a)));
     dispatch(setSidebarPendingMessage(message.trim()));
     dispatch(setActiveSidebarSection('chat'));
     dispatch(setRightSidebarCollapsed(false));
