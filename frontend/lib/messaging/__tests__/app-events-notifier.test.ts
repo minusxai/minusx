@@ -1,10 +1,8 @@
 import type { Mock } from 'vitest';
 /**
- * notifyAppEvent enrichment tests
- *
- * Verifies that every outgoing notification is automatically enriched with
- * requestPath, clientUrl, userEmail, and userRole — regardless of what the
- * call site passes — and that explicit call-site values are not overwritten.
+ * App-event forwarding: enrichEventPayload (request/session context) +
+ * forwardToWebhooks (EVENTS_FORWARD_RULES regex → webhook fan-out, Slack-formatted
+ * for hooks.slack.com, raw JSON otherwise).
  */
 
 vi.mock('server-only', () => ({}));
@@ -19,23 +17,23 @@ vi.mock('@/lib/auth/auth-helpers', () => ({
 }));
 
 vi.mock('@/lib/config', () => ({
-  OBJECT_STORE_PUBLIC_URL: undefined,
-  MX_NETWORK_LOG_EXCLUDE: '',
-  MX_API_BASE_URL: 'https://notify.example.com',
-  MX_API_KEY: 'test-key',
+  EVENTS_FORWARD_RULES: [
+    { pattern: /^error$/, url: 'https://hooks.slack.com/services/errors' },
+    { pattern: /^share:lead$/, url: 'https://hooks.slack.com/services/leads' },
+    { pattern: /^user:.*/, url: 'https://central.example.com/ingest' },
+  ],
 }));
 
-import { notifyAppEvent } from '../app-events-notifier';
+import { enrichEventPayload, forwardToWebhooks } from '../app-events-notifier';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 
 const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
 global.fetch = mockFetch;
-
 const mockGetEffectiveUser = getEffectiveUser as Mock;
 
-function sentBody(): Record<string, unknown> {
-  const raw = mockFetch.mock.calls[0][1].body as string;
-  return JSON.parse(raw);
+function callTo(url: string) {
+  const call = mockFetch.mock.calls.find(c => c[0] === url);
+  return call ? JSON.parse(call[1].body as string) : undefined;
 }
 
 beforeEach(() => {
@@ -47,86 +45,66 @@ beforeEach(() => {
     if (key === 'referer') return 'https://app.example.com/f/42';
     return null;
   });
-  mockGetEffectiveUser.mockResolvedValue({
-    userId: 7,
-    email: 'alice@example.com',
-    role: 'admin',
-    mode: 'org',
-    name: 'Alice',
-    home_folder: '/org',
-  });
+  mockGetEffectiveUser.mockResolvedValue({ userId: 7, email: 'alice@example.com', role: 'admin', mode: 'org', name: 'Alice', home_folder: '/org' });
 });
 
-describe('notifyAppEvent enrichment', () => {
-  it('includes requestPath, clientUrl, userEmail, userRole in every outgoing payload', async () => {
-    await notifyAppEvent('error', { mode: 'org', source: 'tool_handler', message: 'boom' });
-
-    const body = sentBody();
-    expect(body.requestPath).toBe('/api/chat/stream');
-    expect(body.clientUrl).toBe('https://app.example.com/f/42');
-    expect(body.userEmail).toBe('alice@example.com');
-    expect(body.userRole).toBe('admin');
+describe('enrichEventPayload', () => {
+  it('adds requestPath, clientUrl, userEmail, userRole + sets type', async () => {
+    const e = await enrichEventPayload('error', { mode: 'org', source: 'tool', message: 'boom' });
+    expect(e).toMatchObject({
+      type: 'error', requestPath: '/api/chat/stream', clientUrl: 'https://app.example.com/f/42',
+      userEmail: 'alice@example.com', userRole: 'admin', source: 'tool', message: 'boom',
+    });
   });
 
-  it('omits requestPath and clientUrl when headers are unavailable', async () => {
+  it('omits requestPath/clientUrl when headers unavailable', async () => {
     mockGet.mockReturnValue(null);
-
-    await notifyAppEvent('error', { mode: 'org', source: 'cron', message: 'nightly fail' });
-
-    const body = sentBody();
-    expect(body.requestPath).toBeUndefined();
-    expect(body.clientUrl).toBeUndefined();
-    expect(body.userEmail).toBe('alice@example.com');
+    const e = await enrichEventPayload('error', { mode: 'org', message: 'cron' });
+    expect(e.requestPath).toBeUndefined();
+    expect(e.clientUrl).toBeUndefined();
+    expect(e.userEmail).toBe('alice@example.com');
   });
 
-  it('omits userEmail and userRole when session is unavailable', async () => {
+  it('omits userEmail/userRole when session unavailable', async () => {
     mockGetEffectiveUser.mockResolvedValue(null);
-
-    await notifyAppEvent('error', { mode: 'org', source: 'cron', message: 'no session' });
-
-    const body = sentBody();
-    expect(body.userEmail).toBeUndefined();
-    expect(body.userRole).toBeUndefined();
-    expect(body.requestPath).toBe('/api/chat/stream');
+    const e = await enrichEventPayload('error', { mode: 'org', message: 'x' });
+    expect(e.userEmail).toBeUndefined();
+    expect(e.userRole).toBeUndefined();
+    expect(e.requestPath).toBe('/api/chat/stream');
   });
 
   it('call-site payload overrides enriched defaults', async () => {
-    await notifyAppEvent('user:logged_in', {
-      mode: 'org',
-      userEmail: 'explicit@example.com',
-      userRole: 'viewer',
-    });
+    const e = await enrichEventPayload('user:login', { mode: 'org', userEmail: 'explicit@x.com', userRole: 'viewer' });
+    expect(e.userEmail).toBe('explicit@x.com');
+    expect(e.userRole).toBe('viewer');
+  });
+});
 
-    const body = sentBody();
-    expect(body.userEmail).toBe('explicit@example.com');
-    expect(body.userRole).toBe('viewer');
+describe('forwardToWebhooks', () => {
+  it('posts a matched event to its webhook only (regex match)', async () => {
+    await forwardToWebhooks('error', { type: 'error', mode: 'org', message: 'boom' });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe('https://hooks.slack.com/services/errors');
   });
 
-  it('passes through call-site event fields untouched', async () => {
-    await notifyAppEvent('error', {
-      mode: 'org',
-      source: 'tool_handler',
-      message: 'invalid input syntax',
-      context: { tool: 'SearchFiles' },
-    });
-
-    const body = sentBody();
-    expect(body.type).toBe('error');
-    expect(body.mode).toBe('org');
-    expect(body.source).toBe('tool_handler');
-    expect(body.message).toBe('invalid input syntax');
-    expect(body.context).toEqual({ tool: 'SearchFiles' });
+  it('formats Slack webhooks as { text: "*type*\\n• k: v" }', async () => {
+    await forwardToWebhooks('share:lead', { type: 'share:lead', mode: 'org', email: 'jane@acme.test', name: 'Jane' });
+    const body = callTo('https://hooks.slack.com/services/leads');
+    expect(Object.keys(body)).toEqual(['text']);
+    expect(body.text).toContain('*share:lead*');
+    expect(body.text).toContain('• email: jane@acme.test');
+    expect(body.text).not.toContain('• type:'); // header line only
   });
 
-  it('sends to the correct endpoint with the api key header', async () => {
-    await notifyAppEvent('error', { mode: 'org', source: 'x', message: 'y' });
+  it('posts raw enriched JSON to non-Slack webhooks (e.g. central ingest)', async () => {
+    await forwardToWebhooks('user:login', { type: 'user:login', mode: 'org', userEmail: 'a@b.com' });
+    const body = callTo('https://central.example.com/ingest');
+    expect(body).toMatchObject({ type: 'user:login', mode: 'org', userEmail: 'a@b.com' });
+    expect(body.text).toBeUndefined(); // not Slack-formatted
+  });
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://notify.example.com/notify',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ 'mx-api-key': 'test-key' }),
-      }),
-    );
+  it('does nothing when no rule matches', async () => {
+    await forwardToWebhooks('file:viewed', { type: 'file:viewed', mode: 'org', fileId: 1 });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

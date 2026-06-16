@@ -26,11 +26,10 @@ export const POST = withAuth(async (
     // Track read_direct for the whole batch in a single multi-row INSERT.
     // Previously this loop fired one INSERT per file, which Sentry flagged as
     // MINUSX-BI-A (N+1 INSERTs into file_events). We deliberately bypass
-    // appEventRegistry.publish(FILE_VIEWED) here — that path fires both the
-    // analytics INSERT *and* a per-event HTTP notify to MX_API_BASE_URL/notify,
-    // which is also wasteful for bulk reads. Batched analytics keeps the
-    // important signal (file-view counts); per-file notify for bulk loads is
-    // dropped intentionally.
+    // appEventRegistry.publish(FILE_VIEWED) here — that path fires the per-event
+    // analytics INSERT (and the app_events log + webhook fan-out), which is
+    // wasteful for bulk reads. Batched analytics keeps the important signal
+    // (file-view counts); per-file event publish for bulk loads is dropped intentionally.
     trackFileEvents(result.data.map(file => ({
       eventType: FileEventType.READ_DIRECT,
       fileId: file.id,
