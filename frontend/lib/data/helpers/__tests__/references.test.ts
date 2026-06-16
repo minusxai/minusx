@@ -82,12 +82,13 @@ describe('extractReferenceIds — document types', () => {
     expect(await extractReferenceIds(file!, noopResolver)).toEqual([child]);
   });
 
-  it('returns cached references for a report', async () => {
+  it('does not treat reports as reference-bearing (freeform reportPrompt, no references)', async () => {
     const child = await DocumentDB.create('RefRptChild', '/org/refrptchild', 'question', {}, []);
+    // Even if a stale references array lingers in the column, reports expose none.
     const id = await DocumentDB.create('RefRpt', '/org/refrpt', 'report', {}, [child]);
     const file = await DocumentDB.getById(id);
 
-    expect(await extractReferenceIds(file!, noopResolver)).toEqual([child]);
+    expect(await extractReferenceIds(file!, noopResolver)).toEqual([]);
   });
 
   it('returns cached references for a presentation', async () => {
