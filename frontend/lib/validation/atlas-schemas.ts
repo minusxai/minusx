@@ -302,6 +302,10 @@ export const StoryContent = Type.Object({
     'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +
     'the drop in Q3?"), not generic. Omit or leave null to fall back to the default generic prompts.' }))),
+  colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
+    "Forces the color mode (chart theming + tile/chrome) for PUBLIC SHARED viewers, who can't toggle it " +
+    'themselves. Pick the one that matches the story design (e.g. "dark" for a dark editorial layout). ' +
+    'Omit or leave null to use the viewer default.'))),
 }, { title: 'StoryContent' });
 export type StoryContent = Static<typeof StoryContent>;
 

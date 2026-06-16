@@ -9,6 +9,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setUser } from '@/store/authSlice';
+import { setColorMode } from '@/store/uiSlice';
 import { selectMergedContent } from '@/store/filesSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/api/compress-augmented';
@@ -109,6 +110,15 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
     () => (storyContent?.suggestedQuestions ?? undefined) || undefined,
     [storyContent?.suggestedQuestions],
   );
+
+  // Public viewers can't toggle light/dark, so honor the mode the story was
+  // authored for. Charts/tiles/chat all read ui.colorMode from Redux, so a
+  // single dispatch themes the whole page; ColorModeSync mirrors it to the
+  // <html> class. No-op (viewer default) when the story doesn't set one.
+  const storyColorMode = storyContent?.colorMode ?? undefined;
+  useEffect(() => {
+    if (storyColorMode) dispatch(setColorMode(storyColorMode));
+  }, [storyColorMode, dispatch]);
 
   // Collapse toggle for the chat panel — mirrors the right sidebar sidechat.
   const [chatCollapsed, setChatCollapsed] = useState(false);
