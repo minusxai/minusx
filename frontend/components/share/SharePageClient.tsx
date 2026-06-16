@@ -16,6 +16,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import StoryView from '@/components/views/story/StoryView';
 import ChatInterface from '@/components/explore/ChatInterface';
 import ShareLeadGate from './ShareLeadGate';
+import ShareFloatingChat from './ShareFloatingChat';
 import { StoryContent } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -34,6 +35,7 @@ interface ShareSession {
 type Status = 'minting' | 'ready' | 'error';
 
 const CHAT_WIDTH = '420px';
+const CHAT_RAIL_WIDTH = '52px';
 
 /** Mints/refreshes the guest session. Returns the session payload or throws. */
 async function mintSession(shareId: string, body: Record<string, unknown>): Promise<ShareSession> {
@@ -126,12 +128,12 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
 
   return (
     <Flex h="100vh" bg="bg.canvas" overflow="hidden">
-      <Box flex="1" overflowY="auto" px={{ base: 4, md: 8 }} py={6}>
+      <Box flex="1" overflowY="auto">
         <SharedStory fileId={session.fileId} />
       </Box>
-      {showChat && (chatCollapsed ? (
+      {showChat && (
         <Box
-          w="52px"
+          w={chatCollapsed ? CHAT_RAIL_WIDTH : { base: '100%', md: CHAT_WIDTH }}
           flexShrink={0}
           borderLeftWidth="1px"
           borderColor="border.default"
@@ -139,60 +141,56 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
           display={{ base: 'none', md: 'flex' }}
           flexDirection="column"
           h="100vh"
+          transition="width 0.2s ease"
         >
-          <Tooltip content="Open chat" positioning={{ placement: 'left' }}>
-            <Box
-              as="button"
-              aria-label="Open chat"
-              onClick={() => setChatCollapsed(false)}
-              p={3}
+          {chatCollapsed ? (
+            <Tooltip content="Open chat" positioning={{ placement: 'left' }}>
+              <Box
+                as="button"
+                aria-label="Open chat"
+                onClick={() => setChatCollapsed(false)}
+                p={3}
+                bg="bg.muted"
+                borderBottom="1px solid"
+                borderColor="border.default"
+                cursor="pointer"
+                _hover={{ bg: 'bg.elevated' }}
+                transition="background 0.2s"
+              >
+                <Icon as={LuMessageSquare} boxSize={5} color="accent.primary" />
+              </Box>
+            </Tooltip>
+          ) : (
+            <HStack
+              flexShrink={0}
+              px={2}
+              py={2}
               bg="bg.muted"
               borderBottom="1px solid"
               borderColor="border.default"
-              cursor="pointer"
-              _hover={{ bg: 'bg.elevated' }}
-              transition="background 0.2s"
             >
-              <Icon as={LuMessageSquare} boxSize={5} color="accent.primary" />
-            </Box>
-          </Tooltip>
-        </Box>
-      ) : (
-        <Box
-          w={{ base: '100%', md: CHAT_WIDTH }}
-          flexShrink={0}
-          borderLeftWidth="1px"
-          borderColor="border.default"
-          bg="bg.surface"
-          display={{ base: 'none', md: 'flex' }}
-          flexDirection="column"
-          h="100vh"
-        >
-          <HStack
-            flexShrink={0}
-            px={2}
-            py={2}
-            bg="bg.muted"
-            borderBottom="1px solid"
-            borderColor="border.default"
-          >
-            <Tooltip content="Collapse chat" positioning={{ placement: 'bottom' }}>
-              <Box
-                as="button"
-                aria-label="Collapse chat"
-                onClick={() => setChatCollapsed(true)}
-                color="fg.muted"
-                cursor="pointer"
-                _hover={{ color: 'fg.default' }}
-                transition="color 0.2s"
-                display="flex"
-                alignItems="center"
-              >
-                <Icon as={LuChevronRight} boxSize={4} />
-              </Box>
-            </Tooltip>
-          </HStack>
-          <Box flex="1" overflow="hidden" minH={0}>
+              <Tooltip content="Collapse chat" positioning={{ placement: 'bottom' }}>
+                <Box
+                  as="button"
+                  aria-label="Collapse chat"
+                  onClick={() => setChatCollapsed(true)}
+                  color="fg.muted"
+                  cursor="pointer"
+                  _hover={{ color: 'fg.default' }}
+                  transition="color 0.2s"
+                  display="flex"
+                  alignItems="center"
+                >
+                  <Icon as={LuChevronRight} boxSize={4} />
+                </Box>
+              </Tooltip>
+            </HStack>
+          )}
+          {/* Body stays MOUNTED across collapse (only hidden) so the conversation
+              and the floating-bar pending-message handoff survive. Unmounting it
+              made the floating-bar message get consumed at remount, double-sending
+              under StrictMode. */}
+          <Box flex="1" overflow="hidden" minH={0} display={chatCollapsed ? 'none' : 'block'}>
             {session.canChat ? (
               <ChatInterface
                 contextPath={session.folderPath}
@@ -205,7 +203,18 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
             )}
           </Box>
         </Box>
-      ))}
+      )}
+
+      {/* Floating "ask anything" bar — only once the guest can chat, and only
+          while the panel is collapsed (open panel already shows its own input). */}
+      {showChat && session.canChat && chatCollapsed && (
+        <ShareFloatingChat
+          contextPath={session.folderPath}
+          appState={storyAppState}
+          railWidth={CHAT_RAIL_WIDTH}
+          onOpenChat={() => setChatCollapsed(false)}
+        />
+      )}
     </Flex>
   );
 }
