@@ -9,6 +9,7 @@ import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
+import { useContext } from '@/lib/hooks/useContext';
 import { editFile } from '@/lib/api/file-state';
 import ReportView from '@/components/views/ReportView';
 import { ReportContent, RunFileContent } from '@/lib/types';
@@ -28,6 +29,10 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   const fileLoading = !file || file.loading;
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as ReportContent | undefined;
+
+  // Context databases for the report's path — powers @-mention of tables/columns
+  // in the instructions editor (questions/dashboards come from the server).
+  const { databases } = useContext(file?.path || '/');
 
   // Unified job runs state — replaces the old reportRunsSlice and custom fetching
   const numericFileId = typeof fileId === 'number' && fileId >= 0 ? fileId : null;
@@ -65,6 +70,7 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
       selectedRunId={selectedRunId}
       runFileContent={runFileContent}
       runFileId={runFileId}
+      whitelistedSchemas={databases}
       onChange={handleChange}
       onRunNow={handleRunNow}
       onSelectRun={handleSelectRun}

@@ -3,9 +3,8 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { runReportV2 } from '@/lib/chat/run-report-v2.server';
 import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
-import { getAppStateServer } from '@/lib/api/file-state.server';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import type { ReportAgentContext, ReportAgentReference } from '@/agents/report/report-agent';
+import type { ReportAgentContext } from '@/agents/report/report-agent';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
@@ -19,34 +18,6 @@ export const reportJobHandler: JobHandler = {
     const reportFileResult = await FilesAPI.loadFile(reportId, user);
     const reportName = reportFileResult.data?.name ?? `Report ${reportId}`;
 
-    // Load reference files from DB and build CompressedAugmentedFile for each.
-    // The AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
-    // — the same shape ChatInterface builds client-side via compressAugmentedFile().
-    // getAppStateServer handles the full pipeline including:
-    // - Parameter inheritance for dashboards
-    // - Query execution with inherited params
-    const enrichedReferences = await Promise.all(
-      (report.references || []).map(async (ref) => {
-        // Load file for metadata (name, path, connection_id)
-        const refResult = await FilesAPI.loadFile(ref.reference.id, user);
-        const refFile = refResult.data;
-        const connectionId = (refFile?.content as any)?.connection_name;
-
-        // Build app state with query execution enabled for reports
-        const appState = await getAppStateServer(ref.reference.id, user, { executeQueries: true });
-
-        return {
-          ...ref,
-          file_name: refFile?.name || `Reference ${ref.reference.id}`,
-          file_path: refFile?.path || '',
-          connection_id: connectionId,
-          app_state: appState,
-        };
-      })
-    );
-
-    const primaryConnectionId = enrichedReferences.find(r => r.connection_id)?.connection_id;
-
     const baseArgs = await buildServerAgentArgs(user);
 
     // Build the whitelist from the resolved schema (mirrors the chat path).
@@ -58,13 +29,14 @@ export const reportJobHandler: JobHandler = {
       }
     }
 
-    // Run the ReportAgent via the in-process v=2 orchestrator.
+    // Run the ReportAgent via the in-process v=2 orchestrator. The analyst
+    // sub-agent finds the relevant data itself from the freeform reportPrompt.
     const runData: ReportRunContent = await runReportV2({
-      // RemoteAnalystContext (inherited by the analyst sub-agents)
+      // RemoteAnalystContext (inherited by the analyst sub-agent)
       userId: String(user.userId ?? user.email),
       mode: user.mode === 'tutorial' ? 'tutorial' : 'org',
       effectiveUser: user,
-      connectionId: primaryConnectionId || baseArgs.connection_id,
+      connectionId: baseArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
       contextDocs: baseArgs.context || undefined,
       schema: baseArgs.schema,
@@ -73,7 +45,6 @@ export const reportJobHandler: JobHandler = {
       // Report inputs
       reportId,
       reportName,
-      references: enrichedReferences as ReportAgentReference[],
       reportPrompt: report.reportPrompt ?? '',
       emails: [], // Delivery handled via RunFileContent.messages below
     } satisfies ReportAgentContext);

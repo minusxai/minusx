@@ -40,12 +40,6 @@ export function extractReferences(file: DbFile): number[] {
       ?.map((a: any) => a.id)
       .filter((id: any): id is number => typeof id === 'number') || [];
   }
-  if (file.type === 'report') {
-    const content = file.content as any;
-    return content.references
-      ?.map((r: any) => r.reference?.id)
-      .filter((id: any): id is number => typeof id === 'number') || [];
-  }
   if (file.type === 'question') {
     const content = file.content as QuestionContent;
     return content.references?.map((ref: QuestionReference) => ref.id) || [];

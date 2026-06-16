@@ -19,7 +19,6 @@ export async function extractReferenceIds(
     file.type === 'dashboard' ||
     file.type === 'presentation' ||
     file.type === 'notebook' ||
-    file.type === 'report' ||
     file.type === 'question'
   ) {
     return file.references || [];

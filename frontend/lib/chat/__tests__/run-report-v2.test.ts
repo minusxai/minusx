@@ -19,7 +19,6 @@ vi.mock('@/lib/connections/load-schema', () => ({
 
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import { fauxRegistration as analystFaux } from '@/agents/analyst/analyst-agent';
-import { fauxRegistration as reportFaux } from '@/agents/report/report-agent';
 import { runReportV2 } from '@/lib/chat/run-report-v2.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -30,12 +29,13 @@ const USER: EffectiveUser = {
 describe('runReportV2 (real registrables)', () => {
   beforeEach(() => {
     analystFaux.setResponses([]);
-    reportFaux.setResponses([]);
   });
 
   it('runs ReportAgent + analyst sub-agent through the production registrables and returns the run payload', async () => {
-    analystFaux.setResponses([fauxAssistantMessage('Revenue grew.', { stopReason: 'stop' })]);
-    reportFaux.setResponses([fauxAssistantMessage('## Summary\nGrowth across the board.', { stopReason: 'stop' })]);
+    // The analyst's own markdown IS the report — no synthesis pass.
+    analystFaux.setResponses([
+      fauxAssistantMessage('## Summary\nGrowth across the board.', { stopReason: 'stop' }),
+    ]);
 
     const run = await runReportV2({
       userId: '1',
@@ -44,10 +44,7 @@ describe('runReportV2 (real registrables)', () => {
       connectionId: 'db',
       reportId: 99,
       reportName: 'Weekly Revenue',
-      references: [
-        { reference: { id: 5 }, prompt: 'Analyze weekly revenue', file_name: 'Revenue', connection_id: 'db', app_state: { type: 'file' } },
-      ],
-      reportPrompt: 'Executive summary please.',
+      reportPrompt: 'Executive summary of weekly revenue please.',
       emails: [],
     });
 

@@ -20,14 +20,6 @@ export function extractReferencesFromContent(content: BaseFileContent, type: Fil
       .map((a: any) => a.id);
   }
 
-  // Reports use content.references with nested reference.id
-  if (type === 'report') {
-    const references = (content as any)?.references || [];
-    return references
-      .filter((r: any) => typeof r.reference?.id === 'number')
-      .map((r: any) => r.reference.id);
-  }
-
   // Handle question references (composed questions)
   if (type === 'question') {
     const references = (content as any)?.references || [];

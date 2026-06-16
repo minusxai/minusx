@@ -91,7 +91,7 @@ export const FILE_TYPE_METADATA = {
     systemCreatedOnly: true,
   },
   report: {
-    label: 'Report',
+    label: 'Digest',
     icon: LuFileText,
     color: 'accent.secondary',      // Emerald green (#2ecc71)
     category: 'analytics',
