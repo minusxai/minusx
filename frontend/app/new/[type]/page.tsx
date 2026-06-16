@@ -4,10 +4,11 @@ import { use, useEffect, useRef, Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import { Center, Spinner } from '@chakra-ui/react';
-import { FileType, SUPPORTED_FILE_TYPES } from '@/lib/ui/file-metadata';
+import { FileType, getSupportedFileTypes } from '@/lib/ui/file-metadata';
 import { createDraftFile } from '@/lib/api/file-state';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface NewFilePageProps {
   params: Promise<{ type: string }>;
@@ -54,8 +55,9 @@ function NewFileRedirect({ type }: { type: FileType }) {
 export default function NewFilePage({ params }: NewFilePageProps) {
   const { type: typeParam } = use(params);
   const type = typeParam as FileType;
+  const { config } = useConfigs();
 
-  if (!SUPPORTED_FILE_TYPES.includes(type as FileType)) {
+  if (!getSupportedFileTypes(config.supportedFileTypes).includes(type)) {
     notFound();
   }
 

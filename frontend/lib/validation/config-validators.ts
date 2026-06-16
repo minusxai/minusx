@@ -23,6 +23,11 @@ function validateFileTypeArray(value: unknown): boolean {
   return value.every(item => typeof item === 'string' && VALID_FILE_TYPES.has(item));
 }
 
+function validateSupportedFileTypes(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(item => typeof item === 'string' && VALID_FILE_TYPES.has(item));
+}
+
 function validateAccessRulesOverride(accessRules: unknown): accessRules is AccessRulesOverride {
   if (typeof accessRules !== 'object' || accessRules === null) return false;
 
@@ -108,6 +113,10 @@ export function validateOrgConfig(content: unknown): content is Partial<OrgConfi
 
   if (config.accessRules !== undefined && !validateAccessRulesOverride(config.accessRules)) return false;
   if (config.allowedVizTypes !== undefined && !validateAllowedVizTypes(config.allowedVizTypes)) return false;
+  if (config.supportedFileTypes !== undefined && !validateSupportedFileTypes(config.supportedFileTypes)) {
+    console.warn('[Config] Invalid value for supportedFileTypes');
+    return false;
+  }
 
   if (config.setupWizard !== undefined) {
     const sw = config.setupWizard as any;
