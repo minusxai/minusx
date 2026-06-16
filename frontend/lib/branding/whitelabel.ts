@@ -64,6 +64,7 @@ export interface OrgConfig {
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
   accessRules?: AccessRulesOverride;  // Per-org file type access overrides (overrides rules.json)
+  supportedFileTypes?: FileType[];  // Fully replaces the default supported file types when set (see getSupportedFileTypes)
   setupWizard?: SetupWizard;
   bots?: ConfigBot[];
   allowedVizTypes?: VisualizationType[];  // Restrict available visualization types (default: all)
@@ -146,6 +147,9 @@ export function mergeConfig(
       ? overrides.thinkingPhrases
       : defaults.thinkingPhrases,
     accessRules: overrides.accessRules ?? defaults.accessRules,
+    supportedFileTypes: (overrides.supportedFileTypes && overrides.supportedFileTypes.length > 0)
+      ? overrides.supportedFileTypes
+      : defaults.supportedFileTypes,
     setupWizard: overrides.setupWizard ?? defaults.setupWizard,
     bots: overrides.bots ?? defaults.bots,
     allowedVizTypes: overrides.allowedVizTypes ?? defaults.allowedVizTypes,

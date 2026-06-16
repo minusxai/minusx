@@ -228,6 +228,26 @@ export const SUPPORTED_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
 export type SupportedFileType = typeof SUPPORTED_FILE_TYPES[number];
 
 /**
+ * Resolve the effective set of supported file types, applying an optional
+ * per-org config override (`OrgConfig.supportedFileTypes`).
+ *
+ * Override semantics mirror `accessRules`: when present and non-empty the
+ * override **fully replaces** the built-in defaults. An empty/undefined
+ * override falls back to the defaults (guards against accidentally disabling
+ * file creation entirely).
+ */
+export function getSupportedFileTypes(override?: FileType[]): FileType[] {
+  return override && override.length > 0 ? override : SUPPORTED_FILE_TYPES;
+}
+
+/**
+ * Whether a file type is supported, honoring the optional config override.
+ */
+export function isFileTypeSupported(type: FileType, override?: FileType[]): boolean {
+  return getSupportedFileTypes(override).includes(type);
+}
+
+/**
  * Analytics file types (derived from metadata where category === 'analytics')
  * Used for QuestionContainer type in types.ts
  */
