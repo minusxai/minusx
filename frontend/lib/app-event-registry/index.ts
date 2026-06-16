@@ -36,3 +36,4 @@ appEventRegistry.subscribe(AppEvents.USER_CREATED,             p => notifyAppEve
 appEventRegistry.subscribe(AppEvents.USER_DELETED,             p => notifyAppEvent(AppEvents.USER_DELETED,             p as unknown as Record<string, unknown>));
 appEventRegistry.subscribe(AppEvents.FEEDBACK,                 p => trackFeedbackEvent({ conversationId: p.conversationId, userMessageLogIndex: p.userMessageLogIndex, rating: p.rating, tags: p.tags, comment: p.comment, userId: p.userId }));
 appEventRegistry.subscribe(AppEvents.FEEDBACK,                 p => notifyAppEvent(AppEvents.FEEDBACK,                 p as unknown as Record<string, unknown>));
+appEventRegistry.subscribe(AppEvents.SHARE_LEAD,               p => notifyAppEvent(AppEvents.SHARE_LEAD,               p as unknown as Record<string, unknown>));
