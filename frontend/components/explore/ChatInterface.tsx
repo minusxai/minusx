@@ -55,6 +55,8 @@ interface ChatInterfaceProps {
   onDatabaseChange?: (name: string) => void;  // Database change callback (for parent coordination)
   /** Read-only mode: hides input box and action buttons. For inline agent activity feeds. */
   readOnly?: boolean;
+  /** Custom empty-state prompts (e.g. story-specific questions). Falls back to generic defaults. */
+  suggestedPrompts?: string[];
 }
 
 interface StreamingInfoBlockProps {
@@ -139,6 +141,7 @@ export default function ChatInterface({
   onContextChange,
   onDatabaseChange,
   readOnly = false,
+  suggestedPrompts,
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -908,6 +911,7 @@ export default function ChatInterface({
               container={container}
               colSpan={colSpan}
               colStart={colStart}
+              customPrompts={suggestedPrompts}
             />
           ) : (
             <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}

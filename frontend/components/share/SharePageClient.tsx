@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { shallowEqual } from 'react-redux';
-import { Box, Center, Flex, Spinner, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, HStack, Icon, Spinner, Text } from '@chakra-ui/react';
+import { LuChevronRight, LuMessageSquare } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setUser } from '@/store/authSlice';
@@ -97,6 +99,18 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
     [augmented],
   );
 
+  // Story-specific "try these questions" (set by the agent / JSON tab on the story).
+  const storyContent = useAppSelector(state =>
+    (fileId !== undefined ? selectMergedContent(state, fileId) : undefined) as StoryContent | undefined,
+  );
+  const suggestedPrompts = useMemo(
+    () => (storyContent?.suggestedQuestions ?? undefined) || undefined,
+    [storyContent?.suggestedQuestions],
+  );
+
+  // Collapse toggle for the chat panel — mirrors the right sidebar sidechat.
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+
   if (status === 'minting') {
     return <Center h="100vh" bg="bg.canvas"><Spinner size="xl" color="primary" /></Center>;
   }
@@ -115,7 +129,35 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
       <Box flex="1" overflowY="auto" px={{ base: 4, md: 8 }} py={6}>
         <SharedStory fileId={session.fileId} />
       </Box>
-      {showChat && (
+      {showChat && (chatCollapsed ? (
+        <Box
+          w="52px"
+          flexShrink={0}
+          borderLeftWidth="1px"
+          borderColor="border.default"
+          bg="bg.surface"
+          display={{ base: 'none', md: 'flex' }}
+          flexDirection="column"
+          h="100vh"
+        >
+          <Tooltip content="Open chat" positioning={{ placement: 'left' }}>
+            <Box
+              as="button"
+              aria-label="Open chat"
+              onClick={() => setChatCollapsed(false)}
+              p={3}
+              bg="bg.muted"
+              borderBottom="1px solid"
+              borderColor="border.default"
+              cursor="pointer"
+              _hover={{ bg: 'bg.elevated' }}
+              transition="background 0.2s"
+            >
+              <Icon as={LuMessageSquare} boxSize={5} color="accent.primary" />
+            </Box>
+          </Tooltip>
+        </Box>
+      ) : (
         <Box
           w={{ base: '100%', md: CHAT_WIDTH }}
           flexShrink={0}
@@ -126,13 +168,44 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
           flexDirection="column"
           h="100vh"
         >
-          {session.canChat ? (
-            <ChatInterface contextPath={session.folderPath} container="sidebar" appState={storyAppState} />
-          ) : (
-            <ShareLeadGate onSubmit={handleLead} />
-          )}
+          <HStack
+            flexShrink={0}
+            px={2}
+            py={2}
+            bg="bg.muted"
+            borderBottom="1px solid"
+            borderColor="border.default"
+          >
+            <Tooltip content="Collapse chat" positioning={{ placement: 'bottom' }}>
+              <Box
+                as="button"
+                aria-label="Collapse chat"
+                onClick={() => setChatCollapsed(true)}
+                color="fg.muted"
+                cursor="pointer"
+                _hover={{ color: 'fg.default' }}
+                transition="color 0.2s"
+                display="flex"
+                alignItems="center"
+              >
+                <Icon as={LuChevronRight} boxSize={4} />
+              </Box>
+            </Tooltip>
+          </HStack>
+          <Box flex="1" overflow="hidden" minH={0}>
+            {session.canChat ? (
+              <ChatInterface
+                contextPath={session.folderPath}
+                container="sidebar"
+                appState={storyAppState}
+                suggestedPrompts={suggestedPrompts}
+              />
+            ) : (
+              <ShareLeadGate onSubmit={handleLead} suggestedPrompts={suggestedPrompts} />
+            )}
+          </Box>
         </Box>
-      )}
+      ))}
     </Flex>
   );
 }
