@@ -1,23 +1,20 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Button, Textarea, Badge, IconButton, Portal } from '@chakra-ui/react';
-import { ReportContent, ReportReference, ReportOutput, RunFileContent, JobRun } from '@/lib/types';
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
+import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
+import { ReportContent, ReportOutput, RunFileContent, JobRun, DatabaseWithSchema } from '@/lib/types';
+import LexicalTextEditor, { LexicalTextViewer } from '@/components/lexical/LexicalTextEditor';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { LuFileText, LuGripVertical, LuHistory, LuExternalLink } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
-import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
-import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
-import { shallowEqual } from 'react-redux';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
-import { selectIsDirty, selectDashboardFiles, selectQuestionFiles } from '@/store/filesSlice';
-import { createListCollection } from '@chakra-ui/react';
+import { selectIsDirty } from '@/store/filesSlice';
 
 interface ReportViewProps {
   report: ReportContent;
@@ -29,19 +26,14 @@ interface ReportViewProps {
   runFileContent?: RunFileContent | null;
   /** File ID of the selected run file, for navigation link */
   runFileId?: number;
+  /** Context databases for the report's path — powers @-mention of tables/columns. */
+  whitelistedSchemas?: DatabaseWithSchema[];
 
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
-
-const referenceTypeCollection = createListCollection({
-  items: [
-    { value: 'question', label: 'Question' },
-    { value: 'dashboard', label: 'Dashboard' },
-  ]
-});
 
 export default function ReportView({
   report,
@@ -51,6 +43,7 @@ export default function ReportView({
   selectedRunId,
   runFileContent,
   runFileId,
+  whitelistedSchemas,
   onChange,
   onRunNow,
   onSelectRun
@@ -139,51 +132,7 @@ export default function ReportView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // Get available dashboards and questions from Redux — memoized selectors avoid O(n) scan on every file change
-  const dashboards = useAppSelector(selectDashboardFiles, shallowEqual);
-  const questions = useAppSelector(selectQuestionFiles, shallowEqual);
-  // By-ID dictionary for reference lookups (O(1) access).
-  // shallowEqual mirrors the dashboards/questions selectors above: avoid re-
-  // rendering when Immer rotates the bag's top-level ref but no entry changed.
-  const files = useAppSelector(state => state.files.files, shallowEqual);
-
-  // Create collections for select dropdowns
-  const questionCollection = useMemo(() => createListCollection({
-    items: questions.filter(q => q.id != null).map(q => ({ value: String(q.id), label: q.name }))
-  }), [questions]);
-
-  const dashboardCollection = useMemo(() => createListCollection({
-    items: dashboards.filter(d => d.id != null).map(d => ({ value: String(d.id), label: d.name }))
-  }), [dashboards]);
-
-  // Create collection for runs dropdown
-  const runsCollection = useMemo(() => createListCollection({
-    items: runs.filter(r => r.id != null).map(r => ({
-      value: String(r.id),
-      label: new Date(r.created_at).toLocaleString()
-    }))
-  }), [runs]);
-
-  // Reference management
-  const addReference = useCallback(() => {
-    const newReference: ReportReference = {
-      reference: { type: 'question', id: questions[0]?.id || 0 },
-      prompt: ''
-    };
-    onChange({ references: [...(report.references || []), newReference] });
-  }, [onChange, report.references, questions]);
-
-  const updateReference = useCallback((index: number, updates: Partial<ReportReference>) => {
-    const newReferences = [...(report.references || [])];
-    newReferences[index] = { ...newReferences[index], ...updates };
-    onChange({ references: newReferences });
-  }, [onChange, report.references]);
-
-  const removeReference = useCallback((index: number) => {
-    const newReferences = (report.references || []).filter((_, i) => i !== index);
-    onChange({ references: newReferences });
-  }, [onChange, report.references]);
-
+  const hasPrompt = !!report.reportPrompt?.trim();
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
@@ -238,234 +187,42 @@ export default function ReportView({
                 editMode={editMode}
               />
 
-              {/* Analysis Card */}
+              {/* Report Instructions Card — single freeform prompt. The agent
+                  finds the relevant questions/data itself from this text. */}
               <Box
-                position="relative"
                 bg="bg.muted"
                 borderRadius="md"
                 border="1px solid"
                 borderColor="border.muted"
                 p={3}
-                pl={5}
-                overflow="hidden"
               >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.secondary" borderLeftRadius="md" />
-                <HStack mb={3} justify="space-between">
-                  <HStack gap={1.5}>
-                    <LuListChecks size={14} color="var(--chakra-colors-accent-secondary)" />
-                    <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Analysis</Text>
-                  </HStack>
-                  {editMode && (
-                    <Button size="xs" variant="ghost" onClick={addReference}>
-                      <LuPlus size={14} />
-                      Add
-                    </Button>
-                  )}
-                </HStack>
-
-                <VStack align="stretch" gap={2}>
-                  {(report.references || []).map((q, index) => {
-                    const referencedFile = files[q.reference.id];
-                    const referenceName = referencedFile?.name || 'Select item...';
-                    const typeMetadata = FILE_TYPE_METADATA[q.reference.type];
-                    const TypeIcon = typeMetadata.icon;
-
-                    return (
-                      <Box
-                        key={index}
-                        position="relative"
-                        borderRadius="md"
-                        bg="bg.surface"
-                        border="1px solid"
-                        borderColor="border.muted"
-                        _hover={{ bg: editMode ? 'bg.subtle' : 'bg.surface' }}
-                        transition="background 0.15s ease"
-                      >
-                        <Box
-                          position="absolute"
-                          left={0}
-                          top={0}
-                          bottom={0}
-                          width="3px"
-                          bg={typeMetadata.color}
-                          borderLeftRadius="md"
-                        />
-
-                        <Box pl={4} pr={3} py={3}>
-                          <HStack justify="space-between" align="flex-start" mb={editMode ? 2 : (q.prompt ? 2 : 0)}>
-                            <HStack gap={2} flex={1} align="center">
-                              <Box color={typeMetadata.color} flexShrink={0}>
-                                <TypeIcon size={14} />
-                              </Box>
-
-                              {editMode ? (
-                                <HStack gap={2} flex={1}>
-                                  <SelectRoot
-                                    collection={referenceTypeCollection}
-                                    value={[q.reference.type]}
-                                    onValueChange={(e) => {
-                                      const newType = e.value[0] as 'question' | 'dashboard';
-                                      const defaultId = newType === 'dashboard'
-                                        ? dashboards[0]?.id || 0
-                                        : questions[0]?.id || 0;
-                                      updateReference(index, {
-                                        reference: { type: newType, id: defaultId }
-                                      });
-                                    }}
-                                    size="sm"
-                                  >
-                                    <SelectTrigger
-                                      bg="bg.surface"
-                                      border="1px solid"
-                                      borderColor="border.default"
-                                      minW="100px"
-                                    >
-                                      <SelectValueText />
-                                    </SelectTrigger>
-                                    <Portal>
-                                      <SelectPositioner>
-                                        <SelectContent>
-                                          {referenceTypeCollection.items.map((item) => (
-                                            <SelectItem key={item.value} item={item}>
-                                              {item.label}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </SelectPositioner>
-                                    </Portal>
-                                  </SelectRoot>
-
-                                  <SelectRoot
-                                    collection={q.reference.type === 'question' ? questionCollection : dashboardCollection}
-                                    value={q.reference.id ? [q.reference.id.toString()] : []}
-                                    onValueChange={(e) => updateReference(index, {
-                                      reference: { ...q.reference, id: parseInt(e.value[0], 10) }
-                                    })}
-                                    size="sm"
-                                  >
-                                    <SelectTrigger
-                                      bg="bg.surface"
-                                      border="1px solid"
-                                      borderColor="border.default"
-                                      flex={1}
-                                    >
-                                      <SelectValueText placeholder="Select..." />
-                                    </SelectTrigger>
-                                    <Portal>
-                                      <SelectPositioner>
-                                        <SelectContent>
-                                          {(q.reference.type === 'question' ? questionCollection : dashboardCollection).items.map((item) => (
-                                            <SelectItem key={item.value} item={item}>
-                                              {item.label}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </SelectPositioner>
-                                    </Portal>
-                                  </SelectRoot>
-                                </HStack>
-                              ) : (
-                                <Text fontSize="sm" fontWeight="500" color="fg.default">
-                                  {referenceName}
-                                </Text>
-                              )}
-                            </HStack>
-
-                            {editMode && (
-                              <IconButton
-                                size="xs"
-                                variant="ghost"
-                                color="fg.muted"
-                                _hover={{ color: 'red.500', bg: 'red.subtle' }}
-                                onClick={() => removeReference(index)}
-                                aria-label="Remove"
-                              >
-                                <LuTrash2 size={14} />
-                              </IconButton>
-                            )}
-                          </HStack>
-
-                          {editMode ? (
-                            <Textarea
-                              value={q.prompt}
-                              onChange={(e) => updateReference(index, { prompt: e.target.value })}
-                              placeholder="What insights should be included?"
-                              rows={2}
-                              size="sm"
-                              bg="bg.surface"
-                              border="1px solid"
-                              borderColor="border.default"
-                              _placeholder={{ color: 'fg.subtle' }}
-                            />
-                          ) : q.prompt ? (
-                            <Text
-                              fontSize="xs"
-                              color="fg.muted"
-                              pl={5}
-                              fontStyle="italic"
-                              lineHeight="1.5"
-                            >
-                              "{q.prompt}"
-                            </Text>
-                          ) : null}
-                        </Box>
-                      </Box>
-                    );
-                  })}
-
-                  {(report.references || []).length === 0 && (
-                    <Box
-                      py={8}
-                      px={4}
-                      bg="bg.surface"
-                      borderRadius="md"
-                      textAlign="center"
-                      border="1px dashed"
-                      borderColor="border.muted"
-                    >
-                      <Text color="fg.muted" fontSize="sm" mb={editMode ? 2 : 0}>
-                        No analysis items yet
-                      </Text>
-                      {editMode && (
-                        <Button size="sm" variant="ghost" colorPalette="teal" onClick={addReference}>
-                          <LuPlus size={14} />
-                          Add item
-                        </Button>
-                      )}
-                    </Box>
-                  )}
-                </VStack>
-              </Box>
-
-              {/* Report Instructions Card */}
-              <Box
-                position="relative"
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                p={3}
-                pl={5}
-                overflow="hidden"
-              >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.warning" borderLeftRadius="md" />
                 <HStack mb={1} gap={1.5}>
                   <LuFileText size={14} color="var(--chakra-colors-accent-warning)" />
-                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Report Instructions</Text>
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Instructions</Text>
                 </HStack>
                 <Text fontSize="xs" color="fg.subtle" mb={2}>
-                  How to synthesize individual analyses into the final report.
                 </Text>
 
-                <Textarea
-                  value={report.reportPrompt || ''}
-                  onChange={(e) => onChange({ reportPrompt: e.target.value })}
-                  placeholder="Summarize the key findings, highlight any anomalies or trends, and provide actionable recommendations..."
-                  disabled={!editMode}
-                  rows={3}
-                  size="sm"
+                <Box
+                  aria-label="Report instructions"
+                  height="240px"
                   bg="bg.surface"
-                />
+                  borderRadius="md"
+                  border="1px solid"
+                  borderColor="border.default"
+                  overflow="hidden"
+                >
+                  {editMode ? (
+                    <LexicalTextEditor
+                      key={`report-prompt-${fileId}`}
+                      initialMarkdown={report.reportPrompt || ''}
+                      onChange={(markdown) => onChange({ reportPrompt: markdown })}
+                      mentions={{ whitelistedSchemas }}
+                    />
+                  ) : (
+                    <LexicalTextViewer markdown={report.reportPrompt || ''} padding="12px 16px" />
+                  )}
+                </Box>
               </Box>
 
               {/* Delivery Card */}
@@ -551,7 +308,7 @@ export default function ReportView({
               selectedRunId={selectedRunId}
               onSelectRun={onSelectRun}
               isRunning={isRunning}
-              disabled={isDirty || !report.references?.length}
+              disabled={isDirty || !hasPrompt}
               onRunNow={onRunNow}
               externalLinkId={runFileId}
             />
@@ -606,8 +363,8 @@ export default function ReportView({
                   <Text fontSize="sm">
                     {isDirty
                       ? 'Save your changes before running'
-                      : !report.references?.length
-                        ? 'Add analysis items to run the report'
+                      : !hasPrompt
+                        ? 'Add report instructions to run the report'
                         : 'No runs yet. Click "Run Now" to test your report'
                     }
                   </Text>

@@ -555,21 +555,9 @@ export interface DocumentContent extends BaseFileContent {
  * Scheduled reports that run queries and generate insights via LLM
  */
 
-/** Reference to a question or dashboard for the report */
-export interface ReportQuestionReference {
-  type: 'question' | 'dashboard';
-  id: number;
-}
-
-/** A reference in the report - combines a data source with a text prompt */
-export interface ReportReference {
-  reference: ReportQuestionReference;  // Which question/dashboard to run
-  prompt: string;                       // What to ask about the data
-}
-
 export type ReportContent = ScheduledJobContent & {
-  references: ReportReference[];
-  reportPrompt?: string;
+  /** Freeform instruction; the analyst finds the data and writes the report. */
+  reportPrompt: string;
 };
 
 /**

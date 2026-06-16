@@ -1,8 +1,10 @@
-// ReportAgent (v=2) — controller behavior with faux LLMs.
+// ReportAgent (v=2) — single freeform-prompt behavior with faux LLMs.
 //
-// Exercises the full flow without a DB or backend: ReportAgent dispatches one
-// analyst sub-agent per reference (faux analyst), collects their ExecuteQuery
-// results, and runs a final synthesis pass (faux report). `runQuery` /
+// Exercises the full flow without a DB or backend: ReportAgent dispatches ONE
+// analyst sub-agent driven by the report's freeform `reportPrompt`, then uses
+// the analyst's own markdown as the report (no synthesis pass). Charts are
+// `<div data-question-id>` embeds the analyst writes inline (rendered live by
+// the report viewer), so they pass through verbatim. `runQuery` /
 // `loadConnectionSchema` are stubbed so tools never reach ConnectionsAPI/FilesAPI.
 
 vi.mock('@/lib/connections/run-query', () => ({
@@ -18,8 +20,8 @@ vi.mock('@/lib/connections/load-schema', () => ({
 }));
 
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
-import { ReportAgent, fauxRegistration as reportFaux, type ReportAgentContext } from '../report-agent';
+import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { ReportAgent, type ReportAgentContext } from '../report-agent';
 import {
   RemoteAnalystAgent,
   ExecuteQuery,
@@ -30,7 +32,6 @@ import {
   fauxRegistration as analystFaux,
 } from '@/agents/analyst/analyst-agent';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { Context } from '@/orchestrator/llm';
 
 const REGISTRABLES = [
   ReportAgent,
@@ -59,8 +60,7 @@ function baseContext(overrides: Partial<ReportAgentContext>): ReportAgentContext
     connectionId: 'db',
     reportId: 42,
     reportName: 'Q3 Report',
-    references: [],
-    reportPrompt: 'Summarize the findings.',
+    reportPrompt: 'Summarize revenue and costs for the quarter.',
     emails: [],
     ...overrides,
   };
@@ -78,100 +78,97 @@ async function runAgent(ctx: ReportAgentContext): Promise<ReportAgent> {
 }
 
 beforeEach(() => {
-  reportFaux.setResponses([]);
   analystFaux.setResponses([]);
 });
 
 describe('ReportAgent (v2)', () => {
-  it('dispatches an analyst per reference and synthesizes their analyses into a report', async () => {
-    // Two sub-agents, each returns a plain analysis (no tool calls).
+  it('runs a single analyst from the freeform prompt and uses its output as the report', async () => {
+    let seenUserMessage = '';
     analystFaux.setResponses([
-      fauxAssistantMessage('Revenue is up 12% this quarter.', { stopReason: 'stop' }),
-      fauxAssistantMessage('Costs are down 5% this quarter.', { stopReason: 'stop' }),
-    ]);
-
-    // Synthesis faux asserts the prompt carried BOTH child analyses + ref names,
-    // then returns the report body. (Order-independent: parallel sub-agents.)
-    reportFaux.setResponses([
-      (context: Context) => {
-        const userMsg = context.messages.find((m) => m.role === 'user');
-        const text = typeof userMsg?.content === 'string' ? userMsg.content : '';
-        expect(text).toContain('up 12%');
-        expect(text).toContain('down 5%');
-        expect(text).toContain('Revenue Q');
-        expect(text).toContain('Costs Q');
-        return fauxAssistantMessage('## Executive Summary\nEverything looks healthy.', { stopReason: 'stop' });
+      (context) => {
+        seenUserMessage = JSON.stringify(context.messages);
+        return fauxAssistantMessage('## Executive Summary\nRevenue up 12%, costs down 5%.', {
+          stopReason: 'stop',
+        });
       },
     ]);
 
-    const agent = await runAgent(
-      baseContext({
-        references: [
-          { reference: { id: 1 }, prompt: 'Analyze revenue', file_name: 'Revenue Q', connection_id: 'db', app_state: { type: 'file' } },
-          { reference: { id: 2 }, prompt: 'Analyze costs', file_name: 'Costs Q', connection_id: 'db', app_state: { type: 'file' } },
-        ],
-      }),
-    );
+    const agent = await runAgent(baseContext({}));
+
+    // The analyst is driven by the report's freeform prompt.
+    expect(seenUserMessage).toContain('Summarize revenue and costs for the quarter.');
 
     const run = agent.runResult;
     expect(run.status).toBe('success');
     expect(run.reportId).toBe(42);
     expect(run.reportName).toBe('Q3 Report');
-    expect(run.generatedReport).toContain('# Q3 Report'); // header
-    expect(run.generatedReport).toContain('Executive Summary'); // synthesis body
+    expect(run.generatedReport).toContain('# Q3 Report'); // title header
+    expect(run.generatedReport).toContain('Executive Summary'); // analyst body verbatim
+    expect(run.generatedReport).toContain('Revenue up 12%, costs down 5%.');
     expect(run.steps).toHaveLength(1);
-    expect(run.queries).toEqual({});
   });
 
-  it('collects ExecuteQuery results from sub-agents into run.queries', async () => {
-    const execId = 'call_exec_1';
-    // Sub-agent: emit an ExecuteQuery tool call, then stop.
+  it("preserves the analyst's <div data-question-id> chart embeds in the report", async () => {
+    // Charts are saved-question embeds (rendered live by the report viewer),
+    // so the analyst's markdown — including the embed div — passes through verbatim.
     analystFaux.setResponses([
       fauxAssistantMessage(
-        [fauxToolCall('ExecuteQuery', { connectionId: 'db', query: 'SELECT count(*) AS n', vizSettings: { type: 'bar' } }, { id: execId })],
-        { stopReason: 'toolUse' },
+        '## TL;DR\n- revenue up 12%\n\n<div data-question-id="7"></div>\n\n## Summary\nHealthy quarter.',
+        { stopReason: 'stop' },
       ),
-      fauxAssistantMessage('The table has 2 rows.', { stopReason: 'stop' }),
-    ]);
-    reportFaux.setResponses([
-      fauxAssistantMessage(`Here is the chart: {{query:${execId}}}`, { stopReason: 'stop' }),
     ]);
 
-    const agent = await runAgent(
-      baseContext({
-        reportName: 'Sales Report',
-        references: [
-          { reference: { id: 7 }, prompt: 'Count rows', file_name: 'Sales', connection_id: 'db', app_state: { type: 'file' } },
-        ],
-      }),
-    );
+    const agent = await runAgent(baseContext({ reportName: 'Sales Report' }));
 
     const run = agent.runResult;
     expect(run.status).toBe('success');
-    const queries = run.queries ?? {};
-    expect(Object.keys(queries)).toEqual([execId]);
-    const q = queries[execId];
-    expect(q.query).toBe('SELECT count(*) AS n');
-    expect(q.columns).toEqual(['n']);
-    expect(q.rows).toHaveLength(2);
-    expect(q.vizSettings.type).toBe('bar');
-    expect(q.connectionId).toBe('db');
-    expect(q.fileId).toBe(7);
-    expect(q.fileName).toBe('Sales');
-    // The synthesis output (with the {{query:id}} embed) is included in the report.
-    expect(run.generatedReport).toContain(`{{query:${execId}}}`);
+    expect(run.generatedReport).toContain('<div data-question-id="7"></div>');
+  });
+
+  it('normalizes @{json} mentions and tells the analyst to read the mentioned files', async () => {
+    let seen = '';
+    analystFaux.setResponses([
+      (context) => {
+        seen = JSON.stringify(context.messages);
+        return fauxAssistantMessage('done', { stopReason: 'stop' });
+      },
+    ]);
+
+    await runAgent(
+      baseContext({
+        reportPrompt: 'Summarize @{"type":"question","name":"Revenue Q3","id":5}.',
+      }),
+    );
+
+    // Mention rendered readable, carrying the id the analyst can ReadFiles.
+    expect(seen).toContain('Revenue Q3 (question #5)');
+    // Raw mention JSON is not leaked to the analyst.
+    expect(seen).not.toContain('"type":"question"');
+    // The analyst is told to read mentioned files first.
+    expect(seen).toContain('ReadFiles');
+  });
+
+  it('strips conversational preamble before the first heading (no chatty intro in the emailed report)', async () => {
+    analystFaux.setResponses([
+      fauxAssistantMessage(
+        "Now I have a clear picture. Here's the report:\n\n## TL;DR\n- revenue up 12%\n\n## Summary\nHealthy quarter.",
+        { stopReason: 'stop' },
+      ),
+    ]);
+
+    const agent = await runAgent(baseContext({}));
+
+    const report = agent.runResult.generatedReport ?? '';
+    expect(report).not.toContain('clear picture');
+    expect(report).not.toContain("Here's the report");
+    expect(report).toContain('## TL;DR');
+    expect(report).toContain('revenue up 12%');
   });
 
   it('appends the email-recipient footer when emails are provided', async () => {
-    analystFaux.setResponses([fauxAssistantMessage('Analysis.', { stopReason: 'stop' })]);
-    reportFaux.setResponses([fauxAssistantMessage('Body.', { stopReason: 'stop' })]);
+    analystFaux.setResponses([fauxAssistantMessage('Body.', { stopReason: 'stop' })]);
 
-    const agent = await runAgent(
-      baseContext({
-        emails: ['team@example.com'],
-        references: [{ reference: { id: 1 }, prompt: 'x', file_name: 'Ref', connection_id: 'db', app_state: {} }],
-      }),
-    );
+    const agent = await runAgent(baseContext({ emails: ['team@example.com'] }));
 
     expect(agent.runResult.generatedReport).toContain('This report will be sent to: team@example.com');
   });

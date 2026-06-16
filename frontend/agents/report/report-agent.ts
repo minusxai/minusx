@@ -1,13 +1,14 @@
 // Report controller agent.
 //
-// A parent-orchestrating agent: it dispatches one read-only analyst sub-agent
-// (`RemoteAnalystAgent`, schema name `AnalystAgent`) per report reference in
-// parallel, collects each sub-agent's `ExecuteQuery` results from the log, then
-// makes a single LLM **synthesis** call to produce the final markdown report.
+// A parent-orchestrating agent: it dispatches a single read-only analyst
+// sub-agent (`RemoteAnalystAgent`, schema name `AnalystAgent`) driven by the
+// report's freeform `reportPrompt`, then uses that analyst's own markdown as the
+// final report. Any `ExecuteQuery` results the analyst runs are collected so the
+// analyst can embed `{{query:id}}` charts inline.
 //
 // Modeled on `DoubleCheckBenchmarkAgent`: `run()` is hand-rolled (no LLM drives
-// the controller), every step is dispatched via the orchestrator's normal
-// `dispatch()` with deterministic slot ids, and results are read back from
+// the controller), the analyst is dispatched via the orchestrator's normal
+// `dispatch()` with a deterministic slot id, and its result is read back from
 // `toolThread` / the log. The structured run payload is exposed on
 // `this.runResult` for the headless runner (`runReportV2`) to read.
 import 'server-only';
@@ -15,19 +16,18 @@ import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import type {
   AssistantMessage,
-  Context,
-  Message,
   TextContent,
   ToolResultMessage,
 } from '@/orchestrator/llm';
 import { MXAgent, type MXAgentDetails } from '@/orchestrator/types';
-import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import type { ReportRunContent, ReportQueryResult, VizSettings } from '@/lib/types';
+import type { ReportRunContent } from '@/lib/types';
 
+// Kept only so `ReportAgent.model` (required by MXAgent) resolves — the
+// controller never calls the LLM itself, so this provider is never invoked.
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-report-api',
   provider: 'faux-report',
@@ -35,22 +35,10 @@ export const fauxRegistration = registerFauxProvider({
 });
 const FAUX_MODEL = fauxRegistration.getModel();
 
-/** One enriched report reference (built by report-handler from the report file). */
-export interface ReportAgentReference {
-  reference: { id: number; type?: string };
-  prompt?: string;
-  file_name?: string;
-  file_path?: string;
-  connection_id?: string;
-  /** CompressedAugmentedFile app-state for the analyst sub-agent (includes the SQL + results). */
-  app_state?: unknown;
-}
-
-/** Context for ReportAgent — RemoteAnalystContext (inherited by sub-agents) + report inputs. */
+/** Context for ReportAgent — RemoteAnalystContext (inherited by the sub-agent) + report inputs. */
 export interface ReportAgentContext extends RemoteAnalystContext {
   reportId: number;
   reportName: string;
-  references: ReportAgentReference[];
   reportPrompt: string;
   emails: string[];
 }
@@ -58,32 +46,26 @@ export interface ReportAgentContext extends RemoteAnalystContext {
 /** Minimal shape of a dispatchable analyst sub-agent class. */
 type AnalystAgentClass = { readonly schema: { name: string } };
 
-interface SlotSpec {
-  name: string;
-  args: Record<string, unknown>;
-  id: string;
-}
-
 const ReportAgentParams = Type.Object({
   userMessage: Type.String(),
 });
 
-const DEFAULT_REPORT_PROMPT =
-  'Synthesize the analyses into a coherent executive summary. Highlight key findings, trends, and actionable insights.';
+/** Deterministic slot id for the single analyst sub-agent. */
+const ANALYST_SLOT = 'analyst';
 
 export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentContext> {
   static readonly schema: Tool<typeof ReportAgentParams> = {
     name: 'ReportAgent',
     description:
-      'Runs a scheduled report: dispatches an analyst sub-agent per reference, collects their query results, and synthesizes a final markdown report.',
+      "Runs a scheduled report: dispatches a single analyst sub-agent driven by the report's freeform prompt and uses its markdown as the final report.",
     parameters: ReportAgentParams,
   };
   // No LLM-driven tools — `run()` is hand-rolled.
   static readonly tools = [];
-  // Synthesis LLM call uses the analyst model (faux in tests).
+  // Required by MXAgent; never used because `run()` makes no LLM call.
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
 
-  /** Sub-agent dispatched per reference. Read-only analyst (server-side tools only). */
+  /** Sub-agent dispatched for the report. Read-only analyst (server-side tools only). */
   static analystAgent: AnalystAgentClass = RemoteAnalystAgent;
 
   private readonly startedAt = new Date().toISOString();
@@ -104,33 +86,17 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
 
   override async run(): Promise<AssistantMessage> {
     const ctx = this.context;
-    const references = ctx.references ?? [];
     try {
-      // ── Phase 1: dispatch one analyst sub-agent per reference (parallel) ──
+      // ── Phase 1: dispatch a single analyst sub-agent from the freeform prompt ──
       const analystName = (this.constructor as typeof ReportAgent).analystAgent.schema.name;
-      const slotIds = references.map((_, i) => `ref-${i}`);
-      const slots: SlotSpec[] = references.map((ref, i) => ({
-        name: analystName,
-        args: { userMessage: buildGoal(ref, i) },
-        id: slotIds[i],
-      }));
-      // Per-reference context overrides: each sub-agent queries its reference's
-      // connection and sees its reference's app_state (the SQL + cached results).
-      const overrides: Record<string, Record<string, unknown>> = {};
-      references.forEach((ref, i) => {
-        overrides[slotIds[i]] = {
-          connectionId: ref.connection_id || ctx.connectionId,
-          appState: ref.app_state ?? null,
-        };
-      });
-      await this._dispatchSlots(slots, overrides);
+      await this._dispatchAnalyst(analystName, buildGoal(ctx.reportPrompt));
 
-      // ── Phase 2: collect child analyses + ExecuteQuery results ───────────
-      const analyses = slotIds.map((id) => this._readAgentText(id));
-      const queries = this._collectQueries(slotIds, references);
+      // ── Phase 2: read the analyst's markdown (charts are embedded as
+      //    `<div data-question-id>` and rendered live by the report viewer) ────
+      const analysis = this._readAgentText(ANALYST_SLOT);
 
-      // ── Phase 3: synthesize the final report ─────────────────────────────
-      const generatedReport = await this._synthesize(references, analyses, queries);
+      // ── Phase 3: the analyst's output IS the report (title header + footer) ───
+      const generatedReport = this._formatReport(analysis);
 
       this.runResult = {
         reportId: ctx.reportId,
@@ -140,7 +106,6 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
         status: 'success',
         steps: [{ name: 'analysis', startedAt: this.startedAt, completedAt: new Date().toISOString() }],
         generatedReport,
-        queries,
       };
       return synthesiseFinal(generatedReport);
     } catch (err) {
@@ -159,21 +124,16 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
   }
 
   /**
-   * Dispatch the slots that don't already have a result (resumable). One
-   * synthetic assistant turn carrying all missing slots as parallel toolCalls
-   * — same shape an LLM-driven agent produces, so the orchestrator runs them
-   * concurrently. Mirrors `DoubleCheckBenchmarkAgent._dispatchSlots`.
+   * Dispatch the single analyst slot (resumable). One synthetic assistant turn
+   * carrying the analyst as a toolCall — same shape an LLM-driven agent produces.
+   * Mirrors `DoubleCheckBenchmarkAgent._dispatchSlots`.
    */
-  private async _dispatchSlots(
-    slots: SlotSpec[],
-    contextOverridesByToolCallId?: Record<string, Record<string, unknown>>,
-  ): Promise<void> {
-    const missing = slots.filter((s) => !this._findResult(s.id));
-    if (missing.length === 0) return;
+  private async _dispatchAnalyst(analystName: string, userMessage: string): Promise<void> {
+    if (this._findResult(ANALYST_SLOT)) return;
 
     const synthMsg: AssistantMessage = {
       role: 'assistant',
-      content: missing.map((s) => ({ type: 'toolCall', id: s.id, name: s.name, arguments: s.args })),
+      content: [{ type: 'toolCall', id: ANALYST_SLOT, name: analystName, arguments: { userMessage } }],
       api: 'controller' as never,
       provider: 'controller',
       model: 'controller',
@@ -184,11 +144,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
       stopReason: 'toolUse',
       timestamp: Date.now(),
     };
-    await this.orchestrator.dispatch(
-      synthMsg,
-      this,
-      contextOverridesByToolCallId ? { contextOverridesByToolCallId } : undefined,
-    );
+    await this.orchestrator.dispatch(synthMsg, this);
   }
 
   private _findResult(slotId: string): ToolResultMessage | undefined {
@@ -198,7 +154,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
     );
   }
 
-  /** Read a sub-agent slot's final answer text (from its MXAgent result). */
+  /** Read the analyst slot's final answer text (from its MXAgent result). */
   private _readAgentText(slotId: string): string {
     const r = this._findResult(slotId);
     if (!r) return '';
@@ -210,96 +166,11 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
       .join('\n');
   }
 
-  /**
-   * Collect successful `ExecuteQuery` results from the analyst sub-agents.
-   * Each sub-agent's `id` equals its slot id, so its tool calls/results carry
-   * `parent_id === slotId` in the flat log.
-   */
-  private _collectQueries(
-    slotIds: string[],
-    references: ReportAgentReference[],
-  ): Record<string, ReportQueryResult> {
-    const refBySlot = new Map(slotIds.map((id, i) => [id, references[i]]));
-    // toolCallId → { args, slotId } for ExecuteQuery calls under any slot.
-    const callsById = new Map<string, { args: Record<string, unknown>; slotId: string }>();
-    for (const e of this.orchestrator.log) {
-      if (!('role' in e) || e.role !== 'assistant') continue;
-      const slotId = (e as { parent_id?: string | null }).parent_id;
-      if (!slotId || !refBySlot.has(slotId)) continue;
-      for (const block of (e as AssistantMessage).content) {
-        if (block.type === 'toolCall' && block.name === 'ExecuteQuery') {
-          callsById.set(block.id, { args: block.arguments as Record<string, unknown>, slotId });
-        }
-      }
-    }
-
-    const queries: Record<string, ReportQueryResult> = {};
-    for (const e of this.orchestrator.log) {
-      if (!('role' in e) || e.role !== 'toolResult') continue;
-      const trm = e as ToolResultMessage;
-      if (trm.toolName !== 'ExecuteQuery') continue;
-      const call = callsById.get(trm.toolCallId);
-      if (!call) continue;
-      const details = trm.details as
-        | { success?: boolean; queryResult?: { columns: string[]; types: string[]; rows: Record<string, unknown>[] } }
-        | undefined;
-      if (!details?.success || !details.queryResult) continue;
-      const ref = refBySlot.get(call.slotId);
-      queries[trm.toolCallId] = {
-        query: typeof call.args.query === 'string' ? call.args.query : '',
-        columns: details.queryResult.columns,
-        types: details.queryResult.types,
-        rows: details.queryResult.rows,
-        vizSettings: parseVizSettings(call.args.vizSettings),
-        connectionId: typeof call.args.connectionId === 'string' ? call.args.connectionId : undefined,
-        fileId: ref?.reference?.id,
-        fileName: ref?.file_name,
-      };
-    }
-    return queries;
-  }
-
-  /** Single LLM synthesis pass over the child analyses + collected queries. */
-  private async _synthesize(
-    references: ReportAgentReference[],
-    analyses: string[],
-    queries: Record<string, ReportQueryResult>,
-  ): Promise<string> {
-    const analysesText = references
-      .map((ref, i) => {
-        const name = ref.file_name ?? `Reference ${i + 1}`;
-        const prompt = ref.prompt ?? '';
-        return `### ${name}\n**Prompt:** ${prompt}\n**Analysis:**\n${analyses[i] ?? ''}`;
-      })
-      .join('\n\n');
-
-    const queryLines = Object.entries(queries).map(([id, q]) => {
-      const name = q.fileName || 'Query';
-      const sql = (q.query || '').slice(0, 100);
-      const vizType = (q.vizSettings as { type?: string })?.type ?? 'table';
-      return `- \`{{query:${id}}}\`: ${name} (${q.rows.length} rows, ${vizType}) - \`${sql}...\``;
-    });
-    const queriesText = queryLines.length > 0 ? queryLines.join('\n') : 'No queries available';
-
-    const systemPrompt = renderPrompt('report_synthesis.system', {});
-    const userPrompt = renderPrompt('report_synthesis.user', {
-      report_name: this.context.reportName,
-      analyses_text: analysesText,
-      queries_text: queriesText,
-      report_prompt: this.context.reportPrompt || DEFAULT_REPORT_PROMPT,
-    });
-
-    const ctor = this.constructor as typeof ReportAgent;
-    const synthCtx: Context = {
-      systemPrompt,
-      messages: [{ role: 'user', content: userPrompt, timestamp: Date.now() } as Message],
-      tools: [],
-    };
-    const response = await this.orchestrator.callLLM(ctor.model, synthCtx, this.id);
-    const reportContent = extractText(response);
-
+  /** Wrap the analyst's markdown with a title header + optional email footer. */
+  private _formatReport(analysis: string): string {
+    const body = stripConversationalPreamble(analysis);
     const generatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    let finalReport = `# ${this.context.reportName}\n\n*Generated at ${generatedAt} UTC*\n\n${reportContent}\n`;
+    let finalReport = `# ${this.context.reportName}\n\n*Generated at ${generatedAt} UTC*\n\n${body}\n`;
     if (this.context.emails?.length) {
       finalReport += `\n---\n*This report will be sent to: ${this.context.emails.join(', ')}*`;
     }
@@ -309,14 +180,63 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
 
 // ─── pure helpers ─────────────────────────────────────────────────────────
 
-function buildGoal(ref: ReportAgentReference, i: number): string {
-  const fileName = ref.file_name ?? `Reference ${i + 1}`;
-  const prompt = ref.prompt ?? 'Analyze this data';
+function buildGoal(reportPrompt: string): string {
+  const prompt = normalizeMentions(reportPrompt?.trim() || 'Summarize the latest data.');
   return (
-    `[${fileName}]${prompt}\n\n` +
-    'IMPORTANT: This is a background report execution. Run the SQL query from the app_state ' +
-    '(or any other necessary query) to analyze the data, then summarize the findings.'
+    `${prompt}\n\n` +
+    'IMPORTANT: This is a background, scheduled report execution. Follow these rules exactly.\n\n' +
+    'DATA\n' +
+    '- Items written as `@Name (question #id)` or `@Name (dashboard #id)` are saved files. Call ' +
+    '**ReadFiles** on the id to get the file, its SQL, and current results. Rely on these for your numbers.\n' +
+    '- Run **ExecuteQuery** for anything the mentioned files do not cover (or when nothing is mentioned).\n\n' +
+    'CHARTS\n' +
+    '- To show a chart, embed a SAVED question on its own line: `<div data-question-id="123"></div>`. ' +
+    'It renders that question\'s live chart (fresh data) when the report is viewed.\n' +
+    '- Use the id of a mentioned question (`@Name (question #123)` → 123), or a question you find via ' +
+    'SearchFiles. Only saved questions can be charted — never invent an id.\n' +
+    '- For numbers that are not a saved question, just state them in the text (use ExecuteQuery to get them). ' +
+    'Include only the 1-3 charts that matter most.\n\n' +
+    'OUTPUT FORMAT — keep it very short, markdown only:\n' +
+    '- Output ONLY the report. Begin immediately with the `## TL;DR` heading — NO preamble ' +
+    '(no "Now I have a clear picture", no "Here is the report"), NO meta-commentary, NO closing ' +
+    'sign-off. This text is emailed directly to the user.\n' +
+    '- A `## TL;DR` section: 3-5 terse bullet points of the key numbers and findings.\n' +
+    '- The 1-3 embedded question charts, placed where they add the most value.\n' +
+    '- A `## Summary` section: at most 3 lines of prose.\n' +
+    '- No filler, no methodology, no restating the prompt.'
   );
+}
+
+/**
+ * Drop any conversational preamble the analyst writes before the report itself
+ * (e.g. "Now I have a clear picture. Here's the report:"). This text is emailed
+ * to the user, so it must read as a clean report. If the body has a markdown
+ * heading, everything before the first one is preamble and is removed; otherwise
+ * the text is left as-is (no heading to anchor on).
+ */
+function stripConversationalPreamble(text: string): string {
+  const trimmed = text.trim();
+  const firstHeading = trimmed.search(/^#{1,6}\s/m);
+  return firstHeading > 0 ? trimmed.slice(firstHeading).trim() : trimmed;
+}
+
+/**
+ * Replace serialized `@{json}` mentions (the format the Lexical editor writes
+ * into reportPrompt) with readable `@Name (type #id)` text, so the analyst sees
+ * the file name + id instead of a raw JSON blob. Mirrors the mention format in
+ * `components/lexical/mention-transformer.ts` (flat JSON, lazy `{.+?}`).
+ */
+function normalizeMentions(text: string): string {
+  return text.replace(/@(\{.+?\})/g, (full, json: string) => {
+    try {
+      const d = JSON.parse(json) as { type?: string; name?: string; display_text?: string; id?: number };
+      const name = d.name ?? d.display_text;
+      if (!name) return full;
+      return d.type && d.id != null ? `@${name} (${d.type} #${d.id})` : `@${name}`;
+    } catch {
+      return full;
+    }
+  });
 }
 
 function extractText(msg: AssistantMessage): string {
@@ -327,17 +247,6 @@ function extractText(msg: AssistantMessage): string {
     .trim();
 }
 
-function parseVizSettings(raw: unknown): VizSettings {
-  if (raw && typeof raw === 'object') return raw as VizSettings;
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw) as VizSettings;
-    } catch {
-      /* fall through */
-    }
-  }
-  return { type: 'table' } as VizSettings;
-}
 
 /** Build the synthetic final AssistantMessage returned by `run()`. */
 function synthesiseFinal(text: string): AssistantMessage {

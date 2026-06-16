@@ -797,7 +797,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
             cron: '0 9 * * 1',  // Default: Monday 9am
             timezone: 'America/New_York'
           },
-          references: [],
           reportPrompt: '',
           recipients: []
         };

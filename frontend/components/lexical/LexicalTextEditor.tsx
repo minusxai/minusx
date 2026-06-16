@@ -441,7 +441,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             <Icon as={LuLightbulb} boxSize={3} />
             <Text>
               Pro tip: type <Box as="span" fontWeight="700" fontFamily="mono">+</Box> to insert images
-              {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> to mention tables, columns, metrics or saved questions</>}
+              {mentions && <> · <Box as="span" fontWeight="700" fontFamily="mono">@</Box> for tables, columns, metrics or saved questions</>}
             </Text>
           </HStack>
         )}

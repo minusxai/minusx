@@ -20,6 +20,7 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { parseSuggestedQuestions, parseTrustInfo, type ParsedTrustInfo } from '@/lib/utils/xml-parser';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
+import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 
 // Inline chart component for query references in reports
 function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
@@ -122,6 +123,7 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
 type ContentPart =
   | { type: 'text'; content: string }
   | { type: 'query'; content: string }
+  | { type: 'question_embed'; questionId: number }
   | { type: 'trust_legacy'; content: string }
   | { type: 'suggested_questions'; questions: string[] }
   | { type: 'trust_info'; info: ParsedTrustInfo };
@@ -133,7 +135,9 @@ type ContentPart =
 function parseContentParts(text: string, queries?: Record<string, ReportQueryResult>): ContentPart[] {
   // Combined pattern: completed XML blocks + legacy patterns
   // Order matters: XML blocks first (greedy), then legacy patterns
-  const xmlBlockPattern = /(?:<suggested_questions>([\s\S]*?)<\/suggested_questions>|<trust_info\s([\s\S]*?)<\/trust_info>|\{\{(query):([^}]+)\}\}|\[\[(trust):([^\]]+)\]\])/g;
+  // Order matters: XML blocks first (greedy), then legacy patterns, then the
+  // story-style chart embed `<div data-question-id="N">…</div>` (leaf div).
+  const xmlBlockPattern = /(?:<suggested_questions>([\s\S]*?)<\/suggested_questions>|<trust_info\s([\s\S]*?)<\/trust_info>|\{\{(query):([^}]+)\}\}|\[\[(trust):([^\]]+)\]\]|<div\b[^>]*\bdata-question-id=["']?(\d+)["']?[^>]*>[\s\S]*?<\/div>)/g;
 
   const parts: ContentPart[] = [];
   let lastIndex = 0;
@@ -163,6 +167,9 @@ function parseContentParts(text: string, queries?: Record<string, ReportQueryRes
     } else if (match[5] === 'trust') {
       // [[trust:level]] — legacy
       parts.push({ type: 'trust_legacy', content: match[6] });
+    } else if (match[7] !== undefined) {
+      // <div data-question-id="N">…</div> — live embedded question chart
+      parts.push({ type: 'question_embed', questionId: parseInt(match[7], 10) });
     }
 
     lastIndex = match.index + match[0].length;
@@ -739,6 +746,24 @@ export default function Markdown({
               return <TrustBadge key={index} level={level} context={context} />;
             }
             return null;
+          } else if (part.type === 'question_embed') {
+            // Live embedded question chart — the SAME primitive dashboards and
+            // story pages use (SmartEmbeddedQuestionContainer via data-question-id).
+            return (
+              <Box
+                key={index}
+                my={3}
+                height="400px"
+                borderWidth="1px"
+                borderColor="border.default"
+                borderRadius="md"
+                overflow="hidden"
+                display="flex"
+                flexDirection="column"
+              >
+                <SmartEmbeddedQuestionContainer questionId={part.questionId} showTitle />
+              </Box>
+            );
           } else if (part.type === 'query') {
             const queryData = queries?.[part.content];
             if (queryData) {
