@@ -349,4 +349,20 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_fbe_conv  ON feedback_events(conversation_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_fbe_ts    ON feedback_events(created_at);
 
+  -- Generic catch-all event log: every published app-event lands here (the local
+  -- replacement for a central events store). Typed tables above remain for specific
+  -- analytics queries while this stays the raw audit/event stream.
+  CREATE TABLE IF NOT EXISTS app_events (
+    id          BIGSERIAL PRIMARY KEY,
+    event_type  VARCHAR NOT NULL,
+    mode        VARCHAR,
+    user_id     INTEGER,
+    user_email  VARCHAR,
+    payload     JSONB NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_app_events_type ON app_events(event_type, created_at);
+  CREATE INDEX IF NOT EXISTS idx_app_events_ts   ON app_events(created_at);
+
 `;

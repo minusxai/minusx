@@ -20,7 +20,6 @@ import {
   DAB_AUTOCTX_ONLY,
   MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY,
-  MX_API_BASE_URL,
 } from '@/lib/config';
 import { BenchmarkAnalystAgent } from '@/agents/benchmark-analyst/benchmark-analyst';
 import {
@@ -240,8 +239,6 @@ const rowIndices: Set<number> | undefined = (() => {
   }
   return indices.size > 0 ? indices : undefined;
 })();
-const proxied = !!MX_API_BASE_URL;
-
 const agentsConcurrencyNote = MAX_AGENTS_CONCURRENCY
   ? `max ${MAX_AGENTS_CONCURRENCY} concurrent agent runs`
   : 'unbounded agent runs (set MAX_AGENTS_CONCURRENCY env to cap)';
@@ -250,9 +247,6 @@ const llmConcurrencyNote = MAX_LLM_CONCURRENCY
   : 'unbounded LLM calls (set MAX_LLM_CONCURRENCY env to cap)';
 
 logHeader(`Data Analyst Bench  ${CONFIG.model.provider}/${CONFIG.model.model}  ${DATASETS.length} datasets`);
-console.log(
-  `  routing: ${proxied ? 'mxllm proxy (' + MX_API_BASE_URL + ')' : 'DIRECT to provider — set MX_API_BASE_URL to route through mxllm'}`,
-);
 console.log(
   `  concurrency: ${agentsConcurrencyNote}; ${llmConcurrencyNote}${rerun ? '  rerun=on (clearing prior outputs)' : ''}`,
 );

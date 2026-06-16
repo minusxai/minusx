@@ -24,14 +24,13 @@ interface EnvironmentConfig {
   // Iframe embedding: when set, auth cookies become SameSite=None;Secure and a
   // frame-ancestors CSP is applied. '*' = allow any origin; or a comma/space list.
   EMBED_ALLOWED_ORIGINS: string | undefined;
+  EVENTS_FORWARD_RULES: string | undefined;
   DB_TYPE: 'postgres' | 'pglite';
   DATABASE_URL: string;
   PGLITE_DATA_DIR: string | undefined;
   POSTGRES_URL: string | undefined;
   POSTGRES_SCHEMA: string;
   CRON_SECRET: string | undefined;
-  MX_API_BASE_URL: string;
-  MX_API_KEY: string;
   ANALYTICS_DB_DIR: string | undefined;
   DEFAULT_DB_TYPE: string;
   DEFAULT_EMAIL_WEBHOOK: string | undefined;
@@ -113,6 +112,7 @@ const config: EnvironmentConfig = {
   ADMIN_PWD: process.env.ADMIN_PWD,
   E2E_RUNTIME_SECRET: process.env.E2E_RUNTIME_SECRET,
   EMBED_ALLOWED_ORIGINS: process.env.EMBED_ALLOWED_ORIGINS,
+  EVENTS_FORWARD_RULES: process.env.EVENTS_FORWARD_RULES,
 
   DB_TYPE: getOptional(process.env.DB_TYPE, 'pglite') as 'postgres' | 'pglite',
   DATABASE_URL: getOptional(process.env.DATABASE_URL, ''),
@@ -120,8 +120,6 @@ const config: EnvironmentConfig = {
   POSTGRES_URL: process.env.POSTGRES_URL,
   POSTGRES_SCHEMA: getOptional(process.env.POSTGRES_SCHEMA, 'public'),
   CRON_SECRET: process.env.CRON_SECRET,
-  MX_API_BASE_URL: getOptional(process.env.MX_API_BASE_URL, ''),
-  MX_API_KEY: getOptional(process.env.MX_API_KEY, ''),
   ANALYTICS_DB_DIR: process.env.ANALYTICS_DB_DIR,
   DEFAULT_DB_TYPE: getOptional(process.env.DEFAULT_DB_TYPE, 'duckdb'),
   DEFAULT_EMAIL_WEBHOOK: process.env.DEFAULT_EMAIL_WEBHOOK,
@@ -202,14 +200,40 @@ export const E2E_RUNTIME_SECRET = config.E2E_RUNTIME_SECRET;
 export const EMBED_ENABLED = (config.EMBED_ALLOWED_ORIGINS ?? '').trim().length > 0;
 /** CSP `frame-ancestors` value; '' when embedding is disabled or set to '*' (no restriction). */
 export const EMBED_FRAME_ANCESTORS = parseFrameAncestors(config.EMBED_ALLOWED_ORIGINS);
+
+export interface EventForwardRule { pattern: RegExp; url: string }
+/**
+ * Parse EVENTS_FORWARD_RULES — a JSON object of { "<event-type regex>": "<webhook url>" }.
+ * Each app-event whose type matches a rule's regex is POSTed to that rule's webhook.
+ * Invalid JSON / bad regex is logged and skipped (never crashes the app).
+ */
+function parseEventForwardRules(raw: string | undefined): EventForwardRule[] {
+  if (!raw || !raw.trim()) return [];
+  let obj: Record<string, string>;
+  try {
+    obj = JSON.parse(raw);
+  } catch (e) {
+    console.error('[config] EVENTS_FORWARD_RULES is not valid JSON ({ "<regex>": "<webhookUrl>" }):', e);
+    return [];
+  }
+  const rules: EventForwardRule[] = [];
+  for (const [pattern, url] of Object.entries(obj)) {
+    try {
+      rules.push({ pattern: new RegExp(pattern), url: String(url) });
+    } catch (e) {
+      console.error(`[config] EVENTS_FORWARD_RULES: invalid regex "${pattern}" — skipped:`, e);
+    }
+  }
+  return rules;
+}
+/** Webhook fan-out rules for app-events (Slack channels, central ingest, etc.). */
+export const EVENTS_FORWARD_RULES: EventForwardRule[] = parseEventForwardRules(config.EVENTS_FORWARD_RULES);
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;
 export const POSTGRES_URL = config.POSTGRES_URL;
 export const POSTGRES_SCHEMA = config.POSTGRES_SCHEMA;
 export const CRON_SECRET = config.CRON_SECRET;
-export const MX_API_BASE_URL = config.MX_API_BASE_URL;
-export const MX_API_KEY = config.MX_API_KEY;
 export const ANALYTICS_DB_DIR = config.ANALYTICS_DB_DIR;
 export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
 export const DEFAULT_EMAIL_WEBHOOK = config.DEFAULT_EMAIL_WEBHOOK;
