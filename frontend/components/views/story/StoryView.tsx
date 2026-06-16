@@ -62,18 +62,15 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
     );
   }
 
-  // The story is a web page, not a slide: a centered reading column with a
-  // FIXED max width, so opening/closing the right sidebar doesn't reflow it —
-  // it only shrinks when the container genuinely runs out of room. The story
-  // HTML never cares: it's authored on a fixed 1280px logical canvas and
-  // ScaledStoryFrame scales it to whatever width this column resolves to.
+  // The story is a web page, not a slide: it fills the full container width.
+  // The story HTML is authored on a fixed 1280px logical canvas and
+  // ScaledStoryFrame scales it to whatever width this container resolves to,
+  // so keep the on-screen reading width in check from within the HTML itself.
   return (
-    <Box aria-label="Story page" w="100%" minH="420px" display="flex" justifyContent="center">
-      <Box w="100%" maxW="960px">
-        <ScaledStoryFrame>
-          <AgentHtml html={content.story} width={STORY_W} readOnly={readOnly} />
-        </ScaledStoryFrame>
-      </Box>
+    <Box aria-label="Story page" w="100%" minH="420px">
+      <ScaledStoryFrame>
+        <AgentHtml html={content.story} width={STORY_W} readOnly={readOnly} />
+      </ScaledStoryFrame>
     </Box>
   );
 }
