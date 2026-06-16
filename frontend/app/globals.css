@@ -165,3 +165,51 @@ body {
 .bm-stagger-3 { animation: bm-fade-up 0.5s ease-out 0.25s both; }
 .bm-stagger-4 { animation: bm-fade-up 0.5s ease-out 0.35s both; }
 .bm-stagger-5 { animation: bm-fade-up 0.5s ease-out 0.45s both; }
+
+/* ── Login backdrop ───────────────────────────────────────────────
+   Photo + readability fade keyed off the `.dark` class on <html>, which the
+   inline theme script in layout.tsx sets synchronously BEFORE first paint.
+   This avoids the wrong-mode flash you'd get driving it from Redux colorMode
+   (which initializes to 'dark' and only corrects after a mount effect). webp only. */
+.login-hero-bg {
+  background-image: url('/hero/d2m.webp');           /* mobile, light */
+}
+html.dark .login-hero-bg {
+  background-image: url('/hero/d2darkm.webp');        /* mobile, dark */
+}
+@media (min-width: 640px) {
+  .login-hero-bg {
+    background-image: url('/hero/d2.webp');           /* desktop, light */
+  }
+  html.dark .login-hero-bg {
+    background-image: url('/hero/d2dark.webp');        /* desktop, dark */
+  }
+}
+
+.login-hero-fade {
+  background: linear-gradient(to bottom, rgba(247,246,241,0.5), rgba(247,246,241,0.4) 50%, rgba(247,246,241,0.75));
+}
+html.dark .login-hero-fade {
+  background: linear-gradient(to bottom, rgba(16,16,18,0.62), rgba(16,16,18,0.5) 50%, rgba(16,16,18,0.84));
+}
+
+/* Login card — warm frosted-paper panel. Keyed off html.dark (same signal as the photo/fade)
+   so the whole composition stays consistent on the first paint, no Redux colorMode lag. */
+.login-card {
+  background: rgba(252, 251, 247, 0.82);
+  border: 1px solid rgba(112, 100, 78, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 1px 2px rgba(92, 80, 58, 0.12),
+    0 14px 44px rgba(92, 80, 58, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+html.dark .login-card {
+  background: rgba(24, 24, 27, 0.72);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 14px 44px rgba(0, 0, 0, 0.5);
+}
