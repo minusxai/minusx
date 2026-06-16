@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Box, VStack, HStack, Input, Button, Heading, Text } from '@chakra-ui/react';
@@ -8,7 +8,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { LuLogIn, LuBuilding2 } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useAppSelector } from '@/store/hooks';
 import { Dither } from '@/components/Dither';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -33,6 +32,25 @@ interface LoginFormProps {
   enableOrgCreation?: boolean;
 }
 
+/**
+ * Reactive read of the `.dark` class on <html>. That class is set synchronously by the inline
+ * theme script in layout.tsx (before first paint) and kept current by ColorModeSync on toggle,
+ * making it the single authoritative color-mode signal — unlike Redux `state.ui.colorMode`,
+ * which lags by a mount effect. A MutationObserver keeps it in sync when the user toggles.
+ */
+function useHtmlDark(): boolean {
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const html = document.documentElement;
+    const read = () => setIsDark(html.classList.contains('dark'));
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(html, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return isDark;
+}
+
 export function LoginOrRegisterForm({
   orgConfig,
   hasEmailOTP = false,
@@ -43,12 +61,21 @@ export function LoginOrRegisterForm({
   enableOrgCreation = true,
 }: LoginFormProps) {
   const searchParams = useSearchParams();
-  const colorMode = useAppSelector((state) => state.ui.colorMode);
   const { config: reduxConfig } = useConfigs();
   const config = orgConfig || reduxConfig;
   const displayName = config.branding.agentName;
 
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  // Drives the dither dot color. Read from the `.dark` class on <html> — the SAME signal the
+  // photo/fade/card CSS use — so every layer stays in lockstep. Redux `colorMode` is NOT used
+  // here: it initializes to 'dark' and only syncs after a mount effect, which previously left
+  // the JS-styled layers (dark) mismatched against the CSS-styled ones (light) until a toggle.
+  const isDark = useHtmlDark();
+
+  // `?register` (any value, incl. empty) forces the "Set Up Your Workspace" form — handy for
+  // viewing/iterating on it when there's no landing-page button to reach it.
+  const [mode, setMode] = useState<'login' | 'register'>(
+    searchParams.get('register') !== null ? 'register' : initialMode,
+  );
   const [justCreatedOrg, setJustCreatedOrg] = useState<string | null>(null);
 
   // Login state
@@ -284,35 +311,59 @@ export function LoginOrRegisterForm({
       position="relative"
       overflow="hidden"
     >
-      <Box position="absolute" top={4} right={4} zIndex={10}>
+      <Box position="absolute" top={4} right={4} zIndex={20}>
         <ColorModeSwitch />
       </Box>
-      <Box position="absolute" top={0} left={0} right={0} bottom={0} zIndex={0} pointerEvents="none">
+
+      {/* ── Layered backdrop: photo → dither → paper/dark fade ── */}
+      {/* Layer 0: hero photo, full-bleed (webp). Variant + responsive crop are chosen in CSS
+          (.login-hero-bg, keyed off html.dark) so it's correct on the first paint with no
+          colorMode-resolution flash. */}
+      <Box
+        className="login-hero-bg"
+        position="absolute"
+        inset={0}
+        zIndex={0}
+        pointerEvents="none"
+        backgroundSize="cover"
+        backgroundPosition="center"
+      />
+      {/* Layer 1: transparent dither dots — only the dots paint, photo shows through the gaps. */}
+      <Box position="absolute" inset={0} zIndex={1} pointerEvents="none">
         <Dither
-          waveSpeed={0.03}
-          waveFrequency={5}
-          waveAmplitude={0.25}
-          waveColor={colorMode === 'dark' ? [1, 1, 1] : [0.7, 0.7, 0.7]}
+          waveColor={isDark ? [0.82, 0.84, 0.82] : [0.28, 0.31, 0.29]}
           colorNum={2}
           pixelSize={2}
+          waveAmplitude={0.7}
+          waveFrequency={2}
+          waveSpeed={0.45}
           disableAnimation={false}
           enableMouseInteraction={false}
-          mouseRadius={0.5}
-          opacity={colorMode === 'dark' ? 0.2 : 0.5}
+          opacity={isDark ? 0.25 : 0.3}
+          transparent
         />
       </Box>
-
+      {/* Layer 2: paper (light) / dark fade for card readability — lower opacity = more visible
+          photo. Variant chosen in CSS (.login-hero-fade, keyed off html.dark) to match the photo. */}
       <Box
+        className="login-hero-fade"
+        position="absolute"
+        inset={0}
+        zIndex={2}
+        pointerEvents="none"
+      />
+
+      {/* Warm "frosted paper" card. Color/border/shadow live in CSS (.login-card, keyed off
+          html.dark) so the card stays in lockstep with the photo/fade and never mismatches
+          on first paint. */}
+      <Box
+        className="login-card"
         w="full"
         maxW="400px"
         p={8}
-        bg="bg.surface"
-        borderRadius="lg"
-        border="1px solid"
-        borderColor="border.default"
+        borderRadius="xl"
         position="relative"
-        zIndex={1}
-        boxShadow="0 20px 60px rgba(0, 0, 0, 0.3)"
+        zIndex={10}
       >
         <VStack align="stretch" gap={6}>
           <Box display="flex" justifyContent="center" mb={2}>
