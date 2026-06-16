@@ -18,6 +18,7 @@ export const AppEvents = {
   USER_CREATED:             'user:created',
   USER_DELETED:             'user:deleted',
   FEEDBACK:                 'user:feedback',
+  SHARE_LEAD:               'share:lead',
 } as const;
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
@@ -44,4 +45,7 @@ export interface AppEventPayloads {
   'user:created':             BaseEventPayload & { userId?: number; userEmail?: string; role?: string; createdBy?: string };
   'user:deleted':             BaseEventPayload & { userId?: number; userEmail?: string; role?: string; deletedBy?: string };
   'user:feedback':            BaseEventPayload & { conversationId: number; userMessageLogIndex: number; rating: 'positive' | 'negative'; tags: string[]; comment?: string; userId?: number; userEmail?: string };
+  // Anonymous guest submitted name/email on a public share (lead capture).
+  // `userEmail` mirrors `email` for consistency with other events' attribution.
+  'share:lead':               BaseEventPayload & { fileId: number; nonce: string; storyName: string; name: string; email: string; userEmail: string; folderPath: string };
 }

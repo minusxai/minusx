@@ -8,6 +8,7 @@ import {
 import { SHARE_GUEST_CHAT_ENABLED, EMBED_ENABLED } from '@/lib/config';
 import { IS_DEV } from '@/lib/constants';
 import { isValidMode, DEFAULT_MODE, type Mode } from '@/lib/mode/mode-types';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import crypto from 'crypto';
 
 // Public (whitelisted) route: mints/refreshes the anonymous `mx-guest` session for a
@@ -65,6 +66,21 @@ export async function POST(request: NextRequest) {
     }
 
     const canChat = SHARE_GUEST_CHAT_ENABLED && (skipLead || hasLead || reuse?.canChat === true);
+
+    // Lead capture: a real name/email was submitted (not anonymous skip_lead and not a
+    // cookie reuse). Publish a SHARE_LEAD app-event for downstream lead handling.
+    if (hasLead) {
+      appEventRegistry.publish(AppEvents.SHARE_LEAD, {
+        mode,
+        fileId: file.id,
+        nonce,
+        storyName: file.name,
+        name,
+        email,
+        userEmail: email,
+        folderPath: file.path.slice(0, file.path.lastIndexOf('/')),
+      });
+    }
 
     const token = createGuestToken({ fileId: file.id, nonce, home_folder, mode, uid, name, email, canChat });
 
