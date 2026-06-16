@@ -11,6 +11,7 @@ import { createNewConversation } from '@/lib/conversations';
 import { guestChatDenialReason } from '@/lib/auth/guest-session';
 import { checkGuestChatRateLimit } from '@/lib/auth/guest-rate-limit';
 import { SHARE_GUEST_CHAT_ENABLED } from '@/lib/config';
+import { getModules } from '@/lib/modules/registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,6 +93,8 @@ export async function POST(request: NextRequest) {
       );
     }
   }
+
+  await getModules().auth.addHeaders(request, new Headers());
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
