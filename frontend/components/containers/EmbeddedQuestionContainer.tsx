@@ -28,6 +28,7 @@ interface EmbeddedQuestionContainerProps {
   externalParameters?: QuestionParameter[];
   externalParamValues?: Record<string, any>;  // Runtime parameter values from parent (e.g., dashboard ephemeral state)
   onChange?: (updates: Partial<QuestionContent>) => void;
+  enableDrilldown?: boolean;  // Click-to-drill-down on data points (off for story embeds)
 }
 
 /**
@@ -42,6 +43,7 @@ export default function EmbeddedQuestionContainer({
   externalParameters,
   externalParamValues,
   onChange,
+  enableDrilldown = true,
 }: EmbeddedQuestionContainerProps) {
   // Local state for embedded question (no Redux)
   const [localQuestion, setLocalQuestion] = useState<QuestionContent>(question);
@@ -141,7 +143,8 @@ export default function EmbeddedQuestionContainer({
       typesButtonsOrientation: 'vertical',
       showTitle: false
     },
-    fixError: false
+    fixError: false,
+    enableDrilldown,
   };
 
   return (

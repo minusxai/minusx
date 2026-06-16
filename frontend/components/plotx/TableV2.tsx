@@ -37,6 +37,8 @@ interface TableProps {
   renderCell?: (colId: string, value: any, row: Record<string, any>) => React.ReactNode | undefined
   /** Initial sort state: array of { id: columnName, desc: boolean } */
   initialSorting?: SortingState
+  /** Click-a-cell-to-drill-down. Off for read-only embeds (shared story). */
+  enableDrilldown?: boolean
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -109,7 +111,7 @@ interface FacetedFilterValue {
 const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
   v != null && typeof v === 'object' && 'search' in v
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting }: TableProps) => {
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -691,7 +693,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             </Box>
 
             {/* Virtualized Body — native elements + event delegation for performance */}
-            <tbody onClick={handleBodyClick}>
+            <tbody onClick={enableDrilldown ? handleBodyClick : undefined}>
               {virtualItems.length > 0 && virtualItems[0].start > 0 && (
                 <tr><td style={{ height: virtualItems[0].start, padding: 0 }} /></tr>
               )}

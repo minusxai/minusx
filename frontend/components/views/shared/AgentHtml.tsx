@@ -117,15 +117,35 @@ export default function AgentHtml({ html, width, height, readOnly = false }: Age
     fontTagRef.current = null;
   }, []);
 
-  // Emotion injects chart styles lazily as portal content first renders —
-  // re-mirror shortly after, and once more for late async chunks.
+  // Emotion injects each embedded chart's styles lazily — only when that tile's
+  // body mounts. Tiles mount staggered on idle time (SmartEmbeddedQuestion
+  // Container gates each on requestIdleCallback), so a couple of fixed re-mirror
+  // timeouts race the late ones: a CSS-based viz like TrendPlot (vs. a
+  // self-sizing ECharts canvas) then renders unstyled — collapsed, top-left.
+  // Instead, re-mirror whenever the shadow tree itself mutates. A tile mounting
+  // its chart DOM is exactly such a mutation, and by then emotion has already
+  // inserted that tile's rules into the document sheets, so the copy catches
+  // them. Debounced to coalesce bursts; mirrorAppStyles no-ops when unchanged.
   useEffect(() => {
     const root = hostRef.current?.shadowRoot;
-    if (!root || targets.length === 0) return;
+    if (!root) return;
     mirrorAppStyles(root);
-    const t1 = window.setTimeout(() => mirrorAppStyles(root), 250);
-    const t2 = window.setTimeout(() => mirrorAppStyles(root), 1500);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+    let debounce = 0;
+    const schedule = () => {
+      if (debounce) return;
+      debounce = window.setTimeout(() => { debounce = 0; mirrorAppStyles(root); }, 80);
+    };
+    // childList only (not attributes) — ECharts mutates its canvas attributes
+    // every animation frame, which would thrash the (O(rules)) re-mirror.
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, { childList: true, subtree: true });
+    // Belt-and-suspenders for any rule inserted without a shadow-DOM mutation.
+    const timers = [250, 1500, 3000].map(ms => window.setTimeout(() => mirrorAppStyles(root), ms));
+    return () => {
+      observer.disconnect();
+      if (debounce) window.clearTimeout(debounce);
+      timers.forEach(t => window.clearTimeout(t));
+    };
   }, [targets]);
 
   return (
@@ -165,7 +185,9 @@ export default function AgentHtml({ html, width, height, readOnly = false }: Age
           display="flex"
           flexDirection="column"
         >
-          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={true} index={i} readOnly={readOnly} />
+          {/* Stories are a reading surface — charts display only; never open the
+              click-to-drill-down popup (regardless of read-only/public). */}
+          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={true} index={i} readOnly={readOnly} enableDrilldown={false} />
         </Box>,
         t.el,
         `${i}-${t.questionId}`,
