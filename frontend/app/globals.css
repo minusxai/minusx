@@ -165,3 +165,21 @@ body {
 .bm-stagger-3 { animation: bm-fade-up 0.5s ease-out 0.25s both; }
 .bm-stagger-4 { animation: bm-fade-up 0.5s ease-out 0.35s both; }
 .bm-stagger-5 { animation: bm-fade-up 0.5s ease-out 0.45s both; }
+
+/* ─── Home "Command Deck" — proactive, futuristic home surface ─── */
+
+@keyframes mx-rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.mx-rise   { animation: mx-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.mx-rise-1 { animation: mx-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both; }
+.mx-rise-2 { animation: mx-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both; }
+.mx-rise-3 { animation: mx-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.20s both; }
+.mx-rise-4 { animation: mx-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both; }
+.mx-rise-5 { animation: mx-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.36s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mx-rise, .mx-rise-1, .mx-rise-2, .mx-rise-3, .mx-rise-4, .mx-rise-5 { animation: none; }
+}

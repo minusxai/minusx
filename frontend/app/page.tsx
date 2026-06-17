@@ -6,13 +6,13 @@ import { Box, VStack, Flex, Heading, HStack, Text, Icon } from '@chakra-ui/react
 // Param-preserving Link so home/tutorial links keep ?v=2 (and as_user/mode).
 import { Link } from '@/components/ui/Link';
 import { useAppSelector } from '@/store/hooks';
-import { selectHomePage } from '@/store/uiSlice';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, SuggestedQuestions, HomeFolderFiles } from '@/components/RecentFilesSection';
+import { FeedSummary, RecentQuestions, RecentDashboards, RecentConversations, HomeFolderFiles } from '@/components/RecentFilesSection';
+import { SignalsFeed } from '@/components/home/CommandDeck';
 import Breadcrumb from '@/components/Breadcrumb';
 import FloatingChatWrapper from '@/components/FloatingChatWrapper';
 import RightSidebar from '@/components/RightSidebar';
@@ -48,10 +48,10 @@ function SectionPanel({ children }: { children: React.ReactNode }) {
   return (
     <Box
       bg="bg.subtle"
-      borderRadius="lg"
+      borderRadius="xl"
       border="1px solid"
-      borderColor="border.muted"
-      p={5}
+      borderColor="border.subtle"
+      p={4}
       css={{ '&:not(:has(*))': { display: 'none' } }}
     >
       {children}
@@ -98,29 +98,6 @@ function ActionCard({ href, icon, color, title, description }: {
         <Icon as={LuArrowRight} color={color} boxSize={3.5} flexShrink={0} opacity={0.6} />
       </HStack>
     </Link>
-  );
-}
-
-function ColumnEmptyState({ icon, message, linkLabel, linkHref, color }: {
-  icon: React.ElementType; message: string; linkLabel: string; linkHref: string; color: string;
-}) {
-  return (
-    <Box bg="bg.subtle" borderRadius="lg" border="1px solid" borderColor="border.muted" p={6}>
-      <VStack gap={3} align="center" py={4}>
-        <Icon as={icon} color={color} boxSize={6} opacity={0.5} />
-        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">{message}</Text>
-        <Link href={linkHref}>
-          <HStack
-            gap={1.5} px={3} py={1} borderRadius="full"
-            bg={`${color}/10`} cursor="pointer" transition="all 0.15s ease"
-            _hover={{ bg: `${color}/20` }}
-          >
-            <Icon as={LuArrowRight} color={color} boxSize={3} />
-            <Text fontSize="2xs" fontWeight="600" fontFamily="mono" color={color}>{linkLabel}</Text>
-          </HStack>
-        </Link>
-      </VStack>
-    </Box>
   );
 }
 
@@ -189,7 +166,6 @@ export default function Home() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-  const homePage = useAppSelector(selectHomePage);
   const homePath = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '';
   const nearestContext = useAppSelector(state => selectContextFromPath(state, homePath));
   const effectiveContextPath = selectedContextPath || nearestContext?.path || null;
@@ -199,13 +175,12 @@ export default function Home() {
 
   const mode = user.mode || 'org';
   const breadcrumbItems = [{ label: 'Home' }];
-  const rightColEmpty = !homePage.showRecentDashboards && !homePage.showRecentConversations;
   const isNewUser = config.setupWizard?.status !== 'complete';
 
   return (
     <Box minH="90vh" bg="bg.canvas" display="flex">
       <VStack flex="1" minW="0" position="relative" align="stretch">
-        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }} css={{ containerType: 'inline-size' }}>
+        <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 4, md: 5, lg: 6 }} css={{ containerType: 'inline-size' }}>
           <Flex justify="space-between" align="center" mb={4} gap={4}>
             <Box flex="1" minW={0}>
               <Breadcrumb items={breadcrumbItems} />
@@ -232,48 +207,35 @@ export default function Home() {
 
           <UpdateBanner />
 
-          {/* Two-column layout — switches at 700px container width */}
-          <Flex gap={2} css={{ flexDirection: 'column', '@container (min-width: 700px)': { flexDirection: 'row' } }}>
-            {/* Left column */}
-            <VStack flex="1" minW={0} align="stretch" gap={2}>
-              {isNewUser ? (
-                <SectionPanel>
-                  <WelcomeBanner />
-                </SectionPanel>
-              ) : (
-                <>
-                  <SectionPanel><RecentQuestions /></SectionPanel>
-                  <SectionPanel><RecentDashboards /></SectionPanel>
-                  {/* Folder view fallback — shown when analytics sections render nothing */}
-                  <HomeFolderFiles />
-                </>
-              )}
-            </VStack>
+          {isNewUser ? (
+            <SectionPanel>
+              <WelcomeBanner />
+            </SectionPanel>
+          ) : (
+            // Two-column layout — switches at 700px container width
+            <Flex gap={2} css={{ flexDirection: 'column', '@container (min-width: 700px)': { flexDirection: 'row' } }}>
+              {/* Left column — recent charts, dashboards + conversations */}
+              <VStack className="mx-rise" flex="1" minW={0} align="stretch" gap={2}>
+                <SectionPanel><RecentQuestions /></SectionPanel>
+                <SectionPanel><RecentDashboards /></SectionPanel>
+                <SectionPanel><RecentConversations /></SectionPanel>
+                {/* Folder view fallback — shown when analytics sections render nothing */}
+                <HomeFolderFiles />
+              </VStack>
 
-            {/* Right column — dashboards + conversations */}
-            <VStack
-              css={{ width: '100%', '@container (min-width: 700px)': { width: '340px' } }}
-              flexShrink={0}
-              align="stretch"
-              gap={2}
-            >
-              {rightColEmpty ? (
-                <ColumnEmptyState
-                  icon={LuFolder}
-                  message="Browse your files and dashboards"
-                  linkLabel="View Files"
-                  linkHref={`/p/${mode}`}
-                  color="accent.primary"
-                />
-              ) : (
-                <>
-                  <SectionPanel><FeedSummary /></SectionPanel>
-                  <SectionPanel><RecentConversations /></SectionPanel>
-                  <SectionPanel><SuggestedQuestions /></SectionPanel>
-                </>
-              )}
-            </VStack>
-          </Flex>
+              {/* Right column — feed + proactive signals */}
+              <VStack
+                className="mx-rise-1"
+                css={{ width: '100%', '@container (min-width: 700px)': { width: '340px' } }}
+                flexShrink={0}
+                align="stretch"
+                gap={2}
+              >
+                <SectionPanel><FeedSummary /></SectionPanel>
+                <SectionPanel><SignalsFeed /></SectionPanel>
+              </VStack>
+            </Flex>
+          )}
         </Box>
         <FloatingChatWrapper
           filePath={homePath}

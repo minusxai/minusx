@@ -2,7 +2,17 @@
 
 import { memo, useMemo, useState } from 'react';
 import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem, SimpleGrid, Flex, Button } from '@chakra-ui/react';
-import { LuArrowRight, LuArrowLeft, LuCheck, LuRefreshCw } from 'react-icons/lu';
+import {
+  LuArrowRight,
+  LuArrowLeft,
+  LuCheck,
+  LuRefreshCw,
+  LuArrowUpRight,
+  LuArrowDownRight,
+  LuMinus,
+  LuActivity,
+  LuCornerDownRight,
+} from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -13,8 +23,11 @@ import {
   getDemoAgent,
   getBusinessUnit,
   TAG_META,
+  SEVERITY_META,
+  WORKSPACE_INSIGHTS,
   type DemoAgent,
   type AgentSelection,
+  type ProactiveInsight,
 } from '../demo-agents';
 
 interface ExampleQuestionsProps {
@@ -37,12 +50,31 @@ const AGENT_CARD_STYLES = `
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.45; transform: scale(0.82); }
 }
+@keyframes mxRadar {
+  0%   { transform: scale(0.7); opacity: 0.7; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes mxBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
 .mx-agent-card { opacity: 0; animation: mxAgentCardIn 0.5s cubic-bezier(0.22, 0.8, 0.28, 1) forwards; }
 .mx-agent-dot { animation: mxAgentPulse 2.4s ease-in-out infinite; }
 .mx-q-arrow { opacity: 0; transform: translateX(-6px); transition: opacity 0.2s ease, transform 0.2s ease; }
 .mx-q-row:hover .mx-q-arrow { opacity: 1; transform: translateX(0); }
+/* Futuristic briefing deck */
+.mx-deck { position: relative; overflow: hidden; }
+.mx-deck::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(127, 140, 141, 0.12) 1px, transparent 0);
+  background-size: 22px 22px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+.mx-radar { animation: mxRadar 2.2s ease-out infinite; }
+.mx-blink { animation: mxBlink 1.6s steps(1) infinite; }
+.mx-dig { opacity: 0; transform: translateX(-6px); transition: opacity 0.22s ease, transform 0.22s ease; }
+.mx-insight:hover .mx-dig { opacity: 1; transform: translateX(0); }
 @media (prefers-reduced-motion: reduce) {
-  .mx-agent-card, .mx-agent-dot { animation: none; opacity: 1; }
+  .mx-agent-card, .mx-agent-dot, .mx-radar, .mx-blink { animation: none; opacity: 1; }
 }
 `;
 
@@ -110,7 +142,7 @@ function ExampleQuestionsImpl({
         <style>{AGENT_CARD_STYLES}</style>
         <VStack gap={6} align="stretch" flex="1" py={6}>
           {step === 'pick' && (
-            <PickStep firstName={firstName} onLaunch={handleLaunch} />
+            <PickStep firstName={firstName} onLaunch={handleLaunch} onPromptClick={onPromptClick} />
           )}
           {step === 'scope' && pendingAgent && (
             <ScopeStep
@@ -190,125 +222,157 @@ function SidebarGreeting({ firstName }: { firstName: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — Choose your agent
 // ─────────────────────────────────────────────────────────────────────────────
-function PickStep({ firstName, onLaunch }: { firstName: string; onLaunch: (agent: DemoAgent) => void }) {
+function PickStep({
+  firstName,
+  onLaunch,
+  onPromptClick,
+}: {
+  firstName: string;
+  onLaunch: (agent: DemoAgent) => void;
+  onPromptClick: (prompt: string) => void;
+}) {
   return (
-    <VStack gap={6} align="stretch">
-      <VStack gap={1.5} align="center" textAlign="center">
-        <Text
-          fontSize="2xs"
-          fontWeight="700"
-          color="accent.teal"
-          textTransform="uppercase"
-          letterSpacing="0.18em"
-          fontFamily="mono"
-        >
-          Agentic Workspace
-        </Text>
-        <Heading fontSize="2xl" fontWeight="800" fontFamily="mono" color="fg.default" letterSpacing="-0.02em">
-          Choose your agent.
-        </Heading>
-        <Text color="fg.muted" fontSize="sm" fontFamily="mono" maxW="2xl">
-          Hi {firstName} — each agent is briefed on the latest internal data and continuously
-          benchmarks against industry signals. Pick the lens you need today.
-        </Text>
-      </VStack>
+    <Grid templateColumns={{ base: '1fr', lg: '1.7fr 1fr' }} gap={{ base: 8, lg: 7 }} alignItems="start">
+      {/* ── LEFT: pick an agent ─────────────────────────────────────────── */}
+      <VStack align="stretch" gap={4}>
+        <VStack align="start" gap={1}>
+          <Text
+            fontSize="2xs"
+            fontWeight="700"
+            color="accent.teal"
+            textTransform="uppercase"
+            letterSpacing="0.18em"
+            fontFamily="mono"
+          >
+            Agentic Workspace
+          </Text>
+          <Heading fontSize="2xl" fontWeight="800" fontFamily="mono" color="fg.default" letterSpacing="-0.02em">
+            Choose your agent.
+          </Heading>
+          <Text color="fg.muted" fontSize="sm" fontFamily="mono">
+            Hi {firstName} — each one has already scanned today&apos;s data.
+          </Text>
+        </VStack>
 
-      <SimpleGrid columns={{ base: 1, md: 3 }} gap={4} alignItems="stretch">
-        {DEMO_AGENTS.map((agent, index) => (
-          <Box key={agent.id} className="mx-agent-card" style={{ animationDelay: `${index * 100}ms` }} h="100%">
+        <VStack align="stretch" gap={3}>
+          {DEMO_AGENTS.map((agent, index) => (
             <Flex
-              direction="column"
-              h="100%"
+              key={agent.id}
+              className="mx-agent-card"
+              style={{ animationDelay: `${index * 90}ms` }}
+              gap={3}
+              p={3.5}
+              align="center"
               position="relative"
               borderRadius="xl"
               border="1px solid"
               borderColor="border.default"
               bg="bg.panel"
-              overflow="hidden"
+              cursor="pointer"
               transition="border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease"
-              _hover={{ borderColor: 'border.emphasized', boxShadow: 'md', transform: 'translateY(-2px)' }}
+              _hover={{
+                borderColor: `${agent.color}/45`,
+                boxShadow: 'md',
+                transform: 'translateY(-2px)',
+                '& .mx-go': { bg: agent.color, color: 'white', borderColor: agent.color },
+              }}
+              aria-label={`Launch ${agent.name}`}
+              onClick={() => onLaunch(agent)}
             >
-              <VStack align="stretch" gap={3} p={4} flex="1" position="relative">
-                <HStack gap={3} align="start">
-                  <Flex
-                    align="center"
-                    justify="center"
-                    boxSize={10}
-                    borderRadius="lg"
-                    bg={`${agent.color}/12`}
-                    border="1px solid"
-                    borderColor={`${agent.color}/25`}
-                    flexShrink={0}
-                  >
-                    <Icon as={agent.icon} boxSize={5} color={agent.color} />
-                  </Flex>
-                  <VStack gap={0.5} align="start" flex="1" minW={0}>
-                    <Text
-                      fontSize="2xs"
-                      fontWeight="700"
-                      color="fg.subtle"
-                      textTransform="uppercase"
-                      letterSpacing="0.12em"
-                      fontFamily="mono"
-                    >
-                      {agent.tagline}
-                    </Text>
-                    <Text fontSize="md" fontWeight="700" color="fg.default" fontFamily="mono" lineHeight="1.1">
-                      {agent.name}
-                    </Text>
-                  </VStack>
-                </HStack>
+              <Flex
+                align="center"
+                justify="center"
+                boxSize={11}
+                borderRadius="lg"
+                bg={`${agent.color}/12`}
+                border="1px solid"
+                borderColor={`${agent.color}/25`}
+                flexShrink={0}
+              >
+                <Icon as={agent.icon} boxSize={5} color={agent.color} />
+              </Flex>
 
-                <Text fontSize="sm" color="fg.muted" fontFamily="mono" lineHeight="1.55">
+              <VStack align="start" gap={1} flex="1" minW={0}>
+                <HStack gap={2} align="center">
+                  <Text
+                    fontSize="2xs"
+                    fontWeight="700"
+                    color="fg.subtle"
+                    textTransform="uppercase"
+                    letterSpacing="0.12em"
+                    fontFamily="mono"
+                  >
+                    {agent.tagline}
+                  </Text>
+                  <HStack gap={1} flexShrink={0}>
+                    <Box className="mx-agent-dot" boxSize="5px" borderRadius="full" bg={agent.color} flexShrink={0} />
+                    <Text fontSize="2xs" fontWeight="700" color={agent.color} fontFamily="mono" letterSpacing="0.04em">
+                      {agent.proactiveInsights.length} signals
+                    </Text>
+                  </HStack>
+                </HStack>
+                <Text fontSize="md" fontWeight="700" color="fg.default" fontFamily="mono" lineHeight="1.1">
+                  {agent.name}
+                </Text>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" lineHeight="1.5" lineClamp={2}>
                   {agent.description}
                 </Text>
-
-                <HStack gap={1.5} flexWrap="wrap" mt="auto" pt={1}>
-                  {agent.topics.map((topic) => (
-                    <Text
-                      key={topic}
-                      fontSize="2xs"
-                      fontWeight="600"
-                      color="fg.muted"
-                      fontFamily="mono"
-                      px={2}
-                      py={0.5}
-                      borderRadius="full"
-                      bg="bg.muted"
-                      border="1px solid"
-                      borderColor="border.muted"
-                    >
-                      {topic}
-                    </Text>
-                  ))}
-                </HStack>
               </VStack>
 
-              <Box p={3} pt={0}>
-                <Button
-                  w="100%"
-                  size="sm"
-                  variant="outline"
-                  bg="bg.canvas"
-                  color="fg.default"
-                  borderColor="border.emphasized"
-                  fontFamily="mono"
-                  fontWeight="600"
-                  borderRadius="lg"
-                  transition="background 0.18s ease, color 0.18s ease, border-color 0.18s ease"
-                  _hover={{ bg: 'accent.teal', color: 'white', borderColor: 'accent.teal' }}
-                  aria-label={`Launch ${agent.name}`}
-                  onClick={() => onLaunch(agent)}
-                >
-                  Launch {agent.name}
-                  <Icon as={LuArrowRight} boxSize={3.5} ml={1.5} />
-                </Button>
-              </Box>
+              <Flex
+                align="center"
+                justify="center"
+                boxSize={9}
+                borderRadius="lg"
+                flexShrink={0}
+                border="1px solid"
+                borderColor="border.emphasized"
+                bg="bg.canvas"
+                color="fg.muted"
+                transition="background 0.18s ease, color 0.18s ease, border-color 0.18s ease"
+                className="mx-go"
+              >
+                <Icon as={LuArrowRight} boxSize={4} />
+              </Flex>
             </Flex>
-          </Box>
-        ))}
-      </SimpleGrid>
-    </VStack>
+          ))}
+        </VStack>
+      </VStack>
+
+      {/* ── RIGHT: proactive findings (persona-agnostic) ────────────────── */}
+      <VStack align="stretch" gap={3}>
+        <VStack align="start" gap={1}>
+          <HStack gap={2} align="center">
+            <Box position="relative" boxSize="8px" flexShrink={0}>
+              <Box position="absolute" inset={0} borderRadius="full" bg="accent.teal" />
+              <Box className="mx-radar" position="absolute" inset={0} borderRadius="full" border="1.5px solid" borderColor="accent.teal" />
+            </Box>
+            <Text
+              fontSize="2xs"
+              fontWeight="700"
+              color="accent.teal"
+              textTransform="uppercase"
+              letterSpacing="0.18em"
+              fontFamily="mono"
+            >
+              While you were away
+            </Text>
+          </HStack>
+          <Heading fontSize="2xl" fontWeight="800" fontFamily="mono" color="fg.default" letterSpacing="-0.02em">
+            Proactive signals.
+          </Heading>
+          <Text color="fg.muted" fontSize="sm" fontFamily="mono">
+            Surfaced from your latest activity.
+          </Text>
+        </VStack>
+
+        <VStack align="stretch" gap={3}>
+          {WORKSPACE_INSIGHTS.map((insight, idx) => (
+            <InsightCard key={idx} insight={insight} index={idx} onClick={() => onPromptClick(insight.prompt)} />
+          ))}
+        </VStack>
+      </VStack>
+    </Grid>
   );
 }
 
@@ -493,8 +557,9 @@ function WorkspaceStep({
   onPromptClick: (prompt: string) => void;
   onSwitchAgent: () => void;
 }) {
+  const flagged = agent.proactiveInsights.length;
   return (
-    <VStack gap={5} align="stretch">
+    <VStack gap={6} align="stretch">
       {/* Header */}
       <Flex justify="space-between" align="center" gap={3} flexWrap="wrap">
         <HStack gap={3.5} align="center">
@@ -552,36 +617,125 @@ function WorkspaceStep({
         </Button>
       </Flex>
 
-      <VStack align="start" gap={1}>
-        <Heading fontSize="xl" fontWeight="800" fontFamily="mono" color="fg.default" letterSpacing="-0.01em">
-          Welcome back, {firstName}. Here&apos;s where I&apos;d start today.
-        </Heading>
-        <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-          Briefed on this morning&apos;s data{businessUnitName ? ` for ${businessUnitName}` : ''}. Pick a thread to dig in.
-        </Text>
-      </VStack>
+      {/* ─── Proactive intelligence deck (hero) ─────────────────────────── */}
+      <Box
+        className="mx-deck mx-agent-card"
+        borderRadius="2xl"
+        border="1px solid"
+        borderColor="border.default"
+        bg="bg.panel"
+        overflow="hidden"
+      >
+        {/* Top hairline — agent accent fading out */}
+        <Box
+          h="2px"
+          bgGradient="to-r"
+          gradientFrom={agent.color}
+          gradientVia="accent.teal"
+          gradientTo="transparent"
+          opacity={0.8}
+        />
+        <VStack align="stretch" gap={4} p={{ base: 4, md: 5 }} position="relative">
+          {/* Deck header */}
+          <Flex justify="space-between" align="start" gap={3} flexWrap="wrap">
+            <VStack align="start" gap={2}>
+              <HStack gap={2}>
+                {/* Live radar dot */}
+                <Box position="relative" boxSize="9px" flexShrink={0}>
+                  <Box position="absolute" inset={0} borderRadius="full" bg="accent.teal" />
+                  <Box
+                    className="mx-radar"
+                    position="absolute"
+                    inset={0}
+                    borderRadius="full"
+                    border="1.5px solid"
+                    borderColor="accent.teal"
+                  />
+                </Box>
+                <Text
+                  fontSize="2xs"
+                  fontWeight="700"
+                  color="accent.teal"
+                  textTransform="uppercase"
+                  letterSpacing="0.2em"
+                  fontFamily="mono"
+                >
+                  Proactive Intelligence
+                </Text>
+              </HStack>
+              <Heading fontSize="xl" fontWeight="800" fontFamily="mono" color="fg.default" letterSpacing="-0.01em" lineHeight="1.2">
+                I went ahead and looked, {firstName}.
+                <br />
+                {flagged} {flagged === 1 ? 'thing' : 'things'} stand out{businessUnitName ? ` at ${businessUnitName}` : ''}.
+              </Heading>
+            </VStack>
+            {/* Telemetry readout */}
+            <VStack align="end" gap={1} display={{ base: 'none', sm: 'flex' }}>
+              <HStack gap={1.5}>
+                <Icon as={LuActivity} boxSize={3} color="fg.subtle" />
+                <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" letterSpacing="0.05em">
+                  SCAN <Text as="span" className="mx-blink" color="accent.teal">●</Text> 06:42 LOCAL
+                </Text>
+              </HStack>
+              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" letterSpacing="0.05em">
+                18 SIGNALS · {flagged} FLAGGED
+              </Text>
+            </VStack>
+          </Flex>
 
-      {/* Recommended action cards */}
-      <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
-        {agent.recommendedActions.map((action, idx) => {
-          const tag = TAG_META[action.tag];
-          return (
-            <Box
-              key={idx}
-              className="mx-q-row mx-agent-card"
-              style={{ animationDelay: `${idx * 60}ms` }}
-              p={3.5}
-              borderRadius="xl"
-              border="1px solid"
-              borderColor="border.default"
-              bg="bg.panel"
-              cursor="pointer"
-              transition="border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease"
-              _hover={{ borderColor: `${tag.color}/50`, boxShadow: 'md', transform: 'translateY(-2px)' }}
-              aria-label={`Ask: ${action.title}`}
-              onClick={() => onPromptClick(action.title)}
-            >
-              <VStack align="stretch" gap={2}>
+          {/* Insight cards */}
+          <SimpleGrid columns={{ base: 1, lg: 3 }} gap={3}>
+            {agent.proactiveInsights.map((insight, idx) => (
+              <InsightCard
+                key={idx}
+                insight={insight}
+                index={idx}
+                onClick={() => onPromptClick(insight.prompt)}
+              />
+            ))}
+          </SimpleGrid>
+        </VStack>
+      </Box>
+
+      {/* ─── Recommended threads (secondary) ────────────────────────────── */}
+      <VStack align="stretch" gap={3}>
+        <HStack gap={2.5} align="center">
+          <Text
+            fontSize="2xs"
+            fontWeight="700"
+            color="fg.subtle"
+            textTransform="uppercase"
+            letterSpacing="0.18em"
+            fontFamily="mono"
+            whiteSpace="nowrap"
+          >
+            Or pick a thread
+          </Text>
+          <Box flex="1" h="1px" bg="border.muted" />
+        </HStack>
+
+        <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
+          {agent.recommendedActions.map((action, idx) => {
+            const tag = TAG_META[action.tag];
+            return (
+              <HStack
+                key={idx}
+                className="mx-q-row mx-agent-card"
+                style={{ animationDelay: `${idx * 50}ms` }}
+                align="center"
+                gap={2.5}
+                px={3}
+                py={2.5}
+                borderRadius="lg"
+                border="1px solid"
+                borderColor="border.default"
+                bg="bg.panel"
+                cursor="pointer"
+                transition="border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease"
+                _hover={{ borderColor: `${tag.color}/50`, boxShadow: 'sm', transform: 'translateY(-1px)' }}
+                aria-label={`Ask: ${action.title}`}
+                onClick={() => onPromptClick(action.title)}
+              >
                 <Text
                   fontSize="2xs"
                   fontWeight="700"
@@ -589,7 +743,7 @@ function WorkspaceStep({
                   textTransform="uppercase"
                   letterSpacing="0.1em"
                   fontFamily="mono"
-                  w="fit-content"
+                  flexShrink={0}
                   px={1.5}
                   py={0.5}
                   borderRadius="sm"
@@ -597,21 +751,128 @@ function WorkspaceStep({
                 >
                   {tag.label}
                 </Text>
-                <Text fontSize="sm" fontWeight="500" color="fg.default" fontFamily="mono" lineHeight="1.45">
+                <Text fontSize="sm" fontWeight="500" color="fg.default" fontFamily="mono" lineHeight="1.35" flex="1" minW={0}>
                   {action.title}
                 </Text>
-                <HStack gap={1.5} justify="space-between">
-                  <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
-                    {action.source}
-                  </Text>
-                  <Icon className="mx-q-arrow" as={LuArrowRight} boxSize={3.5} color={tag.color} flexShrink={0} />
-                </HStack>
-              </VStack>
-            </Box>
-          );
-        })}
-      </SimpleGrid>
+                <Icon className="mx-q-arrow" as={LuArrowRight} boxSize={3.5} color={tag.color} flexShrink={0} />
+              </HStack>
+            );
+          })}
+        </SimpleGrid>
+      </VStack>
     </VStack>
+  );
+}
+
+// A single proactive finding — metric readout + delta + rationale + dig-in CTA.
+function InsightCard({
+  insight,
+  index,
+  onClick,
+}: {
+  insight: ProactiveInsight;
+  index: number;
+  onClick: () => void;
+}) {
+  const sev = SEVERITY_META[insight.severity];
+  const DeltaIcon = insight.deltaDir === 'up' ? LuArrowUpRight : insight.deltaDir === 'down' ? LuArrowDownRight : LuMinus;
+  return (
+    <Flex
+      className="mx-insight mx-agent-card"
+      style={{ animationDelay: `${index * 90}ms` }}
+      direction="column"
+      position="relative"
+      borderRadius="xl"
+      border="1px solid"
+      borderColor="border.default"
+      bg="bg.canvas"
+      overflow="hidden"
+      cursor="pointer"
+      transition="border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease"
+      _hover={{ borderColor: `${sev.color}/55`, boxShadow: 'md', transform: 'translateY(-3px)' }}
+      aria-label={`Dig into: ${insight.headline}`}
+      onClick={onClick}
+    >
+      {/* Severity-tinted wash, concentrated at the top-right */}
+      <Box
+        position="absolute"
+        inset={0}
+        bgGradient="to-bl"
+        gradientFrom={`${sev.color}/10`}
+        gradientTo="transparent"
+        pointerEvents="none"
+      />
+      {/* Oversized watermark glyph for depth */}
+      <Icon
+        as={sev.icon}
+        position="absolute"
+        top={-4}
+        right={-3}
+        boxSize={24}
+        color={sev.color}
+        opacity={0.07}
+        pointerEvents="none"
+        transform="rotate(-8deg)"
+      />
+
+      <VStack align="stretch" gap={2} p={3} flex="1" position="relative">
+        {/* Hero metric + delta, with severity label on the right */}
+        <HStack justify="space-between" align="center" gap={2}>
+          <HStack align="center" gap={2}>
+            <Text fontSize="2xl" fontWeight="800" color="fg.default" fontFamily="mono" letterSpacing="-0.03em" lineHeight="1">
+              {insight.value}
+            </Text>
+            <HStack
+              gap={1}
+              align="center"
+              color={sev.color}
+              bg={`${sev.color}/12`}
+              border="1px solid"
+              borderColor={`${sev.color}/22`}
+              px={1.5}
+              py={0.5}
+              borderRadius="full"
+              flexShrink={0}
+            >
+              <Icon as={DeltaIcon} boxSize={3} />
+              <Text fontSize="2xs" fontWeight="700" fontFamily="mono" whiteSpace="nowrap" letterSpacing="0.02em">
+                {insight.delta}
+              </Text>
+            </HStack>
+          </HStack>
+          <HStack gap={1} align="center" flexShrink={0}>
+            <Icon as={sev.icon} boxSize={3} color={sev.color} />
+            <Text
+              fontSize="2xs"
+              fontWeight="700"
+              color={sev.color}
+              textTransform="uppercase"
+              letterSpacing="0.12em"
+              fontFamily="mono"
+              whiteSpace="nowrap"
+            >
+              {sev.label}
+            </Text>
+          </HStack>
+        </HStack>
+
+        {/* Finding */}
+        <Text fontSize="sm" fontWeight="600" color="fg.default" fontFamily="mono" lineHeight="1.4">
+          {insight.headline}
+        </Text>
+        <Text fontSize="2xs" color="fg.muted" fontFamily="mono" lineHeight="1.5">
+          {insight.detail}
+        </Text>
+
+        {/* Dig-in CTA */}
+        <HStack gap={1.5} mt="auto" pt={1} color={sev.color}>
+          <Icon className="mx-dig" as={LuCornerDownRight} boxSize={3.5} />
+          <Text className="mx-dig" fontSize="2xs" fontWeight="700" fontFamily="mono" textTransform="uppercase" letterSpacing="0.1em">
+            Dig into this
+          </Text>
+        </HStack>
+      </VStack>
+    </Flex>
   );
 }
 

@@ -895,7 +895,7 @@ export default function ChatInterface({
           overflowY="auto"
           display="flex"
           flexDirection="column"
-          justifyContent={allMessages.length === 0 ? "center" : "flex-start"}
+          justifyContent={allMessages.length === 0 && container !== 'page' ? "center" : "flex-start"}
           onScroll={checkScrollPosition}
         >
           <Box width="100%" p={4}>
