@@ -10,7 +10,7 @@ import { resolveShare } from '@/lib/data/files.server';
 import { createObjectStore, isLocalObjectStore } from '@/lib/object-store';
 import type { StoryContent } from '@/lib/types';
 import { ogCacheKey, truncate } from '@/lib/og/og-helpers';
-import { StoryCoverCard, imageResponse, renderGenericOgImage, OG_SIZE } from '@/lib/og/og-cards';
+import { StoryCoverCard, imageResponse, renderGenericOgImage, loadCardAssets, OG_SIZE } from '@/lib/og/og-cards';
 
 export { OG_SIZE, renderGenericOgImage };
 
@@ -44,7 +44,7 @@ export async function renderShareOgImage(shareId: string): Promise<Response> {
 
   const { file } = resolved;
   const coverUrl = (file.meta as { preview?: { url?: string } } | null)?.preview?.url;
-  // No captured cover yet → branded generic card (the og:title still carries the title).
+  // No captured cover yet → the branded generic card (the og:title still carries the title).
   if (typeof coverUrl !== 'string' || !/^(https?:|data:)/.test(coverUrl)) return renderGenericOgImage();
 
   // Cache to S3 keyed on updated_at (skipped locally — the local-fs URL is auth-gated and
@@ -57,8 +57,9 @@ export async function renderShareOgImage(shareId: string): Promise<Response> {
 
   // Contrast the story: dark story → brightened backdrop (light top → black logo), else darkened.
   const tone = (file.content as StoryContent | null)?.colorMode === 'dark' ? 'light' : 'dark';
+  const assets = await loadCardAssets();
   const element = (
-    <StoryCoverCard coverUrl={(await blurCover(coverUrl, tone)) ?? coverUrl} title={truncate(file.name, 90)} tone={tone} />
+    <StoryCoverCard coverUrl={(await blurCover(coverUrl, tone)) ?? coverUrl} title={truncate(file.name, 90)} tone={tone} assets={assets} />
   );
 
   // An ImageResponse body is consumed once read, so regenerate on a cache-write failure.

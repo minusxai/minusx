@@ -1,12 +1,15 @@
 /**
- * Open Graph card layouts (server-only). No DB/connectors here, so this stays safe to
- * pull into any route's <head> metadata graph. Heavy share-card logic (resolve → blur →
- * compose) lives in og-image.tsx.
+ * Open Graph card layouts (server-only). No `lib/connections` here (which pulls the
+ * @polyglot-sql WASM), so this stays safe to render from the metadata image routes.
+ * Heavy share-card logic (resolve → blur → compose) lives in og-image.tsx.
  */
 import 'server-only';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import { ImageResponse } from 'next/og';
+import { getConfigsForMode } from '@/lib/data/configs.server';
+import { getBrandLogoExpandedUrl } from '@/lib/branding/whitelabel';
 import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
@@ -18,6 +21,15 @@ const FADE = 'linear-gradient(to bottom, rgba(247,246,241,0.3), rgba(247,246,241
 const COVER_GRADIENT =
   'linear-gradient(to bottom, rgba(8,13,16,0) 0%, rgba(8,13,16,0.06) 20%, rgba(7,14,16,0.64) 54%, rgba(5,10,12,0.97) 100%)';
 const COVER_ACCENT = '#3dd9bf';
+
+/** Resolved assets for one render: the d2 hero + the org's expanded wordmarks (light/dark). */
+export interface CardAssets {
+  bg: string;
+  /** Black wordmark — for light backgrounds. */
+  logo: string;
+  /** White wordmark — for dark backgrounds. */
+  logoLight: string;
+}
 
 // JetBrains Mono ships in public/fonts (also used by chart rendering).
 let fontCache: Array<{ name: string; data: Buffer; weight: 400 | 700; style: 'normal' }> | null = null;
@@ -40,19 +52,48 @@ export function imageResponse(element: React.ReactElement): ImageResponse {
   });
 }
 
-// d2 hero + minusx wordmarks, read once as base64 (satori needs inline image bytes).
-let assetCache: { bg: string; logo: string; logoLight: string } | null = null;
-function loadAssets() {
-  if (assetCache) return assetCache;
-  const root = path.join(process.cwd(), 'public');
-  const b64 = (p: string, mime: string) =>
-    `data:${mime};base64,${fs.readFileSync(path.join(root, p)).toString('base64')}`;
-  assetCache = {
-    bg: b64('hero/d2.jpg', 'image/jpeg'),
-    logo: b64('logo_full_dark.png', 'image/png'), // black wordmark (for light backgrounds)
-    logoLight: b64('logo_full.png', 'image/png'), // white wordmark (for dark backgrounds)
-  };
-  return assetCache;
+let bgCache: string | null = null;
+function loadBg(): string {
+  if (!bgCache) {
+    bgCache = `data:image/jpeg;base64,${fs.readFileSync(path.join(process.cwd(), 'public/hero/d2.jpg')).toString('base64')}`;
+  }
+  return bgCache;
+}
+
+/**
+ * Resolve a branding logo URL to an inline PNG data URL satori can render. Handles data
+ * URLs, remote URLs, and local `/public` paths, and normalizes everything (incl. SVG) to
+ * PNG via sharp. Cached per URL.
+ */
+// Keyed by logo URL (deterministic, not per-request data) → safe to share across requests.
+// eslint-disable-next-line no-restricted-syntax
+const logoCache = new Map<string, string>();
+async function resolveLogo(url: string): Promise<string> {
+  const cached = logoCache.get(url);
+  if (cached) return cached;
+  let bytes: Buffer;
+  if (url.startsWith('data:')) {
+    bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  } else if (/^https?:/.test(url)) {
+    const ab = (await fetch(url).then((r) => r.arrayBuffer())) as ArrayBuffer;
+    bytes = Buffer.from(new Uint8Array(ab));
+  } else {
+    bytes = fs.readFileSync(path.join(process.cwd(), 'public', url.replace(/^\//, '')));
+  }
+  const png = await sharp(bytes).png().toBuffer(); // normalize PNG/SVG/WebP → PNG
+  const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
+  logoCache.set(url, dataUrl);
+  return dataUrl;
+}
+
+/** Load the d2 hero + the org's expanded wordmarks (merged config already includes defaults). */
+export async function loadCardAssets(): Promise<CardAssets> {
+  const { branding } = (await getConfigsForMode()).config;
+  const [logo, logoLight] = await Promise.all([
+    resolveLogo(getBrandLogoExpandedUrl(branding, 'light')),
+    resolveLogo(getBrandLogoExpandedUrl(branding, 'dark')),
+  ]);
+  return { bg: loadBg(), logo, logoLight };
 }
 
 function heroBg(bg: string): React.ReactElement {
@@ -78,10 +119,9 @@ function madeWith(logo: string, color: string, w = 132): React.ReactElement {
  * with the brand mark top-right (black on a brightened/light top, white otherwise) and the
  * title anchored in the deep shadow at the bottom.
  */
-export function StoryCoverCard(props: { coverUrl: string; title: string; tone?: CoverTone }): React.ReactElement {
-  const { logo, logoLight } = loadAssets();
-  const topIsLight = (props.tone ?? 'light') === 'dark';
-  const topLogo = topIsLight ? logo : logoLight;
+export function StoryCoverCard(props: { coverUrl: string; title: string; tone: CoverTone; assets: CardAssets }): React.ReactElement {
+  const topIsLight = props.tone === 'dark';
+  const topLogo = topIsLight ? props.assets.logo : props.assets.logoLight;
   const topTextColor = topIsLight ? 'rgba(15,20,25,0.62)' : 'rgba(255,255,255,0.82)';
   return (
     <div style={{ display: 'flex', position: 'relative', width: '100%', height: '100%', backgroundColor: '#0d1117', fontFamily: 'JetBrains Mono', overflow: 'hidden' }}>
@@ -102,25 +142,24 @@ export function StoryCoverCard(props: { coverUrl: string; title: string; tone?: 
   );
 }
 
-/** Generic branded card: d2 hero + centered minusx logo + tagline. */
-export function GenericCard(): React.ReactElement {
-  const { bg, logo } = loadAssets();
+/** Generic branded card: d2 hero + centered wordmark (black, for the light hero) + tagline. */
+export function GenericCard(props: { assets: CardAssets }): React.ReactElement {
   const logoW = 380;
   const logoH = Math.round((logoW * 180) / 820);
   return (
     <div style={{ display: 'flex', position: 'relative', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: PAPER, fontFamily: 'JetBrains Mono', overflow: 'hidden' }}>
-      {heroBg(bg)}
+      {heroBg(props.assets.bg)}
       {heroFade()}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logo} width={logoW} height={logoH} alt="MinusX" />
+        <img src={props.assets.logo} width={logoW} height={logoH} alt="MinusX" />
         <div style={{ display: 'flex', fontSize: 27, color: INK_MUTED, marginTop: 24 }}>{MINUSX_TAGLINE}</div>
       </div>
     </div>
   );
 }
 
-/** Generic branded MinusX card — root fallback, un-captured stories, dead/revoked shares. */
+/** Generic branded card — root fallback, un-captured stories, dead/revoked shares. */
 export async function renderGenericOgImage(): Promise<Response> {
-  return imageResponse(<GenericCard />);
+  return imageResponse(<GenericCard assets={await loadCardAssets()} />);
 }
