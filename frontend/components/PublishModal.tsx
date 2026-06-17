@@ -222,26 +222,46 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
 
   const handlePublishAll = useCallback(async () => {
     setPublishError(null);
-    // If any file is a draft, open SaveFileModal for the first one.
-    // After naming it, handleSaveModalConfirm will run the remaining saves.
-    const firstDraft = dirtyFiles.find(f => f.draft);
-    if (firstDraft) {
-      const nonDraftIds = dirtyFiles.filter(f => !f.draft).map(f => f.id);
-      setPendingSaveAllIds(nonDraftIds);
-      setSelectedFileId(firstDraft.id);
-      setSaveModalFileId(firstDraft.id);
+    const drafts = dirtyFiles.filter(f => f.draft);
+    const nonDrafts = dirtyFiles.filter(f => !f.draft);
+
+    // No drafts → every dirty file is already named; batch-publish in one shot.
+    if (drafts.length === 0) {
+      setIsPublishing(true);
+      try {
+        const filesToPublish = [...dirtyFiles];
+        await publishAll();
+        filesToPublish.forEach(f => exitEditMode(f.id, f.type));
+      } catch (err) {
+        setPublishError(err instanceof Error ? err.message : 'Failed to publish. Please try again.');
+      } finally {
+        setIsPublishing(false);
+      }
       return;
     }
-    setIsPublishing(true);
-    try {
-      const filesToPublish = [...dirtyFiles];
-      await publishAll();
-      filesToPublish.forEach(f => exitEditMode(f.id, f.type));
-    } catch (err) {
-      setPublishError(err instanceof Error ? err.message : 'Failed to publish. Please try again.');
-    } finally {
+
+    // Drafts each need a name/folder. Batch-save the already-named edits up
+    // front, then walk a SaveFileModal for EVERY draft: open the first and queue
+    // the rest — handleSaveModalConfirm advances through them one at a time.
+    // (Previously only the non-drafts were queued, so when every file was a
+    // draft — the common "save a freshly-generated story + its questions" case —
+    // "Save All" saved just the first draft and stopped.)
+    if (nonDrafts.length > 0) {
+      setIsPublishing(true);
+      try {
+        await publishAll(nonDrafts.map(f => f.id));
+        nonDrafts.forEach(f => exitEditMode(f.id, f.type));
+      } catch (err) {
+        setPublishError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
+        setIsPublishing(false);
+        return;
+      }
       setIsPublishing(false);
     }
+    const [first, ...rest] = drafts;
+    setPendingSaveAllIds(rest.map(f => f.id));
+    setSelectedFileId(first.id);
+    setSaveModalFileId(first.id);
   }, [dirtyFiles, exitEditMode]);
 
   const handleSaveModalConfirm = useCallback(async (name: string, path: string) => {
@@ -250,23 +270,26 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     const slug = name.toLowerCase().replace(/\s+/g, '-');
     try {
       await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
-      setSaveModalFileId(null);
       await publishAll([saveModalFileId]);
       exitEditMode(saveModalFileId, file?.type);
-      // If this was triggered by Save All, continue saving remaining files
-      if (pendingSaveAllIds !== null) {
-        if (pendingSaveAllIds.length > 0) {
-          await publishAll(pendingSaveAllIds);
-          pendingSaveAllIds.forEach(id => {
-            const f = dirtyFiles.find(df => df.id === id);
-            exitEditMode(id, f?.type);
-          });
-        }
+      // Save All walk: advance to the next queued draft (each needs its own
+      // name/folder), re-opening the SaveFileModal for it. SaveFileModal's
+      // onSave fires onClose synchronously after this; because we set the next
+      // id *after* the awaits, it wins over that reset and the modal re-opens.
+      if (pendingSaveAllIds !== null && pendingSaveAllIds.length > 0) {
+        const [nextId, ...rest] = pendingSaveAllIds;
+        setPendingSaveAllIds(rest);
+        setSelectedFileId(nextId);
+        setSaveModalFileId(nextId);
+      } else {
         setPendingSaveAllIds(null);
+        setSaveModalFileId(null);
       }
     } catch (err) {
       // Same surface as handleSaveAll: a failed save must never be silent.
       setPublishError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
+      setPendingSaveAllIds(null);
+      setSaveModalFileId(null);
     }
   }, [saveModalFileId, dirtyFiles, exitEditMode, pendingSaveAllIds]);
 
@@ -329,6 +352,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                     Discard All
                   </Button>
                   <Button
+                    aria-label="Save all"
                     size="xs"
                     bg="accent.teal"
                     color="white"
@@ -460,6 +484,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     </Dialog.Root>
     {saveModalFileId !== null && (
       <SaveFileModal
+        key={saveModalFileId}
         isOpen={true}
         onClose={() => { setSaveModalFileId(null); setPendingSaveAllIds(null); }}
         fileId={saveModalFileId}

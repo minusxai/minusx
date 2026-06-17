@@ -90,8 +90,15 @@ export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext
 // `lib/api/tool-handlers.ts`. Handler reads `file_type`, `name`, `path`, `content`.
 const CreateFileParams = Type.Object({
   file_type: Type.String({ description: 'File type to create (question, dashboard, folder, etc.).' }),
-  name: Type.String(),
-  path: Type.String(),
+  name: Type.String({ description: 'Name of the new file/folder. It is slugified and appended to `path` to form the full path.' }),
+  // The handler treats `path` as the PARENT folder and builds the full path as
+  // `<path>/<slug(name)>`. Passing the new file's full path here (e.g. the folder
+  // you intend to create) double-appends the name and fails with "parent folder
+  // does not exist". Be explicit so the LLM gets it right.
+  path: Type.String({
+    description:
+      'PARENT folder to create the file in (must already exist), e.g. "/org" or "/org/reports". Do NOT include the new file/folder name — it is appended automatically from `name`. To create folder "X" under /org, pass path:"/org" and name:"X" (NOT path:"/org/X").',
+  }),
   // Object type (not Type.Unknown) so the model is told to send a JSON OBJECT, not
   // a stringified JSON (which previously got spread char-by-char into the content).
   // The union also accepts a string defensively — the CreateFile handler in
