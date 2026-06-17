@@ -65,6 +65,9 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
       isPublicRoute ||
       isSharePublicPath ||
       hasGuestSession ||
+      // Root metadata image route (generic OG card) — must be crawler-reachable.
+      // The per-share `/l/<id>/opengraph-image` is already covered by `/l/` above.
+      pathname.startsWith('/opengraph-image') ||
       pathname.startsWith('/api/auth') ||
       pathname.startsWith('/api/public/slack-chart') ||
       pathname.startsWith('/api/orgs/register') ||

@@ -62,4 +62,8 @@ export class LocalFsAdapter implements ObjectStore {
   async exists(key: string): Promise<boolean> {
     return existsSync(this.resolvePath(key));
   }
+
+  publicUrl(key: string): string {
+    return `/api/object-store/serve/${key}`;
+  }
 }

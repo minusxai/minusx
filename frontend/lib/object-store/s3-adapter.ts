@@ -99,4 +99,8 @@ export class S3Adapter implements ObjectStore {
       return false;
     }
   }
+
+  publicUrl(key: string): string {
+    return `${this.publicUrlBase}/${key}`;
+  }
 }

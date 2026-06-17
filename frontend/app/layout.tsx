@@ -13,6 +13,7 @@ import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitel
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
+import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
 import FileModal from '@/components/modals/FileModal';
@@ -45,10 +46,13 @@ export async function generateMetadata(): Promise<Metadata> {
       config = result.config;
     } catch {}
   }
+  const title = config.branding.agentName;
   return {
-    title: config.branding.agentName,
-    description: "Your data stack, staffed by agents",
+    title,
+    description: MINUSX_TAGLINE,
     icons: { icon: config.branding.favicon },
+    openGraph: { title, description: MINUSX_TAGLINE, siteName: config.branding.displayName, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description: MINUSX_TAGLINE },
   };
 }
 

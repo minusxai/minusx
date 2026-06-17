@@ -78,7 +78,7 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
   // narrow to hold STORY_MAX_W).
   return (
     <Box aria-label="Story page" w="100%" minH="420px" display="flex" justifyContent="center">
-      <Box w="100%" maxW={STORY_MAX_W}>
+      <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId } : {})}>
         <ScaledStoryFrame>
           <AgentHtml html={content.story} width={STORY_W} readOnly={readOnly} />
         </ScaledStoryFrame>
