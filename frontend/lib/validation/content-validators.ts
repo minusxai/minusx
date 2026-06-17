@@ -56,11 +56,9 @@ function describeError(e: Ajv.ErrorObject): string {
   }
 }
 
-// Every `Nullable(T)` field compiles to `anyOf: [T, null]`, so a single wrong
-// value makes Ajv (with allErrors) emit THREE errors: the real "should be <T>",
-// a redundant "should be null", and the "anyOf" wrapper. Keep only the specific
-// branch and report expected-vs-received, so the agent/user gets one actionable
-// line instead of a wall of noise it can't act on.
+// `Nullable(T)` = `anyOf:[T,null]`, so one bad value emits three Ajv errors
+// (the real one + "should be null" + the "anyOf" wrapper). Keep only the specific
+// branch and report expected-vs-received instead of a wall of noise.
 function formatErrors(errors: Ajv.ErrorObject[] | null | undefined): string {
   if (!errors?.length) return 'unknown error';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

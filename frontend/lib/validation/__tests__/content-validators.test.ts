@@ -1,12 +1,5 @@
-/**
- * content-validators error formatting.
- *
- * Ajv with `allErrors` emits a 3-error burst for every `Nullable(T)` field
- * (anyOf:[T,null]) — the real "should be <T>", a redundant "should be null", and
- * an "anyOf" wrapper — and its messages don't say what was actually received.
- * formatErrors() de-noises that and reports expected-vs-got so the agent (and
- * users) get an actionable message it can recover from.
- */
+// content-validators: formatErrors() de-noises the Ajv `Nullable` 3-error burst
+// and reports expected-vs-got, so validation messages are actionable.
 import { describe, it, expect } from 'vitest';
 import { validateFileState } from '../content-validators';
 

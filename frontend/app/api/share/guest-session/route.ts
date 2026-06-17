@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
 
     const mode = modeFromPath(file.path);
     const home_folder = storyHomeFolder(file.path, mode);
+    // Physical parent folder of the story — the chat context path + view scope.
+    const folderPath = file.path.slice(0, file.path.lastIndexOf('/'));
 
     // Preserve identity across reloads: reuse the existing cookie's identity when it's
     // for the same share, unless the caller supplies a fresh name/email.
@@ -67,6 +69,20 @@ export async function POST(request: NextRequest) {
 
     const canChat = SHARE_GUEST_CHAT_ENABLED && (skipLead || hasLead || reuse?.canChat === true);
 
+    // First open by a new visitor (no cookie yet); reloads reuse the cookie.
+    if (!reuse) {
+      appEventRegistry.publish(AppEvents.SHARE_OPEN, {
+        mode,
+        fileId: file.id,
+        nonce,
+        storyName: file.name,
+        folderPath,
+        anonymous: !hasLead,
+        uid,
+        userEmail: email,
+      });
+    }
+
     // Lead capture: a real name/email was submitted (not anonymous skip_lead and not a
     // cookie reuse). Publish a SHARE_LEAD app-event for downstream lead handling.
     if (hasLead) {
@@ -78,7 +94,7 @@ export async function POST(request: NextRequest) {
         name,
         email,
         userEmail: email,
-        folderPath: file.path.slice(0, file.path.lastIndexOf('/')),
+        folderPath,
       });
     }
 
@@ -87,8 +103,7 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json({
       ok: true,
       fileId: file.id,
-      // Physical parent folder of the story — the chat context path + the guest's view scope.
-      folderPath: file.path.slice(0, file.path.lastIndexOf('/')),
+      folderPath,
       home_folder,
       mode,
       uid,

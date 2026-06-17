@@ -19,6 +19,7 @@ export const AppEvents = {
   USER_DELETED:             'user:deleted',
   FEEDBACK:                 'user:feedback',
   SHARE_LEAD:               'share:lead',
+  SHARE_OPEN:               'share:open',
 } as const;
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
@@ -48,4 +49,6 @@ export interface AppEventPayloads {
   // Anonymous guest submitted name/email on a public share (lead capture).
   // `userEmail` mirrors `email` for consistency with other events' attribution.
   'share:lead':               BaseEventPayload & { fileId: number; nonce: string; storyName: string; name: string; email: string; userEmail: string; folderPath: string };
+  // First open of a public share by a new visitor. `anonymous` = no lead captured.
+  'share:open':               BaseEventPayload & { fileId: number; nonce: string; storyName: string; folderPath: string; anonymous: boolean; uid: number; userEmail?: string };
 }
