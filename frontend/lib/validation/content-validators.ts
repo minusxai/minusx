@@ -8,7 +8,9 @@ import { atlasSchema } from './atlas-json-schemas';
 import type { FileType, QuestionContent, DashboardContent, StoryContent } from '@/lib/types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
 
-const ajv = new Ajv({ allErrors: true });
+// `verbose` so each error carries the received `data` — needed to report
+// expected-vs-got in formatErrors() below.
+const ajv = new Ajv({ allErrors: true, verbose: true });
 ajv.addSchema(atlasSchema, 'atlas');
 
 // Validators compiled once at module load — not per-call
@@ -18,9 +20,60 @@ const validators: Record<string, Ajv.ValidateFunction> = {
   StoryContent: ajv.compile({ $ref: 'atlas#/$defs/StoryContent' }),
 };
 
+/** Short, human/LLM-readable description of a received value (type + a snippet). */
+function describeValue(v: unknown): string {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  const t = typeof v;
+  if (t === 'object') {
+    const s = JSON.stringify(v);
+    return `object ${s.length > 60 ? s.slice(0, 57) + '…' : s}`;
+  }
+  if (t === 'string') {
+    const s = v as string;
+    return `string "${s.length > 40 ? s.slice(0, 37) + '…' : s}"`;
+  }
+  return `${t} ${String(v)}`;
+}
+
+/** Turn one Ajv error into an actionable "<path>: expected X, got Y" line. */
+function describeError(e: Ajv.ErrorObject): string {
+  const path = e.dataPath || 'root';
+  // params is a per-keyword union; we only read a few well-known fields.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const params = e.params as any;
+  switch (e.keyword) {
+    case 'type':
+      return `${path}: expected ${params.type}, got ${describeValue(e.data)}`;
+    case 'required':
+      return `${path}: missing required property '${params.missingProperty}'`;
+    case 'enum':
+      return `${path}: must be one of ${JSON.stringify(params.allowedValues)}, got ${describeValue(e.data)}`;
+    case 'additionalProperties':
+      return `${path}: unexpected property '${params.additionalProperty}'`;
+    default:
+      return `${path}: ${e.message}`;
+  }
+}
+
+// Every `Nullable(T)` field compiles to `anyOf: [T, null]`, so a single wrong
+// value makes Ajv (with allErrors) emit THREE errors: the real "should be <T>",
+// a redundant "should be null", and the "anyOf" wrapper. Keep only the specific
+// branch and report expected-vs-received, so the agent/user gets one actionable
+// line instead of a wall of noise it can't act on.
 function formatErrors(errors: Ajv.ErrorObject[] | null | undefined): string {
   if (!errors?.length) return 'unknown error';
-  return errors.map(e => `${e.dataPath || 'root'}: ${e.message}`).join('; ');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const signal = errors.filter(e => e.keyword !== 'anyOf' && (e.params as any)?.type !== 'null');
+  const lines = Array.from(new Set((signal.length ? signal : errors).map(describeError)));
+  let msg = lines.join('; ');
+  // Bridge the single most-guessed mistake to the supported path: the agent keeps
+  // stuffing per-series {name,color,label} objects into xCols/yCols (rejected),
+  // when colors belong in styleConfig.colors and series renames in SQL aliases.
+  if (/\.(xCols|yCols)\b/.test(msg)) {
+    msg += '. Note: xCols/yCols must be arrays of column-name strings — for per-series colors use styleConfig.colors ({"0":"<colorKey>"}), and rename series via SQL aliases.';
+  }
+  return msg;
 }
 
 type ContentValidationInput =
