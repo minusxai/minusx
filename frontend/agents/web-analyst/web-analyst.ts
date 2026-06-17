@@ -61,11 +61,12 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   // Call-time stream options (spread blindly into `streamSimple`). Default
   // `reasoning: 'low'` so adaptive thinking is on out of the box;
   // `ANALYST_AGENT_MODEL_CONFIG.options` overrides per-deployment.
-  // `webSearch` enables Anthropic's native web search (server-side tool) —
-  // only supported by the Anthropic provider, so disabled for others.
+  // `webSearch` enables native server-side web search via the pi patch — supported on
+  // Anthropic (Messages API) and OpenAI (Responses API). Disabled for other providers
+  // (the patch only injects the tool for these two), where it would be a silent no-op.
   static readonly callOptions = {
     reasoning: 'low',
-    webSearch: (getAnalystModelConfig()?.provider ?? 'anthropic') === 'anthropic',
+    webSearch: ((p) => p === 'anthropic' || p === 'openai')(getAnalystModelConfig()?.provider ?? 'anthropic'),
     ...(getAnalystModelOptions() ?? {}),
   };
 
