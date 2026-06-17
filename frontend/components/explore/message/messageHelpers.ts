@@ -35,7 +35,9 @@ export const deduplicateMessages = (conversation: Conversation) => {
         messages.push(...uniqueStreamingMessages);
     }
 
-    // 3. Add pending tools (executing, not yet completed)
+    // 3. Pending tools — executing AND just-resolved. completeToolCall sets `result`
+    // but only the next updateConversation moves it into `messages`; keep resolved
+    // ones visible here so they don't vanish during that window.
     if (conversation.pending_tool_calls) {
         // Check against original completed messages only
         const completedToolIds = new Set(
@@ -45,18 +47,19 @@ export const deduplicateMessages = (conversation: Conversation) => {
         );
 
         const pendingTools = conversation.pending_tool_calls
-        .filter(p => !p.result && !completedToolIds.has(p.toolCall.id))
+        .filter(p => !completedToolIds.has(p.toolCall.id))
         .map(pendingTool => ({
             role: 'tool' as const,
             tool_call_id: pendingTool.toolCall.id,
-            content: '(executing...)',
+            content: pendingTool.result?.content ?? '(executing...)',
             run_id: (pendingTool.toolCall as any)._run_id || 'pending',
             function: {
             name: (pendingTool.toolCall as any).agent || pendingTool.toolCall.function.name,
             arguments: JSON.stringify((pendingTool.toolCall as any).args || pendingTool.toolCall.function.arguments)
             },
-            created_at: new Date().toISOString(),
-            isPending: true
+            created_at: pendingTool.result?.created_at ?? new Date().toISOString(),
+            details: pendingTool.result?.details,
+            isPending: !pendingTool.result
         }));
 
         messages.push(...pendingTools);
