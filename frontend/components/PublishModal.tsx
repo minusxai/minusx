@@ -240,12 +240,8 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
       return;
     }
 
-    // Drafts each need a name/folder. Batch-save the already-named edits up
-    // front, then walk a SaveFileModal for EVERY draft: open the first and queue
-    // the rest — handleSaveModalConfirm advances through them one at a time.
-    // (Previously only the non-drafts were queued, so when every file was a
-    // draft — the common "save a freshly-generated story + its questions" case —
-    // "Save All" saved just the first draft and stopped.)
+    // Drafts each need a name/folder: batch-save the already-named edits, then
+    // walk a SaveFileModal for every draft (handleSaveModalConfirm advances them).
     if (nonDrafts.length > 0) {
       setIsPublishing(true);
       try {
@@ -272,10 +268,8 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
       await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
       await publishAll([saveModalFileId]);
       exitEditMode(saveModalFileId, file?.type);
-      // Save All walk: advance to the next queued draft (each needs its own
-      // name/folder), re-opening the SaveFileModal for it. SaveFileModal's
-      // onSave fires onClose synchronously after this; because we set the next
-      // id *after* the awaits, it wins over that reset and the modal re-opens.
+      // Advance to the next queued draft, re-opening its SaveFileModal. Setting
+      // the next id after the awaits beats SaveFileModal's onClose reset.
       if (pendingSaveAllIds !== null && pendingSaveAllIds.length > 0) {
         const [nextId, ...rest] = pendingSaveAllIds;
         setPendingSaveAllIds(rest);

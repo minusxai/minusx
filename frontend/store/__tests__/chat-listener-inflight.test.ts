@@ -1,15 +1,6 @@
-/**
- * chatListener in-flight guard.
- *
- * The listener fires on every `updateConversation`, and each completed tool call
- * dispatches another `updateConversation`. The eligibility filter only checks
- * `!t.result`, but `result` isn't set until the async `executeToolCall` resolves
- * — so without an in-flight guard, a concurrent firing re-runs a tool call that
- * is still executing. With many pending calls that explodes into a re-execution
- * storm (hammering the server and re-creating draft files faster than Discard
- * All can clear them). This locks in the guard: a re-fire must NOT re-run a call
- * that is already in flight.
- */
+// chatListener in-flight guard: a listener re-fire must NOT re-run a tool call
+// that is still executing (result not set yet) — otherwise concurrent firings
+// explode into a re-execution storm.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,

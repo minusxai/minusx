@@ -1,17 +1,6 @@
-/**
- * PublishModal "Save All" — multi-draft walk.
- *
- * Bug: clicking "Save All" when every dirty file is a freshly-created DRAFT
- * saved only the FIRST draft (the SaveFileModal opened once, named one file,
- * then stopped). `handlePublishAll` queued only NON-draft ids, which is empty
- * when all files are drafts — so the remaining drafts were never walked.
- *
- * This drives the real component over real Redux dirty state: one "Save All"
- * click should walk a SaveFileModal for EACH draft in turn, save them all, then
- * auto-close once nothing is left unsaved.
- *
- * jsdom component test (aria-label queries only).
- */
+// PublishModal "Save All": when every dirty file is a draft, one click must walk
+// a SaveFileModal for EACH draft and save them all (the bug saved only the first).
+// jsdom component test, aria-label queries only.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
