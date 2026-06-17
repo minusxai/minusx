@@ -47,7 +47,7 @@ export async function generateMetadata(): Promise<Metadata> {
   }
   return {
     title: config.branding.agentName,
-    description: "Next-generation business intelligence",
+    description: "Your data stack, staffed by agents",
     icons: { icon: config.branding.favicon },
   };
 }
