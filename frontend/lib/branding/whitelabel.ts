@@ -39,8 +39,10 @@ export interface OrgBranding {
   displayName: string;  // Workspace display name
   agentName: string;    // Agent name
   favicon: string;      // Favicon URL
-  logoLight?: string;   // Light mode logo URL
-  logoDark?: string;    // Dark mode logo URL
+  logoLight?: string;   // Light mode logo (icon) URL
+  logoDark?: string;    // Dark mode logo (icon) URL
+  logoExpanded?: string;     // Light mode full wordmark URL (e.g. social cards)
+  logoExpandedDark?: string; // Dark mode full wordmark URL
 }
 
 export interface OrgLinks {
@@ -83,6 +85,8 @@ export const DEFAULT_CONFIG: OrgConfig = {
     favicon: '/favicon.ico',
     logoLight: '/logox_dark.svg',
     logoDark: '/logox.svg',
+    logoExpanded: '/logo_full_dark.png',
+    logoExpandedDark: '/logo_full.png',
   },
   links: {
     docsUrl: 'https://docs.minusx.ai',
@@ -169,4 +173,15 @@ export function getBrandLogoUrl(
   }
 
   return branding?.logoLight || branding?.logoDark || DEFAULT_CONFIG.branding.logoLight || '/logox_dark.svg';
+}
+
+/** Full wordmark logo URL for the given color mode (used by social/OG cards). */
+export function getBrandLogoExpandedUrl(
+  branding: Partial<OrgBranding> | undefined,
+  colorMode: 'light' | 'dark',
+): string {
+  if (colorMode === 'dark') {
+    return branding?.logoExpandedDark || branding?.logoExpanded || DEFAULT_CONFIG.branding.logoExpandedDark || '/logo_full.png';
+  }
+  return branding?.logoExpanded || branding?.logoExpandedDark || DEFAULT_CONFIG.branding.logoExpanded || '/logo_full_dark.png';
 }

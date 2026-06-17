@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, CopyObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   OBJECT_STORE_BUCKET,
@@ -91,6 +91,16 @@ export class S3Adapter implements ObjectStore {
     }));
   }
 
+  async get(key: string): Promise<Buffer | null> {
+    try {
+      const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const bytes = await res.Body?.transformToByteArray();
+      return bytes ? Buffer.from(bytes) : null;
+    } catch {
+      return null;
+    }
+  }
+
   async exists(key: string): Promise<boolean> {
     try {
       await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
@@ -98,5 +108,9 @@ export class S3Adapter implements ObjectStore {
     } catch {
       return false;
     }
+  }
+
+  publicUrl(key: string): string {
+    return `${this.publicUrlBase}/${key}`;
   }
 }

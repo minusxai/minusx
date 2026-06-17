@@ -1105,6 +1105,23 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (revoked) await this._writeShares(file, next);
     return revoked;
   }
+
+  /**
+   * Persist the object-store KEY of a story's composed OG share card on `meta.preview`
+   * (a derived artifact, like `meta.shares` — kept out of the agent-authored content). The
+   * public `/l/<id>/opengraph-image` route reads the bytes back by this key. Any user who
+   * can access the story may set it (it's a render of what they already see).
+   */
+  async setStoryPreview(fileId: number, user: EffectiveUser, key: string): Promise<void> {
+    const file = await DocumentDB.getById(fileId);
+    if (!file) throw new FileNotFoundError(fileId);
+    const overrides = await this._getOverrides(user);
+    if (!canAccessFile(file, user, overrides)) {
+      throw new AccessPermissionError('You do not have permission to access this file');
+    }
+    if (file.type !== 'story') throw new UserFacingError('Only data stories have preview images');
+    await DocumentDB.updateMeta(fileId, { ...(file.meta ?? {}), preview: { key, version: file.updated_at } });
+  }
 }
 
 // Export singleton instance - PREFER using this
@@ -1124,6 +1141,7 @@ export const moveFile = FilesAPI.moveFile.bind(FilesAPI);
 export const batchMoveFiles = FilesAPI.batchMoveFiles.bind(FilesAPI);
 export const deleteFile = FilesAPI.deleteFile.bind(FilesAPI);
 export const resolveShare = FilesAPI.resolveShare.bind(FilesAPI);
+export const setStoryPreview = FilesAPI.setStoryPreview.bind(FilesAPI);
 export const getShares = FilesAPI.getShares.bind(FilesAPI);
 export const addShare = FilesAPI.addShare.bind(FilesAPI);
 export const revokeShare = FilesAPI.revokeShare.bind(FilesAPI);

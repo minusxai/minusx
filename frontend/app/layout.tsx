@@ -13,6 +13,7 @@ import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitel
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
+import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
 import FileModal from '@/components/modals/FileModal';
@@ -45,10 +46,20 @@ export async function generateMetadata(): Promise<Metadata> {
       config = result.config;
     } catch {}
   }
+  const title = config.branding.agentName;
+  // Absolute og:image to the generic card route, built from the real request host (Next's
+  // file-convention image only emits the dev localhost host, unusable behind ngrok/prod).
+  const hdrs = await headers();
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? '';
+  const proto = (hdrs.get('x-forwarded-proto') ?? 'http').split(',')[0].trim();
+  const origin = host ? `${proto}://${host}` : '';
+  const images = [{ url: `${origin}/opengraph-image`, width: 1200, height: 630, type: 'image/png' }];
   return {
-    title: config.branding.agentName,
-    description: "Next-generation business intelligence",
+    title,
+    description: MINUSX_TAGLINE,
     icons: { icon: config.branding.favicon },
+    openGraph: { title, description: MINUSX_TAGLINE, siteName: config.branding.displayName, type: 'website', images },
+    twitter: { card: 'summary_large_image', title, description: MINUSX_TAGLINE, images },
   };
 }
 
