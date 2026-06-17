@@ -1,76 +1,36 @@
 /**
- * Open Graph SHARE card generation (server-only). Resolves a public story, blurs its
- * captured cover (meta.preview), and composes the cover card; falls back to the generic
- * branded card when there's no cover yet (or a dead/revoked link). Imports files.server,
- * so only the per-share route may import this — never the generic root card.
+ * Compose a story's social-share card (server-only): blur the captured story screenshot,
+ * then overlay the title + brand mark via the cover card. Called once when a story is made
+ * public; the composed PNG is uploaded and stored, then served directly as og:image — there
+ * is no on-crawl rendering. Imports next/og + sharp, so only the preview route uses this.
  */
 import 'server-only';
 import sharp from 'sharp';
-import { resolveShare } from '@/lib/data/files.server';
-import { createObjectStore, isLocalObjectStore } from '@/lib/object-store';
-import type { StoryContent } from '@/lib/types';
-import { ogCacheKey, truncate } from '@/lib/og/og-helpers';
-import { StoryCoverCard, imageResponse, renderGenericOgImage, loadCardAssets, OG_SIZE } from '@/lib/og/og-cards';
+import { StoryCoverCard, imageResponse, loadCardAssets, type CoverTone, type CardAssets } from '@/lib/og/og-cards';
 
-export { OG_SIZE, renderGenericOgImage };
-
-/**
- * Pre-blur the cover with sharp (satori can't do CSS blur). Accepts a data URL or remote
- * URL; brightens for the light tone / darkens for the dark tone so the frost reads cleanly.
- * Returns a blurred JPEG data URL, or null on failure.
- */
-async function blurCover(coverUrl: string, tone: 'light' | 'dark'): Promise<string | null> {
-  try {
-    let input: Buffer;
-    if (coverUrl.startsWith('data:')) {
-      input = Buffer.from(coverUrl.slice(coverUrl.indexOf(',') + 1), 'base64');
-    } else {
-      const ab = (await fetch(coverUrl).then((r) => r.arrayBuffer())) as ArrayBuffer;
-      input = Buffer.from(new Uint8Array(ab));
-    }
-    const brightness = tone === 'light' ? 1.12 : 0.85;
-    const out = await sharp(input).blur(5).modulate({ brightness }).jpeg({ quality: 80 }).toBuffer();
-    return `data:image/jpeg;base64,${out.toString('base64')}`;
-  } catch (err) {
-    console.warn('[og] cover blur failed:', err);
-    return null;
+/** Pre-blur the screenshot (satori can't do CSS blur), tone-matched so the frost reads well. */
+async function blurScreenshot(screenshot: string, tone: CoverTone): Promise<string> {
+  let input: Buffer;
+  if (screenshot.startsWith('data:')) {
+    input = Buffer.from(screenshot.slice(screenshot.indexOf(',') + 1), 'base64');
+  } else {
+    const ab = (await fetch(screenshot).then((r) => r.arrayBuffer())) as ArrayBuffer;
+    input = Buffer.from(new Uint8Array(ab));
   }
+  const brightness = tone === 'light' ? 1.12 : 0.85;
+  const out = await sharp(input).blur(5).modulate({ brightness }).jpeg({ quality: 80 }).toBuffer();
+  return `data:image/jpeg;base64,${out.toString('base64')}`;
 }
 
-/** Per-story cover card for a public share, with S3 caching in non-local deployments. */
-export async function renderShareOgImage(shareId: string): Promise<Response> {
-  const resolved = await resolveShare(shareId).catch(() => null);
-  if (!resolved) return renderGenericOgImage();
-
-  const { file } = resolved;
-  const coverUrl = (file.meta as { preview?: { url?: string } } | null)?.preview?.url;
-  // No captured cover yet → the branded generic card (the og:title still carries the title).
-  if (typeof coverUrl !== 'string' || !/^(https?:|data:)/.test(coverUrl)) return renderGenericOgImage();
-
-  // Cache to S3 keyed on updated_at (skipped locally — the local-fs URL is auth-gated and
-  // not crawler-reachable, so dev always renders fresh).
-  const store = isLocalObjectStore() ? null : createObjectStore();
-  const key = ogCacheKey(file.id, file.updated_at);
-  if (store && (await store.exists(key).catch(() => false))) {
-    return Response.redirect(store.publicUrl(key), 302);
-  }
-
-  // Contrast the story: dark story → brightened backdrop (light top → black logo), else darkened.
-  const tone = (file.content as StoryContent | null)?.colorMode === 'dark' ? 'light' : 'dark';
-  const assets = await loadCardAssets();
-  const element = (
-    <StoryCoverCard coverUrl={(await blurCover(coverUrl, tone)) ?? coverUrl} title={truncate(file.name, 90)} tone={tone} assets={assets} />
-  );
-
-  // An ImageResponse body is consumed once read, so regenerate on a cache-write failure.
-  if (store) {
-    try {
-      const buf = Buffer.from(await imageResponse(element).arrayBuffer());
-      await store.put(key, buf, 'image/png');
-      return new Response(buf, { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600, s-maxage=86400' } });
-    } catch (err) {
-      console.warn('[og] cache write failed, serving fresh:', err);
-    }
-  }
-  return imageResponse(element);
+/** Compose the final 1200×630 card PNG from a story screenshot (data URL or remote URL). */
+export async function composeStoryCard(
+  screenshot: string,
+  title: string,
+  tone: CoverTone,
+  assets?: CardAssets,
+): Promise<Buffer> {
+  const cardAssets = assets ?? (await loadCardAssets());
+  const blurred = await blurScreenshot(screenshot, tone);
+  const res = imageResponse(<StoryCoverCard coverUrl={blurred} title={title} tone={tone} assets={cardAssets} />);
+  return Buffer.from(await res.arrayBuffer());
 }

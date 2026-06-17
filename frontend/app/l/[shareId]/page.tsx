@@ -19,11 +19,15 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   if (!resolved) return {};
   const title = resolved.file.name;
   const description = truncate((resolved.file.content as StoryContent | null)?.description?.trim() || MINUSX_TAGLINE, 200);
+  // The composed card (stored once at "make public"); when absent the page inherits the
+  // generic root og:image (app/opengraph-image.tsx).
+  const cardUrl = (resolved.file.meta as { preview?: { url?: string } } | null)?.preview?.url;
+  const images = cardUrl ? [cardUrl] : undefined;
   return {
     title,
     description,
-    openGraph: { title, description, type: 'article' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title, description, type: 'article', ...(images ? { images } : {}) },
+    twitter: { card: 'summary_large_image', title, description, ...(images ? { images } : {}) },
   };
 }
 
