@@ -65,6 +65,12 @@ const nextConfig: NextConfig = {
     '@duckdb/node-bindings-linux-arm64', '@duckdb/node-bindings-linux-x64',
     '@duckdb/node-bindings-win32-arm64', '@duckdb/node-bindings-win32-x64',
     '@resvg/resvg-js', '@electric-sql/pglite', '@mariozechner/pi-ai',
+    // '@polyglot-sql/sdk' — WASM SQL parser. If bundled, Turbopack emits its .wasm as a
+    //   `/_next/static/media/*.wasm` asset URL that can't be fetched during SSR, throwing
+    //   "Failed to parse URL from …polyglot_sql_wasm_bg.wasm" on EVERY page's server render
+    //   (the browser then recovers via client render, masking it). External → loaded from
+    //   node_modules with a real file path, so SSR works.
+    '@polyglot-sql/sdk',
   ],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.
