@@ -23,6 +23,7 @@ interface SmartEmbeddedQuestionContainerProps {
   index?: number;  // Optional index for numbering (e.g., #01, #02)
   dashboardId?: number;  // Source dashboard ID (appended as ?dashboard= to question links)
   readOnly?: boolean;  // Public read-only view (e.g. shared story): no actions menu, plain title (no auth-gated link)
+  enableDrilldown?: boolean;  // Click-to-drill-down on data points (off for story embeds, on for dashboards)
 }
 
 function SmartEmbeddedQuestionContainerInner({
@@ -36,6 +37,7 @@ function SmartEmbeddedQuestionContainerInner({
   index = 0,
   dashboardId,
   readOnly = false,
+  enableDrilldown = true,
 }: SmartEmbeddedQuestionContainerProps) {
   const { explainQuestion } = useExplainQuestion();
 
@@ -236,6 +238,7 @@ function SmartEmbeddedQuestionContainerInner({
           filePath={file?.path}
           externalParameters={parametersToUse}
           externalParamValues={externalParamValues}
+          enableDrilldown={enableDrilldown}
         />
       ) : (
         <Box flex="1" display="flex" alignItems="center" justifyContent="center" minH="120px">
@@ -309,6 +312,7 @@ const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainer
   prev.editMode === next.editMode &&
   prev.index === next.index &&
   prev.dashboardId === next.dashboardId &&
-  prev.readOnly === next.readOnly
+  prev.readOnly === next.readOnly &&
+  prev.enableDrilldown === next.enableDrilldown
 );
 export default SmartEmbeddedQuestionContainer;

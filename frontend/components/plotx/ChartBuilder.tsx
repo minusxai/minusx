@@ -71,6 +71,8 @@ interface ChartBuilderProps {
   trendConfig?: TrendConfig
   onTrendConfigChange?: (config: TrendConfig) => void
   exportBranding?: Partial<OrgBranding>
+  /** Click-to-drill-down on data points. Off for read-only embeds (shared story). */
+  enableDrilldown?: boolean
 }
 
 interface GroupedColumns {
@@ -79,7 +81,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding, enableDrilldown = true }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const configPalette = config.chartColorPalette
@@ -496,7 +498,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
               colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}
               formulaResults={formulaResults}
-              onCellClick={handlePivotCellClick}
+              onCellClick={enableDrilldown ? handlePivotCellClick : undefined}
               columnFormats={columnFormats}
               valueColumns={pivotConfig?.values.map(v => v.column)}
             />
@@ -561,7 +563,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   yAxisColumns,
                   yRightCols: yRightColumns,
                   height: undefined,
-                  onChartClick: handleChartClick,
+                  onChartClick: enableDrilldown ? handleChartClick : undefined,
                   chartTitle,
                   showChartTitle,
                   colorPalette,

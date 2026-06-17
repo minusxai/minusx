@@ -1,51 +1,38 @@
 'use client';
 
 import { memo, useMemo } from 'react';
-import { VStack, Box, HStack, Heading, Text, Icon, Grid, GridItem } from '@chakra-ui/react';
-import { LuSparkles, LuSearch, LuChartLine } from 'react-icons/lu';
+import { VStack, Grid, GridItem } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
-import { selectCompanyName, selectEffectiveUser } from '@/store/authSlice';
+import { selectEffectiveUser } from '@/store/authSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import {
+  ExploreBrandHeader,
+  SuggestedQuestionsList,
+  DEFAULT_SUGGESTED_PROMPTS,
+  toSuggestedPrompts,
+} from './ExploreWelcome';
 
 interface ExampleQuestionsProps {
   onPromptClick: (prompt: string) => void;
   container?: 'page' | 'sidebar';
   colSpan: any;
   colStart: any;
+  /** Custom prompts (e.g. story-specific questions). Falls back to the generic defaults when empty. */
+  customPrompts?: string[];
 }
 
 const greetings = [
   (name: string) => `Hi ${name}, what would you like to explore today?`,
   (name: string) => `Hey ${name}, ready to dig into some data?`,
-  (name: string) => `Welcome back ${name}! What can I help you find?`,
+  (name: string) => `Welcome back ${name}! What can I help you analyze?`,
   (name: string) => `What's on your mind today, ${name}?`,
 ];
 
-const suggestedPrompts = [
-  {
-    icon: LuSparkles,
-    text: "What all can you do?",
-    category: "Capability"
-  },
-  {
-    icon: LuSearch,
-    text: "Describe our main dashboards / questions",
-    category: "Search"
-  },
-  {
-    icon: LuChartLine,
-    text: "Show me an interesting visualization",
-    category: "Analysis"
-  }
-];
-
-function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: ExampleQuestionsProps) {
+function ExampleQuestionsImpl({ onPromptClick, colSpan, colStart, customPrompts }: ExampleQuestionsProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const companyName = useAppSelector(selectCompanyName);
   const user = useAppSelector(selectEffectiveUser);
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
-  const isMinusx = agentName.toLowerCase() === 'minusx';
   const firstName = user?.name?.split(' ')[0].split('@')[0] || 'there';
   // greetings is module-level and stable; greeting is intentionally
   // re-randomised on firstName change only — Math.random() in useMemo is
@@ -56,131 +43,19 @@ function ExampleQuestionsImpl({ onPromptClick, container, colSpan, colStart }: E
     return greetings[index](firstName);
   }, [firstName]);
 
+  const prompts = useMemo(
+    () => (customPrompts && customPrompts.length > 0
+      ? toSuggestedPrompts(customPrompts)
+      : DEFAULT_SUGGESTED_PROMPTS),
+    [customPrompts],
+  );
+
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
       <GridItem colSpan={colSpan} colStart={colStart}>
         <VStack gap={6} align="center" justify="center" flex="1" py={6}>
-          {/* Welcome Header */}
-          <VStack gap={2}>
-            {isMinusx ? (
-              <Box
-                position="relative"
-                borderRadius="lg"
-                overflow="hidden"
-                p={4}
-              >
-                <Box
-                  position="absolute"
-                  inset={0}
-                  pointerEvents="none"
-                />
-                <img
-                  src={colorMode === 'light' ? '/minusx_explore_dark.svg' : '/minusx_explore.svg'}
-                  alt="minusx explore"
-                  style={{ width: '380px', height: '160px', position: 'relative' }}
-                />
-              </Box>
-            ) : (
-              <>
-                <Box
-                  p={3}
-                  borderRadius="full"
-                  bg="accent.teal/10"
-                  border="2px solid"
-                  borderColor="accent.teal/30"
-                >
-                  <Box
-                    aria-label="Workspace logo"
-                    role="img"
-                    boxSize={6}
-                    flexShrink={0}
-                  />
-                </Box>
-                <Heading
-                  fontSize="xl"
-                  fontWeight="800"
-                  fontFamily="mono"
-                  color="fg.default"
-                  letterSpacing="-0.02em"
-                >
-                  Ask {agentName} anything
-                </Heading>
-              </>
-            )}
-            <Text
-              color="fg.muted"
-              fontSize="sm"
-              fontFamily="mono"
-            //   textAlign="center"
-            >
-              {greeting}
-            </Text>
-          </VStack>
-
-          {/* Suggested Prompts Grid */}
-            <Box width="100%">
-              <Text
-                fontSize="xs"
-                fontWeight="700"
-                color="fg.subtle"
-                textTransform="uppercase"
-                letterSpacing="0.05em"
-                mb={2}
-                fontFamily="mono"
-              >
-                Try these questions
-              </Text>
-              <VStack gap={2} align="stretch">
-                {suggestedPrompts.map((prompt, index) => (
-                  <Box
-                    key={index}
-                    p={3}
-                    borderRadius="md"
-                    border="1px solid"
-                    borderColor="border.default"
-                    bg="bg.muted"
-                    cursor="pointer"
-                    transition="all 0.2s"
-                    onClick={() => onPromptClick(prompt.text)}
-                    _hover={{
-                      borderColor: 'accent.teal',
-                      bg: 'accent.teal/5',
-                      transform: 'translateX(4px)'
-                    }}
-                  >
-                    <HStack gap={2.5}>
-                      <Box
-                        p={1.5}
-                        borderRadius="md"
-                        bg="accent.teal/10"
-                      >
-                        <Icon as={prompt.icon} boxSize={3.5} color="accent.teal" />
-                      </Box>
-                      <VStack gap={0} align="start" flex="1">
-                        <Text
-                          fontSize="2xs"
-                          fontWeight="600"
-                          color="accent.teal"
-                          textTransform="uppercase"
-                          letterSpacing="0.05em"
-                          fontFamily="mono"
-                        >
-                          {prompt.category}
-                        </Text>
-                        <Text
-                          fontSize="sm"
-                          fontWeight="500"
-                          color="fg.default"
-                          fontFamily="mono"
-                        >
-                          {prompt.text}
-                        </Text>
-                      </VStack>
-                    </HStack>
-                  </Box>
-                ))}
-              </VStack>
-            </Box>
+          <ExploreBrandHeader agentName={agentName} colorMode={colorMode} subtitle={greeting} />
+          <SuggestedQuestionsList prompts={prompts} onPromptClick={onPromptClick} />
         </VStack>
       </GridItem>
     </Grid>

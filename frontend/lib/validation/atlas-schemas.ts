@@ -298,6 +298,14 @@ export const StoryContent = Type.Object({
     'height — a missing height defaults to 400px. Width may be explicit px or a percentage (e.g. 100% inside a ' +
     'grid/flex cell); height percentages do NOT work. Minimums are enforced: height below 340px and width below ' +
     '320px are clamped UP, which will shift your layout — never author chart boxes smaller than that.'),
+  suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
+    'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
+    'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +
+    'the drop in Q3?"), not generic. Omit or leave null to fall back to the default generic prompts.' }))),
+  colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
+    "Forces the color mode (chart theming + tile/chrome) for PUBLIC SHARED viewers, who can't toggle it " +
+    'themselves. Pick the one that matches the story design (e.g. "dark" for a dark editorial layout). ' +
+    'Omit or leave null to use the viewer default.'))),
 }, { title: 'StoryContent' });
 export type StoryContent = Static<typeof StoryContent>;
 

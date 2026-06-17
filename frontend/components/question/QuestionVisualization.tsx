@@ -30,6 +30,8 @@ export interface ContainerConfig {
     showTitle: boolean;
   };
     fixError: boolean;
+    /** Click-to-drill-down on charts/tables. Defaults on; off for read-only embeds (shared story). */
+    enableDrilldown?: boolean;
 }
 
 interface QuestionVisualizationProps {
@@ -423,7 +425,7 @@ function QuestionVisualizationInner({
                 )}
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
-                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} />
+                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} />
                   </Box>
                 )}
                 {(currentState?.vizSettings?.type === 'line' ||
@@ -475,6 +477,7 @@ function QuestionVisualizationInner({
                       trendConfig={currentState.vizSettings?.trendConfig ?? undefined}
                       onTrendConfigChange={onTrendConfigChange}
                       exportBranding={appConfig.branding}
+                      enableDrilldown={config.enableDrilldown !== false}
                     />
                   </Box>
                 )}
