@@ -49,6 +49,8 @@ export interface ObjectStore {
   copyObject(sourceKey: string, destKey: string): Promise<void>;
   /** True if an object exists at `key`. */
   exists(key: string): Promise<boolean>;
+  /** Read an object's bytes, or null if missing. */
+  get(key: string): Promise<Buffer | null>;
   /** Public URL an object at `key` is served from (no network call). */
   publicUrl(key: string): string;
 }

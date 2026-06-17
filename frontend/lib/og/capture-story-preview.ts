@@ -2,20 +2,20 @@
  * Capture a story's social-share card, client-side, when the story is made public.
  *
  * Screenshots the rendered story (charts + custom CSS) via html-to-image and POSTs it to
- * the preview route, which composes the final card (blur + title + logo) and stores it as
- * the story's og:image. Best-effort — returns the stored card URL, or null on failure
- * (e.g. the story isn't on-screen). Requires the `[data-story-capture]` element, which is
- * present when the share modal opens over the story page.
+ * the preview route, which composes the final card (blur + title + logo) and stores it.
+ * Best-effort — returns true on success, false on failure (e.g. the story isn't on-screen).
+ * Requires the `[data-story-capture]` element, present when the share modal opens over the
+ * story page.
  */
 import { toJpeg } from 'html-to-image';
 
 const OG_ASPECT = 1200 / 630;
 
-export async function captureStoryPreview(fileId: number): Promise<string | null> {
+export async function captureStoryPreview(fileId: number): Promise<boolean> {
   try {
     const el = document.querySelector(`[data-story-capture="${fileId}"]`) as HTMLElement | null;
     const width = el?.offsetWidth ?? 0;
-    if (!el || !width) return null;
+    if (!el || !width) return false;
     const height = Math.round(width / OG_ASPECT); // top band at OG aspect
     const screenshot = await toJpeg(el, {
       width,
@@ -30,11 +30,9 @@ export async function captureStoryPreview(fileId: number): Promise<string | null
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ screenshot }),
     });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return (json?.data?.url as string | undefined) ?? null;
+    return res.ok;
   } catch (err) {
     console.warn('[story-og] preview capture failed:', err);
-    return null;
+    return false;
   }
 }

@@ -1,6 +1,6 @@
 // Covers the OG share-card stack: pure helpers, image composition (satori + sharp produce
-// real PNGs), and the share page's server-rendered metadata (og:image from the stored card,
-// and no title leak for revoked links).
+// real PNGs), the public share-image route (serves the stored card, falls back to generic),
+// and the share page's server-rendered metadata (incl. no title leak for revoked links).
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -13,7 +13,9 @@ import { ogCacheKey, truncate, MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 import { renderGenericOgImage } from '@/lib/og/og-cards';
 import { composeStoryCard } from '@/lib/og/og-image';
 import { generateMetadata } from '@/app/l/[shareId]/page';
+import { GET as ogRoute } from '@/app/l/[shareId]/og/route';
 import { addShare, revokeShare, resolveShare, setStoryPreview, createFile } from '@/lib/data/files.server';
+import { createObjectStore } from '@/lib/object-store';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -34,6 +36,12 @@ async function makeStory(name: string, description: string | null): Promise<numb
 }
 
 const meta = (shareId: string) => generateMetadata({ params: Promise.resolve({ shareId }) });
+const renderRoute = (shareId: string) =>
+  ogRoute(new Request('http://localhost/') as never, { params: Promise.resolve({ shareId }) });
+async function expectPng(res: Response) {
+  expect(res.headers.get('content-type')).toContain('image/png');
+  expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+}
 
 // A 1×1 JPEG data URL stands in for the client-captured story screenshot.
 const SCREENSHOT =
@@ -54,9 +62,7 @@ describe('OG image composition', () => {
   setupTestDb(getTestDbPath('og_compose'));
 
   it('renders the generic branded card', async () => {
-    const res = await renderGenericOgImage();
-    expect(res.headers.get('content-type')).toContain('image/png');
-    expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+    await expectPng(await renderGenericOgImage());
   });
 
   it('composes a story card PNG from a screenshot', async () => {
@@ -65,26 +71,43 @@ describe('OG image composition', () => {
   });
 });
 
+describe('share opengraph-image route', () => {
+  setupTestDb(getTestDbPath('og_route'));
+
+  it('falls back to the generic card for an invalid / un-captured share', async () => {
+    await expectPng(await renderRoute('does-not-exist-abcdefghij'));
+  });
+
+  it('serves the stored card bytes when present', async () => {
+    const id = await makeStory('Stored', 'x');
+    const key = ogCacheKey(id, 'testversion');
+    const bytes = Buffer.from('PNG-PLACEHOLDER-'.repeat(100)); // >1000 bytes
+    await createObjectStore().put(key, bytes, 'image/png');
+    await setStoryPreview(id, ADMIN, key);
+    const { shareableId } = await addShare(id, ADMIN);
+
+    const res = await renderRoute(shareableId);
+    expect(res.headers.get('content-type')).toContain('image/png');
+    expect(Buffer.from(await res.arrayBuffer()).length).toBe(bytes.length);
+  });
+});
+
 describe('share page generateMetadata', () => {
   setupTestDb(getTestDbPath('og_metadata'));
 
-  it('sets og:image to the stored card and emits og/twitter tags', async () => {
+  it('emits og/twitter tags from the resolved story (image is auto-wired by the route)', async () => {
     const id = await makeStory('Q3 Revenue Surge', 'How the West drove a 28% jump');
-    await setStoryPreview(id, ADMIN, 'https://cdn.example.com/og/card.png');
     const { shareableId } = await addShare(id, ADMIN);
-
     const m = await meta(shareableId);
     expect(m.title).toBe('Q3 Revenue Surge');
-    expect((m.openGraph as { images?: string[] } | undefined)?.images).toEqual(['https://cdn.example.com/og/card.png']);
+    expect(m.description).toBe('How the West drove a 28% jump');
     expect((m.twitter as { card?: string } | undefined)?.card).toBe('summary_large_image');
   });
 
-  it('omits images (inherits generic) when no card is stored, and uses the tagline with no description', async () => {
+  it('falls back to the tagline when the story has no description', async () => {
     const id = await makeStory('Untitled', null);
     const { shareableId } = await addShare(id, ADMIN);
-    const m = await meta(shareableId);
-    expect(m.description).toBe(MINUSX_TAGLINE);
-    expect((m.openGraph as { images?: string[] } | undefined)?.images).toBeUndefined();
+    expect((await meta(shareableId)).description).toBe(MINUSX_TAGLINE);
   });
 
   it('returns empty metadata for invalid and revoked links (no title leak)', async () => {

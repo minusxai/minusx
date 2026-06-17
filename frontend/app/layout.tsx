@@ -47,12 +47,19 @@ export async function generateMetadata(): Promise<Metadata> {
     } catch {}
   }
   const title = config.branding.agentName;
+  // Absolute og:image to the generic card route, built from the real request host (Next's
+  // file-convention image only emits the dev localhost host, unusable behind ngrok/prod).
+  const hdrs = await headers();
+  const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? '';
+  const proto = (hdrs.get('x-forwarded-proto') ?? 'http').split(',')[0].trim();
+  const origin = host ? `${proto}://${host}` : '';
+  const images = [{ url: `${origin}/opengraph-image`, width: 1200, height: 630, type: 'image/png' }];
   return {
     title,
     description: MINUSX_TAGLINE,
     icons: { icon: config.branding.favicon },
-    openGraph: { title, description: MINUSX_TAGLINE, siteName: config.branding.displayName, type: 'website' },
-    twitter: { card: 'summary_large_image', title, description: MINUSX_TAGLINE },
+    openGraph: { title, description: MINUSX_TAGLINE, siteName: config.branding.displayName, type: 'website', images },
+    twitter: { card: 'summary_large_image', title, description: MINUSX_TAGLINE, images },
   };
 }
 

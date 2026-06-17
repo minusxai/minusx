@@ -18,6 +18,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:qa": "playwright test --config=playwright.qa.config.ts",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",
+    "generate-og:generic": "tsx --conditions react-server scripts/generate-og-default.tsx",
     "postinstall": "node scripts/copy-duckdb-wasm.mjs && patch-package --error-on-fail",
     "benchmark:dab": "node --env-file=.env --max-old-space-size=8192 node_modules/.bin/tsx --conditions react-server benchmarks/dataanalystbench.ts",
     "dump-llm-calls": "node --env-file=.env node_modules/.bin/tsx scripts/dump-llm-calls.ts"

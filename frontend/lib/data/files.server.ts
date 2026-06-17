@@ -1107,12 +1107,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   /**
-   * Persist a pre-rendered OG preview image for a story (its `<bg>` for share cards).
-   * Captured client-side from the actual rendered story and stored on `meta.preview`
-   * (a derived artifact, like `meta.shares` — kept out of the agent-authored content).
-   * Any user who can access the story may set it (it's just a screenshot of what they see).
+   * Persist the object-store KEY of a story's composed OG share card on `meta.preview`
+   * (a derived artifact, like `meta.shares` — kept out of the agent-authored content). The
+   * public `/l/<id>/opengraph-image` route reads the bytes back by this key. Any user who
+   * can access the story may set it (it's a render of what they already see).
    */
-  async setStoryPreview(fileId: number, user: EffectiveUser, previewUrl: string): Promise<void> {
+  async setStoryPreview(fileId: number, user: EffectiveUser, key: string): Promise<void> {
     const file = await DocumentDB.getById(fileId);
     if (!file) throw new FileNotFoundError(fileId);
     const overrides = await this._getOverrides(user);
@@ -1120,7 +1120,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
     if (file.type !== 'story') throw new UserFacingError('Only data stories have preview images');
-    await DocumentDB.updateMeta(fileId, { ...(file.meta ?? {}), preview: { url: previewUrl, version: file.updated_at } });
+    await DocumentDB.updateMeta(fileId, { ...(file.meta ?? {}), preview: { key, version: file.updated_at } });
   }
 }
 

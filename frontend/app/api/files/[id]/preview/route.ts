@@ -33,9 +33,10 @@ export const POST = withAuth(async (
     const tone = (file.content as StoryContent | null)?.colorMode === 'dark' ? 'light' : 'dark';
 
     const card = await composeStoryCard(screenshot, truncate(file.name, 90), tone);
-    const url = await createObjectStore().put(ogCacheKey(file.id, file.updated_at), card, 'image/png');
-    await setStoryPreview(id, user, url);
-    return successResponse({ url });
+    const key = ogCacheKey(file.id, file.updated_at);
+    await createObjectStore().put(key, card, 'image/png');
+    await setStoryPreview(id, user, key);
+    return successResponse({ ok: true });
   } catch (error) {
     return handleApiError(error);
   }

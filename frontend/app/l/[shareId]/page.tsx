@@ -1,8 +1,22 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { resolveShare } from '@/lib/data/files.server';
 import type { StoryContent } from '@/lib/types';
 import { MINUSX_TAGLINE, truncate } from '@/lib/og/og-helpers';
 import ShareClientBoundary from './ShareClientBoundary';
+
+/** Absolute origin from the request host — correct behind ngrok/proxy/prod (Next's
+ *  file-convention og:image only resolves to the dev localhost, so we set images by hand). */
+async function requestOrigin(): Promise<string> {
+  try {
+    const hdrs = await headers();
+    const host = hdrs.get('x-forwarded-host') ?? hdrs.get('host') ?? '';
+    const proto = (hdrs.get('x-forwarded-proto') ?? 'http').split(',')[0].trim();
+    return host ? `${proto}://${host}` : '';
+  } catch {
+    return '';
+  }
+}
 
 interface SharePageProps {
   params: Promise<{ shareId: string }>;
@@ -19,15 +33,16 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   if (!resolved) return {};
   const title = resolved.file.name;
   const description = truncate((resolved.file.content as StoryContent | null)?.description?.trim() || MINUSX_TAGLINE, 200);
-  // The composed card (stored once at "make public"); when absent the page inherits the
-  // generic root og:image (app/opengraph-image.tsx).
-  const cardUrl = (resolved.file.meta as { preview?: { url?: string } } | null)?.preview?.url;
-  const images = cardUrl ? [cardUrl] : undefined;
+  // Absolute og:image to the public per-share route (?v= busts caches on edit). Set
+  // explicitly (with dimensions) rather than via the file convention, which would only
+  // emit the dev localhost host.
+  const image = `${await requestOrigin()}/l/${shareId}/og?v=${resolved.file.version}`;
+  const images = [{ url: image, width: 1200, height: 630, type: 'image/png' }];
   return {
     title,
     description,
-    openGraph: { title, description, type: 'article', ...(images ? { images } : {}) },
-    twitter: { card: 'summary_large_image', title, description, ...(images ? { images } : {}) },
+    openGraph: { title, description, type: 'article', images },
+    twitter: { card: 'summary_large_image', title, description, images },
   };
 }
 

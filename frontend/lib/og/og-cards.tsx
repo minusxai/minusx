@@ -9,7 +9,7 @@ import path from 'path';
 import sharp from 'sharp';
 import { ImageResponse } from 'next/og';
 import { getConfigsForMode } from '@/lib/data/configs.server';
-import { getBrandLogoExpandedUrl } from '@/lib/branding/whitelabel';
+import { getBrandLogoExpandedUrl, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
@@ -144,7 +144,7 @@ export function StoryCoverCard(props: { coverUrl: string; title: string; tone: C
 
 /** Generic branded card: d2 hero + centered wordmark (black, for the light hero) + tagline. */
 export function GenericCard(props: { assets: CardAssets }): React.ReactElement {
-  const logoW = 380;
+  const logoW = 450;
   const logoH = Math.round((logoW * 180) / 820);
   return (
     <div style={{ display: 'flex', position: 'relative', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: PAPER, fontFamily: 'JetBrains Mono', overflow: 'hidden' }}>
@@ -153,13 +153,40 @@ export function GenericCard(props: { assets: CardAssets }): React.ReactElement {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={props.assets.logo} width={logoW} height={logoH} alt="MinusX" />
-        <div style={{ display: 'flex', fontSize: 27, color: INK_MUTED, marginTop: 24 }}>{MINUSX_TAGLINE}</div>
+        <div style={{ display: 'flex', fontSize: 22, color: INK_MUTED, marginTop: 18 }}>{MINUSX_TAGLINE.toLowerCase()}</div>
       </div>
     </div>
   );
 }
 
-/** Generic branded card — root fallback, un-captured stories, dead/revoked shares. */
+/**
+ * Generic branded card — root fallback, un-captured stories, dead/revoked shares.
+ *
+ * For the default brand logo this is a fixed image, so serve a committed
+ * `public/ogs/generic.png` (zero compute per crawl). Only when an org configures a custom
+ * expanded logo — or the static file is missing — do we render it with satori.
+ * (Regenerate the static with `npm run generate-og:generic`.)
+ */
+const GENERIC_STATIC = path.join(process.cwd(), 'public/ogs/generic.png');
 export async function renderGenericOgImage(): Promise<Response> {
+  const { branding } = (await getConfigsForMode()).config;
+  const usesDefaultLogo =
+    getBrandLogoExpandedUrl(branding, 'light') === DEFAULT_CONFIG.branding.logoExpanded &&
+    getBrandLogoExpandedUrl(branding, 'dark') === DEFAULT_CONFIG.branding.logoExpandedDark;
+  if (usesDefaultLogo && fs.existsSync(GENERIC_STATIC)) {
+    return new Response(new Uint8Array(fs.readFileSync(GENERIC_STATIC)), {
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600, s-maxage=86400' },
+    });
+  }
   return imageResponse(<GenericCard assets={await loadCardAssets()} />);
+}
+
+/** Render the DEFAULT-branded generic card to a PNG buffer (used by `npm run generate-og`). */
+export async function renderDefaultGenericCardBuffer(): Promise<Buffer> {
+  const [logo, logoLight] = await Promise.all([
+    resolveLogo(getBrandLogoExpandedUrl(DEFAULT_CONFIG.branding, 'light')),
+    resolveLogo(getBrandLogoExpandedUrl(DEFAULT_CONFIG.branding, 'dark')),
+  ]);
+  const assets: CardAssets = { bg: loadBg(), logo, logoLight };
+  return Buffer.from(await imageResponse(<GenericCard assets={assets} />).arrayBuffer());
 }

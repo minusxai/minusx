@@ -8,7 +8,6 @@ import { LuCopy, LuCheck, LuTrash2, LuLink, LuRefreshCw } from 'react-icons/lu';
 import type { ShareRecord } from '@/lib/auth/share-tokens';
 import { createShareLink, listShareLinks, revokeShareLink } from '@/lib/api/share-links';
 import { captureStoryPreview } from '@/lib/og/capture-story-preview';
-import { useFile } from '@/lib/hooks/file-state-hooks';
 
 interface ShareModalProps {
   fileId: number;
@@ -31,11 +30,6 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [previewBust, setPreviewBust] = useState(0); // cache-bust the preview <img> on re-capture
-  const [freshUrl, setFreshUrl] = useState<string | null>(null);
-
-  const { fileState } = useFile(fileId) ?? {};
-  const storedUrl = (fileState?.meta as { preview?: { url?: string } } | null | undefined)?.preview?.url;
-  const previewUrl = freshUrl ?? storedUrl ?? null;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -58,8 +52,7 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
       const created = await createShareLink(fileId);
       setShares((prev) => [...prev, created.record]);
       // Now that it's public, compose + store the social-share card from the rendered story.
-      const url = await captureStoryPreview(fileId);
-      if (url) setFreshUrl(url);
+      await captureStoryPreview(fileId);
       setPreviewBust((b) => b + 1);
     } catch {
       setError('Could not create a link.');
@@ -72,9 +65,8 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
     setRefreshing(true);
     setError(null);
     try {
-      const url = await captureStoryPreview(fileId);
-      if (url) setFreshUrl(url);
-      else setError('Could not refresh the preview — open the story, then try again.');
+      const ok = await captureStoryPreview(fileId);
+      if (!ok) setError('Could not refresh the preview — open the story, then try again.');
       setPreviewBust((b) => b + 1);
     } finally {
       setRefreshing(false);
@@ -150,19 +142,15 @@ export default function ShareModal({ fileId, fileName, isOpen, onClose }: ShareM
                       <LuRefreshCw /> Refresh
                     </Button>
                   </HStack>
-                  {previewUrl ? (
-                    <Box borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" bg="bg.subtle">
-                      {/* The composed card stored for this story (cache-busted on refresh). */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`${previewUrl}${previewUrl.includes('?') ? '&' : '?'}v=${previewBust}`}
-                        alt="Social share preview"
-                        style={{ width: '100%', aspectRatio: '1200 / 630', objectFit: 'cover', display: 'block' }}
-                      />
-                    </Box>
-                  ) : (
-                    <Text fontSize="xs" color="fg.subtle">Generating preview…</Text>
-                  )}
+                  <Box borderWidth="1px" borderColor="border.default" borderRadius="md" overflow="hidden" bg="bg.subtle">
+                    {/* The composed card served from the public route (cache-busted on refresh). */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/l/${live[0].shareableId}/og?v=${previewBust}`}
+                      alt="Social share preview"
+                      style={{ width: '100%', aspectRatio: '1200 / 630', objectFit: 'cover', display: 'block' }}
+                    />
+                  </Box>
                 </VStack>
               )}
 
