@@ -714,6 +714,15 @@ chatListenerMiddleware.startListening({
 /**
  * updateConversation | setUserInputResult → Execute pending frontend tools automatically.
  */
+// Tool calls currently executing. The listener fires on every
+// `updateConversation`, and each completed tool call dispatches another
+// `updateConversation` — so without this guard, concurrent firings re-run tools
+// whose async `executeToolCall` hasn't set a `result` yet. That explodes into a
+// re-execution storm (hammering the server and re-creating draft files faster
+// than Discard All can clear them). tool_call_id is unique per call.
+// eslint-disable-next-line no-restricted-syntax -- client-side Redux listener; per-tab ephemeral execution state, no data leakage
+const inFlightToolCalls = new Set<string>();
+
 chatListenerMiddleware.startListening({
   matcher: isAnyOf(updateConversation, setUserInputResult),
   effect: async (action: any, listenerApi) => {
@@ -794,12 +803,20 @@ chatListenerMiddleware.startListening({
             }
           }));
         }
+      } finally {
+        inFlightToolCalls.delete(pendingTool.toolCall.id);
       }
     };
 
     const eligible = realConversation.pending_tool_calls.filter(t =>
-      !t.result && !t.userInputs?.some(ui => ui.result === undefined)
+      !t.result &&
+      !t.userInputs?.some(ui => ui.result === undefined) &&
+      !inFlightToolCalls.has(t.toolCall.id)
     );
+    // Mark in-flight synchronously — before the awaits below — so a concurrent
+    // listener firing (from completeToolCall → updateConversation) skips these
+    // instead of double-running them.
+    for (const t of eligible) inFlightToolCalls.add(t.toolCall.id);
 
     // Group by fileId: same fileId → serial; different fileId → parallel
     const groups = new Map<string, typeof eligible>();
