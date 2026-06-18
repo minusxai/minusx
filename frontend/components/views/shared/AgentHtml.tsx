@@ -21,6 +21,14 @@ interface AgentHtmlProps {
   height?: number;
   /** Public read-only render (shared story): embedded charts hide actions + auth-gated links. */
   readOnly?: boolean;
+  /**
+   * Fluid mode (mobile): render at 100% of the container width and let the
+   * authored flow layout reflow, instead of pinning to `width`px (which the
+   * parent then transform-scales). A small CSS shim caps fixed-width chart
+   * embeds / media to the viewport so they don't overflow. Designed for the
+   * agent's encouraged "stacked full-width sections" layout.
+   */
+  fluid?: boolean;
 }
 
 // Placeholder sizing floors/defaults: title bar (~40px) + chart minHeight
@@ -43,7 +51,7 @@ const DEFAULT_CHART_H = 400;
  * document's <style> blocks (web fonts) are hoisted to document.head —
  * font-faces declared inside shadow trees don't load.
  */
-export default function AgentHtml({ html, width, height, readOnly = false }: AgentHtmlProps) {
+export default function AgentHtml({ html, width, height, readOnly = false, fluid = false }: AgentHtmlProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fontTagRef = useRef<HTMLStyleElement | null>(null);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
@@ -60,6 +68,20 @@ export default function AgentHtml({ html, width, height, readOnly = false }: Age
     // wouldn't execute — and is stripped anyway).
     root.innerHTML = `<style data-mx-app-styles></style>${sanitized}`;
     mirrorAppStyles(root);
+
+    // Fluid (mobile) shim: cap fixed-width chart embeds and media to the
+    // viewport so the authored 1280px layout reflows instead of overflowing.
+    // Appended last so it wins ties against the story's own rules. Charts keep
+    // their fixed px height (ECharts re-fits width); we never touch <canvas>.
+    if (fluid) {
+      const shim = document.createElement('style');
+      shim.setAttribute('data-mx-fluid-shim', '');
+      shim.textContent =
+        '[data-question-id]{max-width:100%!important;width:100%!important}' +
+        'img,svg,video,table,pre{max-width:100%!important}' +
+        'img,video{height:auto!important}';
+      root.appendChild(shim);
+    }
 
     // Hoist @import (web fonts) to document.head — font-faces don't load
     // inside shadow trees. One reused tag, removed on unmount.
@@ -109,7 +131,7 @@ export default function AgentHtml({ html, width, height, readOnly = false }: Age
     // necessarily effect → state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTargets(found);
-  }, [sanitized]);
+  }, [sanitized, fluid]);
 
   // Remove the hoisted font tag when the story unmounts.
   useEffect(() => () => {
@@ -153,11 +175,14 @@ export default function AgentHtml({ html, width, height, readOnly = false }: Age
       <Box
         ref={hostRef}
         aria-label="Story document"
-        width={`${width}px`}
+        width={fluid ? '100%' : `${width}px`}
         height={height !== undefined ? `${height}px` : 'auto'}
         position="relative"
         overflow="hidden"
-        bg="white"
+        // Fluid stories paint their own full-bleed background; a transparent
+        // host avoids white gutters when the story's max-width is narrower than
+        // the column (and lets dark stories sit on a dark page).
+        bg={fluid ? 'transparent' : 'white'}
         color="black"
         // Pin every inheritable typography property inline: inherited
         // properties cross the shadow boundary, so this is the document's
