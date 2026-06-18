@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { shallowEqual } from 'react-redux';
-import { Box, Center, Flex, HStack, Icon, Spinner, Text } from '@chakra-ui/react';
-import { LuChevronRight, LuMessageSquare } from 'react-icons/lu';
+import { Box, Center, Dialog, Flex, HStack, Icon, Portal, Spinner, Text } from '@chakra-ui/react';
+import { LuChevronRight, LuMessageSquare, LuX } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -14,6 +14,7 @@ import { selectMergedContent } from '@/store/filesSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { useFile } from '@/lib/hooks/file-state-hooks';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import StoryView from '@/components/views/story/StoryView';
 import ChatInterface from '@/components/explore/ChatInterface';
 import ShareLeadGate from './ShareLeadGate';
@@ -123,6 +124,15 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
   // Collapse toggle for the chat panel — mirrors the right sidebar sidechat.
   const [chatCollapsed, setChatCollapsed] = useState(false);
 
+  // Mobile: the desktop right panel is hidden (display none < md), so chat lives
+  // in a bottom sheet opened by a FAB. Its ChatInterface reads the same active
+  // conversation from Redux as the (hidden) desktop panel, so state is shared.
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+
+  // Agent name for the chat FAB label (e.g. "Ask MinusX").
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName || 'MinusX';
+
   if (status === 'minting') {
     return <Center h="100vh" bg="bg.canvas"><Spinner size="xl" color="primary" /></Center>;
   }
@@ -224,6 +234,100 @@ export default function SharePageClient({ shareId }: { shareId: string }) {
           railWidth={CHAT_RAIL_WIDTH}
           onOpenChat={() => setChatCollapsed(false)}
         />
+      )}
+
+      {/* Mobile chat: the desktop right panel is hidden below md, so chat opens
+          as a bottom sheet (pattern lifted from MobileRightSidebar) hosting the
+          same ChatInterface / ShareLeadGate leaf components as the desktop panel.
+          No sidebarPendingMessage handoff here — the guest types directly into
+          the sheet — so there's no double-consume with the hidden desktop input. */}
+      {showChat && (
+        <Box display={{ base: 'block', md: 'none' }}>
+          {!mobileChatOpen && (
+            <Box
+              as="button"
+              aria-label="Open chat"
+              onClick={() => setMobileChatOpen(true)}
+              position="fixed"
+              bottom={4}
+              right={4}
+              zIndex={99}
+              display="flex"
+              alignItems="center"
+              gap={2}
+              px={4}
+              py={3}
+              borderRadius="full"
+              bg="accent.teal"
+              color="white"
+              boxShadow="0 4px 12px rgba(0, 0, 0, 0.2)"
+              cursor="pointer"
+              _active={{ opacity: 0.9 }}
+            >
+              <Icon as={LuMessageSquare} boxSize={5} />
+              <Text fontSize="sm" fontWeight="600" fontFamily="mono">Ask {agentName}</Text>
+            </Box>
+          )}
+
+          <Dialog.Root
+            open={mobileChatOpen}
+            onOpenChange={(e) => setMobileChatOpen(e.open)}
+            placement="bottom"
+          >
+            <Portal>
+              <Dialog.Backdrop />
+              <Dialog.Positioner padding={0}>
+                <Dialog.Content
+                  maxH="85vh"
+                  w="100%"
+                  maxW="100%"
+                  m={0}
+                  borderTopRadius="xl"
+                  borderBottomRadius="0"
+                  overflow="hidden"
+                >
+                  <HStack
+                    flexShrink={0}
+                    px={4}
+                    py={3}
+                    borderBottom="1px solid"
+                    borderColor="border.default"
+                    bg="bg.muted"
+                    justify="space-between"
+                  >
+                    <HStack gap={2}>
+                      <Icon as={LuMessageSquare} boxSize={5} color="accent.teal" />
+                      <Text fontSize="sm" fontWeight="700" fontFamily="mono" color="fg.default">Chat</Text>
+                    </HStack>
+                    <Icon
+                      as={LuX}
+                      boxSize={5}
+                      color="fg.muted"
+                      cursor="pointer"
+                      aria-label="Close chat"
+                      onClick={() => setMobileChatOpen(false)}
+                      _hover={{ color: 'fg.default' }}
+                    />
+                  </HStack>
+                  <Box height="calc(85vh - 56px)" overflow="hidden" bg="bg.canvas">
+                    {mobileChatOpen && (
+                      session.canChat ? (
+                        <ChatInterface
+                          contextPath={session.folderPath}
+                          container="sidebar"
+                          appState={storyAppState}
+                          suggestedPrompts={suggestedPrompts}
+                        />
+                      ) : (
+                        <ShareLeadGate onSubmit={handleLead} suggestedPrompts={suggestedPrompts} />
+                      )
+                    )}
+                  </Box>
+                </Dialog.Content>
+              </Dialog.Positioner>
+            </Portal>
+          </Dialog.Root>
+        </Box>
       )}
     </Flex>
   );
