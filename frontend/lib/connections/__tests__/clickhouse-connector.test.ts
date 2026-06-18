@@ -121,6 +121,17 @@ describe('ClickHouseConnector.query()', () => {
     expect(arg.query_params).toEqual({ id: 42, role: 'admin', score: 9.5 });
   });
 
+  it('reuses one query_param for a repeated param name', async () => {
+    const query = vi.fn().mockResolvedValue(resultSet({ meta: [], data: [] }));
+    makeClient({ queryImpl: query });
+
+    await new ClickHouseConnector('test', BASE_CONFIG).query('SELECT :val + :val AS doubled', { val: 5 });
+
+    const arg = query.mock.calls[0][0];
+    expect(arg.query).toBe('SELECT {val:Int64} + {val:Int64} AS doubled');
+    expect(arg.query_params).toEqual({ val: 5 });
+  });
+
   it('inlines NULL for params absent from the map (no placeholder emitted)', async () => {
     const query = vi.fn().mockResolvedValue(resultSet({ meta: [], data: [] }));
     makeClient({ queryImpl: query });
@@ -130,6 +141,14 @@ describe('ClickHouseConnector.query()', () => {
     const arg = query.mock.calls[0][0];
     expect(arg.query).toBe('SELECT * FROM t WHERE x = NULL');
     expect(arg.query_params).toEqual({});
+  });
+
+  it('propagates engine errors (e.g. MEMORY_LIMIT_EXCEEDED) by rejecting', async () => {
+    makeClient({ queryImpl: vi.fn().mockRejectedValue(new Error('Memory limit exceeded')) });
+
+    await expect(
+      new ClickHouseConnector('test', BASE_CONFIG).query('SELECT count(DISTINCT huge) FROM big'),
+    ).rejects.toThrow('Memory limit exceeded');
   });
 
   it('does not treat a ::Type cast as a placeholder', async () => {
@@ -243,12 +262,21 @@ describe('ClickHouse client construction & caching', () => {
     }));
   });
 
-  it('reuses one client across calls for the same target', async () => {
+  it('reuses one client across separate connector instances for the same target', async () => {
     makeClient();
-    const connector = new ClickHouseConnector('test', BASE_CONFIG);
-    await connector.testConnection();
-    await connector.testConnection();
+    // Two independent connectors (mimics fuzzy-search / profiling spawning fresh instances).
+    await new ClickHouseConnector('a', BASE_CONFIG).testConnection();
+    await new ClickHouseConnector('b', BASE_CONFIG).testConnection();
     expect(MockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates distinct clients for distinct targets (host/user), sharing within each', async () => {
+    makeClient();
+    await new ClickHouseConnector('a', { ...BASE_CONFIG, host: 'ch-a.internal' }).testConnection();
+    await new ClickHouseConnector('b', { ...BASE_CONFIG, host: 'ch-b.internal' }).testConnection();
+    await new ClickHouseConnector('c', { ...BASE_CONFIG, host: 'ch-a.internal', username: 'other' }).testConnection();
+    // 3 distinct keys: a/play, b/play, a/other.
+    expect(MockCreate).toHaveBeenCalledTimes(3);
   });
 });
 
