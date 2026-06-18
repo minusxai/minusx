@@ -283,21 +283,32 @@ export const StoryContent = Type.Object({
   assets: Type.Array(FileReference, { description:
     'questions embeddable in the story. Every data-question-id used in the story HTML MUST have a matching id here.' }),
   story: NullableD(Type.String(),
-    'One self-contained HTML document rendered as a single scrolling data-story page on a fixed ' +
-    '1280px-wide canvas (height unlimited — the page scrolls; it is scaled to fit the viewer). It renders in an ' +
-    'isolated frame, so go all-out on design: <style> blocks, CSS classes, web fonts (@import in a <style> tag), ' +
-    'gradients and CSS animations are all allowed and encouraged. Scope all CSS under your own root wrapper ' +
-    '(e.g. <div class="story">…) — rules targeting body or html will NOT apply. <script> tags, event-handler ' +
-    'attributes, and iframes are stripped at render time. Flow layout (stacked full-width sections) is ' +
-    'encouraged; write it like a designed long-form editorial piece: narrative prose between charts, big ' +
-    'pull-quote numbers, section headers. ' +
-    'CHART EMBEDS: <div data-question-id="N" style="width:1120px;height:420px"></div> where N is a question id ' +
-    'that MUST also be in assets (the same question may be embedded more than once). The renderer fills the div ' +
-    'exactly with a dashboard-style chart card (title bar with the question name + live chart), so do NOT add ' +
-    'your own duplicate title caption inside or directly above it. SIZING RULES: always give explicit px ' +
-    'height — a missing height defaults to 400px. Width may be explicit px or a percentage (e.g. 100% inside a ' +
-    'grid/flex cell); height percentages do NOT work. Minimums are enforced: height below 340px and width below ' +
-    '320px are clamped UP, which will shift your layout — never author chart boxes smaller than that.'),
+    'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling data-story page (height ' +
+    'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
+    '(~390–430px wide) and capped ~1280px wide, centered, on desktop. The SAME document must look great at BOTH, ' +
+    'so you MUST design responsively. It renders in an isolated frame, so go all-out on design: <style> blocks, ' +
+    'CSS classes, web fonts (@import in a <style> tag), gradients and CSS animations are all allowed and ' +
+    'encouraged. Scope all CSS under your own root wrapper (e.g. <div class="story">…) — rules targeting body or ' +
+    'html will NOT apply. <script> tags, event-handler attributes, and iframes are stripped at render time. ' +
+    'Write it like a designed long-form editorial piece: narrative prose between charts, big pull-quote numbers, ' +
+    'section headers. ' +
+    'RESPONSIVE RULES (non-negotiable — this is how it stays readable on mobile): ' +
+    '(1) Put `container-type:inline-size;container-name:story` on your root wrapper and `box-sizing:border-box` ' +
+    'on everything. (2) Size ALL typography and major spacing with `clamp(min, Ncqi, max)` so it scales with the ' +
+    "story's own width (`cqi` = 1% of the container width). (3) Use `@container story (max-width:…)` queries — " +
+    'NOT `@media` — to collapse every multi-column band to a single column on narrow widths: CSS grids, ' +
+    'side-by-side columns, KPI/stat rows, timelines, and chart pairs must all stack on a phone. Never let any ' +
+    'fixed-px width exceed the container (wrap wide tables in a `overflow-x:auto` scroller). (4) CONTRAST: every ' +
+    'piece of text — especially headings — must contrast strongly with the background behind it (never light ' +
+    'text on a light page or vice-versa). Set the `colorMode` field to the mode your design uses so embedded ' +
+    'charts theme to match (a dark story → "dark"). ' +
+    'CHART EMBEDS: <div data-question-id="N" style="width:100%;height:420px"></div> where N is a question id ' +
+    'that MUST also be in assets (the same question may be embedded more than once). PREFER width:100% so charts ' +
+    'fill their (responsive) cell; the renderer fills the div exactly with a dashboard-style chart card (title ' +
+    'bar with the question name + live chart), so do NOT add your own duplicate title caption inside or directly ' +
+    'above it. SIZING RULES: always give explicit px height — a missing height defaults to 400px; height ' +
+    'percentages do NOT work. Width should be 100% (or a px value, but px will be capped to the container on ' +
+    'mobile); minimum height 340px is enforced (clamped up).'),
   suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
     'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +

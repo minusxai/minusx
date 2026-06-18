@@ -10,15 +10,13 @@ import { StoryContent } from '@/lib/types';
 import { useAppSelector } from '@/store/hooks';
 import { selectPersistableContent } from '@/store/filesSlice';
 import { applyJsonContentEdit } from '@/lib/api/file-state';
-import ScaledStoryFrame, { STORY_W } from './ScaledStoryFrame';
+import { STORY_W } from './ScaledStoryFrame';
 
-// Max on-screen width of the reading column. The story scales to fill THIS
-// (capped) width, not the raw container — so toggling the chat sidebar only
-// eats the side buffer, and the story keeps a constant size. It only re-scales
-// down once the available width drops below this (window genuinely too narrow,
-// e.g. small screen + sidebar open). Raise for a bigger story / less buffer,
-// lower for rock-solid stability on narrower screens.
-const STORY_MAX_W = '1200px';
+// Max on-screen width of the reading column. Stories render FLUID (no transform
+// scale): full-bleed on mobile, capped + centered here on desktop. Authored
+// against a ~1280px canvas, so cap at the same so desktop matches the design
+// while everything below reflows responsively (container queries + cqi).
+const STORY_MAX_W = '1280px';
 
 interface StoryViewProps {
   content: StoryContent;
@@ -70,18 +68,14 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
     );
   }
 
-  // The story is a web page authored on a fixed 1280px logical canvas;
-  // ScaledStoryFrame scales it to whatever width its column resolves to. Cap
-  // that column at STORY_MAX_W and center it, so opening/closing the chat
-  // sidebar only changes the side buffer — not the scale — and the story stops
-  // resizing on every toggle (it only shrinks when the window is genuinely too
-  // narrow to hold STORY_MAX_W).
+  // Render the story as a FLUID responsive document — no transform scale.
+  // Full-bleed on mobile; capped at STORY_MAX_W and centered on desktop so it
+  // matches its ~1280px design canvas. Everything below STORY_MAX_W reflows via
+  // the story's own container queries / cqi units.
   return (
     <Box aria-label="Story page" w="100%" minH="420px" display="flex" justifyContent="center">
       <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId } : {})}>
-        <ScaledStoryFrame>
-          <AgentHtml html={content.story} width={STORY_W} readOnly={readOnly} />
-        </ScaledStoryFrame>
+        <AgentHtml html={content.story} width={STORY_W} fluid readOnly={readOnly} />
       </Box>
     </Box>
   );
