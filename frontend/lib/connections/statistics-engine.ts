@@ -84,6 +84,10 @@ export async function profileDatabase(
     case 'sqlite':
       enrichedTables = await profileGeneric(allTables, countedQueryFn, 'double');
       break;
+    case 'clickhouse':
+      // Metadata-only (system.columns); never scans table rows. See profileClickHouse.
+      enrichedTables = await profileClickHouse(allTables, countedQueryFn);
+      break;
     case 'mongo':
       enrichedTables = await profileMongo(allTables, countedQueryFn);
       break;
@@ -297,6 +301,58 @@ async function profilePostgres(tables: TableEntry[], queryFn: QueryFn): Promise<
   }
 
   return results;
+}
+
+// ─── ClickHouse Strategy — metadata only, NO table scans ────────────────────
+// ClickHouse tables are routinely billions of rows. The generic profiler's
+// COUNT(DISTINCT)/null scans exhaust server memory (MEMORY_LIMIT_EXCEEDED) and
+// hang connection saves. ClickHouse has no precomputed per-column stats table
+// (no pg_stats equivalent), so we enrich purely from `system.columns` metadata
+// (type + comment) and classify by type. Cardinality-dependent meta
+// (nDistinct, topValues, min/max) is intentionally omitted — it isn't worth a
+// full-table scan against a warehouse.
+
+function classifyClickHouseType(columnType: string): ColumnClassification {
+  const t = columnType.toLowerCase();
+  if (t.includes('bool')) return 'boolean';
+  // Date, Date32, DateTime, DateTime64 all contain 'date'/'time'.
+  if (t.includes('date') || t.includes('time')) return 'temporal';
+  if (t.includes('uuid')) return 'id_unique';
+  // Int*, UInt*, Float32/64, Decimal*.
+  if (['int', 'float', 'decimal'].some(k => t.includes(k))) return 'numeric';
+  // String, FixedString, LowCardinality(String), Enum*, Array(String), …
+  if (t.includes('string') || t.includes('enum')) return 'text';
+  return 'unknown';
+}
+
+async function profileClickHouse(tables: TableEntry[], queryFn: QueryFn): Promise<EnrichedTable[]> {
+  const schemaNames = [...new Set(tables.map(t => t.schema))];
+  const schemaList = schemaNames.map(s => `'${escapeSql(s)}'`).join(', ');
+
+  // Column descriptions from system.columns — metadata only, instant.
+  const descMap = new Map<string, string>();
+  if (schemaList) {
+    try {
+      const res = await queryFn(`
+        SELECT database, table, name, comment
+        FROM system.columns
+        WHERE database IN (${schemaList}) AND comment != ''
+      `);
+      for (const row of res.rows as Array<Record<string, unknown>>) {
+        descMap.set(`${row.database}.${row.table}.${row.name}`, String(row.comment));
+      }
+    } catch { /* descriptions are best-effort */ }
+  }
+
+  return tables.map(({ schema, table, columns }) => ({
+    schema,
+    table,
+    columns: columns.map(col =>
+      buildColumn(col, classifyClickHouseType(col.type), {
+        description: descMap.get(`${schema}.${table}.${col.name}`),
+      }),
+    ),
+  }));
 }
 
 // ─── DuckDB Strategy — O(tables + categoricals) ─────────────────────────────
