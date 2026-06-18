@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { Box, Text } from '@chakra-ui/react';
-import { LuBookOpen } from 'react-icons/lu';
+import { useRef, useState } from 'react';
+import { Box, Button, HStack, Icon, Text } from '@chakra-ui/react';
+import { LuBookOpen, LuCheck, LuPencil, LuX } from 'react-icons/lu';
 
-import AgentHtml from '@/components/views/shared/AgentHtml';
+import AgentHtml, { type AgentHtmlHandle } from '@/components/views/shared/AgentHtml';
 import JsonEditor from '@/components/slides/JsonEditor';
 import { StoryContent } from '@/lib/types';
 import { useAppSelector } from '@/store/hooks';
 import { selectPersistableContent } from '@/store/filesSlice';
-import { applyJsonContentEdit } from '@/lib/api/file-state';
+import { applyJsonContentEdit, applyStoryHtmlEdit } from '@/lib/api/file-state';
+import { toaster } from '@/components/ui/toaster';
 import { STORY_W } from './ScaledStoryFrame';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform
@@ -43,6 +44,33 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
   const [jsonError, setJsonError] = useState<string | null>(null);
   const jsonEditable = fileId !== undefined;
 
+  // Inline visual editing: a contenteditable canvas behind an Edit toggle, only
+  // when this is an owned (non-public) story file.
+  const canEdit = !readOnly && fileId !== undefined;
+  const [editing, setEditing] = useState(false);
+  // Bumped to force-remount AgentHtml, rebuilding the shadow DOM from the
+  // current story — used to discard unsaved inline edits on Cancel.
+  const [renderKey, setRenderKey] = useState(0);
+  const agentRef = useRef<AgentHtmlHandle>(null);
+
+  const handleSave = () => {
+    if (fileId === undefined) return;
+    const story = agentRef.current?.serialize();
+    if (story == null) return;
+    const result = applyStoryHtmlEdit({ fileId, story });
+    if (result.success) {
+      setEditing(false);
+      toaster.create({ title: 'Story updated — Publish to save', type: 'success' });
+    } else {
+      toaster.create({ title: 'Could not save story', description: result.error, type: 'error' });
+    }
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setRenderKey(k => k + 1); // discard in-DOM edits by rebuilding from content
+  };
+
   if (viewMode === 'json') {
     return (
       <JsonEditor
@@ -73,9 +101,47 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
   // matches its ~1280px design canvas. Everything below STORY_MAX_W reflows via
   // the story's own container queries / cqi units.
   return (
-    <Box aria-label="Story page" w="100%" minH="420px" display="flex" justifyContent="center">
-      <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId } : {})}>
-        <AgentHtml html={content.story} width={STORY_W} fluid readOnly={readOnly} />
+    <Box aria-label="Story page" w="100%" minH="420px">
+      {canEdit && (
+        <HStack
+          position="sticky"
+          top={0}
+          zIndex={30}
+          justify="flex-end"
+          gap={2}
+          px={3}
+          py={2}
+          bg="bg.canvas/85"
+          backdropFilter="blur(6px)"
+        >
+          {editing ? (
+            <>
+              <Button size="xs" variant="outline" aria-label="Cancel story edits" onClick={handleCancel}>
+                <Icon as={LuX} boxSize={4} /> Cancel
+              </Button>
+              <Button size="xs" colorPalette="teal" aria-label="Save story edits" onClick={handleSave}>
+                <Icon as={LuCheck} boxSize={4} /> Save
+              </Button>
+            </>
+          ) : (
+            <Button size="xs" variant="outline" aria-label="Edit story" onClick={() => setEditing(true)}>
+              <Icon as={LuPencil} boxSize={4} /> Edit
+            </Button>
+          )}
+        </HStack>
+      )}
+      <Box display="flex" justifyContent="center">
+        <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId } : {})}>
+          <AgentHtml
+            key={renderKey}
+            ref={agentRef}
+            html={content.story}
+            width={STORY_W}
+            fluid
+            editable={canEdit && editing}
+            readOnly={readOnly}
+          />
+        </Box>
       </Box>
     </Box>
   );

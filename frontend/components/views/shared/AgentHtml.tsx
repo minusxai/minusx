@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Box } from '@chakra-ui/react';
 
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
+import { serializeEditedStory } from '@/lib/html/serialize-story';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
 
 interface ChartTarget {
@@ -29,6 +30,17 @@ interface AgentHtmlProps {
    * agent's encouraged "stacked full-width sections" layout.
    */
   fluid?: boolean;
+  /**
+   * Inline edit mode: makes the story's text contenteditable (charts stay
+   * locked as atomic, non-editable islands). Read the edited HTML back via the
+   * imperative `serialize()` handle.
+   */
+  editable?: boolean;
+}
+
+export interface AgentHtmlHandle {
+  /** Serialize the live (edited) shadow DOM back to a clean content.story string. */
+  serialize: () => string | null;
 }
 
 // Placeholder sizing floors/defaults: title bar (~40px) + chart minHeight
@@ -51,9 +63,13 @@ const DEFAULT_CHART_H = 400;
  * document's <style> blocks (web fonts) are hoisted to document.head —
  * font-faces declared inside shadow trees don't load.
  */
-export default function AgentHtml({ html, width, height, readOnly = false, fluid = false }: AgentHtmlProps) {
+const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
+  { html, width, height, readOnly = false, fluid = false, editable = false },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fontTagRef = useRef<HTMLStyleElement | null>(null);
+  const importsRef = useRef<string[]>([]);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
 
   const sanitized = useMemo(() => sanitizeAgentHtml(html || ''), [html]);
@@ -108,12 +124,18 @@ export default function AgentHtml({ html, width, height, readOnly = false, fluid
       fontTagRef.current?.remove();
       fontTagRef.current = null;
     }
+    // Remember the hoisted @imports so edit-mode serialization can put them back
+    // into the saved story (they were stripped out of the story's <style>).
+    importsRef.current = imports;
 
     const found: ChartTarget[] = [];
     root.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       el.replaceChildren(); // drop authored fallback content; the portal takes over
+      // Snapshot the AUTHORED inline style before we clamp width/height below, so
+      // edit-mode serialization can restore the original placeholder size.
+      el.setAttribute('data-mx-osz', el.getAttribute('style') ?? '');
       // Sizing contract (dashboards enforce the same idea via
       // DashboardLayoutItem min w/h grid units): honor explicit px sizes,
       // default a missing height, and clamp below-minimum boxes — the tile
@@ -138,6 +160,30 @@ export default function AgentHtml({ html, width, height, readOnly = false, fluid
     fontTagRef.current?.remove();
     fontTagRef.current = null;
   }, []);
+
+  // Inline edit mode: make the story's top-level text containers contenteditable
+  // while keeping chart embeds locked as atomic, non-editable islands. Runs after
+  // the shadow tree + chart targets exist, and re-applies when `editable` flips —
+  // WITHOUT rebuilding the shadow root (that would re-mount the chart portals).
+  useEffect(() => {
+    const root = hostRef.current?.shadowRoot;
+    if (!root) return;
+    Array.from(root.children).forEach(el => {
+      if (el.tagName === 'STYLE') return;
+      (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
+    });
+    root.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
+      el.contentEditable = 'false';
+    });
+  }, [editable, targets, sanitized]);
+
+  // Read the edited story back out as a clean content.story string.
+  useImperativeHandle(ref, () => ({
+    serialize: () => {
+      const root = hostRef.current?.shadowRoot;
+      return root ? serializeEditedStory(root, importsRef.current) : null;
+    },
+  }), []);
 
   // Emotion injects each embedded chart's styles lazily — only when that tile's
   // body mounts. Tiles mount staggered on idle time (SmartEmbeddedQuestion
@@ -179,6 +225,11 @@ export default function AgentHtml({ html, width, height, readOnly = false, fluid
         height={height !== undefined ? `${height}px` : 'auto'}
         position="relative"
         overflow="hidden"
+        // Edit-mode affordance on the host (outside the shadow root, so it is
+        // never serialized into the saved story).
+        outline={editable ? '2px dashed' : undefined}
+        outlineColor="accent.teal"
+        outlineOffset="3px"
         // Fluid stories paint their own full-bleed background; a transparent
         // host avoids white gutters when the story's max-width is narrower than
         // the column (and lets dark stories sit on a dark page).
@@ -219,4 +270,6 @@ export default function AgentHtml({ html, width, height, readOnly = false, fluid
       ))}
     </>
   );
-}
+});
+
+export default AgentHtml;
