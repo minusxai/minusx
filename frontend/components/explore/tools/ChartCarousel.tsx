@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
 import { LuChevronLeft, LuChevronRight, LuChevronDown, LuChevronUp, LuDatabase, LuX, LuCheck, LuSettings } from 'react-icons/lu';
 import type { MessageWithFlags } from '../message/messageHelpers';
@@ -139,6 +139,14 @@ export default function ChartCarousel({
 
   const [localContent, setLocalContent] = useState<QuestionContent | null>(current?.question ?? null);
   const prevQuestionRef = useRef(current?.question);
+
+  // Live geo map view getter — populated by the active chart's map when it mounts,
+  // read by the VizConfigPanel "Pin current view" button (a sibling of the map).
+  const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null);
+  const handleMapReady = useCallback((getView: () => { center: [number, number]; zoom: number } | null) => {
+    getMapViewRef.current = getView;
+  }, []);
+  const getMapView = useCallback(() => getMapViewRef.current?.() ?? null, []);
   if (current?.question !== prevQuestionRef.current) {
     prevQuestionRef.current = current?.question;
     setLocalContent(current?.question ?? null);
@@ -331,6 +339,7 @@ export default function ChartCarousel({
                       onAnnotationsChange={(annotations) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, annotations } })}
                       trendConfig={localContent.vizSettings?.trendConfig ?? undefined}
                       onTrendConfigChange={(trendConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, trendConfig } })}
+                      getMapView={getMapView}
                     />
                   )}
                 </Box>
@@ -362,6 +371,7 @@ export default function ChartCarousel({
               data={current.queryResult}
               onVizTypeChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
               onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
+              onMapReady={handleMapReady}
             />
           ) : (
             <Text fontSize="xs" color="fg.muted" fontFamily="mono" p={3}>No data</Text>

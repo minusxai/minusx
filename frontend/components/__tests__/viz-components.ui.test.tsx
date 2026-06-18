@@ -692,6 +692,30 @@ describe('VizConfigPanel geo type', () => {
 
     expect(screen.queryByLabelText('Geo sub-type Bubble')).not.toBeInTheDocument()
   })
+
+  it('writes pinnedCenter and pinnedZoom from the live map view when "Pin current map view" is clicked', async () => {
+    const user = userEvent.setup()
+    const onGeoConfigChange = vi.fn()
+    const geoConfig: GeoConfig = { subType: 'points', latCol: 'lat', lngCol: 'lng' }
+
+    renderWithProviders(
+      <VizConfigPanel
+        columns={geoColumns}
+        types={geoTypes}
+        chartType="geo"
+        initialGeoConfig={geoConfig}
+        onGeoConfigChange={onGeoConfigChange}
+        getMapView={() => ({ center: [40.71, -74.01], zoom: 7 })}
+      />
+    )
+
+    await user.click(screen.getByLabelText('Geo Settings tab'))
+    await user.click(screen.getByLabelText('Pin current map view'))
+
+    expect(onGeoConfigChange).toHaveBeenCalledWith(
+      expect.objectContaining({ pinnedCenter: [40.71, -74.01], pinnedZoom: 7 })
+    )
+  })
 })
 
 // ─── ChartBuilder geo rendering ─────────────────────────────────────────────

@@ -165,6 +165,13 @@ export default function QuestionViewV2({
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(45);
   const rafRef = useRef<number | null>(null);
+  // Live geo map view getter — populated by the map (ChartBuilder/GeoPlot) when it
+  // mounts, read by the VizConfigPanel "Pin current view" button (a sibling of the map).
+  const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null);
+  const handleMapReady = useCallback((getView: () => { center: [number, number]; zoom: number } | null) => {
+    getMapViewRef.current = getView;
+  }, []);
+  const getMapView = useCallback(() => getMapViewRef.current?.() ?? null, []);
   const dispatch = useAppDispatch();
   const toggleCollapsedPanel = useCallback((panel: 'none' | 'left' | 'right') => {
     dispatch(setQuestionCollapsedPanel(panel));
@@ -772,6 +779,7 @@ export default function QuestionViewV2({
                         onAnnotationsChange={handleAnnotationsChange}
                         trendConfig={content.vizSettings?.trendConfig ?? undefined}
                         onTrendConfigChange={handleTrendConfigChange}
+                        getMapView={getMapView}
                       />
                     )}
                   </Box>
@@ -1013,6 +1021,7 @@ export default function QuestionViewV2({
                 onAxisConfigChange={handleAxisConfigChange}
                 onAnnotationsChange={handleAnnotationsChange}
                 onTrendConfigChange={handleTrendConfigChange}
+                onMapReady={handleMapReady}
                 onOpenVizTab={() => {
                   if (collapsedPanel === 'left') toggleCollapsedPanel('none');
                   setQueryMode('viz');

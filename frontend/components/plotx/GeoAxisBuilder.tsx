@@ -347,6 +347,7 @@ export function GeoAxisBuilder({
           <HStack
             key={key}
             as="button"
+            aria-label={`Geo ${label} tab`}
             flex={1}
             gap={1.5}
             justify="center"
