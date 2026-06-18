@@ -2,8 +2,8 @@
  * Story schema — `story` is a top-level file type whose content carries
  * `assets` (question references) and `story`, a single agent-authored HTML
  * document rendered as a scrolling data-story page. The TypeBox schema is the
- * agent-facing contract: its description must advertise the fixed 1280px-wide
- * canvas and the chart-embed placeholder.
+ * agent-facing contract: its description must advertise the FLUID responsive
+ * contract (container queries, not a fixed canvas) and the chart-embed placeholder.
  */
 import { validateFileState } from '@/lib/validation/content-validators';
 import { atlasSchemaNoViz } from '@/lib/validation/atlas-json-schemas';
@@ -61,9 +61,13 @@ describe('StoryContent schema', () => {
     expect(error).toMatch(/7/);
   });
 
-  it('advertises the story canvas contract in the agent-facing schema', () => {
+  it('advertises the fluid/responsive story contract in the agent-facing schema', () => {
     const serialized = JSON.stringify(atlasSchemaNoViz);
     expect(serialized).toContain('AtlasStoryFile');
-    expect(serialized).toContain('1280px-wide');
+    // Responsive contract: render fluid (not a fixed/scaled canvas) and respond
+    // to the story's own width via container queries — see atlas-schemas.ts.
+    expect(serialized).toContain('FLUID RESPONSIVE');
+    expect(serialized).toContain('container-type:inline-size');
+    expect(serialized).toContain('@container');
   });
 });
