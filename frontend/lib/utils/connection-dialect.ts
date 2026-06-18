@@ -12,6 +12,8 @@ export function connectionTypeToDialect(connectionType: string): string {
     case 'csv':
     case 'google-sheets':
       return 'duckdb';
+    case 'clickhouse':
+      return 'clickhouse';
     case 'postgresql':
     default:
       return 'postgresql';

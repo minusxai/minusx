@@ -71,9 +71,9 @@ export const CONNECTION_TYPES: ConnectionTypeOption[] = [
     type: 'clickhouse',
     name: 'ClickHouse',
     logo: '/logos/clickhouse.svg',
-    comingSoon: true,
-    group: 'coming-soon',
-    description: 'Native ClickHouse connections are planned.',
+    comingSoon: false,
+    group: 'external-engine',
+    description: 'Connect to your ClickHouse instance over HTTP(S). Data stays in ClickHouse.',
   },
   {
     type: 'databricks',

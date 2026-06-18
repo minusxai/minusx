@@ -881,13 +881,13 @@ export interface DbFile extends BaseFileMetadata {
  */
 export interface DatabaseConnection extends BaseEntity {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db' | 'clickhouse';
   config: Record<string, any>;  // Safe config fields only (no sensitive data)
 }
 
 export interface DatabaseConnectionCreate {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'clickhouse';
   config: Record<string, any>;
 }
 
@@ -948,7 +948,7 @@ export interface GoogleSheetsConnectionConfig {
 
 // Connection file content type (stored as file in /database/)
 export interface ConnectionContent extends BaseFileContent {
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db' | 'clickhouse';
   config: Record<string, any>;
   description?: string;
   schema?: DatabaseSchema;  // Added by connection loader via introspection
@@ -1356,6 +1356,7 @@ export function connectionTypeToDialect(type: string): string {
     'google-sheets': 'duckdb',
     athena: 'presto',
     sqlite: 'sqlite',
+    clickhouse: 'clickhouse',
   };
   return map[type] ?? 'duckdb';
 }
