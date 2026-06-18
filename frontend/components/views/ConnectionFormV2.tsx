@@ -42,7 +42,7 @@ import { getPublishedVersion } from '@/lib/context/context-utils';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import StaticTablesBrowser from '../StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig } from './connection-configs';
+import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
 import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
@@ -306,7 +306,7 @@ export default function ConnectionFormV2({
       }
       return;
     }
-    handleTypeChange(selectedType as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena');
+    handleTypeChange(selectedType as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'clickhouse');
     setStep('configure');
   };
 
@@ -368,6 +368,15 @@ export default function ConnectionFormV2({
           schema_name: config.schema_name || '',
           work_group: config.work_group || ''
         }
+      : content.type === 'clickhouse'
+      ? {
+          host: config.host || '',
+          port: config.port || '',
+          protocol: config.protocol || 'https',
+          database: config.database || '',
+          username: config.username || '',
+          password: config.password ? '***REDACTED***' : ''
+        }
       : config
   }, null, 2);
 
@@ -419,6 +428,8 @@ export default function ConnectionFormV2({
       if (!config.files?.length) return false;
     } else if (content.type === 'athena') {
       if (!config.region_name || !config.s3_staging_dir) return false;
+    } else if (content.type === 'clickhouse') {
+      if (!config.host || !config.username) return false;
     }
 
     return true;
@@ -434,7 +445,7 @@ export default function ConnectionFormV2({
     }
   };
 
-  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'duckdb' | 'sqlite') => {
+  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'duckdb' | 'sqlite' | 'clickhouse') => {
     // Clear config when switching types
     const configByType: Record<string, Record<string, any>> = {
       bigquery: { project_id: '', service_account_json: '' },
@@ -442,6 +453,7 @@ export default function ConnectionFormV2({
       'google-sheets': { spreadsheet_url: '', spreadsheet_id: '', schema_name: 'public', files: [] },
       duckdb: { file_path: '' },
       sqlite: { file_path: '' },
+      clickhouse: { protocol: 'https', host: '', port: 8443, database: '', username: '', password: '' },
     };
     onChange({
       type: newType,
@@ -1227,6 +1239,15 @@ export default function ConnectionFormV2({
         {/* Athena Configuration */}
         {content.type === 'athena' && (
           <AthenaConfig
+            config={config}
+            onChange={(newConfig) => onChange({ config: newConfig })}
+            mode={mode}
+          />
+        )}
+
+        {/* ClickHouse Configuration */}
+        {content.type === 'clickhouse' && (
+          <ClickHouseConfig
             config={config}
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}

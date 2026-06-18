@@ -5,5 +5,6 @@ export { default as CsvConfig } from './CsvConfig';
 export { default as GoogleSheetsConfig } from './GoogleSheetsConfig';
 export { default as AthenaConfig } from './AthenaConfig';
 export { default as SqliteConfig } from './SqliteConfig';
+export { default as ClickHouseConfig } from './ClickHouseConfig';
 export { default as StaticConnectionConfig } from './StaticConnectionConfig';
 export type { BaseConfigProps } from './types';

@@ -106,6 +106,16 @@ export interface MongoConfig {
   username?: string;
   password?: string;
 }
+export interface ClickHouseConfig {
+  host: string;
+  port?: number;
+  /** Default database for unqualified table names; schema discovery spans all databases. */
+  database?: string;
+  username: string;
+  password?: string;
+  /** Transport for the HTTP interface. Default 'https'. The playground uses https:443. */
+  protocol?: 'http' | 'https';
+}
 
 /** Maps dialect string → config shape. */
 export interface ConnectorConfigMap {
@@ -118,6 +128,7 @@ export interface ConnectorConfigMap {
   'google-sheets': CsvConfig;
   internal_db: Record<string, unknown>;
   mongo: MongoConfig;
+  clickhouse: ClickHouseConfig;
 }
 
 export type ConnectorDialect = keyof ConnectorConfigMap;

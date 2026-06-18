@@ -65,6 +65,17 @@ export function getSafeConfig(type: string, config: any): Record<string, any> {
     };
   }
 
+  if (type === 'clickhouse') {
+    // Hide password only — username is not a secret on its own and is needed to edit.
+    return {
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      username: config.username,
+      protocol: config.protocol,
+    };
+  }
+
   if (type === 'csv') {
     // CSV config is safe to return (no sensitive data)
     return {
