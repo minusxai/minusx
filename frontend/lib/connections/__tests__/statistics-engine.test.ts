@@ -369,3 +369,59 @@ describe('edge cases', () => {
     expect(col?.meta?.max).toBeUndefined();
   });
 });
+
+// ─── ClickHouse ──────────────────────────────────────────────────────────────
+
+describe('profileClickHouse', () => {
+  // The whole point: NO per-row scans (no COUNT(DISTINCT)/null/top-value queries
+  // that would OOM a warehouse). Profiling issues at most one metadata query
+  // against system.columns.
+  it('classifies columns by type using only a single system.columns metadata query', async () => {
+    const queryFn = vi.fn<(arg: string) => Promise<QueryResult>>();
+    queryFn.mockResolvedValueOnce(qr(['database', 'table', 'name', 'comment'], [])); // no comments
+
+    const s = schema([{ schema: 'github', tables: [{ table: 'commits', columns: [
+      { name: 'sha', type: 'String' },
+      { name: 'additions', type: 'UInt32' },
+      { name: 'committed_at', type: 'DateTime' },
+      { name: 'is_merge', type: 'Bool' },
+      { name: 'id', type: 'UUID' },
+    ] }] }]);
+    const result = await profileDatabase('clickhouse', s, queryFn);
+    const cols = getTable(result, 'github', 'commits');
+
+    expect(getCol(cols, 'sha')?.meta?.category).toBe('text');
+    expect(getCol(cols, 'additions')?.meta?.category).toBe('numeric');
+    expect(getCol(cols, 'committed_at')?.meta?.category).toBe('temporal');
+    // boolean and id_unique (UUID) both fold into the 'other' category (matches toCategory).
+    expect(getCol(cols, 'is_merge')?.meta?.category).toBe('other');
+    expect(getCol(cols, 'id')?.meta?.category).toBe('other');
+
+    // Exactly one query, and it must be metadata (system.columns), never a table scan.
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    expect(queryFn.mock.calls[0][0]).toContain('system.columns');
+    expect(queryFn.mock.calls.every(c => !/COUNT\s*\(\s*DISTINCT/i.test(c[0]))).toBe(true);
+  });
+
+  it('applies column descriptions from system.columns comments', async () => {
+    const queryFn = vi.fn<(arg: string) => Promise<QueryResult>>();
+    queryFn.mockResolvedValueOnce(qr(['database', 'table', 'name', 'comment'], [
+      { database: 'github', table: 'commits', name: 'sha', comment: 'Commit hash' },
+    ]));
+
+    const s = schema([{ schema: 'github', tables: [{ table: 'commits', columns: [{ name: 'sha', type: 'String' }] }] }]);
+    const result = await profileDatabase('clickhouse', s, queryFn);
+
+    expect(getCol(getTable(result, 'github', 'commits'), 'sha')?.meta?.description).toBe('Commit hash');
+  });
+
+  it('still returns columns when the metadata query fails (best-effort descriptions)', async () => {
+    const queryFn = vi.fn<(arg: string) => Promise<QueryResult>>();
+    queryFn.mockRejectedValueOnce(new Error('system.columns unavailable'));
+
+    const s = schema([{ schema: 'github', tables: [{ table: 'commits', columns: [{ name: 'sha', type: 'String' }] }] }]);
+    const result = await profileDatabase('clickhouse', s, queryFn);
+
+    expect(getCol(getTable(result, 'github', 'commits'), 'sha')?.meta?.category).toBe('text');
+  });
+});
