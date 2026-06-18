@@ -54,6 +54,8 @@ interface QuestionVisualizationProps {
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void;
   onTrendConfigChange?: (config: import('@/lib/types').TrendConfig) => void;
+  /** Receives a getter for the live geo map's center/zoom, so a sibling config panel's "Pin current view" button can read this map. */
+  onMapReady?: (getView: () => { center: [number, number]; zoom: number } | null) => void;
   /** Called when user clicks "Show Viz Config" to open/switch left panel to Viz tab */
   onOpenVizTab?: () => void;
   /** Called when user clicks "Hide Viz Config" to collapse the left panel */
@@ -150,6 +152,7 @@ function QuestionVisualizationInner({
   onAxisConfigChange,
   onAnnotationsChange,
   onTrendConfigChange,
+  onMapReady,
   onOpenVizTab,
   onHideVizTab,
   vizTabOpen,
@@ -478,6 +481,7 @@ function QuestionVisualizationInner({
                       onTrendConfigChange={onTrendConfigChange}
                       exportBranding={appConfig.branding}
                       enableDrilldown={config.enableDrilldown !== false}
+                      onMapReady={onMapReady}
                     />
                   </Box>
                 )}

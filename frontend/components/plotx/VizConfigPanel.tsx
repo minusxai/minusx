@@ -44,6 +44,8 @@ interface VizConfigPanelProps {
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void
   trendConfig?: TrendConfig
   onTrendConfigChange?: (config: TrendConfig) => void
+  /** Returns the live geo map's current center/zoom, or null when no map is mounted. Powers the "Pin current view" button. */
+  getMapView?: () => { center: [number, number]; zoom: number } | null
 }
 
 interface GroupedColumns {
@@ -64,6 +66,7 @@ export const VizConfigPanel = ({
   axisConfig, onAxisConfigChange,
   annotations, onAnnotationsChange,
   trendConfig, onTrendConfigChange,
+  getMapView,
 }: VizConfigPanelProps) => {
 
   // Group columns by type
@@ -288,7 +291,7 @@ export const VizConfigPanel = ({
         onTooltipColsChange={onTooltipColsChange}
         colorOverrides={styleConfig?.colors ?? {}}
         onColorOverridesChange={(colors) => onStyleConfigChange?.({ ...styleConfig, colors })}
-        getMapView={() => null}
+        getMapView={getMapView ?? (() => null)}
       />
     )
   }

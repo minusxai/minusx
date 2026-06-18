@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Box, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
@@ -73,6 +73,8 @@ interface ChartBuilderProps {
   exportBranding?: Partial<OrgBranding>
   /** Click-to-drill-down on data points. Off for read-only embeds (shared story). */
   enableDrilldown?: boolean
+  /** Receives a getter for the live geo map's center/zoom once the map mounts. Lets a parent wire the "Pin current view" button (which lives in a sibling config panel) to this map. */
+  onMapReady?: (getView: () => { center: [number, number]; zoom: number } | null) => void
 }
 
 interface GroupedColumns {
@@ -81,7 +83,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding, enableDrilldown = true }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding, enableDrilldown = true, onMapReady }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const configPalette = config.chartColorPalette
@@ -401,9 +403,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return getUniqueRowValuesAtLevel(pivotData, level, parentValues)
   }, [pivotData])
 
-  // Ref must be declared before any early returns (Rules of Hooks)
-  const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null)
-
   // Trend mode: KPI cards, not ECharts
   if (chartType === 'trend') {
     const hasData = allYColumns.length > 0
@@ -470,7 +469,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             tooltipCols={tooltipColumns}
             markerColor={colorPalette[0]}
             columnFormats={columnFormats}
-            onMapReady={(getView) => { getMapViewRef.current = getView }}
+            onMapReady={(getView) => { onMapReady?.(getView) }}
           />
         </Box>
       </Box>
