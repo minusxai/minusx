@@ -576,6 +576,38 @@ export function applyJsonContentEdit(options: { fileId: number; jsonString: stri
 }
 
 /**
+ * Apply an inline (contenteditable) story edit: merge the new `story` HTML into
+ * the story's current content, validate, and store it via setFullContent — the
+ * same Redux path as a JSON-tab edit (marks the file dirty; Publish persists).
+ */
+export function applyStoryHtmlEdit(options: { fileId: number; story: string }): { success: boolean; error?: string } {
+  const { fileId, story } = options;
+  const state = getStore().getState();
+  const fileState = selectFile(state, fileId);
+  if (!fileState) {
+    return { success: false, error: `File ${fileId} not found` };
+  }
+  const current = selectMergedContent(state, fileId);
+  if (!current || typeof current !== 'object') {
+    return { success: false, error: `File ${fileId} has no content to edit` };
+  }
+  const content = { ...(current as object), story };
+
+  const validationError = validateFileState({
+    type: fileState.type as FileType,
+    content,
+    name: selectEffectiveName(state, fileId),
+    path: fileState.metadataChanges?.path ?? fileState.path,
+  });
+  if (validationError) {
+    return { success: false, error: `Invalid ${fileState.type} content: ${validationError}` };
+  }
+
+  getStore().dispatch(setFullContent({ fileId, content: content as DbFile['content'] }));
+  return { success: true };
+}
+
+/**
  * Options for publishFile
  */
 export interface PublishFileOptions {
