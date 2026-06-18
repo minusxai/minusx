@@ -4,10 +4,28 @@ export interface PivotData {
   rowHeaders: string[][]      // Each row's dimension values (for nested grouping)
   columnHeaders: string[][]   // Each column's dimension values (for nested grouping)
   cells: number[][]           // [rowIndex][colIndex] aggregated values
+  cellPresent: boolean[][]    // [rowIndex][colIndex] — false where no source rows existed
+                              // (a true N/A, distinct from an aggregated 0). Used to render
+                              // blanks and exclude missing cells from the heatmap domain.
   rowTotals: number[]         // Sum per row
   columnTotals: number[]      // Sum per column
   grandTotal: number
   valueLabels: string[]       // e.g. ["SUM(revenue)"] - used when multiple values
+}
+
+// Sort pivot dimension keys: numeric values compared as numbers (so 3 < 10),
+// everything else lexicographically. Compares the dimension-value arrays
+// element-wise so nested groupings sort sensibly at each level.
+function compareDimValues(a: string[], b: string[]): number {
+  const n = Math.min(a.length, b.length)
+  for (let i = 0; i < n; i++) {
+    const av = a[i], bv = b[i]
+    const an = Number(av), bn = Number(bv)
+    const bothNumeric = av !== '' && bv !== '' && !Number.isNaN(an) && !Number.isNaN(bn)
+    const cmp = bothNumeric ? an - bn : av.localeCompare(bv)
+    if (cmp !== 0) return cmp
+  }
+  return a.length - b.length
 }
 
 export function applyAggregation(values: number[], fn: AggregationFunction): number {
@@ -40,6 +58,7 @@ export function aggregatePivotData(
       rowHeaders: [],
       columnHeaders: [],
       cells: [],
+      cellPresent: [],
       rowTotals: [],
       columnTotals: [],
       grandTotal: 0,
@@ -79,9 +98,10 @@ export function aggregatePivotData(
     }
   }
 
-  // Sort row and column keys lexicographically ascending
-  const rowKeys = Array.from(rowKeyMap.keys()).sort()
-  const colKeys = Array.from(colKeyMap.keys()).sort()
+  // Sort row and column keys ascending — numerically when the dimension values
+  // are numbers (so week 3 precedes week 10), else lexicographically.
+  const rowKeys = Array.from(rowKeyMap.keys()).sort((a, b) => compareDimValues(rowKeyMap.get(a)!, rowKeyMap.get(b)!))
+  const colKeys = Array.from(colKeyMap.keys()).sort((a, b) => compareDimValues(colKeyMap.get(a)!, colKeyMap.get(b)!))
   const rowHeaders = rowKeys.map(k => rowKeyMap.get(k)!)
   const columnHeaders = colKeys.map(k => colKeyMap.get(k)!)
 
@@ -94,6 +114,7 @@ export function aggregatePivotData(
 
   // Build cells
   const cells: number[][] = []
+  const cellPresent: boolean[][] = []
   const rowTotals: number[] = []
   const columnTotals: number[] = new Array(numValueCols).fill(0)
   let grandTotal = 0
@@ -101,6 +122,7 @@ export function aggregatePivotData(
   for (const rowKey of rowKeys) {
     const rowAcc = accumulator.get(rowKey)!
     const cellRow: number[] = []
+    const presentRow: boolean[] = []
     let rowSum = 0
 
     for (const colKey of colKeys) {
@@ -108,6 +130,10 @@ export function aggregatePivotData(
       for (let vi = 0; vi < valueConfigs.length; vi++) {
         const aggValue = applyAggregation(buckets[vi], valueConfigs[vi].aggFunction ?? 'SUM')
         cellRow.push(aggValue)
+        // Present iff at least one source row contributed a numeric value. This
+        // separates a genuine aggregated 0 (bucket had data) from a missing
+        // intersection (empty bucket → applyAggregation returns 0 too).
+        presentRow.push(buckets[vi].length > 0)
       }
     }
 
@@ -118,6 +144,7 @@ export function aggregatePivotData(
     }
 
     cells.push(cellRow)
+    cellPresent.push(presentRow)
     rowTotals.push(rowSum)
     grandTotal += rowSum
   }
@@ -126,6 +153,7 @@ export function aggregatePivotData(
     rowHeaders,
     columnHeaders,
     cells,
+    cellPresent,
     rowTotals,
     columnTotals,
     grandTotal,

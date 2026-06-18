@@ -62,7 +62,13 @@ export const PivotTable = ({
 }: PivotTableProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const isDark = colorMode === 'dark'
-  const { rowHeaders, columnHeaders, cells, rowTotals, valueLabels } = pivotData
+  const { rowHeaders, columnHeaders, cells, cellPresent, rowTotals, valueLabels } = pivotData
+  // Presence lookup that tolerates pre-existing PivotData without the field
+  // (defaults to present, i.e. legacy behaviour) — formula/subtotal rows pass true.
+  const isPresent = useCallback(
+    (r: number, c: number): boolean => cellPresent?.[r]?.[c] ?? true,
+    [cellPresent],
+  )
 
   // Format a numeric cell value using per-value-column decimal/prefix/suffix config
   // When valueIndex is omitted (totals), fall back to first value column's format
@@ -104,21 +110,30 @@ export const PivotTable = ({
     })
   }, [])
 
-  // Compute min/max across regular cells only for heatmap (excludes formula cells)
+  // Faint neutral fill for missing (N/A) cells — visually distinct from any
+  // heatmap colour, so "no data" never reads as a low value.
+  const absentBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.035)'
+
+  // Compute min/max across regular cells only for heatmap (excludes formula cells
+  // AND missing cells — a missing cell is N/A, not a 0, so it must not drag the
+  // colour domain down).
   const { minValue, maxValue } = useMemo(() => {
     let min = Infinity
     let max = -Infinity
-    for (const row of cells) {
-      for (const val of row) {
+    for (let r = 0; r < cells.length; r++) {
+      for (let c = 0; c < cells[r].length; c++) {
+        if (!(cellPresent?.[r]?.[c] ?? true)) continue
+        const val = cells[r][c]
         if (val < min) min = val
         if (val > max) max = val
       }
     }
     return { minValue: min, maxValue: max }
-  }, [cells])
+  }, [cells, cellPresent])
 
-  const getCellBg = useCallback((value: number): string | undefined => {
+  const getCellBg = useCallback((value: number, present = true): string | undefined => {
     if (!showHeatmap) return undefined
+    if (!present) return absentBg
     if (maxValue === minValue) return 'accent.teal/75'
     const normalized = (value - minValue) / (maxValue - minValue)
     const alpha = compact ? 0.85 : 0.55
@@ -195,7 +210,7 @@ export const PivotTable = ({
     }
 
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }, [showHeatmap, minValue, maxValue, compact, heatmapScale, isDark])
+  }, [showHeatmap, minValue, maxValue, compact, heatmapScale, isDark, absentBg])
 
   // Column entries: interleave regular data columns with formula columns
   const columnEntries = useMemo((): ColEntry[] => {
@@ -622,7 +637,7 @@ export const PivotTable = ({
   }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, valueLabels, onCellClick])
 
   // Compact mode: build tooltip content for a cell given row/col context
-  const buildTooltipContent = useCallback((value: number, rowIndex: number, cellIndex: number, valueIndex?: number): React.ReactNode => {
+  const buildTooltipContent = useCallback((value: number, rowIndex: number, cellIndex: number, valueIndex?: number, present = true): React.ReactNode => {
     const dims: { label: string; value: string }[] = []
     if (rowDimNames && rowHeaders[rowIndex]) {
       rowDimNames.forEach((dimName, i) => {
@@ -635,8 +650,8 @@ export const PivotTable = ({
         if (i < columnHeaders[colKeyIndex].length) dims.push({ label: dimName, value: fmtHeader(columnHeaders[colKeyIndex][i], colDimNames?.[i]) })
       })
     }
-    const formattedValue = fmt(value, valueIndex)
-    const cellBg = getCellBg(value)
+    const formattedValue = present ? fmt(value, valueIndex) : 'No data'
+    const cellBg = getCellBg(value, present)
     return (
       <Box fontFamily="mono" fontSize="xs">
         {dims.length > 0 && (
@@ -647,7 +662,7 @@ export const PivotTable = ({
         <Box display="flex" alignItems="center" gap={2}>
           <Box w="10px" h="10px" borderRadius="full" flexShrink={0} bg={cellBg ?? 'fg.subtle'} />
           <Box color="fg.muted">{valueLabels[valueIndex ?? 0] || 'Value'}</Box>
-          <Box fontWeight="700" ml="auto">{formattedValue}</Box>
+          <Box fontWeight="700" ml="auto" color={present ? undefined : 'fg.subtle'}>{formattedValue}</Box>
         </Box>
       </Box>
     )
@@ -686,14 +701,15 @@ export const PivotTable = ({
     return columnEntries.map((entry, i) => {
       if (entry.type === 'data') {
         const value = cells[rowIndex][entry.cellIndex]
-        const cellContent = compact ? null : fmt(value, entry.cellIndex % numValues)
+        const present = isPresent(rowIndex, entry.cellIndex)
+        const cellContent = compact ? null : (present ? fmt(value, entry.cellIndex % numValues) : '')
         const cell = (
           <ChakraTable.Cell
             key={`col-${i}`}
             textAlign="right"
             fontFamily="mono"
             fontSize={compact ? '2xs' : 'sm'}
-            bg={getCellBg(value)}
+            bg={getCellBg(value, present)}
             cursor="pointer"
             onClick={(e) => handlePivotCellClick(rowIndex, entry.cellIndex, e)}
             _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
@@ -704,7 +720,7 @@ export const PivotTable = ({
         )
         if (compact) {
           return (
-            <Tooltip key={`col-${i}`} content={buildTooltipContent(value, rowIndex, entry.cellIndex, entry.cellIndex % numValues)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
+            <Tooltip key={`col-${i}`} content={buildTooltipContent(value, rowIndex, entry.cellIndex, entry.cellIndex % numValues, present)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
               {cell}
             </Tooltip>
           )
@@ -1171,24 +1187,25 @@ export const PivotTable = ({
                 {/* Data cells (interleaved with formula columns if applicable) */}
                 {hasColFormulas ? renderDataCells(rowIndex) : (
                   cells[rowIndex].map((value, colIndex) => {
+                    const present = isPresent(rowIndex, colIndex)
                     const cell = (
                       <ChakraTable.Cell
                         key={colIndex}
                         textAlign="right"
                         fontFamily="mono"
                         fontSize={compact ? '2xs' : 'sm'}
-                        bg={getCellBg(value)}
+                        bg={getCellBg(value, present)}
                         cursor="pointer"
                         onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
                         _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
                         {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
                       >
-                        {compact ? null : fmt(value, colIndex % numValues)}
+                        {compact ? null : (present ? fmt(value, colIndex % numValues) : '')}
                       </ChakraTable.Cell>
                     )
                     if (compact) {
                       return (
-                        <Tooltip key={colIndex} content={buildTooltipContent(value, rowIndex, colIndex, colIndex % numValues)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
+                        <Tooltip key={colIndex} content={buildTooltipContent(value, rowIndex, colIndex, colIndex % numValues, present)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
                           {cell}
                         </Tooltip>
                       )
