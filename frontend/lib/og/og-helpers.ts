@@ -5,10 +5,13 @@ export const MINUSX_TAGLINE = 'Your data stack, staffed by agents';
 
 /**
  * S3 key for a story's cached OG image. Includes `updated_at` so any edit produces a fresh
- * key — the cache self-busts.
+ * key — the cache self-busts. Accepts a Date because the `pg` driver (prod) returns TIMESTAMP
+ * columns as Date objects, while PGLite (dev) returns ISO strings — normalize to ISO so the
+ * key is stable across drivers.
  */
-export function ogCacheKey(fileId: number, updatedAt: string): string {
-  return `og/${fileId}-${updatedAt.replace(/[^\w-]/g, '')}.png`;
+export function ogCacheKey(fileId: number, updatedAt: string | Date): string {
+  const iso = updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt;
+  return `og/${fileId}-${iso.replace(/[^\w-]/g, '')}.png`;
 }
 
 /** Trim text to a max length for the card, adding an ellipsis when cut. */

@@ -52,6 +52,12 @@ describe('og-helpers', () => {
     expect(ogCacheKey(42, '2026-06-16T12:00:00.000Z')).toBe('og/42-2026-06-16T120000000Z.png');
     expect(ogCacheKey(42, '2026-06-16T12:00:00.000Z')).not.toBe(ogCacheKey(42, '2026-06-16T13:30:00.000Z'));
   });
+  it('ogCacheKey accepts a Date (the pg driver returns TIMESTAMP as Date in prod)', () => {
+    // Regression: `t.replace is not a function` 500 on POST /api/files/[id]/preview.
+    expect(ogCacheKey(42, new Date('2026-06-16T12:00:00.000Z'))).toBe('og/42-2026-06-16T120000000Z.png');
+    // Same instant as a string → same key (cache stays consistent across drivers).
+    expect(ogCacheKey(42, new Date('2026-06-16T12:00:00.000Z'))).toBe(ogCacheKey(42, '2026-06-16T12:00:00.000Z'));
+  });
   it('truncate leaves short text and ellipsizes long text', () => {
     expect(truncate('short', 10)).toBe('short');
     expect(truncate('a'.repeat(20), 10)).toHaveLength(10);
