@@ -62,7 +62,7 @@ async function drain(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<v
   for (;;) { const { done } = await reader.read(); if (done) break; }
 }
 
-describe('/api/chat/stream: background task inherits handler-bound context', () => {
+describe('/api/chat/stream: the detached turn task runs inside the auth context runner', () => {
   setupTestDb(TEST_DB_PATH);
 
   let persistContext: string | undefined | symbol;
@@ -74,23 +74,23 @@ describe('/api/chat/stream: background task inherits handler-bound context', () 
     persistContext = UNSEEN;
 
     const m = getModules();
-    const origAddHeaders = m.auth.addHeaders;
-    m.auth.addHeaders = async function (req, headers, hints) {
-      ctx.enterWith(BOUND);
-      return origAddHeaders.call(this, req, headers, hints);
-    };
+    // The route captures auth.getContextRunner() and wraps the detached turn task
+    // with it. Stand in a runner that scopes an opaque value via AsyncLocalStorage.run,
+    // then assert the task's persistence write runs inside it.
+    const origGetContextRunner = m.auth.getContextRunner;
+    m.auth.getContextRunner = (async () => (fn: () => Promise<unknown>) => ctx.run(BOUND, fn)) as typeof m.auth.getContextRunner;
     const origExec = m.db.exec;
     m.db.exec = (async (sql: string, params?: unknown[]) => {
       const carriesReply = JSON.stringify(params ?? '').includes(REPLY) || String(sql).includes(REPLY);
       if (carriesReply && persistContext === UNSEEN) persistContext = ctx.getStore();
       return origExec(sql, params);
     }) as typeof m.db.exec;
-    restore = () => { m.auth.addHeaders = origAddHeaders; m.db.exec = origExec; };
+    restore = () => { m.auth.getContextRunner = origGetContextRunner; m.db.exec = origExec; };
   });
 
   afterEach(() => { restore?.(); });
 
-  it('the post-response persistence write sees the context addHeaders bound in the handler', async () => {
+  it('the post-response persistence write runs inside the context runner the route captured', async () => {
     const conversationId = await seedConversation('ctx-propagation');
     webAnalystFaux.setResponses([
       async () => fauxAssistantMessage(REPLY, { stopReason: 'stop' }),

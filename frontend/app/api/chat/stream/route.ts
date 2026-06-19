@@ -94,7 +94,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await getModules().auth.addHeaders(request, new Headers());
+  // The orchestrator turn (persistence, server-tool execution) runs in the detached
+  // task below, which outlives this request. Capture the auth module's request-scoped
+  // context NOW (while the request is live) and use the returned runner to wrap that
+  // task, so it carries the right context for the whole turn — concurrency-safely,
+  // independent of the request lifecycle. A no-op in the base build.
+  const runInContext = (await getModules().auth.getContextRunner?.()) ?? ((fn: () => Promise<unknown>) => fn());
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
@@ -110,7 +115,7 @@ export async function POST(request: NextRequest) {
     writer.write(encoder.encode(': ping\n\n')).catch(() => { /* writer closed */ });
   }, 15000);
 
-  processStreamV2(writer, encoder, body, user)
+  runInContext(() => processStreamV2(writer, encoder, body, user))
     .catch((err) => {
       console.error('[chat/stream] Unhandled processStream error:', err);
     })

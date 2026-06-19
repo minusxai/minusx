@@ -65,8 +65,13 @@ export interface IAuthModule {
   register(input: RegisterInput): Promise<RegisterResult>;
   /** Auth-factory hooks consulted at login/refresh time. OSS: not implemented. */
   getAuthHooks?(): Partial<AuthConfigOptions>;
-  /** Wrapper for after() callbacks */
-  getContextRunner?(): (fn: () => Promise<unknown>) => Promise<unknown>;
+  /**
+   * Returns a runner that re-establishes the current request's context for work
+   * that outlives the request (after() callbacks, detached stream tasks). Captures
+   * the context synchronously-from-the-request (async), so it must be awaited while
+   * the request is still active, then used to wrap the background work.
+   */
+  getContextRunner?(): Promise<(fn: () => Promise<unknown>) => Promise<unknown>>;
   /** Extra fields to embed in OAuth access token JWT. OSS: returns {}. */
   getExtraTokenPayload?(userId: number, scope: string | null): Promise<Record<string, unknown>>;
   /**
