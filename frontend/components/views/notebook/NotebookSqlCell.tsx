@@ -26,6 +26,7 @@ import { QuestionVisualization } from '@/components/question/QuestionVisualizati
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
+import ResizablePanel from '@/components/ui/resizable-panel';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { useQuestionReferences } from '@/lib/hooks/useQuestionReferences';
 import { useConnections } from '@/lib/hooks/useConnections';
@@ -252,18 +253,20 @@ export default function NotebookSqlCell({
       )}
 
       {queryMode === 'gui' && (
-        <Box p={2} maxH="360px" overflow="auto">
-          <QueryBuilderRoot
-            databaseName={cell.connection_name || ''}
-            dialect={dialect}
-            sql={cell.query}
-            onSqlChange={handleQueryChange}
-            onExecute={run}
-            isExecuting={loading && !data}
-            availableQuestions={availableQuestions}
-            whitelistedSchema={whitelistedSchema}
-          />
-        </Box>
+        <ResizablePanel defaultHeight={300} minHeight={160} maxHeight={640}>
+          <Box p={2}>
+            <QueryBuilderRoot
+              databaseName={cell.connection_name || ''}
+              dialect={dialect}
+              sql={cell.query}
+              onSqlChange={handleQueryChange}
+              onExecute={run}
+              isExecuting={loading && !data}
+              availableQuestions={availableQuestions}
+              whitelistedSchema={whitelistedSchema}
+            />
+          </Box>
+        </ResizablePanel>
       )}
 
       {queryMode === 'viz' && (
