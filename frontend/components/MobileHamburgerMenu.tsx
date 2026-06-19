@@ -113,9 +113,8 @@ export default function MobileHamburgerMenu({ onClose }: MobileHamburgerMenuProp
           transition="background 0.2s"
           onClick={() => {
             const redirectUrl = `${window.location.origin}/login`;
-            signOut({ callbackUrl: redirectUrl, redirect:false, redirectTo: redirectUrl }).then(() => {
-              window.location.href = redirectUrl; // Ensure redirect after sign out
-            });
+            // redirectTo so signout + redirect are atomic (no re-mint race). See Sidebar.
+            signOut({ redirectTo: redirectUrl });
             onClose();
           }}
         >

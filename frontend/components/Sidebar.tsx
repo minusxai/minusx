@@ -525,6 +525,7 @@ export default function Sidebar() {
           <Menu.Root positioning={{ placement: isCollapsed ? 'right-end' : 'top-start' }}>
             <Menu.Trigger asChild>
               <Flex
+                aria-label="Account menu"
                 align="center"
                 gap={3}
                 px={isCollapsed ? 3 : 4}
@@ -672,6 +673,7 @@ export default function Sidebar() {
                 {/* Logout */}
                 <Menu.Item
                   value="logout"
+                  aria-label="Logout"
                   cursor="pointer"
                   borderRadius="md"
                   px={3}
@@ -681,9 +683,10 @@ export default function Sidebar() {
                     const redirectUrl = `${window.location.origin}/login`;
                     analytics.captureEvent(AnalyticsEvents.USER_SIGNED_OUT);
                     analytics.reset();
-                    signOut({ callbackUrl: redirectUrl, redirect: false, redirectTo: redirectUrl }).then(() => {
-                      window.location.href = redirectUrl;
-                    });
+                    // redirectTo (not redirect:false + manual nav) so signout + full-page
+                    // redirect are atomic — no window for a sliding-session request to re-mint
+                    // the cookie and resurrect the session.
+                    signOut({ redirectTo: redirectUrl });
                   }}
                 >
                   <HStack gap={3}>
