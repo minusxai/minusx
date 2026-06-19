@@ -47,7 +47,12 @@ export default function NotebookCellHeader({
       value={name}
       onChange={(e) => onNameChange(e.target.value)}
       disabled={readOnly}
-      width="130px"
+      // Collapsed: fill the row so the full name is visible. Expanded: a fixed
+      // field on the right so it doesn't crowd the toolbar.
+      flex={collapsed ? 1 : undefined}
+      width={collapsed ? 'auto' : '160px'}
+      minW={collapsed ? '60px' : undefined}
+      flexShrink={collapsed ? 1 : 0}
       px={1}
       fontFamily="mono"
       fontSize="xs"
@@ -58,7 +63,6 @@ export default function NotebookCellHeader({
       textAlign={collapsed ? 'left' : 'right'}
       _placeholder={{ color: 'fg.subtle' }}
       _focus={{ color: 'fg.default', borderColor: 'border.default' }}
-      flexShrink={0}
     />
   );
 
@@ -88,11 +92,8 @@ export default function NotebookCellHeader({
       </HStack>
 
       {collapsed ? (
-        // Collapsed: just the name, then push delete to the right.
-        <>
-          {nameInput}
-          <Box flex={1} />
-        </>
+        // Collapsed: the name fills the row (fully visible).
+        nameInput
       ) : (
         // Expanded: toolbar leads on the LEFT; name sits on the right.
         <>
