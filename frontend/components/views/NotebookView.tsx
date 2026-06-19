@@ -162,7 +162,9 @@ export default function NotebookView({
 
   if (present) {
     return (
-      <Box flex={1} overflow="auto" p={{ base: 4, md: 8 }}>
+      // No own scroll container — the shared FileLayout column owns page scroll,
+      // so the horizontal gutters scroll too (a nested scroller leaves them dead).
+      <Box p={{ base: 4, md: 8 }}>
         <Box maxW="860px" mx="auto">
           {cells.length === 0 ? (
             <Center color="fg.muted" py={16}><Text fontSize="sm">Nothing to present yet.</Text></Center>
@@ -199,7 +201,9 @@ export default function NotebookView({
   }
 
   return (
-    <Box flex={1} overflow="auto" p={4}>
+    // No own scroll container — the shared FileLayout column owns page scroll,
+    // so the horizontal gutters scroll too (a nested scroller leaves them dead).
+    <Box p={4}>
       <Box maxW="900px" mx="auto">
       <VStack align="stretch" gap={0} pl={{ base: 0, md: '40px' }}>
         {cells.length === 0 ? (
