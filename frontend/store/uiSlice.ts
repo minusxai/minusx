@@ -21,6 +21,7 @@ interface UIState {
   fileEditMode: Record<number, boolean>;       // fileId -> editMode (question, report, alert)
   fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab
   sqlEditorCollapsed: Record<number, boolean>;  // fileId -> collapsed state
+  notebookActiveCell: Record<number, string>;   // notebook fileId -> active cell id (for agent context + highlight)
   questionCollapsedPanel: 'none' | 'left' | 'right';  // global: which panel is collapsed across all questions
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
@@ -59,6 +60,7 @@ const initialState: UIState = {
   fileEditMode: {},
   fileViewMode: {},
   sqlEditorCollapsed: {},
+  notebookActiveCell: {},
   questionCollapsedPanel: 'none',
   sidebarDrafts: {},
   proposedQueries: {},
@@ -180,6 +182,10 @@ const uiSlice = createSlice({
       const { fileId, collapsed } = action.payload;
       state.sqlEditorCollapsed[fileId] = collapsed;
     },
+    setNotebookActiveCell: (state, action: PayloadAction<{ fileId: number; cellId: string }>) => {
+      const { fileId, cellId } = action.payload;
+      state.notebookActiveCell[fileId] = cellId;
+    },
     setQuestionCollapsedPanel: (state, action: PayloadAction<'none' | 'left' | 'right'>) => {
       state.questionCollapsedPanel = action.payload;
     },
@@ -299,6 +305,7 @@ export const {
   clearFileEditMode,
   setFileViewMode,
   setSqlEditorCollapsed,
+  setNotebookActiveCell,
   setQuestionCollapsedPanel,
   setSidebarDraft,
   clearSidebarDraft,
@@ -356,6 +363,11 @@ export const selectFileViewMode = (state: RootState, fileId: number | undefined)
   fileId !== undefined ? (state.ui.fileViewMode[fileId] ?? 'visual') : 'visual';
 // Returns collapsed state for a question's SQL editor.
 // Falls back to mode-appropriate default when not yet stored (open in page mode, closed in toolcall).
+export const selectNotebookActiveCell = (
+  state: { ui: UIState },
+  fileId: number | undefined,
+): string | undefined => fileId !== undefined ? state.ui.notebookActiveCell[fileId] : undefined;
+
 export const selectSqlEditorCollapsed = (
   state: RootState,
   fileId: number | undefined,
