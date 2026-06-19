@@ -19,6 +19,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import FileHeader from './FileHeader';
+import { FileToolbarProvider } from './file-toolbar/FileToolbarContext';
 
 export interface FileViewProps {
   fileId: FileId;
@@ -133,7 +134,7 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
   // Render file-specific component
   // getFileComponent returns a stable reference from a lookup table
   return (
-    <>
+    <FileToolbarProvider>
       {showFileHeader && (
         <Box px={3} pt={3} pb={0} borderBottomWidth="1px" borderColor="border.muted">
           <FileHeader fileId={fileId as number} fileType={file.type} mode={mode} />
@@ -145,6 +146,6 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
         mode={mode}
         defaultFolder={defaultFolder}
       />
-    </>
+    </FileToolbarProvider>
   );
 }

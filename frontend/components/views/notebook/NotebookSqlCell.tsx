@@ -16,8 +16,8 @@
  * the query persists the cell but leaves `executed` untouched, so results stay
  * visible while typing.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box } from '@chakra-ui/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Text } from '@chakra-ui/react';
 import NotebookCellHeader from './NotebookCellHeader';
 import SqlEditor from '@/components/SqlEditor';
 import ParameterRow from '@/components/ParameterRow';
@@ -40,7 +40,13 @@ interface NotebookSqlCellProps {
   cell: SqlCell;
   active?: boolean;
   onActivate?: (cellId: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  /** Bumped by the header "Run all" command — re-running this cell on change. */
+  runNonce?: number;
   readOnly?: boolean;
+  /** Present mode: hide all chrome/editor — show just the chart (auto-run). */
+  presentMode?: boolean;
   filePath?: string;
   onCellChange: (id: string, partial: Partial<SqlCell>) => void;
   onRemove: (id: string) => void;
@@ -53,8 +59,12 @@ interface Executed {
   references: QuestionReference[];
 }
 
+// Stable empty params so present-mode execution doesn't refetch every render.
+const EMPTY_PARAMS: Record<string, unknown> = {};
+
 export default function NotebookSqlCell({
-  cell, active = false, onActivate, readOnly = false, filePath, onCellChange, onRemove,
+  cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
+  readOnly = false, presentMode = false, filePath, onCellChange, onRemove,
 }: NotebookSqlCellProps) {
   const handleChange = useCallback(
     (partial: Partial<SqlCell>) => onCellChange(cell.id, partial),
@@ -65,11 +75,11 @@ export default function NotebookSqlCell({
     if (!active) onActivate?.(cell.id);
   }, [active, onActivate, cell.id]);
 
-  const [collapsed, setCollapsed] = useState(false);
   const [executed, setExecuted] = useState<Executed | null>(null);
+  // Present mode reuses whatever was already run — it does NOT re-execute.
   const { data, loading, error, refetch } = useQueryResult(
     executed?.query ?? '',
-    executed?.params ?? {},
+    executed?.params ?? EMPTY_PARAMS,
     executed?.database ?? '',
     executed?.references,
     { skip: !executed },
@@ -130,6 +140,15 @@ export default function NotebookSqlCell({
     refetch();
   }, [cell.query, cell.parameterValues, cell.connection_name, cell.references, refetch]);
 
+  // Header "Run all" command: re-run this cell when the nonce changes.
+  const lastRunNonce = useRef(runNonce);
+  useEffect(() => {
+    if (runNonce === lastRunNonce.current) return;
+    lastRunNonce.current = runNonce;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- imperative "Run all" command from the header toolbar
+    if (cell.query?.trim()) run();
+  }, [runNonce, run, cell.query]);
+
   const setViz = useCallback(
     (patch: Partial<VizSettings>) => handleChange({ vizSettings: { ...cell.vizSettings, ...patch } }),
     [handleChange, cell.vizSettings],
@@ -144,6 +163,30 @@ export default function NotebookSqlCell({
   }), [readOnly]);
 
   const vizType = cell.vizSettings?.type || 'table';
+
+  // Present mode: render just the visualization (no header, editor, or tabs).
+  // It shows results already run in this session; cells never run are skipped
+  // (present does not execute queries — use "Run all" to refresh).
+  if (presentMode) {
+    if (!cell.query?.trim() || !executed) return null;
+    return (
+      <Box>
+        {cell.name && <Text fontSize="sm" fontWeight="600" color="fg.muted" mb={2}>{cell.name}</Text>}
+        <Box h="420px" display="flex" flexDirection="column">
+          <QuestionVisualization
+            currentState={cell as unknown as QuestionContent}
+            config={{ showHeader: false, showJsonToggle: false, editable: false, viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal', showTitle: false }, fixError: true }}
+            data={data}
+            loading={loading && !data}
+            error={error}
+            onRetry={refetch}
+            onVizTypeChange={() => {}}
+            onAxisChange={() => {}}
+          />
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -161,7 +204,7 @@ export default function NotebookSqlCell({
       <NotebookCellHeader
         cellType="sql"
         collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed(c => !c)}
+        onToggleCollapse={() => onToggleCollapse?.()}
         name={cell.name ?? ''}
         onNameChange={(name) => handleChange({ name })}
         onRemove={() => onRemove(cell.id)}

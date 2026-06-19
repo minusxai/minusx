@@ -8,7 +8,7 @@
  * toolbar level. Image upload (type "+") and @ / @@ mentions (tables, questions)
  * are wired like the context docs editor.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Box } from '@chakra-ui/react';
 import NotebookCellHeader from './NotebookCellHeader';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
@@ -21,17 +21,20 @@ interface NotebookTextCellProps {
   cell: TextCell;
   active?: boolean;
   onActivate?: (cellId: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   readOnly?: boolean;
+  /** Present mode: show just the rendered markdown, no chrome. */
+  presentMode?: boolean;
   filePath?: string;
   onCellChange: (id: string, partial: Partial<TextCell>) => void;
   onRemove: (id: string) => void;
 }
 
 export default function NotebookTextCell({
-  cell, active = false, onActivate, readOnly = false, filePath, onCellChange, onRemove,
+  cell, active = false, onActivate, collapsed = false, onToggleCollapse,
+  readOnly = false, presentMode = false, filePath, onCellChange, onRemove,
 }: NotebookTextCellProps) {
-  const [collapsed, setCollapsed] = useState(false);
-
   const handleContentChange = useCallback(
     (markdown: string) => onCellChange(cell.id, { content: markdown }),
     [onCellChange, cell.id],
@@ -55,11 +58,17 @@ export default function NotebookTextCell({
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
   const mentions = useMemo<MentionsConfig>(() => ({ whitelistedSchemas: schemaData }), [schemaData]);
 
+  // Present mode: render just the rendered markdown (skip empty cells).
+  if (presentMode) {
+    if (!cell.content?.trim()) return null;
+    return <Box py={1}><LexicalTextViewer markdown={cell.content} /></Box>;
+  }
+
   const chrome = (middle?: React.ReactNode) => (
     <NotebookCellHeader
       cellType="text"
       collapsed={collapsed}
-      onToggleCollapse={() => setCollapsed(c => !c)}
+      onToggleCollapse={() => onToggleCollapse?.()}
       name={cell.name ?? ''}
       onNameChange={(name) => onCellChange(cell.id, { name })}
       onRemove={() => onRemove(cell.id)}

@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { HStack, Text, Icon, Button } from '@chakra-ui/react';
+import { HStack, Text, Icon, Button, IconButton } from '@chakra-ui/react';
 import { LuLock, LuGlobe } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveName, selectEffectivePath, selectMergedContent } from '@/store/filesSlice';
@@ -33,6 +33,8 @@ import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 import SaveFileModal from './SaveFileModal';
+import { useFileToolbar } from './file-toolbar/FileToolbarContext';
+import { Tooltip } from './ui/tooltip';
 import ShareModal from './share/ShareModal';
 import { isAdmin } from '@/lib/auth/role-helpers';
 
@@ -60,6 +62,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       : selectFileEditMode(state, fileId)
   );
   const viewMode = useAppSelector(state => selectFileViewMode(state, fileId));
+  // View-published toolbar actions (e.g. notebook: Present, Run all, Collapse all).
+  const toolbarActions = useFileToolbar();
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const canEdit = !effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType);
@@ -195,6 +199,45 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     </HStack>
   ) : undefined;
 
+  // Generic header toolbar: render whatever the current file's view registered
+  // (Present, Run all, …) as one list, plus the per-type share button. The
+  // header has no per-type knowledge — views own their actions.
+  const shareButton = canShare ? (
+    <Button aria-label="Make public" size="xs" variant="subtle" fontFamily="mono" px={2} onClick={() => setIsShareModalOpen(true)}>
+      <LuGlobe /> Make public
+    </Button>
+  ) : null;
+  const actionButtons = toolbarActions.map(a => (
+    <Tooltip key={a.id} content={a.ariaLabel} positioning={{ placement: 'top' }}>
+      {a.label ? (
+        <Button
+          aria-label={a.ariaLabel}
+          size="xs"
+          variant="subtle"
+          fontFamily="mono"
+          px={2}
+          onClick={a.onClick}
+        >
+          {a.icon}{a.label}
+        </Button>
+      ) : (
+        <IconButton
+          aria-label={a.ariaLabel}
+          size="xs"
+          variant={a.active ? 'subtle' : 'ghost'}
+          color={a.active ? 'fg.default' : 'fg.muted'}
+          _hover={{ color: 'fg.default', bg: 'bg.muted' }}
+          onClick={a.onClick}
+        >
+          {a.icon}
+        </IconButton>
+      )}
+    </Tooltip>
+  ));
+  const headerActionsNode = (actionButtons.length || shareButton) ? (
+    <HStack gap={1}>{actionButtons}{shareButton}</HStack>
+  ) : undefined;
+
   return (
     <>
       <DocumentHeader
@@ -223,18 +266,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
-        headerActions={canShare ? (
-          <Button
-            aria-label="Make public"
-            size="xs"
-            variant="subtle"
-            fontFamily="mono"
-            onClick={() => setIsShareModalOpen(true)}
-            px={2}
-          >
-            <LuGlobe /> Make public
-          </Button>
-        ) : undefined}
+        headerActions={headerActionsNode}
         additionalBadges={(
           <>
             {questionCount !== undefined && (

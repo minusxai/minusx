@@ -15,12 +15,13 @@
  * A JSON view (FileHeader's eye/code toggle) is wired like StoryView/dashboards:
  * read-only without a fileId, editable with one (full-content edits).
  */
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, VStack, HStack, Button, Center, Text, Icon } from '@chakra-ui/react';
-import { LuDatabase, LuFileText, LuNotebook } from 'react-icons/lu';
+import { LuDatabase, LuFileText, LuNotebook, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPresentation, LuX } from 'react-icons/lu';
 import NotebookSqlCell from './notebook/NotebookSqlCell';
 import NotebookTextCell from './notebook/NotebookTextCell';
 import CellInsertZone from './notebook/CellInsertZone';
+import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
 import JsonEditor from '@/components/slides/JsonEditor';
 import { useAppSelector } from '@/store/hooks';
 import { selectPersistableContent } from '@/store/filesSlice';
@@ -87,6 +88,42 @@ export default function NotebookView({
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
 
+  // Per-cell collapse + a run-all nonce, driven by header toolbar actions.
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [runNonce, setRunNonce] = useState(0);
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const runAll = useCallback(() => setRunNonce(n => n + 1), []);
+  const collapseAll = useCallback(() => setCollapsedIds(new Set(cellsRef.current.map(c => c.id))), []);
+  const expandAll = useCallback(() => setCollapsedIds(new Set()), []);
+
+  // Present (reading) mode — view-local; the header just renders the toggle we
+  // publish below, so present isn't special-cased anywhere outside this view.
+  const [present, setPresent] = useState(false);
+  const togglePresent = useCallback(() => setPresent(p => !p), []);
+
+  // Publish notebook actions into the document header toolbar (one list). The
+  // Present toggle is always available; editing actions hide while presenting.
+  const toolbarActions = useMemo<FileToolbarAction[]>(() => {
+    if (cells.length === 0) return [];
+    const presentAction: FileToolbarAction = present
+      ? { id: 'present', ariaLabel: 'Exit present mode', icon: <LuX />, onClick: togglePresent, active: true }
+      : { id: 'present', ariaLabel: 'Present', icon: <LuPresentation />, onClick: togglePresent };
+    if (present || readOnly) return [presentAction];
+    return [
+      { id: 'run-all', ariaLabel: 'Run all cells', icon: <LuPlay />, onClick: runAll },
+      { id: 'collapse-all', ariaLabel: 'Collapse all cells', icon: <LuChevronsDownUp />, onClick: collapseAll },
+      { id: 'expand-all', ariaLabel: 'Expand all cells', icon: <LuChevronsUpDown />, onClick: expandAll },
+      presentAction,
+    ];
+  }, [present, readOnly, cells.length, runAll, collapseAll, expandAll, togglePresent]);
+  useFileToolbarActions(toolbarActions);
+
   if (viewMode === 'json') {
     return (
       <JsonEditor
@@ -102,9 +139,46 @@ export default function NotebookView({
     );
   }
 
+  if (present) {
+    return (
+      <Box flex={1} overflow="auto" p={{ base: 4, md: 8 }}>
+        <Box maxW="860px" mx="auto">
+          {cells.length === 0 ? (
+            <Center color="fg.muted" py={16}><Text fontSize="sm">Nothing to present yet.</Text></Center>
+          ) : (
+            <VStack align="stretch" gap={8}>
+              {cells.map(cell => cell.type === 'sql' ? (
+                <NotebookSqlCell
+                  key={cell.id}
+                  cell={cell}
+                  presentMode
+                  readOnly
+                  filePath={filePath}
+                  onCellChange={updateCell}
+                  onRemove={removeCell}
+                />
+              ) : (
+                <NotebookTextCell
+                  key={cell.id}
+                  cell={cell}
+                  presentMode
+                  readOnly
+                  filePath={filePath}
+                  onCellChange={updateCell}
+                  onRemove={removeCell}
+                />
+              ))}
+            </VStack>
+          )}
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box flex={1} overflow="auto" p={4}>
-      <VStack align="stretch" gap={0} maxW="900px" mx="auto" pl={{ base: 0, md: '40px' }}>
+      <Box maxW="900px" mx="auto">
+      <VStack align="stretch" gap={0} pl={{ base: 0, md: '40px' }}>
         {cells.length === 0 ? (
           <>
             <Center aria-label="Empty notebook" flexDirection="column" gap={3} py={16} color="fg.muted">
@@ -151,6 +225,9 @@ export default function NotebookView({
                         cell={cell}
                         active={active}
                         onActivate={onActivateCell}
+                        collapsed={collapsedIds.has(cell.id)}
+                        onToggleCollapse={() => toggleCollapse(cell.id)}
+                        runNonce={runNonce}
                         readOnly={readOnly}
                         filePath={filePath}
                         onCellChange={updateCell}
@@ -161,6 +238,8 @@ export default function NotebookView({
                         cell={cell}
                         active={active}
                         onActivate={onActivateCell}
+                        collapsed={collapsedIds.has(cell.id)}
+                        onToggleCollapse={() => toggleCollapse(cell.id)}
                         readOnly={readOnly}
                         filePath={filePath}
                         onCellChange={updateCell}
@@ -175,6 +254,7 @@ export default function NotebookView({
           </>
         )}
       </VStack>
+      </Box>
     </Box>
   );
 }

@@ -11,7 +11,7 @@ import {
   VStack,
   Icon,
 } from '@chakra-ui/react';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFiles } from 'react-icons/lu';
+import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
@@ -279,7 +279,7 @@ export default function DocumentHeader({
                 transition="color 0.15s"
                 cursor="pointer"
               >
-                <Icon as={LuFiles} boxSize={3.5} />
+                <Icon as={LuFileDiff} />
                 <Text fontSize="xs" fontWeight="600" fontFamily="mono">
                   Review {dirtyFileCount} change{dirtyFileCount > 1 ? 's' : ''}
                 </Text>
