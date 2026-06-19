@@ -4,7 +4,7 @@
  */
 import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
-import { selectIsDirty, selectMergedContent, selectFile } from '@/store/filesSlice';
+import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted } from '@/store/filesSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';
@@ -1050,5 +1050,111 @@ describe('EditFile - Context post-edit guard', () => {
     );
     expect(result.details?.success).toBe(false);
     expect(result.details?.error).toMatch(/can only modify docs/);
+  });
+});
+
+describe('EditFile - notebook cell auto-execute', () => {
+  let notebookId: number;
+
+  const notebookContent = {
+    description: null,
+    cells: [{
+      type: 'sql', id: 'cell-1', name: null, query: 'SELECT 1',
+      vizSettings: { type: 'table' }, parameters: [], parameterValues: {},
+      connection_name: 'mxfood', references: [],
+    }],
+  };
+
+  function makeEditToolCall(args: Record<string, unknown>) {
+    return {
+      id: 'test-edit-nb',
+      type: 'function' as const,
+      function: { name: 'EditFile', arguments: args },
+    };
+  }
+
+  function setupStore() {
+    return configureStore({
+      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer },
+    });
+  }
+
+  beforeAll(() => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      if (urlStr.includes('/api/query')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: { columns: ['n'], types: ['BIGINT'], rows: [{ n: 2 }] },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(async () => {
+    await clearFilesExceptOrg();
+    notebookId = await DocumentDB.create('test-notebook', '/org/test-notebook', 'notebook', notebookContent, []);
+    testStore = setupStore();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    testStore = null;
+    if (global.gc) global.gc();
+  });
+
+  it('runs the changed cell and records its executed snapshot in Redux', async () => {
+    await readFiles([notebookId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: notebookId,
+        changes: [{ oldMatch: 'SELECT 1', newMatch: 'SELECT 2' }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(true);
+
+    // The edited cell's executed snapshot is written to ephemeral state so
+    // NotebookView shows the result without a manual Run.
+    const executed = selectNotebookCellExecuted(testStore.getState(), notebookId);
+    expect(executed?.['cell-1']?.query).toBe('SELECT 2');
+    expect(executed?.['cell-1']?.database).toBe('mxfood');
+
+    // The fresh result flows back to the agent in the response.
+    const parsed = JSON.parse(result.content as string);
+    const qr = parsed.queryResults?.[0];
+    expect(qr).toBeDefined();
+    expect(qr.data).toContain('| 2 |');
+  });
+
+  it('does not execute when the edit leaves the cell query unchanged', async () => {
+    await readFiles([notebookId]);
+    // Edit only the notebook description, not any cell query.
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: notebookId,
+        changes: [{ oldMatch: '"description":null', newMatch: '"description":"updated"' }],
+      }),
+      {} as any,
+    );
+    expect(result.details?.success).toBe(true);
+    const executed = selectNotebookCellExecuted(testStore.getState(), notebookId);
+    expect(executed?.['cell-1']).toBeUndefined();
   });
 });

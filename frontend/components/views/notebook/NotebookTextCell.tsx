@@ -8,7 +8,7 @@
  * toolbar level. Image upload (type "+") and @ / @@ mentions (tables, questions)
  * are wired like the context docs editor.
  */
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import NotebookCellHeader from './NotebookCellHeader';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
@@ -35,8 +35,27 @@ export default function NotebookTextCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse,
   readOnly = false, presentMode = false, filePath, onCellChange, onRemove,
 }: NotebookTextCellProps) {
+  // LexicalTextEditor seeds its content from `initialMarkdown` only on mount, so
+  // an EXTERNAL edit (e.g. the agent's EditFile) to cell.content wouldn't show.
+  // Track what this editor last emitted; when cell.content arrives as a value we
+  // didn't emit, it's an external change — bump `syncKey` to remount the editor and
+  // re-seed it. Our own edits echo back equal to `lastEmitted` → no remount, so the
+  // user's typing/cursor is never disrupted (the emit + the Redux round-trip batch
+  // into one render, so `lastEmitted` is current by the time the echo arrives).
+  // Adjusting state during render is React's "reset on prop change" pattern.
+  const [lastEmitted, setLastEmitted] = useState(cell.content);
+  const [seenContent, setSeenContent] = useState(cell.content);
+  const [syncKey, setSyncKey] = useState(0);
+  if (cell.content !== seenContent) {
+    setSeenContent(cell.content);
+    if (cell.content !== lastEmitted) setSyncKey(k => k + 1);
+  }
+
   const handleContentChange = useCallback(
-    (markdown: string) => onCellChange(cell.id, { content: markdown }),
+    (markdown: string) => {
+      setLastEmitted(markdown);
+      onCellChange(cell.id, { content: markdown });
+    },
     [onCellChange, cell.id],
   );
 
@@ -97,6 +116,7 @@ export default function NotebookTextCell({
         </>
       ) : (
         <LexicalTextEditor
+          key={syncKey}
           initialMarkdown={cell.content}
           onChange={handleContentChange}
           onImageUpload={handleImageUpload}

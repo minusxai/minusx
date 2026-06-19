@@ -5,8 +5,8 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, type FileType } from '@/lib/types';
-import { setEphemeral, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType } from '@/lib/types';
+import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -660,6 +660,47 @@ registerFrontendTool('EditFile', async (args, _context) => {
         });
       } catch (execErr) {
         console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
+      }
+    }
+  }
+
+  // Auto-execute changed cells for notebooks (agent + UI see results immediately).
+  // A notebook is one file holding many inline-question cells, so we diff before/after
+  // to find which SQL cell(s) the edit touched and run only those — mirroring the
+  // question branch but per cell, writing each cell's executed snapshot to Redux so
+  // NotebookView's cell displays its result without a manual Run.
+  if (fileState?.type === 'notebook') {
+    const beforeContent = selectMergedContent(stateBefore, fileId) as NotebookContent | undefined;
+    const afterContent = selectMergedContent(getStore().getState(), fileId) as NotebookContent | undefined;
+    const beforeById = new Map<string, NotebookSqlCell>();
+    for (const c of beforeContent?.cells ?? []) {
+      if (c.type === 'sql') beforeById.set(c.id, c);
+    }
+    for (const cell of afterContent?.cells ?? []) {
+      if (cell.type !== 'sql' || !cell.query || !cell.connection_name) continue;
+      const params = cell.parameterValues || {};
+      const prev = beforeById.get(cell.id);
+      const changed = !prev
+        || prev.query !== cell.query
+        || prev.connection_name !== cell.connection_name
+        || JSON.stringify(prev.parameterValues || {}) !== JSON.stringify(params)
+        || JSON.stringify(prev.references || []) !== JSON.stringify(cell.references || []);
+      if (!changed) continue;
+
+      // Clear the cached result + record the executed snapshot before awaiting, so
+      // the cell viz shows loading immediately (mirrors the question branch).
+      getStore().dispatch(clearQueryResult({ query: cell.query, params, database: cell.connection_name }));
+      getStore().dispatch(setNotebookCellExecuted({
+        fileId: fileId as FileId,
+        cellId: cell.id,
+        executed: { query: cell.query, params, database: cell.connection_name, references: cell.references || [] },
+      }));
+
+      // Best-effort: a failed execution must NOT fail the edit (already staged).
+      try {
+        await getQueryResult({ query: cell.query, params, database: cell.connection_name, filePath: fileState?.path });
+      } catch (execErr) {
+        console.warn('[EditFile] Notebook cell auto-execute failed (edit still staged):', execErr);
       }
     }
   }

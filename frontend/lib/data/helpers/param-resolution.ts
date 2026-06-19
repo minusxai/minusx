@@ -10,7 +10,7 @@ import type { RootState } from '@/store/store';
 import { selectFile, selectMergedContent, type FileState } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult } from '@/lib/types';
+import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 
 /**
  * Extracts inherited params from a file's content directly.
@@ -110,6 +110,24 @@ export function augmentWithParams(
       const params = resolveEffectiveParams(content.parameters || [], ownParamValues, inheritedParams);
       const qr = selectQueryResult(state, content.query, params, content.connection_name);
       const id = getQueryHash(content.query, params, content.connection_name);
+      if (qr?.data) {
+        result.set(id, { ...(qr.data || {}), id });
+      } else if (qr?.error) {
+        result.set(id, { columns: [], types: [], rows: [], id, error: qr.error } as any);
+      }
+    }
+  }
+
+  // Notebook SQL cells are inline questions — collect each cell's cached result
+  // (keyed on the cell's own query/params/connection) so the agent sees results
+  // after an EditFile or a manual Run, just like a standalone question.
+  if (fileState.type === 'notebook') {
+    const content = selectMergedContent(state, fileState.id) as NotebookContent | undefined;
+    for (const cell of content?.cells ?? []) {
+      if (cell.type !== 'sql' || !cell.query || !cell.connection_name) continue;
+      const params = cell.parameterValues ?? {};
+      const qr = selectQueryResult(state, cell.query, params, cell.connection_name);
+      const id = getQueryHash(cell.query, params, cell.connection_name);
       if (qr?.data) {
         result.set(id, { ...(qr.data || {}), id });
       } else if (qr?.error) {

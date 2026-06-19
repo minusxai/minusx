@@ -23,8 +23,8 @@ import NotebookTextCell from './notebook/NotebookTextCell';
 import CellInsertZone from './notebook/CellInsertZone';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
 import JsonEditor from '@/components/slides/JsonEditor';
-import { useAppSelector } from '@/store/hooks';
-import { selectPersistableContent } from '@/store/filesSlice';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { selectPersistableContent, selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
 import { applyJsonContentEdit } from '@/lib/api/file-state';
 import type {
   NotebookContent, NotebookCell, NotebookSqlCell as SqlCell,
@@ -44,6 +44,9 @@ interface NotebookViewProps {
 }
 
 const newId = (): string => crypto.randomUUID();
+
+// Stable empty map so an absent cellExecuted doesn't churn cell props each render.
+const EMPTY_EXECUTED: Record<string, Executed> = {};
 
 export default function NotebookView({
   content, onChange, readOnly = false, filePath, fileId, viewMode = 'visual', activeCellId, onActivateCell,
@@ -102,13 +105,23 @@ export default function NotebookView({
   const collapseAll = useCallback(() => setCollapsedIds(new Set(cellsRef.current.map(c => c.id))), []);
   const expandAll = useCallback(() => setCollapsedIds(new Set()), []);
 
-  // What each SQL cell last ran, kept here (not in the cell) so results survive
-  // the edit↔present remount — present is a separate subtree, so a cell-local
-  // executed state would be lost and the charts would vanish.
-  const [executedById, setExecutedById] = useState<Record<string, Executed>>({});
+  // What each SQL cell last ran. Held in Redux ephemeral state (keyed by cell id)
+  // when the notebook is a real file — so the agent's EditFile can drive a cell's
+  // result, and so results survive the edit↔present remount (a separate subtree).
+  // Without a fileId (e.g. unit tests / draft preview) we fall back to local state.
+  const dispatch = useAppDispatch();
+  const reduxExecuted = useAppSelector(state =>
+    fileId !== undefined ? selectNotebookCellExecuted(state, fileId) : undefined
+  );
+  const [localExecuted, setLocalExecuted] = useState<Record<string, Executed>>({});
+  const executedById = (fileId !== undefined ? reduxExecuted : localExecuted) ?? EMPTY_EXECUTED;
   const setCellExecuted = useCallback((id: string, e: Executed) => {
-    setExecutedById(prev => ({ ...prev, [id]: e }));
-  }, []);
+    if (fileId !== undefined) {
+      dispatch(setNotebookCellExecuted({ fileId, cellId: id, executed: e }));
+    } else {
+      setLocalExecuted(prev => ({ ...prev, [id]: e }));
+    }
+  }, [dispatch, fileId]);
 
   // Present (reading) mode — view-local; the header just renders the toggle we
   // publish below, so present isn't special-cased anywhere outside this view.

@@ -128,6 +128,23 @@ describe('NotebookView', () => {
     expect(edit).toBeTruthy();
   });
 
+  it('reflects an external (agent) edit to a text cell', async () => {
+    const { rerender } = renderWithProviders(
+      <NotebookView content={{ description: null, cells: [textCell({ content: 'old text' })] }} onChange={onChange} />
+    );
+    const editor = await screen.findByLabelText('Text cell editor') as HTMLTextAreaElement;
+    expect(editor.value).toBe('old text');
+
+    // The agent edits the cell content (Redux → new content prop). Lexical seeds
+    // its editorState only on mount, so the view must re-seed (remount) to show it.
+    rerender(
+      <NotebookView content={{ description: null, cells: [textCell({ content: 'new text from agent' })] }} onChange={onChange} />
+    );
+    await waitFor(() => {
+      expect((screen.getByLabelText('Text cell editor') as HTMLTextAreaElement).value).toBe('new text from agent');
+    });
+  });
+
   it('defaults a new (hover-inserted) SQL cell to the previous SQL cell connection', () => {
     renderWithProviders(
       <NotebookView content={{ description: null, cells: [sqlCell({ connection_name: 'db_a' })] }} onChange={onChange} />
