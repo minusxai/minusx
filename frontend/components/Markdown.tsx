@@ -17,6 +17,7 @@ import { selectShowSuggestedQuestions, selectShowTrustScore } from '@/store/uiSl
 import { selectContextFromPath } from '@/store/filesSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { isInternalAppLink } from '@/lib/utils/internal-link';
 import { parseSuggestedQuestions, parseTrustInfo, type ParsedTrustInfo } from '@/lib/utils/xml-parser';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -436,8 +437,9 @@ export default function Markdown({
 
   // Append mode param to internal links if in non-default mode
   const withMode = (href: string): string => {
-    if (!mode || mode === 'org') return href;
-    return `${href}?mode=${mode}`;
+    if (!mode || mode === 'org' || !href.startsWith('/')) return href;
+    const sep = href.includes('?') ? '&' : '?';
+    return `${href}${sep}mode=${mode}`;
   };
 
   // Check if a link is an internal file link (/f/<id>)
@@ -492,8 +494,13 @@ export default function Markdown({
           </LinkButton>
         );
       }
-      // Regular external link
-      return <a href={href} {...props}>{children}</a>;
+      // Any other same-origin route (folder /p/…, /f/<id> with a query/hash, etc.)
+      // → client-side nav so we don't hard-reload the page and wipe Redux state.
+      if (isInternalAppLink(href)) {
+        return <Link href={withMode(href)} {...props}>{children}</Link>;
+      }
+      // Genuinely external → open in a new tab.
+      return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
     },
   };
 

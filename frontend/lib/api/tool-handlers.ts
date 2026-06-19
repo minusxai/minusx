@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, type FileType } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -13,6 +13,7 @@ import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { FilesAPI } from '../data/files';
+import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/api/file-state';
@@ -824,24 +825,26 @@ registerFrontendTool('CreateFile', async (args, context) => {
     }
   }
 
+  // Validate the would-be content (pure template defaults + override) BEFORE
+  // creating anything, so a rejected create leaves no draft behind. The shallow
+  // top-level merge mirrors setEdit/selectMergedContent, so this is the exact
+  // content the save path validates — caught up front, with no network round-trip.
+  if (content && Object.keys(content).length > 0) {
+    const defaults = getTemplateDefaults(file_type as FileType);
+    const mergedContent = { ...(defaults ?? {}), ...content };
+    const validationError = validateFileState({ type: file_type as FileType, content: mergedContent });
+    if (validationError) {
+      const err = `Invalid content for '${file_type}': ${validationError}`;
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
+    }
+  }
+
   // Create draft file on server — returns real positive ID with draft:true.
   // Passing name here ensures the DB path uses the slug immediately (important
   // for folders that will be used as parents for other files in the same session).
   const draftId = await createDraftFile(file_type, { folder: path, name: name ?? undefined });
   if (content && Object.keys(content).length > 0) {
     await editFileOp({ fileId: draftId, changes: { content } });
-  }
-
-  // Validate final merged content (template defaults + content override)
-  // Same validator as editFileStr — catches bad vizSettings, invalid types, etc.
-  const fileType = getStore().getState().files.files[draftId]?.type;
-  const mergedContent = selectMergedContent(getStore().getState(), draftId);
-  if (fileType && mergedContent) {
-    const validationError = validateFileState({ type: fileType, content: mergedContent });
-    if (validationError) {
-      const err = `Invalid content for '${fileType}': ${validationError}`;
-      return { content: { success: false, error: err }, details: { success: false, error: err } };
-    }
   }
 
   // Auto-execute query for questions (agent sees results immediately)

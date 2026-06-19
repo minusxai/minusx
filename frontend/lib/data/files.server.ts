@@ -1,7 +1,7 @@
 import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, StoryContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
+import { DbFile, BaseFileContent, FileType, QuestionContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
 import { IFilesDataLayer } from './files.interface';
 import {
   LoadFileResult,
@@ -26,6 +26,7 @@ import { createShareLink, decodeShareLink, isLiveShareNonce, type ShareRecord } 
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
+import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
@@ -678,11 +679,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const defaultDb = selectDatabase(allDbConnections, options.databaseName);
 
         const content: QuestionContent = {
-          description: '',
-          query: options.query || '',
-          vizSettings: { type: 'table' },
-          parameters: [],
-          connection_name: defaultDb || ''
+          ...(getTemplateDefaults('question', { query: options.query }) as QuestionContent),
+          connection_name: defaultDb || '',  // dynamic: suggested from connections
         };
 
         return {
@@ -692,67 +690,20 @@ class FilesDataLayerServer implements IFilesDataLayer {
         };
       }
 
-      case 'dashboard': {
-        const content: DocumentContent = {
-          description: '',
-          assets: [],
-          layout: { columns: 12, items: [] }
-        };
+      case 'dashboard':
+        return { content: getTemplateDefaults('dashboard')!, fileName: '' };
 
-        return {
-          content,
-          fileName: ''
-        };
-      }
+      case 'story':
+        return { content: getTemplateDefaults('story')!, fileName: '' };
 
-      case 'story': {
-        const content: StoryContent = {
-          description: '',
-          assets: [],
-          story: null
-        };
+      case 'presentation':
+        return { content: getTemplateDefaults('presentation')!, fileName: '' };
 
-        return {
-          content,
-          fileName: ''
-        };
-      }
+      case 'connection':
+        return { content: getTemplateDefaults('connection')!, fileName: '' };
 
-      case 'presentation': {
-        const content: DocumentContent = {
-          description: '',
-          assets: [],
-          layout: {
-            canvasWidth: 1280,
-            canvasHeight: 720,
-            slides: [{ rectangles: [], arrows: [] }]
-          }
-        };
-
-        return {
-          content,
-          fileName: ''
-        };
-      }
-
-      case 'connection': {
-        const content: ConnectionContent = {
-          type: 'bigquery',
-          config: {}
-        };
-
-        return {
-          content,
-          fileName: ''
-        };
-      }
-
-      case 'folder': {
-        return {
-          content: { description: '' },
-          fileName: 'New Folder'
-        };
-      }
+      case 'folder':
+        return { content: getTemplateDefaults('folder')!, fileName: 'New Folder' };
 
       case 'context': {
         // Determine folder path (options.path or user's home folder)
