@@ -18,7 +18,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, VStack, HStack, Button, Center, Text, Icon } from '@chakra-ui/react';
 import { LuDatabase, LuFileText, LuNotebook, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPresentation, LuX } from 'react-icons/lu';
-import NotebookSqlCell from './notebook/NotebookSqlCell';
+import NotebookSqlCell, { type Executed } from './notebook/NotebookSqlCell';
 import NotebookTextCell from './notebook/NotebookTextCell';
 import CellInsertZone from './notebook/CellInsertZone';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
@@ -102,6 +102,14 @@ export default function NotebookView({
   const collapseAll = useCallback(() => setCollapsedIds(new Set(cellsRef.current.map(c => c.id))), []);
   const expandAll = useCallback(() => setCollapsedIds(new Set()), []);
 
+  // What each SQL cell last ran, kept here (not in the cell) so results survive
+  // the edit↔present remount — present is a separate subtree, so a cell-local
+  // executed state would be lost and the charts would vanish.
+  const [executedById, setExecutedById] = useState<Record<string, Executed>>({});
+  const setCellExecuted = useCallback((id: string, e: Executed) => {
+    setExecutedById(prev => ({ ...prev, [id]: e }));
+  }, []);
+
   // Present (reading) mode — view-local; the header just renders the toggle we
   // publish below, so present isn't special-cased anywhere outside this view.
   const [present, setPresent] = useState(false);
@@ -154,6 +162,8 @@ export default function NotebookView({
                   presentMode
                   readOnly
                   filePath={filePath}
+                  executed={executedById[cell.id] ?? null}
+                  onExecutedChange={(e) => setCellExecuted(cell.id, e)}
                   onCellChange={updateCell}
                   onRemove={removeCell}
                 />
@@ -230,6 +240,8 @@ export default function NotebookView({
                         runNonce={runNonce}
                         readOnly={readOnly}
                         filePath={filePath}
+                        executed={executedById[cell.id] ?? null}
+                        onExecutedChange={(e) => setCellExecuted(cell.id, e)}
                         onCellChange={updateCell}
                         onRemove={removeCell}
                       />

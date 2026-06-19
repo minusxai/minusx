@@ -37,6 +37,13 @@ import type {
   NotebookSqlCell as SqlCell, QuestionContent, QuestionReference, VizSettings, FullQuery,
 } from '@/lib/types';
 
+export interface Executed {
+  query: string;
+  params: Record<string, unknown>;
+  database: string;
+  references: QuestionReference[];
+}
+
 interface NotebookSqlCellProps {
   cell: SqlCell;
   active?: boolean;
@@ -46,26 +53,23 @@ interface NotebookSqlCellProps {
   /** Bumped by the header "Run all" command — re-running this cell on change. */
   runNonce?: number;
   readOnly?: boolean;
-  /** Present mode: hide all chrome/editor — show just the chart (auto-run). */
+  /** Present mode: hide all chrome/editor — show just the chart. */
   presentMode?: boolean;
   filePath?: string;
+  /** What this cell last ran — lifted to NotebookView so results survive the
+      edit↔present remount (the present view is a separate subtree). */
+  executed?: Executed | null;
+  onExecutedChange?: (executed: Executed) => void;
   onCellChange: (id: string, partial: Partial<SqlCell>) => void;
   onRemove: (id: string) => void;
 }
 
-interface Executed {
-  query: string;
-  params: Record<string, unknown>;
-  database: string;
-  references: QuestionReference[];
-}
-
-// Stable empty params so present-mode execution doesn't refetch every render.
+// Stable empty params so execution doesn't refetch every render.
 const EMPTY_PARAMS: Record<string, unknown> = {};
 
 export default function NotebookSqlCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
-  readOnly = false, presentMode = false, filePath, onCellChange, onRemove,
+  readOnly = false, presentMode = false, filePath, executed = null, onExecutedChange, onCellChange, onRemove,
 }: NotebookSqlCellProps) {
   const handleChange = useCallback(
     (partial: Partial<SqlCell>) => onCellChange(cell.id, partial),
@@ -76,8 +80,7 @@ export default function NotebookSqlCell({
     if (!active) onActivate?.(cell.id);
   }, [active, onActivate, cell.id]);
 
-  const [executed, setExecuted] = useState<Executed | null>(null);
-  // Present mode reuses whatever was already run — it does NOT re-execute.
+  // `executed` is owned by NotebookView so results persist across present toggle.
   const { data, loading, error, refetch } = useQueryResult(
     executed?.query ?? '',
     executed?.params ?? EMPTY_PARAMS,
@@ -131,7 +134,7 @@ export default function NotebookSqlCell({
   }, [cell.query, dialect]);
 
   const run = useCallback(() => {
-    setExecuted({
+    onExecutedChange?.({
       query: cell.query,
       params: cell.parameterValues ?? {},
       database: cell.connection_name,
@@ -139,7 +142,7 @@ export default function NotebookSqlCell({
     });
     // If the same query was already executed, force a fresh fetch.
     refetch();
-  }, [cell.query, cell.parameterValues, cell.connection_name, cell.references, refetch]);
+  }, [cell.query, cell.parameterValues, cell.connection_name, cell.references, refetch, onExecutedChange]);
 
   // Header "Run all" command: re-run this cell when the nonce changes.
   const lastRunNonce = useRef(runNonce);
@@ -311,7 +314,7 @@ export default function NotebookSqlCell({
           lastSubmittedValues={executed?.params}
           onValueChange={(name, value) =>
             handleChange({ parameterValues: { ...(cell.parameterValues ?? {}), [name]: value } })}
-          onSubmit={(values) => setExecuted({
+          onSubmit={(values) => onExecutedChange?.({
             query: cell.query, params: values, database: cell.connection_name, references: cell.references ?? [],
           })}
           onParametersChange={(parameters) => handleChange({ parameters })}
