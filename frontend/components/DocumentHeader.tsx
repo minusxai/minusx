@@ -296,20 +296,27 @@ export default function DocumentHeader({
                 size="xs"
                 colorPalette="teal"
                 px={2}
+                h="26px"
               >
                 <LuSave />
                 {'Save'}
               </IconButton>
             )}
 
-            {/* Edit/Cancel Button */}
+            {/* Edit/Cancel Button — matches the header toolbar pill aesthetic */}
             {!hideEditToggle && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
-              variant={editMode ? 'outline' : 'subtle'}
+              variant="ghost"
               size="xs"
               px={2}
+              h="26px"
+              bg="bg.muted"
+              borderWidth="1px"
+              borderColor="border.muted"
+              color="fg.muted"
+              _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
             >
               {!editMode && <LuPencil />}
               {editMode ? 'Cancel' : 'Edit'}

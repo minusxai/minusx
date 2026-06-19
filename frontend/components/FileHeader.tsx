@@ -213,9 +213,13 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         <Button
           aria-label={a.ariaLabel}
           size="xs"
-          variant="subtle"
+          variant="ghost"
           fontFamily="mono"
-          px={2}
+          px={1}
+          h="22px"
+          color={a.active ? 'fg.default' : 'fg.muted'}
+          bg={a.active ? 'bg.emphasized' : undefined}
+          _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
           onClick={a.onClick}
         >
           {a.icon}{a.label}
@@ -224,9 +228,13 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         <IconButton
           aria-label={a.ariaLabel}
           size="xs"
-          variant={a.active ? 'subtle' : 'ghost'}
+          variant="ghost"
+          h="22px"
+          minW="22px"
+          px={1}
           color={a.active ? 'fg.default' : 'fg.muted'}
-          _hover={{ color: 'fg.default', bg: 'bg.muted' }}
+          bg={a.active ? 'bg.emphasized' : undefined}
+          _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
           onClick={a.onClick}
         >
           {a.icon}
@@ -235,7 +243,14 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     </Tooltip>
   ));
   const headerActionsNode = (actionButtons.length || shareButton) ? (
-    <HStack gap={1}>{actionButtons}{shareButton}</HStack>
+    <HStack gap={1.5}>
+      {actionButtons.length > 0 && (
+        <HStack gap="2px" bg="bg.muted" borderRadius="md" px="3px" py="1px" borderWidth="1px" borderColor="border.muted">
+          {actionButtons}
+        </HStack>
+      )}
+      {shareButton}
+    </HStack>
   ) : undefined;
 
   return (
