@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const runInContext = getModules().auth.getContextRunner?.() ?? ((fn: () => Promise<unknown>) => fn());
+  const runInContext = (await getModules().auth.getContextRunner?.()) ?? ((fn: () => Promise<unknown>) => fn());
   const installation = teamId ? await findSlackInstallationByTeam(teamId) : null;
   const signingSecret = installation?.bot.signing_secret ?? getSlackSigningSecret();
 
