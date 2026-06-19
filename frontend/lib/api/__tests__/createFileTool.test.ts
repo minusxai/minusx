@@ -296,4 +296,48 @@ describe('CreateFile tool — draft file path conflict validation', () => {
     expect(parsed.success).toBe(false);
     expect(parsed.error).toMatch(/must be a JSON object/i);
   });
+
+  // -------------------------------------------------------------------------
+  // Validate-before-create: invalid content is rejected up front, no draft left
+  // -------------------------------------------------------------------------
+
+  it('rejects invalid vizSettings BEFORE creating any draft', async () => {
+    const result = await executeToolCall(
+      createFileTool({
+        file_type: 'question', path: '/org', name: 'Bad Viz',
+        content: {
+          query: 'SELECT month, net_new_arr FROM t', connection_name: 'static',
+          // the exact mistake: per-series objects in xCols/yCols (must be strings)
+          vizSettings: { type: 'bar', xCols: [{ name: 'month' }], yCols: [{ name: 'net_new_arr', label: 'Net New ARR' }] },
+        },
+      }),
+      MOCK_DB,
+    );
+
+    const parsed = parseContent(result);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toMatch(/expected string, got object/);
+    expect(parsed.error).toMatch(/xCols/);
+
+    // Nothing persisted — the create never ran (validation is up front, in-memory).
+    const questions = Object.values((testStore.getState() as any).files.files).filter((f: any) => f?.type === 'question');
+    expect(questions).toHaveLength(0);
+  });
+
+  it('creates the draft when vizSettings are valid (string columns)', async () => {
+    const result = await executeToolCall(
+      createFileTool({
+        file_type: 'question', path: '/org', name: 'Good Viz',
+        content: {
+          query: 'SELECT month, net_new_arr FROM t', connection_name: 'static',
+          vizSettings: { type: 'bar', xCols: ['month'], yCols: ['net_new_arr'] },
+        },
+      }),
+      MOCK_DB,
+    );
+
+    expect(parseContent(result).success).toBe(true);
+    const questions = Object.values((testStore.getState() as any).files.files).filter((f: any) => f?.type === 'question');
+    expect(questions).toHaveLength(1);
+  });
 });
