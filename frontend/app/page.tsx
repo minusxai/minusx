@@ -218,7 +218,7 @@ export default function Home() {
             fontWeight="900"
             letterSpacing="-0.03em"
             color="fg.default"
-            mt={4}
+            mt={10}
             mb={2}
           >
             {config.branding.displayName}

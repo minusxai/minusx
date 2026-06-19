@@ -255,7 +255,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
       align="center"
       justify="space-between"
       gap={2}
-      mb={2}
+    //   mb={2}
       px={3}
       py={1}
       mx={-3}

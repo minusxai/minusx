@@ -136,7 +136,7 @@ export default function FileLayout(props: FileLayoutProps) {
               pb={shouldShowFloatingChat ? { base: '60px', md: '60px' } : { base: 4, md: 6, lg: 8 }}
               align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'auto'} minHeight="0">
             {!hideTopChrome && (
-              <Flex justify="space-between" align="center" mb={4} gap={4}>
+              <Flex justify="space-between" align="center" gap={4}>
                 <Box flex="1" minW={0}>
                   <Breadcrumb
                     items={breadcrumbItems}

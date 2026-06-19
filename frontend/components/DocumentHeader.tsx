@@ -164,9 +164,9 @@ export default function DocumentHeader({
       {highlightColor && <style>{pulseAnimation}</style>}
       {/* Main Header Section */}
       <VStack align="start" gap={1} mb={2}>
-        <HStack justify="space-between" width="100%" flexWrap="wrap" gap={2} align="center">
+        <HStack justify="space-between" width="100%" flexWrap="wrap" gap={2} align="start">
           {/* Title and Description */}
-          <VStack align="start" gap={0.5} flex="1">
+          <VStack align="start" gap={0.5} flex="1" minW={0}>
             {/* Title */}
             {editMode && !readOnlyName ? (
               <Input
@@ -195,6 +195,9 @@ export default function DocumentHeader({
                 letterSpacing="-0.02em"
                 color={titleColor}
                 fontFamily="mono"
+                maxW="100%"
+                lineClamp={1}
+                title={name}
                 onDoubleClick={readOnlyName ? undefined : onEditModeToggle}
                 cursor={readOnlyName ? 'default' : 'text'}
               >
@@ -202,8 +205,10 @@ export default function DocumentHeader({
               </Heading>
             )}
 
-            {/* Description with inline badges */}
-            <HStack gap={2} align="center" width="100%" flexWrap="wrap">
+            {/* Description (single line, ellipsised). The type/extra badges
+                live in the right column above the actions — keeping the header
+                to two rows. */}
+            <Box width="100%">
               {!hideDescription && editMode ? (
                 <Input
                   value={description || ''}
@@ -235,6 +240,8 @@ export default function DocumentHeader({
                     lineHeight="1.5"
                     fontWeight="600"
                     maxW="800px"
+                    lineClamp={1}
+                    title={description}
                     onDoubleClick={onEditModeToggle}
                     cursor="text"
                   >
@@ -242,21 +249,17 @@ export default function DocumentHeader({
                   </Text>
                 )
               )}
-
-              {/* Badges inline with description */}
-              {!editMode && (
-              <HStack gap={1.5}>
-                {/* Document type badge */}
-                <FileTypeBadge fileType={fileType} />
-
-                {/* Additional badges */}
-                {additionalBadges}
-              </HStack>
-                )}
-            </HStack>
+            </Box>
           </VStack>
 
-          {/* Actions */}
+          {/* Right column: type/extra badges above the action buttons. Shown in
+              both view and edit mode so the row height (and the actions below)
+              stay put when toggling Edit. */}
+          <VStack align="end" gap={1.5} flexShrink={0}>
+            <HStack gap={1.5} flexWrap="wrap" justify="flex-end">
+              <FileTypeBadge fileType={fileType} />
+              {additionalBadges}
+            </HStack>
           <HStack gap={2} flexShrink={0}>
             {/* Always-visible extra actions (e.g. Make public for stories) */}
             {headerActions}
@@ -335,6 +338,7 @@ export default function DocumentHeader({
               />
             )}
           </HStack>
+          </VStack>
         </HStack>
       </VStack>
 
