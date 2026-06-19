@@ -3,7 +3,7 @@ import type { FileState } from '@/store/filesSlice';
 // Atlas file content types — single source of truth is the TypeBox schemas in
 // lib/validation/atlas-schemas.ts.
 import type {
-  QuestionContent, StoryContent, FileReference, InlineAsset, VizSettings,
+  QuestionContent, StoryContent, NotebookContent, FileReference, InlineAsset, VizSettings,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -20,7 +20,8 @@ export type {
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   StoryContent,
-  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile,
+  NotebookContent, NotebookCell, NotebookSqlCell, NotebookTextCell,
+  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -88,11 +89,6 @@ export function isFileReference(asset: AssetReference): asset is FileReference {
 
 export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
   return ['text', 'image', 'divider'].includes(asset.type);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface NotebookLayout {
-  // Reserved for future overrides
 }
 
 export interface PresentationSlide {
@@ -872,7 +868,7 @@ export interface JobRunnerInput {
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | StoryContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
+  content: QuestionContent | DocumentContent | StoryContent | NotebookContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
 }
 
 /**

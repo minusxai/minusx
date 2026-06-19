@@ -70,6 +70,8 @@ via the Publish All button. You do not need to call Navigate or PublishFile.
 
 String Matching: Use \`oldMatch\` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.
 
+Notebooks: content has \`cells\` (an ordered array; each cell has a stable \`id\` and is either a \`sql\` cell — a full inline question — or a \`text\` cell). AppState content also carries \`activeCellId\`: the cell the user is currently working on. Unless they say otherwise, scope edits to that cell (match within it by its \`id\`/\`query\`), and do NOT touch other cells.
+
 Content schema — the shape of the file's "content" field, by file type (a discriminated oneOf on "type"). For vizSettings, use the same schema as ExecuteQuery's vizSettings:
 ${CONTENT_SCHEMA_NO_VIZ}`;
 

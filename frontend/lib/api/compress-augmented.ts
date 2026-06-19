@@ -33,12 +33,22 @@ export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can req
 
 /** Extract referenced file IDs from a DbFile's content */
 export function extractReferences(file: DbFile): number[] {
-  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'notebook' || file.type === 'story') {
+  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'story') {
     const content = file.content as any;
     return content.assets
       ?.filter((a: any) => a.type === 'question')
       ?.map((a: any) => a.id)
       .filter((id: any): id is number => typeof id === 'number') || [];
+  }
+  // Notebook SQL cells are inline questions; cross-file refs are each cell's @-references.
+  if (file.type === 'notebook') {
+    const content = file.content as any;
+    const ids: number[] = (content?.cells || [])
+      .filter((c: any) => c?.type === 'sql' && Array.isArray(c.references))
+      .flatMap((c: any) => c.references)
+      .map((ref: any) => ref?.id)
+      .filter((id: any): id is number => typeof id === 'number');
+    return Array.from(new Set(ids));
   }
   if (file.type === 'question') {
     const content = file.content as QuestionContent;

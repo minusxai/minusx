@@ -696,6 +696,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
       case 'story':
         return { content: getTemplateDefaults('story')!, fileName: '' };
 
+      case 'notebook':
+        return { content: getTemplateDefaults('notebook')!, fileName: '' };
+
       case 'presentation':
         return { content: getTemplateDefaults('presentation')!, fileName: '' };
 

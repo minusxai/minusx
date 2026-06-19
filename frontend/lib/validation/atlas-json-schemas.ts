@@ -20,9 +20,11 @@ import {
   QuestionContent,
   DashboardContent,
   StoryContent,
+  NotebookContent,
   AtlasQuestionFile,
   AtlasDashboardFile,
   AtlasStoryFile,
+  AtlasNotebookFile,
 } from './atlas-schemas';
 
 /** Deep-clone to plain JSON, dropping TypeBox's Symbol-keyed metadata. */
@@ -36,6 +38,7 @@ const topLevel = (defs: Record<string, unknown>): Record<string, unknown> => ({
     { $ref: '#/$defs/AtlasQuestionFile' },
     { $ref: '#/$defs/AtlasDashboardFile' },
     { $ref: '#/$defs/AtlasStoryFile' },
+    { $ref: '#/$defs/AtlasNotebookFile' },
   ],
 });
 
@@ -44,9 +47,11 @@ export const atlasSchema: Record<string, unknown> = topLevel({
   QuestionContent: toJson(QuestionContent),
   DashboardContent: toJson(DashboardContent),
   StoryContent: toJson(StoryContent),
+  NotebookContent: toJson(NotebookContent),
   AtlasQuestionFile: toJson(AtlasQuestionFile),
   AtlasDashboardFile: toJson(AtlasDashboardFile),
   AtlasStoryFile: toJson(AtlasStoryFile),
+  AtlasNotebookFile: toJson(AtlasNotebookFile),
 });
 
 // ── No-viz schema (vizSettings collapsed to a prose note) ────────────────────
@@ -69,4 +74,5 @@ export const atlasSchemaNoViz: Record<string, unknown> = topLevel({
   AtlasQuestionFile: stripViz(toJson(AtlasQuestionFile)),
   AtlasDashboardFile: stripViz(toJson(AtlasDashboardFile)),
   AtlasStoryFile: stripViz(toJson(AtlasStoryFile)),
+  AtlasNotebookFile: stripViz(toJson(AtlasNotebookFile)),
 });

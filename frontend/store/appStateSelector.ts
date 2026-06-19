@@ -22,13 +22,15 @@ export const selectAppState = createSelector(
   (state: RootState) => state.files.pathIndex,
   (state: RootState) => state.auth.user,
   (state: RootState) => state.queryResults.results,
+  (state: RootState) => state.ui.notebookActiveCell,
   (
     pathname,
     searchParams,
     filesState,
     pathIndex,
     user,
-    queryResultsMap
+    queryResultsMap,
+    notebookActiveCell
   ): { appState: AppState | null; loading: boolean } => {
     const pathState = computePathState(pathname, searchParams);
 
@@ -40,8 +42,21 @@ export const selectAppState = createSelector(
       if (!file) return { appState: null, loading: true };
       const [augmented] = selectAugmentedFiles(partialState, [pathState.id]);
       if (!augmented) return { appState: null, loading: true };
+      const compressed = compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS);
+      // Tell the agent which notebook cell the user is currently working on, so
+      // edits/suggestions target the right cell. Injected into the app-state
+      // snapshot only (not persisted to the file).
+      if (compressed.fileState?.type === 'notebook' && compressed.fileState.content) {
+        const activeCellId = notebookActiveCell[pathState.id];
+        if (activeCellId) {
+          compressed.fileState = {
+            ...compressed.fileState,
+            content: { ...(compressed.fileState.content as Record<string, unknown>), activeCellId } as typeof compressed.fileState.content,
+          };
+        }
+      }
       return {
-        appState: { type: 'file', state: compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS) },
+        appState: { type: 'file', state: compressed },
         loading: file.loading || false,
       };
     }
