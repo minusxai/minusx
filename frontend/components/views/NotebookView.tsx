@@ -25,7 +25,7 @@ import { useFileToolbarActions, type FileToolbarAction } from '@/components/file
 import JsonEditor from '@/components/slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectPersistableContent, selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
-import { applyJsonContentEdit } from '@/lib/api/file-state';
+import { applyJsonContentEdit, captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
 import type {
   NotebookContent, NotebookCell, NotebookSqlCell as SqlCell,
 } from '@/lib/types';
@@ -66,7 +66,9 @@ export default function NotebookView({
 
   const removeCell = useCallback((id: string) => {
     commit(cellsRef.current.filter(c => c.id !== id));
-  }, [commit]);
+    // Drop the deleted cell's cached result so it doesn't linger in content.
+    if (fileId !== undefined && !readOnly) removeNotebookCellResult(fileId, id);
+  }, [commit, fileId, readOnly]);
 
   // A new SQL cell defaults to the most recent SQL cell's connection.
   const makeCell = useCallback((type: 'sql' | 'text'): NotebookCell => {
@@ -122,6 +124,13 @@ export default function NotebookView({
       setLocalExecuted(prev => ({ ...prev, [id]: e }));
     }
   }, [dispatch, fileId]);
+
+  // Cache a cell's freshly-run result into the notebook content so it survives a
+  // reload (real, editable notebooks only — drafts/read-only don't persist).
+  const persistCellResult = useCallback((cellId: string, executed: Executed, data: unknown) => {
+    if (fileId === undefined || readOnly) return;
+    captureNotebookCellResult(fileId, cellId, executed, data as Parameters<typeof captureNotebookCellResult>[3]);
+  }, [fileId, readOnly]);
 
   // Present (reading) mode — view-local; the header just renders the toggle we
   // publish below, so present isn't special-cased anywhere outside this view.
@@ -259,6 +268,7 @@ export default function NotebookView({
                         filePath={filePath}
                         executed={executedById[cell.id] ?? null}
                         onExecutedChange={(e) => setCellExecuted(cell.id, e)}
+                        onPersistResult={persistCellResult}
                         onCellChange={updateCell}
                         onRemove={removeCell}
                       />

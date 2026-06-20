@@ -6,12 +6,12 @@
  * editFile. Rendering is delegated to NotebookView (presentational).
  * Header (edit mode, save, cancel, name) is handled by FileHeader via FileView.
  */
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, type FileId } from '@/store/filesSlice';
 import { selectFileViewMode, selectNotebookActiveCell, setNotebookActiveCell } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile } from '@/lib/api/file-state';
+import { editFile, rehydrateNotebookResults } from '@/lib/api/file-state';
 import NotebookView from '@/components/views/NotebookView';
 import { NotebookContent } from '@/lib/types';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
@@ -44,6 +44,16 @@ export default function NotebookContainerV2({ fileId }: NotebookContainerV2Props
   const handleActivateCell = useCallback((cellId: string) => {
     if (numericId !== undefined) dispatch(setNotebookActiveCell({ fileId: numericId, cellId }));
   }, [dispatch, numericId]);
+
+  // On open, rehydrate persisted cell results into the cache + cellExecuted so
+  // charts/tables render without a rerun. Once per file, after content loads.
+  const rehydratedRef = useRef<FileId | null>(null);
+  useEffect(() => {
+    if (numericId === undefined || fileLoading || !mergedContent) return;
+    if (rehydratedRef.current === numericId) return;
+    rehydratedRef.current = numericId;
+    rehydrateNotebookResults(numericId);
+  }, [numericId, fileLoading, mergedContent]);
 
   if (fileLoading || !file || !mergedContent) {
     return <div>Loading notebook...</div>;

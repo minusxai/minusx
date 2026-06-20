@@ -429,6 +429,22 @@ const filesSlice = createSlice({
     },
 
     /**
+     * Replace a notebook's whole cellResults map in persistableChanges (notebooks
+     * only). cellResults needs REPLACE semantics — selectMergedContent shallow-
+     * overlays persistableChanges onto content, so a partial map would drop the
+     * unlisted (already-saved) cells, and deepMerge can't delete a cell's entry.
+     * Callers compute the full next map (add/prune) and pass it here.
+     */
+    setNotebookCellResults(state, action: PayloadAction<{ fileId: FileId; cellResults: Record<string, unknown> }>) {
+      const { fileId, cellResults } = action.payload;
+      const file = state.files[fileId];
+      if (!file) return;
+      // Cast: callers build the map from loosely-typed snapshots; the runtime
+      // shape matches NotebookContent.cellResults.
+      file.persistableChanges = { ...file.persistableChanges, cellResults: cellResults as any };
+    },
+
+    /**
      * Clear ephemeral changes (Phase 3)
      */
     clearEphemeral(state, action: PayloadAction<FileId>) {
@@ -889,6 +905,7 @@ export const {
   clearEdits,
   setEphemeral,
   setNotebookCellExecuted,
+  setNotebookCellResults,
   clearEphemeral,
   setMetadataEdit,
   clearMetadataEdits,

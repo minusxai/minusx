@@ -348,9 +348,28 @@ export type NotebookTextCell = Static<typeof NotebookTextCell>;
 export const NotebookCell = Type.Union([NotebookSqlCell, NotebookTextCell]);
 export type NotebookCell = Static<typeof NotebookCell>;
 
+// System-managed cached result for a SQL cell, persisted so a reopened notebook
+// shows charts/tables without re-running. Keyed by cell id in NotebookContent.
+// `queryHash` is getQueryHash(query, params, connection) at capture time — the
+// snapshot is ignored on load if it no longer matches the cell's current query.
+export const NotebookCellResult = Type.Object({
+  queryHash: Type.String(),
+  executedAt: Type.Number({ description: 'epoch ms when the result was captured' }),
+  data: Type.Object({
+    columns: Type.Array(Type.String()),
+    types: Type.Array(Type.String()),
+    rows: Type.Array(Type.Unknown()),
+  }),
+  truncated: Type.Optional(Type.Boolean({ description: 'true if rows were capped at capture time' })),
+}, { title: 'NotebookCellResult' });
+export type NotebookCellResult = Static<typeof NotebookCellResult>;
+
 export const NotebookContent = Type.Object({
   description: Nullable(Type.String()),
   cells: Type.Array(NotebookCell, { description: 'ordered, vertical list of notebook cells' }),
+  cellResults: Type.Optional(Type.Record(Type.String(), NotebookCellResult, {
+    description: 'system-managed cached cell results keyed by cell id — never authored by the agent',
+  })),
 }, { title: 'NotebookContent' });
 export type NotebookContent = Static<typeof NotebookContent>;
 

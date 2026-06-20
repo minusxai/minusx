@@ -139,6 +139,13 @@ function compressFileState(fs: FileState): CompressedFileState {
       queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.connection_name);
     }
   }
+  // Notebooks: drop system-managed cached cell results from the model's view.
+  // The agent already gets cell results via queryResults; the raw snapshots would
+  // bloat its context and tempt it to author the field. mergedContent is a fresh
+  // object here, so this never mutates Redux state.
+  if (fs.type === 'notebook' && mergedContent && 'cellResults' in mergedContent) {
+    delete (mergedContent as any).cellResults;
+  }
   // Strip column details from fullSchema for context files to reduce payload size
   if (fs.type === 'context' && mergedContent && 'fullSchema' in mergedContent) {
     const ctx = mergedContent as any;

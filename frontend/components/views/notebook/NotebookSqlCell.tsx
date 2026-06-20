@@ -60,6 +60,8 @@ interface NotebookSqlCellProps {
       edit↔present remount (the present view is a separate subtree). */
   executed?: Executed | null;
   onExecutedChange?: (executed: Executed) => void;
+  /** Persist a freshly-run result up to the notebook (cached into content.cellResults). */
+  onPersistResult?: (cellId: string, executed: Executed, data: unknown) => void;
   onCellChange: (id: string, partial: Partial<SqlCell>) => void;
   onRemove: (id: string) => void;
 }
@@ -69,7 +71,7 @@ const EMPTY_PARAMS: Record<string, unknown> = {};
 
 export default function NotebookSqlCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
-  readOnly = false, presentMode = false, filePath, executed = null, onExecutedChange, onCellChange, onRemove,
+  readOnly = false, presentMode = false, filePath, executed = null, onExecutedChange, onPersistResult, onCellChange, onRemove,
 }: NotebookSqlCellProps) {
   const handleChange = useCallback(
     (partial: Partial<SqlCell>) => onCellChange(cell.id, partial),
@@ -143,6 +145,14 @@ export default function NotebookSqlCell({
     // If the same query was already executed, force a fresh fetch.
     refetch();
   }, [cell.query, cell.parameterValues, cell.connection_name, cell.references, refetch, onExecutedChange]);
+
+  // Persist a freshly-run result up to the notebook so it survives reload. The
+  // capture itself no-ops when the identical data is already stored, so this
+  // doesn't churn dirty state on rehydrate or re-render.
+  useEffect(() => {
+    if (readOnly || !executed || !data || !onPersistResult) return;
+    onPersistResult(cell.id, executed, data);
+  }, [data, executed, readOnly, onPersistResult, cell.id]);
 
   // Header "Run all" command: re-run this cell when the nonce changes.
   const lastRunNonce = useRef(runNonce);

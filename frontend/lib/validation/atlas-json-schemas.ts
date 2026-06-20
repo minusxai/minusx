@@ -67,6 +67,11 @@ function stripViz(fileSchema: Record<string, unknown>): Record<string, unknown> 
   if (contentProps && 'vizSettings' in contentProps) {
     contentProps.vizSettings = VIZ_NOTE;
   }
+  // Notebook cellResults are system-managed cached results — never authored by
+  // the agent, so drop them from the EditFile/CreateFile schema description.
+  if (contentProps && 'cellResults' in contentProps) {
+    delete contentProps.cellResults;
+  }
   return clone;
 }
 
