@@ -66,6 +66,8 @@ import { $createMetricNode } from './MetricNode';
 import { MentionsPlugin } from '@/components/chat/lexical/MentionsPlugin';
 import { DOCS_TRANSFORMERS, DOCS_NODES } from './docs-transformers';
 import { InsertMenuPlugin } from './InsertMenuPlugin';
+import { EditSelectionPlugin } from './EditSelectionPlugin';
+import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
 /** Config for the optional @ / @@ mention typeahead (tables, questions, dashboards). */
 export interface MentionsConfig {
@@ -374,9 +376,11 @@ interface LexicalTextEditorProps {
   mentions?: MentionsConfig;
   /** Enables the "+" insert menu (image + metric block). */
   insertMenu?: boolean;
+  /** If provided, selecting text shows an "Interact with {agentName}" pill that sends the selection to chat. */
+  editWithAgent?: EditWithAgentSource;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, editWithAgent }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -495,6 +499,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           />
         )}
         {insertMenu && <InsertMenuPlugin onImageUpload={onImageUpload} />}
+        {editWithAgent && <EditSelectionPlugin source={editWithAgent} />}
       </LexicalComposer>
     </Box>
   );

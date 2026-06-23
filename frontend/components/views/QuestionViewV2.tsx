@@ -723,6 +723,7 @@ export default function QuestionViewV2({
                     databaseName={content.connection_name}
                     connectionType={connectionType}
                     fillHeight={!useCompactLayout}
+                    editWithAgent={{ fileName: filePath?.split('/').pop() ?? 'query', filePath, questionId }}
                   />
                 )}
 

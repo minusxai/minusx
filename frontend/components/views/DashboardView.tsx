@@ -539,6 +539,7 @@ export default function DashboardView({
             id={textAsset.id || ''}
             content={textAsset.content || ''}
             editMode={editMode}
+            filePath={folderPath}
             onContentChange={(id, content) => {
               dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId: id, content }));
             }}
@@ -547,7 +548,7 @@ export default function DashboardView({
         </Box>
       );
     });
-  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights, folderPath]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;

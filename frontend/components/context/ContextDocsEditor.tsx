@@ -437,6 +437,7 @@ export default function ContextDocsEditor({
                         onImageUpload={showImageUpload ? handleImageUpload : undefined}
                         mentions={mentions}
                         insertMenu
+                        editWithAgent={{ editorKind: 'richtext', fileName: docEntry.title?.trim() || `doc ${index + 1}`, blockId: `doc-${index}` }}
                         renderToolbar={originalDocs?.[index] != null ? (toolbar) => (
                           <HStack justify="space-between" borderBottomWidth="1px" borderColor="border.default" bg="bg.muted" flexShrink={0} pr={2}>
                             <Box flex={1} minW={0}>{toolbar}</Box>
