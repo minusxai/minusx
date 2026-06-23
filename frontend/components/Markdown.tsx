@@ -5,6 +5,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import Link from 'next/link';
+import { rehypeMentions } from '@/lib/markdown/rehype-mentions';
+import { splitMentions } from '@/lib/utils/mentions';
+import { MentionChip } from '@/components/chat/MentionChip';
 import { LuChartColumnIncreasing, LuChevronDown, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion, LuSearch } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
@@ -460,6 +463,19 @@ export default function Markdown({
 
   // Custom components for ReactMarkdown
   const components = {
+    // Mention chips: the rehypeMentions plugin rewrites `@{...}` into
+    // <span> placeholders carrying the raw mention string in `mentionJson`.
+    span: ({ node, children, ...props }: any) => {
+      const raw = node?.properties?.mentionJson;
+      if (typeof raw === 'string') {
+        const segments = splitMentions(raw);
+        const mention = segments.find((s) => s.type === 'mention');
+        if (mention && mention.type === 'mention') {
+          return <MentionChip data={mention.data} raw={mention.raw} />;
+        }
+      }
+      return <span {...props}>{children}</span>;
+    },
     table: ({ node, ...props }: any) => (
       <Box overflowX="auto" mb={`${styles.table.mb * 0.25}rem`} mt={`${styles.table.mt * 0.25}rem`}>
         <table {...props} />
@@ -714,7 +730,7 @@ export default function Markdown({
     // If no special patterns found, render plain markdown
     if (parts.length === 1 && parts[0].type === 'text') {
       return (
-        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeMentions]} components={components}>
           {children}
         </ReactMarkdown>
       );
@@ -731,6 +747,7 @@ export default function Markdown({
               <ReactMarkdown
                 key={index}
                 remarkPlugins={[remarkGfm, remarkBreaks]}
+                rehypePlugins={[rehypeMentions]}
                 components={components}
               >
                 {part.content}
