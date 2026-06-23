@@ -21,7 +21,7 @@ export type {
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   StoryContent,
   NotebookContent, NotebookCell, NotebookSqlCell, NotebookTextCell,
-  QuestionV2Content,
+  QuestionV2Content, StoryV2Content,
   AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File, AtlasStoryV2File,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';

@@ -29,7 +29,6 @@ import { Semaphore } from '@/lib/utils/semaphore';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
 import { buildQuestionJsx } from '@/lib/data/question-v2';
-import { buildStoryJsx } from '@/lib/data/story-v2';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
@@ -39,7 +38,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { encodeFileStr, decodeFileStr, sortObjectKeysDeep } from '@/lib/api/file-encoding';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, StoryContent, FileType, DbFile } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -754,9 +753,10 @@ export async function publishFile(
     return { id: fileId, name: fileState.name };
   }
 
-  // v2 types: the `jsx` body is the source of truth. Serialize the merged (edited) content
-  // back to jsx and persist that via the jsx endpoint — `content` is a derived projection,
-  // never stored. setFileJsx refreshes Redux (re-derives content, clears edits).
+  // questionv2: content (query/viz) is the projection of the `jsx` body, so a GUI edit
+  // must serialize back to jsx (the source of truth) — never persist it as content.
+  // (storyv2's content is only metadata; its body is the jsx, edited via the agent, so it
+  // saves through the normal content path.)
   if (fileState.type === 'questionv2') {
     const merged = selectMergedContent(state, fileId) as QuestionContent;
     const jsx = buildQuestionJsx({
@@ -764,17 +764,6 @@ export async function publishFile(
       connection_name: merged?.connection_name ?? '',
       vizSettings: merged?.vizSettings,
     });
-    getStore().dispatch(setSaving({ id: fileId, saving: true }));
-    try {
-      const updated = await setFileJsx(fileId, jsx);
-      return { id: updated.id, name: updated.name };
-    } finally {
-      getStore().dispatch(setSaving({ id: fileId, saving: false }));
-    }
-  }
-  if (fileState.type === 'storyv2') {
-    const merged = selectMergedContent(state, fileId) as StoryContent;
-    const jsx = buildStoryJsx(merged);
     getStore().dispatch(setSaving({ id: fileId, saving: true }));
     try {
       const updated = await setFileJsx(fileId, jsx);

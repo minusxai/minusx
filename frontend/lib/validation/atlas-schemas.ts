@@ -435,15 +435,25 @@ export const AtlasQuestionV2File = Type.Object({
 }, { title: 'AtlasQuestionV2File' });
 export type AtlasQuestionV2File = Static<typeof AtlasQuestionV2File>;
 
-// File Architecture v2 — StoryV2. The HTML-ish JSX body (with <Question id={…}/> embeds)
-// lives in the file's top-level `jsx` field; `content` is the derived StoryContent
-// projection (reused as-is, so a storyv2 renders through the existing StoryView).
+// File Architecture v2 — StoryV2. The story BODY (HTML-ish JSX with <Question id={…}/>
+// embeds) lives in the file's top-level `jsx` field — NOT in `content`. `content` holds
+// only story-level metadata; it intentionally has NO `story`/`assets` fields so the model
+// authors the body as jsx (see the CreateFile `jsx` description for how).
+export const StoryV2Content = Type.Object({
+  description: Nullable(Type.String()),
+  suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
+    'Up to ~3 short, story-specific follow-up questions shown as prompts in the chat panel.' }))),
+  colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
+    'Forces chart/chrome color mode for public viewers; match the story design (e.g. "dark" for a dark layout).'))),
+}, { title: 'StoryV2Content' });
+export type StoryV2Content = Static<typeof StoryV2Content>;
+
 export const AtlasStoryV2File = Type.Object({
   id: Nullable(Type.Integer()),
   name: Type.String(),
   path: Type.String(),
   type: Type.Literal('storyv2'),
-  content: StoryContent,
+  content: StoryV2Content,
   references: Nullable(Type.Array(Type.Integer())),
 }, { title: 'AtlasStoryV2File' });
 export type AtlasStoryV2File = Static<typeof AtlasStoryV2File>;

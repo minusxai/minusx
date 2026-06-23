@@ -113,7 +113,10 @@ const CreateFileParams = Type.Object({
   // File Architecture v2: for `questionv2` files the query/connection/viz live here
   // (a static-JSX body), NOT in `content`.
   jsx: Type.Optional(Type.String({
-    description: 'The static-JSX body for v2 file types (provide INSTEAD of content). For "questionv2": `<Question connection="github" viz={{"type":"bar","xCols":["a"]}}>{`SELECT ...`}</Question>` (SQL in a template-literal child so <, >, { stay raw). For "storyv2": HTML-ish JSX with `<Question id={123} />` embeds, e.g. `<div class="story"><style>{`.story{...css...}`}</style><h1>Title</h1><Question id={123} /></div>` (CSS in a <style> template-literal child). Only the <Question> component is allowed; no functions/handlers.',
+    description:
+      'The static-JSX BODY for v2 file types — provide this INSTEAD of content (their content holds only metadata).\n' +
+      'questionv2: `<Question connection="github" viz={{"type":"bar","xCols":["a"]}}>{`SELECT ...`}</Question>` — the SQL goes in a template-literal `{`…`}` child so <, >, { stay raw; `viz` is the vizSettings JSON.\n' +
+      'storyv2: an HTML-ish JSX data-story document with `<Question id={N} />` embeds (N = a question/questionv2 id). Author it like a designed long-form editorial piece (prose between charts, big numbers, section headers). Rules: (1) wrap everything in a root `<div class="story">` and scope ALL CSS under it; put the CSS in a `<style>{`…`}</style>` template-literal child (so the CSS `{ }` don\'t break jsx). (2) Responsive: `container-type:inline-size;container-name:story` on the root, size type/spacing with `clamp(min, Ncqi, max)`, and use `@container story (max-width:…)` to stack multi-column bands on mobile. (3) Embeds: `<Question id={N} height={440} />` (default 440px; min 340). (4) Set content.colorMode to match (dark layout → "dark"). Only the `<Question>` component is allowed; no <script>, functions, or event handlers.',
   })),
 });
 

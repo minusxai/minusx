@@ -27,8 +27,8 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
     case 'story':
       return { description: '', assets: [], story: null } as StoryContent;
     case 'storyv2':
-      // Content is the derived projection of the `jsx` body; start empty.
-      return { description: '', assets: [], story: null, colorMode: 'dark' } as StoryContent;
+      // Content holds only story metadata; the body (HTML + embeds) lives in `jsx`.
+      return { description: '', colorMode: 'dark' };
     case 'notebook':
       return { description: '', cells: [] } as NotebookContent;
     case 'questionv2':
