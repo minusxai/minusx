@@ -28,6 +28,9 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return { description: '', assets: [], story: null } as StoryContent;
     case 'notebook':
       return { description: '', cells: [] } as NotebookContent;
+    case 'questionv2':
+      // Content is vestigial for QuestionV2 — the query/viz live in the `jsx` body.
+      return { description: '' };
     case 'presentation':
       return {
         description: '',

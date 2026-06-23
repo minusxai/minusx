@@ -11,23 +11,23 @@
     {
       "type": "fileTypeAccess",
       "role": "editor",
-      "allowedTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
-      "createTypes": ["question", "dashboard", "story", "notebook", "folder", "alert", "conversation", "chat", "session", "report", "transformation", "alert_run", "report_run", "transformation_run"],
-      "viewTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
+      "allowedTypes": ["question", "questionv2", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
+      "createTypes": ["question", "questionv2", "dashboard", "story", "notebook", "folder", "alert", "conversation", "chat", "session", "report", "transformation", "alert_run", "report_run", "transformation_run"],
+      "viewTypes": ["question", "questionv2", "dashboard", "story", "notebook", "folder", "context", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
     },
     {
       "type": "fileTypeAccess",
       "role": "viewer",
-      "allowedTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
+      "allowedTypes": ["question", "questionv2", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
       "createTypes": ["conversation", "chat", "session"],
-      "viewTypes": ["dashboard", "story", "notebook", "folder", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run"]
+      "viewTypes": ["question", "questionv2", "dashboard", "story", "notebook", "folder", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run"]
     },
     {
       "type": "createLocationRestrictions",
       "role": "*",
       "restrictions": [
         {
-          "fileTypes": ["context", "question", "dashboard", "story", "notebook"],
+          "fileTypes": ["context", "question", "questionv2", "dashboard", "story", "notebook"],
           "requiredPathPrefix": "",
           "description": "Analytics files must be in mode root (resolved at runtime based on user's mode)"
         },

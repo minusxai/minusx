@@ -33,6 +33,14 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: '100vh',
   },
+  questionv2: {                   // File Architecture v2 — static-JSX question (experimental)
+    label: 'Question V2',
+    icon: LuScanSearch,
+    color: 'accent.primary',
+    category: 'analytics',
+    supported: false,            // hidden from create menu; created by agent/seed for now
+    h: '100vh',
+  },
   dashboard: {
     label: 'Dashboard',
     icon: LuLayoutDashboard,

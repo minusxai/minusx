@@ -417,5 +417,23 @@ export const AtlasNotebookFile = Type.Object({
 }, { title: 'AtlasNotebookFile' });
 export type AtlasNotebookFile = Static<typeof AtlasNotebookFile>;
 
-export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile]);
+// File Architecture v2 — QuestionV2. The query/connection/viz live in the file's
+// top-level `jsx` body (a `<Question …>{`SQL`}</Question>` static-JSX string), NOT in
+// `content`; content is vestigial here, so the schema is intentionally minimal.
+export const QuestionV2Content = Type.Object({
+  description: Nullable(Type.String()),
+}, { title: 'QuestionV2Content' });
+export type QuestionV2Content = Static<typeof QuestionV2Content>;
+
+export const AtlasQuestionV2File = Type.Object({
+  id: Nullable(Type.Integer()),
+  name: Type.String(),
+  path: Type.String(),
+  type: Type.Literal('questionv2'),
+  content: QuestionV2Content,
+  references: Nullable(Type.Array(Type.Integer())),
+}, { title: 'AtlasQuestionV2File' });
+export type AtlasQuestionV2File = Static<typeof AtlasQuestionV2File>;
+
+export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File]);
 export type AtlasFile = Static<typeof AtlasFile>;
