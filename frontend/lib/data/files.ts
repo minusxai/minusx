@@ -126,6 +126,27 @@ class FilesDataLayerClient implements IFilesDataLayer {
     return { data: json.data };
   }
 
+  async setJsx(id: number, jsx: string, _user?: EffectiveUser): Promise<CreateFileResult> {
+    const res = await fetch(`${API_BASE}/api/files/${id}/jsx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsx }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      if (errorData.error?.type && errorData.error?.message) {
+        throw deserializeError(errorData.error as SerializedError);
+      }
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to set jsx: ${res.statusText}`;
+      if (errorMessage.includes('permission') || errorMessage.includes('access')) {
+        throw new AccessPermissionError(errorMessage);
+      }
+      throw new Error(errorMessage);
+    }
+    const json = await res.json();
+    return { data: json.data };
+  }
+
   async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user?: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
     const res = await fetch(`${API_BASE}/api/files/${id}`, {
       method: 'PATCH',

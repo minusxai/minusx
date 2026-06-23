@@ -110,6 +110,11 @@ const CreateFileParams = Type.Object({
         'Initial content fields, merged on top of template defaults, as a JSON OBJECT (do NOT stringify). Same per-file-type content schema as EditFile — see the EditFile description for the exact shape by file type.',
     }),
   ),
+  // File Architecture v2: for `questionv2` files the query/connection/viz live here
+  // (a static-JSX body), NOT in `content`.
+  jsx: Type.Optional(Type.String({
+    description: 'For file_type "questionv2": the static-JSX body, e.g. `<Question connection="github" viz={{"type":"bar","xCols":["a"]}}>{`SELECT ...`}</Question>`. The SQL goes in a template-literal child so <, >, { stay raw. Provide this INSTEAD of content for questionv2.',
+  })),
 });
 
 export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystContext> {
@@ -117,6 +122,56 @@ export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystCon
     name: 'CreateFile',
     description: 'Create a new file in the user\'s workspace. Executes on the frontend with real Redux state.',
     parameters: CreateFileParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    throw new UserInputException(this.id);
+  }
+}
+
+// ─── SetJsx / EditJsx (File Architecture v2) ─────────────────────────────────
+// Operate on a file's static-JSX `jsx` body (e.g. questionv2). The body is raw
+// text — edit it as such (no escaped-JSON-inside-JSON). Persisted immediately.
+const JSX_FORMAT = `The jsx body is a static-JSX document. For a question it is a single <Question> element:
+<Question connection="<connection_name>" viz={{ ...vizSettings... }}>{\`
+SELECT ...raw SQL — <, >, { stay raw...
+\`}</Question>
+- connection: a plain string attribute.
+- viz: a JSON object literal in {{ }} (the vizSettings — type, xCols, yCols, ...).
+- The SQL goes in a template-literal child {\` ... \`} so it stays raw (escape only backtick and \${ ).
+Only the <Question> component (and plain HTML) is allowed; no functions, expressions, or event handlers.`;
+
+const SetJsxParams = Type.Object({
+  fileId: Type.Number(),
+  jsx: Type.String({ description: 'The full static-JSX body to set (replaces the existing jsx). Small bodies (a single question): prefer this over EditJsx.' }),
+});
+
+export class SetJsx extends MXTool<typeof SetJsxParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof SetJsxParams> = {
+    name: 'SetJsx',
+    description: `Replace a file's entire static-JSX body (File Architecture v2). Executes on the frontend; persisted immediately.\n\n${JSX_FORMAT}`,
+    parameters: SetJsxParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    throw new UserInputException(this.id);
+  }
+}
+
+const EditJsxParams = Type.Object({
+  fileId: Type.Number(),
+  changes: Type.Array(Type.Object({
+    oldMatch: Type.String({ description: 'Existing substring of the jsx body to replace.' }),
+    newMatch: Type.String({ description: 'Replacement text.' }),
+    replaceAll: Type.Optional(Type.Boolean({ description: 'Replace every occurrence (default true).' })),
+  })),
+});
+
+export class EditJsx extends MXTool<typeof EditJsxParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof EditJsxParams> = {
+    name: 'EditJsx',
+    description: `Edit a file's static-JSX body with an ordered list of string find-and-replace changes (applied to the RAW jsx text — no escaping). Use for large bodies; for small ones prefer SetJsx. Executes on the frontend; persisted immediately.\n\n${JSX_FORMAT}`,
+    parameters: EditJsxParams,
   };
 
   async run(): Promise<ToolResponse> {

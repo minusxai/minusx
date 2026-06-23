@@ -16,7 +16,9 @@ import { FilesAPI } from '../data/files';
 import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/api/file-state';
+import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp, setFileJsx, getFileJsx } from '@/lib/api/file-state';
+import { validateJsxSource } from '@/lib/jsx';
+import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -766,6 +768,69 @@ registerFrontendTool('EditFile', async (args, _context) => {
 });
 
 /**
+ * SetJsx - Replace a file's entire static-JSX body (File Architecture v2).
+ * Validates (client + server), persists immediately, reflects in Redux.
+ */
+registerFrontendTool('SetJsx', async (args, _context) => {
+  const { fileId, jsx } = args;
+  const errors = validateJsxSource(jsx, JSX_COMPONENT_NAMES);
+  if (errors.length > 0) {
+    const err = `Invalid jsx: ${errors.map(e => e.message).join('; ')}`;
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
+  try {
+    await setFileJsx(fileId, jsx);
+  } catch (e) {
+    const err = e instanceof Error ? e.message : 'Failed to set jsx';
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
+  return { content: { success: true, jsx }, details: { success: true } };
+});
+
+/**
+ * EditJsx - Ordered string find-and-replace over a file's static-JSX body.
+ * The body is RAW text (no escaped-JSON-inside-JSON). All changes apply or the
+ * batch fails; the result is re-validated before persisting.
+ */
+registerFrontendTool('EditJsx', async (args, _context) => {
+  const { fileId, changes } = args;
+  let working = getFileJsx(fileId);
+  if (working === null) {
+    const err = `File ${fileId} has no jsx body to edit — use SetJsx to create one first.`;
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
+  for (let i = 0; i < changes.length; i++) {
+    const { oldMatch, newMatch, replaceAll = true } = changes[i];
+    if (!working.includes(oldMatch)) {
+      const err = `Change ${i + 1}/${changes.length} failed: "${oldMatch}" not found in jsx`;
+      return { content: { success: false, error: err, succeededCount: i }, details: { success: false, error: err } };
+    }
+    if (!replaceAll) {
+      const count = working.split(oldMatch).length - 1;
+      if (count > 1) {
+        const err = `Change ${i + 1}: "${oldMatch}" is not unique (${count}×) — add surrounding context or use replaceAll.`;
+        return { content: { success: false, error: err, succeededCount: i }, details: { success: false, error: err } };
+      }
+      working = working.replace(oldMatch, newMatch);
+    } else {
+      working = working.split(oldMatch).join(newMatch);
+    }
+  }
+  const errors = validateJsxSource(working, JSX_COMPONENT_NAMES);
+  if (errors.length > 0) {
+    const err = `Edit produced invalid jsx: ${errors.map(e => e.message).join('; ')}`;
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
+  try {
+    await setFileJsx(fileId, working);
+  } catch (e) {
+    const err = e instanceof Error ? e.message : 'Failed to set jsx';
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
+  return { content: { success: true, jsx: working }, details: { success: true } };
+});
+
+/**
  * CreateFile - Create a new virtual file (draft, any type).
  * Always creates as a draft in Redux (negative virtual ID) — no navigation.
  *
@@ -880,12 +945,26 @@ registerFrontendTool('CreateFile', async (args, context) => {
     }
   }
 
+  // File Architecture v2: validate the jsx body up front so a bad jsx leaves no draft.
+  const jsxBody = typeof args.jsx === 'string' ? args.jsx : null;
+  if (jsxBody !== null) {
+    const jsxErrors = validateJsxSource(jsxBody, JSX_COMPONENT_NAMES);
+    if (jsxErrors.length > 0) {
+      const err = `Invalid jsx: ${jsxErrors.map(e => e.message).join('; ')}`;
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
+    }
+  }
+
   // Create draft file on server — returns real positive ID with draft:true.
   // Passing name here ensures the DB path uses the slug immediately (important
   // for folders that will be used as parents for other files in the same session).
   const draftId = await createDraftFile(file_type, { folder: path, name: name ?? undefined });
   if (content && Object.keys(content).length > 0) {
     await editFileOp({ fileId: draftId, changes: { content } });
+  }
+  // Persist the static-JSX body (e.g. questionv2). Independent of the content path.
+  if (jsxBody !== null) {
+    await setFileJsx(draftId, jsxBody);
   }
 
   // Auto-execute query for questions (agent sees results immediately)

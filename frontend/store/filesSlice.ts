@@ -374,6 +374,18 @@ const filesSlice = createSlice({
     },
 
     /**
+     * Set a file's static-JSX body (File Architecture v2). jsx is persisted
+     * immediately via its own endpoint, so this just reflects the saved value in
+     * Redux (no draft/persistableChanges staging for jsx in M1).
+     */
+    setJsx(state, action: PayloadAction<{ fileId: FileId; jsx: string }>) {
+      const { fileId, jsx } = action.payload;
+      if (state.files[fileId]) {
+        state.files[fileId].jsx = jsx;
+      }
+    },
+
+    /**
      * Replace entire content (not merge)
      * Used by JSON editors where the full content is provided
      */
@@ -901,6 +913,7 @@ export const {
   setFolderLoading,
   setLoadError,
   setEdit,
+  setJsx,
   setFullContent,
   clearEdits,
   setEphemeral,

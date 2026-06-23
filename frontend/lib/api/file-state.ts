@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setFullContent, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, setNotebookCellExecuted, setNotebookCellResults, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, persistableContentOf, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setJsx, setFullContent, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, setNotebookCellExecuted, setNotebookCellResults, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, persistableContentOf, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
@@ -1235,6 +1235,21 @@ export async function createDraftFile(
   const file = result.data;
   getStore().dispatch(setFile({ file, references: [] }));
   return file.id;
+}
+
+/**
+ * Set a file's static-JSX body (File Architecture v2). Validates + persists via the
+ * jsx endpoint, then reflects the saved value in Redux. Used by SetJsx / EditJsx.
+ */
+export async function setFileJsx(fileId: number, jsx: string): Promise<void> {
+  await FilesAPI.setJsx(fileId, jsx);
+  getStore().dispatch(setJsx({ fileId, jsx }));
+}
+
+/** Read a file's current jsx body from Redux (effective, post any in-session set). */
+export function getFileJsx(fileId: number): string | null {
+  const fileState = selectFile(getStore().getState(), fileId);
+  return fileState?.jsx ?? null;
 }
 
 // ============================================================================

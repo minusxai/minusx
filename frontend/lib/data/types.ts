@@ -78,6 +78,7 @@ export interface CreateFileInput {
   options?: CreateFileOptions;  // Optional create options
   editId?: string;  // Idempotency key for create operations
   meta?: Record<string, unknown> | null;  // Initial value for the `meta` JSONB column (sidebar-cheap fields)
+  jsx?: string | null;  // File Architecture v2 — initial static-JSX body (e.g. QuestionV2)
 }
 
 /**
