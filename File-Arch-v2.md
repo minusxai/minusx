@@ -2,6 +2,11 @@
 
 **Status:** proposal · **Author:** discussion w/ Sreejith · **Date:** 2026-06-23
 
+> **M0 + M1 are implemented** on branch `feature/improved-edits-v1` (PR #489). See
+> **[M0 + M1 — implementation status & how to test](#m0--m1--implementation-status--how-to-test)**
+> at the bottom. Fully additive / backward-compatible; full suite green (node 2234 /
+> orchestrator 493 / ui 231).
+
 ## Summary
 
 Replace the JSON `content` field with a single **`jsx`** text field: a **static JSX** document that is the file's source of truth.
@@ -154,3 +159,70 @@ Parallel-run / strangler migration: build V2 alongside V1, prove it on stories f
 - Exact sanitizer allowlist (which tags/attrs; `<style>` policy — `@import`, scoping).
 - Surgical re-serialize implementation (source-span replacement fidelity).
 - Per-type migration ordering + the `content`→`jsx` serializers.
+
+---
+
+# M0 + M1 — implementation status & how to test
+
+Implemented on `feature/improved-edits-v1` (PR #489), TDD, additive & backward-compatible.
+
+## What shipped
+
+**M0 — jsx engine + schema**
+- `frontend/lib/jsx/` — isomorphic `parseJsx` (acorn+acorn-jsx → normalized AST),
+  `validateJsx` (static subset + security: JSON-literal attrs only, registered
+  components, no `<script>`/`on*`/`javascript:`), `renderJsx` (AST→React via registry,
+  never `eval`/`dangerouslySetInnerHTML`). `compileJsx` (client) + `validateJsxSource`
+  (server). `lib/jsx/components.ts` = the `Question` allowlist (single source).
+- `lib/data/question-v2.ts` — QuestionV2 ⇄ jsx adapter. SQL lives in a **template-literal
+  child** `{` … `}` so `<`, `>`, `{` stay raw (only backtick/`${` escaped).
+- `files.jsx` TEXT column (idempotent `ADD COLUMN` guard, like `meta`); threaded through
+  `DbRow`/`DbFile`/`FileState`/`compressFileState` (the agent's view). Written by
+  `DocumentDB.create(jsx?)` + `DocumentDB.updateJsx`; the content publish path never
+  touches `jsx` (independent → zero risk to existing files).
+
+**M1 — QuestionV2**
+- `questionv2` file type registered end-to-end (FileType, atlas schemas, validators,
+  rules.json, template, DbRow, getTemplate). Content is vestigial — the query/connection/viz
+  live in the `jsx` body.
+- Renders via `SmartEmbeddedQuestionContainer`: a questionv2's `jsx` is parsed into the
+  effective `{query, connection_name, vizSettings}` and fed to the existing
+  EmbeddedQuestionContainer → query → chart path. **Stories embed a QuestionV2 with the
+  same `data-question-id` mechanism — no story change needed.** Plain questions unchanged.
+  Standalone `/f/<id>` renders via `QuestionV2ContainerV2` (view-first).
+- Agent tools: **`SetJsx`** (replace jsx body — preferred for small bodies), **`EditJsx`**
+  (oldMatch/newMatch over the RAW jsx text), **`CreateFile`** gains a `jsx` arg (create a
+  questionv2 with its body). Registered in `V2_REGISTRABLES` + `WebAnalystAgent.tools`.
+  Persist immediately via `POST /api/files/[id]/jsx` (access-checked + jsx-validated).
+
+## Deferred (not blocking the M1 test)
+- **EditProps** (name/path/meta) — the create + edit-SQL path doesn't need it.
+- **Rich GUI editor** (two-mode components, surgical re-serialize) — M1 is view-first.
+- **Seed sample + prompt steering** — the agent won't *prefer* questionv2 yet, so in testing
+  ask for it explicitly (below). Story-as-jsx + content removal are M3–M5.
+
+## How to test (new company)
+A new company auto-runs the schema (so the `jsx` column exists). Then:
+
+1. **Create a data story** (or open one) and open its side chat.
+2. **Ask the agent explicitly**, e.g. *"Create a **QuestionV2** (use the jsx body) that shows
+   <metric> from <table>, then embed it in this story."* The agent should call
+   `CreateFile(file_type:"questionv2", jsx:"<Question connection=… viz={{…}}>{\`SELECT …\`}</Question>")`
+   and add a `data-question-id` embed to the story.
+3. **Verify** the chart renders live inside the story (query runs, viz shows).
+4. **Edit the SQL** — *"change the question to filter to last 30 days"* — the agent uses
+   `SetJsx`/`EditJsx` on the raw jsx; the chart re-renders. (This is the reliability win:
+   the agent edits raw SQL, not escaped JSON.)
+5. **Publish All**; reload — the QuestionV2 + embed persist.
+6. Optional: open the QuestionV2 directly at `/f/<id>` — it renders standalone.
+
+**Backward-compat check:** existing questions, dashboards, stories, and notebooks behave
+exactly as before (everything above is additive — new column, new type, new tools).
+
+## Verification done
+- jsx engine: parse/validate(security)/render + adapter — 43 unit tests.
+- questionv2 registration — validates end-to-end.
+- **Server round-trip** (`store/__tests__/questionv2-server.test.ts`): create-with-jsx →
+  persists → parses back (raw `<` survives) → `SetJsx` updates → invalid jsx rejected on
+  create + set.
+- Full suite green: node 2234, orchestrator 493, ui 231.
