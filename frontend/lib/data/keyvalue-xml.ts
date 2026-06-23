@@ -151,6 +151,11 @@ function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): u
   return coerce(textOf(node).trim(), s);
 }
 
+/** Parse an already-extracted props element (used by the file-markup combiner). */
+export function propsFromElement(el: JsxElement, schema: JsonSchema, ctx: SchemaCtx): unknown {
+  return elementToValue(el, schema, ctx);
+}
+
 export type XmlToPropsResult =
   | { ok: true; value: unknown }
   | { ok: false; error: string };
