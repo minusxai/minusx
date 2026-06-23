@@ -122,6 +122,7 @@ export default function NotebookTextCell({
           onImageUpload={handleImageUpload}
           mentions={mentions}
           insertMenu
+          editWithAgent={{ editorKind: 'richtext', fileName: cell.name?.trim() || filePath?.split('/').pop() || 'notebook cell', filePath, blockId: cell.id }}
           renderToolbar={(toolbar) => chrome(toolbar)}
         />
       )}

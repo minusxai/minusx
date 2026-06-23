@@ -78,6 +78,7 @@ export default function TextBlockCard({
           onImageUpload={handleImageUpload}
           mentions={mentions}
           insertMenu
+          editWithAgent={{ editorKind: 'richtext', fileName: filePath?.split('/').pop() ?? 'text block', filePath, blockId: id }}
           renderToolbar={(toolbar) => (
             <HStack
               className="drag-handle"

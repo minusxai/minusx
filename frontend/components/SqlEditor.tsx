@@ -9,6 +9,8 @@ import { format } from 'sql-formatter';
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { DatabaseWithSchema } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import EditWithAgentPopover from '@/components/EditWithAgentPopover';
+import { computeMonacoPopoverPosition, type MonacoPopoverPosition } from '@/lib/chat/edit-with-agent';
 import { ResolvedReference } from '@/lib/sql/query-composer';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 
@@ -125,6 +127,7 @@ interface SqlEditorProps {
   databaseName?: string;  // Database name for API autocomplete
   connectionType?: string;  // Connection type for dialect-aware autocomplete
   fillHeight?: boolean;  // When true, fills parent container height instead of fixed pixel height
+  editWithAgent?: { fileName: string; filePath?: string; questionId?: number };  // Enables the "Interact with {agentName}" selection pill
 }
 
 export default function SqlEditor({
@@ -143,6 +146,7 @@ export default function SqlEditor({
   databaseName,
   connectionType,
   fillHeight = false,
+  editWithAgent,
 }: SqlEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const editorTheme = colorMode === 'dark' ? 'vs-dark' : 'vs-light';
@@ -162,6 +166,9 @@ export default function SqlEditor({
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const databaseNameRef = useRef(databaseName);
   const connectionTypeRef = useRef(connectionType);
+  // "Interact with {agentName}" selection pill (gate the once-registered listeners on the latest prop).
+  const editWithAgentRef = useRef(editWithAgent);
+  const [editSel, setEditSel] = useState<MonacoPopoverPosition | null>(null);
 
 
   // Keep the ref updated with the latest onRun callback
@@ -192,6 +199,10 @@ export default function SqlEditor({
   }, [databaseName]);
 
   // Keep connectionType ref updated
+  useEffect(() => {
+    editWithAgentRef.current = editWithAgent;
+  }, [editWithAgent]);
+
   useEffect(() => {
     connectionTypeRef.current = connectionType;
   }, [connectionType]);
@@ -574,6 +585,15 @@ export default function SqlEditor({
                   window.removeEventListener('atlas:editor-insert', handleEditorInsert);
                 });
 
+                // "Interact with {agentName}" pill: show on a non-empty selection, hide on scroll.
+                editor.onDidChangeCursorSelection(() => {
+                  if (!editWithAgentRef.current) return;
+                  setEditSel(computeMonacoPopoverPosition(editor));
+                });
+                editor.onDidScrollChange(() => {
+                  if (editWithAgentRef.current) setEditSel(null);
+                });
+
                 // Manually trigger suggestions when @ is typed
                 editor.onKeyUp(() => {
                   // Check if @ was typed by looking at the character before cursor
@@ -782,6 +802,14 @@ export default function SqlEditor({
                 },
                 placeholder: `Write your SQL query here, or just ask ${agentName}!`,
               }}
+            />
+          )}
+          {editWithAgent && editSel && (
+            <EditWithAgentPopover
+              position={{ x: editSel.x, y: editSel.y }}
+              selectedText={editSel.text}
+              source={{ editorKind: 'sql', fileName: editWithAgent.fileName, filePath: editWithAgent.filePath, fileId: editWithAgent.questionId, lineRange: editSel.lineRange }}
+              onClose={() => setEditSel(null)}
             />
           )}
         </Box>
