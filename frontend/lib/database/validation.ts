@@ -64,10 +64,11 @@ export function validateFileReferences(documents: ExportedDocument[]): Validatio
       }
     }
 
-    if (type === 'notebook' && 'assets' in content && content.assets) {
-      for (const asset of content.assets) {
-        if (asset.type === 'question') {
-          const refId = asset.id;
+    if (type === 'notebook' && 'cells' in content && Array.isArray(content.cells)) {
+      for (const cell of content.cells) {
+        if (cell?.type !== 'sql' || !Array.isArray(cell.references)) continue;
+        for (const ref of cell.references) {
+          const refId = ref?.id;
           if (!refId) {
             warnings.push(`Notebook '${path}' (ID: ${id}) has question reference without ID`);
             continue;

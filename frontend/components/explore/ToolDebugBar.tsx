@@ -98,7 +98,7 @@ export default function ToolDebugBar({ messages }: ToolDebugBarProps) {
 
         {/* Minimap: colored blocks grouped by run_id (same assistant message) */}
         {toolCalls.length > 0 && (
-          <HStack gap={1.5} flex={1} minW={0} overflow="hidden">
+          <HStack gap={1.5} flex={1} minW={0} overflow="scroll">
             {(() => {
               // Group tool calls by run_id
               const groups: (typeof toolCalls)[] = [];

@@ -17,6 +17,7 @@ export const PAGE_SKILL_MAP: Record<string, string[]> = {
   folder: ['explore'],
   slack: ['explore'],
   story: ['data_stories', 'questions'],
+  notebook: ['notebooks', 'questions'],
 };
 
 /** Used when the page type is unknown or null. */

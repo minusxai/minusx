@@ -98,7 +98,7 @@ export default function FileLayout(props: FileLayoutProps) {
   // Phase 1: Always use children prop
   // Type-based rendering is now handled by FileView component via fileComponents mapping
   const content = props.children;
-  const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'story' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
+  const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'story' || fileType === 'notebook' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
   // view=contentonly hides the right sidebar, so the floating chat bar (which opens
   // into it) is dead weight — drop it (and its bottom padding) too.
   const shouldShowFloatingChat = shouldShowRightSidebar && !hideRightSidebar;
@@ -136,7 +136,7 @@ export default function FileLayout(props: FileLayoutProps) {
               pb={shouldShowFloatingChat ? { base: '60px', md: '60px' } : { base: 4, md: 6, lg: 8 }}
               align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'auto'} minHeight="0">
             {!hideTopChrome && (
-              <Flex justify="space-between" align="center" mb={4} gap={4}>
+              <Flex justify="space-between" align="center" gap={4}>
                 <Box flex="1" minW={0}>
                   <Breadcrumb
                     items={breadcrumbItems}

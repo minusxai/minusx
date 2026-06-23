@@ -9,7 +9,7 @@
  * (whitelist → schema) and can't be produced purely.
  */
 import type {
-  FileType, BaseFileContent, QuestionContent, DocumentContent, StoryContent, ConnectionContent,
+  FileType, BaseFileContent, QuestionContent, DocumentContent, StoryContent, NotebookContent, ConnectionContent,
 } from '@/lib/types';
 
 export function getTemplateDefaults(type: FileType, options?: { query?: string }): BaseFileContent | undefined {
@@ -26,6 +26,8 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return { description: '', assets: [], layout: { columns: 12, items: [] } } as DocumentContent;
     case 'story':
       return { description: '', assets: [], story: null } as StoryContent;
+    case 'notebook':
+      return { description: '', cells: [] } as NotebookContent;
     case 'presentation':
       return {
         description: '',

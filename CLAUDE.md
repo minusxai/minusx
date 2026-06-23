@@ -148,7 +148,7 @@ npm run update-workspace-template   # re-runs migrations on the template; review
 **File Types**
 - `question` - SQL query with visualization (table, line, bar, area, scatter)
 - `dashboard` - Collection of questions with grid layout
-- `notebook` - Vertical notebook-style view (future)
+- `notebook` - Vertical list of cells; each cell is either a full inline SQL question (query + viz + connection + params + @refs) or a rich-text (markdown) cell. Content schema `NotebookContent` (`cells: NotebookCell[]`) in `lib/validation/atlas-schemas.ts`; rendered by `NotebookContainerV2` → `NotebookView` → `NotebookSqlCell`/`NotebookTextCell`
 - `presentation` - Slide-based presentations (future)
 - `report` - Report-style documents (future)
 - `connection` - Database connection configuration

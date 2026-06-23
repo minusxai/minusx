@@ -12,8 +12,8 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { HStack, Text, Icon, Button } from '@chakra-ui/react';
-import { LuLock, LuGlobe } from 'react-icons/lu';
+import { HStack, Text, Icon, Button, IconButton } from '@chakra-ui/react';
+import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveName, selectEffectivePath, selectMergedContent } from '@/store/filesSlice';
 import {
@@ -33,8 +33,8 @@ import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 import SaveFileModal from './SaveFileModal';
-import ShareModal from './share/ShareModal';
-import { isAdmin } from '@/lib/auth/role-helpers';
+import { useFileToolbar } from './file-toolbar/FileToolbarContext';
+import { Tooltip } from './ui/tooltip';
 
 interface FileHeaderProps {
   fileId: number;
@@ -60,12 +60,11 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       : selectFileEditMode(state, fileId)
   );
   const viewMode = useAppSelector(state => selectFileViewMode(state, fileId));
+  // View-published toolbar actions (e.g. notebook: Present, Run all, Collapse all).
+  const toolbarActions = useFileToolbar();
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const canEdit = !effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType);
-  // Public sharing is admin-only and story-only in v1. Stories are hidden from file
-  // listings, so the detail header is the only place this action can live.
-  const canShare = fileType === 'story' && isAdmin(effectiveUser?.role || 'viewer');
 
   const dispatchSetEditMode = useCallback((val: boolean) => {
     if (isDashboard) {
@@ -127,7 +126,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   }, [fileId]);
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const doSave = useCallback(async () => {
     setSaveError(null);
@@ -195,6 +193,50 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     </HStack>
   ) : undefined;
 
+  // Generic header toolbar: render whatever the current file's view registered
+  // (Present, Run all, Make public, …) as one list. The header has no per-type
+  // knowledge — every file view owns and registers its own actions.
+  const actionButtons = toolbarActions.map(a => (
+    <Tooltip key={a.id} content={a.ariaLabel} positioning={{ placement: 'top' }}>
+      {a.label ? (
+        <Button
+          aria-label={a.ariaLabel}
+          size="xs"
+          variant="ghost"
+          fontFamily="mono"
+          px={1}
+          h="22px"
+          color={a.active ? 'fg.default' : 'fg.muted'}
+          bg={a.active ? 'bg.emphasized' : undefined}
+          _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
+          onClick={a.onClick}
+        >
+          {a.icon}{a.label}
+        </Button>
+      ) : (
+        <IconButton
+          aria-label={a.ariaLabel}
+          size="xs"
+          variant="ghost"
+          h="22px"
+          minW="22px"
+          px={1}
+          color={a.active ? 'fg.default' : 'fg.muted'}
+          bg={a.active ? 'bg.emphasized' : undefined}
+          _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
+          onClick={a.onClick}
+        >
+          {a.icon}
+        </IconButton>
+      )}
+    </Tooltip>
+  ));
+  const headerActionsNode = actionButtons.length > 0 ? (
+    <HStack gap="2px" bg="bg.muted" borderRadius="md" px="3px" py="1px" borderWidth="1px" borderColor="border.muted">
+      {actionButtons}
+    </HStack>
+  ) : undefined;
+
   return (
     <>
       <DocumentHeader
@@ -223,18 +265,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
-        headerActions={canShare ? (
-          <Button
-            aria-label="Make public"
-            size="xs"
-            variant="subtle"
-            fontFamily="mono"
-            onClick={() => setIsShareModalOpen(true)}
-            px={2}
-          >
-            <LuGlobe /> Make public
-          </Button>
-        ) : undefined}
+        headerActions={headerActionsNode}
         additionalBadges={(
           <>
             {questionCount !== undefined && (
@@ -261,14 +292,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         )}
       />
       <PublishModal isOpen={isPublishModalOpen} onClose={closePublishModal} />
-      {canShare && (
-        <ShareModal
-          isOpen={isShareModalOpen}
-          onClose={() => setIsShareModalOpen(false)}
-          fileId={fileId}
-          fileName={effectiveName}
-        />
-      )}
       {isSaveModalOpen && (
         <SaveFileModal
           isOpen={isSaveModalOpen}

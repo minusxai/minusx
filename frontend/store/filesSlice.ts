@@ -17,13 +17,20 @@ const SYSTEM_FILE_TYPES_SET = immutableSet<string>(['connection', 'config', 'sty
 /**
  * Ephemeral changes - non-persistent state like lastExecuted query
  */
+export interface ExecutedSnapshot {
+  query: string;
+  params: Record<string, any>;
+  database: string;
+  references: any[];
+}
+
 export type EphemeralChanges = Partial<DbFile['content']> & {
-  lastExecuted?: {
-    query: string;
-    params: Record<string, any>;
-    database: string;
-    references: any[];
-  };
+  lastExecuted?: ExecutedSnapshot;
+  // Notebooks only: what each SQL cell last ran, keyed by cell id. Drives each
+  // cell's useQueryResult so an agent EditFile (or a user Run) surfaces results.
+  // Like lastExecuted, it's UI-only and never persisted (selectPersistableContent
+  // drops ephemerals).
+  cellExecuted?: Record<string, ExecutedSnapshot>;
 };
 
 /**
@@ -403,6 +410,38 @@ const filesSlice = createSlice({
           ...changes
         };
       }
+    },
+
+    /**
+     * Set a single notebook cell's executed snapshot (notebooks only).
+     * Merges per-cell so other cells' executed state is preserved — unlike
+     * setEphemeral, which would replace the whole cellExecuted map.
+     */
+    setNotebookCellExecuted(state, action: PayloadAction<{ fileId: FileId; cellId: string; executed: ExecutedSnapshot }>) {
+      const { fileId, cellId, executed } = action.payload;
+      const file = state.files[fileId];
+      if (!file) return;
+      const prev = file.ephemeralChanges.cellExecuted ?? {};
+      file.ephemeralChanges = {
+        ...file.ephemeralChanges,
+        cellExecuted: { ...prev, [cellId]: executed },
+      };
+    },
+
+    /**
+     * Replace a notebook's whole cellResults map in persistableChanges (notebooks
+     * only). cellResults needs REPLACE semantics — selectMergedContent shallow-
+     * overlays persistableChanges onto content, so a partial map would drop the
+     * unlisted (already-saved) cells, and deepMerge can't delete a cell's entry.
+     * Callers compute the full next map (add/prune) and pass it here.
+     */
+    setNotebookCellResults(state, action: PayloadAction<{ fileId: FileId; cellResults: Record<string, unknown> }>) {
+      const { fileId, cellResults } = action.payload;
+      const file = state.files[fileId];
+      if (!file) return;
+      // Cast: callers build the map from loosely-typed snapshots; the runtime
+      // shape matches NotebookContent.cellResults.
+      file.persistableChanges = { ...file.persistableChanges, cellResults: cellResults as any };
     },
 
     /**
@@ -865,6 +904,8 @@ export const {
   setFullContent,
   clearEdits,
   setEphemeral,
+  setNotebookCellExecuted,
+  setNotebookCellResults,
   clearEphemeral,
   setMetadataEdit,
   clearMetadataEdits,
@@ -949,6 +990,16 @@ export const selectMergedContent = createSelector(
     } as DbFile['content'];
   }
 );
+
+/**
+ * Get a notebook's per-cell executed snapshots (UI-only ephemeral state).
+ * Keyed by cell id; drives each SQL cell's useQueryResult.
+ */
+export const selectNotebookCellExecuted = (
+  state: RootState,
+  fileId: FileId,
+): Record<string, ExecutedSnapshot> | undefined =>
+  state.files.files[fileId]?.ephemeralChanges?.cellExecuted;
 
 /**
  * Compute the content that would be persisted on save for a file state:

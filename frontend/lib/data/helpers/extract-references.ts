@@ -7,17 +7,28 @@ import { BaseFileContent, FileType } from '@/lib/types';
  * Phase 6: Moved from server to client - server should be dumb and just save what it receives
  */
 export function extractReferencesFromContent(content: BaseFileContent, type: FileType): number[] {
-  // Handle document types that use content.assets (dashboard, presentation, notebook, story)
+  // Handle document types that use content.assets (dashboard, presentation, story)
   if (
     type === 'dashboard' ||
     type === 'presentation' ||
-    type === 'notebook' ||
     type === 'story'
   ) {
     const assets = (content as any)?.assets || [];
     return assets
       .filter((a: any) => a.type === 'question' && typeof a.id === 'number')
       .map((a: any) => a.id);
+  }
+
+  // Notebook SQL cells are inline questions; their cross-file refs are the
+  // @-references each cell holds (saved question files composed as CTEs).
+  if (type === 'notebook') {
+    const cells = (content as any)?.cells || [];
+    const ids = cells
+      .filter((c: any) => c?.type === 'sql' && Array.isArray(c.references))
+      .flatMap((c: any) => c.references)
+      .filter((ref: any) => typeof ref?.id === 'number')
+      .map((ref: any) => ref.id as number);
+    return Array.from(new Set(ids));
   }
 
   // Handle question references (composed questions)

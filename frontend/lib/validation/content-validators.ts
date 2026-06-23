@@ -5,7 +5,7 @@
  */
 import Ajv from 'ajv';
 import { atlasSchema } from './atlas-json-schemas';
-import type { FileType, QuestionContent, DashboardContent, StoryContent } from '@/lib/types';
+import type { FileType, QuestionContent, DashboardContent, StoryContent, NotebookContent } from '@/lib/types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
 
 // `verbose` so each error carries the received `data` — needed to report
@@ -18,6 +18,7 @@ const validators: Record<string, Ajv.ValidateFunction> = {
   QuestionContent: ajv.compile({ $ref: 'atlas#/$defs/QuestionContent' }),
   DashboardContent: ajv.compile({ $ref: 'atlas#/$defs/DashboardContent' }),
   StoryContent: ajv.compile({ $ref: 'atlas#/$defs/StoryContent' }),
+  NotebookContent: ajv.compile({ $ref: 'atlas#/$defs/NotebookContent' }),
 };
 
 /** Short, human/LLM-readable description of a received value (type + a snippet). */
@@ -77,7 +78,8 @@ function formatErrors(errors: Ajv.ErrorObject[] | null | undefined): string {
 type ContentValidationInput =
   | { type: 'QuestionContent'; data: QuestionContent }
   | { type: 'DashboardContent'; data: DashboardContent }
-  | { type: 'StoryContent'; data: StoryContent };
+  | { type: 'StoryContent'; data: StoryContent }
+  | { type: 'NotebookContent'; data: NotebookContent };
 
 function validateContent(input: ContentValidationInput): string | null {
   const validate = validators[input.type];
@@ -118,6 +120,8 @@ export function validateFileState(file: {
     return validateContent({ type: 'DashboardContent', data: file.content as DashboardContent });
   if (file.type === 'story')
     return validateContent({ type: 'StoryContent', data: file.content as StoryContent });
+  if (file.type === 'notebook')
+    return validateContent({ type: 'NotebookContent', data: file.content as NotebookContent });
   if (file.type === 'config')
     return validateOrgConfig(file.content) ? null : 'Invalid config structure';
   if (file.type === 'connection') {

@@ -321,6 +321,59 @@ export const StoryContent = Type.Object({
 export type StoryContent = Static<typeof StoryContent>;
 
 // ============================================================================
+// Notebook Content — ordered list of cells (each a full inline question or text)
+// ============================================================================
+
+export const NotebookSqlCell = Type.Object({
+  type: Type.Literal('sql'),
+  id: Type.String({ description: 'stable cell id (uuid) — never reused; enables future cell-to-cell references' }),
+  name: Nullable(Type.String({ description: 'optional cell name' })),
+  query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
+  vizSettings: VizSettings,
+  parameters: Nullable(Type.Array(QuestionParameter)),
+  parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
+  connection_name: Type.String({ description: 'connection name (empty string if none)' }),
+  references: Nullable(Type.Array(QuestionReference, { description: '@alias references to saved question files, composed as CTEs' })),
+}, { title: 'NotebookSqlCell' });
+export type NotebookSqlCell = Static<typeof NotebookSqlCell>;
+
+export const NotebookTextCell = Type.Object({
+  type: Type.Literal('text'),
+  id: Type.String({ description: 'stable cell id (uuid)' }),
+  name: Nullable(Type.String()),
+  content: Type.String({ description: 'rich-text body stored as markdown' }),
+}, { title: 'NotebookTextCell' });
+export type NotebookTextCell = Static<typeof NotebookTextCell>;
+
+export const NotebookCell = Type.Union([NotebookSqlCell, NotebookTextCell]);
+export type NotebookCell = Static<typeof NotebookCell>;
+
+// System-managed cached result for a SQL cell, persisted so a reopened notebook
+// shows charts/tables without re-running. Keyed by cell id in NotebookContent.
+// `queryHash` is getQueryHash(query, params, connection) at capture time — the
+// snapshot is ignored on load if it no longer matches the cell's current query.
+export const NotebookCellResult = Type.Object({
+  queryHash: Type.String(),
+  executedAt: Type.Number({ description: 'epoch ms when the result was captured' }),
+  data: Type.Object({
+    columns: Type.Array(Type.String()),
+    types: Type.Array(Type.String()),
+    rows: Type.Array(Type.Unknown()),
+  }),
+  truncated: Type.Optional(Type.Boolean({ description: 'true if rows were capped at capture time' })),
+}, { title: 'NotebookCellResult' });
+export type NotebookCellResult = Static<typeof NotebookCellResult>;
+
+export const NotebookContent = Type.Object({
+  description: Nullable(Type.String()),
+  cells: Type.Array(NotebookCell, { description: 'ordered, vertical list of notebook cells' }),
+  cellResults: Type.Optional(Type.Record(Type.String(), NotebookCellResult, {
+    description: 'system-managed cached cell results keyed by cell id — never authored by the agent',
+  })),
+}, { title: 'NotebookContent' });
+export type NotebookContent = Static<typeof NotebookContent>;
+
+// ============================================================================
 // Top-level discriminated file models
 // ============================================================================
 
@@ -354,5 +407,15 @@ export const AtlasStoryFile = Type.Object({
 }, { title: 'AtlasStoryFile' });
 export type AtlasStoryFile = Static<typeof AtlasStoryFile>;
 
-export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile]);
+export const AtlasNotebookFile = Type.Object({
+  id: Nullable(Type.Integer()),
+  name: Type.String(),
+  path: Type.String(),
+  type: Type.Literal('notebook'),
+  content: NotebookContent,
+  references: Nullable(Type.Array(Type.Integer())),
+}, { title: 'AtlasNotebookFile' });
+export type AtlasNotebookFile = Static<typeof AtlasNotebookFile>;
+
+export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile]);
 export type AtlasFile = Static<typeof AtlasFile>;
