@@ -5,7 +5,6 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
-import { parseQuestionJsx } from '@/lib/data/question-v2';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
 import { Box, Spinner, Text, HStack, IconButton, Menu, Portal, Icon } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
@@ -65,27 +64,11 @@ function SmartEmbeddedQuestionContainerInner({
   const loading = !file || file.loading;
 
   // Get merged content (includes any edits)
+  // For questionv2, content is derived from the jsx body upstream (dbFileToFileState),
+  // so mergedContent is already a proper QuestionContent here — same path as a question.
   const mergedContent = useAppSelector(state =>
     selectMergedContent(state, questionId)
   ) as QuestionContent | undefined;
-
-  // QuestionV2 stores its query/connection/viz in the `jsx` body, not `content`.
-  // Derive the effective QuestionContent from the jsx so the existing render/query
-  // path below works unchanged (backward compatible — plain questions use mergedContent).
-  const effectiveContent = useMemo<QuestionContent | undefined>(() => {
-    if (file?.type === 'questionv2') {
-      if (!file.jsx) return undefined;
-      const parsed = parseQuestionJsx(file.jsx);
-      if (!parsed.ok) return undefined; // invalid jsx → loading guard renders a spinner
-      return {
-        ...(mergedContent ?? {}),
-        query: parsed.value.query,
-        connection_name: parsed.value.connection_name,
-        vizSettings: parsed.value.vizSettings ?? { type: 'table' },
-      } as QuestionContent;
-    }
-    return mergedContent;
-  }, [file?.type, file?.jsx, mergedContent]);
 
   // Use effective name so pending renames are reflected immediately in the dashboard card
   const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
@@ -105,7 +88,7 @@ function SmartEmbeddedQuestionContainerInner({
   }, [questionId, dashboardId, externalParamValues]);
 
   // Show loading state while file loads
-  if (loading || !file || !effectiveContent) {
+  if (loading || !file || !mergedContent) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minH="200px">
         <Spinner size="lg" />
@@ -114,7 +97,7 @@ function SmartEmbeddedQuestionContainerInner({
   }
 
   // Use external parameters (from dashboard) or fall back to question's own parameters
-  const parametersToUse = externalParameters ?? effectiveContent?.parameters ?? [];
+  const parametersToUse = externalParameters ?? mergedContent?.parameters ?? [];
 
   // Render embedded question container with loaded content
   return (
@@ -252,7 +235,7 @@ function SmartEmbeddedQuestionContainerInner({
       )}
       {bodyReady ? (
         <EmbeddedQuestionContainer
-          question={effectiveContent}
+          question={mergedContent}
           questionId={questionId}
           filePath={file?.path}
           externalParameters={parametersToUse}

@@ -98,7 +98,7 @@ export default function FileLayout(props: FileLayoutProps) {
   // Phase 1: Always use children prop
   // Type-based rendering is now handled by FileView component via fileComponents mapping
   const content = props.children;
-  const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'story' || fileType === 'notebook' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
+  const shouldShowRightSidebar = fileType === 'question' || fileType === 'questionv2' || fileType === 'dashboard' || fileType === 'story' || fileType === 'notebook' || fileType === 'report' || fileType === 'alert' || fileType === 'context';
   // view=contentonly hides the right sidebar, so the floating chat bar (which opens
   // into it) is dead weight — drop it (and its bottom padding) too.
   const shouldShowFloatingChat = shouldShowRightSidebar && !hideRightSidebar;
@@ -108,7 +108,7 @@ export default function FileLayout(props: FileLayoutProps) {
 
   // Get current app state for database name (for question pages)
   const { appState, loading: appStateLoading } = useAppState();
-  const appStateDatabaseName = appState?.type === 'file' && appState.state.fileState.type === 'question'
+  const appStateDatabaseName = appState?.type === 'file' && (appState.state.fileState.type === 'question' || appState.state.fileState.type === 'questionv2')
     ? (appState.state.fileState.content as any)?.connection_name
     : undefined;
   

@@ -262,7 +262,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         saveCount={saveCount}
         hideEditToggle={isDraft || !canEdit}
         skipNameValidation={isDraft}
-        questionId={fileType === 'question' ? fileId : undefined}
+        questionId={(fileType === 'question' || fileType === 'questionv2') ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
         headerActions={headerActionsNode}

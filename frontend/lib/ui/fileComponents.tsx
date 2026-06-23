@@ -9,7 +9,6 @@ import { ComponentType } from 'react';
 import { FileType } from './file-metadata';
 import { type FileId } from '@/store/filesSlice';
 import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
-import QuestionV2ContainerV2 from '@/components/containers/QuestionV2ContainerV2';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import NotebookContainerV2 from '@/components/containers/NotebookContainerV2';
 import StoryContainerV2 from '@/components/containers/StoryContainerV2';
@@ -48,7 +47,7 @@ export interface FileComponentProps {
  */
 export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps>>> = {
   question: QuestionContainerV2,
-  questionv2: QuestionV2ContainerV2,
+  questionv2: QuestionContainerV2,   // same full UI as a question; content derived from jsx
   dashboard: DashboardContainerV2,
   notebook: NotebookContainerV2,
   story: StoryContainerV2,

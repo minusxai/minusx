@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setJsx, setFullContent, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, setNotebookCellExecuted, setNotebookCellResults, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, persistableContentOf, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setFullContent, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, setNotebookCellExecuted, setNotebookCellResults, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, selectDirtyFiles, persistableContentOf, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { captureError } from '@/lib/messaging/capture-error';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
@@ -28,6 +28,7 @@ import { selectMaxConcurrentQueries } from '@/store/configsSlice';
 import { Semaphore } from '@/lib/utils/semaphore';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
+import { buildQuestionJsx } from '@/lib/data/question-v2';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
@@ -457,7 +458,7 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
 
   // Auto-execute query for questions (same as EditFile tool handler)
   const fileState = selectFile(state, fileId);
-  if (fileState?.type === 'question') {
+  if (fileState?.type === 'question' || fileState?.type === 'questionv2') {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
     if (finalContent?.query && finalContent?.connection_name) {
@@ -750,6 +751,25 @@ export async function publishFile(
   if (!isDirty) {
     // Nothing to save, return current ID and name
     return { id: fileId, name: fileState.name };
+  }
+
+  // questionv2: the `jsx` body is the source of truth. Serialize the merged (edited)
+  // content back to jsx and persist that via the jsx endpoint — `content` is a derived
+  // projection, never stored. setFileJsx refreshes Redux (re-derives content, clears edits).
+  if (fileState.type === 'questionv2') {
+    const merged = selectMergedContent(state, fileId) as QuestionContent;
+    const jsx = buildQuestionJsx({
+      query: merged?.query ?? '',
+      connection_name: merged?.connection_name ?? '',
+      vizSettings: merged?.vizSettings,
+    });
+    getStore().dispatch(setSaving({ id: fileId, saving: true }));
+    try {
+      const updated = await setFileJsx(fileId, jsx);
+      return { id: updated.id, name: updated.name };
+    } finally {
+      getStore().dispatch(setSaving({ id: fileId, saving: false }));
+    }
   }
 
   // Prepare content for saving: merge only persistable changes, NOT ephemeral.
@@ -1239,11 +1259,16 @@ export async function createDraftFile(
 
 /**
  * Set a file's static-JSX body (File Architecture v2). Validates + persists via the
- * jsx endpoint, then reflects the saved value in Redux. Used by SetJsx / EditJsx.
+ * jsx endpoint, then replaces the Redux FileState with the saved file (which re-derives
+ * content from jsx and clears pending edits). Used by SetJsx / EditJsx and the
+ * questionv2 publish path. Returns the updated file.
  */
-export async function setFileJsx(fileId: number, jsx: string): Promise<void> {
-  await FilesAPI.setJsx(fileId, jsx);
-  getStore().dispatch(setJsx({ fileId, jsx }));
+export async function setFileJsx(fileId: number, jsx: string): Promise<DbFile> {
+  const result = await FilesAPI.setJsx(fileId, jsx);
+  // questionv2 has no cross-file references; refresh the FileState (re-derives content
+  // from the new jsx, clears pending edits) with no referenced files.
+  getStore().dispatch(setFile({ file: result.data, references: [] }));
+  return result.data;
 }
 
 /** Read a file's current jsx body from Redux (effective, post any in-session set). */

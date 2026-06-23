@@ -89,8 +89,9 @@ export class DocumentDB {
    */
   static async updateJsx(id: number, jsx: string, editId?: string): Promise<boolean> {
     const db = getModules().db;
+    // draft = false: saving the jsx body publishes the file (same as a content save).
     const result = await db.exec(
-      `UPDATE files SET jsx = $1, version = version + 1, last_edit_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+      `UPDATE files SET jsx = $1, version = version + 1, last_edit_id = $2, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
       [jsx, editId ?? null, id]
     );
     return (result.rowCount ?? 0) > 0;

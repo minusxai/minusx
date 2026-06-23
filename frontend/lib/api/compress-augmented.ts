@@ -8,6 +8,7 @@
  */
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { parseQuestionJsx } from '@/lib/data/question-v2';
 import type {
   AugmentedFile,
   CompressedAugmentedFile,
@@ -64,8 +65,35 @@ export function stripQueryResultId(file: DbFile): DbFile['content'] {
   return rest as DbFile['content'];
 }
 
-/** Compute the query result cache key for a question file */
+/**
+ * Derive a QuestionContent from a questionv2's `jsx` body, so the *entire* existing
+ * question stack (QuestionContainerV2 → QuestionViewV2: SQL editor, viz selector, right
+ * sidebar, side chat, query execution) works unchanged. The `jsx` is the source of
+ * truth; `content` is a derived projection. Preserves any UI-only fields (parameters,
+ * parameterValues) from the stored content.
+ */
+export function questionV2Content(file: DbFile): QuestionContent {
+  const base = (file.content ?? {}) as Partial<QuestionContent>;
+  const parsed = file.jsx ? parseQuestionJsx(file.jsx) : null;
+  const v = parsed && parsed.ok ? parsed.value : { query: '', connection_name: '', vizSettings: undefined };
+  return {
+    description: base.description ?? '',
+    query: v.query,
+    connection_name: v.connection_name,
+    vizSettings: v.vizSettings ?? { type: 'table' },
+    parameters: base.parameters ?? [],
+    ...(base.parameterValues ? { parameterValues: base.parameterValues } : {}),
+    references: [],
+  } as QuestionContent;
+}
+
+/** Compute the query result cache key for a question / questionv2 file */
 export function computeQueryResultId(file: DbFile): string | undefined {
+  if (file.type === 'questionv2') {
+    const c = questionV2Content(file);
+    if (!c.query || !c.connection_name) return undefined;
+    return getQueryHash(c.query, c.parameterValues || {}, c.connection_name);
+  }
   if (file.type !== 'question' || !file.content) return undefined;
   const content = file.content as QuestionContent;
   if (!content.query || !content.connection_name) return undefined;
@@ -80,9 +108,13 @@ export function computeQueryResultId(file: DbFile): string | undefined {
  * code (dbFileToCompressedAugmented) so they stay in sync.
  */
 export function dbFileToFileState(file: DbFile): FileState {
+  // questionv2: project the jsx body into a QuestionContent so the whole question UI works.
+  const content = file.type === 'questionv2'
+    ? sortObjectKeysDeep(questionV2Content(file)) as DbFile['content']
+    : sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'];
   return {
     ...file,
-    content: sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'],
+    content,
     references: extractReferences(file),
     queryResultId: computeQueryResultId(file),
     loading: false,

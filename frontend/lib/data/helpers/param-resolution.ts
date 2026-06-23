@@ -103,7 +103,7 @@ export function augmentWithParams(
 
   // Questions execute SQL — look up the cached result using effective params.
   // Dashboards do not execute their own query; only their references do.
-  if (fileState.type === 'question') {
+  if (fileState.type === 'question' || fileState.type === 'questionv2') {
     const content = selectMergedContent(state, fileState.id) as QuestionContent;
     if (content?.query) {
       const ownParamValues = content.parameterValues ?? {};
