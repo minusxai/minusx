@@ -60,18 +60,33 @@ const VIZ_NOTE = {
   description: 'vizSettings — see ExecuteQuery.vizSettings for schema',
 };
 
+/**
+ * Recursively replace every `vizSettings` schema with the prose stub and drop
+ * every `cellResults` schema. Walks the whole tree because notebooks embed a
+ * full `vizSettings` inside *each* SQL cell (`content.cells[].vizSettings`),
+ * not just at `content.vizSettings` like questions — a top-level-only strip
+ * would leave the full viz schema (e.g. `ChoroplethConfig`) in notebook cells.
+ */
+function stripVizDeep(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) stripVizDeep(item);
+    return;
+  }
+  if (node === null || typeof node !== 'object') return;
+  const obj = node as Record<string, unknown>;
+  const props = obj.properties as Record<string, unknown> | undefined;
+  if (props) {
+    if ('vizSettings' in props) props.vizSettings = { ...VIZ_NOTE };
+    // cellResults are system-managed cached results — never authored by the
+    // agent, so drop them from the EditFile/CreateFile schema description.
+    if ('cellResults' in props) delete props.cellResults;
+  }
+  for (const value of Object.values(obj)) stripVizDeep(value);
+}
+
 function stripViz(fileSchema: Record<string, unknown>): Record<string, unknown> {
   const clone = toJson(fileSchema);
-  const content = (clone.properties as Record<string, Record<string, unknown>>)?.content;
-  const contentProps = content?.properties as Record<string, unknown> | undefined;
-  if (contentProps && 'vizSettings' in contentProps) {
-    contentProps.vizSettings = VIZ_NOTE;
-  }
-  // Notebook cellResults are system-managed cached results — never authored by
-  // the agent, so drop them from the EditFile/CreateFile schema description.
-  if (contentProps && 'cellResults' in contentProps) {
-    delete contentProps.cellResults;
-  }
+  stripVizDeep(clone);
   return clone;
 }
 
