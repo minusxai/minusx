@@ -176,7 +176,9 @@ export type Attachment = {
   type: 'text' | 'image';
   name: string;
   content: string;
-  metadata?: { pages?: number; wordCount?: number; auto?: boolean };
+  // `language`/`sourceLabel` drive the selection-snippet chip (TextAttachmentCard);
+  // all metadata is client-only — the server drops it (see lib/chat/attachments.server.ts).
+  metadata?: { pages?: number; wordCount?: number; auto?: boolean; language?: string; sourceLabel?: string };
 };
 
 export interface ChatMentionData {

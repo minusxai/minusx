@@ -28,21 +28,51 @@ export function EditSelectionPlugin({ source }: { source: EditWithAgentSource })
     setSelectedText('');
   }, []);
 
+  // Show the pill at the CURRENT selection — only called once a selection gesture
+  // finishes (mouse-up / key-up), so the pill doesn't follow the cursor mid-drag.
+  const showAtSelection = useCallback(() => {
+    if (pinnedRef.current) return;
+    editor.getEditorState().read(() => {
+      const sel = $getSelection();
+      if (!$isRangeSelection(sel) || sel.isCollapsed()) { hide(); return; }
+      const text = sel.getTextContent();
+      if (!text.trim()) { hide(); return; }
+      const domSel = window.getSelection();
+      if (!domSel || domSel.rangeCount === 0) return;
+      // Anchor at the END of the selection (last line, right edge), like the SQL
+      // editor — the popover clamps to the viewport if there isn't room.
+      const range = domSel.getRangeAt(0);
+      const rects = range.getClientRects?.();
+      const rect = rects && rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+      setPosition({ x: rect.right, y: rect.bottom + 4 });
+      setSelectedText(text);
+    });
+  }, [editor, hide]);
+
+  // Hide as soon as the selection collapses (caret click, typing) — but never SHOW
+  // from here, so the pill stays put while the user drags out a selection.
   useEffect(() => {
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
         const sel = $getSelection();
-        if (!$isRangeSelection(sel) || sel.isCollapsed()) { hide(); return; }
-        const text = sel.getTextContent();
-        if (!text.trim()) { hide(); return; }
-        const domSel = window.getSelection();
-        if (!domSel || domSel.rangeCount === 0) return;
-        const rect = domSel.getRangeAt(0).getBoundingClientRect();
-        setPosition({ x: rect.left, y: rect.bottom + 4 });
-        setSelectedText(text);
+        if (!$isRangeSelection(sel) || sel.isCollapsed()) hide();
       });
     });
   }, [editor, hide]);
+
+  // Reveal only when a selection gesture completes.
+  useEffect(() => {
+    const onMouseUp = () => requestAnimationFrame(showAtSelection);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.shiftKey || e.key === 'Shift') requestAnimationFrame(showAtSelection);
+    };
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('keyup', onKeyUp);
+    return () => {
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('keyup', onKeyUp);
+    };
+  }, [showAtSelection]);
 
   // Hide on scroll (the anchored rect would otherwise drift).
   useEffect(() => {

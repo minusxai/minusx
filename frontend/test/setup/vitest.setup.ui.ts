@@ -43,7 +43,8 @@ vi.mock('@monaco-editor/react', () => {
         onDidDispose: vi.fn(),
         onKeyUp: vi.fn(),
         onDidChangeModelContent: vi.fn(),
-        // "Edit with {agentName}" selection listeners + position getters.
+        // "Interact with {agentName}" selection listeners + position getters.
+        onMouseUp: vi.fn(),
         onDidChangeCursorSelection: vi.fn(),
         onDidScrollChange: vi.fn(),
         getSelection: () => null,

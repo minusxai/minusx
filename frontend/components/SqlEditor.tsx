@@ -585,10 +585,19 @@ export default function SqlEditor({
                   window.removeEventListener('atlas:editor-insert', handleEditorInsert);
                 });
 
-                // "Interact with {agentName}" pill: show on a non-empty selection, hide on scroll.
+                // "Interact with {agentName}" pill: reveal only once a selection
+                // gesture finishes (mouse-up / shift key-up), so it doesn't follow
+                // the cursor mid-drag. Hide while selecting, on collapse, and on scroll.
+                editor.onMouseUp(() => {
+                  if (editWithAgentRef.current) setEditSel(computeMonacoPopoverPosition(editor));
+                });
+                editor.onKeyUp((e: { shiftKey?: boolean }) => {
+                  if (editWithAgentRef.current && e.shiftKey) setEditSel(computeMonacoPopoverPosition(editor));
+                });
                 editor.onDidChangeCursorSelection(() => {
                   if (!editWithAgentRef.current) return;
-                  setEditSel(computeMonacoPopoverPosition(editor));
+                  const sel = editor.getSelection();
+                  if (!sel || sel.isEmpty()) setEditSel(null); // hide only; don't reposition mid-drag
                 });
                 editor.onDidScrollChange(() => {
                   if (editWithAgentRef.current) setEditSel(null);

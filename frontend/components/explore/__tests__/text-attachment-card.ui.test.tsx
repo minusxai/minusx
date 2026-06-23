@@ -16,28 +16,27 @@ const ATT: Attachment = {
 };
 
 describe('TextAttachmentCard', () => {
-  it('shows a compact chip with line count and source label', async () => {
+  it('shows a compact chip with the selected line count', async () => {
     renderWithProviders(<TextAttachmentCard attachment={ATT} />);
-    const chip = await screen.findByLabelText('Selected snippet: Revenue');
-    expect(chip).toHaveTextContent('3 lines');
-    expect(chip).toHaveTextContent('Revenue');
+    const chip = await screen.findByLabelText('Selected snippet, 3 selected lines');
+    expect(chip).toHaveTextContent('3 selected lines');
   });
 
   it('expands to reveal the snippet content on click, and collapses again', async () => {
     renderWithProviders(<TextAttachmentCard attachment={ATT} />);
     expect(screen.queryByLabelText('Snippet content')).not.toBeInTheDocument();
 
-    fireEvent.click(await screen.findByLabelText('Selected snippet: Revenue'));
+    fireEvent.click(await screen.findByLabelText('Selected snippet, 3 selected lines'));
     expect(await screen.findByLabelText('Snippet content')).toHaveTextContent('SELECT id');
 
-    fireEvent.click(await screen.findByLabelText('Selected snippet: Revenue'));
+    fireEvent.click(await screen.findByLabelText('Selected snippet, 3 selected lines'));
     expect(screen.queryByLabelText('Snippet content')).not.toBeInTheDocument();
   });
 
-  it('uses a singular label for a one-line snippet and falls back to the name', async () => {
+  it('uses a singular label for a one-line snippet', async () => {
     const att: Attachment = { type: 'text', name: 'notes.txt', content: 'just one line' };
     renderWithProviders(<TextAttachmentCard attachment={att} />);
-    const chip = await screen.findByLabelText('Selected snippet: notes.txt');
-    expect(chip).toHaveTextContent('1 line');
+    const chip = await screen.findByLabelText('Selected snippet, 1 selected line');
+    expect(chip).toHaveTextContent('1 selected line');
   });
 });
