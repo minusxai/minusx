@@ -6,6 +6,7 @@ import { MessageDebugInfo, CompletedToolCall } from '@/lib/types';
 import ToolCallDisplay from './ToolCallDisplay';
 import DebugInfoDisplay from './DebugInfoDisplay';
 import { MessageWithMentions } from '../chat/MessageWithMentions';
+import TextAttachmentCard from './TextAttachmentCard';
 import { useAppSelector } from '@/store/hooks';
 import { useAppDispatch } from '@/store/hooks';
 
@@ -93,6 +94,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
   if (isUser) {
     const userMsg = message as import('@/store/chatSlice').UserMessage;
     const imageAttachments = userMsg.attachments?.filter(a => a.type === 'image' && !a.metadata?.auto) ?? [];
+    const textAttachments = userMsg.attachments?.filter(a => a.type === 'text' && !a.metadata?.auto) ?? [];
     const canEdit = showDebug && conversationID !== undefined && userMsg.logIndex !== undefined;
 
     const handleEditConfirm = () => {
@@ -176,6 +178,9 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
                   context={markdownContext}
                   textAlign="left"
                 />
+                {textAttachments.map((att, i) => (
+                  <TextAttachmentCard key={`text-att-${i}`} attachment={att} />
+                ))}
                 {imageAttachments.length > 0 && (
                   <HStack mt={2} gap={2} flexWrap="wrap">
                     {imageAttachments.map((att, i) => (
