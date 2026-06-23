@@ -93,7 +93,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       const shim = document.createElement('style');
       shim.setAttribute('data-mx-fluid-shim', '');
       shim.textContent =
-        '[data-question-id]{max-width:100%!important;width:100%!important}' +
+        // min-width:0 lets the embed shrink to its container when it's a flex/grid
+        // item (default min-width:auto would otherwise let a wide child — e.g. a
+        // many-column table with its own min-width — blow past the story's edge
+        // instead of letting the embed's internal overflow:auto scroll).
+        '[data-question-id]{max-width:100%!important;width:100%!important;min-width:0!important}' +
         'img,svg,video,table,pre{max-width:100%!important}' +
         'img,video{height:auto!important}';
       root.appendChild(shim);
