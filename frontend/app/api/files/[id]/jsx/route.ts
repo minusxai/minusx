@@ -24,7 +24,10 @@ export const POST = withAuth(async (
       return ApiErrors.validationError('jsx (string) is required');
     }
     const result = await setJsxFile(id, jsx, user);
-    return successResponse({ data: result.data });
+    // successResponse already wraps in { success, data } — pass the file directly,
+    // NOT { data: ... }, or the client receives a double-wrapped { data: { data: file } }
+    // and setFile() gets a malformed object (no type/jsx → blank derived content).
+    return successResponse(result.data);
   } catch (error) {
     return handleApiError(error);
   }
