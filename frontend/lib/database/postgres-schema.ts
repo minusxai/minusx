@@ -107,6 +107,7 @@ export const POSTGRES_SCHEMA = `
     last_edit_id TEXT,
     draft BOOLEAN NOT NULL DEFAULT FALSE,
     meta JSONB DEFAULT NULL,
+    jsx TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -165,6 +166,17 @@ export const POSTGRES_SCHEMA = `
       WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'meta'
     ) THEN
       ALTER TABLE files ADD COLUMN meta JSONB DEFAULT NULL;
+    END IF;
+  END $$;
+
+  -- Add jsx column if it doesn't exist (File Architecture v2 — static-JSX body)
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'jsx'
+    ) THEN
+      ALTER TABLE files ADD COLUMN jsx TEXT DEFAULT NULL;
     END IF;
   END $$;
 

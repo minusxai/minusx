@@ -73,6 +73,7 @@ export interface BaseFileMetadata extends BaseEntity {
   last_edit_id: string | null;  // Last edit idempotency key (for OCC); null if not set
   draft?: boolean;               // true until first real save (invisible in listings); undefined = false
   meta?: Record<string, unknown> | null;  // arbitrary file-level metadata (future use)
+  jsx?: string | null;           // File Architecture v2 — static-JSX body (e.g. QuestionV2)
 }
 
 // Document-based architecture types
@@ -1270,6 +1271,7 @@ export interface CompressedFileState {
   isDirty: boolean;             // true if unpublished changes exist
   queryResultId?: string;        // computed hash of query+params+database (questions only)
   content: FileState['content']; // merged: { ...content, ...persistableChanges }
+  jsx?: string;                  // File Architecture v2 — static-JSX body (e.g. QuestionV2)
 }
 
 export interface CompressedAugmentedFile {

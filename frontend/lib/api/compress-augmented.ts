@@ -167,6 +167,7 @@ function compressFileState(fs: FileState): CompressedFileState {
     content: mergedContent,
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
+    ...(fs.jsx ? { jsx: fs.jsx } : {}),
   };
 }
 
