@@ -67,12 +67,19 @@ function nodeToHtml(node: JsxNode, assets: number[]): string {
   return `${open}${children}</${node.tag}>`;
 }
 
+// JSX attribute names → their HTML equivalents. The agent authors *JSX*, so it naturally
+// reaches for the React spellings (`className`, `htmlFor`); emitting those verbatim into the
+// shadow-DOM HTML produces dead `classname`/`htmlfor` attributes and the CSS class selectors
+// never match (story renders unstyled). Map them back to real HTML attribute names.
+const JSX_ATTR_TO_HTML: Record<string, string> = { className: 'class', htmlFor: 'for' };
+
 function attrToHtml(a: { name: string; value: { static: boolean; json?: unknown } }): string {
   if (!a.value.static) return '';
+  const name = JSX_ATTR_TO_HTML[a.name] ?? a.name;
   const v = a.value.json;
-  if (v === true) return a.name;
+  if (v === true) return name;
   if (v === false || v === null || v === undefined) return '';
-  if (typeof v === 'string' || typeof v === 'number') return `${a.name}="${String(v).replace(/"/g, '&quot;')}"`;
+  if (typeof v === 'string' || typeof v === 'number') return `${name}="${String(v).replace(/"/g, '&quot;')}"`;
   return ''; // object/array attribute values aren't meaningful in plain HTML
 }
 

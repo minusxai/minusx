@@ -31,6 +31,17 @@ describe('parseStoryJsx', () => {
     if (r.ok) expect(r.value.assets).toEqual([5]);
     expect(parseStoryJsx('<div oops=>').ok).toBe(false);
   });
+
+  it('maps JSX attribute names to HTML (className→class, htmlFor→for) so class selectors match', () => {
+    const r = parseStoryJsx('<div className="story"><label htmlFor="x">L</label></div>');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      // The CSS targets `.story` — emit real `class`, not the dead `className` attribute.
+      expect(r.value.html).toContain('<div class="story">');
+      expect(r.value.html).not.toContain('className');
+      expect(r.value.html).toContain('<label for="x">');
+    }
+  });
 });
 
 describe('buildStoryJsx', () => {
