@@ -10,6 +10,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { parseQuestionJsx } from '@/lib/data/question-v2';
 import { parseStoryJsx } from '@/lib/data/story-v2';
+import { fileToMarkup } from '@/lib/data/file-markup';
 import type {
   AugmentedFile,
   CompressedAugmentedFile,
@@ -224,6 +225,8 @@ function compressFileState(fs: FileState): CompressedFileState {
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
     ...(fs.jsx ? { jsx: fs.jsx } : {}),
+    // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
+    markup: fileToMarkup(fs.type as FileType, mergedContent),
   };
 }
 

@@ -37,7 +37,8 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { encodeFileStr, decodeFileStr, sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
 import type { AugmentedFile, FileState, QueryResult, QuestionContent, StoryContent, StoryV2Content, FileType, DbFile } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -451,8 +452,8 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
   const built = buildCurrentFileStr(state, fileId);
   if (!built.success) return built;
 
-  // Replace the entire file string via editFileStr (handles content, metadata, validation)
-  const targetStr = encodeFileStr(targetFileObj);
+  // Replace the entire file string via editFileStr — the agent's edit surface is MARKUP.
+  const targetStr = fileToMarkup(selectFile(state, fileId)!.type, targetFileObj.content);
   const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: targetStr });
   if (!result.success) return result;
 
@@ -513,21 +514,12 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
     ? { ...baseContent, ...fileState.persistableChanges }
     : baseContent;
   const currentName = selectEffectiveName(state, fileId) || '';
-  let queryResultId = fileState.queryResultId;
-  if (fileState.type === 'question') {
-    const qc = mergedContent as QuestionContent;
-    if (qc?.query && qc?.connection_name) {
-      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.connection_name);
-    }
-  }
-  const fullFileStr = encodeFileStr({
-    id: fileState.id,
-    name: currentName,
-    path: fileState.metadataChanges?.path ?? fileState.path,
-    type: fileState.type,
-    content: mergedContent,
-    ...(queryResultId ? { queryResultId } : {}),
-  });
+  // File Architecture v2: the agent reads + edits the file as MARKUP (jsx body for
+  // documents, keyvalue→XML for structured props) — never escaped JSON. The id/name/path
+  // wrapper is not part of the editable surface (EditFile targets by fileId; renames go
+  // through metadata). `mergedContent` is still returned for the structured callers.
+  void currentName;
+  const fullFileStr = fileToMarkup(fileState.type, mergedContent);
   return { success: true, fullFileStr, mergedContent };
 }
 
@@ -578,54 +570,24 @@ export async function editFileStr(
     editedStr = fullFileStr.split(effectiveOldMatch).join(effectiveNewMatch);
   }
 
-  // Decode back to object
-  let editedFile: { id: number; name: string; path: string; type: FileType; queryResultId?: string; content: any };
-  try {
-    editedFile = decodeFileStr(editedStr) as typeof editedFile;
-  } catch (error) {
-    return {
-      success: false,
-      error: `Invalid file encoding after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
+  // File Architecture v2: the edited string is MARKUP — parse it back to typed content.
+  const parsedContent = markupToContent(fileState.type, editedStr);
+  if (!parsedContent.ok) {
+    return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
   }
+  // Merge over the existing content so unedited fields (and any not surfaced in the markup
+  // projection) are preserved; the markup carries the editable surface.
+  const newContent = { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
+  void currentName;
 
-  // Detect what changed and dispatch appropriate Redux actions
-  const metadataChanges: { name?: string; path?: string } = {};
-  let contentChanged = false;
+  const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
 
-  // Check name change
-  if (editedFile.name !== currentName) {
-    metadataChanges.name = editedFile.name;
-  }
-
-  // Check path change
-  if (editedFile.path !== fileState.path) {
-    metadataChanges.path = editedFile.path;
-  }
-
-  // Check content change
-  if (JSON.stringify(editedFile.content) !== JSON.stringify(mergedContent)) {
-    contentChanged = true;
-  }
-
-  // Validate content if it changed
   if (contentChanged) {
-    const error = validateFileState(editedFile);
+    const error = validateFileState({ type: fileState.type, content: newContent, name: fileState.name, path: fileState.path });
     if (error) {
-      return { success: false, error: `Invalid ${editedFile.type} content: ${error}` };
+      return { success: false, error: `Invalid ${fileState.type} content: ${error}` };
     }
-  }
-
-  // Dispatch Redux actions for changes
-  if (Object.keys(metadataChanges).length > 0) {
-    getStore().dispatch(setMetadataEdit({ fileId, changes: metadataChanges }));
-  }
-
-  if (contentChanged) {
-    getStore().dispatch(setEdit({
-      fileId,
-      edits: editedFile.content
-    }));
+    getStore().dispatch(setEdit({ fileId, edits: newContent }));
   }
 
   // Generate diff

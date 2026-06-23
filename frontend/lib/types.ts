@@ -1273,6 +1273,8 @@ export interface CompressedFileState {
   queryResultId?: string;        // computed hash of query+params+database (questions only)
   content: FileState['content']; // merged: { ...content, ...persistableChanges }
   jsx?: string;                  // File Architecture v2 — static-JSX body (e.g. QuestionV2)
+  markup?: string;               // File Architecture v2 — the agent's edit surface (jsx body
+                                 // for documents, keyvalue→XML for props); mirrors buildCurrentFileStr
 }
 
 export interface CompressedAugmentedFile {
