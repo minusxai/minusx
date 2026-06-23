@@ -13,6 +13,7 @@ export * from './types';
 export { parseJsx } from './parse';
 export { validateJsx } from './validate';
 export { renderJsx, type JsxComponentRegistry } from './render';
+export { serializeJsx } from './serialize';
 
 export type CompileResult =
   | { ok: true; node: ReactNode[] }
