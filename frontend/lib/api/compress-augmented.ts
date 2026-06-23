@@ -9,6 +9,7 @@
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { parseQuestionJsx } from '@/lib/data/question-v2';
+import { parseStoryJsx } from '@/lib/data/story-v2';
 import type {
   AugmentedFile,
   CompressedAugmentedFile,
@@ -18,6 +19,7 @@ import type {
   FileState,
   QueryResult,
   QuestionContent,
+  StoryContent,
   QuestionReference,
   FileType,
 } from '@/lib/types';
@@ -87,6 +89,25 @@ export function questionV2Content(file: DbFile): QuestionContent {
   } as QuestionContent;
 }
 
+/**
+ * Derive a StoryContent from a storyv2's `jsx` body, so the existing story stack
+ * (StoryContainerV2 → StoryView → AgentHtml shadow-DOM render + live embeds) works
+ * unchanged. The `jsx` is the source of truth; `content` is a derived projection:
+ * `story` = the compiled HTML, `assets` = the embedded question ids.
+ */
+export function storyV2Content(file: DbFile): StoryContent {
+  const base = (file.content ?? {}) as Partial<StoryContent>;
+  const parsed = file.jsx ? parseStoryJsx(file.jsx) : null;
+  const v = parsed && parsed.ok ? parsed.value : { html: '', assets: [] };
+  return {
+    description: base.description ?? '',
+    story: v.html,
+    assets: v.assets.map((id) => ({ id, type: 'question' as const })),
+    colorMode: base.colorMode ?? 'dark',
+    ...(base.suggestedQuestions ? { suggestedQuestions: base.suggestedQuestions } : {}),
+  } as StoryContent;
+}
+
 /** Compute the query result cache key for a question / questionv2 file */
 export function computeQueryResultId(file: DbFile): string | undefined {
   if (file.type === 'questionv2') {
@@ -108,9 +129,12 @@ export function computeQueryResultId(file: DbFile): string | undefined {
  * code (dbFileToCompressedAugmented) so they stay in sync.
  */
 export function dbFileToFileState(file: DbFile): FileState {
-  // questionv2: project the jsx body into a QuestionContent so the whole question UI works.
+  // v2 types project their jsx body into the legacy content shape so the whole existing
+  // question / story UI works unchanged.
   const content = file.type === 'questionv2'
     ? sortObjectKeysDeep(questionV2Content(file)) as DbFile['content']
+    : file.type === 'storyv2'
+    ? sortObjectKeysDeep(storyV2Content(file)) as DbFile['content']
     : sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'];
   return {
     ...file,

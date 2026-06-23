@@ -51,6 +51,7 @@ export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileCompone
   dashboard: DashboardContainerV2,
   notebook: NotebookContainerV2,
   story: StoryContainerV2,
+  storyv2: StoryContainerV2,   // same story UI; content derived from the jsx body
   presentation: PresentationContainerV2,
   context: ContextContainerV2,
   connection: ConnectionContainerV2,

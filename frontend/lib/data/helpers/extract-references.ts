@@ -7,11 +7,12 @@ import { BaseFileContent, FileType } from '@/lib/types';
  * Phase 6: Moved from server to client - server should be dumb and just save what it receives
  */
 export function extractReferencesFromContent(content: BaseFileContent, type: FileType): number[] {
-  // Handle document types that use content.assets (dashboard, presentation, story)
+  // Handle document types that use content.assets (dashboard, presentation, story, storyv2)
   if (
     type === 'dashboard' ||
     type === 'presentation' ||
-    type === 'story'
+    type === 'story' ||
+    type === 'storyv2'
   ) {
     const assets = (content as any)?.assets || [];
     return assets

@@ -120,7 +120,7 @@ export function validateFileState(file: {
     return validateContent({ type: 'QuestionContent', data: file.content as QuestionContent });
   if (file.type === 'dashboard')
     return validateContent({ type: 'DashboardContent', data: file.content as DashboardContent });
-  if (file.type === 'story')
+  if (file.type === 'story' || file.type === 'storyv2')
     return validateContent({ type: 'StoryContent', data: file.content as StoryContent });
   if (file.type === 'notebook')
     return validateContent({ type: 'NotebookContent', data: file.content as NotebookContent });

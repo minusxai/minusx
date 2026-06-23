@@ -22,7 +22,7 @@ export type {
   StoryContent,
   NotebookContent, NotebookCell, NotebookSqlCell, NotebookTextCell,
   QuestionV2Content,
-  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File,
+  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File, AtlasStoryV2File,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 

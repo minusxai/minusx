@@ -113,7 +113,7 @@ const CreateFileParams = Type.Object({
   // File Architecture v2: for `questionv2` files the query/connection/viz live here
   // (a static-JSX body), NOT in `content`.
   jsx: Type.Optional(Type.String({
-    description: 'For file_type "questionv2": the static-JSX body, e.g. `<Question connection="github" viz={{"type":"bar","xCols":["a"]}}>{`SELECT ...`}</Question>`. The SQL goes in a template-literal child so <, >, { stay raw. Provide this INSTEAD of content for questionv2.',
+    description: 'The static-JSX body for v2 file types (provide INSTEAD of content). For "questionv2": `<Question connection="github" viz={{"type":"bar","xCols":["a"]}}>{`SELECT ...`}</Question>` (SQL in a template-literal child so <, >, { stay raw). For "storyv2": HTML-ish JSX with `<Question id={123} />` embeds, e.g. `<div class="story"><style>{`.story{...css...}`}</style><h1>Title</h1><Question id={123} /></div>` (CSS in a <style> template-literal child). Only the <Question> component is allowed; no functions/handlers.',
   })),
 });
 

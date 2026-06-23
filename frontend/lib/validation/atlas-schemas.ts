@@ -435,5 +435,18 @@ export const AtlasQuestionV2File = Type.Object({
 }, { title: 'AtlasQuestionV2File' });
 export type AtlasQuestionV2File = Static<typeof AtlasQuestionV2File>;
 
-export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File]);
+// File Architecture v2 — StoryV2. The HTML-ish JSX body (with <Question id={…}/> embeds)
+// lives in the file's top-level `jsx` field; `content` is the derived StoryContent
+// projection (reused as-is, so a storyv2 renders through the existing StoryView).
+export const AtlasStoryV2File = Type.Object({
+  id: Nullable(Type.Integer()),
+  name: Type.String(),
+  path: Type.String(),
+  type: Type.Literal('storyv2'),
+  content: StoryContent,
+  references: Nullable(Type.Array(Type.Integer())),
+}, { title: 'AtlasStoryV2File' });
+export type AtlasStoryV2File = Static<typeof AtlasStoryV2File>;
+
+export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File, AtlasStoryV2File]);
 export type AtlasFile = Static<typeof AtlasFile>;

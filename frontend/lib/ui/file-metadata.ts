@@ -57,6 +57,14 @@ export const FILE_TYPE_METADATA = {
     supported: false,
     h: 'none',
   },
+  storyv2: {                       // File Architecture v2 — jsx-backed data story (experimental)
+    label: 'Data Story V2',
+    icon: LuBookOpen,
+    color: 'accent.cyan',
+    category: 'analytics',
+    supported: false,            // hidden from create menu; created via agent for now
+    h: 'none',
+  },
   notebook: {
     label: 'Notebook',
     icon: LuNotebook,
