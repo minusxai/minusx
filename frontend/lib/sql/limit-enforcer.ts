@@ -154,6 +154,72 @@ function extractLimitValue(limitNode: any): number | null {
 }
 
 /**
+ * Restore `:param` placeholders that polyglot rendered in a dialect-native form
+ * (`$param` duckdb, `@param` bigquery, `%(param)s` postgres), applying the
+ * substitution ONLY to text outside string/identifier literals. Quoted regions
+ * are emitted verbatim so `$`/`@` that are part of string data — e.g. a JSON
+ * path key `'$."$current_url"'` or an email `'a@b.com'` — are never mistaken
+ * for a placeholder.
+ *
+ * Quote handling: `'`/`"` are strings, backticks are identifiers; the doubled
+ * quote (`''`/`""`) escape is universal. Backslash escapes (`\'`) are only
+ * honored for dialects that actually use them (BigQuery/MySQL); treating `\`
+ * as an escape under Postgres/DuckDB (which don't, outside E-strings) would
+ * mis-track a trailing-backslash literal and swallow the rest of the query.
+ */
+function restoreParamPlaceholders(sql: string, dialect: string): string {
+  const honorBackslash = dialect === 'bigquery' || dialect === 'mysql';
+  let out = '';
+  let buf = '';
+  const flush = () => {
+    out += buf
+      .replace(/\$(\w+)/g, ':$1')      // $param → :param (duckdb)
+      .replace(/@(\w+)/g, ':$1')        // @param → :param (bigquery)
+      .replace(/%\((\w+)\)s/g, ':$1');  // %(param)s → :param (postgres)
+    buf = '';
+  };
+
+  let i = 0;
+  const n = sql.length;
+  while (i < n) {
+    const c = sql[i];
+    // Single/double quotes are string literals; backticks are identifiers.
+    // Placeholders never appear inside any of these — copy them through as-is.
+    if (c === "'" || c === '"' || c === '`') {
+      flush();
+      const quote = c;
+      out += c;
+      i++;
+      while (i < n) {
+        const ch = sql[i];
+        if (honorBackslash && ch === '\\' && i + 1 < n) {  // \' / \\ escape
+          out += ch + sql[i + 1];
+          i += 2;
+          continue;
+        }
+        if (ch === quote) {
+          if (sql[i + 1] === quote) {          // doubled-quote escape ('' / "")
+            out += ch + sql[i + 1];
+            i += 2;
+            continue;
+          }
+          out += ch;
+          i++;
+          break;                               // closing quote
+        }
+        out += ch;
+        i++;
+      }
+    } else {
+      buf += c;
+      i++;
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
  * Regenerate SQL from a (possibly mutated) AST. Returns `null` on failure —
  * generate() threw, or produced no SQL — so callers fall back to the original
  * query. NEVER returns JSON.stringify(ast): that would be sent to the DB as
@@ -163,13 +229,11 @@ function regenerateSql(ast: any, dialect: string): string | null {
   try {
     const result = generate([ast], dialect as Dialect);
     if (result.sql?.[0]) {
-      let sql = result.sql[0];
-      // Fix parameter placeholders — polyglot may transform :param syntax
-      // Restore :param format for all dialects
-      sql = sql.replace(/\$(\w+)/g, ':$1');      // $param → :param (duckdb)
-      sql = sql.replace(/@(\w+)/g, ':$1');        // @param → :param (bigquery)
-      sql = sql.replace(/%\((\w+)\)s/g, ':$1');   // %(param)s → :param (postgres)
-      return sql;
+      // Fix parameter placeholders — polyglot may transform :param syntax into
+      // the dialect's native form. Restore :param, but ONLY outside string
+      // literals: a `$`/`@` inside a string literal is data, not a placeholder
+      // (e.g. PostHog JSON keys like '$."$current_url"'), and must survive.
+      return restoreParamPlaceholders(result.sql[0], dialect);
     }
   } catch {
     // fall through
