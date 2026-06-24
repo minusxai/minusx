@@ -245,7 +245,7 @@ interface FormatPopoverProps {
   onChange: (config: ColumnFormatConfig) => void
 }
 
-const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverProps) => {
+export const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverProps) => {
   const config = formatConfig
 
   const handleAliasChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,6 +281,7 @@ const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverPr
         </Text>
         <input
           type="text"
+          aria-label={`Alias for ${column}`}
           placeholder={column}
           value={config.alias || ''}
           onChange={handleAliasChange}
