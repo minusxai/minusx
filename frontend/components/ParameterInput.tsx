@@ -156,6 +156,7 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
       >
         <Combobox.Control>
           <Combobox.Input
+            aria-label={`param ${paramName}`}
             placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
             bg="bg.canvas"
             borderColor="border.muted"
@@ -315,6 +316,7 @@ function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, d
       >
         <Combobox.Control>
           <Combobox.Input
+            aria-label={`param ${paramName}`}
             placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
             bg="transparent"
             border="none"

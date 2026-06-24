@@ -1258,3 +1258,44 @@ describe('editFile - story <Param> lint (non-blocking feedback)', () => {
     expect((result.validation ?? []).join(' ')).not.toMatch(/:city/);
   });
 });
+
+describe('editFile - dashboard param lint (non-blocking type-conflict feedback)', () => {
+  function loadStore(files: any[]) {
+    testStore = configureStore({ reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer } });
+    testStore.dispatch({ type: 'files/setFiles', payload: { files } });
+  }
+  beforeEach(async () => { await clearFilesExceptOrg(); });
+  afterEach(() => { testStore = null; });
+
+  // Two questions filter on :region but with different param types — auto-derive splits them.
+  const Q = (id: number, type: 'text' | 'number') => ({
+    id, name: `q-${id}`, path: `/org/q-${id}`, type: 'question', version: 1, last_edit_id: null,
+    content: { query: 'SELECT * FROM sales WHERE region = :region', connection_name: 'static',
+      vizSettings: { type: 'table' }, parameters: [{ name: 'region', type, label: null, source: null }] },
+    file_references: [], created_at: '', updated_at: '',
+  });
+  const DASH = (id: number, qIds: number[], desc: string) => ({
+    id, name: `d-${id}`, path: `/org/d-${id}`, type: 'dashboard', version: 1, last_edit_id: null,
+    content: { description: desc, assets: qIds.map((q) => ({ type: 'question', id: q })), layout: null },
+    file_references: qIds, created_at: '', updated_at: '',
+  });
+
+  it('warns when two embedded questions use the same :param name with conflicting types', async () => {
+    const a = 5001, b = 5002, d = 5003;
+    loadStore([Q(a, 'text'), Q(b, 'number'), DASH(d, [a, b], 'before')]);
+    const result = await editFileStr({ fileId: d, oldMatch: 'before', newMatch: 'after' });
+    expect(result.success).toBe(true); // permissive — applied
+    const v = (result.validation ?? []).join(' ');
+    expect(v).toMatch(/:region/);
+    expect(v).toContain('text');
+    expect(v).toContain('number');
+  });
+
+  it('no warning when the same :param name has a consistent type across questions', async () => {
+    const a = 5011, b = 5012, d = 5013;
+    loadStore([Q(a, 'text'), Q(b, 'text'), DASH(d, [a, b], 'before')]);
+    const result = await editFileStr({ fileId: d, oldMatch: 'before', newMatch: 'after' });
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).join(' ')).not.toMatch(/:region/);
+  });
+});

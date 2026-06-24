@@ -36,10 +36,17 @@ describe('StoryParamControl', () => {
 });
 
 describe('StoryParamControl — autocomplete (param with a question source)', () => {
-  it('renders the source dropdown (no plain input) when the param imports a question column', () => {
+  it('renders the source autocomplete combobox (not a plain input) when the param imports a question column', () => {
     const sourced: StoryParam = { name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'city' } };
-    const { queryByLabelText, getByText } = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
-    expect(getByText('city')).toBeTruthy();              // labelled
-    expect(queryByLabelText('param city')).toBeNull();    // NOT the plain input — the dropdown took over
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
+    // The labelled input rendered (positive proof the widget mounted) AND it's a combobox —
+    // i.e. the autocomplete path, not the plain <input type="text"> the source-less branch uses.
+    const input = getByLabelText('param city') as HTMLInputElement;
+    expect(input.getAttribute('role')).toBe('combobox');
+  });
+
+  it('source-less param renders a plain (non-combobox) input', () => {
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={city} value="" onChange={() => {}} />);
+    expect((getByLabelText('param city') as HTMLInputElement).getAttribute('role')).not.toBe('combobox');
   });
 });
