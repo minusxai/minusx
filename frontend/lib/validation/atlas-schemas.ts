@@ -146,6 +146,16 @@ export const ColumnFormatConfig = Type.Object({
 }, { title: 'ColumnFormatConfig' });
 export type ColumnFormatConfig = Static<typeof ColumnFormatConfig>;
 
+export const ConditionalFormatRule = Type.Object({
+  id: Type.String({ description: 'stable unique id for this rule' }),
+  column: Type.String({ description: 'the column whose value the condition is checked against' }),
+  operator: StringEnum(['=', '!=', '>', '<', '>=', '<=', 'contains'], 'comparison operator'),
+  value: Type.String({ description: 'value to compare against (coerced to number for numeric columns)' }),
+  target: StringEnum(['cell', 'row', 'column'], "what gets painted when the condition matches: the matching 'cell', the entire 'row', or the entire 'column'"),
+  bgColor: Type.String({ description: "background color as a hex string, e.g. '#fde68a'" }),
+}, { title: 'ConditionalFormatRule' });
+export type ConditionalFormatRule = Static<typeof ConditionalFormatRule>;
+
 export const VisualizationStyleConfig = Type.Object({
   colors: Nullable(Type.Record(Type.String(), Type.String(), { description: "color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'})." })),
   opacity: Nullable(Type.Number({ description: 'series opacity from 0.1 to 1.0' })),
@@ -178,6 +188,7 @@ export const VizSettings = Type.Object({
   tooltipCols: Nullable(Type.Array(Type.String(), { description: 'additional columns to show in chart tooltips without changing grouping or series structure' })),
   pivotConfig: NullableD(PivotConfig, "pivot table configuration (only used when type is 'pivot')"),
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description: 'per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.' })),
+  conditionalFormats: Nullable(Type.Array(ConditionalFormatRule, { description: "conditional background-color rules for table viz. Each rule paints a cell/row/column a color when a condition on a column holds. Only used when type is 'table'." })),
   styleConfig: NullableD(VisualizationStyleConfig, 'shared visual styling for the chart, such as colors, opacity, and marker size.'),
   annotations: Nullable(Type.Array(ChartAnnotation, { description: 'annotations for cartesian charts. Each annotation specifies x, series, and text.' })),
   colors: Nullable(Type.Record(Type.String(), Type.String(), { description: 'deprecated legacy color overrides. Use styleConfig.colors instead.' })),
