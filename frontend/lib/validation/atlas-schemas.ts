@@ -295,8 +295,6 @@ export type DashboardContent = Static<typeof DashboardContent>;
 
 export const StoryContent = Type.Object({
   description: Nullable(Type.String()),
-  assets: Type.Array(FileReference, { description:
-    'questions embeddable in the story. Every data-question-id used in the story HTML MUST have a matching id here.' }),
   story: NullableD(Type.String({ format: 'jsx' }),
     'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling data-story page (height ' +
     'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
@@ -317,13 +315,20 @@ export const StoryContent = Type.Object({
     'piece of text — especially headings — must contrast strongly with the background behind it (never light ' +
     'text on a light page or vice-versa). Set the `colorMode` field to the mode your design uses so embedded ' +
     'charts theme to match (a dark story → "dark"). ' +
-    'CHART EMBEDS: <div data-question-id="N" style="width:100%;height:420px"></div> where N is a question id ' +
-    'that MUST also be in assets (the same question may be embedded more than once). PREFER width:100% so charts ' +
-    'fill their (responsive) cell; the renderer fills the div exactly with a dashboard-style chart card (title ' +
-    'bar with the question name + live chart), so do NOT add your own duplicate title caption inside or directly ' +
-    'above it. SIZING RULES: always give explicit px height — a missing height defaults to 400px; height ' +
-    'percentages do NOT work. Width should be 100% (or a px value, but px will be capped to the container on ' +
-    'mobile); minimum height 340px is enforced (clamped up).'),
+    'CHART EMBEDS — the body is the single source of truth (there is no separate assets field). ' +
+    'Use the <Question/> component, two forms: ' +
+    '(A) SAVED — <Question id={N} height="420px" /> embeds saved question file N. PREFER THIS: reuse an ' +
+    'existing saved question whenever one fits the beat (reusable, governed, shows up in search & dependencies). ' +
+    '(B) INLINE — <Question query={`SELECT …`} connection="<db>" viz={{type:"single_value", yCols:["mrr"], ' +
+    'singleValueConfig:{prefix:"$", suffix:" MRR"}}} params={[{name:"month",type:"date",label:null,source:null}]} ' +
+    'height="200px" /> embeds a story-LOCAL question whose query/connection/viz live right here in the body — no ' +
+    'saved file. Use inline ONLY for one-off metrics/live numbers that do not deserve their own saved question. ' +
+    'NUMBERS ARE ALWAYS LIVE: never hand-type a metric, percentage, or pull-quote figure into the prose. To show ' +
+    'a big number, embed a single_value question (saved or inline) and style it with singleValueConfig ' +
+    '(prefix/suffix/label/valueSize/valueColor) — the digits are read from the query, never written by you. ' +
+    'The renderer fills the div exactly with a chart card (title bar + live chart), so do NOT add your own ' +
+    'duplicate title caption inside or directly above it. SIZING: always give an explicit px height (a missing ' +
+    'height defaults to 430px; percentages do NOT work); width is 100%; minimum height 340px is enforced.'),
   suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
     'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +

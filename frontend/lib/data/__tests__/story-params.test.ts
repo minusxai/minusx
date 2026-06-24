@@ -77,6 +77,15 @@ describe('story-params — lint (non-blocking feedback)', () => {
     expect(unused.some((w) => w.includes('ghost') && w.includes('declared'))).toBe(true);
   });
 
+  it('labels inline (file-less) questions as "Inline question #N" in warnings', () => {
+    const warnings = lintStoryParams(
+      [],
+      [{ id: 0, inlineIndex: 2, query: 'SELECT * FROM t WHERE m = :month' }],
+    );
+    expect(warnings.some((w) => w.includes('Inline question #2') && w.includes(':month'))).toBe(true);
+    expect(warnings.some((w) => w.includes('Question 0'))).toBe(false);
+  });
+
   it('clean story (all params declared, right types) → no warnings', () => {
     const warnings = lintStoryParams(
       [{ name: 'city', type: 'text', nullable: true }, { name: 'min_rev', type: 'number', nullable: true }],

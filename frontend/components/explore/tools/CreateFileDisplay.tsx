@@ -8,6 +8,7 @@ import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { type DetailCardProps, parseToolArgs, isToolSuccess, parseToolContent } from './DetailCarousel';
+import { embeddedQuestionCount } from '@/lib/data/story-question';
 
 // ─── Shared file detail card (used by created/edited/read) ───────
 
@@ -21,7 +22,7 @@ export function FileDetailCard({ msg, filesDict }: DetailCardProps) {
   const fileName = fileState?.name || args.name || null;
   const filePath = fileState?.path || null;
   const fileType = (fileState?.type || args.file_type || null) as FileType | null;
-  const assetCount = fileState?.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+  const assetCount = embeddedQuestionCount(fileState?.content, fileType) || null;
 
   // Get fileId for linking
   let fileId: number | null = args.fileId || args.fileIds?.[0] || null;

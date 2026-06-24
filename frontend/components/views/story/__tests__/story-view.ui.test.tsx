@@ -40,11 +40,10 @@ const STORY =
 
 const content: StoryContent = {
   description: 'demo',
-  assets: [{ type: 'question', id: 14 }],
   story: STORY,
 };
 
-const emptyContent: StoryContent = { description: null, assets: [], story: null };
+const emptyContent: StoryContent = { description: null, story: null };
 
 /** The story renders inside a shadow root on the story host. */
 function storyRoot(): ShadowRoot {

@@ -39,6 +39,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
 import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
+import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story-question';
 import { noneifyEmptyNumericParams, paramTypeMap } from '@/lib/sql/sql-params';
 import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
@@ -608,11 +609,30 @@ export async function editFileStr(
  * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
  * params for embedded questions). Best-effort — embedded questions are read from Redux.
  */
-/** Resolve a story/dashboard's `assets` question refs to their merged SQL + stored params (for param lint). */
+/**
+ * Resolve a story/dashboard's embedded questions to their SQL + stored params (for the param lint).
+ * - Story: derived from the BODY — saved `<Question id>` embeds (resolved from Redux) plus inline
+ *   `<Question query>` embeds (carried in the body). No assets field.
+ * - Dashboard: the `assets` manifest (dashboards have no body).
+ */
 function collectEmbeddedQuestions(
   state: ReturnType<ReturnType<typeof getStore>['getState']>,
   content: Record<string, unknown>,
+  type: FileType,
 ): EmbeddedQuestion[] {
+  if (type === 'story') {
+    const html = content.story as string | null | undefined;
+    const saved = extractSavedQuestionIds(html)
+      .map((id): EmbeddedQuestion | null => {
+        const qc = selectMergedContent(state, id) as QuestionContent | undefined;
+        return qc ? { id, query: qc.query ?? '', parameters: qc.parameters ?? [] } : null;
+      })
+      .filter((q): q is EmbeddedQuestion => q !== null);
+    const inline = extractInlineQuestions(html).map((e, i): EmbeddedQuestion => ({
+      id: 0, inlineIndex: i + 1, query: e.query, parameters: e.parameters ?? [],
+    }));
+    return [...saved, ...inline];
+  }
   const assets = (content.assets as { type?: string; id?: number }[] | undefined) ?? [];
   return assets
     .filter((a) => a.type === 'question' && typeof a.id === 'number')
@@ -629,13 +649,13 @@ function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['ge
   if (schemaError) issues.push(schemaError);
   if (fileState.type === 'story') {
     const declared = extractStoryParams(content.story as string | null | undefined);
-    issues.push(...lintStoryParams(declared, collectEmbeddedQuestions(state, content)));
+    issues.push(...lintStoryParams(declared, collectEmbeddedQuestions(state, content, 'story')));
     issues.push(...lintStoryParamSources(declared, (id) => selectFile(state, id)?.type));
   } else if (fileState.type === 'dashboard') {
     // Dashboards auto-derive their params from embedded questions (merged by name+type). Warn
     // when two questions use the same :param name with conflicting types — auto-derive silently
     // splits them into separate filters. Non-blocking, same channel as the story lint.
-    issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content)));
+    issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content, 'dashboard')));
   }
   return issues;
 }

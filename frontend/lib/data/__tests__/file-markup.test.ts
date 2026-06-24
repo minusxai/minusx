@@ -33,13 +33,13 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
       description: 'launch',
       colorMode: 'dark',
       story: '<div class="story"><h1>Hi</h1><div data-question-id="1022" style="width:100%;height:460px"></div></div>',
-      assets: [{ type: 'question', id: 1022 }],
     };
     const markup = fileToMarkup('story', content);
     expect(markup).toContain('<story><div class="story">');
     expect(markup).toContain('<Question id={1022}');       // embed inline, recognized
     expect(markup).toContain('<colorMode>dark</colorMode>');
     expect(markup).not.toContain('<jsx>');
+    expect(markup).not.toContain('<assets>');              // body is the source — no assets field
     const back = markupToContent('story', markup);
     expect(back.ok).toBe(true);
     if (back.ok) {
@@ -55,7 +55,6 @@ describe('fileToMarkup / markupToContent — story with <Param>', () => {
     const content = {
       colorMode: 'dark',
       parameterValues: { city: 'NYC' },
-      assets: [{ type: 'question', id: 5 }],
       story: '<div class="story"><div data-param-name="city" data-param-type="text" data-param-nullable="false" data-param-source-id="5" data-param-source-col="city"></div><div data-question-id="5" style="width:100%;height:430px"></div></div>',
     };
     const markup = fileToMarkup('story', content);

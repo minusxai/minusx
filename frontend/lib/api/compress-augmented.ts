@@ -9,8 +9,10 @@
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
+import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
   AugmentedFile,
+  BaseFileContent,
   CompressedAugmentedFile,
   CompressedFileState,
   CompressedQueryResult,
@@ -18,7 +20,6 @@ import type {
   FileState,
   QueryResult,
   QuestionContent,
-  QuestionReference,
   FileType,
 } from '@/lib/types';
 
@@ -32,30 +33,13 @@ export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can req
 // DbFile → FileState
 // ---------------------------------------------------------------------------
 
-/** Extract referenced file IDs from a DbFile's content */
+/**
+ * Extract referenced file IDs from a DbFile's content. Delegates to the single
+ * {@link extractReferencesFromContent} so the save path and this app-state path can never
+ * disagree (story refs derive from the body, dashboard from assets, notebook from @-refs).
+ */
 export function extractReferences(file: DbFile): number[] {
-  if (file.type === 'dashboard' || file.type === 'story') {
-    const content = file.content as any;
-    return content.assets
-      ?.filter((a: any) => a.type === 'question')
-      ?.map((a: any) => a.id)
-      .filter((id: any): id is number => typeof id === 'number') || [];
-  }
-  // Notebook SQL cells are inline questions; cross-file refs are each cell's @-references.
-  if (file.type === 'notebook') {
-    const content = file.content as any;
-    const ids: number[] = (content?.cells || [])
-      .filter((c: any) => c?.type === 'sql' && Array.isArray(c.references))
-      .flatMap((c: any) => c.references)
-      .map((ref: any) => ref?.id)
-      .filter((id: any): id is number => typeof id === 'number');
-    return Array.from(new Set(ids));
-  }
-  if (file.type === 'question') {
-    const content = file.content as QuestionContent;
-    return content.references?.map((ref: QuestionReference) => ref.id) || [];
-  }
-  return [];
+  return extractReferencesFromContent(file.content as BaseFileContent, file.type as FileType);
 }
 
 /** Strip legacy queryResultId persisted inside question content */

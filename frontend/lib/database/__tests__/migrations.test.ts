@@ -33,6 +33,17 @@ function makeDashboard(id: number, assetIds: number[], layoutIds: number[] = ass
   });
 }
 
+function makeStory(id: number, embedIds: number[], paramSourceId?: number): DbFile {
+  const embeds = embedIds.map(eid => `<div data-question-id="${eid}" style="width:100%;height:420px"></div>`).join('');
+  const param = paramSourceId != null
+    ? `<div data-param-name="region" data-param-type="text" data-param-nullable="true" data-param-source-id="${paramSourceId}" data-param-source-col="region"></div>`
+    : '';
+  return makeDoc(id, {
+    type: 'story',
+    content: { description: null, story: `<div class="story">${param}${embeds}</div>` } as any,
+  });
+}
+
 function initData(documents: DbFile[], version = 35): InitData {
   return { version, users: [], documents };
 }
@@ -258,6 +269,30 @@ describe('V36: shift all non-system file IDs to ≥ 1000', () => {
     const dash = result.find(d => d.id === 1001)!;
     const content = dash.content as any;
     expect(content.assets.map((a: any) => a.id)).toEqual([1, 1000]);
+  });
+
+  // ── Story content: body embeds (the body is the source of truth — no assets field) ──
+
+  it('remaps a story body\'s data-question-id embeds for shifted user docs', () => {
+    const docs = [makeDoc(500), makeStory(501, [500])];
+    const result = migrate(docs);
+    const story = result.find(d => d.id === 1001)!;
+    expect((story.content as any).story).toContain('data-question-id="1000"');
+    expect((story.content as any).story).not.toContain('data-question-id="500"');
+  });
+
+  it('remaps a story <Param> import source id (data-param-source-id) too', () => {
+    const docs = [makeDoc(500), makeStory(501, [500], 500)];
+    const result = migrate(docs);
+    const story = result.find(d => d.id === 1001)!;
+    expect((story.content as any).story).toContain('data-param-source-id="1000"');
+  });
+
+  it('does not remap a story body embed pointing at a template doc', () => {
+    const docs = [makeDoc(1), makeStory(500, [1])];
+    const result = migrate(docs);
+    const story = result.find(d => d.id === 1000)!;
+    expect((story.content as any).story).toContain('data-question-id="1"'); // template ref unchanged
   });
 
   // ── Dashboard content: layout[] ───────────────────────────────────────────────

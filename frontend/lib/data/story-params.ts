@@ -122,9 +122,17 @@ export function storyParamToQuestionParameter(p: StoryParam): QuestionParameter 
 
 /** An embedded question's identity + SQL + stored params (the param types live here, not in the SQL). */
 export interface EmbeddedQuestion {
+  /** saved question file id, or 0 for an inline (file-less) story question. */
   id: number;
   query: string;
   parameters?: QuestionParameter[];
+  /** 1-based position among the story's inline questions (set only when id === 0), for lint messages. */
+  inlineIndex?: number;
+}
+
+/** Human label for an embedded question in lint messages ("Question 5" or "Inline question #2"). */
+function embeddedQuestionLabel(q: EmbeddedQuestion): string {
+  return q.id > 0 ? `Question ${q.id}` : `Inline question #${q.inlineIndex ?? 1}`;
 }
 
 /**
@@ -138,13 +146,14 @@ export function lintStoryParams(declared: StoryParam[], questions: EmbeddedQuest
   const warnings: string[] = [];
   const used = new Set<string>();
   for (const q of questions) {
+    const label = embeddedQuestionLabel(q);
     for (const needed of syncParametersWithSQL(q.query || '', q.parameters ?? [])) {
       used.add(needed.name);
       const decl = byName.get(needed.name);
       if (!decl) {
-        warnings.push(`Question ${q.id} uses :${needed.name} (${needed.type}) but no <Param name="${needed.name}"> is declared in the story.`);
+        warnings.push(`${label} uses :${needed.name} (${needed.type}) but no <Param name="${needed.name}"> is declared in the story.`);
       } else if (decl.type !== needed.type) {
-        warnings.push(`Question ${q.id} uses :${needed.name} as ${needed.type}, but <Param name="${needed.name}"> declares it as ${decl.type}.`);
+        warnings.push(`${label} uses :${needed.name} as ${needed.type}, but <Param name="${needed.name}"> declares it as ${decl.type}.`);
       }
     }
   }

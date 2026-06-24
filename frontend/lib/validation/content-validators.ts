@@ -96,14 +96,8 @@ function validateContent(input: ContentValidationInput): string | null {
       return 'vizSettings.pivotConfig is required when type is "pivot"';
     }
   }
-  if (input.type === 'StoryContent') {
-    const assetIds = new Set(input.data.assets.map(a => a.id));
-    for (const m of (input.data.story ?? '').matchAll(/data-question-id="(\d+)"/g)) {
-      if (!assetIds.has(Number(m[1]))) {
-        return `story embeds question ${m[1]} which is not in assets`;
-      }
-    }
-  }
+  // Stories have no assets cross-check: the body IS the source of truth — saved-question
+  // dependencies derive from its `data-question-id` embeds, inline questions live inline.
   return null;
 }
 

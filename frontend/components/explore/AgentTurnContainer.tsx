@@ -8,6 +8,7 @@ import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
 import ChartCarousel from './tools/ChartCarousel';
 import DetailCarousel, { type DetailCardProps, getToolNameFromMsg, isToolSuccess } from './tools/DetailCarousel';
+import { embeddedQuestionCount } from '@/lib/data/story-question';
 import { NavigateDetailCard } from './tools/NavigateDisplay';
 import { PublishAllDetailCard } from './tools/PublishAllDisplay';
 import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
@@ -161,7 +162,7 @@ function parseFileToolContent(msg: MessageWithFlags): {
     const fileName = fileState.name || null;
     const filePath = fileState.path || null;
     const fileType = fileState.type || null;
-    const assetCount = fileState.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+    const assetCount = embeddedQuestionCount(fileState.content, fileType) || null;
 
     if (!fileState.content || fileState.type !== 'question') {
       return { content: null, queryResult: null, fileName, filePath, fileType, assetCount };

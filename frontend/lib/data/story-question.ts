@@ -66,6 +66,26 @@ function inlineFromDivInner(inner: string): InlineQuestionEmbed | null {
   return e;
 }
 
+const SAVED_Q_DIV_RE = /data-question-id="(\d+)"/g;
+
+/** Extract the saved-question file ids a story body embeds (the `data-question-id` placeholders). */
+export function extractSavedQuestionIds(html: string | null | undefined): number[] {
+  const ids = new Set<number>();
+  for (const m of (html ?? '').matchAll(SAVED_Q_DIV_RE)) ids.add(Number(m[1]));
+  return [...ids];
+}
+
+/**
+ * Remap the saved-question ids a story body references, for a file-ID-shift migration. Rewrites
+ * `data-question-id` (saved embeds) and `data-param-source-id` (a `<Param id=N>` import). Inline
+ * questions carry no file id (they reference a connection by name), so they need no remap.
+ */
+export function remapStoryQuestionIds(html: string, remap: (id: number) => number): string {
+  return html
+    .replace(/data-question-id="(\d+)"/g, (_m, id: string) => `data-question-id="${remap(Number(id))}"`)
+    .replace(/data-param-source-id="(\d+)"/g, (_m, id: string) => `data-param-source-id="${remap(Number(id))}"`);
+}
+
 /** Extract all inline question embeds from a story's HTML (the `data-question-inline` placeholders). */
 export function extractInlineQuestions(html: string | null | undefined): InlineQuestionEmbed[] {
   const out: InlineQuestionEmbed[] = [];
@@ -94,6 +114,18 @@ export function placeholdersToInlineQuestionJsx(html: string | null | undefined)
     const e = inlineFromDivInner(inner);
     return e ? inlineQuestionToJsx(e) : whole;
   });
+}
+
+/**
+ * Count the questions a story/dashboard embeds (for chat-UI chips, badges). Story counts from
+ * the body (saved + inline embeds); dashboard counts from the assets manifest.
+ */
+export function embeddedQuestionCount(content: unknown, type?: string | null): number {
+  const c = content as { story?: string | null; assets?: { type?: string }[] } | null | undefined;
+  if (type === 'story') {
+    return extractSavedQuestionIds(c?.story).length + extractInlineQuestions(c?.story).length;
+  }
+  return (c?.assets ?? []).filter((a) => a?.type === 'question').length;
 }
 
 /** Project an inline embed to a full QuestionContent the renderer/query stack consumes. */

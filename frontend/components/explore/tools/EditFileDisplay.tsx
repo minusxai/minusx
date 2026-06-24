@@ -12,6 +12,7 @@ import { useAppSelector } from '@/store/hooks';
 import { Tooltip } from '@/components/ui/tooltip';
 import { decodeFileStr } from '@/lib/api/file-encoding';
 import { replaceFileState } from '@/lib/api/file-state';
+import { embeddedQuestionCount } from '@/lib/data/story-question';
 import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
@@ -26,7 +27,7 @@ export function EditFileDetailCard({ msg, filesDict }: DetailCardProps) {
   const fileName = fileState?.name || (fileId && filesDict[fileId]?.name) || (fileId ? `#${fileId}` : 'file');
   const filePath = fileState?.path || null;
   const fileType = (fileState?.type || (fileId && filesDict[fileId]?.type) || null) as FileType | null;
-  const assetCount = fileState?.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+  const assetCount = embeddedQuestionCount(fileState?.content, fileType) || null;
   const meta = fileType ? getFileTypeMetadata(fileType) : null;
   const canLink = fileId != null && fileId > 0;
 
