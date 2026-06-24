@@ -26,10 +26,24 @@ export interface InlineQuestionEmbed {
   height?: string;
 }
 
+/**
+ * Normalize literal escape sequences in an inline query into real whitespace. A `<Question>` whose
+ * `query` is authored as a QUOTED jsx attribute (`query="SELECT\n…"`) — rather than a `{`…`}`
+ * template literal — leaves `\n`/`\r`/`\t` as literal backslash sequences, because JSX attribute
+ * strings (unlike JS strings/template literals) don't process escapes. Those literal `\` then break
+ * the SQL parser. SQL is whitespace-insensitive outside string literals, so converting these escapes
+ * to real whitespace makes the query run regardless of how the agent wrote it. A template-literal
+ * query already holds real newlines (cooked), so this is a no-op for it.
+ */
+export function normalizeInlineQuery(q: string): string {
+  return q.replace(/\\r\\n|\\r|\\n/g, '\n').replace(/\\t/g, '\t');
+}
+
 /** Build an inline embed from a `<Question>` element's parsed jsx attributes. Null if no `query`. */
 export function inlineQuestionFromJsxAttrs(attrs: Record<string, unknown>): InlineQuestionEmbed | null {
-  const query = typeof attrs.query === 'string' ? attrs.query : '';
-  if (!query) return null;
+  const raw = typeof attrs.query === 'string' ? attrs.query : '';
+  if (!raw) return null;
+  const query = normalizeInlineQuery(raw);
   const e: InlineQuestionEmbed = { query, connection: typeof attrs.connection === 'string' ? attrs.connection : '' };
   if (attrs.viz && typeof attrs.viz === 'object' && !Array.isArray(attrs.viz)) e.vizSettings = attrs.viz as Partial<VizSettings>;
   if (Array.isArray(attrs.params)) e.parameters = attrs.params as QuestionParameter[];
@@ -53,7 +67,9 @@ const INLINE_Q_DIV_RE = /<div\s+([^>]*?data-question-inline="[^"]*"[^>]*?)>\s*<\
 function payloadToEmbed(payload: Record<string, unknown> | null | undefined): InlineQuestionEmbed | null {
   if (typeof payload?.query !== 'string') return null;
   const e: InlineQuestionEmbed = {
-    query: payload.query,
+    // Defensive: also normalize on read, so any embed already stored with literal \n escapes
+    // (authored before the fix) still parses + runs correctly.
+    query: normalizeInlineQuery(payload.query),
     connection: typeof payload.connection_name === 'string' ? payload.connection_name : '',
   };
   if (payload.vizSettings) e.vizSettings = payload.vizSettings as Partial<VizSettings>;

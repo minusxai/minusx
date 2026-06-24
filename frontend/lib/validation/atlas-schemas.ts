@@ -319,10 +319,20 @@ export const StoryContent = Type.Object({
     'Use the <Question/> component, two forms: ' +
     '(A) SAVED — <Question id={N} height="420px" /> embeds saved question file N. PREFER THIS: reuse an ' +
     'existing saved question whenever one fits the beat (reusable, governed, shows up in search & dependencies). ' +
-    '(B) INLINE — <Question query={`SELECT …`} connection="<db>" viz={{type:"single_value", yCols:["mrr"], ' +
-    'singleValueConfig:{prefix:"$", suffix:" MRR"}}} params={[{name:"month",type:"date",label:null,source:null}]} ' +
-    'height="200px" /> embeds a story-LOCAL question whose query/connection/viz live right here in the body — no ' +
-    'saved file. Use inline ONLY for one-off metrics/live numbers that do not deserve their own saved question. ' +
+    '(B) INLINE — embeds a story-LOCAL question whose query/connection/viz live right here in the body (no saved ' +
+    'file). The `query` MUST be a TEMPLATE LITERAL in backticks `query={`…`}` — write real, multi-line SQL with ' +
+    'actual line breaks and -- comments inside the backticks. NEVER put the query in a double-quoted string and ' +
+    'NEVER use \\n / \\t escape sequences: a quoted attribute keeps them literal and the SQL parser breaks on the ' +
+    'backslash. Example:\n' +
+    '      <Question\n' +
+    '        query={`SELECT SUM(mrr) AS mrr\n' +
+    '                FROM monthly_saas_metrics\n' +
+    '                WHERE month = :month`}\n' +
+    '        connection="<db>"\n' +
+    '        viz={{type:"single_value", yCols:["mrr"], singleValueConfig:{prefix:"$", suffix:" MRR"}}}\n' +
+    '        params={[{name:"month",type:"date",label:null,source:null}]}\n' +
+    '        height="200px" />\n' +
+    'Use inline ONLY for one-off metrics/live numbers that do not deserve their own saved question. ' +
     'NUMBERS ARE ALWAYS LIVE: never hand-type a metric, percentage, or pull-quote figure into the prose. To show ' +
     'a big number, embed a single_value question (saved or inline) and style it with singleValueConfig ' +
     '(prefix/suffix/label/valueSize/valueColor) — the digits are read from the query, never written by you. ' +

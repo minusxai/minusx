@@ -32,6 +32,15 @@ describe('story-question — jsx attrs ⇄ inline embed', () => {
   it('defaults connection to "" and tolerates a missing viz/params', () => {
     expect(inlineQuestionFromJsxAttrs({ query: 'SELECT 1' })).toEqual({ query: 'SELECT 1', connection: '' });
   });
+
+  it('normalizes literal \\n / \\t escapes (agent wrote a quoted attr, not a template literal) into real whitespace', () => {
+    // A quoted JSX attribute leaves backslash-escapes literal; the SQL parser then chokes on `\`.
+    const e = inlineQuestionFromJsxAttrs({ query: 'SELECT\\n  mrr\\nFROM t\\tWHERE x > 1', connection: 'duckdb' });
+    expect(e!.query).toBe('SELECT\n  mrr\nFROM t\tWHERE x > 1');
+    expect(e!.query).not.toContain('\\n');
+    // a clean query (real newlines, e.g. from a template literal) is untouched
+    expect(inlineQuestionFromJsxAttrs({ query: 'SELECT 1\nFROM t' })!.query).toBe('SELECT 1\nFROM t');
+  });
 });
 
 describe('story-question — placeholder round-trip (through content.story HTML)', () => {
