@@ -5,6 +5,8 @@
 import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted, selectPersistableContent } from '@/store/filesSlice';
+import { selectQueryResult } from '@/store/queryResultsSlice';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';
@@ -670,6 +672,60 @@ describe('editFile - Story drops legacy assets on edit (clean re-save)', () => {
     expect(persistable.assets).toBeUndefined();
     expect('assets' in JSON.parse(JSON.stringify(persistable))).toBe(false);
     expect(persistable.story).toContain('NEW HEADLINE'); // the edit applied
+  });
+});
+
+describe('editFile - Story auto-executes inline questions (agent sees the new result)', () => {
+  let storyId: number;
+
+  function setupStore() {
+    return configureStore({ reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer } });
+  }
+
+  beforeAll(() => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      if (urlStr.includes('/api/query')) {
+        // Echo the SQL so the test can prove the NEW (edited) query was the one executed.
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        return { ok: true, status: 200, json: async () => ({
+          success: true,
+          data: { columns: ['v'], types: ['INTEGER'], rows: [{ v: 99 }], finalQuery: body.query },
+        }) } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+  afterAll(() => { vi.restoreAllMocks(); });
+
+  beforeEach(async () => {
+    await clearFilesExceptOrg();
+    const body = `<div class="story">${inlineQuestionToPlaceholder({ query: 'SELECT 1 AS v', connection: 'test' })}</div>`;
+    storyId = await DocumentDB.create('test-story-exec', '/org/test-story-exec', 'story', { description: null, story: body } as any, []);
+    testStore = setupStore();
+    vi.clearAllMocks();
+  });
+  afterEach(() => { testStore = null; if (global.gc) global.gc(); });
+
+  it('runs the edited inline query so its result is in the cache (was a gap — no rows after edit)', async () => {
+    await readFiles([storyId]);
+    // Edit via the EditFile TOOL (where auto-execute lives), changing the inline SQL in the markup.
+    await executeToolCall(
+      { id: 'c1', type: 'function', function: { name: 'EditFile', arguments: { fileId: storyId, changes: [{ oldMatch: 'SELECT 1 AS v', newMatch: 'SELECT 2 AS v' }] } } } as any,
+      {} as any,
+    );
+
+    // The NEW query was auto-executed and cached under its own hash ({} params, 'test' conn).
+    const qr = selectQueryResult(testStore.getState(), 'SELECT 2 AS v', {}, 'test');
+    expect(qr?.data?.rows).toEqual([{ v: 99 }]);
+    expect(qr?.data?.finalQuery).toBe('SELECT 2 AS v'); // the edited query, not the old one
   });
 });
 
