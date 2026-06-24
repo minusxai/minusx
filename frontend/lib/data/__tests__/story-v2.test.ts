@@ -44,6 +44,20 @@ describe('parseStoryJsx', () => {
   });
 });
 
+describe('parseStoryJsx — inline <Question>', () => {
+  it('maps an inline <Question query=… connection=… viz=…/> to a data-question-inline embed (no asset id)', () => {
+    const jsx = '<div class="story"><Question query={`SELECT SUM(mrr) AS mrr FROM t WHERE m = :month`} connection="duckdb" viz={{type:"single_value",yCols:["mrr"]}} height="200px" /></div>';
+    const r = parseStoryJsx(jsx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.assets).toEqual([]); // inline questions are not saved-file references
+      expect(r.value.html).toContain('data-question-inline');
+      expect(r.value.html).toContain('height:200px');
+      expect(r.value.html).not.toContain('<Question');
+    }
+  });
+});
+
 describe('buildStoryJsx', () => {
   it('round-trips an agent-authored story (jsx → content → jsx → same html)', () => {
     const jsx = '<div class="story"><style>{`.s{color:blue}`}</style><h2>T</h2><Question id={42} /></div>';
@@ -52,6 +66,17 @@ describe('buildStoryJsx', () => {
     if (!parsed.ok) return;
     const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: parsed.value.assets.map((id) => ({ id, type: 'question' })) } as never);
     expect(validateJsxSource(rebuilt, ['Question'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+  });
+
+  it('round-trips a story with an INLINE question (multi-line SQL with <, >, : kept raw)', () => {
+    const jsx = '<div class="story"><Question query={`SELECT *\nFROM t\nWHERE rev > 100 AND a < 5 AND m = :month`} connection="duckdb" viz={{type:"single_value",yCols:["rev"]}} params={[{name:"month",type:"date",label:null,source:null}]} height="180px" /></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const rebuilt = buildStoryJsx({ story: parsed.value.html, assets: [] } as never);
+    expect(validateJsxSource(rebuilt, ['Question', 'Param'])).toEqual([]);
     const reparsed = parseStoryJsx(rebuilt);
     expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
   });

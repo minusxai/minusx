@@ -11,6 +11,7 @@
  */
 import type { ParameterType, QuestionParameter } from '@/lib/validation/atlas-schemas';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
+import { escAttr, unescAttr } from './html-attr';
 
 /** Autocomplete / import source: a column of an embedded question. */
 export interface StoryParamSource {
@@ -35,9 +36,6 @@ export function normalizeParamType(t: unknown): ParameterType {
   if (s === 'int' || s === 'integer' || s === 'float' || s === 'num') return 'number';
   return (TYPES.includes(s) ? s : 'text') as ParameterType;
 }
-
-const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const unescAttr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 /** Build a StoryParam from a `<Param>` element's parsed jsx attributes (name→value map). */
 export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | null {

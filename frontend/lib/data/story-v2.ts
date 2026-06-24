@@ -21,6 +21,7 @@ import { parseJsx } from '@/lib/jsx';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryContent } from '@/lib/types';
 import { paramFromJsxAttrs, paramToPlaceholder, placeholdersToParamJsx } from './story-params';
+import { inlineQuestionFromJsxAttrs, inlineQuestionToPlaceholder, placeholdersToInlineQuestionJsx } from './story-question';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const VOID_TAGS = immutableSet([
@@ -48,17 +49,23 @@ function nodeToHtml(node: JsxNode, assets: number[]): string {
   if (node.type === 'text') return node.value;
   if (node.type === 'expression') return node.value.static && typeof node.value.json === 'string' ? node.value.json : '';
 
-  // <Question id={…} /> → the embed placeholder AgentHtml resolves to a live chart.
+  // <Question/> → the embed placeholder AgentHtml resolves to a live chart. Polymorphic:
+  // `id={N}` embeds a saved question file; `query=…` embeds an inline story-local question.
   if (node.tag === 'Question') {
-    const idAttr = node.attributes.find((a) => a.name === 'id');
-    const id = idAttr?.value.static && typeof idAttr.value.json === 'number' ? idAttr.value.json : null;
-    if (id == null) return '';
-    assets.push(id);
-    const hAttr = node.attributes.find((a) => a.name === 'height');
-    const h = hAttr?.value.static && (typeof hAttr.value.json === 'string' || typeof hAttr.value.json === 'number')
-      ? String(hAttr.value.json).replace(/["']/g, '')
-      : '430px';
-    return `<div data-question-id="${id}" style="width:100%;height:${h}"></div>`;
+    const attrsMap: Record<string, unknown> = {};
+    for (const a of node.attributes) if (a.value.static) attrsMap[a.name] = a.value.json;
+    // Saved question by id (the agent's preferred path — reuse an existing file).
+    if (typeof attrsMap.id === 'number') {
+      const id = attrsMap.id;
+      assets.push(id);
+      const h = typeof attrsMap.height === 'string' || typeof attrsMap.height === 'number'
+        ? String(attrsMap.height).replace(/["']/g, '')
+        : '430px';
+      return `<div data-question-id="${id}" style="width:100%;height:${h}"></div>`;
+    }
+    // Inline story-local question (query/connection/viz/params live in the body).
+    const inline = inlineQuestionFromJsxAttrs(attrsMap);
+    return inline ? inlineQuestionToPlaceholder(inline) : '';
   }
 
   // <Param name=… /> → the shared-param placeholder AgentHtml mounts a ParameterInput at.
@@ -103,6 +110,8 @@ export function buildStoryJsx(content: StoryContent): string {
   html = html.replace(/<style>([\s\S]*?)<\/style>/g, (_m, css: string) => `<style>{\`${css.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\`}</style>`);
   // <div data-question-id="N" …></div> → <Question id={N} />
   html = html.replace(/<div\s+data-question-id=["'](\d+)["'][^>]*>\s*<\/div>/g, (_m, id: string) => `<Question id={${id}} />`);
+  // <div data-question-inline="…" …></div> → <Question query={`…`} connection=… viz=… params=… />
+  html = placeholdersToInlineQuestionJsx(html);
   // <div data-param-* …></div> → <Param name=… />
   html = placeholdersToParamJsx(html);
   // self-close void tags (jsx requires it): <br> → <br/>, <img …> → <img …/>
