@@ -5,7 +5,7 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { TableV2 } from '@/components/plotx/TableV2'
 import { ChartBuilder } from '@/components/plotx/ChartBuilder'
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel'
-import type { GeoConfig } from '@/lib/types'
+import type { GeoConfig, ColumnFormatConfig } from '@/lib/types'
 
 // ─── Shared mocks ────────────────────────────────────────────────────────────
 
@@ -206,6 +206,47 @@ describe('TableV2', () => {
       <TableV2 columns={TEST_COLUMNS} types={TEST_TYPES} rows={[]} />
     )
     expect(screen.getByText('Uh-oh, no data in results!')).toBeInTheDocument()
+  })
+
+  it('displays the column alias from columnFormats in the header', () => {
+    renderWithProviders(
+      <TableV2
+        columns={TEST_COLUMNS}
+        types={TEST_TYPES}
+        rows={TEST_ROWS}
+        columnFormats={{ age: { alias: 'Years Old' } }}
+      />
+    )
+    expect(screen.getByLabelText('Column header Years Old')).toBeInTheDocument()
+  })
+
+  it('renames a column via the header format popover', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [cf, setCf] = React.useState<Record<string, ColumnFormatConfig>>({})
+      return (
+        <TableV2
+          columns={TEST_COLUMNS}
+          types={TEST_TYPES}
+          rows={TEST_ROWS}
+          columnFormats={cf}
+          onColumnFormatsChange={setCf}
+        />
+      )
+    }
+    renderWithProviders(<Harness />)
+
+    await user.click(screen.getByLabelText('Format column age'))
+    await user.type(screen.getByLabelText('Alias for age'), 'Years')
+
+    expect(await screen.findByLabelText('Column header Years')).toBeInTheDocument()
+  })
+
+  it('does not render the format editor when onColumnFormatsChange is absent', () => {
+    renderWithProviders(
+      <TableV2 columns={TEST_COLUMNS} types={TEST_TYPES} rows={TEST_ROWS} />
+    )
+    expect(screen.queryByLabelText('Format column age')).not.toBeInTheDocument()
   })
 })
 
