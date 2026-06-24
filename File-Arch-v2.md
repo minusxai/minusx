@@ -36,16 +36,19 @@ of truth:
   gains a `markup` arg. **`SetJsx`/`EditJsx` deleted** — a document's jsx body is edited
   through `EditFile` (the markup's `<jsx>` block) like any other file.
 
-### Remaining (clean follow-ups; not blocking the capability)
-- **Retire the `questionv2`/`storyv2` file types** — now redundant (base types are
-  markup-edited). Vestigial but harmless; ~22 files to clean (the `question-v2.ts`/`story-v2.ts`
-  *adapters* stay — they're reused by the markup layer). The `jsx` DB column + `setFileJsx` +
-  `/api/files/[id]/jsx` become vestigial once these types are gone.
+### Also done
+- **Retired the `questionv2`/`storyv2`/`presentation` file types** (commit "retire …") — the
+  base types are markup-edited, so they were redundant/unused. The `question-v2.ts`/`story-v2.ts`
+  *adapters* stay (reused by the markup layer). The `jsx` DB column + `setFileJsx` +
+  `/api/files/[id]/jsx` are now vestigial (left in place; not removed, harmless).
 - **Tutorial seed** — NO change needed: `content` is canonical, so the agent already sees the
   seed as markup. (The earlier "convert the seed to jsx" goal is moot under content-canonical.)
-- **`connection` secrets via `@SECRETS/…`** — server-only resolution; the highest-risk piece,
-  intentionally last.
-- **Remove `presentation`** (unused).
+
+### Remaining (the one user-gated phase)
+- **`connection` secrets via `@SECRETS/…`** — store secrets in a server-only secrets store as
+  `@SECRETS/path` refs; resolve them only on the server query path; never to the client/markup.
+  Highest-risk, security-sensitive, intentionally LAST and gated for explicit review before merge
+  (per the design discussion). Not yet implemented.
 
 ---
 
