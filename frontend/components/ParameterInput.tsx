@@ -11,6 +11,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter, QuestionContent } from '@/lib/types';
 import type { QuestionParameterSource, SqlParameterSource } from '@/lib/validation/atlas-schemas';
 import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
+import { getParameterDisplayName, generateLabel } from '@/lib/sql/sql-params';
 import DatePicker from './DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import FileSearchSelect from './shared/FileSearchSelect';
@@ -466,6 +467,25 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
           >
             <Popover.Body p={3} overflow="visible">
               <VStack gap={3} align="stretch">
+                {/* Display name */}
+                <Box>
+                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                    Display name
+                  </Text>
+                  <Input
+                    aria-label={`Display name for ${parameter.name}`}
+                    size="sm"
+                    h={ROW_H}
+                    fontSize="xs"
+                    bg="bg.muted"
+                    borderColor="border.muted"
+                    placeholder={generateLabel(parameter.name)}
+                    value={parameter.label ?? ''}
+                    onChange={(e) => onParameterChange({ ...parameter, label: e.target.value || null })}
+                    _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
+                  />
+                </Box>
+
                 {/* Type selector */}
                 {onTypeChange && !disableTypeChange && (
                   <Box>
@@ -752,23 +772,25 @@ export default function ParameterInput({
       onMouseLeave={() => onHoverParam?.(null)}
       overflow="hidden"
     >
-      {/* Param label */}
-      <HStack
-        gap={1}
-        px={2}
-        h="full"
-        bg={`${getTypeColor(parameter.type)}/20`}
-        color="fg.emphasized"
-        fontSize="xs"
-        fontWeight="600"
-        fontFamily="mono"
-        flexShrink={0}
-        borderLeft="3px solid"
-        borderLeftColor={getTypeColor(parameter.type)}
-      >
-        {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
-        <Text fontSize="xs" fontFamily="mono" fontWeight="600">:{parameter.name}</Text>
-      </HStack>
+      {/* Param label — shows the friendly display name; tooltip reveals the raw :name binding */}
+      <Tooltip content={`:${parameter.name}`} positioning={{ placement: 'top-start' }}>
+        <HStack
+          gap={1}
+          px={2}
+          h="full"
+          bg={`${getTypeColor(parameter.type)}/20`}
+          color="fg.emphasized"
+          fontSize="xs"
+          fontWeight="600"
+          fontFamily="mono"
+          flexShrink={0}
+          borderLeft="3px solid"
+          borderLeftColor={getTypeColor(parameter.type)}
+        >
+          {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
+          <Text aria-label={`Parameter ${parameter.name}`} fontSize="xs" fontFamily="mono" fontWeight="600">{getParameterDisplayName(parameter)}</Text>
+        </HStack>
+      </Tooltip>
 
       {/* Value area */}
       {isNone ? (
