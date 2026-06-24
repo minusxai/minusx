@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paramFromJsxAttrs, paramToPlaceholder, paramToJsx, extractStoryParams,
-  placeholdersToParamJsx, normalizeParamType, lintStoryParams, lintDashboardParams, lintStoryParamSources, resolveImportedParam, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
+  placeholdersToParamJsx, normalizeParamType, lintStoryParams, lintDashboardParams, lintStoryParamSources, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
 } from '../story-params';
 
 describe('story-params — type normalisation', () => {
@@ -120,18 +120,6 @@ describe('story-params — source validation (FIX-1)', () => {
   it('no warning when the source resolves to an existing question; ignores source-less params', () => {
     const declared: StoryParam[] = [sourced('city', 5), { name: 'plain', type: 'text', nullable: true }];
     expect(lintStoryParamSources(declared, (id) => (id === 5 ? 'question' : undefined))).toEqual([]);
-  });
-});
-
-describe('story-params — import resolution', () => {
-  it('inherits the type from the source question when imported', () => {
-    const p: StoryParam = { name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'city' } };
-    const resolved = resolveImportedParam(p, [{ name: 'city', type: 'date', label: null, source: null }]);
-    expect(resolved.type).toBe('date'); // inherited from q5's :city
-  });
-  it('is a no-op without a source', () => {
-    const p: StoryParam = { name: 'x', type: 'text', nullable: true };
-    expect(resolveImportedParam(p, [])).toEqual(p);
   });
 });
 

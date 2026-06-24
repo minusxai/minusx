@@ -61,7 +61,7 @@ export function paramToPlaceholder(p: StoryParam): string {
   return `<div ${a.join(' ')}></div>`;
 }
 
-/** StoryParam → the `<Param/>` jsx the agent reads/edits. */
+/** StoryParam → the `<Param/>` jsx the agent reads/edits (part of the param ⇄ jsx codec). */
 export function paramToJsx(p: StoryParam): string {
   const a = [`name="${p.name}"`, `type="${p.type}"`, `nullable={${p.nullable}}`];
   if (p.source) {
@@ -201,13 +201,3 @@ export function lintStoryParamSources(declared: StoryParam[], resolve: (id: numb
   return warnings;
 }
 
-/**
- * Resolve an imported param: `<Param name="city" id={5}>` inherits its type from question 5's
- * matching `:param` when the author didn't pin one. The autocomplete `source` (questionId+column)
- * is already on the param. `sourceParams` are question N's parameters.
- */
-export function resolveImportedParam(p: StoryParam, sourceParams: QuestionParameter[]): StoryParam {
-  if (!p.source) return p;
-  const src = sourceParams.find((sp) => sp.name === p.name || sp.name === p.source!.column);
-  return src ? { ...p, type: src.type } : p;
-}

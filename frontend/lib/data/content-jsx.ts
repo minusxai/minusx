@@ -21,7 +21,6 @@
 import { parseJsx, serializeJsx, validateJsxSource } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
-import { buildStoryJsx, parseStoryJsx } from './story-v2';
 
 /** Thrown by a jsx field that fails the static-JSX security rules; surfaced as a parse error. */
 class JsxFieldError extends Error {}
@@ -33,6 +32,18 @@ export type JsonSchema = any;
 export interface SchemaCtx {
   /** $defs for `$ref` resolution (e.g. atlasSchema.$defs). */
   defs: Record<string, JsonSchema>;
+  /**
+   * Codec for a `format:'jsx'` field (e.g. a story body): the field's stored string ⇄ the inline
+   * jsx that represents it. Injected by the caller (`file-markup` wires the story-v2 codec) so this
+   * converter stays file-type-agnostic — it never imports a specific file type's logic. When absent,
+   * a jsx field degrades to a plain string leaf.
+   */
+  jsxField?: {
+    /** stored content string → inline jsx (placed inside the field's tag). */
+    toJsx(value: string): string;
+    /** inline jsx (already security-validated) → stored content string. */
+    fromJsx(inner: string): string;
+  };
 }
 
 /**
@@ -158,9 +169,9 @@ function fieldToJsx(tag: string, value: unknown, schema: JsonSchema, ctx: Schema
   const branches = unionBranches(s, ctx);
   if (branches) return fieldToJsx(tag, value, branchForValue(branches, value), ctx, depth);
 
-  // jsx field — the value is markup; emit it inline as real elements.
-  if (isJsxField(s) && typeof value === 'string') {
-    return `${p}<${tag}>${buildStoryJsx({ story: value, assets: [] } as Parameters<typeof buildStoryJsx>[0])}</${tag}>`;
+  // jsx field — the value is markup; emit it inline as real elements (via the injected codec).
+  if (isJsxField(s) && typeof value === 'string' && ctx.jsxField) {
+    return `${p}<${tag}>${ctx.jsxField.toJsx(value)}</${tag}>`;
   }
 
   const isObj = typeof value === 'object' && !Array.isArray(value);
@@ -246,15 +257,14 @@ function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): u
     return coerceUnionScalar(text, branches);
   }
 
-  // jsx field — serialise its inline elements back to the stored markup string. Enforce the
-  // static-JSX security rules (no <script>/event-handlers/javascript: URLs, only registered
-  // components) on save, before it ever reaches the render path.
+  // jsx field — serialise its inline elements back to the stored string (via the injected codec).
+  // The static-JSX security rules (no <script>/event-handlers/javascript: URLs, only registered
+  // components) are enforced HERE — generic to any jsx field — before it reaches the render path.
   if (isJsxField(s)) {
     const inner = serializeJsx(node.children).trim();
     const errs = validateJsxSource(inner, JSX_COMPONENT_NAMES);
     if (errs.length > 0) throw new JsxFieldError(errs.map((e) => e.message).join('; '));
-    const parsed = parseStoryJsx(inner);
-    return parsed.ok ? parsed.value.html : inner;
+    return ctx.jsxField ? ctx.jsxField.fromJsx(inner) : inner;
   }
 
   // A static expression child handles raw strings (`{`SQL`}`) and the JSON-literal escape hatch.

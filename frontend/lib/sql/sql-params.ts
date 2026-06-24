@@ -1,6 +1,4 @@
 import { QuestionParameter } from '../types';
-import { LuType, LuHash, LuCalendar } from 'react-icons/lu';
-import { IconType } from 'react-icons/lib';
 
 /**
  * Extract parameter names from SQL query using :param_name syntax.
@@ -77,10 +75,8 @@ export function buildQueryParamValues(
   return out;
 }
 
-/**
- * Infer parameter type from parameter name
- */
-export function inferParameterType(paramName: string): 'text' | 'number' | 'date' {
+/** Infer a parameter's type from its name (internal — used by syncParametersWithSQL). */
+function inferParameterType(paramName: string): 'text' | 'number' | 'date' {
   const lowerName = paramName.toLowerCase();
 
   // Date patterns
@@ -112,60 +108,12 @@ export function inferParameterType(paramName: string): 'text' | 'number' | 'date
   return 'text';
 }
 
-/**
- * Generate label from parameter name (convert snake_case to Title Case)
- */
-export function generateLabel(paramName: string): string {
+/** snake_case → Title Case label (internal — used by syncParametersWithSQL). */
+function generateLabel(paramName: string): string {
   return paramName
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
-}
-
-/**
- * Get icon component for parameter/column type
- */
-export function getTypeIcon(type: 'text' | 'number' | 'date'): IconType {
-  switch (type) {
-    case 'number':
-      return LuHash;
-    case 'date':
-      return LuCalendar;
-    case 'text':
-    default:
-      return LuType;
-  }
-}
-
-/**
- * Get semantic color token for parameter/column type
- * Matches the color scheme used in Table component
- */
-export function getTypeColor(type: 'text' | 'number' | 'date'): string {
-  switch (type) {
-    case 'number':
-      return 'accent.primary'; // blue (#2980b9 - Belize Hole)
-    case 'date':
-      return 'accent.secondary'; // purple (#9b59b6 - Amethyst)
-    case 'text':
-    default:
-      return 'accent.warning'; // orange (#f39c12)
-  }
-}
-
-/**
- * Get hex color value for type (for use in charts/canvas)
- */
-export function getTypeColorHex(type: 'text' | 'number' | 'date'): string {
-  switch (type) {
-    case 'number':
-      return '#2980b9'; // Belize Hole (blue)
-    case 'date':
-      return '#9b59b6'; // Amethyst (purple)
-    case 'text':
-    default:
-      return '#f39c12'; // Orange
-  }
 }
 
 /**

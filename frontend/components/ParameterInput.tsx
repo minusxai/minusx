@@ -10,7 +10,7 @@ import { LuChevronDown, LuSettings2, LuTriangleAlert, LuBan } from 'react-icons/
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter, QuestionContent } from '@/lib/types';
 import type { QuestionParameterSource, SqlParameterSource } from '@/lib/validation/atlas-schemas';
-import { getTypeColor, getTypeIcon } from '@/lib/sql/sql-params';
+import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
 import DatePicker from './DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import FileSearchSelect from './shared/FileSearchSelect';

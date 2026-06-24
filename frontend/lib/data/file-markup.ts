@@ -14,9 +14,19 @@
  */
 import { contentToJsx, jsxToContent, type SchemaCtx, type JsonSchema } from './content-jsx';
 import { atlasSchema } from '@/lib/validation/atlas-json-schemas';
-import type { FileType } from '@/lib/types';
+import type { FileType, StoryContent } from '@/lib/types';
+import { buildStoryJsx, parseStoryJsx } from './story-v2';
 
-const CTX: SchemaCtx = { defs: (atlasSchema as { $defs?: Record<string, JsonSchema> }).$defs ?? {} };
+// The single place a file type's specifics are bound to the generic converter: the `$defs` for
+// schema resolution + the codec for `format:'jsx'` fields (the story body's <Question>/<Param>
+// placeholder ⇄ inline-jsx round-trip). content-jsx itself stays file-type-agnostic.
+const CTX: SchemaCtx = {
+  defs: (atlasSchema as { $defs?: Record<string, JsonSchema> }).$defs ?? {},
+  jsxField: {
+    toJsx: (value) => buildStoryJsx({ story: value, assets: [] } as StoryContent),
+    fromJsx: (inner) => { const p = parseStoryJsx(inner); return p.ok ? p.value.html : inner; },
+  },
+};
 
 /** The `*Content` JSON-Schema that drives conversion for a file type — undefined ⇒ schemaless. */
 function schemaFor(type: FileType): JsonSchema {

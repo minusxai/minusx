@@ -4,7 +4,12 @@ import { describe, it, expect } from 'vitest';
 import { contentToJsx, jsxToContent, type SchemaCtx } from '../content-jsx';
 import { atlasSchema } from '@/lib/validation/atlas-json-schemas';
 
-const ctx: SchemaCtx = { defs: (atlasSchema as { $defs?: Record<string, unknown> }).$defs ?? {} };
+// Identity jsx-field codec — content-jsx is the GENERIC converter; the real story-specific codec
+// (placeholder ⇄ <Question>/<Param>) is wired by file-markup and covered in file-markup.test.ts.
+const ctx: SchemaCtx = {
+  defs: (atlasSchema as { $defs?: Record<string, unknown> }).$defs ?? {},
+  jsxField: { toJsx: (s) => s, fromJsx: (s) => s },
+};
 
 function roundtrip(value: unknown, schema: unknown) {
   const jsx = contentToJsx(value, schema, ctx);
