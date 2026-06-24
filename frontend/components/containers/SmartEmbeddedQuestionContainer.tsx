@@ -63,9 +63,7 @@ function SmartEmbeddedQuestionContainerInner({
   const { fileState: file } = useFile(questionId) ?? {};
   const loading = !file || file.loading;
 
-  // Get merged content (includes any edits)
-  // For questionv2, content is derived from the jsx body upstream (dbFileToFileState),
-  // so mergedContent is already a proper QuestionContent here — same path as a question.
+  // Get merged content (includes any edits) — a proper QuestionContent for the embedded question.
   const mergedContent = useAppSelector(state =>
     selectMergedContent(state, questionId)
   ) as QuestionContent | undefined;
