@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner, Input } from '@chakra-ui/react'
-import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuChartColumn } from 'react-icons/lu'
+import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuChartColumn, LuSettings2 } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
+import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-utils'
+import { buildConditionalBg, getContrastText } from '@/lib/chart/conditional-format-utils'
+import { FormatPopover } from './AxisComponents'
+import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'
 import { MiniHistogram } from './MiniHistogram'
 import { MiniBarChart } from './MiniBarChart'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
@@ -39,6 +43,12 @@ interface TableProps {
   initialSorting?: SortingState
   /** Click-a-cell-to-drill-down. Off for read-only embeds (shared story). */
   enableDrilldown?: boolean
+  /** Per-column display formatting (alias/decimals/prefix/suffix/date) keyed by column name. Applied to headers and cells. */
+  columnFormats?: Record<string, ColumnFormatConfig>
+  /** When provided, each column header exposes a rename/format editor. Omit for read-only tables. */
+  onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
+  /** Conditional background-color rules. Applied to cells/rows/columns when their condition matches. */
+  conditionalFormats?: ConditionalFormatRule[]
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -111,7 +121,7 @@ interface FacetedFilterValue {
 const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
   v != null && typeof v === 'object' && 'search' in v
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true }: TableProps) => {
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -123,6 +133,37 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   const [loadingStats, setLoadingStats] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [activeFilterCol, setActiveFilterCol] = useState<string | null>(null)
+  const [activeFormatCol, setActiveFormatCol] = useState<string | null>(null)
+
+  // Display name (alias) + value formatting derived from columnFormats. When no
+  // config exists for a column, behaviour is identical to the unformatted table.
+  const getDisplayName = useCallback(
+    (col: string) => columnFormats?.[col]?.alias || col,
+    [columnFormats]
+  )
+
+  const formatCell = useCallback((col: string, value: any, type: ColumnType): string => {
+    if (value == null) return '-'
+    const cfg = columnFormats?.[col]
+    if (cfg) {
+      if (type === 'number' && typeof value === 'number') {
+        const base = cfg.decimalPoints != null ? formatNumber(value, cfg.decimalPoints) : NUMBER_FORMAT.format(value)
+        return applyPrefixSuffix(base, cfg.prefix, cfg.suffix)
+      }
+      if (type === 'date' && cfg.dateFormat) {
+        return formatDateValue(value instanceof Date ? value.toISOString() : String(value), cfg.dateFormat)
+      }
+    }
+    return formatValue(value, type)
+  }, [columnFormats])
+
+  const handleFormatChange = useCallback((col: string, cfg: ColumnFormatConfig) => {
+    const next: Record<string, ColumnFormatConfig> = { ...(columnFormats ?? {}) }
+    const isEmpty = !cfg.alias && cfg.decimalPoints == null && !cfg.dateFormat && !cfg.prefix && !cfg.suffix
+    if (isEmpty) delete next[col]
+    else next[col] = cfg
+    onColumnFormatsChange?.(next)
+  }, [columnFormats, onColumnFormatsChange])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const tableBodyRef = useRef<HTMLDivElement>(null)
@@ -131,6 +172,13 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     () => types ? types.map(getColumnType) : colNames.map(() => 'text'),
     [types, colNames]
   )
+
+  // Conditional background-color lookup. No-op (returns undefined) when no rules.
+  const getCellBg = useMemo(() => {
+    const typeByName: Record<string, ColumnType> = {}
+    colNames.forEach((col, i) => { typeByName[col] = columnTypes[i] })
+    return buildConditionalBg(conditionalFormats, rows, typeByName)
+  }, [conditionalFormats, rows, colNames, columnTypes])
 
   // Reset visibility when columns change
   useEffect(() => {
@@ -292,7 +340,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   const downloadCsv = useCallback(() => {
     const visibleCols = colNames.filter(c => columnVisibility[c] !== false)
     const escape = (v: string) => (v.includes(',') || v.includes('"') || v.includes('\n')) ? `"${v.replace(/"/g, '""')}"` : v
-    const header = visibleCols.map(escape).join(',')
+    const header = visibleCols.map(c => escape(getDisplayName(c))).join(',')
     const dataRows = tableRows.map(row =>
       visibleCols.map(c => escape(String(row.original[c] ?? ''))).join(',')
     )
@@ -305,7 +353,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     link.download = `table-${ts}.csv`
     link.click()
     URL.revokeObjectURL(url)
-  }, [colNames, tableRows, columnVisibility])
+  }, [colNames, tableRows, columnVisibility, getDisplayName])
 
   const visibleColumnCount = colNames.filter(c => columnVisibility[c] !== false).length
 
@@ -438,6 +486,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                             flexShrink={0}
                           />
                           <Text
+                            aria-label={`Column header ${getDisplayName(header.id)}`}
                             textTransform="uppercase"
                             letterSpacing="0.05em"
                             truncate
@@ -446,7 +495,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                             onClick={header.column.getToggleSortingHandler()}
                             _hover={{ color: 'accent.teal' }}
                           >
-                            {header.id}
+                            {getDisplayName(header.id)}
                           </Text>
                           <HStack gap={0.5} flexShrink={0}>
                             {/* Sort indicator / toggle */}
@@ -492,6 +541,30 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                                 <Icon as={LuFilter} boxSize={2.5} color={hasActiveFilter ? 'white' : 'fg.muted'} />
                               </Box>
                             )}
+                            {/* Rename / format toggle — only when editable */}
+                            {onColumnFormatsChange && (() => {
+                              const hasFormat = !!columnFormats?.[header.id]
+                              return (
+                                <Box
+                                  as="button"
+                                  data-format-anchor={header.id}
+                                  aria-label={`Format column ${header.id}`}
+                                  onClick={() => setActiveFormatCol(prev => prev === header.id ? null : header.id)}
+                                  cursor="pointer"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  w={4} h={4}
+                                  borderRadius="sm"
+                                  bg={hasFormat ? 'accent.teal' : undefined}
+                                  opacity={hasFormat ? 1 : 0.5}
+                                  _hover={{ opacity: 1, bg: hasFormat ? 'accent.teal' : 'bg.subtle' }}
+                                  transition="all 0.15s"
+                                >
+                                  <Icon as={LuSettings2} boxSize={2.5} color={hasFormat ? 'white' : 'fg.muted'} />
+                                </Box>
+                              )
+                            })()}
                           </HStack>
                         </HStack>
 
@@ -626,6 +699,44 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                           </Portal>
                         )}
 
+                        {/* Rename / format popover — rendered via Portal */}
+                        {activeFormatCol === header.id && onColumnFormatsChange && (
+                          <Portal>
+                            <Box
+                              position="fixed"
+                              top={0} left={0} right={0} bottom={0}
+                              zIndex={99}
+                              onClick={() => setActiveFormatCol(null)}
+                            />
+                            <Box
+                              position="absolute"
+                              zIndex={100}
+                              bg="bg.panel"
+                              border="1px solid"
+                              borderColor="border.muted"
+                              borderRadius="md"
+                              shadow="lg"
+                              ref={(el: HTMLDivElement | null) => {
+                                if (!el) return
+                                const anchor = el.closest('body')?.querySelector(`th [data-format-anchor="${header.id}"]`)
+                                if (!anchor) return
+                                const rect = (anchor as HTMLElement).getBoundingClientRect()
+                                el.style.top = `${rect.bottom + 4}px`
+                                el.style.left = `${Math.max(8, rect.left - 150)}px`
+                                el.style.position = 'fixed'
+                              }}
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            >
+                              <FormatPopover
+                                type={colType}
+                                column={header.id}
+                                formatConfig={columnFormats?.[header.id] ?? {}}
+                                onChange={(cfg) => handleFormatChange(header.id, cfg)}
+                              />
+                            </Box>
+                          </Portal>
+                        )}
+
                         {/* Stats area — only rendered when toggled on */}
                         {showStats && (
                           <Box h="100px" w="100%" overflow="hidden">
@@ -715,6 +826,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                   >
                     {visibleColIds.map((colId, cellIdx) => {
                       const shouldWrap = wrapColumns?.has(colId)
+                      const cellBg = getCellBg(original, colId)
                       return (
                         <td
                           key={colId}
@@ -723,10 +835,11 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                           style={{
                             width: colSizes[colId],
                             borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
+                            ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
                             ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
                           }}
                         >
-                          {renderCell?.(colId, original[colId], original) ?? formatValue(original[colId], columnTypes[colIndexMap[colId]])}
+                          {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], columnTypes[colIndexMap[colId]])}
                         </td>
                       )
                     })}

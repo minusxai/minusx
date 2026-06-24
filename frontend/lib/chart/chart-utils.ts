@@ -2072,13 +2072,29 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   if (isRowChart) {
     const categoryAxis = baseOption.xAxis as any
     const valueAxis = baseOption.yAxis as any
-    // Truncate long category labels — containLabel auto-expands the grid to fit
+    // Truncate long category labels — containLabel auto-expands the grid to fit.
+    // Scale the label width to the container so wide charts show more of each
+    // label instead of always chopping to a fixed 75px; clamp so a row chart
+    // never eats more than ~30% of its width on labels (and pathological URLs
+    // still get truncated).
+    const labelWidth = containerWidth
+      ? Math.max(75, Math.min(Math.round(containerWidth * 0.3), 240))
+      : 75
     if (categoryAxis?.axisLabel) {
       categoryAxis.axisLabel.overflow = 'truncate'
-      categoryAxis.axisLabel.width = 75
+      categoryAxis.axisLabel.width = labelWidth
     }
-    // Push axis name further left so it doesn't overlap truncated labels
-    if (categoryAxis) categoryAxis.nameGap = 90
+    // Position the (rotated) axis name just left of the longest *rendered*
+    // label. Basing nameGap on the truncation cap (labelWidth) overshoots when
+    // labels are short and shoves the name off the left edge, so estimate the
+    // real label width from the longest category (~7px/char at the 11px mono
+    // axis font), capped by the truncation width.
+    const longestLabelChars = xAxisData.reduce((max, d) => Math.max(max, String(d).length), 0)
+    const estLabelWidth = Math.min(labelWidth, longestLabelChars * 7)
+    if (categoryAxis) categoryAxis.nameGap = estLabelWidth + 15
+    // Render rows in the data's given order top→bottom. ECharts plots the first
+    // category at the bottom by default, which inverts a desc-sorted query.
+    if (categoryAxis) categoryAxis.inverse = true
     baseOption.xAxis = valueAxis as any
     baseOption.yAxis = categoryAxis as any
   }

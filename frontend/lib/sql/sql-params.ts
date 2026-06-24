@@ -108,12 +108,22 @@ function inferParameterType(paramName: string): 'text' | 'number' | 'date' {
   return 'text';
 }
 
-/** snake_case → Title Case label (internal — used by syncParametersWithSQL). */
-function generateLabel(paramName: string): string {
+/** snake_case → Title Case label (used by syncParametersWithSQL and as a placeholder hint). */
+export function generateLabel(paramName: string): string {
   return paramName
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+/**
+ * Resolve the human-facing display name for a parameter: the user-set `label`
+ * if present, otherwise an auto-generated Title Case label from the SQL name
+ * (e.g. `start_date` → "Start Date"). The raw `name` remains the SQL binding.
+ */
+export function getParameterDisplayName(parameter: QuestionParameter): string {
+  const custom = parameter.label?.trim();
+  return custom || generateLabel(parameter.name);
 }
 
 /**
