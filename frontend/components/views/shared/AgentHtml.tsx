@@ -8,10 +8,17 @@ import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
+import StoryParamControl from '@/components/views/story/StoryParamControl';
+import { paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
 
 interface ChartTarget {
   el: HTMLElement;
   questionId: number;
+}
+
+interface ParamTarget {
+  el: HTMLElement;
+  param: StoryParam;
 }
 
 interface AgentHtmlProps {
@@ -36,6 +43,13 @@ interface AgentHtmlProps {
    * imperative `serialize()` handle.
    */
   editable?: boolean;
+  /**
+   * Shared story param values (keyed by `<Param name>`). Default/current values; the reader
+   * changes them via the inline `<Param>` controls and every embedded `<Question>` re-runs.
+   */
+  paramValues?: Record<string, unknown>;
+  /** Called when the reader changes a param (so the page can persist/submit the values). */
+  onParamValuesChange?: (values: Record<string, unknown>) => void;
 }
 
 export interface AgentHtmlHandle {
@@ -64,13 +78,24 @@ const DEFAULT_CHART_H = 400;
  * font-faces declared inside shadow trees don't load.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fontTagRef = useRef<HTMLStyleElement | null>(null);
   const importsRef = useRef<string[]>([]);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
+  const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
+  // The shared param context: the reader's current values, seeded once from the story
+  // defaults. (AgentHtml remounts via `key` when the story reloads, re-seeding.)
+  const [values, setValues] = useState<Record<string, unknown>>(paramValues ?? {});
+  const setParamValue = (name: string, v: unknown) => setValues((prev) => {
+    const next = { ...prev, [name]: v };
+    onParamValuesChange?.(next);
+    return next;
+  });
+  // Param defs (from the placeholders) → the QuestionParameter shape the embeds consume.
+  const externalParameters = useMemo(() => paramTargets.map((t) => storyParamToQuestionParameter(t.param)), [paramTargets]);
 
   const sanitized = useMemo(() => sanitizeAgentHtml(html || ''), [html]);
 
@@ -153,10 +178,20 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.style.height = `${Number.isFinite(h) ? Math.max(h, MIN_CHART_H) : DEFAULT_CHART_H}px`;
       found.push({ el, questionId });
     });
+    // <div data-param-name="…"> → a reader filter control bound to the shared param context.
+    const paramsFound: ParamTarget[] = [];
+    root.querySelectorAll<HTMLElement>('[data-param-name]').forEach((el) => {
+      const param = paramFromPlaceholderEl(el);
+      if (!param) return;
+      el.replaceChildren();
+      paramsFound.push({ el, param });
+    });
     // Portal targets only exist after the shadow-root write, so discovery is
     // necessarily effect → state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTargets(found);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setParamTargets(paramsFound);
   }, [sanitized, fluid]);
 
   // Remove the hoisted font tag when the story unmounts.
@@ -267,10 +302,23 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         >
           {/* Stories are a reading surface — charts display only; never open the
               click-to-drill-down popup (regardless of read-only/public). */}
-          <SmartEmbeddedQuestionContainer questionId={t.questionId} showTitle={true} index={i} readOnly={readOnly} enableDrilldown={false} />
+          <SmartEmbeddedQuestionContainer
+            questionId={t.questionId}
+            showTitle={true}
+            index={i}
+            readOnly={readOnly}
+            enableDrilldown={false}
+            externalParameters={externalParameters.length ? externalParameters : undefined}
+            externalParamValues={externalParameters.length ? values : undefined}
+          />
         </Box>,
         t.el,
         `${i}-${t.questionId}`,
+      ))}
+      {paramTargets.map((t, i) => createPortal(
+        <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />,
+        t.el,
+        `param-${i}-${t.param.name}`,
       ))}
     </>
   );

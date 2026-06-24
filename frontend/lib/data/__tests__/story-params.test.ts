@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paramFromJsxAttrs, paramToPlaceholder, paramToJsx, extractStoryParams,
-  placeholdersToParamJsx, normalizeParamType, lintStoryParams, resolveImportedParam, type StoryParam,
+  placeholdersToParamJsx, normalizeParamType, lintStoryParams, resolveImportedParam, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
 } from '../story-params';
 
 describe('story-params — type normalisation', () => {
@@ -95,5 +95,18 @@ describe('story-params — import resolution', () => {
   it('is a no-op without a source', () => {
     const p: StoryParam = { name: 'x', type: 'text', nullable: true };
     expect(resolveImportedParam(p, [])).toEqual(p);
+  });
+});
+
+describe('story-params — render helpers', () => {
+  it('reads a param from a placeholder element', () => {
+    const el = { getAttribute: (n: string) => ({ 'data-param-name': 'city', 'data-param-type': 'text', 'data-param-nullable': 'false', 'data-param-source-id': '5', 'data-param-source-col': 'region' } as Record<string, string>)[n] ?? null };
+    expect(paramFromPlaceholderEl(el)).toEqual({ name: 'city', type: 'text', nullable: false, source: { questionId: 5, column: 'region' } });
+  });
+  it('maps a StoryParam to a QuestionParameter (source → question source)', () => {
+    expect(storyParamToQuestionParameter({ name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'region' } }))
+      .toEqual({ name: 'city', type: 'text', label: null, source: { type: 'question', id: 5, column: 'region' } });
+    expect(storyParamToQuestionParameter({ name: 'n', type: 'number', nullable: true }))
+      .toEqual({ name: 'n', type: 'number', label: null, source: null });
   });
 });

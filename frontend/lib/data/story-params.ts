@@ -100,6 +100,26 @@ export function placeholdersToParamJsx(html: string | null | undefined): string 
   });
 }
 
+/** Read a StoryParam from a rendered placeholder element (AgentHtml has the DOM node). */
+export function paramFromPlaceholderEl(el: { getAttribute(name: string): string | null }): StoryParam | null {
+  const name = el.getAttribute('data-param-name');
+  if (!name) return null;
+  const p: StoryParam = { name, type: normalizeParamType(el.getAttribute('data-param-type')), nullable: el.getAttribute('data-param-nullable') !== 'false' };
+  const sid = el.getAttribute('data-param-source-id');
+  if (sid) p.source = { questionId: Number(sid), column: el.getAttribute('data-param-source-col') ?? name };
+  return p;
+}
+
+/** A declared story param → the QuestionParameter shape the embeds + ParameterInput consume. */
+export function storyParamToQuestionParameter(p: StoryParam): QuestionParameter {
+  return {
+    name: p.name,
+    type: p.type,
+    label: null,
+    source: p.source ? { type: 'question', id: p.source.questionId, column: p.source.column } : null,
+  };
+}
+
 // ── Lint + import resolution ────────────────────────────────────────────────
 
 /** An embedded question's identity + SQL + stored params (the param types live here, not in the SQL). */
