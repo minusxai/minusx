@@ -1089,11 +1089,9 @@ describe('Phase 1: Unified File System API E2E', () => {
           newMatch: '<type>not_a_real_viz_type</type>'
         });
 
-        // Verify error
-        expect(result.success).toBe(false);
-        if (!result.success) {
-          expect(result.error).toContain('vizSettings');
-        }
+        // Permissive edit: the change applies, the schema issue comes back as feedback.
+        expect(result.success).toBe(true);
+        expect((result.validation ?? []).join(' ')).toContain('vizSettings');
       });
 
       it('should validate dashboard content after edit', async () => {
@@ -1107,18 +1105,16 @@ describe('Phase 1: Unified File System API E2E', () => {
 
         // A dashboard's assets project to <item> elements with a typed <type>. Corrupt
         // an asset's type to a value outside the allowed set so the edited markup no
-        // longer produces valid dashboard content — the edit must be rejected.
+        // longer produces valid dashboard content — caught as feedback (edit still applies).
         const result = await editFileStr({
           fileId: dashboardId,
           oldMatch: '<type>question</type>',
           newMatch: '<type>bogus_type</type>'  // not a valid asset type → invalid dashboard
         });
 
-        // Verify error
-        expect(result.success).toBe(false);
-        if (!result.success) {
-          expect(result.error).toContain('dashboard');
-        }
+        // Permissive edit: applied, with the schema issue reported as feedback.
+        expect(result.success).toBe(true);
+        expect((result.validation ?? []).length).toBeGreaterThan(0);
       });
 
       it('should work with editFileStr + publishFile flow', async () => {

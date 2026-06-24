@@ -38,7 +38,8 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
-import type { AugmentedFile, FileState, QueryResult, FileType, DbFile } from '@/lib/types';
+import { extractStoryParams, lintStoryParams } from '@/lib/data/story-params';
+import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -536,7 +537,7 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
  */
 export async function editFileStr(
   options: EditFileStrOptions
-): Promise<{ success: boolean; diff?: string; error?: string }> {
+): Promise<{ success: boolean; diff?: string; error?: string; validation?: string[] }> {
   const { fileId, oldMatch, newMatch } = options;
   const state = getStore().getState();
 
@@ -569,7 +570,8 @@ export async function editFileStr(
     editedStr = fullFileStr.split(effectiveOldMatch).join(effectiveNewMatch);
   }
 
-  // File Architecture v2: the edited string is MARKUP — parse it back to typed content.
+  // File Architecture v2: the edited string is MARKUP — parse it back to typed content. A
+  // PARSE failure is the only hard error (there's nothing to apply); everything else applies.
   const parsedContent = markupToContent(fileState.type, editedStr);
   if (!parsedContent.ok) {
     return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
@@ -581,18 +583,42 @@ export async function editFileStr(
 
   const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
 
+  // Permissive edit: ALWAYS stage the change, and return validation as non-blocking feedback
+  // (schema + story param lint). The agent iterates freely; Publish is the validation gate.
+  let validation: string[] = [];
   if (contentChanged) {
-    const error = validateFileState({ type: fileState.type, content: newContent, name: fileState.name, path: fileState.path });
-    if (error) {
-      return { success: false, error: `Invalid ${fileState.type} content: ${error}` };
-    }
     getStore().dispatch(setEdit({ fileId, edits: newContent }));
+    validation = collectEditValidation(getStore().getState(), fileState, newContent);
   }
 
   // Generate diff
   const diff = generateDiff(fullFileStr, editedStr);
 
-  return { success: true, diff };
+  return { success: true, diff, ...(validation.length ? { validation } : {}) };
+}
+
+/**
+ * Collect non-blocking validation feedback for an applied edit: the content-schema check
+ * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
+ * params for embedded questions). Best-effort — embedded questions are read from Redux.
+ */
+function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['getState']>, fileState: FileState, content: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+  const schemaError = validateFileState({ type: fileState.type, content, name: fileState.name, path: fileState.path });
+  if (schemaError) issues.push(schemaError);
+  if (fileState.type === 'story') {
+    const declared = extractStoryParams(content.story as string | null | undefined);
+    const assets = (content.assets as { type?: string; id?: number }[] | undefined) ?? [];
+    const embedded = assets
+      .filter((a) => a.type === 'question' && typeof a.id === 'number')
+      .map((a) => {
+        const qc = selectMergedContent(state, a.id as number) as QuestionContent | undefined;
+        return qc ? { id: a.id as number, query: qc.query ?? '', parameters: qc.parameters ?? [] } : null;
+      })
+      .filter((q): q is { id: number; query: string; parameters: NonNullable<QuestionContent['parameters']> } => q !== null);
+    issues.push(...lintStoryParams(declared, embedded));
+  }
+  return issues;
 }
 
 /**

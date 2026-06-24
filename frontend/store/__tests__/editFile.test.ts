@@ -375,7 +375,7 @@ describe('editFile - Question content validation', () => {
   // the markup surface. To preserve this test's intent (the validation gate rejects
   // schema-invalid question content with "Invalid question content"), we empty the
   // required `<vizSettings>` so its required `type` goes missing.
-  it('rejects required vizSettings.type going missing', async () => {
+  it('flags required vizSettings.type going missing as validation feedback', async () => {
     await readFiles([questionId]);
     const result = await editFileStr({
       fileId: questionId,
@@ -386,47 +386,47 @@ describe('editFile - Question content validation', () => {
 </vizSettings>`,
       newMatch: '<vizSettings/>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid question content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
   // Markup note: see above — instead of nulling connection_name (impossible via markup),
   // we inject a wrong-typed value into a required array field (xCols expects an array of
   // strings) via the JSON-literal escape hatch, which the validator rejects.
-  it('rejects wrong-typed xCols (object instead of array)', async () => {
+  it('flags wrong-typed xCols (object instead of array) as validation feedback', async () => {
     await readFiles([questionId]);
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: '<xCols/>',
       newMatch: '<xCols>{{"a":1}}</xCols>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid question content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
-  it('rejects invalid visualization type', async () => {
+  it('flags invalid visualization type as validation feedback', async () => {
     await readFiles([questionId]);
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: '<type>table</type>',
       newMatch: '<type>invalid_chart_type</type>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid question content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
-  it('rejects pivot type without pivotConfig', async () => {
+  it('flags pivot type without pivotConfig as validation feedback', async () => {
     await readFiles([questionId]);
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: '<type>table</type>',
       newMatch: '<type>pivot</type>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/pivotConfig is required/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).join(' ')).toMatch(/pivotConfig is required/);
   });
 
-  it('rejects pivot with missing required pivotConfig fields', async () => {
+  it('flags pivot with missing required pivotConfig fields as validation feedback', async () => {
     await readFiles([questionId]);
     const result = await editFileStr({
       fileId: questionId,
@@ -437,8 +437,8 @@ describe('editFile - Question content validation', () => {
 </vizSettings>`,
       newMatch: '<vizSettings>\n  <type>pivot</type>\n  <pivotConfig>\n    <rows>\n      <item>region</item>\n    </rows>\n  </pivotConfig>\n</vizSettings>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid question content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
   it('accepts valid table viz (no xCols/yCols needed)', async () => {
@@ -560,48 +560,48 @@ describe('editFile - Dashboard content validation', () => {
   // intent (the validation gate rejects malformed dashboard content with "Invalid dashboard
   // content"), we set a non-integer id; with replaceAll both the assets `<id>` (AssetReference,
   // Type.Integer) and the layout item `<id>` reject.
-  it('rejects non-integer id in FileAssetRef', async () => {
+  it('flags non-integer id in FileAssetRef as validation feedback', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
       oldMatch: '<id>99</id>',
       newMatch: '<id>99.5</id>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid dashboard content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
-  it('rejects non-integer layout x coordinate', async () => {
+  it('flags non-integer layout x coordinate as validation feedback', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
       oldMatch: '<x>0</x>',
       newMatch: '<x>0.5</x>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid dashboard content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
-  it('rejects layout item w below minimum (2)', async () => {
+  it('flags layout item w below minimum (2) as validation feedback', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
       oldMatch: '<w>6</w>',
       newMatch: '<w>1</w>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid dashboard content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
-  it('rejects layout item h below minimum (1)', async () => {
+  it('flags layout item h below minimum (1) as validation feedback', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
       oldMatch: '<h>4</h>',
       newMatch: '<h>0</h>',
     });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Invalid dashboard content/);
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).length).toBeGreaterThan(0);
   });
 
   it('accepts valid inline (text) asset', async () => {
@@ -810,7 +810,7 @@ describe('CreateFile tool - content validation', () => {
     expect(parsed.state.fileState.content.query).toBe('SELECT * FROM users');
   });
 
-  it('rejects question with invalid vizSettings type', async () => {
+  it('flags question with invalid vizSettings type as validation feedback', async () => {
     const result = await executeToolCall(
       makeToolCall({
         file_type: 'question',
@@ -819,11 +819,11 @@ describe('CreateFile tool - content validation', () => {
       {} as any
     );
     const parsed = JSON.parse(result.content as string);
-    expect(parsed.success).toBe(false);
-    expect(parsed.error).toMatch(/Invalid content/);
+    expect(parsed.success).toBe(true);
+    expect((parsed.validation ?? []).length).toBeGreaterThan(0);
   });
 
-  it('rejects question with pivot vizSettings but no pivotConfig', async () => {
+  it('flags question with pivot vizSettings but no pivotConfig as validation feedback', async () => {
     const result = await executeToolCall(
       makeToolCall({
         file_type: 'question',
@@ -832,8 +832,8 @@ describe('CreateFile tool - content validation', () => {
       {} as any
     );
     const parsed = JSON.parse(result.content as string);
-    expect(parsed.success).toBe(false);
-    expect(parsed.error).toMatch(/pivotConfig/);
+    expect(parsed.success).toBe(true);
+    expect((parsed.validation ?? []).join(' ')).toMatch(/pivotConfig/);
   });
 
   it('creates a question with valid pivot content', async () => {
@@ -1217,5 +1217,44 @@ describe('EditFile - notebook cell auto-execute', () => {
     expect(result.details?.success).toBe(true);
     const executed = selectNotebookCellExecuted(testStore.getState(), notebookId);
     expect(executed?.['cell-1']).toBeUndefined();
+  });
+});
+
+describe('editFile - story <Param> lint (non-blocking feedback)', () => {
+  function loadStore(files: any[]) {
+    testStore = configureStore({ reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer } });
+    testStore.dispatch({ type: 'files/setFiles', payload: { files } });
+  }
+  beforeEach(async () => { await clearFilesExceptOrg(); });
+  afterEach(() => { testStore = null; });
+
+  const QUESTION = (id: number) => ({
+    id, name: `q-${id}`, path: `/org/q-${id}`, type: 'question', version: 1, last_edit_id: null,
+    content: { query: 'SELECT * FROM sales WHERE city = :city', connection_name: 'static',
+      vizSettings: { type: 'table' }, parameters: [{ name: 'city', type: 'text', label: null, source: null }] },
+    file_references: [], created_at: '', updated_at: '',
+  });
+  const STORY = (id: number, qId: number, body: string) => ({
+    id, name: `s-${id}`, path: `/org/s-${id}`, type: 'story', version: 1, last_edit_id: null,
+    content: { description: 'x', assets: [{ type: 'question', id: qId }], story: body },
+    file_references: [qId], created_at: '', updated_at: '',
+  });
+
+  it('warns when an embedded question needs a param not declared by a <Param>', async () => {
+    const qId = 4001, sId = 4002;
+    loadStore([QUESTION(qId), STORY(sId, qId, `<div class="story"><h1>T</h1><div data-question-id="${qId}" style="width:100%;height:430px"></div></div>`)]);
+    const result = await editFileStr({ fileId: sId, oldMatch: '<h1>T</h1>', newMatch: '<h1>Title</h1>' });
+    expect(result.success).toBe(true); // permissive — applied
+    expect((result.validation ?? []).join(' ')).toMatch(/:city/);
+    expect((result.validation ?? []).join(' ')).toContain(`Question ${qId}`);
+  });
+
+  it('no warning once the <Param name="city"> is declared', async () => {
+    const qId = 4003, sId = 4004;
+    const body = `<div class="story"><div data-param-name="city" data-param-type="text" data-param-nullable="true"></div><h1>T</h1><div data-question-id="${qId}" style="width:100%;height:430px"></div></div>`;
+    loadStore([QUESTION(qId), STORY(sId, qId, body)]);
+    const result = await editFileStr({ fileId: sId, oldMatch: '<h1>T</h1>', newMatch: '<h1>Title</h1>' });
+    expect(result.success).toBe(true);
+    expect((result.validation ?? []).join(' ')).not.toMatch(/:city/);
   });
 });
