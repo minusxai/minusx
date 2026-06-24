@@ -130,6 +130,12 @@ function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): u
   const expr = node.children.find((c) => c.type === 'expression' && c.value.static);
   if (expr && expr.type === 'expression' && expr.value.static) return coerce(expr.value.json, s);
 
+  // Schemaless empty self-closing element `<tag/>` → [] (propsToXml emits `<tag/>` for an
+  // empty array/object; an empty string is `<tag></tag>`). Without this, an empty array
+  // round-trips to "" and editFileStr's merge would clobber the real [] (e.g. a context
+  // file's derived fullSchema/docs arrays).
+  if (!s && node.selfClosing && node.children.length === 0) return [];
+
   const childEls = node.children.filter((c): c is JsxElement => c.type === 'element');
   const itemEls = childEls.filter((c) => c.tag === 'item');
 

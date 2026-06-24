@@ -131,7 +131,13 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
       fauxAssistantMessage(
         [fauxToolCall('EditFile', {
           fileId: contextId,
-          changes: [{ oldMatch: '"docs":[]', newMatch: `"docs":[{"content":"${DOC_MARKDOWN}"}]` }],
+          // File Architecture v2: the agent edits the file's MARKUP, not JSON. An empty
+          // docs array projects to a self-closing `<docs/>`; populating it writes an
+          // `<item>` whose markdown content is the element's text child.
+          changes: [{
+            oldMatch: '<docs/>',
+            newMatch: `<docs><item><content>${DOC_MARKDOWN}</content></item></docs>`,
+          }],
         }, { id: 'tc_editfile' })],
         { stopReason: 'toolUse' },
       ),
@@ -188,13 +194,14 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
   }, 45000);
 
   it('REALISTIC LLM faux: derives oldMatch from app_state the way a real model does — reveals serializer mismatch', async () => {
-    // Mimic a real LLM: read the app_state from the user prompt, copy a JSON
-    // fragment verbatim (`"docs":[]`), and use that as oldMatch. If `app_state`
-    // (JSON.stringify) and `buildCurrentFileStr` (encodeFileStr) serialize
+    // Mimic a real LLM (File Architecture v2): read the app_state from the user
+    // prompt, copy a MARKUP fragment verbatim (`<docs/>`) from the file's `markup`
+    // surface, and use that as oldMatch. If the markup the agent sees (`markup`
+    // field) and the markup EditFile operates on (buildCurrentFileStr) serialize
     // differently, this fails — which is exactly the production symptom.
     onboardingFaux.setResponses([
       (ctx) => {
-        // Find the rendered user prompt (it embeds the app_state JSON).
+        // Find the rendered user prompt (it embeds the app_state, incl. `markup`).
         const userMsg = ctx.messages.find((m) => m.role === 'user');
         const text = typeof userMsg?.content === 'string'
           ? userMsg.content
@@ -202,15 +209,16 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
               .filter((c) => c?.type === 'text' && typeof c.text === 'string')
               .map((c) => c.text!)
               .join('');
-        // Docs start empty — a real LLM would copy `"docs":[]` from the prompt.
-        const emptyDocs = '"docs":[]';
+        // Docs start empty — an empty array projects to a self-closing `<docs/>` in
+        // the markup. A real LLM would copy that fragment from the prompt's markup.
+        const emptyDocs = '<docs/>';
         if (!text.includes(emptyDocs)) {
-          throw new Error(`prompt did not contain expected empty docs fragment "${emptyDocs}"`);
+          throw new Error(`prompt did not contain expected empty docs markup fragment "${emptyDocs}"`);
         }
         return fauxAssistantMessage(
           [fauxToolCall('EditFile', {
             fileId: contextId,
-            changes: [{ oldMatch: emptyDocs, newMatch: `"docs":[{"content":"${DOC_MARKDOWN}"}]` }],
+            changes: [{ oldMatch: emptyDocs, newMatch: `<docs><item><content>${DOC_MARKDOWN}</content></item></docs>` }],
           }, { id: 'tc_real_edit' })],
           { stopReason: 'toolUse' },
         );
@@ -255,12 +263,13 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
       fauxAssistantMessage(
         [fauxToolCall('EditFile', {
           fileId: contextId,
-          changes: [{
-            oldMatch: '"docs":[]',
-            // Write a doc AND flip published — the guard strips docs before
-            // comparing, so the published change is detected.
-            newMatch: '"docs":[{"content":"# Doc"}],"published":false',
-          }],
+          // File Architecture v2 markup edits: write a doc (the allowed field) AND
+          // flip the non-doc `published.all` (1 → 0). The guard strips docs before
+          // comparing, so the published change is detected and the edit is rejected.
+          changes: [
+            { oldMatch: '<docs/>', newMatch: '<docs><item><content># Doc</content></item></docs>' },
+            { oldMatch: '<all>1</all>', newMatch: '<all>0</all>' },
+          ],
         }, { id: 'tc_nonDoc' })],
         { stopReason: 'toolUse' },
       ),
