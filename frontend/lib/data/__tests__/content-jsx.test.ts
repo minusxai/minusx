@@ -47,6 +47,12 @@ describe('content ⇄ jsx — hand schema (the personal/story/friends shape)', (
     const { back } = roundtrip({ personal: { name: 'x', age: 40 } }, schema);
     expect(back.ok && (back.value as { personal: { age: number } }).personal.age).toBe(40);
   });
+
+  it('rejects a jsx field that violates the static-JSX security rules (e.g. <script>)', () => {
+    const bad = jsxToContent('<story><div class="story"><script>alert(1)</script></div></story>', schema, ctx);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.error.toLowerCase()).toContain('script');
+  });
 });
 
 describe('content ⇄ jsx — schemaless config (type="…")', () => {

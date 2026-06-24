@@ -18,9 +18,13 @@
  *
  * Top level emits the content object's FIELDS as sibling elements (no wrapper).
  */
-import { parseJsx, serializeJsx } from '@/lib/jsx';
+import { parseJsx, serializeJsx, validateJsxSource } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
+import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { buildStoryJsx, parseStoryJsx } from './story-v2';
+
+/** Thrown by a jsx field that fails the static-JSX security rules; surfaced as a parse error. */
+class JsxFieldError extends Error {}
 
 // JSON Schema is structurally dynamic; we walk it untyped.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,9 +149,13 @@ function textOf(node: JsxElement): string {
 function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): unknown {
   const s = unwrap(schema, ctx);
 
-  // jsx field — serialise its inline elements back to the stored markup string.
+  // jsx field — serialise its inline elements back to the stored markup string. Enforce the
+  // static-JSX security rules (no <script>/event-handlers/javascript: URLs, only registered
+  // components) on save, before it ever reaches the render path.
   if (isJsxField(s)) {
     const inner = serializeJsx(node.children).trim();
+    const errs = validateJsxSource(inner, JSX_COMPONENT_NAMES);
+    if (errs.length > 0) throw new JsxFieldError(errs.map((e) => e.message).join('; '));
     const parsed = parseStoryJsx(inner);
     return parsed.ok ? parsed.value.html : inner;
   }
@@ -195,10 +203,15 @@ export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): J
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const s = unwrap(schema, ctx);
   const obj: Record<string, unknown> = {};
-  for (const root of parsed.nodes) {
-    if (root.type !== 'element') continue;
-    if (s && s.properties && !(root.tag in s.properties)) continue;
-    obj[root.tag] = elementToValue(root, s && s.properties ? s.properties[root.tag] : undefined, ctx);
+  try {
+    for (const root of parsed.nodes) {
+      if (root.type !== 'element') continue;
+      if (s && s.properties && !(root.tag in s.properties)) continue;
+      obj[root.tag] = elementToValue(root, s && s.properties ? s.properties[root.tag] : undefined, ctx);
+    }
+  } catch (e) {
+    if (e instanceof JsxFieldError) return { ok: false, error: e.message };
+    throw e;
   }
   return { ok: true, value: obj };
 }
