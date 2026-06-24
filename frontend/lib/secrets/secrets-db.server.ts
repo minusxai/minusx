@@ -19,9 +19,11 @@ export const SecretsDB = {
   /** Upsert a secret value at a ref path. */
   async set(path: string, value: string): Promise<void> {
     const db = getModules().db;
+    // Conflict on the primary-key constraint by name (rather than the `path` column)
+    // so the upsert stays correct if the table's primary key definition changes.
     await db.exec(
       `INSERT INTO secrets (path, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
-       ON CONFLICT (path) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+       ON CONFLICT ON CONSTRAINT secrets_pkey DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
       [path, value],
     );
   },
