@@ -26,6 +26,16 @@ export interface StoryParam {
   nullable: boolean;
   /** `<Param id={N} column="c">` — autocomplete from / import the def of question N's column. */
   source?: StoryParamSource;
+  /** Agent-supplied CSS applied to the filter INPUT (`<Param style={{…}}>`), so the control can
+   *  match the story design — literal CSS, not theme tokens (overrides the default legible look). */
+  style?: Record<string, string | number>;
+  /** Agent-supplied CSS applied to the param LABEL (`<Param labelStyle={{…}}>`). */
+  labelStyle?: Record<string, string | number>;
+}
+
+/** Read a plain CSS object from a `<Param>` attribute value (object expressions parse to JSON). */
+function styleAttr(v: unknown): Record<string, string | number> | undefined {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string | number>) : undefined;
 }
 
 const TYPES = ['text', 'number', 'date'];
@@ -45,6 +55,10 @@ export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | 
   if (typeof attrs.id === 'number') {
     param.source = { questionId: attrs.id, column: typeof attrs.column === 'string' ? attrs.column : name };
   }
+  const style = styleAttr(attrs.style);
+  if (style) param.style = style;
+  const labelStyle = styleAttr(attrs.labelStyle);
+  if (labelStyle) param.labelStyle = labelStyle;
   return param;
 }
 
@@ -56,6 +70,8 @@ export function paramToPlaceholder(p: StoryParam): string {
     `data-param-nullable="${p.nullable}"`,
   ];
   if (p.source) a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
+  if (p.style) a.push(`data-param-style="${escAttr(JSON.stringify(p.style))}"`);
+  if (p.labelStyle) a.push(`data-param-labelstyle="${escAttr(JSON.stringify(p.labelStyle))}"`);
   return `<div ${a.join(' ')}></div>`;
 }
 
@@ -66,6 +82,8 @@ export function paramToJsx(p: StoryParam): string {
     a.push(`id={${p.source.questionId}}`);
     if (p.source.column !== p.name) a.push(`column="${p.source.column}"`);
   }
+  if (p.style) a.push(`style={${JSON.stringify(p.style)}}`);
+  if (p.labelStyle) a.push(`labelStyle={${JSON.stringify(p.labelStyle)}}`);
   return `<Param ${a.join(' ')} />`;
 }
 
@@ -77,7 +95,17 @@ function paramFromPlaceholderInner(inner: string): StoryParam | null {
   if (!a.name) return null;
   const p: StoryParam = { name: a.name, type: normalizeParamType(a.type), nullable: a.nullable !== 'false' };
   if (a['source-id']) p.source = { questionId: Number(a['source-id']), column: a['source-col'] ?? a.name };
+  const style = parseStyleJson(a.style);
+  if (style) p.style = style;
+  const labelStyle = parseStyleJson(a.labelstyle);
+  if (labelStyle) p.labelStyle = labelStyle;
   return p;
+}
+
+/** Parse a stored style JSON string (already entity-decoded by unescAttr / getAttribute). */
+function parseStyleJson(v: string | null | undefined): Record<string, string | number> | undefined {
+  if (!v) return undefined;
+  try { return styleAttr(JSON.parse(v)); } catch { return undefined; }
 }
 
 /** Extract all declared params from a story's HTML (the `data-param` placeholders). */
@@ -105,6 +133,10 @@ export function paramFromPlaceholderEl(el: { getAttribute(name: string): string 
   const p: StoryParam = { name, type: normalizeParamType(el.getAttribute('data-param-type')), nullable: el.getAttribute('data-param-nullable') !== 'false' };
   const sid = el.getAttribute('data-param-source-id');
   if (sid) p.source = { questionId: Number(sid), column: el.getAttribute('data-param-source-col') ?? name };
+  const style = parseStyleJson(el.getAttribute('data-param-style'));
+  if (style) p.style = style;
+  const labelStyle = parseStyleJson(el.getAttribute('data-param-labelstyle'));
+  if (labelStyle) p.labelStyle = labelStyle;
   return p;
 }
 

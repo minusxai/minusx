@@ -10,6 +10,7 @@
  * autocomplete from that column's distinct values.
  */
 import { Box, Text, Input } from '@chakra-ui/react';
+import type { CSSProperties } from 'react';
 import type { StoryParam } from '@/lib/data/story-params';
 import { SourceDropdownWidget } from '@/components/ParameterInput';
 
@@ -28,7 +29,9 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
       {/* Inherit the story's own text color (with slight muting) so the label stays legible on
           any story surface — an app `fg.muted` token would resolve to the host app's color mode
           across the shadow boundary and can vanish on a contrasting story background. */}
-      <Text fontSize="xs" fontWeight={600} color="inherit" opacity={0.7} textTransform="capitalize">
+      {/* The agent can override the label's look via <Param labelStyle={{…}}> — literal CSS wins
+          over the inherited default. */}
+      <Text fontSize="xs" fontWeight={600} color="inherit" opacity={0.7} textTransform="capitalize" style={param.labelStyle as CSSProperties | undefined}>
         {param.name}
       </Text>
       {useDropdown && param.source ? (
@@ -41,6 +44,7 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
           paramType={param.type === 'number' ? 'number' : 'text'}
           currentValue={value == null ? undefined : (value as string | number)}
           paramName={param.name}
+          inputStyle={param.style as CSSProperties | undefined}
           onChange={(v) => onChange(v === '' || v == null ? null : String(v))}
         />
       ) : (
@@ -58,6 +62,8 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
           color="gray.900"
           borderColor="gray.300"
           _placeholder={{ color: 'gray.500' }}
+          // Agent override (<Param style={{…}}>) — literal CSS, wins over the defaults above.
+          style={param.style as CSSProperties | undefined}
         />
       )}
     </Box>
