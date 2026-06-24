@@ -50,11 +50,7 @@ export function inlineQuestionToPlaceholder(e: InlineQuestionEmbed): string {
 
 const INLINE_Q_DIV_RE = /<div\s+([^>]*?data-question-inline="[^"]*"[^>]*?)>\s*<\/div>/g;
 
-function inlineFromDivInner(inner: string): InlineQuestionEmbed | null {
-  const m = inner.match(/data-question-inline="([^"]*)"/);
-  if (!m) return null;
-  let payload: Record<string, unknown>;
-  try { payload = JSON.parse(unescAttr(m[1])); } catch { return null; }
+function payloadToEmbed(payload: Record<string, unknown> | null | undefined): InlineQuestionEmbed | null {
   if (typeof payload?.query !== 'string') return null;
   const e: InlineQuestionEmbed = {
     query: payload.query,
@@ -64,6 +60,20 @@ function inlineFromDivInner(inner: string): InlineQuestionEmbed | null {
   if (payload.parameters) e.parameters = payload.parameters as QuestionParameter[];
   if (typeof payload.height === 'string') e.height = payload.height;
   return e;
+}
+
+function inlineFromDivInner(inner: string): InlineQuestionEmbed | null {
+  const m = inner.match(/data-question-inline="([^"]*)"/);
+  if (!m) return null;
+  try { return payloadToEmbed(JSON.parse(unescAttr(m[1]))); } catch { return null; }
+}
+
+/** Read an inline embed from a rendered placeholder element (AgentHtml has the DOM node — the
+ *  browser has already entity-decoded the attribute, so its value is plain JSON). */
+export function inlineQuestionFromEl(el: { getAttribute(name: string): string | null }): InlineQuestionEmbed | null {
+  const raw = el.getAttribute('data-question-inline');
+  if (raw == null) return null;
+  try { return payloadToEmbed(JSON.parse(raw)); } catch { return null; }
 }
 
 const SAVED_Q_DIV_RE = /data-question-id="(\d+)"/g;

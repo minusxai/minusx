@@ -8,12 +8,20 @@ import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
+import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import { paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
+import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story-question';
+import type { QuestionContent } from '@/lib/types';
 
 interface ChartTarget {
   el: HTMLElement;
   questionId: number;
+}
+
+interface InlineChartTarget {
+  el: HTMLElement;
+  content: QuestionContent;
 }
 
 interface ParamTarget {
@@ -85,6 +93,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const fontTagRef = useRef<HTMLStyleElement | null>(null);
   const importsRef = useRef<string[]>([]);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
+  const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
   // The shared param context: the reader's current values, seeded once from the story
   // defaults. (AgentHtml remounts via `key` when the story reloads, re-seeding.)
@@ -157,26 +166,37 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // into the saved story (they were stripped out of the story's <style>).
     importsRef.current = imports;
 
-    const found: ChartTarget[] = [];
-    root.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
-      const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
-      if (Number.isNaN(questionId)) return;
+    // Sizing contract (dashboards enforce the same idea via DashboardLayoutItem min w/h grid
+    // units): honor explicit px sizes, default a missing height, and clamp below-minimum boxes —
+    // the tile (title bar + the chart's built-in 300px minHeight) can't physically render
+    // smaller, it would just clip. Applied identically to saved and inline embeds.
+    const sizeEmbedEl = (el: HTMLElement) => {
       el.replaceChildren(); // drop authored fallback content; the portal takes over
-      // Snapshot the AUTHORED inline style before we clamp width/height below, so
-      // edit-mode serialization can restore the original placeholder size.
+      // Snapshot the AUTHORED inline style before we clamp, so edit-mode serialization can restore it.
       el.setAttribute('data-mx-osz', el.getAttribute('style') ?? '');
-      // Sizing contract (dashboards enforce the same idea via
-      // DashboardLayoutItem min w/h grid units): honor explicit px sizes,
-      // default a missing height, and clamp below-minimum boxes — the tile
-      // (title bar + the chart's built-in 300px minHeight) can't physically
-      // render smaller, it would just clip.
       const px = (v: string) => (v.endsWith('px') ? parseFloat(v) : NaN);
       const w = px(el.style.width);
       if (Number.isFinite(w)) el.style.width = `${Math.max(w, MIN_CHART_W)}px`;
       else if (!el.style.width) el.style.width = '100%';
       const h = px(el.style.height);
       el.style.height = `${Number.isFinite(h) ? Math.max(h, MIN_CHART_H) : DEFAULT_CHART_H}px`;
+    };
+
+    const found: ChartTarget[] = [];
+    root.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
+      const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
+      if (Number.isNaN(questionId)) return;
+      sizeEmbedEl(el);
       found.push({ el, questionId });
+    });
+    // <div data-question-inline="…"> → a story-local inline question (query/connection/viz live
+    // in the body, no saved file). Rendered live, just like a saved embed.
+    const inlineFound: InlineChartTarget[] = [];
+    root.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
+      const embed = inlineQuestionFromEl(el);
+      if (!embed) return;
+      sizeEmbedEl(el);
+      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed) });
     });
     // <div data-param-name="…"> → a reader filter control bound to the shared param context.
     const paramsFound: ParamTarget[] = [];
@@ -190,6 +210,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // necessarily effect → state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTargets(found);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInlineTargets(inlineFound);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setParamTargets(paramsFound);
   }, [sanitized, fluid]);
@@ -211,10 +233,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (el.tagName === 'STYLE') return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
     });
-    root.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
+    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
-  }, [editable, targets, sanitized]);
+  }, [editable, targets, inlineTargets, sanitized]);
 
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
@@ -314,6 +336,31 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         </Box>,
         t.el,
         `${i}-${t.questionId}`,
+      ))}
+      {inlineTargets.map((t, i) => createPortal(
+        // Inline story-local question: same chart-card chrome as a saved embed, but no title
+        // bar (there is no saved file / name) — the chart fills the card. Ideal for a styled
+        // single_value live number. Renders straight from the inline content (no file load).
+        <Box
+          className="mx-chart-fill"
+          bg="bg.subtle"
+          borderWidth="1px"
+          borderColor="border.default"
+          borderRadius="md"
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
+        >
+          <EmbeddedQuestionContainer
+            question={t.content}
+            questionId={0}
+            externalParameters={externalParameters.length ? externalParameters : undefined}
+            externalParamValues={externalParameters.length ? values : undefined}
+            enableDrilldown={false}
+          />
+        </Box>,
+        t.el,
+        `inline-${i}`,
       ))}
       {paramTargets.map((t, i) => createPortal(
         <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />,

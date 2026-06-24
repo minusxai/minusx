@@ -5,10 +5,10 @@
  *
  *  - drop the injected `<style data-mx-app-styles>` (mirrored app CSS, not part
  *    of the story);
- *  - restore each `[data-question-id]` chart embed to its authored EMPTY
- *    placeholder — clear the portal-rendered chart DOM and put back the original
- *    inline style snapshotted in `data-mx-osz` (AgentHtml clamps width/height at
- *    render, so the live style is not what was authored);
+ *  - restore each chart embed (`[data-question-id]` saved, `[data-question-inline]`
+ *    inline) to its authored EMPTY placeholder — clear the portal-rendered chart DOM
+ *    and put back the original inline style snapshotted in `data-mx-osz` (AgentHtml
+ *    clamps width/height at render, so the live style is not what was authored);
  *  - strip the `contenteditable` attributes added for inline editing;
  *  - re-insert the `@import` web-font lines AgentHtml hoisted out of the story's
  *    `<style>` into `document.head` (otherwise the saved story loses its fonts).
@@ -29,7 +29,7 @@ export function serializeEditedStory(
 
   container.querySelectorAll(INJECTED_STYLE_SELECTOR).forEach(el => el.remove());
 
-  container.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
+  container.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline]').forEach(el => {
     const authored = el.getAttribute(ORIG_STYLE_ATTR);
     if (authored !== null) {
       el.setAttribute('style', authored);
