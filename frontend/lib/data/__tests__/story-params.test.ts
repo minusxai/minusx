@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paramFromJsxAttrs, paramToPlaceholder, paramToJsx, extractStoryParams,
-  placeholdersToParamJsx, normalizeParamType, lintStoryParams, resolveImportedParam, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
+  placeholdersToParamJsx, normalizeParamType, lintStoryParams, lintDashboardParams, resolveImportedParam, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
 } from '../story-params';
 
 describe('story-params — type normalisation', () => {
@@ -82,6 +82,24 @@ describe('story-params — lint (non-blocking feedback)', () => {
       [{ name: 'city', type: 'text', nullable: true }, { name: 'min_rev', type: 'number', nullable: true }],
       [{ id: 5, query: 'SELECT * FROM t WHERE city = :city AND rev > :min_rev', parameters: [{ name: 'city', type: 'text', label: null, source: null }, { name: 'min_rev', type: 'number', label: null, source: null }] }],
     );
+    expect(warnings).toEqual([]);
+  });
+});
+
+describe('story-params — dashboard param lint (type-conflict only)', () => {
+  it('warns when two questions use the same :param name with conflicting types', () => {
+    const warnings = lintDashboardParams([
+      { id: 1, query: 'SELECT * FROM a WHERE x = :region', parameters: [{ name: 'region', type: 'text', label: null, source: null }] },
+      { id: 2, query: 'SELECT * FROM b WHERE x = :region', parameters: [{ name: 'region', type: 'number', label: null, source: null }] },
+    ]);
+    expect(warnings.some((w) => w.includes(':region') && w.includes('text') && w.includes('number'))).toBe(true);
+  });
+
+  it('no warning when the same param name has the same type across questions', () => {
+    const warnings = lintDashboardParams([
+      { id: 1, query: 'SELECT * FROM a WHERE x = :region', parameters: [{ name: 'region', type: 'text', label: null, source: null }] },
+      { id: 2, query: 'SELECT * FROM b WHERE x = :region', parameters: [{ name: 'region', type: 'text', label: null, source: null }] },
+    ]);
     expect(warnings).toEqual([]);
   });
 });

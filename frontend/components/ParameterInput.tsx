@@ -43,7 +43,7 @@ function formatNumStr(v: string): string {
   return String(parseFloat(n.toFixed(2)));
 }
 
-function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit }: SourceDropdownWidgetProps) {
+export function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit }: SourceDropdownWidgetProps) {
   const augmented = useFile(source.id);
   const content = augmented?.fileState.content as QuestionContent | undefined | null;
 

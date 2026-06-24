@@ -157,6 +157,32 @@ export function lintStoryParams(declared: StoryParam[], questions: EmbeddedQuest
 }
 
 /**
+ * Dashboard param lint: dashboards AUTO-derive params from their questions (merged by
+ * name+type), so the only thing to flag is a TYPE CONFLICT — when two questions use the same
+ * `:param` name with different types, auto-derive silently makes two separate filters. Returns
+ * advisory messages; never blocks the edit.
+ */
+export function lintDashboardParams(questions: EmbeddedQuestion[]): string[] {
+  const typesByName = new Map<string, Map<ParameterType, number[]>>();
+  for (const q of questions) {
+    for (const p of syncParametersWithSQL(q.query || '', q.parameters ?? [])) {
+      if (!typesByName.has(p.name)) typesByName.set(p.name, new Map());
+      const byType = typesByName.get(p.name)!;
+      if (!byType.has(p.type)) byType.set(p.type, []);
+      byType.get(p.type)!.push(q.id);
+    }
+  }
+  const warnings: string[] = [];
+  for (const [name, byType] of typesByName) {
+    if (byType.size > 1) {
+      const desc = [...byType.entries()].map(([t, ids]) => `${t} (question${ids.length > 1 ? 's' : ''} ${ids.join(', ')})`).join(' vs ');
+      warnings.push(`Dashboard param :${name} has conflicting types across questions: ${desc} — they won't share one filter.`);
+    }
+  }
+  return warnings;
+}
+
+/**
  * Resolve an imported param: `<Param name="city" id={5}>` inherits its type from question 5's
  * matching `:param` when the author didn't pin one. The autocomplete `source` (questionId+column)
  * is already on the param. `sourceParams` are question N's parameters.

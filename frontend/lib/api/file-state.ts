@@ -38,7 +38,7 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
-import { extractStoryParams, lintStoryParams } from '@/lib/data/story-params';
+import { extractStoryParams, lintStoryParams, lintDashboardParams, type EmbeddedQuestion } from '@/lib/data/story-params';
 import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -602,21 +602,33 @@ export async function editFileStr(
  * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
  * params for embedded questions). Best-effort — embedded questions are read from Redux.
  */
+/** Resolve a story/dashboard's `assets` question refs to their merged SQL + stored params (for param lint). */
+function collectEmbeddedQuestions(
+  state: ReturnType<ReturnType<typeof getStore>['getState']>,
+  content: Record<string, unknown>,
+): EmbeddedQuestion[] {
+  const assets = (content.assets as { type?: string; id?: number }[] | undefined) ?? [];
+  return assets
+    .filter((a) => a.type === 'question' && typeof a.id === 'number')
+    .map((a): EmbeddedQuestion | null => {
+      const qc = selectMergedContent(state, a.id as number) as QuestionContent | undefined;
+      return qc ? { id: a.id as number, query: qc.query ?? '', parameters: qc.parameters ?? [] } : null;
+    })
+    .filter((q): q is EmbeddedQuestion => q !== null);
+}
+
 function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['getState']>, fileState: FileState, content: Record<string, unknown>): string[] {
   const issues: string[] = [];
   const schemaError = validateFileState({ type: fileState.type, content, name: fileState.name, path: fileState.path });
   if (schemaError) issues.push(schemaError);
   if (fileState.type === 'story') {
     const declared = extractStoryParams(content.story as string | null | undefined);
-    const assets = (content.assets as { type?: string; id?: number }[] | undefined) ?? [];
-    const embedded = assets
-      .filter((a) => a.type === 'question' && typeof a.id === 'number')
-      .map((a) => {
-        const qc = selectMergedContent(state, a.id as number) as QuestionContent | undefined;
-        return qc ? { id: a.id as number, query: qc.query ?? '', parameters: qc.parameters ?? [] } : null;
-      })
-      .filter((q): q is { id: number; query: string; parameters: NonNullable<QuestionContent['parameters']> } => q !== null);
-    issues.push(...lintStoryParams(declared, embedded));
+    issues.push(...lintStoryParams(declared, collectEmbeddedQuestions(state, content)));
+  } else if (fileState.type === 'dashboard') {
+    // Dashboards auto-derive their params from embedded questions (merged by name+type). Warn
+    // when two questions use the same :param name with conflicting types — auto-derive silently
+    // splits them into separate filters. Non-blocking, same channel as the story lint.
+    issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content)));
   }
   return issues;
 }

@@ -34,3 +34,12 @@ describe('StoryParamControl', () => {
     expect((getByLabelText('param min_rev') as HTMLInputElement).type).toBe('number');
   });
 });
+
+describe('StoryParamControl — autocomplete (param with a question source)', () => {
+  it('renders the source dropdown (no plain input) when the param imports a question column', () => {
+    const sourced: StoryParam = { name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'city' } };
+    const { queryByLabelText, getByText } = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
+    expect(getByText('city')).toBeTruthy();              // labelled
+    expect(queryByLabelText('param city')).toBeNull();    // NOT the plain input — the dropdown took over
+  });
+});
