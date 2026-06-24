@@ -163,6 +163,20 @@ export const TrendConfig = Type.Object({
 }, { title: 'TrendConfig' });
 export type TrendConfig = Static<typeof TrendConfig>;
 
+// Typographic control for the single_value (big number) viz. The number is ALWAYS live (read
+// from the query result) — these props only style/decorate it; they never replace the value.
+export const SingleValueConfig = Type.Object({
+  label: Nullable(Type.String({ description: 'override the displayed label (defaults to the metric column name); set to an empty string to hide the label' })),
+  prefix: Nullable(Type.String({ description: "text shown immediately before the number, e.g. '$'" })),
+  suffix: Nullable(Type.String({ description: "text shown immediately after the number, e.g. '%' or ' MRR'" })),
+  valueSize: Nullable(Type.String({ description: "CSS font-size for the number, e.g. '4rem' or 'clamp(2rem, 10cqi, 6rem)'. Omit for the responsive default." })),
+  valueColor: Nullable(Type.String({ description: 'CSS color for the number, e.g. "#16a34a" (a CSS color string, not a theme token)' })),
+  valueWeight: Nullable(Type.Integer({ description: 'font weight for the number (100–900)' })),
+  labelColor: Nullable(Type.String({ description: 'CSS color for the label' })),
+  align: Nullable(StringEnum(['left', 'center', 'right'], 'horizontal alignment of the value block (default center)')),
+}, { title: 'SingleValueConfig' });
+export type SingleValueConfig = Static<typeof SingleValueConfig>;
+
 export const ChartAnnotation = Type.Object({
   x: Type.Union([Type.String(), Type.Number()], { description: 'X-axis value to anchor the annotation to' }),
   series: Nullable(Type.String({ description: 'series name to anchor the annotation to' })),
@@ -184,6 +198,7 @@ export const VizSettings = Type.Object({
   axisConfig: NullableD(AxisConfig, 'axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.'),
   trendConfig: NullableD(TrendConfig, "trend chart configuration (only used when type is 'trend')"),
   geoConfig: NullableD(GeoConfig, "geo map configuration (only used when type is 'geo')"),
+  singleValueConfig: NullableD(SingleValueConfig, "single-value (big number) styling — label, prefix/suffix, font size/color/weight, alignment. The number stays live; these only decorate it. Only used when type is 'single_value'."),
 }, { title: 'VizSettings' });
 export type VizSettings = Static<typeof VizSettings>;
 
