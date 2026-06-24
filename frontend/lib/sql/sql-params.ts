@@ -26,6 +26,31 @@ export function extractParametersFromSQL(sql: string): string[] {
 }
 
 /**
+ * Assemble the values dict to execute a question with, from its declared params and the
+ * available value sources (explicit external values from a dashboard/story take precedence
+ * over the question's own saved values).
+ *
+ * Type-aware None coercion: an empty string is meaningless for a **number** param — engines
+ * can't cast `''` to a number, and the agent's `(:p IS NULL OR … >= :p)` guards expect `null`
+ * to mean "no filter". So `''` (and a missing value) for a number param becomes `null` (None).
+ * Text params keep `''` as a real value; an explicit `null` (Set to None) is always preserved.
+ */
+export function buildQueryParamValues(
+  params: QuestionParameter[],
+  ownValues: Record<string, unknown> | undefined,
+  externalValues: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of params) {
+    let v: unknown = externalValues && p.name in externalValues ? externalValues[p.name] : ownValues?.[p.name];
+    if (v === undefined) v = p.type === 'number' ? null : '';
+    if (v === '' && p.type === 'number') v = null;
+    out[p.name] = v;
+  }
+  return out;
+}
+
+/**
  * Infer parameter type from parameter name
  */
 export function inferParameterType(paramName: string): 'text' | 'number' | 'date' {

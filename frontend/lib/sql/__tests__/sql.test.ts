@@ -6,6 +6,7 @@ import { irToSqlLocal } from '../ir-to-sql';
 import { QueryIR, FilterCondition, type CompoundQueryIR } from '../ir-types';
 import { removeNoneParamConditions } from '../ir-transforms';
 import { enforceQueryLimit } from '../limit-enforcer';
+import { buildQueryParamValues } from '../sql-params';
 import { getMentionCompletionsLocal, type AvailableQuestion } from '../mention-completions';
 import { filterSchemaByWhitelist } from '../schema-filter';
 import type { DatabaseSchema, WhitelistItem } from '../../types';
@@ -2504,5 +2505,40 @@ ORDER BY r.month`,
   it.each(multilineValidCases)('$desc', async ({ sql, dialect }) => {
     const result = await validateSqlLocal(sql, dialect);
     expect(result.valid).toBe(true);
+  });
+});
+
+describe('buildQueryParamValues — type-aware None coercion (FIX-2)', () => {
+  const P = (name: string, type: 'text' | 'number' | 'date') => ({ name, type, label: null, source: null });
+
+  it('coerces an empty-string NUMBER param to null (None) — text empty stays a value', () => {
+    const out = buildQueryParamValues(
+      [P('min_mrr', 'number'), P('status', 'text')],
+      { min_mrr: '', status: '' },
+      undefined,
+    );
+    expect(out.min_mrr).toBeNull();   // '' for a number → None
+    expect(out.status).toBe('');      // '' for text → kept
+  });
+
+  it('defaults a MISSING number param to null (not "") and a missing text param to ""', () => {
+    const out = buildQueryParamValues([P('min_mrr', 'number'), P('region', 'text')], {}, undefined);
+    expect(out.min_mrr).toBeNull();
+    expect(out.region).toBe('');
+  });
+
+  it('keeps real numeric values and preserves an explicit null (Set to None)', () => {
+    const out = buildQueryParamValues([P('a', 'number'), P('b', 'number')], { a: 100, b: null }, undefined);
+    expect(out.a).toBe(100);
+    expect(out.b).toBeNull();
+  });
+
+  it('external values (dashboard) take precedence; external empty number → null', () => {
+    const out = buildQueryParamValues(
+      [P('min_mrr', 'number')],
+      { min_mrr: 50 },
+      { min_mrr: '' },     // dashboard submitted empty
+    );
+    expect(out.min_mrr).toBeNull();
   });
 });

@@ -319,14 +319,15 @@ The application supports mode-based file system isolation, similar to the `as_us
 - **Dashboard merging**: Parameters with same name AND type merge at dashboard level
 - **Type locking**: Types can change in question view, but locked in dashboard view
 
-**Parameter value states** — a parameter can be in one of three states:
+**Parameter value states:**
 | State | JS value | SQL behavior |
 |---|---|---|
 | Has a value | `"foo"` / `100` | Filter condition included, `:param` substituted with the value |
-| Empty | `""` | Treated as None — filter condition removed via IR, remaining `:param` refs replaced with `NULL` |
-| **None** (explicit) | `null` | Same as empty — filter condition removed via IR, remaining `:param` refs replaced with `NULL` |
+| Empty **text** | `""` | A regular value — forwarded as-is (filter kept, `:param` bound to `""`) |
+| Empty **number** | `""` → `null` | Normalized to None at param assembly (engines can't cast `""` to a number) — see `EmbeddedQuestionContainer` |
+| **None** (explicit) | `null` | Filter condition removed via IR round-trip; any remaining `:param` refs replaced with `NULL` |
 
-The UI exposes a "Set to None / Clear None" toggle on each parameter input. None is `null` in JS. The `applyNoneParams` function in `app/api/query/route.ts` handles both `null` and `""` identically: IR round-trip strips the filter condition; any remaining `:param` refs become `NULL`.
+Server-side, `applyNoneParams` (`app/api/query/route.ts`) treats **only `null`** as None — an empty string is a real value, forwarded to the connector. So an empty **numeric** param is coerced `""`→`null` *client-side* where the values are assembled from their declared types (`EmbeddedQuestionContainer`), before it reaches the route. The UI exposes a "Set to None / Clear None" toggle (None = `null`).
 
 **Dashboard fallback rule**: `effectiveSubmittedValues` uses the question's saved `parameterValues` default only when the key is **absent** from the dashboard's submitted params. An explicit `null` or `""` is never overridden by the question default — key-existence checks (`in`) are used, not `??`.
 

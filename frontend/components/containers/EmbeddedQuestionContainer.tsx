@@ -14,6 +14,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { QuestionVisualization, ContainerConfig } from '@/components/question/QuestionVisualization';
 import { QuestionContent, QuestionParameter, QuestionReference } from '@/lib/types';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
+import { buildQueryParamValues } from '@/lib/sql/sql-params';
 
 // Stable empty fallback — `localQuestion.references || []` would allocate a
 // fresh array on every render, breaking referential equality on `useQueryResult`'s
@@ -53,26 +54,14 @@ export default function EmbeddedQuestionContainer({
     setLocalQuestion(question);
   }, [question]);
 
-  // Phase 3: Convert parameters to format useQueryResult expects
-  const queryParams = useMemo(() => {
-    const questionParams = localQuestion.parameters || [];
-    const ownParamValues = localQuestion.parameterValues || {};
-    if (!externalParameters && !externalParamValues) {
-      // No external params — use question's own parameterValues
-      return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: ownParamValues[p.name] ?? '' }), {} as Record<string, any>);
-    }
-    // Use explicit values dict if provided (from dashboard state),
-    // fall back to question's own parameterValues.
-    // Use 'in' check so null (skipped) from dashboard is preserved, not overridden by question's own values.
-    return questionParams.reduce((acc, p) => {
-      if (externalParamValues && p.name in externalParamValues) {
-        acc[p.name] = externalParamValues[p.name];
-      } else {
-        acc[p.name] = ownParamValues[p.name] ?? '';
-      }
-      return acc;
-    }, {} as Record<string, any>);
-  }, [externalParameters, externalParamValues, localQuestion.parameters, localQuestion.parameterValues]);
+  // Phase 3: Convert parameters to format useQueryResult expects. Explicit external values
+  // (dashboard/story) take precedence over the question's own; an empty-string value for a
+  // NUMBER param is coerced to None (null) so it doesn't reach the engine as '' (un-castable
+  // to a number) — see buildQueryParamValues.
+  const queryParams = useMemo(
+    () => buildQueryParamValues(localQuestion.parameters || [], localQuestion.parameterValues || {}, externalParamValues),
+    [externalParamValues, localQuestion.parameters, localQuestion.parameterValues],
+  );
 
   // Phase 3: Use useQueryResult hook for automatic execution with TTL caching
   const {
