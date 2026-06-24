@@ -306,7 +306,7 @@ from a question** by id. Reuses the existing param system (`ParameterType` text|
 `<div data-param-* />` placeholder inside `content.story`. Submitted/default **values** live in the
 new `StoryContent.parameterValues`. No separate stored declarations field.
 
-**Milestones (Types → Tests → Code, each green + committed):**
+**Milestones (Types → Tests → Code, each green + committed):** — SP1-SP4 DONE; SP5 follow-up.
 - **SP1** — `StoryParam` type; `StoryContent.parameterValues`; `Param` in `JSX_COMPONENT_NAMES`;
   `story-v2` round-trips `<Param/>` ⇄ placeholder; `lib/data/story-params.ts:extractStoryParams(html)`.
 - **SP2** — `lintStoryParams(declared, embeddedQuestions)` → warnings (via `syncParametersWithSQL`);
