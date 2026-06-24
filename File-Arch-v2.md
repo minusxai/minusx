@@ -12,16 +12,20 @@ of truth:
 
 - **`content` (the typed jsonb) stays canonical.** Renders, GUI saves, the server query
   path, and validators are all UNCHANGED. No storage migration.
-- **The agent never sees escaped JSON.** It reads + creates + edits every file as **MARKUP**
-  — a projection of `content`, chosen by file type:
-  - **keyvalue → XML** (`question`, `notebook`, `connection`, `config`, `folder`, `context`):
-    the whole `content` as a `<props>` block of nested elements; SQL/raw strings ride in
-    `{`…`}` template-literal children so `<`/`>` survive.
-  - **jsx** (`story`, `dashboard`): a `<jsx>` body (story HTML + `<Question id={N}/>` embeds;
-    dashboard `<Dashboard><Question id x y w h/></Dashboard>` grid) + a `<props>` block of metadata.
-- **The file type's JSON Schema does double duty** — validates *and* drives the keyvalue↔XML
-  conversion (nesting, arrays, scalar coercion). One generic converter; schemaless inference
-  covers config types without a JSON schema.
+- **The agent never sees escaped JSON.** It reads + creates + edits every file as **ONE JSX
+  document** — a projection of `content`. There is **one uniform converter** (`lib/data/content-jsx.ts`)
+  for every file type; no per-type dialect and no "XML" (it was always JSX). The content
+  object's fields are the top-level elements:
+  - object → nested `<field>…</field>`; array → `<field>` with repeated `<item>` children
+  - scalar → `<field>value</field>`; a string containing `<`/`>`/`{` rides in a raw
+    template-literal child `{`…`}` (so SQL with `x < 5` stays raw, unescaped)
+  - a field tagged **`format:'jsx'`** (e.g. `StoryContent.story`) is emitted **inline** as real
+    elements with `<Question id={N}/>` embeds, and parsed back to the stored HTML
+  - **schemaless** config types (`connection`/`config`/`context`/…) annotate non-string &
+    ambiguous scalars with `type="…"` so they round-trip losslessly (`<port type="number">5432</port>`)
+- **The file type's JSON Schema (TypeBox `*Content`) does double duty** — validates *and* drives
+  the conversion (nesting, arrays, scalar coercion, which field is a jsx body). Config types with
+  no schema fall back to the schemaless `type="…"` form.
 
 ### What's implemented (all green: node 2261, orchestrator 493)
 - **Engine** (`lib/data/keyvalue-xml.ts`, `lib/jsx/serialize.ts`, `lib/data/dashboard-jsx.ts`,
