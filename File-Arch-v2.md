@@ -2,6 +2,53 @@
 
 **Status:** proposal · **Author:** discussion w/ Sreejith · **Date:** 2026-06-23
 
+---
+
+## ⭐ CONVERGED MODEL (implemented 2026-06-24) — markup as the agent's I/O surface
+
+After the M0/M1 stepping stones, the design converged (discussion w/ Sreejith) to a
+**content-canonical** model, which is simpler and lower-risk than storing jsx as the source
+of truth:
+
+- **`content` (the typed jsonb) stays canonical.** Renders, GUI saves, the server query
+  path, and validators are all UNCHANGED. No storage migration.
+- **The agent never sees escaped JSON.** It reads + creates + edits every file as **MARKUP**
+  — a projection of `content`, chosen by file type:
+  - **keyvalue → XML** (`question`, `notebook`, `connection`, `config`, `folder`, `context`):
+    the whole `content` as a `<props>` block of nested elements; SQL/raw strings ride in
+    `{`…`}` template-literal children so `<`/`>` survive.
+  - **jsx** (`story`, `dashboard`): a `<jsx>` body (story HTML + `<Question id={N}/>` embeds;
+    dashboard `<Dashboard><Question id x y w h/></Dashboard>` grid) + a `<props>` block of metadata.
+- **The file type's JSON Schema does double duty** — validates *and* drives the keyvalue↔XML
+  conversion (nesting, arrays, scalar coercion). One generic converter; schemaless inference
+  covers config types without a JSON schema.
+
+### What's implemented (all green: node 2261, orchestrator 493)
+- **Engine** (`lib/data/keyvalue-xml.ts`, `lib/jsx/serialize.ts`, `lib/data/dashboard-jsx.ts`,
+  `lib/data/file-markup.ts`): schema-driven `propsToXml`/`xmlToProps`, `serializeJsx`
+  (AST→jsx), the dashboard body adapter, and `fileToMarkup`/`markupToContent` (the combiner).
+  Story reuses `parse/buildStoryJsx`. 15 round-trip tests.
+- **Wiring**: `buildCurrentFileStr`→markup, `editFileStr`→`markupToContent`,
+  `compressFileState` gains a `markup` field (the agent's edit surface). `content` stays for
+  internal consumers. The JSON edit tests were migrated to markup; `key-order`'s old
+  JSON-key-order failure mode is DISSOLVED by markup (now a determinism test).
+- **Tools**: `ReadFiles`/`EditFile` operate on markup (descriptions rewritten); `CreateFile`
+  gains a `markup` arg. **`SetJsx`/`EditJsx` deleted** — a document's jsx body is edited
+  through `EditFile` (the markup's `<jsx>` block) like any other file.
+
+### Remaining (clean follow-ups; not blocking the capability)
+- **Retire the `questionv2`/`storyv2` file types** — now redundant (base types are
+  markup-edited). Vestigial but harmless; ~22 files to clean (the `question-v2.ts`/`story-v2.ts`
+  *adapters* stay — they're reused by the markup layer). The `jsx` DB column + `setFileJsx` +
+  `/api/files/[id]/jsx` become vestigial once these types are gone.
+- **Tutorial seed** — NO change needed: `content` is canonical, so the agent already sees the
+  seed as markup. (The earlier "convert the seed to jsx" goal is moot under content-canonical.)
+- **`connection` secrets via `@SECRETS/…`** — server-only resolution; the highest-risk piece,
+  intentionally last.
+- **Remove `presentation`** (unused).
+
+---
+
 > **M0 + M1 are implemented** on branch `feature/improved-edits-v1` (PR #489). See
 > **[M0 + M1 — implementation status & how to test](#m0--m1--implementation-status--how-to-test)**
 > at the bottom. Fully additive / backward-compatible; full suite green (node 2234 /
