@@ -18,6 +18,8 @@ import {
   resolveEffectiveParams,
   buildEffectiveReference,
 } from '@/lib/data/helpers/param-resolution';
+import { extractInlineQuestions } from '@/lib/data/story-question';
+import type { QuestionParameter } from '@/lib/validation/atlas-schemas';
 import type {
   IFileStateRead,
   ReadFilesOptions,
@@ -171,42 +173,56 @@ async function executeQueriesForFile(
 ): Promise<QueryResult[]> {
   const results: QueryResult[] = [];
 
-  const execQuestion = async (q: DbFile): Promise<void> => {
-    if (q.type !== 'question') return;
-    const content = q.content as QuestionContent;
-    if (!content.query || !content.connection_name) return;
-
-    const ownParamValues = content.parameterValues ?? {};
-    const params = content.parameters?.length
-      ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
+  // Run one question (saved or inline) and push its result, keyed by the same query hash the
+  // client cache uses so ids line up. Params inherit from the root file (story/dashboard) params.
+  const runOne = async (
+    query: string | undefined,
+    connectionName: string | undefined,
+    parameters: QuestionParameter[] | null | undefined,
+    ownParamValues: Record<string, unknown>,
+  ): Promise<void> => {
+    if (!query || !connectionName) return;
+    const params = parameters?.length
+      ? resolveEffectiveParams(parameters, ownParamValues, inheritedParams)
       : ownParamValues;
 
     const paramRecord: Record<string, string | number> = {};
     for (const [k, v] of Object.entries(params)) {
-      if (typeof v === 'string' || typeof v === 'number') {
-        paramRecord[k] = v;
-      } else if (v != null) {
-        paramRecord[k] = String(v);
-      }
+      if (typeof v === 'string' || typeof v === 'number') paramRecord[k] = v;
+      else if (v != null) paramRecord[k] = String(v);
     }
 
-    const id = getQueryHash(content.query, params, content.connection_name);
-
+    const id = getQueryHash(query, params, connectionName);
     try {
-      const result = await runQuery(content.connection_name, content.query, paramRecord, user);
+      const result = await runQuery(connectionName, query, paramRecord, user);
       results.push({ ...result, id });
     } catch (err) {
       results.push({
-        columns: [],
-        types: [],
-        rows: [],
-        id,
+        columns: [], types: [], rows: [], id,
         error: err instanceof Error ? err.message : 'Query failed',
       } as QueryResult & { error: string });
     }
   };
 
+  const execQuestion = async (q: DbFile): Promise<void> => {
+    if (q.type !== 'question') return;
+    const content = q.content as QuestionContent;
+    await runOne(content.query, content.connection_name, content.parameters, content.parameterValues ?? {});
+  };
+
+  // A story's INLINE questions live in its body (no saved file) — run them too so the agent's
+  // read sees their LIVE results, exactly like the saved-question embeds. They bind to the
+  // story's shared params (inheritedParams) via runOne.
+  const execInlineQuestions = async (storyFile: DbFile): Promise<void> => {
+    if (storyFile.type !== 'story') return;
+    const html = (storyFile.content as { story?: string | null } | null)?.story;
+    for (const e of extractInlineQuestions(html)) {
+      await runOne(e.query, e.connection, e.parameters, {});
+    }
+  };
+
   await execQuestion(file);
+  await execInlineQuestions(file);
   await Promise.all(references.map(ref => execQuestion(ref)));
 
   return results;

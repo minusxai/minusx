@@ -113,6 +113,13 @@ export const POSTGRES_SCHEMA = `
     UNIQUE(path)
   );
 
+  -- File Architecture v2 server-only secrets store (resolved at query time, never a files row)
+  CREATE TABLE IF NOT EXISTS secrets (
+    path TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
   -- Add file_references column if it doesn't exist (migration for existing tables)
   DO $$
   BEGIN

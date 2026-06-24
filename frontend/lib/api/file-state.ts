@@ -36,8 +36,12 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { encodeFileStr, decodeFileStr, sortObjectKeysDeep } from '@/lib/api/file-encoding';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile } from '@/lib/types';
+import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
+import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
+import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
+import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story-question';
+import { noneifyEmptyNumericParams, paramTypeMap } from '@/lib/sql/sql-params';
+import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -210,9 +214,13 @@ export async function readFiles(
       questionFiles.flatMap(f => {
         const content = f.content as any;
         if (!content?.query || !content?.connection_name) return [];
+        const types = paramTypeMap(content.parameters);
         return [getQueryResult({
           query: content.query,
-          params: content.parameterValues ?? {},
+          // Coerce here (not inside getQueryResult) so the stored cache key matches the
+          // coerced key useQueryResult reads with — see noneifyEmptyNumericParams.
+          params: noneifyEmptyNumericParams(content.parameterValues ?? {}, types),
+          parameterTypes: types,
           database: content.connection_name,
           filePath: f.path,
           fileId: f.id,
@@ -450,8 +458,8 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
   const built = buildCurrentFileStr(state, fileId);
   if (!built.success) return built;
 
-  // Replace the entire file string via editFileStr (handles content, metadata, validation)
-  const targetStr = encodeFileStr(targetFileObj);
+  // Replace the entire file string via editFileStr — the agent's edit surface is MARKUP.
+  const targetStr = fileToMarkup(selectFile(state, fileId)!.type, targetFileObj.content);
   const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: targetStr });
   if (!result.success) return result;
 
@@ -461,9 +469,10 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
     if (finalContent?.query && finalContent?.connection_name) {
-      const params = finalContent.parameterValues || {};
+      const types = paramTypeMap(finalContent.parameters);
+      const params = noneifyEmptyNumericParams(finalContent.parameterValues || {}, types);
       try {
-        await getQueryResult({ query: finalContent.query, params, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
+        await getQueryResult({ query: finalContent.query, params, parameterTypes: types, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
         getStore().dispatch(setEphemeral({
           fileId: fileId as FileId,
           changes: {
@@ -512,21 +521,12 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
     ? { ...baseContent, ...fileState.persistableChanges }
     : baseContent;
   const currentName = selectEffectiveName(state, fileId) || '';
-  let queryResultId = fileState.queryResultId;
-  if (fileState.type === 'question') {
-    const qc = mergedContent as QuestionContent;
-    if (qc?.query && qc?.connection_name) {
-      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.connection_name);
-    }
-  }
-  const fullFileStr = encodeFileStr({
-    id: fileState.id,
-    name: currentName,
-    path: fileState.metadataChanges?.path ?? fileState.path,
-    type: fileState.type,
-    content: mergedContent,
-    ...(queryResultId ? { queryResultId } : {}),
-  });
+  // File Architecture v2: the agent reads + edits the file as MARKUP (jsx body for
+  // documents, keyvalue→XML for structured props) — never escaped JSON. The id/name/path
+  // wrapper is not part of the editable surface (EditFile targets by fileId; renames go
+  // through metadata). `mergedContent` is still returned for the structured callers.
+  void currentName;
+  const fullFileStr = fileToMarkup(fileState.type, mergedContent);
   return { success: true, fullFileStr, mergedContent };
 }
 
@@ -544,7 +544,7 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
  */
 export async function editFileStr(
   options: EditFileStrOptions
-): Promise<{ success: boolean; diff?: string; error?: string }> {
+): Promise<{ success: boolean; diff?: string; error?: string; validation?: string[] }> {
   const { fileId, oldMatch, newMatch } = options;
   const state = getStore().getState();
 
@@ -577,60 +577,94 @@ export async function editFileStr(
     editedStr = fullFileStr.split(effectiveOldMatch).join(effectiveNewMatch);
   }
 
-  // Decode back to object
-  let editedFile: { id: number; name: string; path: string; type: FileType; queryResultId?: string; content: any };
-  try {
-    editedFile = decodeFileStr(editedStr) as typeof editedFile;
-  } catch (error) {
-    return {
-      success: false,
-      error: `Invalid file encoding after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
+  // File Architecture v2: the edited string is MARKUP — parse it back to typed content. A
+  // PARSE failure is the only hard error (there's nothing to apply); everything else applies.
+  const parsedContent = markupToContent(fileState.type, editedStr);
+  if (!parsedContent.ok) {
+    return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
   }
+  // Merge over the existing content so unedited fields (and any not surfaced in the markup
+  // projection) are preserved; the markup carries the editable surface.
+  const newContent = { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
+  // StoryContent no longer has an `assets` field — saved-question deps derive from the body. Drop
+  // any legacy `assets` carried over from a migrated story's stored content so re-saves are clean.
+  // Set to `undefined` (not `delete`): newContent becomes persistableChanges, and the save path
+  // re-merges {...originalContent, ...persistableChanges} — a spread can't delete a key, but an
+  // explicit `undefined` overrides it and JSON.stringify drops it on persist. (Existing unedited
+  // files keep theirs harmlessly; it's inert — references come from the body.)
+  if (fileState.type === 'story') (newContent as Record<string, unknown>).assets = undefined;
+  void currentName;
 
-  // Detect what changed and dispatch appropriate Redux actions
-  const metadataChanges: { name?: string; path?: string } = {};
-  let contentChanged = false;
+  const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
 
-  // Check name change
-  if (editedFile.name !== currentName) {
-    metadataChanges.name = editedFile.name;
-  }
-
-  // Check path change
-  if (editedFile.path !== fileState.path) {
-    metadataChanges.path = editedFile.path;
-  }
-
-  // Check content change
-  if (JSON.stringify(editedFile.content) !== JSON.stringify(mergedContent)) {
-    contentChanged = true;
-  }
-
-  // Validate content if it changed
+  // Permissive edit: ALWAYS stage the change, and return validation as non-blocking feedback
+  // (schema + story param lint). The agent iterates freely; Publish is the validation gate.
+  let validation: string[] = [];
   if (contentChanged) {
-    const error = validateFileState(editedFile);
-    if (error) {
-      return { success: false, error: `Invalid ${editedFile.type} content: ${error}` };
-    }
-  }
-
-  // Dispatch Redux actions for changes
-  if (Object.keys(metadataChanges).length > 0) {
-    getStore().dispatch(setMetadataEdit({ fileId, changes: metadataChanges }));
-  }
-
-  if (contentChanged) {
-    getStore().dispatch(setEdit({
-      fileId,
-      edits: editedFile.content
-    }));
+    getStore().dispatch(setEdit({ fileId, edits: newContent }));
+    validation = collectEditValidation(getStore().getState(), fileState, newContent);
   }
 
   // Generate diff
   const diff = generateDiff(fullFileStr, editedStr);
 
-  return { success: true, diff };
+  return { success: true, diff, ...(validation.length ? { validation } : {}) };
+}
+
+/**
+ * Collect non-blocking validation feedback for an applied edit: the content-schema check
+ * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
+ * params for embedded questions). Best-effort — embedded questions are read from Redux.
+ */
+/**
+ * Resolve a story/dashboard's embedded questions to their SQL + stored params (for the param lint).
+ * - Story: derived from the BODY — saved `<Question id>` embeds (resolved from Redux) plus inline
+ *   `<Question query>` embeds (carried in the body). No assets field.
+ * - Dashboard: the `assets` manifest (dashboards have no body).
+ */
+function collectEmbeddedQuestions(
+  state: ReturnType<ReturnType<typeof getStore>['getState']>,
+  content: Record<string, unknown>,
+  type: FileType,
+): EmbeddedQuestion[] {
+  if (type === 'story') {
+    const html = content.story as string | null | undefined;
+    const saved = extractSavedQuestionIds(html)
+      .map((id): EmbeddedQuestion | null => {
+        const qc = selectMergedContent(state, id) as QuestionContent | undefined;
+        return qc ? { id, query: qc.query ?? '', parameters: qc.parameters ?? [] } : null;
+      })
+      .filter((q): q is EmbeddedQuestion => q !== null);
+    const inline = extractInlineQuestions(html).map((e, i): EmbeddedQuestion => ({
+      id: 0, inlineIndex: i + 1, query: e.query, parameters: e.parameters ?? [],
+    }));
+    return [...saved, ...inline];
+  }
+  const assets = (content.assets as { type?: string; id?: number }[] | undefined) ?? [];
+  return assets
+    .filter((a) => a.type === 'question' && typeof a.id === 'number')
+    .map((a): EmbeddedQuestion | null => {
+      const qc = selectMergedContent(state, a.id as number) as QuestionContent | undefined;
+      return qc ? { id: a.id as number, query: qc.query ?? '', parameters: qc.parameters ?? [] } : null;
+    })
+    .filter((q): q is EmbeddedQuestion => q !== null);
+}
+
+function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['getState']>, fileState: FileState, content: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+  const schemaError = validateFileState({ type: fileState.type, content, name: fileState.name, path: fileState.path });
+  if (schemaError) issues.push(schemaError);
+  if (fileState.type === 'story') {
+    const declared = extractStoryParams(content.story as string | null | undefined);
+    issues.push(...lintStoryParams(declared, collectEmbeddedQuestions(state, content, 'story')));
+    issues.push(...lintStoryParamSources(declared, (id) => selectFile(state, id)?.type));
+  } else if (fileState.type === 'dashboard') {
+    // Dashboards auto-derive their params from embedded questions (merged by name+type). Warn
+    // when two questions use the same :param name with conflicting types — auto-derive silently
+    // splits them into separate filters. Non-blocking, same channel as the story lint.
+    issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content, 'dashboard')));
+  }
+  return issues;
 }
 
 /**
@@ -1236,6 +1270,7 @@ export async function createDraftFile(
   getStore().dispatch(setFile({ file, references: [] }));
   return file.id;
 }
+
 
 // ============================================================================
 // Dry Run Save

@@ -6,6 +6,7 @@ import { LuCheck, LuX, LuBookOpen } from 'react-icons/lu';
 import { DisplayProps, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
+import { embeddedQuestionCount } from '@/lib/data/story-question';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store/hooks';
@@ -31,7 +32,7 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
         const meta = type ? getFileTypeMetadata(type) : null;
         const name = fs.name || (filesDict[id]?.name) || `#${id}`;
         const path = fs.path || null;
-        const assetCount = fs.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+        const assetCount = embeddedQuestionCount(fs.content, type) || null;
         return { id, name, path, meta, assetCount, canLink: id > 0 };
       })
     : fileIds.map(id => {

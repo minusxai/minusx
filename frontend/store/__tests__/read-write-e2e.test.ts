@@ -299,8 +299,8 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     const editResult = await editFileStr({
       fileId: questionId,
-      oldMatch: '"query":"SELECT month, SUM(revenue) as total FROM sales GROUP BY month"',
-      newMatch: '"query":"SELECT month, SUM(revenue) as total FROM sales ORDER BY month"'
+      oldMatch: 'GROUP BY month',
+      newMatch: 'ORDER BY month'
     });
 
     expect(editResult.success).toBe(true);
@@ -384,8 +384,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Step 2: Edit the file
       await editFileStr({
         fileId: questionId,
-        oldMatch: '"description":"Total revenue by month"',
-        newMatch: '"description":"Updated description"'
+        oldMatch: '<description>Total revenue by month</description>',
+        newMatch: '<description>Updated description</description>'
       });
 
       // Step 3: Read file after edit (should show persistableChanges)
@@ -407,8 +407,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Edit
       await editFileStr({
         fileId: questionId,
-        oldMatch: '"description":"Total revenue by month"',
-        newMatch: '"description":"Final description"'
+        oldMatch: '<description>Total revenue by month</description>',
+        newMatch: '<description>Final description</description>'
       });
 
       await publishFile({ fileId: questionId });
@@ -442,10 +442,11 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Build oldMatch from normalized Redux state (post-dbFileToFileState), not raw DB object,
       // mirroring how the LLM builds oldMatch from ReadFiles/AppState output.
       const normalizedContent = (store.getState() as any).files.files[questionId].content;
+      const { fileToMarkup } = await import('@/lib/data/file-markup');
       await editFileStr({
         fileId: questionId,
-        oldMatch: `"content":${JSON.stringify(normalizedContent)}`,
-        newMatch: `"content":${JSON.stringify(editedContent)}`
+        oldMatch: fileToMarkup('question', normalizedContent),
+        newMatch: fileToMarkup('question', editedContent)
       });
 
       // Verify edits in persistableChanges
@@ -881,9 +882,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
         const content = before.fileState.content as any;
 
-        // Build oldMatch exactly as the model would — copy verbatim from content
-        const oldQuery = `"query":${JSON.stringify(content.query)}`;
-        const newQuery = '"query":"SELECT month, revenue FROM sales"';
+        // Build oldMatch exactly as the model would — copy verbatim from the markup query value
+        const oldQuery = `<query>${content.query}</query>`;
+        const newQuery = '<query>SELECT month, revenue FROM sales</query>';
 
         // Apply the edit (this is what the EditFile tool handler does internally)
         const editResult = await editFileStr({ fileId: questionId, oldMatch: oldQuery, newMatch: newQuery });
@@ -916,11 +917,11 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Make an edit
         const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
         const content = before.fileState.content as any;
-        const oldQuery = `"query":${JSON.stringify(content.query)}`;
+        const oldQuery = `<query>${content.query}</query>`;
         const editResult = await editFileStr({
           fileId: questionId,
           oldMatch: oldQuery,
-          newMatch: '"query":"SELECT year, revenue FROM sales"'
+          newMatch: '<query>SELECT year, revenue FROM sales</query>'
         });
         expect(editResult.success).toBe(true);
 
@@ -949,11 +950,11 @@ describe('Phase 1: Unified File System API E2E', () => {
 
         // Stage a persistableChanges edit
         const [initial] = (await readFiles([questionId], {})).map(compressAugmentedFile);
-        const oldDesc = `"description":${JSON.stringify((initial.fileState.content as any).description)}`;
+        const oldDesc = `<description>${(initial.fileState.content as any).description}</description>`;
         const editResult = await editFileStr({
           fileId: questionId,
           oldMatch: oldDesc,
-          newMatch: '"description":"Ephemeral isolation test"'
+          newMatch: '<description>Ephemeral isolation test</description>'
         });
         expect(editResult.success).toBe(true);
 
@@ -979,9 +980,10 @@ describe('Phase 1: Unified File System API E2E', () => {
           payload: { files: [questionFile] }
         });
 
-        // Get current content as compact string
-        const currentContent = JSON.stringify(questionFile?.content);
-        const queryMatch = currentContent.match(/"query":"[^"]+"/);
+        // Get current content as markup
+        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const currentContent = fileToMarkup('question', questionFile?.content);
+        const queryMatch = currentContent.match(/<query>[^<]+<\/query>/);
         expect(queryMatch).toBeTruthy();
         const originalQuery = queryMatch![0];
 
@@ -989,7 +991,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         const result = await editFileStr({
           fileId: questionId,
           oldMatch: originalQuery,
-          newMatch: '"query":"SELECT month, total FROM modified_sales"'
+          newMatch: '<query>SELECT month, total FROM modified_sales</query>'
         });
 
         // Verify success
@@ -1018,8 +1020,8 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Try to replace a string that doesn't exist
         const result = await editFileStr({
           fileId: questionId,
-          oldMatch: '"nonexistent":"field"',
-          newMatch: '"new":"value"'
+          oldMatch: '<nonexistent>field</nonexistent>',
+          newMatch: '<new>value</new>'
         });
 
         // Verify error
@@ -1038,54 +1040,61 @@ describe('Phase 1: Unified File System API E2E', () => {
           payload: { files: [questionFile] }
         });
 
-        // Get current content
-        const currentContent = JSON.stringify(questionFile?.content);
-        const queryMatch = currentContent.match(/"query":"[^"]+"/);
+        // Get current content as markup
+        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const currentContent = fileToMarkup('question', questionFile?.content);
+        const queryMatch = currentContent.match(/<query>[^<]+<\/query>/);
         expect(queryMatch).toBeTruthy();
 
-        // Try to replace with invalid JSON (missing closing quote)
+        // Try to replace with invalid markup (unclosed <query> tag)
         const result = await editFileStr({
           fileId: questionId,
           oldMatch: queryMatch![0],
-          newMatch: '"query":"SELECT * FROM invalid'  // Missing closing quote
+          newMatch: '<query>SELECT * FROM invalid'  // Missing closing tag
         });
 
         // Verify error
         expect(result.success).toBe(false);
         if (!result.success) {
-          expect(result.error).toContain('Invalid file encoding after edit');
+          expect(result.error).toContain('Invalid question after edit');
         }
       });
 
-      it('should validate required question fields', async () => {
+      it('should validate question content after edit', async () => {
 
-        // Load question into Redux
-        const questionFile = await DocumentDB.getById(questionId);
-        (store.dispatch as any)({
-          type: 'files/setFiles',
-          payload: { files: [questionFile] }
-        });
+        // Use a fresh question so the edit target is deterministic (the shared
+        // question's vizSettings.type is mutated by other tests).
+        const id = await DocumentDB.create(
+          'Viz Validation',
+          '/org/viz-validation',
+          'question',
+          {
+            description: 'viz validation question',
+            query: 'SELECT month, total FROM sales',
+            connection_name: 'test_db',
+            parameters: [],
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          []
+        );
+        const file = await DocumentDB.getById(id);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
-        // Get current content
-        const currentContent = JSON.stringify(questionFile?.content);
-        const databaseMatch = currentContent.match(/"connection_name":"[^"]+"/);
-        expect(databaseMatch).toBeTruthy();
-
-        // Try to remove connection_name field
+        // The markup edit surface merges over existing content, so scalar fields
+        // can't be deleted — but editing one to a schema-invalid value must be rejected.
+        // Set vizSettings.type to a value outside the allowed enum.
         const result = await editFileStr({
-          fileId: questionId,
-          oldMatch: `${databaseMatch![0]},`,
-          newMatch: ''  // Remove the field
+          fileId: id,
+          oldMatch: '<type>table</type>',
+          newMatch: '<type>not_a_real_viz_type</type>'
         });
 
-        // Verify error
-        expect(result.success).toBe(false);
-        if (!result.success) {
-          expect(result.error).toContain('connection_name');
-        }
+        // Permissive edit: the change applies, the schema issue comes back as feedback.
+        expect(result.success).toBe(true);
+        expect((result.validation ?? []).join(' ')).toContain('vizSettings');
       });
 
-      it('should validate required dashboard fields', async () => {
+      it('should validate dashboard content after edit', async () => {
 
         // Load dashboard into Redux
         const dashboardFile = await DocumentDB.getById(dashboardId);
@@ -1094,23 +1103,18 @@ describe('Phase 1: Unified File System API E2E', () => {
           payload: { files: [dashboardFile] }
         });
 
-        // Get current content
-        const currentContent = JSON.stringify(dashboardFile?.content);
-        const assetsMatch = currentContent.match(/"assets":\[[^\]]*\]/);
-        expect(assetsMatch).toBeTruthy();
-
-        // Try to remove assets field
+        // A dashboard's assets project to <item> elements with a typed <type>. Corrupt
+        // an asset's type to a value outside the allowed set so the edited markup no
+        // longer produces valid dashboard content — caught as feedback (edit still applies).
         const result = await editFileStr({
           fileId: dashboardId,
-          oldMatch: `${assetsMatch![0]},`,
-          newMatch: ''  // Remove the field
+          oldMatch: '<type>question</type>',
+          newMatch: '<type>bogus_type</type>'  // not a valid asset type → invalid dashboard
         });
 
-        // Verify error
-        expect(result.success).toBe(false);
-        if (!result.success) {
-          expect(result.error).toContain('assets');
-        }
+        // Permissive edit: applied, with the schema issue reported as feedback.
+        expect(result.success).toBe(true);
+        expect((result.validation ?? []).length).toBeGreaterThan(0);
       });
 
       it('should work with editFileStr + publishFile flow', async () => {
@@ -1123,15 +1127,16 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Get current description
-        const currentContent = JSON.stringify(questionFile?.content);
-        const descMatch = currentContent.match(/"description":"[^"]*"/);
+        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const currentContent = fileToMarkup('question', questionFile?.content);
+        const descMatch = currentContent.match(/<description>[^<]*<\/description>/);
         expect(descMatch).toBeTruthy();
 
         // Step 1: Edit with string replacement
         const editResult = await editFileStr({
           fileId: questionId,
           oldMatch: descMatch![0],
-          newMatch: '"description":"Monthly revenue analysis"'
+          newMatch: '<description>Monthly revenue analysis</description>'
         });
 
         expect(editResult.success).toBe(true);
@@ -1160,15 +1165,16 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Get the actual content to match against
-        const initialContent = JSON.stringify(questionFile?.content);
-        const descMatch = initialContent.match(/"description":"[^"]+"/);
+        const { fileToMarkup } = await import('@/lib/data/file-markup');
+        const initialContent = fileToMarkup('question', questionFile?.content);
+        const descMatch = initialContent.match(/<description>[^<]+<\/description>/);
         expect(descMatch).toBeTruthy();
 
         // Edit 1: Change description
         const result1 = await editFileStr({
           fileId: questionId,
           oldMatch: descMatch![0],
-          newMatch: '"description":"Revenue Report"'
+          newMatch: '<description>Revenue Report</description>'
         });
 
         if (!result1.success) {
@@ -1180,14 +1186,14 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Get the current query from merged content (includes first edit)
         const questionState1 = (store.getState() as any).files.files[questionId];
         const mergedContent = { ...questionFile!.content, ...questionState1.persistableChanges };
-        const currentStr = JSON.stringify(mergedContent);
-        const queryMatch = currentStr.match(/"query":"[^"]+"/);
+        const currentStr = fileToMarkup('question', mergedContent);
+        const queryMatch = currentStr.match(/<query>[^<]+<\/query>/);
         expect(queryMatch).toBeTruthy();
 
         const result2 = await editFileStr({
           fileId: questionId,
           oldMatch: queryMatch![0],
-          newMatch: '"query":"SELECT * FROM sales WHERE month = :month"'
+          newMatch: '<query>SELECT * FROM sales WHERE month = :month</query>'
         });
         expect(result2.success).toBe(true);
 
@@ -1231,11 +1237,11 @@ describe('Phase 1: Unified File System API E2E', () => {
         const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
-        // encodeFileStr escapes " to \" so LLM writes \" (backslash+quote) in oldMatch
+        // In markup the query value is RAW — double quotes appear verbatim (no escaping)
         const result = await editFileStr({
           fileId: id,
-          oldMatch: 'SELECT * FROM \\"users\\" WHERE \\"active\\" = true',
-          newMatch: 'SELECT * FROM \\"accounts\\" WHERE \\"active\\" = true',
+          oldMatch: 'SELECT * FROM "users" WHERE "active" = true',
+          newMatch: 'SELECT * FROM "accounts" WHERE "active" = true',
         });
 
         expect(result.success).toBe(true);
@@ -1253,11 +1259,11 @@ describe('Phase 1: Unified File System API E2E', () => {
         const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
-        // encodeFileStr escapes \ to \\ so LLM writes \\ (two backslashes) in oldMatch
+        // In markup the query value is RAW — a single backslash appears verbatim
         const result = await editFileStr({
           fileId: id,
-          oldMatch: "SELECT * FROM t WHERE name LIKE '%\\\\_%'",
-          newMatch: "SELECT * FROM t WHERE name LIKE '%\\\\x%'",
+          oldMatch: "SELECT * FROM t WHERE name LIKE '%\\_%'",
+          newMatch: "SELECT * FROM t WHERE name LIKE '%\\x%'",
         });
 
         expect(result.success).toBe(true);
@@ -1277,8 +1283,8 @@ describe('Phase 1: Unified File System API E2E', () => {
 
         const result = await editFileStr({
           fileId: id,
-          oldMatch: 'SELECT *\n\tFROM \\"orders\\"\nWHERE status = \\"active\\"',
-          newMatch: 'SELECT *\n\tFROM \\"orders\\"\nWHERE status = \\"completed\\"',
+          oldMatch: 'SELECT *\n\tFROM "orders"\nWHERE status = "active"',
+          newMatch: 'SELECT *\n\tFROM "orders"\nWHERE status = "completed"',
         });
 
         expect(result.success).toBe(true);
@@ -1456,7 +1462,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: paramQuestionId,
-            changes: [{ oldMatch: '"description":"Sales with limit param"', newMatch: '"description":"Updated description"' }]
+            changes: [{ oldMatch: '<description>Sales with limit param</description>', newMatch: '<description>Updated description</description>' }]
           }
         }
       };
@@ -1493,7 +1499,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: paramQuestionId,
-            changes: [{ oldMatch: '"description":"Sales with limit param"', newMatch: '"description":"Ephemeral override test"' }]
+            changes: [{ oldMatch: '<description>Sales with limit param</description>', newMatch: '<description>Ephemeral override test</description>' }]
           }
         }
       };
@@ -1524,7 +1530,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: paramQuestionId,
-            changes: [{ oldMatch: '"description":"Sales with limit param"', newMatch: '"description":"Response structure test"' }]
+            changes: [{ oldMatch: '<description>Sales with limit param</description>', newMatch: '<description>Response structure test</description>' }]
           }
         }
       };
@@ -1580,7 +1586,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: brokenQuestionId,
-            changes: [{ oldMatch: '"description":"Query has :limit but parameters is empty"', newMatch: '"description":"Step 1: parameters updated next"' }]
+            changes: [{ oldMatch: '<description>Query has :limit but parameters is empty</description>', newMatch: '<description>Step 1: parameters updated next</description>' }]
           }
         }
       };

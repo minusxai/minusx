@@ -17,6 +17,7 @@ import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/api/file-state';
+import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -743,6 +744,9 @@ registerFrontendTool('EditFile', async (args, _context) => {
     queryResults: deltaQueryResults,
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
     ...(vizWarning ? { vizWarning } : {}),
+    // Non-blocking validation feedback (content schema + story <Param> lint). The edit was
+    // applied regardless; the agent sees this and can fix.
+    ...(result.validation?.length ? { validation: result.validation } : {}),
   };
   // Image delta: only render chart when query result or vizSettings changed.
   const queryResultChanged = compressed.queryResults.some((qr: any) => {
@@ -764,6 +768,9 @@ registerFrontendTool('EditFile', async (args, _context) => {
     details: { success: true, diff } as EditFileDetails,
   };
 });
+
+// SetJsx / EditJsx were removed in File Architecture v2 — a document's jsx body is edited
+// through EditFile (the markup's <jsx> block), like any other file.
 
 /**
  * CreateFile - Create a new virtual file (draft, any type).
@@ -792,6 +799,17 @@ registerFrontendTool('CreateFile', async (args, context) => {
       const err = 'CreateFile: `content` must be a JSON object (or a valid JSON string), not a raw string.';
       return { content: { success: false, error: err }, details: { success: false, error: err } };
     }
+  }
+
+  // File Architecture v2: prefer the `markup` arg — parse it into typed content (the same
+  // markup EditFile edits). Merges over any structured `content` fallback.
+  if (typeof args.markup === 'string' && args.markup.trim()) {
+    const parsed = markupToContent(file_type as FileType, args.markup);
+    if (!parsed.ok) {
+      const err = `CreateFile: invalid markup for '${file_type}': ${parsed.error}`;
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
+    }
+    content = { ...((content as Record<string, unknown>) ?? {}), ...parsed.content };
   }
 
   // --- Page-context guards for background file creation ---
@@ -866,18 +884,17 @@ registerFrontendTool('CreateFile', async (args, context) => {
     }
   }
 
-  // Validate the would-be content (pure template defaults + override) BEFORE
-  // creating anything, so a rejected create leaves no draft behind. The shallow
-  // top-level merge mirrors setEdit/selectMergedContent, so this is the exact
-  // content the save path validates — caught up front, with no network round-trip.
+  // Validate the would-be content (pure template defaults + override) as non-blocking
+  // FEEDBACK — the file is still created with the agent's content. The shallow top-level merge
+  // mirrors setEdit/selectMergedContent, so this is the exact content the save path validates.
+  const createValidation: string[] = [];
   if (content && Object.keys(content).length > 0) {
     const defaults = getTemplateDefaults(file_type as FileType);
     const mergedContent = { ...(defaults ?? {}), ...content };
     const validationError = validateFileState({ type: file_type as FileType, content: mergedContent });
-    if (validationError) {
-      const err = `Invalid content for '${file_type}': ${validationError}`;
-      return { content: { success: false, error: err }, details: { success: false, error: err } };
-    }
+    // Permissive: a schema issue is non-blocking FEEDBACK, not a rejection — the file is still
+    // created with the agent's content; it sees this and can fix. (Publish is the gate.)
+    if (validationError) createValidation.push(validationError);
   }
 
   // Create draft file on server — returns real positive ID with draft:true.
@@ -934,6 +951,7 @@ registerFrontendTool('CreateFile', async (args, context) => {
 
   const result: Record<string, any> = { success: true, state: compressAugmentedFile(augmented) };
   if (vizWarning) result.vizWarning = vizWarning;
+  if (createValidation.length) result.validation = createValidation; // non-blocking feedback
   const imageBlocks = await renderFileChartImageBlocks([augmented]);
   if (imageBlocks.length === 0) {
     return { content: result, details: { success: true } };

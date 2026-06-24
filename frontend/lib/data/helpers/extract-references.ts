@@ -1,4 +1,5 @@
 import { BaseFileContent, FileType } from '@/lib/types';
+import { extractSavedQuestionIds } from '@/lib/data/story-question';
 
 /**
  * CLIENT-SIDE: Extract reference IDs from content for caching in references column
@@ -7,12 +8,16 @@ import { BaseFileContent, FileType } from '@/lib/types';
  * Phase 6: Moved from server to client - server should be dumb and just save what it receives
  */
 export function extractReferencesFromContent(content: BaseFileContent, type: FileType): number[] {
-  // Handle document types that use content.assets (dashboard, presentation, story)
-  if (
-    type === 'dashboard' ||
-    type === 'presentation' ||
-    type === 'story'
-  ) {
+  // A story's body is the single source of truth: its saved-question dependencies are the
+  // `data-question-id` embeds in content.story (inline questions carry no file id, so they
+  // are not file references). No `assets` field — references derive from the body.
+  if (type === 'story') {
+    return extractSavedQuestionIds((content as any)?.story);
+  }
+
+  // Dashboards have no body — their content IS the ordered `assets` (tiles), so question
+  // dependencies come from the assets manifest.
+  if (type === 'dashboard') {
     const assets = (content as any)?.assets || [];
     return assets
       .filter((a: any) => a.type === 'question' && typeof a.id === 'number')

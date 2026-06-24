@@ -1,9 +1,11 @@
 import { Box, VStack, Text } from '@chakra-ui/react'
-import { formatLargeNumber } from '@/lib/chart/chart-utils'
 import { useRef, useState, useEffect } from 'react'
+import { resolveSingleValueDisplay, type SingleValueItem } from '@/lib/chart/single-value'
+import type { SingleValueConfig } from '@/lib/validation/atlas-schemas'
 
 interface SingleValueProps {
-  values: Array<{ name: string; value: string | number | null }>
+  values: SingleValueItem[]
+  config?: SingleValueConfig | null
 }
 
 type SizeMode = 'lg' | 'sm'
@@ -23,7 +25,13 @@ function useSizeMode(ref: React.RefObject<HTMLDivElement | null>): SizeMode {
   return mode
 }
 
-export const SingleValue = ({ values }: SingleValueProps) => {
+const ALIGN_ITEMS: Record<'left' | 'center' | 'right', 'flex-start' | 'center' | 'flex-end'> = {
+  left: 'flex-start',
+  center: 'center',
+  right: 'flex-end',
+}
+
+export const SingleValue = ({ values, config }: SingleValueProps) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mode = useSizeMode(containerRef)
 
@@ -36,52 +44,59 @@ export const SingleValue = ({ values }: SingleValueProps) => {
   }
 
   const isSmall = mode === 'sm'
-
-  const formatValue = (val: string | number | null): string => {
-    if (val == null) return '—'
-    if (typeof val === 'number') return formatLargeNumber(val)
-    return String(val)
-  }
+  const align = config?.align ?? 'center'
+  const alignItems = ALIGN_ITEMS[align]
 
   return (
     <Box
       ref={containerRef}
       display="flex"
       alignItems="center"
-      justifyContent="center"
+      justifyContent={alignItems === 'center' ? 'center' : 'flex-start'}
       height="100%"
       overflow="hidden"
+      px={align === 'center' ? 0 : 6}
     >
-      <VStack gap={isSmall ? 1 : 2}>
-        {values.map((item) => (
-          <VStack key={item.name} gap={isSmall ? 1 : 2}>
-            {/* Label */}
-            <Text
-              fontSize={isSmall ? 'xs' : 'sm'}
-              fontWeight="700"
-              color="fg.muted"
-              textTransform="uppercase"
-              letterSpacing="0.05em"
-              fontFamily="mono"
-              truncate
-            >
-              {item.name}
-            </Text>
+      <VStack gap={isSmall ? 1 : 2} alignItems={alignItems}>
+        {values.map((item) => {
+          const d = resolveSingleValueDisplay(item, config)
+          return (
+            <VStack key={item.name} gap={isSmall ? 1 : 2} alignItems={alignItems}>
+              {/* Label (hidden when the agent overrides it to an empty string) */}
+              {d.label !== '' && (
+                <Text
+                  fontSize={isSmall ? 'xs' : 'sm'}
+                  fontWeight="700"
+                  color="fg.muted"
+                  textTransform="uppercase"
+                  letterSpacing="0.05em"
+                  fontFamily="mono"
+                  textAlign={align}
+                  style={d.labelStyle}
+                  truncate
+                >
+                  {d.label}
+                </Text>
+              )}
 
-            {/* Value */}
-            <Text
-              fontSize={isSmall ? '4xl' : '6xl'}
-              fontWeight="800"
-              color="fg.default"
-              fontFamily="mono"
-              letterSpacing="-0.02em"
-              lineHeight="1"
-              truncate
-            >
-              {formatValue(item.value)}
-            </Text>
-          </VStack>
-        ))}
+              {/* Value — always the live number; config only styles it */}
+              <Text
+                aria-label={`single value ${item.name}`}
+                fontSize={isSmall ? '4xl' : '6xl'}
+                fontWeight="800"
+                color="fg.default"
+                fontFamily="mono"
+                letterSpacing="-0.02em"
+                lineHeight="1"
+                textAlign={align}
+                style={d.valueStyle}
+                truncate
+              >
+                {d.text}
+              </Text>
+            </VStack>
+          )
+        })}
       </VStack>
     </Box>
   )

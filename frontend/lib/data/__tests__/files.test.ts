@@ -15,7 +15,6 @@ import {
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type {
   QuestionContent,
-  DocumentContent,
   ConnectionContent,
   ContextContent
 } from '@/lib/types';
@@ -117,22 +116,6 @@ describe('Files Data Layer - getTemplate', () => {
           columns: 12,
           items: []
         }
-      });
-    });
-  });
-
-  describe('presentation template', () => {
-    it('should generate presentation template with default slide', async () => {
-      const result = await FilesAPI.getTemplate('presentation', {}, testUser);
-
-      expect(result.fileName).toBe('');
-      const content = result.content as DocumentContent;
-      expect(content.description).toBe('');
-      expect(content.assets).toEqual([]);
-      expect(content.layout).toMatchObject({
-        canvasWidth: 1280,
-        canvasHeight: 720,
-        slides: [{ rectangles: [], arrows: [] }]
       });
     });
   });

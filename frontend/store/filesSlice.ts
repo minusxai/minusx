@@ -373,6 +373,7 @@ const filesSlice = createSlice({
       }
     },
 
+
     /**
      * Replace entire content (not merge)
      * Used by JSON editors where the full content is provided

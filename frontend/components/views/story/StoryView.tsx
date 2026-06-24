@@ -140,6 +140,7 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
             fluid
             editable={canEdit && editing}
             readOnly={readOnly}
+            paramValues={content.parameterValues ?? undefined}
           />
         </Box>
       </Box>

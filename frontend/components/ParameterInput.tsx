@@ -10,7 +10,7 @@ import { LuChevronDown, LuSettings2, LuTriangleAlert, LuBan } from 'react-icons/
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter, QuestionContent } from '@/lib/types';
 import type { QuestionParameterSource, SqlParameterSource } from '@/lib/validation/atlas-schemas';
-import { getTypeColor, getTypeIcon } from '@/lib/sql/sql-params';
+import { getTypeColor, getTypeIcon } from '@/lib/sql/param-type-display';
 import DatePicker from './DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import FileSearchSelect from './shared/FileSearchSelect';
@@ -43,7 +43,7 @@ function formatNumStr(v: string): string {
   return String(parseFloat(n.toFixed(2)));
 }
 
-function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit }: SourceDropdownWidgetProps) {
+export function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit }: SourceDropdownWidgetProps) {
   const augmented = useFile(source.id);
   const content = augmented?.fileState.content as QuestionContent | undefined | null;
 
@@ -77,43 +77,25 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
       : result.sort();
   }, [data, source.column, paramType]);
 
-  // Local filter text — only used while the combobox is open/focused
-  const [filterText, setFilterText] = useState('');
-
-  const filteredCollection = useMemo(() => {
-    const lower = filterText.toLowerCase();
-    const all = values ?? [];
-    if (!lower) return createListCollection({ items: all.map(v => ({ value: v, label: v })) });
-    const prefix: string[] = [];
-    const rest: string[] = [];
-    for (const v of all) {
-      if (v.toLowerCase().startsWith(lower)) prefix.push(v);
-      else if (v.toLowerCase().includes(lower)) rest.push(v);
-    }
-    return createListCollection({ items: [...prefix, ...rest].map(v => ({ value: v, label: v })) });
-  }, [values, filterText]);
-
   // What to show in the input — formatted current committed value
   const defaultDisplayValue = currentValue != null
     ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
     : '';
 
-  // Controlled input display — we own it so Ark UI can't clear it on close.
-  // SourceDropdownWidget is keyed on `value` from the parent, so this state
-  // (and committedRef) automatically reinitializes whenever the committed value
-  // changes externally (cancel, save, dashboard sync, etc.).
+  // Controlled input display, owned locally so typing drives it directly. We do NOT key/remount
+  // on value changes (that lost focus mid-type) and we do NOT resync from the prop in an effect:
+  // for a story `<Param>`, the value only ever changes by the reader typing into THIS widget, so
+  // the local state is always the source of truth. A fresh mount (story reload) re-seeds it from
+  // the committed value via useState's initializer.
   const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
 
-  // Track last committed value so onOpenChange can restore the display on blur-without-select.
-  const committedRef = useRef(defaultDisplayValue);
-
   const commit = (raw: string) => {
-    committedRef.current = raw;
     setInputDisplay(raw);
-    setFilterText('');
     const final: string | number = paramType === 'number' ? (parseFloat(raw) || 0) : raw;
     onChange(final);
   };
+
+  const listId = `param-src-${source.id}-${source.column}`;
 
   return (
     <HStack gap={1}>
@@ -127,81 +109,52 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
       {loading && values === null && <Spinner size="xs" color="accent.teal" />}
 
       {/*
-        inputValue is controlled so Ark UI cannot clear the input on close.
-        onOpenChange restores the display to the last committed value when the user
-        closes the dropdown without selecting (blur).
-        External value changes (cancel, save) are handled by key={value} on the
-        parent <SourceDropdownWidget>, which remounts the entire widget.
+        Native <datalist> autocomplete — NOT a floating popover. This control renders inside the
+        story's SHADOW ROOT (StoryParamControl portals it there). A floating dropdown (Ark UI /
+        floating-ui) cannot measure its anchor across the shadow boundary, so its menu — and its
+        "No matches" empty state — rendered detached in a corner of the window. The browser
+        positions a <datalist> itself, correctly, in any context (shadow root included), with zero
+        positioning code. Explicit LIGHT colors because Chakra surface/fg tokens resolve against the
+        host app's color mode across the shadow boundary (a dark-app token paints this black on a
+        light story). `role=combobox` matches the input-with-list ARIA contract.
       */}
-      <Combobox.Root
-        collection={filteredCollection}
-        inputValue={inputDisplay}
-        onValueChange={(e) => {
-          if (e.value[0] !== undefined) commit(e.value[0]);
+      <Input
+        list={listId}
+        role="combobox"
+        aria-label={`param ${paramName}`}
+        placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
+        value={inputDisplay}
+        bg="white"
+        color="gray.900"
+        borderColor="gray.300"
+        _placeholder={{ color: 'gray.500' }}
+        fontSize="sm"
+        h={ROW_H}
+        minW="120px"
+        fontFamily={paramType === 'number' ? 'mono' : 'inherit'}
+        _focus={{
+          borderColor: 'accent.teal',
+          boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
         }}
-        onInputValueChange={(details) => {
-          setInputDisplay(details.inputValue);
-          setFilterText(details.inputValue);
-        }}
-        onOpenChange={({ open }) => {
-          if (!open) {
-            setInputDisplay(committedRef.current);
-            setFilterText('');
+        onChange={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const raw = e.currentTarget.value;
+            commit(raw);
+            if (onSubmit) {
+              const final: string | number = paramType === 'number' ? (parseFloat(raw) || 0) : raw;
+              onSubmit(paramName, final);
+            }
           }
         }}
-        openOnClick
-        inputBehavior="none"
-        positioning={{ placement: 'bottom-start', gutter: 4 }}
-        size="sm"
-      >
-        <Combobox.Control>
-          <Combobox.Input
-            placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
-            bg="bg.canvas"
-            borderColor="border.muted"
-            fontSize="sm"
-            h={ROW_H}
-            minW="120px"
-            fontFamily={paramType === 'number' ? 'mono' : 'inherit'}
-            _focus={{
-              borderColor: 'accent.teal',
-              boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
-                e.preventDefault();
-                e.stopPropagation();
-                const raw = e.currentTarget.value;
-                commit(raw);
-                if (onSubmit) {
-                  const final: string | number = paramType === 'number'
-                    ? (parseFloat(raw) || 0)
-                    : raw;
-                  onSubmit(paramName, final);
-                }
-              }
-            }}
-          />
-        </Combobox.Control>
-        <Portal>
-          <Combobox.Positioner>
-            <Combobox.Content minW="160px">
-              {loading && values === null ? (
-                <Combobox.Empty>Loading…</Combobox.Empty>
-              ) : filteredCollection.items.length === 0 ? (
-                <Combobox.Empty>No matches</Combobox.Empty>
-              ) : (
-                filteredCollection.items.map(item => (
-                  <Combobox.Item key={item.value} item={item}>
-                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                    <Combobox.ItemIndicator />
-                  </Combobox.Item>
-                ))
-              )}
-            </Combobox.Content>
-          </Combobox.Positioner>
-        </Portal>
-      </Combobox.Root>
+      />
+      <datalist id={listId}>
+        {(values ?? []).map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
     </HStack>
   );
 }
@@ -315,6 +268,7 @@ function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, d
       >
         <Combobox.Control>
           <Combobox.Input
+            aria-label={`param ${paramName}`}
             placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
             bg="transparent"
             border="none"

@@ -11,6 +11,9 @@ import { validateOrgConfig } from '@/lib/validation/config-validators';
 // `verbose` so each error carries the received `data` — needed to report
 // expected-vs-got in formatErrors() below.
 const ajv = new Ajv({ allErrors: true, verbose: true });
+// `format: 'jsx'` marks a string field as a jsx body (drives content⇄jsx); it is not a
+// validation constraint, so register it as a no-op format so Ajv accepts the schema.
+ajv.addFormat('jsx', () => true);
 ajv.addSchema(atlasSchema, 'atlas');
 
 // Validators compiled once at module load — not per-call
@@ -93,14 +96,8 @@ function validateContent(input: ContentValidationInput): string | null {
       return 'vizSettings.pivotConfig is required when type is "pivot"';
     }
   }
-  if (input.type === 'StoryContent') {
-    const assetIds = new Set(input.data.assets.map(a => a.id));
-    for (const m of (input.data.story ?? '').matchAll(/data-question-id="(\d+)"/g)) {
-      if (!assetIds.has(Number(m[1]))) {
-        return `story embeds question ${m[1]} which is not in assets`;
-      }
-    }
-  }
+  // Stories have no assets cross-check: the body IS the source of truth — saved-question
+  // dependencies derive from its `data-question-id` embeds, inline questions live inline.
   return null;
 }
 

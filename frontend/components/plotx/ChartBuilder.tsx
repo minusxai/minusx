@@ -20,7 +20,7 @@ import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
-import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig, VisualizationType } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig, SingleValueConfig, VisualizationType } from '@/lib/types'
 import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/validation/atlas-schemas'
 import { getTimestamp, buildCompactYLabel } from '@/lib/chart/chart-utils'
@@ -70,6 +70,7 @@ interface ChartBuilderProps {
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void
   trendConfig?: TrendConfig
   onTrendConfigChange?: (config: TrendConfig) => void
+  singleValueConfig?: SingleValueConfig
   exportBranding?: Partial<OrgBranding>
   /** Click-to-drill-down on data points. Off for read-only embeds (shared story). */
   enableDrilldown?: boolean
@@ -83,7 +84,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding, enableDrilldown = true, onMapReady }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, singleValueConfig, exportBranding, enableDrilldown = true, onMapReady }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const configPalette = config.chartColorPalette
@@ -435,10 +436,13 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
         <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
           {hasData ? (
-            <SingleValue values={yAxisColumns.map(col => ({
-              name: columnFormats[col]?.alias || col,
-              value: rows[0]?.[col] ?? null,
-            }))} />
+            <SingleValue
+              values={yAxisColumns.map(col => ({
+                name: columnFormats[col]?.alias || col,
+                value: rows[0]?.[col] ?? null,
+              }))}
+              config={singleValueConfig}
+            />
           ) : (
             <ChartError variant="info" title="No data to display" message="Drag metric columns to see values" />
           )}

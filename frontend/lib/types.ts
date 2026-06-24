@@ -14,7 +14,7 @@ export type { FileType };
 export type { FileState };
 export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
-  PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode,
+  PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, VizSettings, AxisConfig, AxisScale, VisualizationStyleConfig, ChartAnnotation, TrendConfig, TrendCompareMode, SingleValueConfig,
   QuestionParameter, QuestionReference,
   QuestionContent,
   FileReference, InlineAsset,
@@ -91,18 +91,6 @@ export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
   return ['text', 'image', 'divider'].includes(asset.type);
 }
 
-export interface PresentationSlide {
-  rectangles: Rectangle[];  // Canvas elements with positioning and styling
-  arrows: Arrow[];          // Connections between rectangles
-}
-
-export interface PresentationLayout {
-  canvasWidth: number;
-  canvasHeight: number;
-  slides: PresentationSlide[];
-  theme?: string;
-}
-
 export interface ReportLayout {
   pageSize?: 'letter' | 'a4';
 }
@@ -133,42 +121,6 @@ export interface CompressedQueryResult {
   /** Fully resolved SQL, propagated from QueryResult so LLM-facing
    *  compressions surface the actual executed query alongside the data. */
   finalQuery?: string;
-}
-
-export interface Rectangle {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number; // degrees
-  assetId: string; // Reference to asset in Document.assets
-  zIndex: number;
-  shapeType?: 'rectangle' | 'oval' | 'triangle' | 'diamond' | 'arrow' | 'star';
-  backgroundColor?: string;
-  borderColor?: string;
-  borderWidth?: number;
-  textAlign?: 'left' | 'center' | 'right';
-  backgroundImage?: string; // URL for background image
-  textColor?: string; // Text color for markdown content
-}
-
-export interface Arrow {
-  id: string;
-  fromId: string; // rectangle ID
-  toId: string; // rectangle ID
-  fromAnchor: 'top' | 'right' | 'bottom' | 'left' | 'center';
-  toAnchor: 'top' | 'right' | 'bottom' | 'left' | 'center';
-  color: string;
-  strokeWidth: number;
-}
-
-export interface SlideData {
-  version: string;
-  canvasWidth: number;
-  canvasHeight: number;
-  rectangles: Rectangle[];
-  arrows: Arrow[];
 }
 
 // Chat attachment types
@@ -1270,6 +1222,8 @@ export interface CompressedFileState {
   isDirty: boolean;             // true if unpublished changes exist
   queryResultId?: string;        // computed hash of query+params+database (questions only)
   content: FileState['content']; // merged: { ...content, ...persistableChanges }
+  markup?: string;               // File Architecture v2 — the agent's edit surface (jsx body
+                                 // for documents, keyvalue→XML for props); mirrors buildCurrentFileStr
 }
 
 export interface CompressedAugmentedFile {

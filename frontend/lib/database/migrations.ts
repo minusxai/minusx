@@ -7,6 +7,7 @@ import { InitData, OrgData } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION, MINIMUM_SUPPORTED_DATA_VERSION } from './constants';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import workspaceTemplate from './workspace-template.json';
+import { remapStoryQuestionIds } from '@/lib/data/story-question';
 
 export type DataMigration = (data: InitData) => InitData;
 export type SchemaMigration = null;  // Null means "recreate DB with new schema"
@@ -65,6 +66,11 @@ function v36ShiftUserFileIds(data: InitData): InitData {
           ? { layout: (c.layout as Array<{ id: number } & Record<string, unknown>>).map(item => ({ ...item, id: remap(item.id) })) }
           : {}),
       };
+    }
+    // Story: the body is the source of truth — remap the saved-question ids it embeds
+    // (data-question-id) and any <Param> import sources (data-param-source-id).
+    if (typeof c.story === 'string') {
+      return { ...c, story: remapStoryQuestionIds(c.story, remap) };
     }
     return content;
   }

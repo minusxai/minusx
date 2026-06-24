@@ -1,5 +1,6 @@
 import 'server-only';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
+import { resolveConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
 import { getNodeConnector } from '@/lib/connections';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { connectionTypeToDialect } from '@/lib/types';
@@ -33,10 +34,15 @@ export async function runQuery(
     throw new Error(`Connection not found: ${databaseName}`);
   }
 
-  const { type, config } = rawConn;
+  const { type } = rawConn;
   if (type === 'internal_db' && user.mode !== 'internals') {
     throw new Error('internal_db connections are only available in internals mode');
   }
+
+  // File Architecture v2: the stored config holds @SECRETS/… refs — resolve them to real
+  // credentials here, server-side, right before handing config to the connector. Resolved
+  // values never leave the server (not returned, not logged, not in markup).
+  const config = await resolveConnectionSecrets(rawConn.config);
 
   const connector = getNodeConnector(databaseName, type, config);
   if (!connector) {

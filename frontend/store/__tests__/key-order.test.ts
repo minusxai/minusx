@@ -1,18 +1,30 @@
 /**
- * Tests for JSON key ordering consistency in the EditFile tool flow.
+ * Tests for deterministic MARKUP projection in the EditFile tool flow (File Arch v2).
  *
- * Root cause of production EditFile failures: DashboardLayoutItem key order
- * varies between write paths (PGLite JSONB sorts length-first-then-alpha,
- * LLM writes arbitrary order), so oldMatch strings don't match
- * buildCurrentFileStr output.
+ * History: the agent's file-edit surface used to be escaped JSON, and the JSON
+ * key-ordering of layout items (DashboardLayoutItem `{id,x,y,w,h}`) varied between
+ * write paths (PGLite JSONB sorts length-first-then-alpha, the LLM wrote arbitrary
+ * order). That made `oldMatch` strings fail to match `buildCurrentFileStr` output —
+ * the bug this file used to guard against.
  *
- * Fix: sortObjectKeysDeep called at both Redux write points:
- *   1. dbFileToFileState (compress-augmented.ts) — normalises on DB load
- *   2. setEdit / setFullContent (filesSlice.ts) — normalises on LLM writes
+ * Under the markup model that whole class of bug is DISSOLVED: a dashboard projects to
+ * a deterministic, schema-driven jsx document (`<assets>`/`<layout>` with nested `<item>`
+ * elements and scalar position tags like `<w>6</w>`). Layout positions are emitted in a
+ * fixed, schema-defined order, so the order in which `content` keys happen to be stored
+ * no longer affects the projection.
+ *
+ * The invariants this file now guards:
+ *   1. buildCurrentFileStr produces deterministic, stable markup after a DB round-trip.
+ *   2. editFileStr with a markup oldMatch (a layout-item position element) succeeds
+ *      and updates Redux.
+ *   3. Re-deriving markup after setEdit with reordered content keys yields IDENTICAL
+ *      markup — the projection is independent of content key order (the new guarantee
+ *      that replaces the old key-order fix).
  */
 import { getTestDbPath, initTestDatabase } from './test-utils';
 import { readFiles, buildCurrentFileStr, editFileStr } from '@/lib/api/file-state';
 import { setEdit } from '@/store/filesSlice';
+import { fileToMarkup } from '@/lib/data/file-markup';
 import { DashboardContent } from '@/lib/types';
 import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
@@ -34,9 +46,34 @@ vi.mock('@/store/store', () => ({
   getStore: () => testStore,
 }));
 
-describe('key-order - JSON key ordering consistency', () => {
+describe('key-order - deterministic markup projection', () => {
   const dbPath = getTestDbPath('key_order');
   let dashId: number;
+
+  // Canonical markup the dashboard projects to. Under the uniform schema-driven
+  // content⇄jsx converter, assets and layout nest as `<item>` elements with scalar
+  // child tags; layout positions are nested scalar elements (`<w>6</w>`), not jsx
+  // attributes — but the projection is still fixed by the schema, independent of
+  // how the underlying content keys happen to be ordered.
+  const EXPECTED_MARKUP =
+    '<assets>\n' +
+    '  <item>\n' +
+    '    <type>question</type>\n' +
+    '    <id>99</id>\n' +
+    '  </item>\n' +
+    '</assets>\n' +
+    '<layout>\n' +
+    '  <columns>12</columns>\n' +
+    '  <items>\n' +
+    '    <item>\n' +
+    '      <id>99</id>\n' +
+    '      <x>0</x>\n' +
+    '      <y>0</y>\n' +
+    '      <w>6</w>\n' +
+    '      <h>4</h>\n' +
+    '    </item>\n' +
+    '  </items>\n' +
+    '</layout>';
 
   function setupStore() {
     return configureStore({
@@ -70,8 +107,9 @@ describe('key-order - JSON key ordering consistency', () => {
     await initTestDatabase(dbPath);
 
     const { DocumentDB } = await import('@/lib/database/documents-db');
-    // Insert with template/frontend insertion order {id, x, y, w, h}.
-    // PGLite JSONB will round-trip to {h, w, x, y, id} (1-char keys first, then 2-char).
+    // Insert with frontend insertion order {id, x, y, w, h}. PGLite JSONB will
+    // round-trip the layout item to a different key order ({h, w, x, y, id}) —
+    // which, under the markup model, must NOT affect the projected attributes.
     dashId = await DocumentDB.create(
       'key-order-dashboard',
       '/org/key-order-dashboard',
@@ -93,82 +131,83 @@ describe('key-order - JSON key ordering consistency', () => {
   });
 
   /**
-   * Case 1 — JSONB round-trip changes key order (dbFileToFileState source)
+   * Case 1 — buildCurrentFileStr produces deterministic markup after a DB round-trip.
    *
    * Given: dashboard inserted into DB with layout items in {id,x,y,w,h} order
-   * When:  file loaded via readFiles → dbFileToFileState
-   * Then:  buildCurrentFileStr contains items in canonical alphabetical order {h,id,w,x,y}
-   *
-   * Red reason: dbFileToFileState doesn't normalise; PGLite returns {h,w,x,y,id}.
+   * When:  file loaded via readFiles and buildCurrentFileStr called (twice)
+   * Then:  the markup equals the canonical projection and is byte-identical on repeat,
+   *        regardless of how PGLite JSONB reordered the underlying content keys.
    */
-  it('Case 1: buildCurrentFileStr produces canonical key order after DB round-trip', async () => {
+  it('Case 1: buildCurrentFileStr produces deterministic markup after DB round-trip', async () => {
     await readFiles([dashId]);
 
     const state = testStore.getState();
-    const built = buildCurrentFileStr(state as any, dashId);
-    expect(built.success).toBe(true);
-    if (!built.success) return;
+    const first = buildCurrentFileStr(state as any, dashId);
+    expect(first.success).toBe(true);
+    if (!first.success) return;
 
-    // PGLite JSONB sorts keys by length-first then alpha:
-    //   1-char: h, w, x, y  →  2-char: id
-    //   Result: "h":4,"w":6,"x":0,"y":0,"id":99
-    //
-    // Canonical alphabetical (h < id < w < x < y):
-    //   Result: "h":4,"id":99,"w":6,"x":0,"y":0
-    //
-    // After fix, dbFileToFileState normalises via sortObjectKeysDeep.
-    expect(built.fullFileStr).toContain('"h":4,"id":99,"w":6,"x":0,"y":0');
+    // Matches the canonical projection computed straight from content.
+    expect(first.fullFileStr).toBe(EXPECTED_MARKUP);
+    expect(first.fullFileStr).toBe(fileToMarkup('dashboard', first.mergedContent));
+
+    // Stable: building again yields byte-identical markup.
+    const second = buildCurrentFileStr(testStore.getState() as any, dashId);
+    expect(second.success).toBe(true);
+    if (!second.success) return;
+    expect(second.fullFileStr).toBe(first.fullFileStr);
   });
 
   /**
-   * Case 2 — EditFile write stores one key order; subsequent EditFile expects canonical order
+   * Case 2 — editFileStr with a markup oldMatch succeeds and updates Redux.
    *
-   * Given: setEdit called with layout items in LLM-written {h,w,x,y,id} order
-   * When:  editFileStr uses canonical-order oldMatch {h,id,w,x,y} for that same item
-   * Then:  editFileStr succeeds
-   *
-   * Red reason: setEdit stores LLM-written key order; canonical oldMatch doesn't match.
+   * Given: the loaded dashboard projected to markup
+   * When:  editFileStr changes a layout-item position element (<w>6</w> → <w>8</w>)
+   * Then:  the edit applies and the new layout width is reflected in Redux + re-projected markup
    */
-  it('Case 2: editFileStr with canonical oldMatch succeeds after setEdit with LLM-written key order', async () => {
+  it('Case 2: editFileStr with a markup oldMatch (layout position) updates Redux', async () => {
     await readFiles([dashId]);
 
-    // Simulate LLM writing a layout item in non-canonical {h,w,x,y,id} order
-    testStore.dispatch(setEdit({
-      fileId: dashId,
-      edits: {
-        layout: {
-          columns: 12,
-          items: [{ h: 4, w: 4, x: 6, y: 0, id: 100 }],
-        },
-      } as any,
-    }));
-
-    // A subsequent edit uses canonical-order oldMatch {h,id,w,x,y}
     const result = await editFileStr({
       fileId: dashId,
-      oldMatch: '"h":4,"id":100,"w":4,"x":6,"y":0',
-      newMatch: '"h":6,"id":100,"w":4,"x":6,"y":0',
+      oldMatch: '<w>6</w>',
+      newMatch: '<w>8</w>',
     });
 
     expect(result.success).toBe(true);
+
+    // Redux content reflects the new width.
+    const built = buildCurrentFileStr(testStore.getState() as any, dashId);
+    expect(built.success).toBe(true);
+    if (!built.success) return;
+    const item = (built.mergedContent as DashboardContent).layout!.items![0];
+    expect(item.w).toBe(8);
+    expect(item).toMatchObject({ id: 99, x: 0, y: 0, h: 4 });
+
+    // Re-projected markup carries the edited width and nothing else changed.
+    expect(built.fullFileStr).toContain('<w>8</w>');
   });
 
   /**
-   * Case 3 — buildCurrentFileStr always produces canonical key order
+   * Case 3 — markup is independent of content key order.
    *
-   * Given: dashboard state in Redux with items in {h,w,x,y,id} order (via setEdit)
+   * Given: dashboard state mutated via setEdit with layout items in a DIFFERENT key
+   *        order ({h,w,x,y,id}) than the original ({id,x,y,w,h})
    * When:  buildCurrentFileStr is called
-   * Then:  every layout item in the resulting file string has keys in alphabetical order
-   *
-   * Red reason: setEdit doesn't normalise; encodeFileStr preserves insertion order.
+   * Then:  the projected markup is byte-identical to the canonical projection — the
+   *        element order is fixed by the schema-driven converter, not by content key order.
    */
-  it('Case 3: buildCurrentFileStr produces canonical key order after setEdit with wrong-order content', async () => {
+  it('Case 3: re-deriving markup after setEdit with reordered content keys yields identical markup', async () => {
     await readFiles([dashId]);
 
-    // Simulate setEdit storing {h,w,x,y,id} order (non-canonical, as LLM might write)
+    const before = buildCurrentFileStr(testStore.getState() as any, dashId);
+    expect(before.success).toBe(true);
+    if (!before.success) return;
+
+    // Same item values, deliberately different key order, as an LLM might write.
     testStore.dispatch(setEdit({
       fileId: dashId,
       edits: {
+        assets: [{ type: 'question', id: 99 }],
         layout: {
           columns: 12,
           items: [{ h: 4, w: 6, x: 0, y: 0, id: 99 }],
@@ -176,14 +215,11 @@ describe('key-order - JSON key ordering consistency', () => {
       } as any,
     }));
 
-    const state = testStore.getState();
-    const built = buildCurrentFileStr(state as any, dashId);
-    expect(built.success).toBe(true);
-    if (!built.success) return;
+    const after = buildCurrentFileStr(testStore.getState() as any, dashId);
+    expect(after.success).toBe(true);
+    if (!after.success) return;
 
-    // Non-canonical {h,w,x,y,id} order must NOT appear
-    expect(built.fullFileStr).not.toContain('"h":4,"w":6,"x":0,"y":0,"id":99');
-    // Canonical {h,id,w,x,y} order MUST appear
-    expect(built.fullFileStr).toContain('"h":4,"id":99,"w":6,"x":0,"y":0');
+    expect(after.fullFileStr).toBe(EXPECTED_MARKUP);
+    expect(after.fullFileStr).toBe(before.fullFileStr);
   });
 });

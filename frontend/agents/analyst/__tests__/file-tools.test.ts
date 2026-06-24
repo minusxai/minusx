@@ -19,6 +19,8 @@ import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner
 import { FilesAPI } from '@/lib/data/files.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { TOOL_DEFAULT_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { getQueryHash } from '@/lib/utils/query-hash';
+import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent, FolderContent, DocumentContent, CompressedAugmentedFile, ReadFilesResult } from '@/lib/types';
 import {
@@ -151,6 +153,22 @@ describe('ReadFiles', () => {
     //    so tool output === readFilesServer === live AppState.
     const appState = await readFilesServer([dash.data.id], ADMIN, { maxChars: TOOL_DEFAULT_LIMIT_CHARS });
     expect(out.files).toEqual(appState);
+  });
+
+  it('runs a story\'s INLINE questions and includes their query results (live numbers for the agent)', async () => {
+    const inlineQuery = 'SELECT 42 AS answer';
+    const body = `<div class="story"><h1>KPI</h1>${inlineQuestionToPlaceholder({ query: inlineQuery, connection: 'test', vizSettings: { type: 'single_value', yCols: ['answer'] } })}</div>`;
+    const story = await FilesAPI.createFile(
+      { name: 'inline-kpi-story', path: `${TEST_FOLDER}/inline-kpi-story`, type: 'story', content: { description: 'x', story: body } as unknown as DocumentContent },
+      ADMIN,
+    );
+
+    const out = await readFilesServer([story.data.id], ADMIN, { executeQueries: true, maxChars: TOOL_DEFAULT_LIMIT_CHARS });
+    // The inline question (no saved file, no reference) was executed and its result attached,
+    // keyed by the SAME query hash the client cache uses. Previously inline questions were skipped.
+    const expectedId = getQueryHash(inlineQuery, {}, 'test');
+    const ids = out[0].queryResults.map(r => r.id);
+    expect(ids).toContain(expectedId);
   });
 
   it('enforces ACL — restricted viewer cannot read a file outside their home folder', async () => {

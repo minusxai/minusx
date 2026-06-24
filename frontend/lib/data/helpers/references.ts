@@ -17,7 +17,6 @@ export async function extractReferenceIds(
   // Phase 6: For document types, return cached references from DB column
   if (
     file.type === 'dashboard' ||
-    file.type === 'presentation' ||
     file.type === 'notebook' ||
     file.type === 'question'
   ) {

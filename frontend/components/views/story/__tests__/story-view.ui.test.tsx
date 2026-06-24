@@ -24,6 +24,12 @@ vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', () => ({
     React.createElement('div', { 'aria-label': `Embedded question ${questionId}` }),
 }));
 
+vi.mock('@/components/containers/EmbeddedQuestionContainer', () => ({
+  __esModule: true,
+  default: ({ question }: { question: { query: string; connection_name: string; vizSettings: { type: string } } }) =>
+    React.createElement('div', { 'aria-label': `Inline question ${question.vizSettings.type}` }, question.query),
+}));
+
 import StoryView from '@/components/views/story/StoryView';
 
 // Real-world Google Fonts @import — note the SEMICOLONS inside the URL
@@ -40,11 +46,10 @@ const STORY =
 
 const content: StoryContent = {
   description: 'demo',
-  assets: [{ type: 'question', id: 14 }],
   story: STORY,
 };
 
-const emptyContent: StoryContent = { description: null, assets: [], story: null };
+const emptyContent: StoryContent = { description: null, story: null };
 
 /** The story renders inside a shadow root on the story host. */
 function storyRoot(): ShadowRoot {
@@ -96,6 +101,17 @@ describe('StoryView', () => {
     renderWithProviders(<StoryView content={content} />);
     await waitFor(() => {
       expect(within(storyRoot() as unknown as HTMLElement).getByLabelText('Embedded question 14')).toBeTruthy();
+    });
+  });
+
+  it('hydrates an INLINE <Question query=…> placeholder with a live embedded question', async () => {
+    const inlineStory =
+      '<div class="hs"><h2>Live KPI</h2>' +
+      '<div data-question-inline="{&quot;query&quot;:&quot;SELECT SUM(mrr) AS mrr FROM metrics&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;single_value&quot;}}" style="width:100%;height:200px"></div></div>';
+    renderWithProviders(<StoryView content={{ description: null, story: inlineStory }} />);
+    await waitFor(() => {
+      const el = within(storyRoot() as unknown as HTMLElement).getByLabelText('Inline question single_value');
+      expect(el.textContent).toContain('SELECT SUM(mrr) AS mrr FROM metrics');
     });
   });
 

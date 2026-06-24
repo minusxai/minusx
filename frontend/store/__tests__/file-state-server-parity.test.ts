@@ -367,8 +367,8 @@ describe('Client-Server File State Parity', () => {
     // ------------------------------------------------------------------
     const editResult = await editFileStr({
       fileId: paramQuestionId,
-      oldMatch: '"description":"Sales with limit param"',
-      newMatch: '"description":"Sales with limit param (edited)"',
+      oldMatch: '<description>Sales with limit param</description>',
+      newMatch: '<description>Sales with limit param (edited)</description>',
     });
     expect(editResult.success).toBe(true);
 

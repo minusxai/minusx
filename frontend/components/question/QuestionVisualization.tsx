@@ -479,6 +479,7 @@ function QuestionVisualizationInner({
                       onAnnotationsChange={onAnnotationsChange}
                       trendConfig={currentState.vizSettings?.trendConfig ?? undefined}
                       onTrendConfigChange={onTrendConfigChange}
+                      singleValueConfig={currentState.vizSettings?.singleValueConfig ?? undefined}
                       exportBranding={appConfig.branding}
                       enableDrilldown={config.enableDrilldown !== false}
                       onMapReady={onMapReady}

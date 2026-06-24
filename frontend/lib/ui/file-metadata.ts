@@ -1,4 +1,4 @@
-import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuPresentation, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
+import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -53,14 +53,6 @@ export const FILE_TYPE_METADATA = {
     label: 'Notebook',
     icon: LuNotebook,
     color: 'accent.warning',      // Orange (#f39c12)
-    category: 'analytics',
-    supported: false,
-    h: 'none',
-  },
-  presentation: {
-    label: 'Presentation',
-    icon: LuPresentation,
-    color: 'accent.secondary',    // Amethyst purple (#9b59b6)
     category: 'analytics',
     supported: false,
     h: 'none',

@@ -1,6 +1,4 @@
 import { QuestionParameter } from '../types';
-import { LuType, LuHash, LuCalendar } from 'react-icons/lu';
-import { IconType } from 'react-icons/lib';
 
 /**
  * Extract parameter names from SQL query using :param_name syntax.
@@ -26,9 +24,59 @@ export function extractParametersFromSQL(sql: string): string[] {
 }
 
 /**
- * Infer parameter type from parameter name
+ * An empty string is meaningless for a **number** param — engines can't cast `''` to a number,
+ * and the agent's `(:p IS NULL OR … >= :p)` guards expect `null` to mean "no filter". So `''`
+ * for a number param is None. Text `''` is a real value; `null` (Set to None) is preserved.
  */
-export function inferParameterType(paramName: string): 'text' | 'number' | 'date' {
+const isEmptyNumeric = (v: unknown, type: string | undefined): boolean => v === '' && type === 'number';
+
+/** name → declared type map, for the chokepoint coercion (`getQueryResult`'s `parameterTypes`). */
+export function paramTypeMap(params: QuestionParameter[] | undefined): Record<string, 'text' | 'number' | 'date'> {
+  const m: Record<string, 'text' | 'number' | 'date'> = {};
+  for (const p of params ?? []) m[p.name] = p.type;
+  return m;
+}
+
+/**
+ * The single coercion (used at the `getQueryResult` chokepoint): map an empty-string value of a
+ * number-typed param to None (`null`), preserving every other value. Pure; no-ops without types.
+ */
+export function noneifyEmptyNumericParams(
+  values: Record<string, unknown>,
+  types: Record<string, 'text' | 'number' | 'date'> | undefined,
+): Record<string, unknown> {
+  if (!values || !types) return values ?? {};
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (isEmptyNumeric(v, types[k])) { out[k] = null; changed = true; } else out[k] = v;
+  }
+  return changed ? out : values;
+}
+
+/**
+ * Assemble the values dict to execute a question with, from its declared params and the
+ * available value sources (explicit external values from a dashboard/story take precedence
+ * over the question's own saved values). A missing number param defaults to None, a missing
+ * text param to `''`; empty-numeric → None is applied via the shared rule.
+ */
+export function buildQueryParamValues(
+  params: QuestionParameter[],
+  ownValues: Record<string, unknown> | undefined,
+  externalValues: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of params) {
+    let v: unknown = externalValues && p.name in externalValues ? externalValues[p.name] : ownValues?.[p.name];
+    if (v === undefined) v = p.type === 'number' ? null : '';
+    if (isEmptyNumeric(v, p.type)) v = null;
+    out[p.name] = v;
+  }
+  return out;
+}
+
+/** Infer a parameter's type from its name (internal — used by syncParametersWithSQL). */
+function inferParameterType(paramName: string): 'text' | 'number' | 'date' {
   const lowerName = paramName.toLowerCase();
 
   // Date patterns
@@ -60,60 +108,12 @@ export function inferParameterType(paramName: string): 'text' | 'number' | 'date
   return 'text';
 }
 
-/**
- * Generate label from parameter name (convert snake_case to Title Case)
- */
-export function generateLabel(paramName: string): string {
+/** snake_case → Title Case label (internal — used by syncParametersWithSQL). */
+function generateLabel(paramName: string): string {
   return paramName
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
-}
-
-/**
- * Get icon component for parameter/column type
- */
-export function getTypeIcon(type: 'text' | 'number' | 'date'): IconType {
-  switch (type) {
-    case 'number':
-      return LuHash;
-    case 'date':
-      return LuCalendar;
-    case 'text':
-    default:
-      return LuType;
-  }
-}
-
-/**
- * Get semantic color token for parameter/column type
- * Matches the color scheme used in Table component
- */
-export function getTypeColor(type: 'text' | 'number' | 'date'): string {
-  switch (type) {
-    case 'number':
-      return 'accent.primary'; // blue (#2980b9 - Belize Hole)
-    case 'date':
-      return 'accent.secondary'; // purple (#9b59b6 - Amethyst)
-    case 'text':
-    default:
-      return 'accent.warning'; // orange (#f39c12)
-  }
-}
-
-/**
- * Get hex color value for type (for use in charts/canvas)
- */
-export function getTypeColorHex(type: 'text' | 'number' | 'date'): string {
-  switch (type) {
-    case 'number':
-      return '#2980b9'; // Belize Hole (blue)
-    case 'date':
-      return '#9b59b6'; // Amethyst (purple)
-    case 'text':
-    default:
-      return '#f39c12'; // Orange
-  }
 }
 
 /**

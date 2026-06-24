@@ -6,6 +6,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getNodeConnector } from '@/lib/connections';
 import { fuzzyMatch } from '@/lib/connections/fuzzy-search';
+import { resolveConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
 
 /** Args for the FuzzyMatch tool. */
 export interface FuzzyMatchToolArgs {
@@ -59,7 +60,7 @@ export async function executeFuzzyMatch(
     };
   }
 
-  const connector = getNodeConnector(connection_id, content.type, content.config);
+  const connector = getNodeConnector(connection_id, content.type, await resolveConnectionSecrets(content.config));
   if (!connector) {
     throw new Error(`No connector available for type: ${content.type}`);
   }

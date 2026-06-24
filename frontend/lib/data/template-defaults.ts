@@ -28,12 +28,6 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return { description: '', assets: [], story: null } as StoryContent;
     case 'notebook':
       return { description: '', cells: [] } as NotebookContent;
-    case 'presentation':
-      return {
-        description: '',
-        assets: [],
-        layout: { canvasWidth: 1280, canvasHeight: 720, slides: [{ rectangles: [], arrows: [] }] },
-      } as DocumentContent;
     case 'connection':
       return { type: 'bigquery', config: {} } as ConnectionContent;
     case 'folder':

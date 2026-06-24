@@ -12,7 +12,6 @@ import QuestionContainerV2 from '@/components/containers/QuestionContainerV2';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 import NotebookContainerV2 from '@/components/containers/NotebookContainerV2';
 import StoryContainerV2 from '@/components/containers/StoryContainerV2';
-import PresentationContainerV2 from '@/components/containers/PresentationContainerV2';
 import ContextContainerV2 from '@/components/containers/ContextContainerV2';
 import ConnectionContainerV2 from '@/components/containers/ConnectionContainerV2';
 import ConversationContainerV2 from '@/components/containers/ConversationContainerV2';
@@ -50,7 +49,6 @@ export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileCompone
   dashboard: DashboardContainerV2,
   notebook: NotebookContainerV2,
   story: StoryContainerV2,
-  presentation: PresentationContainerV2,
   context: ContextContainerV2,
   connection: ConnectionContainerV2,
   conversation: ConversationContainerV2,

@@ -301,7 +301,7 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   // Validate-before-create: invalid content is rejected up front, no draft left
   // -------------------------------------------------------------------------
 
-  it('rejects invalid vizSettings BEFORE creating any draft', async () => {
+  it('flags invalid vizSettings as feedback (permissive: still creates the file)', async () => {
     const result = await executeToolCall(
       createFileTool({
         file_type: 'question', path: '/org', name: 'Bad Viz',
@@ -314,14 +314,14 @@ describe('CreateFile tool — draft file path conflict validation', () => {
       MOCK_DB,
     );
 
+    // Permissive: the file IS created and the schema issue comes back as non-blocking
+    // feedback (the agent iterates; Publish is the validation gate).
     const parsed = parseContent(result);
-    expect(parsed.success).toBe(false);
-    expect(parsed.error).toMatch(/expected string, got object/);
-    expect(parsed.error).toMatch(/xCols/);
+    expect(parsed.success).toBe(true);
+    expect((parsed.validation ?? []).join(' ')).toMatch(/xCols/);
 
-    // Nothing persisted — the create never ran (validation is up front, in-memory).
     const questions = Object.values((testStore.getState() as any).files.files).filter((f: any) => f?.type === 'question');
-    expect(questions).toHaveLength(0);
+    expect(questions).toHaveLength(1);
   });
 
   it('creates the draft when vizSettings are valid (string columns)', async () => {

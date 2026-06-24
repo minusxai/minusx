@@ -20,7 +20,7 @@
       "role": "viewer",
       "allowedTypes": ["question", "dashboard", "story", "notebook", "folder", "context", "connection", "conversation", "chat", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
       "createTypes": ["conversation", "chat", "session"],
-      "viewTypes": ["dashboard", "story", "notebook", "folder", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run"]
+      "viewTypes": ["question", "dashboard", "story", "notebook", "folder", "conversation", "chat", "session", "report", "alert", "alert_run", "report_run"]
     },
     {
       "type": "createLocationRestrictions",

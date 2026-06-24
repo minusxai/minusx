@@ -36,6 +36,7 @@ import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHom
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
+import { extractConnectionSecrets, mergeExistingSecretRefs } from '@/lib/secrets/connection-secrets.server';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
 import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -440,7 +441,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
-    const contentToCreate = content;
+    let contentToCreate = content;
+    // File Architecture v2: a new connection's raw credentials go to the server-only secrets
+    // store; the document persists @SECRETS/… refs.
+    if (type === 'connection' && (content as ConnectionContent | null)?.config) {
+      const cc = content as ConnectionContent;
+      contentToCreate = { ...cc, config: await extractConnectionSecrets(name, cc.config) } as BaseFileContent;
+    }
 
     // Validate content schema before writing to DB
     const createValidationError = validateFileState({ type, content: contentToCreate, name, path: finalPath });
@@ -540,6 +547,16 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'connection') {
       const { schema, ...connectionContentWithoutSchema } = content as ConnectionContent;
       const previousSchema = (existingFile.content as ConnectionContent | null)?.schema;
+      // File Architecture v2: move raw credentials out of the document into the server-only
+      // secrets store; the persisted config holds @SECRETS/… refs instead.
+      if (connectionContentWithoutSchema.config) {
+        // getSafeConfig strips secrets on load, so an UNCHANGED credential comes back absent
+        // (or ""). Carry the existing @SECRETS ref forward so an edit to a non-secret field
+        // doesn't wipe the password; a newly-entered raw value is extracted as normal.
+        const existingConfig = ((existingFile.content as ConnectionContent | null)?.config ?? {}) as Record<string, unknown>;
+        const merged = mergeExistingSecretRefs(connectionContentWithoutSchema.config, existingConfig);
+        connectionContentWithoutSchema.config = await extractConnectionSecrets(name, merged);
+      }
       contentToSave = (previousSchema
         ? { ...connectionContentWithoutSchema, schema: previousSchema }
         : connectionContentWithoutSchema) as BaseFileContent;
@@ -698,9 +715,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
       case 'notebook':
         return { content: getTemplateDefaults('notebook')!, fileName: '' };
-
-      case 'presentation':
-        return { content: getTemplateDefaults('presentation')!, fileName: '' };
 
       case 'connection':
         return { content: getTemplateDefaults('connection')!, fileName: '' };

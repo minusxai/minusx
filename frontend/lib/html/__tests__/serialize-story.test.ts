@@ -20,6 +20,9 @@ function makeRoot(): HTMLDivElement {
     '<div data-question-id="5" data-mx-osz="width:100%;height:420px" contenteditable="false">' +
     '<div class="rendered-chart">live echarts junk</div>' +
     '</div>' +
+    '<div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;}" data-mx-osz="width:100%;height:200px" contenteditable="false">' +
+    '<div class="rendered-chart">inline echarts junk</div>' +
+    '</div>' +
     '</div>';
   return root;
 }
@@ -45,6 +48,15 @@ describe('serializeEditedStory', () => {
     // rendered chart DOM and the size-snapshot attr are gone
     expect(out).not.toContain('rendered-chart');
     expect(out).not.toContain('data-mx-osz');
+  });
+
+  it('restores an INLINE question embed to an empty placeholder with its authored size + def', () => {
+    const out = serializeEditedStory(makeRoot(), []);
+    expect(out).toContain('data-question-inline');
+    expect(out).toContain('width:100%;height:200px');
+    // the inline def survives, the rendered chart + size-snapshot do not
+    expect(out).toContain('SELECT 1');
+    expect(out).not.toContain('inline echarts junk');
   });
 
   it('strips all contenteditable attributes', () => {

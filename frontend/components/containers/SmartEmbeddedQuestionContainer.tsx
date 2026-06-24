@@ -63,7 +63,7 @@ function SmartEmbeddedQuestionContainerInner({
   const { fileState: file } = useFile(questionId) ?? {};
   const loading = !file || file.loading;
 
-  // Get merged content (includes any edits)
+  // Get merged content (includes any edits) — a proper QuestionContent for the embedded question.
   const mergedContent = useAppSelector(state =>
     selectMergedContent(state, questionId)
   ) as QuestionContent | undefined;
