@@ -16,7 +16,8 @@ import { FilesAPI } from '../data/files';
 import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp, setFileJsx, getFileJsx } from '@/lib/api/file-state';
+import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp, setFileJsx } from '@/lib/api/file-state';
+import { markupToContent } from '@/lib/data/file-markup';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
@@ -767,68 +768,8 @@ registerFrontendTool('EditFile', async (args, _context) => {
   };
 });
 
-/**
- * SetJsx - Replace a file's entire static-JSX body (File Architecture v2).
- * Validates (client + server), persists immediately, reflects in Redux.
- */
-registerFrontendTool('SetJsx', async (args, _context) => {
-  const { fileId, jsx } = args;
-  const errors = validateJsxSource(jsx, JSX_COMPONENT_NAMES);
-  if (errors.length > 0) {
-    const err = `Invalid jsx: ${errors.map(e => e.message).join('; ')}`;
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
-  }
-  try {
-    await setFileJsx(fileId, jsx);
-  } catch (e) {
-    const err = e instanceof Error ? e.message : 'Failed to set jsx';
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
-  }
-  return { content: { success: true, jsx }, details: { success: true } };
-});
-
-/**
- * EditJsx - Ordered string find-and-replace over a file's static-JSX body.
- * The body is RAW text (no escaped-JSON-inside-JSON). All changes apply or the
- * batch fails; the result is re-validated before persisting.
- */
-registerFrontendTool('EditJsx', async (args, _context) => {
-  const { fileId, changes } = args;
-  let working = getFileJsx(fileId);
-  if (working === null) {
-    const err = `File ${fileId} has no jsx body to edit — use SetJsx to create one first.`;
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
-  }
-  for (let i = 0; i < changes.length; i++) {
-    const { oldMatch, newMatch, replaceAll = true } = changes[i];
-    if (!working.includes(oldMatch)) {
-      const err = `Change ${i + 1}/${changes.length} failed: "${oldMatch}" not found in jsx`;
-      return { content: { success: false, error: err, succeededCount: i }, details: { success: false, error: err } };
-    }
-    if (!replaceAll) {
-      const count = working.split(oldMatch).length - 1;
-      if (count > 1) {
-        const err = `Change ${i + 1}: "${oldMatch}" is not unique (${count}×) — add surrounding context or use replaceAll.`;
-        return { content: { success: false, error: err, succeededCount: i }, details: { success: false, error: err } };
-      }
-      working = working.replace(oldMatch, newMatch);
-    } else {
-      working = working.split(oldMatch).join(newMatch);
-    }
-  }
-  const errors = validateJsxSource(working, JSX_COMPONENT_NAMES);
-  if (errors.length > 0) {
-    const err = `Edit produced invalid jsx: ${errors.map(e => e.message).join('; ')}`;
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
-  }
-  try {
-    await setFileJsx(fileId, working);
-  } catch (e) {
-    const err = e instanceof Error ? e.message : 'Failed to set jsx';
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
-  }
-  return { content: { success: true, jsx: working }, details: { success: true } };
-});
+// SetJsx / EditJsx were removed in File Architecture v2 — a document's jsx body is edited
+// through EditFile (the markup's <jsx> block), like any other file.
 
 /**
  * CreateFile - Create a new virtual file (draft, any type).
@@ -857,6 +798,17 @@ registerFrontendTool('CreateFile', async (args, context) => {
       const err = 'CreateFile: `content` must be a JSON object (or a valid JSON string), not a raw string.';
       return { content: { success: false, error: err }, details: { success: false, error: err } };
     }
+  }
+
+  // File Architecture v2: prefer the `markup` arg — parse it into typed content (the same
+  // markup EditFile edits). Merges over any structured `content` fallback.
+  if (typeof args.markup === 'string' && args.markup.trim()) {
+    const parsed = markupToContent(file_type as FileType, args.markup);
+    if (!parsed.ok) {
+      const err = `CreateFile: invalid markup for '${file_type}': ${parsed.error}`;
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
+    }
+    content = { ...((content as Record<string, unknown>) ?? {}), ...parsed.content };
   }
 
   // --- Page-context guards for background file creation ---

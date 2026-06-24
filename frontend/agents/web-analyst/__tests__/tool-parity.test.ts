@@ -20,8 +20,6 @@ const EXPECTED_TOOLS = [
   'SearchDBSchema',
   'SearchFiles',
   'CreateFile',
-  'SetJsx',
-  'EditJsx',
   'LoadSkill',
   'FuzzyMatch',
 ].sort();

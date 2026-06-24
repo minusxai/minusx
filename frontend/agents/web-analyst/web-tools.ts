@@ -3,15 +3,6 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { getSkill } from '@/orchestrator/prompts';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import { atlasSchemaNoViz } from '@/lib/validation/atlas-json-schemas';
-
-// Per-file-type content JSON schema (a discriminated `oneOf` by file `type`),
-// with viz stripped for token economy — vizSettings uses the ExecuteQuery
-// vizSettings schema instead. Embedded into the EditFile/CreateFile descriptions
-// so the model emits correctly-shaped content. Built at module load from
-// the TypeBox single-source in lib/validation/atlas-schemas.ts.
-const CONTENT_SCHEMA_NO_VIZ = JSON.stringify(atlasSchemaNoViz);
-
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
 // throw UserInputException so the orchestrator pauses; the bridge (Redux
@@ -32,48 +23,56 @@ const EditFileParams = Type.Object({
   })),
 });
 
+// The agent edits the file's MARKUP (the `markup` field in AppState / ReadFiles), not JSON.
+const MARKUP_FORMAT = `Every file projects to a MARKUP document — that is what you edit (the \`markup\` field in AppState / ReadFiles), never escaped JSON.
+
+Two shapes, by file type:
+- Structured files (question, notebook, connection, config, folder, context) → a \`<props>\` block of nested elements, one per field. Scalars are element text; nested objects nest; arrays use repeated \`<item>\` children; a string containing <, >, {, backtick, or a newline (e.g. SQL) is a RAW template-literal child \`<query>{\`SELECT a WHERE x < 5\`}</query>\` — no escaping inside.
+- Document files (story, dashboard) → a \`<jsx>\` body (story = HTML + \`<Question id={N}/>\` embeds; dashboard = \`<Dashboard cols={12}><Question id={N} x={} y={} w={} h={}/></Dashboard>\`) followed by a \`<props>\` block of metadata.
+
+Example question markup:
+<props>
+  <description>Revenue by month</description>
+  <query>{\`SELECT month, SUM(revenue) AS rev FROM sales WHERE rev < 5000 GROUP BY 1\`}</query>
+  <vizSettings>
+    <type>bar</type>
+    <xCols><item>month</item></xCols>
+    <yCols><item>rev</item></yCols>
+  </vizSettings>
+  <connection_name>saas_metrics</connection_name>
+</props>`;
+
 // Keep this description in sync with the EditFile behavior in tool-handlers.ts —
 // the query/parameters warning in particular prevents broken queries.
-const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes. Executes on the frontend with real Redux state.
+const EDIT_FILE_DESCRIPTION = `Edit a file using an ordered list of string find-and-replace changes over its MARKUP. Executes on the frontend with real Redux state.
 
-Search for each oldMatch in the FULL file JSON and replace with newMatch.
-The file JSON includes: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
+${MARKUP_FORMAT}
 
-You can edit ANY field (name, path, or content) using this tool.
+Search for each oldMatch in the file's markup and replace with newMatch. Because the markup is clean text (raw SQL, no JSON-in-JSON escaping), oldMatch is usually a short literal substring — e.g. the changed SQL fragment.
 
 Changes are applied sequentially in order — later entries can depend on earlier ones.
 All changes succeed or the batch fails: on failure the response includes \`succeededCount\`
-and \`failedIndex\` so you know exactly where to retry.
+and \`failedIndex\` so you know exactly where to retry. On fail, retry with a shortened/uniquer oldMatch.
 
-On fail, you can retry with shortened oldMatch if applicable.
-
-Example — update query and viz in one call:
+Example — change the SQL ordering and the viz type in one call:
 EditFile(fileId=123, changes=[
-    {"oldMatch": '"query":"SELECT 1"', "newMatch": '"query":"SELECT id, name FROM users"'},
-    {"oldMatch": '"type":"table"', "newMatch": '"type":"bar"'}
+    {"oldMatch": 'GROUP BY 1 ORDER BY 1', "newMatch": 'GROUP BY 1 ORDER BY 2 DESC'},
+    {"oldMatch": '<type>table</type>', "newMatch": '<type>bar</type>'}
 ])
 
 CRITICAL — query + parameters must stay in sync:
 If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
-change to the parameters array in the same call. The frontend auto-syncs on user edit, but
-EditFile bypasses that — orphaned or missing parameters will cause query execution to fail.
+change to the \`<parameters>\` in the same call — orphaned or missing parameters fail execution.
 
 replaceAll behaviour (per change):
-- replaceAll=true (default): replace EVERY occurrence of oldMatch in the file JSON.
-  Use this when renaming a column/table that appears in multiple places (SELECT, WHERE, GROUP BY, etc.).
-- replaceAll=false: replace only if oldMatch is unique. If it appears more than once the
-  tool returns an error — add more surrounding context to oldMatch to make it unique, or
-  switch back to replaceAll=true if you really want all occurrences replaced.
+- replaceAll=true (default): replace EVERY occurrence (use when renaming a column/table that appears in SELECT, WHERE, GROUP BY, …).
+- replaceAll=false: replace only if oldMatch is unique; otherwise the tool errors — add surrounding context to make it unique.
 
-Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
-via the Publish All button. You do not need to call Navigate or PublishFile.
+Changes are staged as drafts in Redux. The user reviews and publishes via Publish All. You do not need to call Navigate or PublishFile.
 
-String Matching: Use \`oldMatch\` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.
+String Matching: copy \`oldMatch\` directly from the \`markup\` in AppState — never call ReadFiles just to get markup already in AppState.
 
-Notebooks: content has \`cells\` (an ordered array; each cell has a stable \`id\` and is either a \`sql\` cell — a full inline question — or a \`text\` cell). AppState content also carries \`activeCellId\`: the cell the user is currently working on. Unless they say otherwise, scope edits to that cell (match within it by its \`id\`/\`query\`), and do NOT touch other cells.
-
-Content schema — the shape of the file's "content" field, by file type (a discriminated oneOf on "type"). For vizSettings, use the same schema as ExecuteQuery's vizSettings:
-${CONTENT_SCHEMA_NO_VIZ}`;
+Notebooks: the markup's \`<props>\` has \`<cells>\` (ordered; each cell has a stable \`<id>\` and is a \`sql\` or \`text\` cell). AppState also carries \`activeCellId\` — scope edits to that cell unless told otherwise.`;
 
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
@@ -99,25 +98,19 @@ const CreateFileParams = Type.Object({
     description:
       'PARENT folder to create the file in (must already exist), e.g. "/org" or "/org/reports". Do NOT include the new file/folder name — it is appended automatically from `name`. To create folder "X" under /org, pass path:"/org" and name:"X" (NOT path:"/org/X").',
   }),
-  // Object type (not Type.Unknown) so the model is told to send a JSON OBJECT, not
-  // a stringified JSON (which previously got spread char-by-char into the content).
-  // The union also accepts a string defensively — the CreateFile handler in
-  // lib/api/tool-handlers.ts JSON.parses it. Shape varies by file_type, so it's an
-  // open object validated per-type later by validateFileState (no discriminated union).
+  // File Architecture v2: the new file's body is authored as MARKUP — the same shape
+  // EditFile edits and ReadFiles returns (see the EditFile description / MARKUP_FORMAT).
+  markup: Type.Optional(Type.String({
+    description:
+      "The new file's content as MARKUP (preferred). Structured files (question/notebook/connection/config/context): a <props> block of nested elements (SQL/raw strings in a {`…`} template-literal child). Document files (story/dashboard): a <jsx> body + <props> metadata. See the EditFile description for the exact shape and examples.",
+  })),
+  // Optional structured fallback: initial content fields merged over template defaults, as a
+  // JSON OBJECT. Prefer `markup`. (A string is JSON.parsed defensively by the handler.)
   content: Type.Optional(
     Type.Union([Type.Record(Type.String(), Type.Unknown()), Type.String()], {
-      description:
-        'Initial content fields, merged on top of template defaults, as a JSON OBJECT (do NOT stringify). Same per-file-type content schema as EditFile — see the EditFile description for the exact shape by file type.',
+      description: 'Initial content fields as a JSON OBJECT, merged over template defaults. Prefer `markup`.',
     }),
   ),
-  // File Architecture v2: for `questionv2` files the query/connection/viz live here
-  // (a static-JSX body), NOT in `content`.
-  jsx: Type.Optional(Type.String({
-    description:
-      'The static-JSX BODY for v2 file types — provide this INSTEAD of content (their content holds only metadata).\n' +
-      'questionv2: `<Question connection="github" viz={{"type":"bar","xCols":["a"]}}>{`SELECT ...`}</Question>` — the SQL goes in a template-literal `{`…`}` child so <, >, { stay raw; `viz` is the vizSettings JSON.\n' +
-      'storyv2: an HTML-ish JSX data-story document with `<Question id={N} />` embeds (N = a question/questionv2 id). Author it like a designed long-form editorial piece (prose between charts, big numbers, section headers). Rules: (1) wrap everything in a root `<div class="story">` and scope ALL CSS under it; put the CSS in a `<style>{`…`}</style>` template-literal child (so the CSS `{ }` don\'t break jsx). (2) Responsive: `container-type:inline-size;container-name:story` on the root, size type/spacing with `clamp(min, Ncqi, max)`, and use `@container story (max-width:…)` to stack multi-column bands on mobile. (3) Embeds: `<Question id={N} height={440} />` (default 440px; min 340). (4) Set content.colorMode to match (dark layout → "dark"). Only the `<Question>` component is allowed; no <script>, functions, or event handlers.',
-  })),
 });
 
 export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystContext> {
@@ -132,55 +125,8 @@ export class CreateFile extends MXTool<typeof CreateFileParams, RemoteAnalystCon
   }
 }
 
-// ─── SetJsx / EditJsx (File Architecture v2) ─────────────────────────────────
-// Operate on a file's static-JSX `jsx` body (e.g. questionv2). The body is raw
-// text — edit it as such (no escaped-JSON-inside-JSON). Persisted immediately.
-const JSX_FORMAT = `The jsx body is a static-JSX document. For a question it is a single <Question> element:
-<Question connection="<connection_name>" viz={{ ...vizSettings... }}>{\`
-SELECT ...raw SQL — <, >, { stay raw...
-\`}</Question>
-- connection: a plain string attribute.
-- viz: a JSON object literal in {{ }} (the vizSettings — type, xCols, yCols, ...).
-- The SQL goes in a template-literal child {\` ... \`} so it stays raw (escape only backtick and \${ ).
-Only the <Question> component (and plain HTML) is allowed; no functions, expressions, or event handlers.`;
-
-const SetJsxParams = Type.Object({
-  fileId: Type.Number(),
-  jsx: Type.String({ description: 'The full static-JSX body to set (replaces the existing jsx). Small bodies (a single question): prefer this over EditJsx.' }),
-});
-
-export class SetJsx extends MXTool<typeof SetJsxParams, RemoteAnalystContext> {
-  static readonly schema: Tool<typeof SetJsxParams> = {
-    name: 'SetJsx',
-    description: `Replace a file's entire static-JSX body (File Architecture v2). Executes on the frontend; persisted immediately.\n\n${JSX_FORMAT}`,
-    parameters: SetJsxParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    throw new UserInputException(this.id);
-  }
-}
-
-const EditJsxParams = Type.Object({
-  fileId: Type.Number(),
-  changes: Type.Array(Type.Object({
-    oldMatch: Type.String({ description: 'Existing substring of the jsx body to replace.' }),
-    newMatch: Type.String({ description: 'Replacement text.' }),
-    replaceAll: Type.Optional(Type.Boolean({ description: 'Replace every occurrence (default true).' })),
-  })),
-});
-
-export class EditJsx extends MXTool<typeof EditJsxParams, RemoteAnalystContext> {
-  static readonly schema: Tool<typeof EditJsxParams> = {
-    name: 'EditJsx',
-    description: `Edit a file's static-JSX body with an ordered list of string find-and-replace changes (applied to the RAW jsx text — no escaping). Use for large bodies; for small ones prefer SetJsx. Executes on the frontend; persisted immediately.\n\n${JSX_FORMAT}`,
-    parameters: EditJsxParams,
-  };
-
-  async run(): Promise<ToolResponse> {
-    throw new UserInputException(this.id);
-  }
-}
+// SetJsx / EditJsx were removed in File Architecture v2 — the agent edits a document's
+// jsx body through EditFile (the markup's <jsx> block), same as any other file.
 
 // ─── ReadFiles (frontend-bridge variant) ─────────────────────────────────────
 // Replaces the server-side `ReadFiles` from `agents/analyst/file-tools.ts` for
@@ -198,7 +144,7 @@ const ReadFilesParams = Type.Object({
 export class ReadFiles extends MXTool<typeof ReadFilesParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof ReadFilesParams> = {
     name: 'ReadFiles',
-    description: 'Load one or more files by integer ID with their references and (optionally) executed query results. Reads in-flight Redux state including unpublished drafts.',
+    description: "Load one or more files by integer ID with their references and (optionally) executed query results. Reads in-flight Redux state including unpublished drafts. Each file's `markup` field is its editable surface (the same markup EditFile operates on) — prefer it over the raw `content`.",
     parameters: ReadFilesParams,
   };
 

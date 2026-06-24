@@ -141,24 +141,6 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 
     timelineVerb: 'Editing',
   },
-  'SetJsx': {
-    displayComponent: null,
-
-    chipLabel: 'jsx edit',
-    chipLabelPlural: 'jsx edits',
-    chipIcon: LuPencilLine,
-
-    timelineVerb: 'Editing',
-  },
-  'EditJsx': {
-    displayComponent: null,
-
-    chipLabel: 'jsx edit',
-    chipLabelPlural: 'jsx edits',
-    chipIcon: LuPencilLine,
-
-    timelineVerb: 'Editing',
-  },
   'ReadFiles': {
     displayComponent: ReadFilesDisplay,
 

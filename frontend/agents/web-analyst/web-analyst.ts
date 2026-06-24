@@ -8,8 +8,6 @@ import { getAgentModelOrTestFallback, getAnalystModelConfig, getAnalystModelOpti
 import {
   EditFile,
   CreateFile,
-  SetJsx,
-  EditJsx,
   ReadFiles,
   Navigate,
   ClarifyFrontend,
@@ -20,8 +18,6 @@ import {
 export {
   EditFile,
   CreateFile,
-  SetJsx,
-  EditJsx,
   ReadFiles,
   Navigate,
   ClarifyFrontend,
@@ -56,8 +52,6 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     SearchFiles.schema,
     EditFile.schema,
     CreateFile.schema,
-    SetJsx.schema,
-    EditJsx.schema,
     Navigate.schema,
     ClarifyFrontend.schema,
     PublishAll.schema,

@@ -28,20 +28,19 @@ describe('CreateFile content schema', () => {
   });
 });
 
-describe('CreateFile/EditFile embed the per-file-type content schema', () => {
-  it('EditFile description embeds the no-viz content schema (question + dashboard union)', () => {
+describe('CreateFile/EditFile describe the MARKUP edit surface (File Architecture v2)', () => {
+  it('EditFile description teaches the markup format (props/jsx), not JSON content', () => {
     const desc = EditFile.schema.description ?? '';
-    expect(desc).toContain('Content schema');
-    expect(desc).toContain('AtlasQuestionFile');
-    expect(desc).toContain('AtlasDashboardFile');
-    // It must be the NO-VIZ variant (viz-only defs stripped for token economy).
-    expect(desc).not.toContain('ChoroplethConfig');
+    expect(desc).toContain('MARKUP');
+    expect(desc).toContain('<props>');
+    expect(desc).toContain('template-literal'); // raw SQL child
+    // The old JSON-content-schema embed is gone.
+    expect(desc).not.toContain('AtlasQuestionFile');
   });
 
-  it('CreateFile content description points to the EditFile content schema', () => {
-    const contentSchema = (CreateFile.schema.parameters as { properties?: { content?: { description?: string } } })
-      .properties?.content;
-    expect(contentSchema?.description ?? '').toMatch(/EditFile/);
-    expect(contentSchema?.description ?? '').toMatch(/do NOT stringify/i);
+  it('CreateFile exposes a markup param and references the EditFile description', () => {
+    const props = (CreateFile.schema.parameters as { properties?: Record<string, { description?: string }> }).properties ?? {};
+    expect(props.markup?.description ?? '').toMatch(/MARKUP/);
+    expect(props.markup?.description ?? '').toMatch(/EditFile/);
   });
 });
