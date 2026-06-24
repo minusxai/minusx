@@ -23,7 +23,6 @@ export interface DbRow {
   last_edit_id: string | null;
   draft: boolean;
   meta: Record<string, unknown> | null;
-  jsx: string | null;   // File Architecture v2 — static-JSX body (loaded with content)
 }
 
 /** Convert a raw DB row to a typed DbFile, reading draft/meta from the row. */
@@ -41,7 +40,6 @@ function rowToDbFile(row: DbRow, includeContent: boolean = true): DbFile {
     last_edit_id: row.last_edit_id ?? null,
     draft: row.draft ?? false,
     meta: row.meta ?? null,
-    jsx: includeContent ? (row.jsx ?? null) : null,  // loaded alongside content
   };
 }
 
@@ -55,7 +53,6 @@ export class DocumentDB {
     editId?: string,
     draft: boolean = true,
     meta?: Record<string, unknown> | null,
-    jsx?: string | null,
   ): Promise<number> {
     if (references.some(ref => ref < 0)) {
       throw new Error(
@@ -73,28 +70,13 @@ export class DocumentDB {
       next_id_gen AS (
         SELECT GREATEST(COALESCE(MAX(id), 0) + 1, 1000) AS next_id FROM files
       )
-      INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, jsx, created_at, updated_at)
-      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at)
+      SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null, jsx ?? null]);
+    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]);
 
     return result.rows[0].id;
-  }
-
-  /**
-   * Overwrite the `jsx` body for a file (File Architecture v2). Bumps version + sets
-   * last_edit_id like a content save, but writes only the `jsx` column — the content
-   * publish path (update/batchSave) never touches `jsx`, so the two are independent.
-   */
-  static async updateJsx(id: number, jsx: string, editId?: string): Promise<boolean> {
-    const db = getModules().db;
-    // draft = false: saving the jsx body publishes the file (same as a content save).
-    const result = await db.exec(
-      `UPDATE files SET jsx = $1, version = version + 1, last_edit_id = $2, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-      [jsx, editId ?? null, id]
-    );
-    return (result.rowCount ?? 0) > 0;
   }
 
   static async getById(id: number, includeContent: boolean = true): Promise<DbFile | null> {

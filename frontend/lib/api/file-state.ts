@@ -1199,25 +1199,6 @@ export async function createDraftFile(
   return file.id;
 }
 
-/**
- * Set a file's static-JSX body (File Architecture v2). Validates + persists via the
- * jsx endpoint, then replaces the Redux FileState with the saved file (which re-derives
- * content from jsx and clears pending edits). Used by SetJsx / EditJsx and the
- * questionv2 publish path. Returns the updated file.
- */
-export async function setFileJsx(fileId: number, jsx: string): Promise<DbFile> {
-  const result = await FilesAPI.setJsx(fileId, jsx);
-  // questionv2 has no cross-file references; refresh the FileState (re-derives content
-  // from the new jsx, clears pending edits) with no referenced files.
-  getStore().dispatch(setFile({ file: result.data, references: [] }));
-  return result.data;
-}
-
-/** Read a file's current jsx body from Redux (effective, post any in-session set). */
-export function getFileJsx(fileId: number): string | null {
-  const fileState = selectFile(getStore().getState(), fileId);
-  return fileState?.jsx ?? null;
-}
 
 // ============================================================================
 // Dry Run Save

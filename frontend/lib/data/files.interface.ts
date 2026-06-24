@@ -42,13 +42,6 @@ export interface IFilesDataLayer {
   createFile(input: CreateFileInput, user: EffectiveUser): Promise<CreateFileResult>;
 
   /**
-   * Set a file's static-JSX body (File Architecture v2). Validates the jsx, writes
-   * only the `jsx` column (independent of the content publish path), returns the
-   * updated file.
-   */
-  setJsx(id: number, jsx: string, user: EffectiveUser): Promise<CreateFileResult>;
-
-  /**
    * Save file content (Phase 2)
    * Updates file content, name, and path in database and returns updated file
    * @param name - File name (from file.name metadata, not content)

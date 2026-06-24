@@ -169,7 +169,6 @@ function compressFileState(fs: FileState): CompressedFileState {
     content: mergedContent,
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
-    ...(fs.jsx ? { jsx: fs.jsx } : {}),
     // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
     markup: fileToMarkup(fs.type as FileType, mergedContent),
   };

@@ -26,8 +26,6 @@ import { createShareLink, decodeShareLink, isLiveShareNonce, type ShareRecord } 
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
-import { validateJsxSource } from '@/lib/jsx';
-import { JSX_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
@@ -457,14 +455,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new UserFacingError(`Invalid file content: ${createValidationError}`);
     }
 
-    // File Architecture v2: validate the static-JSX body if present.
-    if (input.jsx != null) {
-      const jsxErrors = validateJsxSource(input.jsx, JSX_COMPONENT_NAMES);
-      if (jsxErrors.length > 0) {
-        throw new UserFacingError(`Invalid jsx: ${jsxErrors.map(e => e.message).join('; ')}`);
-      }
-    }
-
     // Guard: references must be real (positive) IDs — virtual files must be saved first
     const negativeCreateRefs = safeReferences.filter(id => id < 0);
     if (negativeCreateRefs.length > 0) {
@@ -478,7 +468,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, safeReferences, editId, startAsDraft, input.meta ?? null, input.jsx ?? null);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, safeReferences, editId, startAsDraft, input.meta ?? null);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -518,29 +508,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
     return {
       data: newFile
     };
-  }
-
-  async setJsx(id: number, jsx: string, user: EffectiveUser): Promise<CreateFileResult> {
-    const file = await DocumentDB.getById(id);
-    if (!file) throw new FileNotFoundError(`File ${id} not found`);
-
-    const overrides = await this._getOverrides(user);
-    if (!canAccessFile(file, user, overrides)) {
-      throw new AccessPermissionError(`You do not have permission to edit file ${id}`);
-    }
-    if (!canCreateFileByRole(user.role, file.type, overrides)) {
-      throw new AccessPermissionError(`Your role (${user.role}) does not have permission to edit ${file.type} files.`);
-    }
-
-    const jsxErrors = validateJsxSource(jsx, JSX_COMPONENT_NAMES);
-    if (jsxErrors.length > 0) {
-      throw new UserFacingError(`Invalid jsx: ${jsxErrors.map(e => e.message).join('; ')}`);
-    }
-
-    await DocumentDB.updateJsx(id, jsx, String(Date.now()));
-    const updated = await DocumentDB.getById(id);
-    if (!updated) throw new FileNotFoundError(`File ${id} not found after jsx update`);
-    return { data: updated };
   }
 
   async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
@@ -1134,7 +1101,6 @@ export const loadFile = FilesAPI.loadFile.bind(FilesAPI);
 export const loadFiles = FilesAPI.loadFiles.bind(FilesAPI);
 export const getFiles = FilesAPI.getFiles.bind(FilesAPI);
 export const createFile = FilesAPI.createFile.bind(FilesAPI);
-export const setJsxFile = FilesAPI.setJsx.bind(FilesAPI);
 export const saveFile = FilesAPI.saveFile.bind(FilesAPI);
 export const loadFileByPath = FilesAPI.loadFileByPath.bind(FilesAPI);
 export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);
