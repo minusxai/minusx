@@ -26,14 +26,41 @@ export function extractParametersFromSQL(sql: string): string[] {
 }
 
 /**
+ * An empty string is meaningless for a **number** param — engines can't cast `''` to a number,
+ * and the agent's `(:p IS NULL OR … >= :p)` guards expect `null` to mean "no filter". So `''`
+ * for a number param is None. Text `''` is a real value; `null` (Set to None) is preserved.
+ */
+const isEmptyNumeric = (v: unknown, type: string | undefined): boolean => v === '' && type === 'number';
+
+/** name → declared type map, for the chokepoint coercion (`getQueryResult`'s `parameterTypes`). */
+export function paramTypeMap(params: QuestionParameter[] | undefined): Record<string, 'text' | 'number' | 'date'> {
+  const m: Record<string, 'text' | 'number' | 'date'> = {};
+  for (const p of params ?? []) m[p.name] = p.type;
+  return m;
+}
+
+/**
+ * The single coercion (used at the `getQueryResult` chokepoint): map an empty-string value of a
+ * number-typed param to None (`null`), preserving every other value. Pure; no-ops without types.
+ */
+export function noneifyEmptyNumericParams(
+  values: Record<string, unknown>,
+  types: Record<string, 'text' | 'number' | 'date'> | undefined,
+): Record<string, unknown> {
+  if (!values || !types) return values ?? {};
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (isEmptyNumeric(v, types[k])) { out[k] = null; changed = true; } else out[k] = v;
+  }
+  return changed ? out : values;
+}
+
+/**
  * Assemble the values dict to execute a question with, from its declared params and the
  * available value sources (explicit external values from a dashboard/story take precedence
- * over the question's own saved values).
- *
- * Type-aware None coercion: an empty string is meaningless for a **number** param — engines
- * can't cast `''` to a number, and the agent's `(:p IS NULL OR … >= :p)` guards expect `null`
- * to mean "no filter". So `''` (and a missing value) for a number param becomes `null` (None).
- * Text params keep `''` as a real value; an explicit `null` (Set to None) is always preserved.
+ * over the question's own saved values). A missing number param defaults to None, a missing
+ * text param to `''`; empty-numeric → None is applied via the shared rule.
  */
 export function buildQueryParamValues(
   params: QuestionParameter[],
@@ -44,7 +71,7 @@ export function buildQueryParamValues(
   for (const p of params) {
     let v: unknown = externalValues && p.name in externalValues ? externalValues[p.name] : ownValues?.[p.name];
     if (v === undefined) v = p.type === 'number' ? null : '';
-    if (v === '' && p.type === 'number') v = null;
+    if (isEmptyNumeric(v, p.type)) v = null;
     out[p.name] = v;
   }
   return out;

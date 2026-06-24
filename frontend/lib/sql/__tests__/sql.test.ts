@@ -6,7 +6,7 @@ import { irToSqlLocal } from '../ir-to-sql';
 import { QueryIR, FilterCondition, type CompoundQueryIR } from '../ir-types';
 import { removeNoneParamConditions } from '../ir-transforms';
 import { enforceQueryLimit } from '../limit-enforcer';
-import { buildQueryParamValues } from '../sql-params';
+import { buildQueryParamValues, noneifyEmptyNumericParams, paramTypeMap } from '../sql-params';
 import { getMentionCompletionsLocal, type AvailableQuestion } from '../mention-completions';
 import { filterSchemaByWhitelist } from '../schema-filter';
 import type { DatabaseSchema, WhitelistItem } from '../../types';
@@ -2540,5 +2540,30 @@ describe('buildQueryParamValues — type-aware None coercion (FIX-2)', () => {
       { min_mrr: '' },     // dashboard submitted empty
     );
     expect(out.min_mrr).toBeNull();
+  });
+});
+
+describe('noneifyEmptyNumericParams — chokepoint coercion (FIX-2 completeness)', () => {
+  const types = paramTypeMap([
+    { name: 'min_mrr', type: 'number', label: null, source: null },
+    { name: 'region', type: 'text', label: null, source: null },
+  ]);
+
+  it('coerces empty-string number params to null; leaves text "" and other values intact', () => {
+    const out = noneifyEmptyNumericParams({ min_mrr: '', region: '', other: 5 }, types);
+    expect(out.min_mrr).toBeNull();
+    expect(out.region).toBe('');
+    expect(out.other).toBe(5);
+  });
+
+  it('preserves real numbers and explicit null; returns the same ref when nothing changes', () => {
+    const input = { min_mrr: 100, region: 'west' };
+    expect(noneifyEmptyNumericParams(input, types)).toBe(input); // no-op identity
+    expect(noneifyEmptyNumericParams({ min_mrr: null }, types).min_mrr).toBeNull();
+  });
+
+  it('no-ops when types are absent (e.g. an untyped caller)', () => {
+    const input = { min_mrr: '' };
+    expect(noneifyEmptyNumericParams(input, undefined)).toBe(input);
   });
 });

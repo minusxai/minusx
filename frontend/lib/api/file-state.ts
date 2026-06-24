@@ -39,6 +39,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
 import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
+import { noneifyEmptyNumericParams, paramTypeMap } from '@/lib/sql/sql-params';
 import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -212,9 +213,13 @@ export async function readFiles(
       questionFiles.flatMap(f => {
         const content = f.content as any;
         if (!content?.query || !content?.connection_name) return [];
+        const types = paramTypeMap(content.parameters);
         return [getQueryResult({
           query: content.query,
-          params: content.parameterValues ?? {},
+          // Coerce here (not inside getQueryResult) so the stored cache key matches the
+          // coerced key useQueryResult reads with — see noneifyEmptyNumericParams.
+          params: noneifyEmptyNumericParams(content.parameterValues ?? {}, types),
+          parameterTypes: types,
           database: content.connection_name,
           filePath: f.path,
           fileId: f.id,
@@ -463,9 +468,10 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
     if (finalContent?.query && finalContent?.connection_name) {
-      const params = finalContent.parameterValues || {};
+      const types = paramTypeMap(finalContent.parameters);
+      const params = noneifyEmptyNumericParams(finalContent.parameterValues || {}, types);
       try {
-        await getQueryResult({ query: finalContent.query, params, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
+        await getQueryResult({ query: finalContent.query, params, parameterTypes: types, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
         getStore().dispatch(setEphemeral({
           fileId: fileId as FileId,
           changes: {

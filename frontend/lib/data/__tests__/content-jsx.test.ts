@@ -104,6 +104,30 @@ describe('content ⇄ jsx — discriminated/scalar unions (DashboardContent asse
   });
 });
 
+describe('content ⇄ jsx — NotebookCell union (sql vs text cell discrimination)', () => {
+  const nbSchema = (atlasSchema as { $defs: Record<string, unknown> }).$defs.NotebookContent;
+
+  it('round-trips a SQL cell and a TEXT cell without cross-contaminating their fields', () => {
+    const value = {
+      description: 'nb',
+      cells: [
+        { type: 'sql', id: 'c1', name: 'Rev', query: 'SELECT 1 WHERE x < 5', vizSettings: { type: 'table' }, parameters: [], parameterValues: {}, connection_name: 'static', references: [] },
+        { type: 'text', id: 'c2', name: null, content: '# Notes\nSome **markdown** body.' },
+      ],
+    };
+    const { back } = roundtrip(value, nbSchema);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const v = back.value as typeof value;
+      // SQL branch keeps query/viz; not mis-parsed as a text cell.
+      expect(v.cells[0]).toMatchObject({ type: 'sql', id: 'c1', query: 'SELECT 1 WHERE x < 5' });
+      // TEXT branch keeps its `content` (dropped before FIX-3 — union resolved to NotebookSqlCell).
+      expect(v.cells[1]).toMatchObject({ type: 'text', id: 'c2', content: '# Notes\nSome **markdown** body.' });
+      expect((v.cells[1] as { query?: string }).query).toBeUndefined();
+    }
+  });
+});
+
 describe('content ⇄ jsx — schemaless config (type="…")', () => {
   it('annotates non-string + numeric-looking scalars so they round-trip losslessly', () => {
     const value = { type: 'postgres', config: { host: 'db', port: 5432, ssl: true, zip: '90210' } };

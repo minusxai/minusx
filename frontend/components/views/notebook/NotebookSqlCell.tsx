@@ -28,6 +28,7 @@ import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import ResizablePanel from '@/components/ui/resizable-panel';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
+import { paramTypeMap } from '@/lib/sql/sql-params';
 import { useQuestionReferences } from '@/lib/hooks/useQuestionReferences';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
@@ -88,7 +89,7 @@ export default function NotebookSqlCell({
     executed?.params ?? EMPTY_PARAMS,
     executed?.database ?? '',
     executed?.references,
-    { skip: !executed },
+    { skip: !executed, parameterTypes: paramTypeMap(cell.parameters ?? undefined) },
   );
 
   const { availableQuestions, resolvedReferences, referencedQuestions, mergedParameters, handleQueryChange } =

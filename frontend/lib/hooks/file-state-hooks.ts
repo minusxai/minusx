@@ -49,6 +49,7 @@ import type { AppState } from '@/lib/appState';
 import { selectAppStateWithUI } from '@/store/appStateSelector';
 import { getStore } from '@/store/store';
 import { CACHE_TTL } from '@/lib/constants/cache';
+import { noneifyEmptyNumericParams } from '@/lib/sql/sql-params';
 import type { LoadError } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
 import type { AugmentedFile, QuestionReference } from '@/lib/types';
@@ -440,12 +441,18 @@ function useQueryResultSelector(
  */
 export function useQueryResult(
   query: string,
-  params: Record<string, any>,
+  rawParams: Record<string, any>,
   database: string,
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
   const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes, filePath } = options;
+
+  // Coerce empty-numeric params to None ONCE here, so the SAME params drive both the
+  // execute-effect and the result selector below. (Coercing inside getQueryResult would
+  // store under the coerced key while the selector read the raw key → a perpetual-loading
+  // mismatch.) No-ops unless the caller passed parameterTypes; identity-stable when unchanged.
+  const params = useMemo(() => noneifyEmptyNumericParams(rawParams, parameterTypes), [rawParams, parameterTypes]);
 
   useEffect(() => {
     if (skip) return;
