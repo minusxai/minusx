@@ -44,11 +44,16 @@ of truth:
 - **Tutorial seed** — NO change needed: `content` is canonical, so the agent already sees the
   seed as markup. (The earlier "convert the seed to jsx" goal is moot under content-canonical.)
 
-### Remaining (the one user-gated phase)
-- **`connection` secrets via `@SECRETS/…`** — store secrets in a server-only secrets store as
-  `@SECRETS/path` refs; resolve them only on the server query path; never to the client/markup.
-  Highest-risk, security-sensitive, intentionally LAST and gated for explicit review before merge
-  (per the design discussion). Not yet implemented.
+- **`connection` secrets via `@SECRETS/…`** (commit "connection secrets …") — **done**. Raw DB
+  credentials never enter the connection document/markup/client: a dedicated **`secrets` table**
+  (not a `files` row → structurally unreachable from the agent surface) holds them, keyed by an
+  `@SECRETS/connections/<name>/<field>` ref stored in the config. `extractConnectionSecrets` runs
+  on save (create + update, with `mergeExistingSecretRefs` so a stripped/unchanged credential
+  isn't wiped); `resolveConnectionSecrets` runs server-side at every credential-use point
+  (run-query, connection-loader schema introspection, fuzzy-match) right before the connector.
+  Backward compatible (legacy raw values pass through + get extracted on next save). `lib/secrets/`.
+
+### Status: all phases implemented and green (node / orchestrator / ui suites all pass).
 
 ---
 
