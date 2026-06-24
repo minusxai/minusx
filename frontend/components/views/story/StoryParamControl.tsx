@@ -32,8 +32,11 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
         {param.name}
       </Text>
       {useDropdown && param.source ? (
+        // NOTE: do NOT key this on `value`. Each keystroke commits the value (so embeds re-run
+        // live), which would change the key and REMOUNT the input mid-type — the field loses
+        // focus on every character and on backspace. The widget syncs to external value changes
+        // internally instead (it stays mounted, so focus is preserved while typing).
         <SourceDropdownWidget
-          key={String(value ?? '')}
           source={{ type: 'question', id: param.source.questionId, column: param.source.column }}
           paramType={param.type === 'number' ? 'number' : 'text'}
           currentValue={value == null ? undefined : (value as string | number)}

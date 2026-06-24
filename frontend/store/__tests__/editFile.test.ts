@@ -4,7 +4,7 @@
  */
 import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
-import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted } from '@/store/filesSlice';
+import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted, selectPersistableContent } from '@/store/filesSlice';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';
@@ -622,6 +622,54 @@ describe('editFile - Dashboard content validation', () => {
       newMatch: '      <x>0</x>\n      <y>0</y>\n      <w>4</w>\n      <h>6</h>',
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('editFile - Story drops legacy assets on edit (clean re-save)', () => {
+  let storyId: number;
+  // A migrated story whose stored content still carries the legacy `assets` field.
+  const storyContent = {
+    description: 'demo',
+    assets: [{ type: 'question', id: 5 }],
+    story: '<div class="story"><h1>OLD HEADLINE</h1><div data-question-id="5" style="width:100%;height:420px"></div></div>',
+  };
+
+  function setupStore() {
+    return configureStore({ reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer } });
+  }
+
+  beforeAll(() => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+  afterAll(() => { vi.restoreAllMocks(); });
+
+  beforeEach(async () => {
+    await clearFilesExceptOrg();
+    storyId = await DocumentDB.create('test-story', '/org/test-story', 'story', storyContent as any, [5]);
+    testStore = setupStore();
+    vi.clearAllMocks();
+  });
+  afterEach(() => { testStore = null; if (global.gc) global.gc(); });
+
+  it('drops the legacy assets key from persistable content after an edit', async () => {
+    await readFiles([storyId]);
+    const result = await editFileStr({ fileId: storyId, oldMatch: 'OLD HEADLINE', newMatch: 'NEW HEADLINE' });
+    expect(result.success).toBe(true);
+    const persistable = selectPersistableContent(testStore.getState(), storyId) as Record<string, unknown>;
+    // assets overridden to undefined → the save serialization (JSON.stringify) drops it entirely.
+    expect(persistable.assets).toBeUndefined();
+    expect('assets' in JSON.parse(JSON.stringify(persistable))).toBe(false);
+    expect(persistable.story).toContain('NEW HEADLINE'); // the edit applied
   });
 });
 

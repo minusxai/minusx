@@ -49,4 +49,15 @@ describe('StoryParamControl — autocomplete (param with a question source)', ()
     const { getByLabelText } = renderWithProviders(<StoryParamControl param={city} value="" onChange={() => {}} />);
     expect((getByLabelText('param city') as HTMLInputElement).getAttribute('role')).not.toBe('combobox');
   });
+
+  it('does NOT remount the source input when the committed value changes (focus-loss regression)', () => {
+    // Each keystroke commits the value live; if the widget is keyed on value it remounts and the
+    // field loses focus mid-type. Assert the SAME input DOM node survives a value change.
+    const sourced: StoryParam = { name: 'region', type: 'text', nullable: true, source: { questionId: 5, column: 'region' } };
+    const { getByLabelText, rerender } = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
+    const before = getByLabelText('param region');
+    rerender(<StoryParamControl param={sourced} value="No" onChange={() => {}} />);
+    const after = getByLabelText('param region');
+    expect(after).toBe(before); // same node identity → not remounted → focus preserved
+  });
 });

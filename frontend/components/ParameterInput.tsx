@@ -82,8 +82,11 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
     ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
     : '';
 
-  // Controlled input display — reseeds on external value change because the parent keys
-  // <SourceDropdownWidget> on `value` (cancel, save, dashboard sync remount the widget).
+  // Controlled input display, owned locally so typing drives it directly. We do NOT key/remount
+  // on value changes (that lost focus mid-type) and we do NOT resync from the prop in an effect:
+  // for a story `<Param>`, the value only ever changes by the reader typing into THIS widget, so
+  // the local state is always the source of truth. A fresh mount (story reload) re-seeds it from
+  // the committed value via useState's initializer.
   const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
 
   const commit = (raw: string) => {

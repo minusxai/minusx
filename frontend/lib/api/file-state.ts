@@ -586,6 +586,13 @@ export async function editFileStr(
   // Merge over the existing content so unedited fields (and any not surfaced in the markup
   // projection) are preserved; the markup carries the editable surface.
   const newContent = { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
+  // StoryContent no longer has an `assets` field — saved-question deps derive from the body. Drop
+  // any legacy `assets` carried over from a migrated story's stored content so re-saves are clean.
+  // Set to `undefined` (not `delete`): newContent becomes persistableChanges, and the save path
+  // re-merges {...originalContent, ...persistableChanges} — a spread can't delete a key, but an
+  // explicit `undefined` overrides it and JSON.stringify drops it on persist. (Existing unedited
+  // files keep theirs harmlessly; it's inert — references come from the body.)
+  if (fileState.type === 'story') (newContent as Record<string, unknown>).assets = undefined;
   void currentName;
 
   const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
