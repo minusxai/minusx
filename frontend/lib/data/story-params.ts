@@ -183,6 +183,25 @@ export function lintDashboardParams(questions: EmbeddedQuestion[]): string[] {
 }
 
 /**
+ * Non-blocking lint: a `<Param id={N}>` imports its autocomplete/type from question N. Warn when
+ * that referenced question doesn't exist, or isn't a question. `resolve` maps an id to the file's
+ * type (or `undefined` if not found) — typically `(id) => selectFile(state, id)?.type`.
+ */
+export function lintStoryParamSources(declared: StoryParam[], resolve: (id: number) => string | undefined): string[] {
+  const warnings: string[] = [];
+  for (const p of declared) {
+    if (!p.source) continue;
+    const t = resolve(p.source.questionId);
+    if (t === undefined) {
+      warnings.push(`<Param name="${p.name}"> imports from question #${p.source.questionId}, which doesn't exist.`);
+    } else if (t !== 'question') {
+      warnings.push(`<Param name="${p.name}"> imports from #${p.source.questionId}, which is a ${t}, not a question.`);
+    }
+  }
+  return warnings;
+}
+
+/**
  * Resolve an imported param: `<Param name="city" id={5}>` inherits its type from question 5's
  * matching `:param` when the author didn't pin one. The autocomplete `source` (questionId+column)
  * is already on the param. `sourceParams` are question N's parameters.

@@ -38,7 +38,7 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
-import { extractStoryParams, lintStoryParams, lintDashboardParams, type EmbeddedQuestion } from '@/lib/data/story-params';
+import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
 import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -624,6 +624,7 @@ function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['ge
   if (fileState.type === 'story') {
     const declared = extractStoryParams(content.story as string | null | undefined);
     issues.push(...lintStoryParams(declared, collectEmbeddedQuestions(state, content)));
+    issues.push(...lintStoryParamSources(declared, (id) => selectFile(state, id)?.type));
   } else if (fileState.type === 'dashboard') {
     // Dashboards auto-derive their params from embedded questions (merged by name+type). Warn
     // when two questions use the same :param name with conflicting types — auto-derive silently

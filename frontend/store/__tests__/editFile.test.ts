@@ -1257,6 +1257,16 @@ describe('editFile - story <Param> lint (non-blocking feedback)', () => {
     expect(result.success).toBe(true);
     expect((result.validation ?? []).join(' ')).not.toMatch(/:city/);
   });
+
+  it('warns when a <Param id=N> imports from a question that does not exist (FIX-1)', async () => {
+    const qId = 4005, sId = 4006;
+    // <Param name="city" id={9999}> — source question 9999 is not loaded / does not exist.
+    const body = `<div class="story"><div data-param-name="city" data-param-type="text" data-param-nullable="true" data-param-source-id="9999" data-param-source-col="city"></div><h1>T</h1><div data-question-id="${qId}" style="width:100%;height:430px"></div></div>`;
+    loadStore([QUESTION(qId), STORY(sId, qId, body)]);
+    const result = await editFileStr({ fileId: sId, oldMatch: '<h1>T</h1>', newMatch: '<h1>Title</h1>' });
+    expect(result.success).toBe(true); // permissive — applied
+    expect((result.validation ?? []).join(' ')).toMatch(/#9999.*doesn't exist/);
+  });
 });
 
 describe('editFile - dashboard param lint (non-blocking type-conflict feedback)', () => {

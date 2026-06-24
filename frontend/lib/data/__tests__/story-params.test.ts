@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paramFromJsxAttrs, paramToPlaceholder, paramToJsx, extractStoryParams,
-  placeholdersToParamJsx, normalizeParamType, lintStoryParams, lintDashboardParams, resolveImportedParam, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
+  placeholdersToParamJsx, normalizeParamType, lintStoryParams, lintDashboardParams, lintStoryParamSources, resolveImportedParam, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
 } from '../story-params';
 
 describe('story-params — type normalisation', () => {
@@ -101,6 +101,25 @@ describe('story-params — dashboard param lint (type-conflict only)', () => {
       { id: 2, query: 'SELECT * FROM b WHERE x = :region', parameters: [{ name: 'region', type: 'text', label: null, source: null }] },
     ]);
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('story-params — source validation (FIX-1)', () => {
+  const sourced = (name: string, qid: number): StoryParam => ({ name, type: 'text', nullable: true, source: { questionId: qid, column: name } });
+
+  it('warns when a <Param id=N> imports from a non-existent question', () => {
+    const warnings = lintStoryParamSources([sourced('region', 1)], () => undefined);
+    expect(warnings.some((w) => w.includes('#1') && w.includes("doesn't exist"))).toBe(true);
+  });
+
+  it('warns when the referenced file is not a question (e.g. a dashboard)', () => {
+    const warnings = lintStoryParamSources([sourced('region', 7)], () => 'dashboard');
+    expect(warnings.some((w) => w.includes('#7') && w.includes('dashboard') && w.includes('not a question'))).toBe(true);
+  });
+
+  it('no warning when the source resolves to an existing question; ignores source-less params', () => {
+    const declared: StoryParam[] = [sourced('city', 5), { name: 'plain', type: 'text', nullable: true }];
+    expect(lintStoryParamSources(declared, (id) => (id === 5 ? 'question' : undefined))).toEqual([]);
   });
 });
 
