@@ -29,7 +29,7 @@ export function serializeEditedStory(
 
   container.querySelectorAll(INJECTED_STYLE_SELECTOR).forEach(el => el.remove());
 
-  container.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline]').forEach(el => {
+  container.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
     const authored = el.getAttribute(ORIG_STYLE_ATTR);
     if (authored !== null) {
       el.setAttribute('style', authored);

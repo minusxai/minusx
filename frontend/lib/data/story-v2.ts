@@ -22,6 +22,7 @@ import type { JsxNode } from '@/lib/jsx';
 import type { StoryContent } from '@/lib/types';
 import { paramFromJsxAttrs, paramToPlaceholder, placeholdersToParamJsx } from './story-params';
 import { inlineQuestionFromJsxAttrs, inlineQuestionToPlaceholder, placeholdersToInlineQuestionJsx } from './story-question';
+import { numberFromJsxAttrs, numberToPlaceholder, placeholdersToNumberJsx } from './story-number';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const VOID_TAGS = immutableSet([
@@ -68,6 +69,14 @@ function nodeToHtml(node: JsxNode, assets: number[]): string {
     return inline ? inlineQuestionToPlaceholder(inline) : '';
   }
 
+  // <Number/> → an inline live figure (a <span>, not a chart card). id={N} or query={`…`}.
+  if (node.tag === 'Number') {
+    const attrsMap: Record<string, unknown> = {};
+    for (const a of node.attributes) if (a.value.static) attrsMap[a.name] = a.value.json;
+    const num = numberFromJsxAttrs(attrsMap);
+    return num ? numberToPlaceholder(num) : '';
+  }
+
   // <Param name=… /> → the shared-param placeholder AgentHtml mounts a ParameterInput at.
   if (node.tag === 'Param') {
     const attrsMap: Record<string, unknown> = {};
@@ -112,6 +121,8 @@ export function buildStoryJsx(content: StoryContent): string {
   html = html.replace(/<div\s+data-question-id=["'](\d+)["'][^>]*>\s*<\/div>/g, (_m, id: string) => `<Question id={${id}} />`);
   // <div data-question-inline="…" …></div> → <Question query={`…`} connection=… viz=… params=… />
   html = placeholdersToInlineQuestionJsx(html);
+  // <span data-number-inline="…"></span> → <Number id={N}|query={`…`} … />
+  html = placeholdersToNumberJsx(html);
   // <div data-param-* …></div> → <Param name=… />
   html = placeholdersToParamJsx(html);
   // self-close void tags (jsx requires it): <br> → <br/>, <img …> → <img …/>

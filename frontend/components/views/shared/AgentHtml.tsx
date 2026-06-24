@@ -12,11 +12,19 @@ import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionC
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import { paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story-question';
+import { numberFromEl } from '@/lib/data/story-number';
+import type { InlineNumberEmbed } from '@/lib/data/story-number';
+import InlineNumber from '@/components/views/story/InlineNumber';
 import type { QuestionContent } from '@/lib/types';
 
 interface ChartTarget {
   el: HTMLElement;
   questionId: number;
+}
+
+interface NumberTarget {
+  el: HTMLElement;
+  embed: InlineNumberEmbed;
 }
 
 interface InlineChartTarget {
@@ -99,6 +107,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const importsRef = useRef<string[]>([]);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
+  const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
   // The shared param context: the reader's current values, seeded once from the story
   // defaults. (AgentHtml remounts via `key` when the story reloads, re-seeding.)
@@ -208,6 +217,15 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
       inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue });
     });
+    // <span data-number-inline="…"> → an inline LIVE figure (not a chart card). Stays inline in
+    // the text flow — no sizing/clamping; InlineNumber renders the value in the span.
+    const numbersFound: NumberTarget[] = [];
+    root.querySelectorAll<HTMLElement>('[data-number-inline]').forEach((el) => {
+      const embed = numberFromEl(el);
+      if (!embed) return;
+      el.replaceChildren();
+      numbersFound.push({ el, embed });
+    });
     // <div data-param-name="…"> → a reader filter control bound to the shared param context.
     const paramsFound: ParamTarget[] = [];
     root.querySelectorAll<HTMLElement>('[data-param-name]').forEach((el) => {
@@ -222,6 +240,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     setTargets(found);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInlineTargets(inlineFound);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNumberTargets(numbersFound);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setParamTargets(paramsFound);
   }, [sanitized, fluid]);
@@ -243,10 +263,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (el.tagName === 'STYLE') return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
     });
-    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline]').forEach(el => {
+    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
-  }, [editable, targets, inlineTargets, sanitized]);
+  }, [editable, targets, inlineTargets, numberTargets, sanitized]);
 
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
@@ -372,6 +392,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         </Box>,
         t.el,
         `inline-${i}`,
+      ))}
+      {numberTargets.map((t, i) => createPortal(
+        <InlineNumber embed={t.embed} externalParamValues={externalParameters.length ? values : undefined} />,
+        t.el,
+        `number-${i}`,
       ))}
       {paramTargets.map((t, i) => createPortal(
         <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />,

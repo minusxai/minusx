@@ -30,6 +30,12 @@ vi.mock('@/components/containers/EmbeddedQuestionContainer', () => ({
     React.createElement('div', { 'aria-label': `Inline question ${question.vizSettings.type}` }, question.query),
 }));
 
+vi.mock('@/components/views/story/InlineNumber', () => ({
+  __esModule: true,
+  default: ({ embed }: { embed: { id?: number; prefix?: string } }) =>
+    React.createElement('span', { 'aria-label': `inline number ${embed.id ?? 'query'}` }, embed.prefix ?? ''),
+}));
+
 import StoryView from '@/components/views/story/StoryView';
 
 // Real-world Google Fonts @import — note the SEMICOLONS inside the URL
@@ -141,6 +147,15 @@ describe('StoryView', () => {
     renderWithProviders(<StoryView content={content} fileId={1029} />);
     await waitFor(() => {
       expect(document.querySelector('[data-file-id="1029"]')).toBeTruthy();
+    });
+  });
+
+  it('hydrates a <Number> placeholder into an INLINE figure span (not a chart card)', async () => {
+    const story = '<div class="hs"><p>Latest MRR is <span data-number-inline="{&quot;id&quot;:1026,&quot;prefix&quot;:&quot;$&quot;}"></span>.</p></div>';
+    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    await waitFor(() => {
+      const el = within(storyRoot() as unknown as HTMLElement).getByLabelText('inline number 1026');
+      expect(el.tagName).toBe('SPAN'); // inline in the prose, not a block embed
     });
   });
 
