@@ -342,5 +342,5 @@ function SharedStory({ fileId }: { fileId: number }) {
   if (!ready || !mergedContent) {
     return <Center h="60vh"><Spinner size="lg" /></Center>;
   }
-  return <StoryView content={mergedContent} viewMode="visual" readOnly />;
+  return <StoryView content={mergedContent} readOnly />;
 }
