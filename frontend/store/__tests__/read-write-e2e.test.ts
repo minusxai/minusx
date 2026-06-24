@@ -1105,13 +1105,13 @@ describe('Phase 1: Unified File System API E2E', () => {
           payload: { files: [dashboardFile] }
         });
 
-        // A dashboard's body projects to a <jsx> block. Break the jsx (remove the
-        // closing </Dashboard> tag) so the edited markup no longer parses — the edit
-        // must be rejected rather than producing invalid dashboard content.
+        // A dashboard's assets project to <item> elements with a typed <type>. Corrupt
+        // an asset's type to a value outside the allowed set so the edited markup no
+        // longer produces valid dashboard content — the edit must be rejected.
         const result = await editFileStr({
           fileId: dashboardId,
-          oldMatch: '</Dashboard>',
-          newMatch: ''  // Remove the closing tag → unparseable jsx
+          oldMatch: '<type>question</type>',
+          newMatch: '<type>bogus_type</type>'  // not a valid asset type → invalid dashboard
         });
 
         // Verify error

@@ -29,12 +29,14 @@ describe('CreateFile content schema', () => {
 });
 
 describe('CreateFile/EditFile describe the MARKUP edit surface (File Architecture v2)', () => {
-  it('EditFile description teaches the markup format (props/jsx), not JSON content', () => {
+  it('EditFile description teaches the uniform jsx markup format, not JSON content', () => {
     const desc = EditFile.schema.description ?? '';
     expect(desc).toContain('MARKUP');
-    expect(desc).toContain('<props>');
-    expect(desc).toContain('template-literal'); // raw SQL child
-    // The old JSON-content-schema embed is gone.
+    expect(desc).toContain('<item>');             // arrays
+    expect(desc).toContain('template-literal');   // raw SQL child
+    expect(desc).toContain('type="number"');      // schemaless annotation
+    // No <props> wrapper and no embedded JSON content-schema in the new model.
+    expect(desc).not.toContain('<props>');
     expect(desc).not.toContain('AtlasQuestionFile');
   });
 

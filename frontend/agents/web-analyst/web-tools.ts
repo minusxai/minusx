@@ -24,23 +24,23 @@ const EditFileParams = Type.Object({
 });
 
 // The agent edits the file's MARKUP (the `markup` field in AppState / ReadFiles), not JSON.
-const MARKUP_FORMAT = `Every file projects to a MARKUP document — that is what you edit (the \`markup\` field in AppState / ReadFiles), never escaped JSON.
+const MARKUP_FORMAT = `Every file projects to a single JSX document — that is what you edit (the \`markup\` field in AppState / ReadFiles), never escaped JSON. The content object's fields are the top-level elements (no wrapper). It is all JSX.
 
-Two shapes, by file type:
-- Structured files (question, notebook, connection, config, folder, context) → a \`<props>\` block of nested elements, one per field. Scalars are element text; nested objects nest; arrays use repeated \`<item>\` children; a string containing <, >, {, backtick, or a newline (e.g. SQL) is a RAW template-literal child \`<query>{\`SELECT a WHERE x < 5\`}</query>\` — no escaping inside.
-- Document files (story, dashboard) → a \`<jsx>\` body (story = HTML + \`<Question id={N}/>\` embeds; dashboard = \`<Dashboard cols={12}><Question id={N} x={} y={} w={} h={}/></Dashboard>\`) followed by a \`<props>\` block of metadata.
+Rules (uniform for every file type):
+- object → nested \`<field>…</field>\`; array → \`<field>\` with repeated \`<item>\` children.
+- scalar → \`<field>value</field>\`. A string containing <, >, {, backtick, or a newline (e.g. SQL) rides in a RAW template-literal child: \`<query>{\`SELECT a WHERE x < 5\`}</query>\` — no escaping inside.
+- a jsx field (e.g. a story's HTML body) is emitted INLINE as real elements, with \`<Question id={N}/>\` embeds: \`<story><div class="story">…<Question id={5}/>…</div></story>\`.
+- config types with no schema (connection/config/context/…) annotate non-string scalars so they round-trip: \`<port type="number">5432</port>\`, \`<enabled type="boolean">true</enabled>\`.
 
 Example question markup:
-<props>
-  <description>Revenue by month</description>
-  <query>{\`SELECT month, SUM(revenue) AS rev FROM sales WHERE rev < 5000 GROUP BY 1\`}</query>
-  <vizSettings>
-    <type>bar</type>
-    <xCols><item>month</item></xCols>
-    <yCols><item>rev</item></yCols>
-  </vizSettings>
-  <connection_name>saas_metrics</connection_name>
-</props>`;
+<description>Revenue by month</description>
+<query>{\`SELECT month, SUM(revenue) AS rev FROM sales WHERE rev < 5000 GROUP BY 1\`}</query>
+<vizSettings>
+  <type>bar</type>
+  <xCols><item>month</item></xCols>
+  <yCols><item>rev</item></yCols>
+</vizSettings>
+<connection_name>saas_metrics</connection_name>`;
 
 // Keep this description in sync with the EditFile behavior in tool-handlers.ts —
 // the query/parameters warning in particular prevents broken queries.
@@ -72,7 +72,7 @@ Changes are staged as drafts in Redux. The user reviews and publishes via Publis
 
 String Matching: copy \`oldMatch\` directly from the \`markup\` in AppState — never call ReadFiles just to get markup already in AppState.
 
-Notebooks: the markup's \`<props>\` has \`<cells>\` (ordered; each cell has a stable \`<id>\` and is a \`sql\` or \`text\` cell). AppState also carries \`activeCellId\` — scope edits to that cell unless told otherwise.`;
+Notebooks: the markup has a \`<cells>\` element (ordered; each cell has a stable \`<id>\` and is a \`sql\` or \`text\` cell). AppState also carries \`activeCellId\` — scope edits to that cell unless told otherwise.`;
 
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
@@ -102,7 +102,7 @@ const CreateFileParams = Type.Object({
   // EditFile edits and ReadFiles returns (see the EditFile description / MARKUP_FORMAT).
   markup: Type.Optional(Type.String({
     description:
-      "The new file's content as MARKUP (preferred). Structured files (question/notebook/connection/config/context): a <props> block of nested elements (SQL/raw strings in a {`…`} template-literal child). Document files (story/dashboard): a <jsx> body + <props> metadata. See the EditFile description for the exact shape and examples.",
+      "The new file's content as MARKUP (preferred) — one JSX document, the content fields as top-level elements (objects nest, arrays use <item>, SQL/raw strings in a {`…`} child, a story's HTML body inline with <Question id={N}/> embeds). See the EditFile description for the exact shape and examples.",
   })),
   // Optional structured fallback: initial content fields merged over template defaults, as a
   // JSON OBJECT. Prefer `markup`. (A string is JSON.parsed defensively by the handler.)

@@ -282,7 +282,7 @@ export const StoryContent = Type.Object({
   description: Nullable(Type.String()),
   assets: Type.Array(FileReference, { description:
     'questions embeddable in the story. Every data-question-id used in the story HTML MUST have a matching id here.' }),
-  story: NullableD(Type.String(),
+  story: NullableD(Type.String({ format: 'jsx' }),
     'One self-contained, FLUID RESPONSIVE HTML document rendered as a single scrolling data-story page (height ' +
     'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
     '(~390–430px wide) and capped ~1280px wide, centered, on desktop. The SAME document must look great at BOTH, ' +

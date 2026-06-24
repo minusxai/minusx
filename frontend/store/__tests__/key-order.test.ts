@@ -8,13 +8,14 @@
  * the bug this file used to guard against.
  *
  * Under the markup model that whole class of bug is DISSOLVED: a dashboard projects to
- * a deterministic jsx body (`<Dashboard cols><Question id x y w h/></Dashboard>`) plus
- * a `<props>` block. Layout positions are jsx ATTRIBUTES, not JSON object keys, so the
- * order in which `content` keys happen to be stored no longer affects the projection.
+ * a deterministic, schema-driven jsx document (`<assets>`/`<layout>` with nested `<item>`
+ * elements and scalar position tags like `<w>6</w>`). Layout positions are emitted in a
+ * fixed, schema-defined order, so the order in which `content` keys happen to be stored
+ * no longer affects the projection.
  *
  * The invariants this file now guards:
  *   1. buildCurrentFileStr produces deterministic, stable markup after a DB round-trip.
- *   2. editFileStr with a markup oldMatch (a `<Question>` position attribute) succeeds
+ *   2. editFileStr with a markup oldMatch (a layout-item position element) succeeds
  *      and updates Redux.
  *   3. Re-deriving markup after setEdit with reordered content keys yields IDENTICAL
  *      markup — the projection is independent of content key order (the new guarantee
@@ -49,15 +50,30 @@ describe('key-order - deterministic markup projection', () => {
   const dbPath = getTestDbPath('key_order');
   let dashId: number;
 
-  // Canonical markup the dashboard projects to. Positions are jsx attributes;
-  // the dashboard has no description so props is the empty self-closing form.
+  // Canonical markup the dashboard projects to. Under the uniform schema-driven
+  // content⇄jsx converter, assets and layout nest as `<item>` elements with scalar
+  // child tags; layout positions are nested scalar elements (`<w>6</w>`), not jsx
+  // attributes — but the projection is still fixed by the schema, independent of
+  // how the underlying content keys happen to be ordered.
   const EXPECTED_MARKUP =
-    '<jsx>\n' +
-    '<Dashboard cols={12}>\n' +
-    '  <Question id={99} x={0} y={0} w={6} h={4} />\n' +
-    '</Dashboard>\n' +
-    '</jsx>\n' +
-    '<props/>';
+    '<assets>\n' +
+    '  <item>\n' +
+    '    <type>question</type>\n' +
+    '    <id>99</id>\n' +
+    '  </item>\n' +
+    '</assets>\n' +
+    '<layout>\n' +
+    '  <columns>12</columns>\n' +
+    '  <items>\n' +
+    '    <item>\n' +
+    '      <id>99</id>\n' +
+    '      <x>0</x>\n' +
+    '      <y>0</y>\n' +
+    '      <w>6</w>\n' +
+    '      <h>4</h>\n' +
+    '    </item>\n' +
+    '  </items>\n' +
+    '</layout>';
 
   function setupStore() {
     return configureStore({
@@ -145,16 +161,16 @@ describe('key-order - deterministic markup projection', () => {
    * Case 2 — editFileStr with a markup oldMatch succeeds and updates Redux.
    *
    * Given: the loaded dashboard projected to markup
-   * When:  editFileStr changes a <Question> position attribute (w={6} → w={8})
+   * When:  editFileStr changes a layout-item position element (<w>6</w> → <w>8</w>)
    * Then:  the edit applies and the new layout width is reflected in Redux + re-projected markup
    */
-  it('Case 2: editFileStr with a markup oldMatch (Question position) updates Redux', async () => {
+  it('Case 2: editFileStr with a markup oldMatch (layout position) updates Redux', async () => {
     await readFiles([dashId]);
 
     const result = await editFileStr({
       fileId: dashId,
-      oldMatch: '<Question id={99} x={0} y={0} w={6} h={4} />',
-      newMatch: '<Question id={99} x={0} y={0} w={8} h={4} />',
+      oldMatch: '<w>6</w>',
+      newMatch: '<w>8</w>',
     });
 
     expect(result.success).toBe(true);
@@ -167,8 +183,8 @@ describe('key-order - deterministic markup projection', () => {
     expect(item.w).toBe(8);
     expect(item).toMatchObject({ id: 99, x: 0, y: 0, h: 4 });
 
-    // Re-projected markup carries the edited attribute and nothing else changed.
-    expect(built.fullFileStr).toContain('<Question id={99} x={0} y={0} w={8} h={4} />');
+    // Re-projected markup carries the edited width and nothing else changed.
+    expect(built.fullFileStr).toContain('<w>8</w>');
   });
 
   /**
@@ -177,8 +193,8 @@ describe('key-order - deterministic markup projection', () => {
    * Given: dashboard state mutated via setEdit with layout items in a DIFFERENT key
    *        order ({h,w,x,y,id}) than the original ({id,x,y,w,h})
    * When:  buildCurrentFileStr is called
-   * Then:  the projected markup is byte-identical to the canonical projection — the jsx
-   *        attribute order is fixed by dashboardToJsx, not by the content key order.
+   * Then:  the projected markup is byte-identical to the canonical projection — the
+   *        element order is fixed by the schema-driven converter, not by content key order.
    */
   it('Case 3: re-deriving markup after setEdit with reordered content keys yields identical markup', async () => {
     await readFiles([dashId]);

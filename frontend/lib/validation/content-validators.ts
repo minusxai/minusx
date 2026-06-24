@@ -11,6 +11,9 @@ import { validateOrgConfig } from '@/lib/validation/config-validators';
 // `verbose` so each error carries the received `data` — needed to report
 // expected-vs-got in formatErrors() below.
 const ajv = new Ajv({ allErrors: true, verbose: true });
+// `format: 'jsx'` marks a string field as a jsx body (drives content⇄jsx); it is not a
+// validation constraint, so register it as a no-op format so Ajv accepts the schema.
+ajv.addFormat('jsx', () => true);
 ajv.addSchema(atlasSchema, 'atlas');
 
 // Validators compiled once at module load — not per-call

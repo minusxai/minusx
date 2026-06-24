@@ -266,9 +266,11 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
           // File Architecture v2 markup edits: write a doc (the allowed field) AND
           // flip the non-doc `published.all` (1 → 0). The guard strips docs before
           // comparing, so the published change is detected and the edit is rejected.
+          // Context is a schemaless type, so the numeric `published.all` projects to
+          // an annotated `<all type="number">` element (not a bare `<all>`).
           changes: [
             { oldMatch: '<docs/>', newMatch: '<docs><item><content># Doc</content></item></docs>' },
-            { oldMatch: '<all>1</all>', newMatch: '<all>0</all>' },
+            { oldMatch: '<all type="number">1</all>', newMatch: '<all type="number">0</all>' },
           ],
         }, { id: 'tc_nonDoc' })],
         { stopReason: 'toolUse' },

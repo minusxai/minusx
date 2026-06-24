@@ -1,11 +1,10 @@
-// The agent-markup combiner: content → markup → content round-trips per dialect.
+// The agent-markup combiner: content → jsx markup → content round-trips, one uniform
+// schema-driven conversion for every file type (no per-type dialect, no <props>/<jsx> split).
 import { describe, it, expect } from 'vitest';
 import { fileToMarkup, markupToContent } from '../file-markup';
-import { dashboardToJsx, jsxToDashboard } from '../dashboard-jsx';
-import { parseJsx } from '@/lib/jsx';
 
-describe('fileToMarkup / markupToContent — keyvalue (question)', () => {
-  it('projects a question to <props> XML and round-trips', () => {
+describe('fileToMarkup / markupToContent — question (no wrapper, raw SQL)', () => {
+  it('emits fields at top level and round-trips', () => {
     const content = {
       description: 'rev',
       query: 'SELECT m, sum(r) AS r FROM s WHERE r < 5 GROUP BY 1',
@@ -14,9 +13,10 @@ describe('fileToMarkup / markupToContent — keyvalue (question)', () => {
       parameters: [],
     };
     const markup = fileToMarkup('question', content);
-    expect(markup.startsWith('<props>')).toBe(true);
+    expect(markup).not.toContain('<props>');
     expect(markup).not.toContain('<jsx>');
-    expect(markup).toContain('WHERE r < 5'); // SQL raw
+    expect(markup).toContain('<query>');
+    expect(markup).toContain('WHERE r < 5'); // raw
     const back = markupToContent('question', markup);
     expect(back.ok).toBe(true);
     if (back.ok) {
@@ -27,8 +27,8 @@ describe('fileToMarkup / markupToContent — keyvalue (question)', () => {
   });
 });
 
-describe('fileToMarkup / markupToContent — jsx (story)', () => {
-  it('splits the HTML body into <jsx> and metadata into <props>, round-trips', () => {
+describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
+  it('emits the HTML body inline as a <story> jsx field with <Question/> embeds', () => {
     const content = {
       description: 'launch',
       colorMode: 'dark',
@@ -36,44 +36,29 @@ describe('fileToMarkup / markupToContent — jsx (story)', () => {
       assets: [{ type: 'question', id: 1022 }],
     };
     const markup = fileToMarkup('story', content);
-    expect(markup).toContain('<jsx>');
-    expect(markup).toContain('<Question id={1022}');
+    expect(markup).toContain('<story><div class="story">');
+    expect(markup).toContain('<Question id={1022}');       // embed inline, recognized
     expect(markup).toContain('<colorMode>dark</colorMode>');
+    expect(markup).not.toContain('<jsx>');
     const back = markupToContent('story', markup);
     expect(back.ok).toBe(true);
     if (back.ok) {
       expect(back.content.colorMode).toBe('dark');
-      expect(back.content.story).toContain('data-question-id="1022"');
-      expect(back.content.assets).toEqual([{ type: 'question', id: 1022 }]);
+      expect(back.content.story).toContain('data-question-id="1022"'); // parsed back to HTML
     }
   });
 });
 
-describe('dashboard body adapter', () => {
-  it('round-trips positioned question embeds', () => {
-    const content = {
-      assets: [{ type: 'question', id: 5 }, { type: 'question', id: 9 }],
-      layout: { columns: 12, items: [{ id: 5, x: 0, y: 0, w: 6, h: 4 }, { id: 9, x: 6, y: 0, w: 6, h: 4 }] },
-    };
-    const jsx = dashboardToJsx(content as Parameters<typeof dashboardToJsx>[0]);
-    expect(jsx).toContain('<Dashboard cols={12}>');
-    expect(jsx).toContain('<Question id={5} x={0} y={0} w={6} h={4} />');
-    const parsed = parseJsx(jsx);
-    expect(parsed.ok).toBe(true);
-    if (parsed.ok) {
-      const d = jsxToDashboard(parsed.nodes as Parameters<typeof jsxToDashboard>[0]);
-      expect(d.layout.items).toEqual(content.layout.items);
-      expect(d.assets).toEqual(content.assets);
-    }
-  });
-
-  it('round-trips through fileToMarkup/markupToContent', () => {
+describe('fileToMarkup / markupToContent — dashboard (uniform nested, no grid)', () => {
+  it('round-trips assets + layout as nested elements', () => {
     const content = {
       description: 'KPIs',
       assets: [{ type: 'question', id: 5 }],
       layout: { columns: 12, items: [{ id: 5, x: 0, y: 0, w: 12, h: 4 }] },
     };
     const markup = fileToMarkup('dashboard', content);
+    expect(markup).toContain('<layout>');
+    expect(markup).toContain('<columns>12</columns>');
     const back = markupToContent('dashboard', markup);
     expect(back.ok).toBe(true);
     if (back.ok) {
@@ -84,12 +69,11 @@ describe('dashboard body adapter', () => {
   });
 });
 
-describe('fileToMarkup — keyvalue (schemaless connection)', () => {
-  it('projects nested config to XML and back', () => {
+describe('fileToMarkup — schemaless connection (type="…")', () => {
+  it('round-trips nested config with typed scalars', () => {
     const content = { type: 'postgres', config: { host: 'db', port: 5432, ssl: true } };
     const markup = fileToMarkup('connection', content);
-    expect(markup).toContain('<type>postgres</type>');
-    expect(markup).toContain('<port>5432</port>');
+    expect(markup).toContain('<port type="number">5432</port>');
     const back = markupToContent('connection', markup);
     expect(back.ok && back.content).toEqual(content);
   });

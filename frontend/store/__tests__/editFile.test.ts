@@ -380,10 +380,10 @@ describe('editFile - Question content validation', () => {
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: `<vizSettings>
-    <type>table</type>
-    <xCols/>
-    <yCols/>
-  </vizSettings>`,
+  <type>table</type>
+  <xCols/>
+  <yCols/>
+</vizSettings>`,
       newMatch: '<vizSettings/>',
     });
     expect(result.success).toBe(false);
@@ -431,11 +431,11 @@ describe('editFile - Question content validation', () => {
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: `<vizSettings>
-    <type>table</type>
-    <xCols/>
-    <yCols/>
-  </vizSettings>`,
-      newMatch: '<vizSettings>\n    <type>pivot</type>\n    <pivotConfig>\n      <rows>\n        <item>region</item>\n      </rows>\n    </pivotConfig>\n  </vizSettings>',
+  <type>table</type>
+  <xCols/>
+  <yCols/>
+</vizSettings>`,
+      newMatch: '<vizSettings>\n  <type>pivot</type>\n  <pivotConfig>\n    <rows>\n      <item>region</item>\n    </rows>\n  </pivotConfig>\n</vizSettings>',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid question content/);
@@ -446,11 +446,11 @@ describe('editFile - Question content validation', () => {
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: `<vizSettings>
-    <type>table</type>
-    <xCols/>
-    <yCols/>
-  </vizSettings>`,
-      newMatch: '<vizSettings>\n    <type>table</type>\n  </vizSettings>',
+  <type>table</type>
+  <xCols/>
+  <yCols/>
+</vizSettings>`,
+      newMatch: '<vizSettings>\n  <type>table</type>\n</vizSettings>',
     });
     expect(result.success).toBe(true);
   });
@@ -458,29 +458,29 @@ describe('editFile - Question content validation', () => {
   it('accepts valid pivot with full pivotConfig', async () => {
     await readFiles([questionId]);
     const pivotViz = `<vizSettings>
-    <type>pivot</type>
-    <pivotConfig>
-      <rows>
-        <item>region</item>
-      </rows>
-      <columns>
-        <item>year</item>
-      </columns>
-      <values>
-        <item>
-          <column>revenue</column>
-          <aggFunction>SUM</aggFunction>
-        </item>
-      </values>
-    </pivotConfig>
-  </vizSettings>`;
+  <type>pivot</type>
+  <pivotConfig>
+    <rows>
+      <item>region</item>
+    </rows>
+    <columns>
+      <item>year</item>
+    </columns>
+    <values>
+      <item>
+        <column>revenue</column>
+        <aggFunction>SUM</aggFunction>
+      </item>
+    </values>
+  </pivotConfig>
+</vizSettings>`;
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: `<vizSettings>
-    <type>table</type>
-    <xCols/>
-    <yCols/>
-  </vizSettings>`,
+  <type>table</type>
+  <xCols/>
+  <yCols/>
+</vizSettings>`,
       newMatch: pivotViz,
     });
     expect(result.success).toBe(true);
@@ -491,11 +491,11 @@ describe('editFile - Question content validation', () => {
     const result = await editFileStr({
       fileId: questionId,
       oldMatch: `<vizSettings>
-    <type>table</type>
-    <xCols/>
-    <yCols/>
-  </vizSettings>`,
-      newMatch: '<vizSettings>\n    <type>bar</type>\n    <xCols>\n      <item>category</item>\n    </xCols>\n    <yCols>\n      <item>revenue</item>\n    </yCols>\n  </vizSettings>',
+  <type>table</type>
+  <xCols/>
+  <yCols/>
+</vizSettings>`,
+      newMatch: '<vizSettings>\n  <type>bar</type>\n  <xCols>\n    <item>category</item>\n  </xCols>\n  <yCols>\n    <item>revenue</item>\n  </yCols>\n</vizSettings>',
     });
     expect(result.success).toBe(true);
   });
@@ -555,18 +555,17 @@ describe('editFile - Dashboard content validation', () => {
     if (global.gc) global.gc();
   });
 
-  // Markup note: a dashboard projects to a `<jsx>` body of `<Question id={N} .../>`
-  // embeds. The asset *type* is derived from the tag (Question/text/img/hr), so an
-  // "invalid discriminator" can't be expressed — and a non-numeric `id={...}` is simply
-  // dropped (not invalid). To preserve the intent (the validation gate rejects malformed
-  // dashboard content with "Invalid dashboard content"), we set a non-integer id, which
-  // both AssetReference (Type.Integer) and the layout item id reject.
+  // Markup note: a dashboard projects to uniform nested markup — an `<assets>` block of
+  // `<item>` references and a `<layout>` block of `<item>` grid placements. To preserve the
+  // intent (the validation gate rejects malformed dashboard content with "Invalid dashboard
+  // content"), we set a non-integer id; with replaceAll both the assets `<id>` (AssetReference,
+  // Type.Integer) and the layout item `<id>` reject.
   it('rejects non-integer id in FileAssetRef', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: 'id={99}',
-      newMatch: 'id={99.5}',
+      oldMatch: '<id>99</id>',
+      newMatch: '<id>99.5</id>',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
@@ -576,8 +575,8 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: 'x={0}',
-      newMatch: 'x={0.5}',
+      oldMatch: '<x>0</x>',
+      newMatch: '<x>0.5</x>',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
@@ -587,8 +586,8 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: 'w={6}',
-      newMatch: 'w={1}',
+      oldMatch: '<w>6</w>',
+      newMatch: '<w>1</w>',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
@@ -598,8 +597,8 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: 'h={4}',
-      newMatch: 'h={0}',
+      oldMatch: '<h>4</h>',
+      newMatch: '<h>0</h>',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
@@ -609,8 +608,8 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: '<Question id={99} x={0} y={0} w={6} h={4} />',
-      newMatch: '<text x={0} y={0} w={6} h={4}>{`Section header`}</text>',
+      oldMatch: '    <type>question</type>\n    <id>99</id>',
+      newMatch: '    <type>text</type>\n    <content>Section header</content>',
     });
     expect(result.success).toBe(true);
   });
@@ -619,8 +618,8 @@ describe('editFile - Dashboard content validation', () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
-      oldMatch: 'x={0} y={0} w={6} h={4}',
-      newMatch: 'x={0} y={0} w={4} h={6}',
+      oldMatch: '      <x>0</x>\n      <y>0</y>\n      <w>6</w>\n      <h>4</h>',
+      newMatch: '      <x>0</x>\n      <y>0</y>\n      <w>4</w>\n      <h>6</h>',
     });
     expect(result.success).toBe(true);
   });
@@ -968,7 +967,7 @@ describe('EditFile - Context post-edit guard', () => {
   // keys, so editFileStr's merge preserves the original [] values — the guard then only
   // fires on a genuine non-docs edit. Prepend this change to doc-only ("allows") edits.
   const dropDerivedArrays = {
-    oldMatch: '  <fullAnnotations/>\n  <fullDocs/>\n  <fullMetrics/>\n  <fullSchema/>\n  <fullSkills/>\n  <parentSchema/>\n',
+    oldMatch: '<fullAnnotations/>\n<fullDocs/>\n<fullMetrics/>\n<fullSchema/>\n<fullSkills/>\n<parentSchema/>\n',
     newMatch: '',
   };
 
@@ -1038,10 +1037,10 @@ describe('EditFile - Context post-edit guard', () => {
       makeEditToolCall({
         fileId: contextId,
         changes: [dropDerivedArrays, {
-          // Append a second <item> inside the docs block (both the versions[].docs
-          // and the top-level docs[] are exempt from the post-edit guard).
-          oldMatch: '<content># Original doc</content>\n          <draft>false</draft>\n        </item>',
-          newMatch: '<content># Original doc</content>\n          <draft>false</draft>\n        </item>\n        <item>\n          <content># New doc</content>\n          <draft>true</draft>\n        </item>',
+          // Append a second <item> inside the versions[].docs block (both the
+          // versions[].docs and the top-level docs[] are exempt from the post-edit guard).
+          oldMatch: '<content># Original doc</content>\n        <draft type="boolean">false</draft>\n      </item>',
+          newMatch: '<content># Original doc</content>\n        <draft type="boolean">false</draft>\n      </item>\n      <item>\n        <content># New doc</content>\n        <draft type="boolean">true</draft>\n      </item>',
         }],
       }),
       {} as any,
@@ -1055,8 +1054,8 @@ describe('EditFile - Context post-edit guard', () => {
       makeEditToolCall({
         fileId: contextId,
         changes: [dropDerivedArrays, {
-          // Empty the docs blocks (versions[].docs and top-level docs are exempt).
-          oldMatch: '<docs>\n        <item>\n          <content># Original doc</content>\n          <draft>false</draft>\n        </item>\n      </docs>',
+          // Empty the top-level docs block (versions[].docs and top-level docs are exempt).
+          oldMatch: '<docs>\n  <item>\n    <content># Original doc</content>\n    <draft type="boolean">false</draft>\n  </item>\n</docs>',
           newMatch: '<docs/>',
         }],
       }),
@@ -1071,8 +1070,8 @@ describe('EditFile - Context post-edit guard', () => {
       makeEditToolCall({
         fileId: contextId,
         changes: [dropDerivedArrays, {
-          oldMatch: '<draft>false</draft>',
-          newMatch: '<draft>true</draft>',
+          oldMatch: '<draft type="boolean">false</draft>',
+          newMatch: '<draft type="boolean">true</draft>',
         }],
       }),
       {} as any,
@@ -1102,8 +1101,8 @@ describe('EditFile - Context post-edit guard', () => {
       makeEditToolCall({
         fileId: contextId,
         changes: [{
-          oldMatch: '<published>\n    <all>1</all>\n  </published>',
-          newMatch: '<published>\n    <all>99</all>\n  </published>',
+          oldMatch: '<published>\n  <all type="number">1</all>\n</published>',
+          newMatch: '<published>\n  <all type="number">99</all>\n</published>',
         }],
       }),
       {} as any,
@@ -1211,7 +1210,7 @@ describe('EditFile - notebook cell auto-execute', () => {
     const result = await executeToolCall(
       makeEditToolCall({
         fileId: notebookId,
-        changes: [{ oldMatch: '  <cells>', newMatch: '  <description>updated</description>\n  <cells>' }],
+        changes: [{ oldMatch: '<cells>', newMatch: '<description>updated</description>\n<cells>' }],
       }),
       {} as any,
     );
