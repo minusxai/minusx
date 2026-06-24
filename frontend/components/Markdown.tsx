@@ -21,10 +21,10 @@ import { selectContextFromPath } from '@/store/filesSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { isInternalAppLink } from '@/lib/utils/internal-link';
-import { parseSuggestedQuestions, parseTrustInfo, type ParsedTrustInfo } from '@/lib/utils/xml-parser';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
+import { parseContentParts, type ContentPart } from '@/lib/markdown/content-parts';
 
 // Inline chart component for query references in reports
 function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
@@ -123,75 +123,6 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
 // --- XML block parsing helpers ---
 // `parseSuggestedQuestions`, `parseTrustInfo`, and `ParsedTrustInfo` are shared
 // with the Slack reply path — see `@/lib/utils/xml-parser`.
-
-type ContentPart =
-  | { type: 'text'; content: string }
-  | { type: 'query'; content: string }
-  | { type: 'question_embed'; questionId: number }
-  | { type: 'trust_legacy'; content: string }
-  | { type: 'suggested_questions'; questions: string[] }
-  | { type: 'trust_info'; info: ParsedTrustInfo };
-
-/**
- * Parse content string into parts, extracting XML blocks and legacy patterns.
- * Incomplete XML blocks (no closing tag yet — streaming) are stripped from output.
- */
-function parseContentParts(text: string, queries?: Record<string, ReportQueryResult>): ContentPart[] {
-  // Combined pattern: completed XML blocks + legacy patterns
-  // Order matters: XML blocks first (greedy), then legacy patterns
-  // Order matters: XML blocks first (greedy), then legacy patterns, then the
-  // story-style chart embed `<div data-question-id="N">…</div>` (leaf div).
-  const xmlBlockPattern = /(?:<suggested_questions>([\s\S]*?)<\/suggested_questions>|<trust_info\s([\s\S]*?)<\/trust_info>|\{\{(query):([^}]+)\}\}|\[\[(trust):([^\]]+)\]\]|<div\b[^>]*\bdata-question-id=["']?(\d+)["']?[^>]*>[\s\S]*?<\/div>)/g;
-
-  const parts: ContentPart[] = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = xmlBlockPattern.exec(text)) !== null) {
-    // Add text before this match
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
-    }
-
-    if (match[1] !== undefined) {
-      // <suggested_questions>...</suggested_questions>
-      const questions = parseSuggestedQuestions(match[0]);
-      if (questions.length > 0) {
-        parts.push({ type: 'suggested_questions', questions });
-      }
-    } else if (match[2] !== undefined) {
-      // <trust_info ...>...</trust_info>
-      const info = parseTrustInfo(match[0]);
-      if (info) {
-        parts.push({ type: 'trust_info', info });
-      }
-    } else if (match[3] === 'query') {
-      // {{query:id}}
-      parts.push({ type: 'query', content: match[4] });
-    } else if (match[5] === 'trust') {
-      // [[trust:level]] — legacy
-      parts.push({ type: 'trust_legacy', content: match[6] });
-    } else if (match[7] !== undefined) {
-      // <div data-question-id="N">…</div> — live embedded question chart
-      parts.push({ type: 'question_embed', questionId: parseInt(match[7], 10) });
-    }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Remaining text — but strip any incomplete XML tags (streaming)
-  if (lastIndex < text.length) {
-    let remaining = text.slice(lastIndex);
-    // Remove incomplete opening tags that haven't closed yet
-    remaining = remaining.replace(/<suggested_questions>[\s\S]*$/, '');
-    remaining = remaining.replace(/<trust_info[\s\S]*$/, '');
-    if (remaining.trim()) {
-      parts.push({ type: 'text', content: remaining });
-    }
-  }
-
-  return parts;
-}
 
 // Suggested questions component — clickable chips that dispatch directly to Redux
 function SuggestedQuestionsBlock({ questions, markdownContext = 'mainpage', conversationID: conversationIDProp }: { questions: string[]; markdownContext?: 'sidebar' | 'mainpage'; conversationID?: number }) {

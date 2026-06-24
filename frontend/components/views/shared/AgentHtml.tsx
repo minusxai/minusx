@@ -22,6 +22,8 @@ interface ChartTarget {
 interface InlineChartTarget {
   el: HTMLElement;
   content: QuestionContent;
+  /** single_value: render compact + without the chart-card chrome so the number blends in. */
+  bare?: boolean;
 }
 
 interface ParamTarget {
@@ -71,6 +73,9 @@ export interface AgentHtmlHandle {
 const MIN_CHART_W = 320;
 const MIN_CHART_H = 340;
 const DEFAULT_CHART_H = 400;
+// single_value embeds are just a number — far smaller floors so they read as inline figures.
+const SINGLE_VALUE_MIN_H = 48;
+const SINGLE_VALUE_DEFAULT_H = 120;
 
 /**
  * Renders one agent-authored HTML document into a shadow root on a
@@ -170,7 +175,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // units): honor explicit px sizes, default a missing height, and clamp below-minimum boxes —
     // the tile (title bar + the chart's built-in 300px minHeight) can't physically render
     // smaller, it would just clip. Applied identically to saved and inline embeds.
-    const sizeEmbedEl = (el: HTMLElement) => {
+    const sizeEmbedEl = (el: HTMLElement, minH = MIN_CHART_H, defaultH = DEFAULT_CHART_H) => {
       el.replaceChildren(); // drop authored fallback content; the portal takes over
       // Snapshot the AUTHORED inline style before we clamp, so edit-mode serialization can restore it.
       el.setAttribute('data-mx-osz', el.getAttribute('style') ?? '');
@@ -179,7 +184,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (Number.isFinite(w)) el.style.width = `${Math.max(w, MIN_CHART_W)}px`;
       else if (!el.style.width) el.style.width = '100%';
       const h = px(el.style.height);
-      el.style.height = `${Number.isFinite(h) ? Math.max(h, MIN_CHART_H) : DEFAULT_CHART_H}px`;
+      el.style.height = `${Number.isFinite(h) ? Math.max(h, minH) : defaultH}px`;
     };
 
     const found: ChartTarget[] = [];
@@ -195,8 +200,13 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
       const embed = inlineQuestionFromEl(el);
       if (!embed) return;
-      sizeEmbedEl(el);
-      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed) });
+      // A single_value embed is just a styled number — it should NOT get the tall 340px chart-card
+      // treatment. Render it COMPACT (small height floor + compact default) and CHROME-LIGHT (no
+      // card border/bg) so it blends into the surrounding editorial layout; the agent styles the
+      // figure via singleValueConfig + its own container.
+      const isSingleValue = embed.vizSettings?.type === 'single_value';
+      sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
+      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue });
     });
     // <div data-param-name="…"> → a reader filter control bound to the shared param context.
     const paramsFound: ParamTarget[] = [];
@@ -338,15 +348,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         `${i}-${t.questionId}`,
       ))}
       {inlineTargets.map((t, i) => createPortal(
-        // Inline story-local question: same chart-card chrome as a saved embed, but no title
-        // bar (there is no saved file / name) — the chart fills the card. Ideal for a styled
-        // single_value live number. Renders straight from the inline content (no file load).
+        // Inline story-local question. A regular chart gets the same chart-card chrome as a saved
+        // embed (border + bg, no title bar). A single_value (`bare`) renders CHROME-LIGHT —
+        // transparent, no border — so the styled number blends into the surrounding design; the
+        // agent owns its look via singleValueConfig + its own container. Renders straight from the
+        // inline content (no file load).
         <Box
           className="mx-chart-fill"
-          bg="bg.subtle"
-          borderWidth="1px"
-          borderColor="border.default"
-          borderRadius="md"
+          {...(t.bare
+            ? {}
+            : { bg: 'bg.subtle', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'md' })}
           overflow="hidden"
           display="flex"
           flexDirection="column"

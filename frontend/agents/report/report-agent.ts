@@ -180,7 +180,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
 
 // ─── pure helpers ─────────────────────────────────────────────────────────
 
-function buildGoal(reportPrompt: string): string {
+export function buildGoal(reportPrompt: string): string {
   const prompt = normalizeMentions(reportPrompt?.trim() || 'Summarize the latest data.');
   return (
     `${prompt}\n\n` +
@@ -189,13 +189,15 @@ function buildGoal(reportPrompt: string): string {
     '- Items written as `@Name (question #id)` or `@Name (dashboard #id)` are saved files. Call ' +
     '**ReadFiles** on the id to get the file, its SQL, and current results. Rely on these for your numbers.\n' +
     '- Run **ExecuteQuery** for anything the mentioned files do not cover (or when nothing is mentioned).\n\n' +
-    'CHARTS\n' +
-    '- To show a chart, embed a SAVED question on its own line: `<div data-question-id="123"></div>`. ' +
-    'It renders that question\'s live chart (fresh data) when the report is viewed.\n' +
+    'CHARTS & NUMBERS\n' +
+    '- To show a chart, embed a SAVED question with the `<Question>` component on its own line: ' +
+    '`<Question id={123} />`. It renders that question\'s live chart (fresh data) when the report is viewed.\n' +
     '- Use the id of a mentioned question (`@Name (question #123)` → 123), or a question you find via ' +
-    'SearchFiles. Only saved questions can be charted — never invent an id.\n' +
-    '- For numbers that are not a saved question, just state them in the text (use ExecuteQuery to get them). ' +
-    'Include only the 1-3 charts that matter most.\n\n' +
+    'SearchFiles. Only saved questions can be embedded — never invent an id.\n' +
+    '- For a headline KPI number, PREFER embedding a saved single-number question the same way ' +
+    '(`<Question id={N} />`) so the figure stays live; only state a number directly in the prose when no ' +
+    'saved question covers it (get it with ExecuteQuery — never guess). Include only the 1-3 ' +
+    'charts/numbers that matter most.\n\n' +
     'OUTPUT FORMAT — keep it very short, markdown only:\n' +
     '- Output ONLY the report. Begin immediately with the `## TL;DR` heading — NO preamble ' +
     '(no "Now I have a clear picture", no "Here is the report"), NO meta-commentary, NO closing ' +

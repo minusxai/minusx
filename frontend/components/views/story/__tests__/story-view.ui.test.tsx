@@ -115,6 +115,26 @@ describe('StoryView', () => {
     });
   });
 
+  it('sizes an inline single_value embed COMPACT — honors a small height, no 340px chart floor', async () => {
+    const story =
+      '<div class="hs"><div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;single_value&quot;}}" style="width:100%;height:90px"></div></div>';
+    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    await waitFor(() => {
+      const div = storyRoot().querySelector('[data-question-inline]') as HTMLElement;
+      expect(div?.style.height).toBe('90px'); // honored, NOT clamped up to 340px
+    });
+  });
+
+  it('still applies the 340px chart floor to a NON-single_value inline embed', async () => {
+    const story =
+      '<div class="hs"><div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;table&quot;}}" style="width:100%;height:90px"></div></div>';
+    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    await waitFor(() => {
+      const div = storyRoot().querySelector('[data-question-inline]') as HTMLElement;
+      expect(div?.style.height).toBe('340px'); // clamped up to the chart floor
+    });
+  });
+
   it('sanitizes hostile HTML', async () => {
     renderWithProviders(
       <StoryView content={{ ...emptyContent, story: '<script>window.__pwned = true;</script><div onclick="alert(1)">Safe</div>' }} />
