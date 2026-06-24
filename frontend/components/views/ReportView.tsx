@@ -135,7 +135,8 @@ export default function ReportView({
   const hasPrompt = !!report.reportPrompt?.trim();
 
   return (
-    <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
+    // data-file-id → standard FileView capture (useScreenshot / Dev Tools "Download Image").
+    <Box data-file-id={fileId} display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
       {/* Status bar: Live/Draft toggle */}
       <StatusBanner
         status={report.status ?? 'draft'}

@@ -103,7 +103,9 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
         </HStack>
       )}
       <Box display="flex" justifyContent="center">
-        <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId } : {})}>
+        {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView
+            capture (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
+        <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId, 'data-file-id': fileId } : {})}>
           <AgentHtml
             key={renderKey}
             ref={agentRef}

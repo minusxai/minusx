@@ -135,6 +135,15 @@ describe('StoryView', () => {
     });
   });
 
+  it('marks the story with data-file-id so FileView capture (Dev Tools "Download Image") finds it', async () => {
+    // Regression: stories rendered without data-file-id, so useScreenshot.captureFileView threw
+    // "FileView with id N not found" (questions/dashboards set it on their content region).
+    renderWithProviders(<StoryView content={content} fileId={1029} />);
+    await waitFor(() => {
+      expect(document.querySelector('[data-file-id="1029"]')).toBeTruthy();
+    });
+  });
+
   it('sanitizes hostile HTML', async () => {
     renderWithProviders(
       <StoryView content={{ ...emptyContent, story: '<script>window.__pwned = true;</script><div onclick="alert(1)">Safe</div>' }} />
