@@ -158,8 +158,15 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
           <Combobox.Input
             aria-label={`param ${paramName}`}
             placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
-            bg="bg.canvas"
-            borderColor="border.muted"
+            // Reader filter control: render as a self-contained LIGHT form input with explicit
+            // colors. Chakra's `bg.canvas`/`fg` tokens resolve against the host APP's color mode
+            // (inherited across the story shadow boundary), so a dark-app token would paint this
+            // black on a light story — see the black-input bug. Fixed colors stay legible on any
+            // story surface (light or dark), like a standard form field.
+            bg="white"
+            color="gray.900"
+            borderColor="gray.300"
+            _placeholder={{ color: 'gray.500' }}
             fontSize="sm"
             h={ROW_H}
             minW="120px"
@@ -184,24 +191,31 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
             }}
           />
         </Combobox.Control>
-        <Portal>
-          <Combobox.Positioner>
-            <Combobox.Content minW="160px">
-              {loading && values === null ? (
-                <Combobox.Empty>Loading…</Combobox.Empty>
-              ) : filteredCollection.items.length === 0 ? (
-                <Combobox.Empty>No matches</Combobox.Empty>
-              ) : (
-                filteredCollection.items.map(item => (
-                  <Combobox.Item key={item.value} item={item}>
-                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                    <Combobox.ItemIndicator />
-                  </Combobox.Item>
-                ))
-              )}
-            </Combobox.Content>
-          </Combobox.Positioner>
-        </Portal>
+        {/*
+          NO <Portal> here. This widget renders inside the story's shadow root (StoryParamControl
+          portals it there). A Chakra <Portal> escapes to document.body — OUTSIDE the shadow root —
+          and the floating anchor reference breaks across that boundary, so the dropdown and its
+          "No matches" empty state floated detached in a corner of the window. Rendering the
+          Positioner inline keeps it in the same tree as the input so it anchors correctly; the
+          story scrolls (no overflow:hidden clip), so a portal isn't needed here. Explicit light
+          colors for the same shadow-boundary token reason as the input above.
+        */}
+        <Combobox.Positioner>
+          <Combobox.Content minW="160px" bg="white" color="gray.900" borderColor="gray.300" borderWidth="1px">
+            {loading && values === null ? (
+              <Combobox.Empty>Loading…</Combobox.Empty>
+            ) : filteredCollection.items.length === 0 ? (
+              <Combobox.Empty>No matches</Combobox.Empty>
+            ) : (
+              filteredCollection.items.map(item => (
+                <Combobox.Item key={item.value} item={item} _hover={{ bg: 'gray.100' }}>
+                  <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                  <Combobox.ItemIndicator />
+                </Combobox.Item>
+              ))
+            )}
+          </Combobox.Content>
+        </Combobox.Positioner>
       </Combobox.Root>
     </HStack>
   );
