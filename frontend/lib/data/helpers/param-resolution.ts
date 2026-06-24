@@ -10,6 +10,7 @@ import type { RootState } from '@/store/store';
 import { selectFile, selectMergedContent, type FileState } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { extractInlineQuestions } from '@/lib/data/story-question';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 
 /**
@@ -132,6 +133,25 @@ export function augmentWithParams(
         result.set(id, { ...(qr.data || {}), id });
       } else if (qr?.error) {
         result.set(id, { columns: [], types: [], rows: [], id, error: qr.error } as any);
+      }
+    }
+  }
+
+  // Story bodies embed INLINE questions (`data-question-inline`, no saved file) — collect each
+  // one's cached result keyed on its own query/params/connection, mirroring the server's
+  // executeQueriesForFile so app-state and ReadFiles agree. Params match the server: an inline
+  // question with declared params resolves them against the story's inherited params; otherwise {}.
+  if (fileState.type === 'story') {
+    const content = selectMergedContent(state, fileState.id) as { story?: string | null } | undefined;
+    for (const e of extractInlineQuestions(content?.story)) {
+      if (!e.query || !e.connection) continue;
+      const params = e.parameters?.length ? resolveEffectiveParams(e.parameters, {}, inheritedParams) : {};
+      const qr = selectQueryResult(state, e.query, params, e.connection);
+      const id = getQueryHash(e.query, params, e.connection);
+      if (qr?.data) {
+        result.set(id, { ...(qr.data || {}), id });
+      } else if (qr?.error) {
+        result.set(id, { columns: [], types: [], rows: [], id, error: qr.error } as QueryResult & { error: string });
       }
     }
   }
