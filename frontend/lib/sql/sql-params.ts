@@ -71,6 +71,16 @@ export function generateLabel(paramName: string): string {
 }
 
 /**
+ * Resolve the human-facing display name for a parameter: the user-set `label`
+ * if present, otherwise an auto-generated Title Case label from the SQL name
+ * (e.g. `start_date` → "Start Date"). The raw `name` remains the SQL binding.
+ */
+export function getParameterDisplayName(parameter: QuestionParameter): string {
+  const custom = parameter.label?.trim();
+  return custom || generateLabel(parameter.name);
+}
+
+/**
  * Get icon component for parameter/column type
  */
 export function getTypeIcon(type: 'text' | 'number' | 'date'): IconType {
