@@ -30,6 +30,19 @@ export async function extractConnectionSecrets(connectionName: string, config: C
   return out;
 }
 
+/**
+ * Carry forward existing `@SECRETS/…` refs for any secret field the incoming config omits
+ * or blanks — `getSafeConfig` strips secrets on load, so an UNCHANGED credential arrives
+ * absent/"". Run this before extract so editing a non-secret field doesn't wipe the secret.
+ */
+export function mergeExistingSecretRefs(newConfig: Config, existingConfig: Config): Config {
+  const out: Config = { ...newConfig };
+  for (const [key, value] of Object.entries(existingConfig)) {
+    if (isSecretRef(value) && (out[key] === undefined || out[key] === '')) out[key] = value;
+  }
+  return out;
+}
+
 /** Resolve any `@SECRETS/…` refs in a config to their raw values (server-only). */
 export async function resolveConnectionSecrets(config: Config): Promise<Config> {
   const out: Config = { ...config };

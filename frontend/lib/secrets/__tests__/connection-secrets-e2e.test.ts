@@ -6,7 +6,7 @@ import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__
 import { createFile } from '@/lib/data/files.server';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { SecretsDB } from '../secrets-db.server';
-import { resolveConnectionSecrets } from '../connection-secrets.server';
+import { resolveConnectionSecrets, mergeExistingSecretRefs } from '../connection-secrets.server';
 import { isSecretRef } from '../secret-refs';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConnectionContent } from '@/lib/types';
@@ -54,5 +54,24 @@ describe('connection save → secrets boundary (e2e)', () => {
     // Query-time resolution recovers it (server-side only).
     const resolved = await resolveConnectionSecrets(cfg);
     expect(resolved.password).toBe('hunter2');
+  });
+
+  it('preserve-on-update: an edit that omits the (stripped) password keeps the secret ref', async () => {
+    const created = await createFile({
+      name: 'keepme',
+      path: '/org/database/keepme',
+      type: 'connection',
+      content: { type: 'postgresql', config: { host: 'old', port: 5432, password: 'p@ss' } } as ConnectionContent,
+    }, user);
+    const ref = ((await DocumentDB.getById(created.data.id))!.content as ConnectionContent).config.password as string;
+
+    // The wizard re-saves with the password ABSENT (getSafeConfig strips it on load). The
+    // save path runs mergeExistingSecretRefs(newConfig, existingConfig) before extract:
+    const incoming = { host: 'new-host', port: 5432 }; // no password field
+    const merged = mergeExistingSecretRefs(incoming, { host: 'old', port: 5432, password: ref });
+
+    expect(merged.host).toBe('new-host');   // edit applied
+    expect(merged.password).toBe(ref);      // ref carried forward, not wiped
+    expect(await resolveConnectionSecrets(merged)).toMatchObject({ password: 'p@ss' });
   });
 });

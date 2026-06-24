@@ -38,7 +38,7 @@ import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHom
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
-import { extractConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
+import { extractConnectionSecrets, mergeExistingSecretRefs } from '@/lib/secrets/connection-secrets.server';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
 import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -583,7 +583,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       // File Architecture v2: move raw credentials out of the document into the server-only
       // secrets store; the persisted config holds @SECRETS/… refs instead.
       if (connectionContentWithoutSchema.config) {
-        connectionContentWithoutSchema.config = await extractConnectionSecrets(name, connectionContentWithoutSchema.config);
+        // getSafeConfig strips secrets on load, so an UNCHANGED credential comes back absent
+        // (or ""). Carry the existing @SECRETS ref forward so an edit to a non-secret field
+        // doesn't wipe the password; a newly-entered raw value is extracted as normal.
+        const existingConfig = ((existingFile.content as ConnectionContent | null)?.config ?? {}) as Record<string, unknown>;
+        const merged = mergeExistingSecretRefs(connectionContentWithoutSchema.config, existingConfig);
+        connectionContentWithoutSchema.config = await extractConnectionSecrets(name, merged);
       }
       contentToSave = (previousSchema
         ? { ...connectionContentWithoutSchema, schema: previousSchema }
