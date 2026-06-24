@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paramFromJsxAttrs, paramToPlaceholder, paramToJsx, extractStoryParams,
-  placeholdersToParamJsx, normalizeParamType, type StoryParam,
+  placeholdersToParamJsx, normalizeParamType, lintStoryParams, resolveImportedParam, type StoryParam,
 } from '../story-params';
 
 describe('story-params — type normalisation', () => {
@@ -53,5 +53,47 @@ describe('story-params — placeholder round-trip (through content.story HTML)',
     expect(jsx).toBe('<Param name="city" type="text" nullable={false} id={5} column="region" />');
     // and that jsx parses back to the same param
     expect(paramToJsx(params[0])).toBe(jsx);
+  });
+});
+
+describe('story-params — lint (non-blocking feedback)', () => {
+  it('warns when an embedded question needs a param that is not declared', () => {
+    const warnings = lintStoryParams(
+      [{ name: 'city', type: 'text', nullable: true }],
+      [{ id: 5, query: 'SELECT * FROM t WHERE city = :city AND rev > :min_rev' }],
+    );
+    expect(warnings.some((w) => w.includes(':min_rev') && w.includes('Question 5'))).toBe(true);
+    expect(warnings.some((w) => w.includes(':city'))).toBe(false); // city IS declared
+  });
+
+  it('warns on a type mismatch and on a declared-but-unused param', () => {
+    const mismatch = lintStoryParams(
+      [{ name: 'min_rev', type: 'text', nullable: true }],
+      [{ id: 9, query: 'SELECT * FROM t WHERE rev > :min_rev', parameters: [{ name: 'min_rev', type: 'number', label: null, source: null }] }],
+    );
+    expect(mismatch.some((w) => w.includes('min_rev') && w.includes('number') && w.includes('text'))).toBe(true);
+
+    const unused = lintStoryParams([{ name: 'ghost', type: 'text', nullable: true }], [{ id: 1, query: 'SELECT 1' }]);
+    expect(unused.some((w) => w.includes('ghost') && w.includes('declared'))).toBe(true);
+  });
+
+  it('clean story (all params declared, right types) → no warnings', () => {
+    const warnings = lintStoryParams(
+      [{ name: 'city', type: 'text', nullable: true }, { name: 'min_rev', type: 'number', nullable: true }],
+      [{ id: 5, query: 'SELECT * FROM t WHERE city = :city AND rev > :min_rev', parameters: [{ name: 'city', type: 'text', label: null, source: null }, { name: 'min_rev', type: 'number', label: null, source: null }] }],
+    );
+    expect(warnings).toEqual([]);
+  });
+});
+
+describe('story-params — import resolution', () => {
+  it('inherits the type from the source question when imported', () => {
+    const p: StoryParam = { name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'city' } };
+    const resolved = resolveImportedParam(p, [{ name: 'city', type: 'date', label: null, source: null }]);
+    expect(resolved.type).toBe('date'); // inherited from q5's :city
+  });
+  it('is a no-op without a source', () => {
+    const p: StoryParam = { name: 'x', type: 'text', nullable: true };
+    expect(resolveImportedParam(p, [])).toEqual(p);
   });
 });

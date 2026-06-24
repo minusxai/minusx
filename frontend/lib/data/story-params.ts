@@ -9,7 +9,8 @@
  *
  * Pure (client + server safe). The static-JSX engine validates `<Param>` (it's in the registry).
  */
-import type { ParameterType } from '@/lib/validation/atlas-schemas';
+import type { ParameterType, QuestionParameter } from '@/lib/validation/atlas-schemas';
+import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 
 /** Autocomplete / import source: a column of an embedded question. */
 export interface StoryParamSource {
@@ -97,4 +98,51 @@ export function placeholdersToParamJsx(html: string | null | undefined): string 
     const p = paramFromPlaceholderInner(inner);
     return p ? paramToJsx(p) : whole;
   });
+}
+
+// ── Lint + import resolution ────────────────────────────────────────────────
+
+/** An embedded question's identity + SQL + stored params (the param types live here, not in the SQL). */
+export interface EmbeddedQuestion {
+  id: number;
+  query: string;
+  parameters?: QuestionParameter[];
+}
+
+/**
+ * Non-blocking lint: every `:param` an embedded question needs should have a matching
+ * `<Param name=…>` declared (same name, compatible type). Returns advisory messages — the
+ * edit is never blocked; the agent gets this as feedback and can add the missing declarations.
+ * Param types come from each question's stored `parameters` (the SQL alone doesn't type them).
+ */
+export function lintStoryParams(declared: StoryParam[], questions: EmbeddedQuestion[]): string[] {
+  const byName = new Map(declared.map((p) => [p.name, p]));
+  const warnings: string[] = [];
+  const used = new Set<string>();
+  for (const q of questions) {
+    for (const needed of syncParametersWithSQL(q.query || '', q.parameters ?? [])) {
+      used.add(needed.name);
+      const decl = byName.get(needed.name);
+      if (!decl) {
+        warnings.push(`Question ${q.id} uses :${needed.name} (${needed.type}) but no <Param name="${needed.name}"> is declared in the story.`);
+      } else if (decl.type !== needed.type) {
+        warnings.push(`Question ${q.id} uses :${needed.name} as ${needed.type}, but <Param name="${needed.name}"> declares it as ${decl.type}.`);
+      }
+    }
+  }
+  for (const p of declared) {
+    if (!used.has(p.name)) warnings.push(`<Param name="${p.name}"> is declared but no embedded question uses :${p.name}.`);
+  }
+  return warnings;
+}
+
+/**
+ * Resolve an imported param: `<Param name="city" id={5}>` inherits its type from question 5's
+ * matching `:param` when the author didn't pin one. The autocomplete `source` (questionId+column)
+ * is already on the param. `sourceParams` are question N's parameters.
+ */
+export function resolveImportedParam(p: StoryParam, sourceParams: QuestionParameter[]): StoryParam {
+  if (!p.source) return p;
+  const src = sourceParams.find((sp) => sp.name === p.name || sp.name === p.source!.column);
+  return src ? { ...p, type: src.type } : p;
 }
