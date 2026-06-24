@@ -50,6 +50,7 @@ import { viewAtLeast } from '@/lib/view/view-types';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
 import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
+import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { FilesAPI } from '@/lib/data/files';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 
@@ -422,6 +423,11 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, columnFormats } });
   };
 
+  // Handle conditional formatting rule changes (table viz)
+  const handleConditionalFormatsChange = (conditionalFormats: import('@/lib/types').ConditionalFormatRule[]) => {
+    onChange({ vizSettings: { ...content.vizSettings, conditionalFormats } });
+  };
+
   // Handle shared visual style changes
   const handleStyleConfigChange = (styleConfig: import('@/lib/types').VisualizationStyleConfig) => {
     onChange({ vizSettings: { ...content.vizSettings, styleConfig } });
@@ -751,6 +757,13 @@ export default function QuestionViewV2({
                       onChange={handleVizTypeChange}
                       orientation="grouped"
                     />
+                    {content.vizSettings?.type === 'table' && (
+                      <TableConditionalFormatPanel
+                        columns={queryData.columns}
+                        rules={content.vizSettings?.conditionalFormats ?? undefined}
+                        onChange={handleConditionalFormatsChange}
+                      />
+                    )}
                     {content.vizSettings?.type && content.vizSettings.type !== 'table' && (
                       <VizConfigPanel
                         columns={queryData.columns}

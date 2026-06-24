@@ -4,8 +4,9 @@ import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuChec
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { formatNumber, applyPrefixSuffix, formatDateValue } from '@/lib/chart/chart-utils'
+import { buildConditionalBg, getContrastText } from '@/lib/chart/conditional-format-utils'
 import { FormatPopover } from './AxisComponents'
-import type { ColumnFormatConfig } from '@/lib/types'
+import type { ColumnFormatConfig, ConditionalFormatRule } from '@/lib/types'
 import { MiniHistogram } from './MiniHistogram'
 import { MiniBarChart } from './MiniBarChart'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
@@ -46,6 +47,8 @@ interface TableProps {
   columnFormats?: Record<string, ColumnFormatConfig>
   /** When provided, each column header exposes a rename/format editor. Omit for read-only tables. */
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
+  /** Conditional background-color rules. Applied to cells/rows/columns when their condition matches. */
+  conditionalFormats?: ConditionalFormatRule[]
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -118,7 +121,7 @@ interface FacetedFilterValue {
 const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
   v != null && typeof v === 'object' && 'search' in v
 
-export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange }: TableProps) => {
+export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName, onRowClick, initialColumnSizing, wrapColumns, renderCell, initialSorting, enableDrilldown = true, columnFormats, onColumnFormatsChange, conditionalFormats }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>(initialSorting ?? [])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -169,6 +172,13 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     () => types ? types.map(getColumnType) : colNames.map(() => 'text'),
     [types, colNames]
   )
+
+  // Conditional background-color lookup. No-op (returns undefined) when no rules.
+  const getCellBg = useMemo(() => {
+    const typeByName: Record<string, ColumnType> = {}
+    colNames.forEach((col, i) => { typeByName[col] = columnTypes[i] })
+    return buildConditionalBg(conditionalFormats, rows, typeByName)
+  }, [conditionalFormats, rows, colNames, columnTypes])
 
   // Reset visibility when columns change
   useEffect(() => {
@@ -816,6 +826,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                   >
                     {visibleColIds.map((colId, cellIdx) => {
                       const shouldWrap = wrapColumns?.has(colId)
+                      const cellBg = getCellBg(original, colId)
                       return (
                         <td
                           key={colId}
@@ -824,6 +835,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                           style={{
                             width: colSizes[colId],
                             borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
+                            ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
                             ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
                           }}
                         >
