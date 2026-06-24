@@ -55,6 +55,55 @@ describe('content ⇄ jsx — hand schema (the personal/story/friends shape)', (
   });
 });
 
+describe('content ⇄ jsx — discriminated/scalar unions (DashboardContent assets + layout id)', () => {
+  const dashSchema = (atlasSchema as { $defs: Record<string, unknown> }).$defs.DashboardContent;
+
+  it('preserves an inline TEXT asset (string id + content) AND a question ref through the round-trip', () => {
+    const value = {
+      description: 'MRR Dashboard',
+      assets: [
+        { type: 'text', id: 'inline-text-0', content: '# MRR Overview' },
+        { type: 'question', id: 1026 },
+      ],
+      layout: {
+        columns: 12,
+        items: [
+          { id: 'inline-text-0', x: 0, y: 0, w: 12, h: 2 },
+          { id: 1026, x: 0, y: 2, w: 12, h: 6 },
+        ],
+      },
+    };
+    const { back } = roundtrip(value, dashSchema);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const v = back.value as typeof value;
+      // InlineAsset branch: content kept, string id kept (NOT coerced to NaN/null)
+      expect(v.assets[0]).toEqual({ type: 'text', id: 'inline-text-0', content: '# MRR Overview' });
+      // FileReference branch: integer id stays an integer
+      expect(v.assets[1]).toEqual({ type: 'question', id: 1026 });
+      // Scalar union DashboardLayoutItem.id: string id stays a string, int id stays an int
+      expect(v.layout.items[0].id).toBe('inline-text-0');
+      expect(v.layout.items[1].id).toBe(1026);
+    }
+  });
+
+  it('does not corrupt a divider inline asset (string id, null content)', () => {
+    const value = {
+      description: 'd',
+      assets: [{ type: 'divider', id: 'div-1', content: null }],
+      layout: { columns: 12, items: [{ id: 'div-1', x: 0, y: 0, w: 12, h: 1 }] },
+    };
+    const { back } = roundtrip(value, dashSchema);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      const v = back.value as typeof value;
+      expect(v.assets[0].type).toBe('divider');
+      expect(v.assets[0].id).toBe('div-1');
+      expect(v.layout.items[0].id).toBe('div-1');
+    }
+  });
+});
+
 describe('content ⇄ jsx — schemaless config (type="…")', () => {
   it('annotates non-string + numeric-looking scalars so they round-trip losslessly', () => {
     const value = { type: 'postgres', config: { host: 'db', port: 5432, ssl: true, zip: '90210' } };

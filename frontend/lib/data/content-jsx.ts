@@ -35,18 +35,95 @@ export interface SchemaCtx {
   defs: Record<string, JsonSchema>;
 }
 
-/** Resolve `$ref` and unwrap a Nullable (`anyOf: [T, null]`) to its underlying schema. */
+/**
+ * Resolve `$ref` and unwrap a Nullable (`anyOf: [T, null]`) to its underlying schema.
+ * A genuine multi-branch union (e.g. `FileReference | InlineAsset`, `Integer | String`) is
+ * left intact — it can't collapse to one schema; `unionBranches` resolves it per-value instead.
+ */
 function unwrap(schema: JsonSchema, ctx: SchemaCtx): JsonSchema {
   let s = schema;
   for (let i = 0; i < 20 && s; i++) {
     if (s.$ref) { s = ctx.defs[String(s.$ref).split('/').pop() as string]; continue; }
     if (Array.isArray(s.anyOf)) {
-      const nonNull = s.anyOf.find((b: JsonSchema) => b && b.type !== 'null');
-      if (nonNull) { s = nonNull; continue; }
+      const nonNull = s.anyOf.filter((b: JsonSchema) => b && b.type !== 'null');
+      if (nonNull.length === 1) { s = nonNull[0]; continue; } // Nullable(T) → T
+      break; // multi-branch union: keep as-is, resolved per-value/-node by the caller
     }
     break;
   }
   return s;
+}
+
+/** The non-null branches of a genuine multi-branch union (≥2), each `$ref`/Nullable-resolved; else null. */
+function unionBranches(s: JsonSchema, ctx: SchemaCtx): JsonSchema[] | null {
+  if (!s || !Array.isArray(s.anyOf)) return null;
+  const nonNull = s.anyOf.filter((b: JsonSchema) => b && b.type !== 'null');
+  return nonNull.length > 1 ? nonNull.map((b: JsonSchema) => unwrap(b, ctx)) : null;
+}
+
+/** A property schema's `const`/`enum` allowed-values, used to discriminate object unions; else null. */
+function narrowedValues(propSchema: JsonSchema): unknown[] | null {
+  if (!propSchema) return null;
+  if ('const' in propSchema) return [propSchema.const];
+  if (Array.isArray(propSchema.enum)) return propSchema.enum;
+  return null;
+}
+
+/** Pick the union branch for a JS value: discriminate objects by their const/enum props, scalars by JS type. */
+function branchForValue(branches: JsonSchema[], value: unknown): JsonSchema {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const v = value as Record<string, unknown>;
+    const objBranches = branches.filter((b) => b && b.type === 'object' && b.properties);
+    const match = objBranches.find((b) =>
+      Object.entries(b.properties as Record<string, JsonSchema>).every(([k, ps]) => {
+        const allowed = narrowedValues(ps);
+        return !allowed || allowed.includes(v[k]);
+      })
+    );
+    return match ?? objBranches[0] ?? branches[0];
+  }
+  const t = typeof value;
+  return (
+    branches.find((b) => b && (
+      (t === 'number' && (b.type === 'number' || b.type === 'integer')) ||
+      (t === 'boolean' && b.type === 'boolean') ||
+      (t === 'string' && b.type === 'string')
+    )) ?? branches[0]
+  );
+}
+
+/** Parse-side object-union discrimination: read the narrowing child (e.g. `<type>`) and match a branch. */
+function branchForNode(branches: JsonSchema[], childEls: JsxElement[]): JsonSchema | null {
+  const objBranches = branches.filter((b) => b && b.type === 'object' && b.properties);
+  const discKeys = new Set<string>();
+  for (const b of objBranches) {
+    for (const [k, ps] of Object.entries(b.properties as Record<string, JsonSchema>)) {
+      if (narrowedValues(ps)) discKeys.add(k);
+    }
+  }
+  for (const k of discKeys) {
+    const child = childEls.find((c) => c.tag === k);
+    if (!child) continue;
+    const text = textOf(child).trim();
+    const match = objBranches.find((b) => {
+      const allowed = narrowedValues((b.properties as Record<string, JsonSchema>)[k]);
+      return allowed ? allowed.includes(text) : false;
+    });
+    if (match) return match;
+  }
+  return null;
+}
+
+/** Coerce a scalar leaf against a scalar union (e.g. `Integer | String`) — NaN-safe (keeps strings). */
+function coerceUnionScalar(text: string, branches: JsonSchema[]): unknown {
+  const hasNum = branches.some((b) => b.type === 'number' || b.type === 'integer');
+  const hasStr = branches.some((b) => b.type === 'string');
+  const hasBool = branches.some((b) => b.type === 'boolean');
+  if (hasBool && (text === 'true' || text === 'false')) return text === 'true';
+  if (hasNum && text !== '' && /^-?\d+(\.\d+)?$/.test(text)) return Number(text);
+  if (hasStr) return text;
+  if (hasNum) { const n = Number(text); return Number.isNaN(n) ? text : n; }
+  return text;
 }
 
 const pad = (d: number) => '  '.repeat(d);
@@ -75,6 +152,11 @@ function fieldToJsx(tag: string, value: unknown, schema: JsonSchema, ctx: Schema
   if (value == null) return '';
   const s = unwrap(schema, ctx);
   const p = pad(depth);
+
+  // Multi-branch union (e.g. assets' FileReference|InlineAsset, layout id Integer|String) —
+  // re-emit against the branch this value matches, so the right properties/types are used.
+  const branches = unionBranches(s, ctx);
+  if (branches) return fieldToJsx(tag, value, branchForValue(branches, value), ctx, depth);
 
   // jsx field — the value is markup; emit it inline as real elements.
   if (isJsxField(s) && typeof value === 'string') {
@@ -148,6 +230,21 @@ function textOf(node: JsxElement): string {
 
 function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): unknown {
   const s = unwrap(schema, ctx);
+
+  // Multi-branch union: object node → discriminate by its narrowing child (e.g. <type>) and
+  // re-parse against that branch; scalar node → NaN-safe coercion across the branch types.
+  const branches = unionBranches(s, ctx);
+  if (branches) {
+    const childEls = node.children.filter((c): c is JsxElement => c.type === 'element');
+    if (childEls.length > 0) {
+      const branch = branchForNode(branches, childEls) ?? branches.find((b) => b.type === 'object') ?? branches[0];
+      return elementToValue(node, branch, ctx);
+    }
+    const exprLeaf = node.children.find((c) => c.type === 'expression' && c.value.static);
+    const text = exprLeaf && exprLeaf.type === 'expression' && exprLeaf.value.static && typeof exprLeaf.value.json === 'string'
+      ? exprLeaf.value.json : textOf(node).trim();
+    return coerceUnionScalar(text, branches);
+  }
 
   // jsx field — serialise its inline elements back to the stored markup string. Enforce the
   // static-JSX security rules (no <script>/event-handlers/javascript: URLs, only registered
