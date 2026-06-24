@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import type { JobRun, QuestionContent, Test, Transform, TransformationContent } from '@/lib/types';
@@ -332,7 +332,6 @@ export default function TransformationView({
   onSelectRun,
 }: TransformationViewProps) {
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Resizable panel state
@@ -463,15 +462,8 @@ export default function TransformationView({
         onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
-      {/* JSON View */}
-      {activeTab === 'json' && (
-        <Box p={4} bg="bg.muted" borderRadius="md" fontFamily="mono" fontSize="sm" overflow="auto">
-          <pre>{JSON.stringify(transformation, null, 2)}</pre>
-        </Box>
-      )}
-
-      {/* Visual View - Two Column Layout */}
-      {activeTab === 'visual' && (
+      {/* Visual View - Two Column Layout (the Code view is rendered upstream by FileView) */}
+      {(
         <Box
           ref={mainContentRef}
           display="flex"

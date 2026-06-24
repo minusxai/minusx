@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, type FileId } from '@/store/filesSlice';
-import { selectFileViewMode, selectNotebookActiveCell, setNotebookActiveCell } from '@/store/uiSlice';
+import { selectNotebookActiveCell, setNotebookActiveCell } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, rehydrateNotebookResults } from '@/lib/api/file-state';
 import NotebookView from '@/components/views/NotebookView';
@@ -30,7 +30,6 @@ export default function NotebookContainerV2({ fileId }: NotebookContainerV2Props
   const numericId = typeof fileId === 'number' ? fileId : undefined;
 
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as NotebookContent | undefined;
-  const viewMode = useAppSelector(state => selectFileViewMode(state, numericId));
   const activeCellId = useAppSelector(state => selectNotebookActiveCell(state, numericId));
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
@@ -66,7 +65,6 @@ export default function NotebookContainerV2({ fileId }: NotebookContainerV2Props
       readOnly={readOnly}
       filePath={file.path}
       fileId={numericId}
-      viewMode={viewMode}
       activeCellId={activeCellId}
       onActivateCell={handleActivateCell}
     />

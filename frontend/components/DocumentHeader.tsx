@@ -65,7 +65,8 @@ export interface DocumentHeaderProps {
   hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
   skipNameValidation?: boolean;  // If true, skip name check on save (e.g. save modal handles it)
 
-  // JSON view toggle (optional - shown only for admins when provided)
+  // Visual / Code view toggle (optional - shown only for admins when provided).
+  // 'json' is the Code view (JSON + agent XML); value kept as 'json' for back-compat.
   viewMode?: 'visual' | 'json';  // Current view mode
   onViewModeChange?: (mode: 'visual' | 'json') => void;  // View mode change handler
 
@@ -324,12 +325,12 @@ export default function DocumentHeader({
               {editMode ? 'Cancel' : 'Edit'}
             </IconButton>
             )}
-            {/* JSON View Toggle (shown only when showJson setting is enabled) */}
+            {/* Visual / Code view toggle (shown only when devMode is enabled) */}
             {onViewModeChange && showJson && (
               <TabSwitcher
                 tabs={[
                   { value: 'visual', label: 'Visual view', icon: LuEye },
-                  { value: 'json', label: 'JSON view', icon: LuCode }
+                  { value: 'json', label: 'Code view', icon: LuCode }
                 ]}
                 activeTab={viewMode}
                 onTabChange={(tab) => onViewModeChange(tab as 'visual' | 'json')}

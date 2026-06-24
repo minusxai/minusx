@@ -36,15 +36,13 @@ import { syncReferencesWithSQL } from '@/lib/sql/sql-references';
 import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
-import JsonEditor from '../slides/JsonEditor';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
-import { addReferenceToQuestion, removeReferenceFromQuestion, setFile, selectPersistableContent } from '@/store/filesSlice';
-import { applyJsonContentEdit } from '@/lib/api/file-state';
-import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
+import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode } from '@/store/uiSlice';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '../query-builder';
@@ -143,16 +141,10 @@ export default function QuestionViewV2({
     state => selectSqlEditorCollapsed(state, questionId, defaultSqlCollapsed)
   );
   const sqlEditorCollapsed = questionId !== undefined ? reduxSqlEditorCollapsed : localSqlEditorCollapsed;
-  // editMode and viewMode sourced from Redux (managed by FileHeader)
+  // editMode sourced from Redux (managed by FileHeader). The JSON/XML "Code view"
+  // is rendered centrally by FileView, so this view only renders the visual surface.
   const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
   const editMode = (isPreview || readOnly) ? false : reduxEditMode;
-  const activeTab = useAppSelector(state => selectFileViewMode(state, questionId));
-  // JSON tab edits the persistable content (content + persistableChanges, no ephemerals)
-  const persistableContent = useAppSelector(state =>
-    questionId !== undefined ? selectPersistableContent(state, questionId) : undefined
-  );
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const jsonEditable = questionId !== undefined && !isPreview && !readOnly;
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
@@ -540,24 +532,8 @@ export default function QuestionViewV2({
     >
       {/* Main Content */}
       <Box ref={mainContentRef} flex={1} overflow="hidden" minHeight="0">
-        {/* JSON View */}
-        {activeTab === 'json' && (
-          <Box p={4}>
-            <JsonEditor
-              value={JSON.stringify(persistableContent ?? content, null, 2)}
-              readOnly={!jsonEditable}
-              error={jsonError}
-              onChange={(value) => {
-                if (questionId === undefined) return;
-                const result = applyJsonContentEdit({ fileId: questionId, jsonString: value });
-                setJsonError(result.success ? null : result.error ?? null);
-              }}
-            />
-          </Box>
-        )}
-
-        {/* Visual View */}
-        {activeTab === 'visual' && (
+        {/* Visual View (the Code view is rendered upstream by FileView) */}
+        {(
         <Box
           display="flex"
           flexDirection={!useCompactLayout ? 'row' : 'column'}

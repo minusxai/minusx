@@ -9,11 +9,10 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent, selectPersistableContent } from '@/store/filesSlice';
-import { editFile, applyJsonContentEdit } from '@/lib/api/file-state';
-import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
+import { editFile } from '@/lib/api/file-state';
+import { pushView, selectDashboardEditMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
@@ -119,14 +118,10 @@ export default function DashboardView({
 }: DashboardViewProps) {
   const dispatch = useAppDispatch();
 
-  // editMode and viewMode sourced from Redux (managed by FileHeader)
+  // editMode sourced from Redux (managed by FileHeader). The JSON/XML "Code view"
+  // is rendered centrally by FileView, so this view only renders the visual surface.
   const reduxEditMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
   const editMode = (mode === 'preview' || readOnly) ? false : reduxEditMode;
-  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
-  // JSON tab edits the persistable content (content + persistableChanges, no ephemerals)
-  const persistableContent = useAppSelector(state => selectPersistableContent(state, fileId));
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const jsonEditable = mode !== 'preview' && !readOnly;
 
   // Ref to always have the latest document for callbacks that may fire with stale closures
   const documentRef = useRef(document);
@@ -570,21 +565,8 @@ export default function DashboardView({
   return (
     <Box flex="1" data-file-id={fileId} role="region" aria-label="Dashboard">
 
-      {/* JSON View */}
-      {activeTab === 'json' && (
-        <JsonEditor
-          value={JSON.stringify(persistableContent ?? document, null, 2)}
-          readOnly={!jsonEditable}
-          error={jsonError}
-          onChange={(value) => {
-            const result = applyJsonContentEdit({ fileId, jsonString: value });
-            setJsonError(result.success ? null : result.error ?? null);
-          }}
-        />
-      )}
-
-      {/* Visual View */}
-      {activeTab === 'visual' && (
+      {/* Visual View (the Code view is rendered upstream by FileView) */}
+      {(
         <>
           {/* Dashboard-level Parameters */}
           {parameterValuesForDisplay.length > 0 && (

@@ -127,23 +127,10 @@ describe('StoryView', () => {
     expect((window as any).__pwned).toBeUndefined();
   });
 
-  it('shows a read-only JSON view when no fileId is supplied', () => {
-    renderWithProviders(<StoryView content={content} viewMode="json" />);
-    const editor = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
-    expect(editor.value).toContain('data-question-id');
-    expect(editor.readOnly).toBe(true);
-    expect(screen.queryByLabelText('Story page')).not.toBeInTheDocument();
-  });
-
-  it('shows an editable JSON view when a fileId is supplied', () => {
-    renderWithProviders(<StoryView content={content} fileId={14} viewMode="json" />);
-    const editor = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
-    expect(editor.value).toContain('data-question-id');
-    expect(editor.readOnly).toBe(false);
-  });
-
-  it('shows the story (not JSON) when viewMode is visual', () => {
-    renderWithProviders(<StoryView content={content} viewMode="visual" />);
+  // The JSON/XML "Code view" moved out of StoryView into the shared CodeView
+  // (rendered centrally by FileView) — see components/views/__tests__/code-view.ui.test.tsx.
+  it('renders the story visual canvas (never a code editor)', () => {
+    renderWithProviders(<StoryView content={content} />);
     expect(screen.getByLabelText('Story page')).toBeInTheDocument();
     expect(screen.queryByLabelText('JSON editor')).not.toBeInTheDocument();
   });

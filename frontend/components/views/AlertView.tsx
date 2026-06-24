@@ -9,7 +9,7 @@ import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { useAppSelector } from '@/store/hooks';
-import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
@@ -43,7 +43,6 @@ export default function AlertView({
   onSelectRun
 }: AlertViewProps) {
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Resizable panel state
@@ -131,15 +130,8 @@ export default function AlertView({
         onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
-      {/* JSON View */}
-      {activeTab === 'json' && (
-        <Box p={4} bg="bg.muted" borderRadius="md" fontFamily="mono" fontSize="sm" overflow="auto">
-          <pre>{JSON.stringify(alert, null, 2)}</pre>
-        </Box>
-      )}
-
-      {/* Visual View - Two Column Layout */}
-      {activeTab === 'visual' && (
+      {/* Visual View - Two Column Layout (the Code view is rendered upstream by FileView) */}
+      {(
         <Box
           ref={mainContentRef}
           display="flex"
