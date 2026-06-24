@@ -28,7 +28,6 @@ import { selectMaxConcurrentQueries } from '@/store/configsSlice';
 import { Semaphore } from '@/lib/utils/semaphore';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
-import { buildQuestionJsx } from '@/lib/data/question-v2';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
@@ -39,7 +38,7 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, StoryContent, StoryV2Content, FileType, DbFile } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, FileType, DbFile } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -459,7 +458,7 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
 
   // Auto-execute query for questions (same as EditFile tool handler)
   const fileState = selectFile(state, fileId);
-  if (fileState?.type === 'question' || fileState?.type === 'questionv2') {
+  if (fileState?.type === 'question') {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
     if (finalContent?.query && finalContent?.connection_name) {
@@ -686,20 +685,6 @@ export interface PublishFileResult {
 export type SaveResult = PublishFileResult;
 
 /**
- * Project a storyv2's (derived) StoryContent down to the persistable StoryV2Content
- * metadata — dropping `story`/`assets`, which are derived from the `jsx` body and are
- * not valid StoryV2Content. Used by both publishFile and the batch save path so a
- * storyv2 never tries to persist its derived projection as content.
- */
-export function storyV2MetadataOnly(content: StoryContent | undefined): StoryV2Content {
-  return {
-    description: content?.description ?? '',
-    colorMode: content?.colorMode ?? 'dark',
-    ...(content?.suggestedQuestions ? { suggestedQuestions: content.suggestedQuestions } : {}),
-  };
-}
-
-/**
  * PublishFile - Save file and dirty references to database
  *
  * Handles both virtual files (negative IDs) and real files (positive IDs).
@@ -729,38 +714,11 @@ export async function publishFile(
     return { id: fileId, name: fileState.name };
   }
 
-  // questionv2: content (query/viz) is the projection of the `jsx` body, so a GUI edit
-  // must serialize back to jsx (the source of truth) — never persist it as content.
-  if (fileState.type === 'questionv2') {
-    const merged = selectMergedContent(state, fileId) as QuestionContent;
-    const jsx = buildQuestionJsx({
-      query: merged?.query ?? '',
-      connection_name: merged?.connection_name ?? '',
-      vizSettings: merged?.vizSettings,
-    });
-    getStore().dispatch(setSaving({ id: fileId, saving: true }));
-    try {
-      const updated = await setFileJsx(fileId, jsx);
-      return { id: updated.id, name: updated.name };
-    } finally {
-      getStore().dispatch(setSaving({ id: fileId, saving: false }));
-    }
-  }
-
   // Prepare content for saving: merge only persistable changes, NOT ephemeral.
   // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted.
   // When contentReplaced is set (JSON-view edits via setFullContent), the
   // persistableChanges ARE the full content — no merge, so deletions persist.
-  //
-  // storyv2: content is ONLY metadata (description / colorMode / suggestedQuestions). The
-  // body (HTML + embeds) lives in `jsx`, edited by the agent via SetJsx. But
-  // dbFileToFileState PROJECTS the jsx into content.story / content.assets so the existing
-  // story render path works — those derived fields are NOT valid StoryV2Content, so persist
-  // only the metadata or the save fails schema validation ("Failed to save"). jsx is left
-  // untouched (it has its own write path), so the body survives.
-  const contentToSave = fileState.type === 'storyv2'
-    ? storyV2MetadataOnly(selectMergedContent(state, fileId) as StoryContent)
-    : persistableContentOf(fileState);
+  const contentToSave = persistableContentOf(fileState);
 
   if (!contentToSave) {
     throw new Error(`File ${fileId} has no content to save`);
@@ -876,22 +834,8 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
   }
   if (allDirty.length === 0) return {};
 
-  // questionv2 persists its content (query/viz) back to the `jsx` source of truth via
-  // setFileJsx — NOT a content save — so it can't ride the batch content path. Peel those
-  // out and publish them individually; the rest batch-save together.
-  const questionV2Dirty = allDirty.filter(f => f.type === 'questionv2');
-  for (const f of questionV2Dirty) {
-    await publishFile({ fileId: f.id });
-  }
-  const batchDirty = allDirty.filter(f => f.type !== 'questionv2');
-  if (batchDirty.length === 0) return {};
-
-  const toSave = batchDirty.map(f => {
-    // storyv2 content is the derived jsx projection (story/assets) — persist only the valid
-    // StoryV2Content metadata (the body stays in `jsx`, untouched by the batch save).
-    const merged = f.type === 'storyv2'
-      ? storyV2MetadataOnly(selectMergedContent(state, f.id) as StoryContent)
-      : (persistableContentOf(f) ?? {});
+  const toSave = allDirty.map(f => {
+    const merged = persistableContentOf(f) ?? {};
     return {
       id: f.id,
       name: f.metadataChanges?.name || f.name,

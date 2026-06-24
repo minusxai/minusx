@@ -26,20 +26,8 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return { description: '', assets: [], layout: { columns: 12, items: [] } } as DocumentContent;
     case 'story':
       return { description: '', assets: [], story: null } as StoryContent;
-    case 'storyv2':
-      // Content holds only story metadata; the body (HTML + embeds) lives in `jsx`.
-      return { description: '', colorMode: 'dark' };
     case 'notebook':
       return { description: '', cells: [] } as NotebookContent;
-    case 'questionv2':
-      // Content is vestigial for QuestionV2 — the query/viz live in the `jsx` body.
-      return { description: '' };
-    case 'presentation':
-      return {
-        description: '',
-        assets: [],
-        layout: { canvasWidth: 1280, canvasHeight: 720, slides: [{ rectangles: [], arrows: [] }] },
-      } as DocumentContent;
     case 'connection':
       return { type: 'bigquery', config: {} } as ConnectionContent;
     case 'folder':

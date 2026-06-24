@@ -1,4 +1,4 @@
-import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuPresentation, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
+import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -33,14 +33,6 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: '100vh',
   },
-  questionv2: {                   // File Architecture v2 — static-JSX question (experimental)
-    label: 'Question V2',
-    icon: LuScanSearch,
-    color: 'accent.primary',
-    category: 'analytics',
-    supported: false,            // hidden from create menu; created by agent/seed for now
-    h: '100vh',
-  },
   dashboard: {
     label: 'Dashboard',
     icon: LuLayoutDashboard,
@@ -57,26 +49,10 @@ export const FILE_TYPE_METADATA = {
     supported: false,
     h: 'none',
   },
-  storyv2: {                       // File Architecture v2 — jsx-backed data story (experimental)
-    label: 'Data Story V2',
-    icon: LuBookOpen,
-    color: 'accent.cyan',
-    category: 'analytics',
-    supported: false,            // hidden from create menu; created via agent for now
-    h: 'none',
-  },
   notebook: {
     label: 'Notebook',
     icon: LuNotebook,
     color: 'accent.warning',      // Orange (#f39c12)
-    category: 'analytics',
-    supported: false,
-    h: 'none',
-  },
-  presentation: {
-    label: 'Presentation',
-    icon: LuPresentation,
-    color: 'accent.secondary',    // Amethyst purple (#9b59b6)
     category: 'analytics',
     supported: false,
     h: 'none',

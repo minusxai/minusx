@@ -50,20 +50,6 @@ export function validateFileReferences(documents: ExportedDocument[]): Validatio
       }
     }
 
-    if (type === 'presentation' && 'layout' in content && content.layout?.slides) {
-      for (let slideIdx = 0; slideIdx < content.layout.slides.length; slideIdx++) {
-        const slide = content.layout.slides[slideIdx];
-        if (slide.rectangles) {
-          for (const rect of slide.rectangles) {
-            const assetId = rect.assetId;
-            if (!('assets' in content) || !content.assets || !content.assets.find((a) => a.id === assetId)) {
-              warnings.push(`Presentation '${path}' (ID: ${id}) slide ${slideIdx} references non-existent asset: ${assetId}`);
-            }
-          }
-        }
-      }
-    }
-
     if (type === 'notebook' && 'cells' in content && Array.isArray(content.cells)) {
       for (const cell of content.cells) {
         if (cell?.type !== 'sql' || !Array.isArray(cell.references)) continue;

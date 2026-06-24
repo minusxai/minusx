@@ -45,19 +45,6 @@ const SEARCH_CONFIGS: Record<string, SearchFieldConfig[]> = {
     { field: 'name', weight: 3, accessor: (f) => f.name },
     { field: 'path', weight: 2, accessor: (f) => f.path },
     { field: 'description', weight: 2, accessor: (f) => (f.content as any).description || '' }
-  ],
-  // File Architecture v2 — the searchable body lives in the `jsx` field, not content.
-  questionv2: [
-    { field: 'name', weight: 3, accessor: (f) => f.name },
-    { field: 'path', weight: 2, accessor: (f) => f.path },
-    { field: 'description', weight: 2, accessor: (f) => (f.content as any).description || '' },
-    { field: 'query', weight: 1, accessor: (f) => (f as any).jsx || '' }
-  ],
-  storyv2: [
-    { field: 'name', weight: 3, accessor: (f) => f.name },
-    { field: 'path', weight: 2, accessor: (f) => f.path },
-    { field: 'description', weight: 2, accessor: (f) => (f.content as any).description || '' },
-    { field: 'body', weight: 1, accessor: (f) => (f as any).jsx || '' }
   ]
 };
 
@@ -244,7 +231,7 @@ export async function searchFilesInFolder(
   const searchPath = folder_path || resolvedHomeFolder;
 
   // Parse file_types (default to all user-facing file types)
-  let types: FileType[] = ['question', 'questionv2', 'dashboard', 'folder', 'connection', 'context'];
+  let types: FileType[] = ['question', 'dashboard', 'folder', 'connection', 'context'];
   if (file_types) {
     types = Array.isArray(file_types) ? file_types : [file_types];
   }

@@ -3,7 +3,7 @@ import type { FileState } from '@/store/filesSlice';
 // Atlas file content types — single source of truth is the TypeBox schemas in
 // lib/validation/atlas-schemas.ts.
 import type {
-  QuestionContent, StoryContent, NotebookContent, QuestionV2Content, FileReference, InlineAsset, VizSettings,
+  QuestionContent, StoryContent, NotebookContent, FileReference, InlineAsset, VizSettings,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -21,8 +21,7 @@ export type {
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   StoryContent,
   NotebookContent, NotebookCell, NotebookSqlCell, NotebookTextCell,
-  QuestionV2Content, StoryV2Content,
-  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File, AtlasStoryV2File,
+  AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile,
   ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './validation/atlas-schemas';
 
@@ -93,18 +92,6 @@ export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
   return ['text', 'image', 'divider'].includes(asset.type);
 }
 
-export interface PresentationSlide {
-  rectangles: Rectangle[];  // Canvas elements with positioning and styling
-  arrows: Arrow[];          // Connections between rectangles
-}
-
-export interface PresentationLayout {
-  canvasWidth: number;
-  canvasHeight: number;
-  slides: PresentationSlide[];
-  theme?: string;
-}
-
 export interface ReportLayout {
   pageSize?: 'letter' | 'a4';
 }
@@ -135,42 +122,6 @@ export interface CompressedQueryResult {
   /** Fully resolved SQL, propagated from QueryResult so LLM-facing
    *  compressions surface the actual executed query alongside the data. */
   finalQuery?: string;
-}
-
-export interface Rectangle {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number; // degrees
-  assetId: string; // Reference to asset in Document.assets
-  zIndex: number;
-  shapeType?: 'rectangle' | 'oval' | 'triangle' | 'diamond' | 'arrow' | 'star';
-  backgroundColor?: string;
-  borderColor?: string;
-  borderWidth?: number;
-  textAlign?: 'left' | 'center' | 'right';
-  backgroundImage?: string; // URL for background image
-  textColor?: string; // Text color for markdown content
-}
-
-export interface Arrow {
-  id: string;
-  fromId: string; // rectangle ID
-  toId: string; // rectangle ID
-  fromAnchor: 'top' | 'right' | 'bottom' | 'left' | 'center';
-  toAnchor: 'top' | 'right' | 'bottom' | 'left' | 'center';
-  color: string;
-  strokeWidth: number;
-}
-
-export interface SlideData {
-  version: string;
-  canvasWidth: number;
-  canvasHeight: number;
-  rectangles: Rectangle[];
-  arrows: Arrow[];
 }
 
 // Chat attachment types
@@ -872,7 +823,7 @@ export interface JobRunnerInput {
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | StoryContent | NotebookContent | QuestionV2Content | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
+  content: QuestionContent | DocumentContent | StoryContent | NotebookContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
 }
 
 /**

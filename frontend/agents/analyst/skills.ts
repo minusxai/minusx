@@ -9,7 +9,6 @@ import { HIDDEN_SKILLS, listSkills, getSkill, type PromptTree } from '@/orchestr
 /** Page type → skills preloaded into the system prompt. */
 export const PAGE_SKILL_MAP: Record<string, string[]> = {
   question: ['questions'],
-  questionv2: ['questions'],
   dashboard: ['dashboards', 'questions'],
   context: ['contexts'],
   report: ['reports'],
@@ -18,7 +17,6 @@ export const PAGE_SKILL_MAP: Record<string, string[]> = {
   folder: ['explore'],
   slack: ['explore'],
   story: ['data_stories', 'questions'],
-  storyv2: ['data_stories', 'questions'],
   notebook: ['notebooks', 'questions'],
 };
 

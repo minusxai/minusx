@@ -91,13 +91,6 @@ describe('extractReferenceIds — document types', () => {
     expect(await extractReferenceIds(file!, noopResolver)).toEqual([]);
   });
 
-  it('returns cached references for a presentation', async () => {
-    const child = await DocumentDB.create('RefPrsChild', '/org/refprschild', 'question', {}, []);
-    const id = await DocumentDB.create('RefPrs', '/org/refprs', 'presentation', {}, [child]);
-    const file = await DocumentDB.getById(id);
-
-    expect(await extractReferenceIds(file!, noopResolver)).toEqual([child]);
-  });
 });
 
 // ---------------------------------------------------------------------------

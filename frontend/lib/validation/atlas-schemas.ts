@@ -417,46 +417,5 @@ export const AtlasNotebookFile = Type.Object({
 }, { title: 'AtlasNotebookFile' });
 export type AtlasNotebookFile = Static<typeof AtlasNotebookFile>;
 
-// File Architecture v2 — QuestionV2. The query/connection/viz live in the file's
-// top-level `jsx` body (a `<Question …>{`SQL`}</Question>` static-JSX string), NOT in
-// `content`; content is vestigial here, so the schema is intentionally minimal.
-export const QuestionV2Content = Type.Object({
-  description: Nullable(Type.String()),
-}, { title: 'QuestionV2Content' });
-export type QuestionV2Content = Static<typeof QuestionV2Content>;
-
-export const AtlasQuestionV2File = Type.Object({
-  id: Nullable(Type.Integer()),
-  name: Type.String(),
-  path: Type.String(),
-  type: Type.Literal('questionv2'),
-  content: QuestionV2Content,
-  references: Nullable(Type.Array(Type.Integer())),
-}, { title: 'AtlasQuestionV2File' });
-export type AtlasQuestionV2File = Static<typeof AtlasQuestionV2File>;
-
-// File Architecture v2 — StoryV2. The story BODY (HTML-ish JSX with <Question id={…}/>
-// embeds) lives in the file's top-level `jsx` field — NOT in `content`. `content` holds
-// only story-level metadata; it intentionally has NO `story`/`assets` fields so the model
-// authors the body as jsx (see the CreateFile `jsx` description for how).
-export const StoryV2Content = Type.Object({
-  description: Nullable(Type.String()),
-  suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
-    'Up to ~3 short, story-specific follow-up questions shown as prompts in the chat panel.' }))),
-  colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
-    'Forces chart/chrome color mode for public viewers; match the story design (e.g. "dark" for a dark layout).'))),
-}, { title: 'StoryV2Content' });
-export type StoryV2Content = Static<typeof StoryV2Content>;
-
-export const AtlasStoryV2File = Type.Object({
-  id: Nullable(Type.Integer()),
-  name: Type.String(),
-  path: Type.String(),
-  type: Type.Literal('storyv2'),
-  content: StoryV2Content,
-  references: Nullable(Type.Array(Type.Integer())),
-}, { title: 'AtlasStoryV2File' });
-export type AtlasStoryV2File = Static<typeof AtlasStoryV2File>;
-
-export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasQuestionV2File, AtlasStoryV2File]);
+export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile]);
 export type AtlasFile = Static<typeof AtlasFile>;

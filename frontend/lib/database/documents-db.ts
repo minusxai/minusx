@@ -14,7 +14,7 @@ export interface DbRow {
   id: number;
   name: string;
   path: string;
-  type: 'question' | 'questionv2' | 'folder' | 'dashboard' | 'story' | 'storyv2' | 'notebook' | 'presentation' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'session' | 'config';
+  type: 'question' | 'folder' | 'dashboard' | 'story' | 'notebook' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'session' | 'config';
   content: any;           // JSONB — driver returns parsed JS object
   file_references: any[]; // JSONB — driver returns parsed JS array
   created_at: string;

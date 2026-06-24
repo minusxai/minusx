@@ -8,8 +8,6 @@
  */
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
-import { parseQuestionJsx } from '@/lib/data/question-v2';
-import { parseStoryJsx } from '@/lib/data/story-v2';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import type {
   AugmentedFile,
@@ -20,7 +18,6 @@ import type {
   FileState,
   QueryResult,
   QuestionContent,
-  StoryContent,
   QuestionReference,
   FileType,
 } from '@/lib/types';
@@ -37,7 +34,7 @@ export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can req
 
 /** Extract referenced file IDs from a DbFile's content */
 export function extractReferences(file: DbFile): number[] {
-  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'story') {
+  if (file.type === 'dashboard' || file.type === 'story') {
     const content = file.content as any;
     return content.assets
       ?.filter((a: any) => a.type === 'question')
@@ -68,54 +65,8 @@ export function stripQueryResultId(file: DbFile): DbFile['content'] {
   return rest as DbFile['content'];
 }
 
-/**
- * Derive a QuestionContent from a questionv2's `jsx` body, so the *entire* existing
- * question stack (QuestionContainerV2 → QuestionViewV2: SQL editor, viz selector, right
- * sidebar, side chat, query execution) works unchanged. The `jsx` is the source of
- * truth; `content` is a derived projection. Preserves any UI-only fields (parameters,
- * parameterValues) from the stored content.
- */
-export function questionV2Content(file: DbFile): QuestionContent {
-  const base = (file.content ?? {}) as Partial<QuestionContent>;
-  const parsed = file.jsx ? parseQuestionJsx(file.jsx) : null;
-  const v = parsed && parsed.ok ? parsed.value : { query: '', connection_name: '', vizSettings: undefined };
-  return {
-    description: base.description ?? '',
-    query: v.query,
-    connection_name: v.connection_name,
-    vizSettings: v.vizSettings ?? { type: 'table' },
-    parameters: base.parameters ?? [],
-    ...(base.parameterValues ? { parameterValues: base.parameterValues } : {}),
-    references: [],
-  } as QuestionContent;
-}
-
-/**
- * Derive a StoryContent from a storyv2's `jsx` body, so the existing story stack
- * (StoryContainerV2 → StoryView → AgentHtml shadow-DOM render + live embeds) works
- * unchanged. The `jsx` is the source of truth; `content` is a derived projection:
- * `story` = the compiled HTML, `assets` = the embedded question ids.
- */
-export function storyV2Content(file: DbFile): StoryContent {
-  const base = (file.content ?? {}) as Partial<StoryContent>;
-  const parsed = file.jsx ? parseStoryJsx(file.jsx) : null;
-  const v = parsed && parsed.ok ? parsed.value : { html: '', assets: [] };
-  return {
-    description: base.description ?? '',
-    story: v.html,
-    assets: v.assets.map((id) => ({ id, type: 'question' as const })),
-    colorMode: base.colorMode ?? 'dark',
-    ...(base.suggestedQuestions ? { suggestedQuestions: base.suggestedQuestions } : {}),
-  } as StoryContent;
-}
-
-/** Compute the query result cache key for a question / questionv2 file */
+/** Compute the query result cache key for a question file */
 export function computeQueryResultId(file: DbFile): string | undefined {
-  if (file.type === 'questionv2') {
-    const c = questionV2Content(file);
-    if (!c.query || !c.connection_name) return undefined;
-    return getQueryHash(c.query, c.parameterValues || {}, c.connection_name);
-  }
   if (file.type !== 'question' || !file.content) return undefined;
   const content = file.content as QuestionContent;
   if (!content.query || !content.connection_name) return undefined;
@@ -130,13 +81,7 @@ export function computeQueryResultId(file: DbFile): string | undefined {
  * code (dbFileToCompressedAugmented) so they stay in sync.
  */
 export function dbFileToFileState(file: DbFile): FileState {
-  // v2 types project their jsx body into the legacy content shape so the whole existing
-  // question / story UI works unchanged.
-  const content = file.type === 'questionv2'
-    ? sortObjectKeysDeep(questionV2Content(file)) as DbFile['content']
-    : file.type === 'storyv2'
-    ? sortObjectKeysDeep(storyV2Content(file)) as DbFile['content']
-    : sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'];
+  const content = sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'];
   return {
     ...file,
     content,
