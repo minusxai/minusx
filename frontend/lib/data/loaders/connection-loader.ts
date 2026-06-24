@@ -8,6 +8,7 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { updateCachedSchema } from '@/lib/data/connections.server';
 import { CustomLoader } from './types';
 import { getNodeConnector } from '@/lib/connections';
+import { resolveConnectionSecrets } from '@/lib/secrets/connection-secrets.server';
 import { profileDatabase } from '@/lib/connections/statistics-engine';
 import { getSafeConfig } from '@/lib/data/helpers/connections';
 
@@ -99,7 +100,7 @@ async function fetchAndPersistSchema(file: DbFile): Promise<DbFile> {
   // Fetch fresh schema via the Node.js connector for the connection's type.
   let freshSchema: DatabaseSchema;
   try {
-    const connector = getNodeConnector(file.name, content.type, content.config);
+    const connector = getNodeConnector(file.name, content.type, await resolveConnectionSecrets(content.config));
     const result = connector ? { schemas: await connector.getSchema() } : { schemas: [] };
 
     // Enrich schema with column metadata (descriptions, categories, top values, etc.)
