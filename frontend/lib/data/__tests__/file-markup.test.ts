@@ -49,6 +49,30 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
   });
 });
 
+describe('fileToMarkup / markupToContent — story with <Param>', () => {
+  it('round-trips a <Param> embed inline + its parameterValues', async () => {
+    const { extractStoryParams } = await import('../story-params');
+    const content = {
+      colorMode: 'dark',
+      parameterValues: { city: 'NYC' },
+      assets: [{ type: 'question', id: 5 }],
+      story: '<div class="story"><div data-param-name="city" data-param-type="text" data-param-nullable="false" data-param-source-id="5" data-param-source-col="city"></div><div data-question-id="5" style="width:100%;height:430px"></div></div>',
+    };
+    const markup = fileToMarkup('story', content);
+    expect(markup).toContain('<Param name="city" type="text" nullable={false} id={5}'); // inline, agent-friendly
+    expect(markup).toContain('<parameterValues>');
+    const back = markupToContent('story', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.story).toContain('data-param-name="city"'); // placeholder preserved
+      expect(back.content.parameterValues).toEqual({ city: 'NYC' });
+      expect(extractStoryParams(back.content.story as string)).toEqual([
+        { name: 'city', type: 'text', nullable: false, source: { questionId: 5, column: 'city' } },
+      ]);
+    }
+  });
+});
+
 describe('fileToMarkup / markupToContent — dashboard (uniform nested, no grid)', () => {
   it('round-trips assets + layout as nested elements', () => {
     const content = {

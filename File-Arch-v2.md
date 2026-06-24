@@ -285,3 +285,33 @@ exactly as before (everything above is additive — new column, new type, new to
   persists → parses back (raw `<` survives) → `SetJsx` updates → invalid jsx rejected on
   create + set.
 - Full suite green: node 2234, orchestrator 493, ui 231.
+
+---
+
+## Story params — `<Param>` components (plan)
+
+**Goal.** A story can declare `<Param>` components in its jsx that form a **shared param context**
+for the whole document; every embedded `<Question/>` binds to it by name; a **non-blocking lint
+pass** warns when an embedded question needs a param that isn't declared; a param can be **imported
+from a question** by id. Reuses the existing param system (`ParameterType` text|number|date,
+`ParameterSource`, `syncParametersWithSQL`, `ParameterInput`).
+
+**Shape (agent-authored, in the story jsx):**
+`<Param name="city" type="text" nullable={false} id={5} column="city" />`
+- `name` (req) · `type` text|number|date (`"string"`→`text`) · `nullable` · `id` = import/autocomplete
+  source question · `column` = autocomplete column (default = name). (Inline SQL-source autocomplete
+  is a documented follow-up; question-column source covers the common case.)
+
+**Storage.** Param declarations are **derived from the jsx** (like `assets`) — `<Param/>` ⇄
+`<div data-param-* />` placeholder inside `content.story`. Submitted/default **values** live in the
+new `StoryContent.parameterValues`. No separate stored declarations field.
+
+**Milestones (Types → Tests → Code, each green + committed):**
+- **SP1** — `StoryParam` type; `StoryContent.parameterValues`; `Param` in `JSX_COMPONENT_NAMES`;
+  `story-v2` round-trips `<Param/>` ⇄ placeholder; `lib/data/story-params.ts:extractStoryParams(html)`.
+- **SP2** — `lintStoryParams(declared, embeddedQuestions)` → warnings (via `syncParametersWithSQL`);
+  `resolveImportedParam(param, qContent)` for `<Param id={N}>`.
+- **SP3** — wire the lint into `CreateFile`/`EditFile` results as non-blocking `warnings`.
+- **SP4** — `AgentHtml` renders a `ParameterInput` at each `data-param` placeholder, holds the shared
+  `parameterValues`, and passes them to every `<Question/>` embed (`externalParamValues`).
+- **SP5 (follow-up)** — dashboards: keep auto-derive, add the same lint; inline SQL autocomplete source.

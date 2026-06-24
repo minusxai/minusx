@@ -317,6 +317,10 @@ export const StoryContent = Type.Object({
     "Forces the color mode (chart theming + tile/chrome) for PUBLIC SHARED viewers, who can't toggle it " +
     'themselves. Pick the one that matches the story design (e.g. "dark" for a dark editorial layout). ' +
     'Omit or leave null to use the viewer default.'))),
+  parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown(), { description:
+    'Current/default values for the story\'s shared params (declared via <Param name=…> in the body). ' +
+    'Keyed by param name; flows down to every embedded question, like a dashboard. Readers change them at ' +
+    'runtime; the values here are the defaults.' })),
 }, { title: 'StoryContent' });
 export type StoryContent = Static<typeof StoryContent>;
 

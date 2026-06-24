@@ -1,0 +1,100 @@
+/**
+ * Story params (File Architecture v2). A story declares `<Param>` components in its jsx that
+ * form a shared param context; every embedded `<Question/>` binds to it by name.
+ *
+ * Like `<Question/>`, a `<Param/>` round-trips through `content.story` as a `<div data-param-*>`
+ * PLACEHOLDER (so it renders where the agent placed it, AgentHtml mounts a ParameterInput
+ * there). The declarations are DERIVED from those placeholders — never a separate stored field;
+ * submitted/default values live in `StoryContent.parameterValues`.
+ *
+ * Pure (client + server safe). The static-JSX engine validates `<Param>` (it's in the registry).
+ */
+import type { ParameterType } from '@/lib/validation/atlas-schemas';
+
+/** Autocomplete / import source: a column of an embedded question. */
+export interface StoryParamSource {
+  questionId: number;
+  column: string;
+}
+
+/** A declared story param (derived from a `<Param>` element). */
+export interface StoryParam {
+  name: string;
+  type: ParameterType; // 'text' | 'number' | 'date'
+  nullable: boolean;
+  /** `<Param id={N} column="c">` — autocomplete from / import the def of question N's column. */
+  source?: StoryParamSource;
+}
+
+const TYPES = ['text', 'number', 'date'];
+/** Normalise an author-written type to the canonical ParameterType (`string`→`text`, …). */
+export function normalizeParamType(t: unknown): ParameterType {
+  const s = String(t ?? 'text').toLowerCase();
+  if (s === 'string' || s === 'str') return 'text';
+  if (s === 'int' || s === 'integer' || s === 'float' || s === 'num') return 'number';
+  return (TYPES.includes(s) ? s : 'text') as ParameterType;
+}
+
+const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const unescAttr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/** Build a StoryParam from a `<Param>` element's parsed jsx attributes (name→value map). */
+export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | null {
+  const name = typeof attrs.name === 'string' ? attrs.name : '';
+  if (!name) return null;
+  const param: StoryParam = { name, type: normalizeParamType(attrs.type), nullable: attrs.nullable !== false };
+  if (typeof attrs.id === 'number') {
+    param.source = { questionId: attrs.id, column: typeof attrs.column === 'string' ? attrs.column : name };
+  }
+  return param;
+}
+
+/** StoryParam → the `<div data-param-*>` placeholder stored inside `content.story` HTML. */
+export function paramToPlaceholder(p: StoryParam): string {
+  const a = [
+    `data-param-name="${escAttr(p.name)}"`,
+    `data-param-type="${p.type}"`,
+    `data-param-nullable="${p.nullable}"`,
+  ];
+  if (p.source) a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
+  return `<div ${a.join(' ')}></div>`;
+}
+
+/** StoryParam → the `<Param/>` jsx the agent reads/edits. */
+export function paramToJsx(p: StoryParam): string {
+  const a = [`name="${p.name}"`, `type="${p.type}"`, `nullable={${p.nullable}}`];
+  if (p.source) {
+    a.push(`id={${p.source.questionId}}`);
+    if (p.source.column !== p.name) a.push(`column="${p.source.column}"`);
+  }
+  return `<Param ${a.join(' ')} />`;
+}
+
+const PARAM_DIV_RE = /<div\s+([^>]*?data-param-name="[^"]*"[^>]*?)>\s*<\/div>/g;
+
+function paramFromPlaceholderInner(inner: string): StoryParam | null {
+  const a: Record<string, string> = {};
+  for (const m of inner.matchAll(/data-param-([a-z-]+)="([^"]*)"/g)) a[m[1]] = unescAttr(m[2]);
+  if (!a.name) return null;
+  const p: StoryParam = { name: a.name, type: normalizeParamType(a.type), nullable: a.nullable !== 'false' };
+  if (a['source-id']) p.source = { questionId: Number(a['source-id']), column: a['source-col'] ?? a.name };
+  return p;
+}
+
+/** Extract all declared params from a story's HTML (the `data-param` placeholders). */
+export function extractStoryParams(html: string | null | undefined): StoryParam[] {
+  const out: StoryParam[] = [];
+  for (const m of (html ?? '').matchAll(PARAM_DIV_RE)) {
+    const p = paramFromPlaceholderInner(m[1]);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
+/** Rewrite a story HTML's `<div data-param>` placeholders back to `<Param/>` jsx (for buildStoryJsx). */
+export function placeholdersToParamJsx(html: string | null | undefined): string {
+  return (html ?? '').replace(PARAM_DIV_RE, (whole, inner) => {
+    const p = paramFromPlaceholderInner(inner);
+    return p ? paramToJsx(p) : whole;
+  });
+}

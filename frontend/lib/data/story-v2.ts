@@ -20,6 +20,7 @@
 import { parseJsx } from '@/lib/jsx';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryContent } from '@/lib/types';
+import { paramFromJsxAttrs, paramToPlaceholder, placeholdersToParamJsx } from './story-params';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const VOID_TAGS = immutableSet([
@@ -60,6 +61,14 @@ function nodeToHtml(node: JsxNode, assets: number[]): string {
     return `<div data-question-id="${id}" style="width:100%;height:${h}"></div>`;
   }
 
+  // <Param name=… /> → the shared-param placeholder AgentHtml mounts a ParameterInput at.
+  if (node.tag === 'Param') {
+    const attrsMap: Record<string, unknown> = {};
+    for (const a of node.attributes) if (a.value.static) attrsMap[a.name] = a.value.json;
+    const p = paramFromJsxAttrs(attrsMap);
+    return p ? paramToPlaceholder(p) : '';
+  }
+
   const attrs = node.attributes.map(attrToHtml).filter(Boolean).join(' ');
   const open = attrs ? `<${node.tag} ${attrs}>` : `<${node.tag}>`;
   if (VOID_TAGS.has(node.tag.toLowerCase())) return open;
@@ -94,6 +103,8 @@ export function buildStoryJsx(content: StoryContent): string {
   html = html.replace(/<style>([\s\S]*?)<\/style>/g, (_m, css: string) => `<style>{\`${css.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\`}</style>`);
   // <div data-question-id="N" …></div> → <Question id={N} />
   html = html.replace(/<div\s+data-question-id=["'](\d+)["'][^>]*>\s*<\/div>/g, (_m, id: string) => `<Question id={${id}} />`);
+  // <div data-param-* …></div> → <Param name=… />
+  html = placeholdersToParamJsx(html);
   // self-close void tags (jsx requires it): <br> → <br/>, <img …> → <img …/>
   html = html.replace(/<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)((?:\s[^>]*)?)>/g, (_m, tag: string, rest: string) => `<${tag}${rest} />`);
   return html;
