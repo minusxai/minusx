@@ -24,6 +24,8 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
   // When the param imports a question column (<Param id={N} column="c">), offer autocomplete
   // from that column's distinct values; otherwise a plain typed input.
   const useDropdown = !!param.source && param.type !== 'date';
+  // <Param widget="slider"> on a number param renders a range slider with the declared bounds.
+  const useSlider = param.widget === 'slider' && param.type === 'number';
   return (
     <Box display="inline-flex" flexDirection="column" gap={1} minW="160px">
       {/* Inherit the story's own text color (with slight muting) so the label stays legible on
@@ -34,7 +36,26 @@ export default function StoryParamControl({ param, value, onChange }: Props) {
       <Text fontSize="xs" fontWeight={600} color="inherit" opacity={0.7} textTransform="capitalize" style={param.labelStyle as CSSProperties | undefined}>
         {param.name}
       </Text>
-      {useDropdown && param.source ? (
+      {useSlider ? (
+        // A native range input — shadow-boundary-safe (Chakra's Slider resolves theme tokens
+        // against the host app's color mode across the shadow root, same hazard the source
+        // dropdown's native <datalist> avoids). Themeable via <Param style={{accentColor:…}}>.
+        <Box display="inline-flex" alignItems="center" gap={2}>
+          <input
+            type="range"
+            aria-label={`param ${param.name}`}
+            min={param.min ?? 0}
+            max={param.max ?? 100}
+            step={param.step ?? 1}
+            value={value == null ? String(param.min ?? 0) : String(value)}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ accentColor: '#c8781a', cursor: 'pointer', ...(param.style as CSSProperties | undefined) }}
+          />
+          <Text fontSize="xs" color="inherit" opacity={0.8} minW="2ch" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {value == null ? (param.min ?? 0) : String(value)}
+          </Text>
+        </Box>
+      ) : useDropdown && param.source ? (
         // NOTE: do NOT key this on `value`. Each keystroke commits the value (so embeds re-run
         // live), which would change the key and REMOUNT the input mid-type — the field loses
         // focus on every character and on backspace. The widget syncs to external value changes

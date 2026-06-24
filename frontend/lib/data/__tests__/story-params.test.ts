@@ -54,6 +54,26 @@ describe('story-params — agent style override', () => {
   });
 });
 
+describe('story-params — widget override (slider etc.)', () => {
+  it('reads widget + slider bounds from <Param> attrs', () => {
+    expect(paramFromJsxAttrs({ name: 'limit', type: 'number', widget: 'slider', min: 0, max: 100, step: 5 }))
+      .toMatchObject({ widget: 'slider', min: 0, max: 100, step: 5 });
+  });
+
+  it('round-trips widget + bounds through the placeholder', () => {
+    const p: StoryParam = { name: 'limit', type: 'number', nullable: true, widget: 'slider', min: 0, max: 100, step: 5 };
+    expect(extractStoryParams(paramToPlaceholder(p))).toEqual([p]);
+  });
+
+  it('paramToJsx emits widget + numeric bounds', () => {
+    const jsx = paramToJsx({ name: 'limit', type: 'number', nullable: true, widget: 'slider', min: 0, max: 100, step: 5 });
+    expect(jsx).toContain('widget="slider"');
+    expect(jsx).toContain('min={0}');
+    expect(jsx).toContain('max={100}');
+    expect(jsx).toContain('step={5}');
+  });
+});
+
 describe('story-params — placeholder round-trip (through content.story HTML)', () => {
   const params: StoryParam[] = [
     { name: 'city', type: 'text', nullable: false, source: { questionId: 5, column: 'region' } },

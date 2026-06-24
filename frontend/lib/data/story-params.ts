@@ -31,6 +31,13 @@ export interface StoryParam {
   style?: Record<string, string | number>;
   /** Agent-supplied CSS applied to the param LABEL (`<Param labelStyle={{…}}>`). */
   labelStyle?: Record<string, string | number>;
+  /** Control widget override. `'slider'` (number params) renders a range slider instead of an
+   *  input; default is a typed input / autocomplete. */
+  widget?: 'slider';
+  /** Slider bounds (only used when widget==='slider'). */
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 /** Read a plain CSS object from a `<Param>` attribute value (object expressions parse to JSON). */
@@ -59,6 +66,10 @@ export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | 
   if (style) param.style = style;
   const labelStyle = styleAttr(attrs.labelStyle);
   if (labelStyle) param.labelStyle = labelStyle;
+  if (attrs.widget === 'slider') param.widget = 'slider';
+  if (typeof attrs.min === 'number') param.min = attrs.min;
+  if (typeof attrs.max === 'number') param.max = attrs.max;
+  if (typeof attrs.step === 'number') param.step = attrs.step;
   return param;
 }
 
@@ -72,6 +83,10 @@ export function paramToPlaceholder(p: StoryParam): string {
   if (p.source) a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
   if (p.style) a.push(`data-param-style="${escAttr(JSON.stringify(p.style))}"`);
   if (p.labelStyle) a.push(`data-param-labelstyle="${escAttr(JSON.stringify(p.labelStyle))}"`);
+  if (p.widget) a.push(`data-param-widget="${p.widget}"`);
+  if (p.min != null) a.push(`data-param-min="${p.min}"`);
+  if (p.max != null) a.push(`data-param-max="${p.max}"`);
+  if (p.step != null) a.push(`data-param-step="${p.step}"`);
   return `<div ${a.join(' ')}></div>`;
 }
 
@@ -84,6 +99,10 @@ export function paramToJsx(p: StoryParam): string {
   }
   if (p.style) a.push(`style={${JSON.stringify(p.style)}}`);
   if (p.labelStyle) a.push(`labelStyle={${JSON.stringify(p.labelStyle)}}`);
+  if (p.widget) a.push(`widget="${p.widget}"`);
+  if (p.min != null) a.push(`min={${p.min}}`);
+  if (p.max != null) a.push(`max={${p.max}}`);
+  if (p.step != null) a.push(`step={${p.step}}`);
   return `<Param ${a.join(' ')} />`;
 }
 
@@ -99,6 +118,10 @@ function paramFromPlaceholderInner(inner: string): StoryParam | null {
   if (style) p.style = style;
   const labelStyle = parseStyleJson(a.labelstyle);
   if (labelStyle) p.labelStyle = labelStyle;
+  if (a.widget === 'slider') p.widget = 'slider';
+  if (a.min != null && a.min !== '') p.min = Number(a.min);
+  if (a.max != null && a.max !== '') p.max = Number(a.max);
+  if (a.step != null && a.step !== '') p.step = Number(a.step);
   return p;
 }
 
@@ -137,6 +160,13 @@ export function paramFromPlaceholderEl(el: { getAttribute(name: string): string 
   if (style) p.style = style;
   const labelStyle = parseStyleJson(el.getAttribute('data-param-labelstyle'));
   if (labelStyle) p.labelStyle = labelStyle;
+  if (el.getAttribute('data-param-widget') === 'slider') p.widget = 'slider';
+  const min = el.getAttribute('data-param-min');
+  if (min != null && min !== '') p.min = Number(min);
+  const max = el.getAttribute('data-param-max');
+  if (max != null && max !== '') p.max = Number(max);
+  const step = el.getAttribute('data-param-step');
+  if (step != null && step !== '') p.step = Number(step);
   return p;
 }
 
