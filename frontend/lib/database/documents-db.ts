@@ -131,9 +131,14 @@ export class DocumentDB {
   static async getByPath(path: string, includeContent: boolean = true): Promise<DbFile | null> {
     const db = getModules().db;
 
+    // Multiple DRAFTS can share a path (only published files are path-unique — see
+    // idx_files_path_published_unique). Prefer the published file (draft ASC → false first), then
+    // the most recently updated, so path lookups are deterministic and a draft never shadows the
+    // canonical published file.
+    const order = ' ORDER BY draft ASC, updated_at DESC LIMIT 1';
     const query = includeContent
-      ? 'SELECT * FROM files WHERE path = $1'
-      : 'SELECT id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta FROM files WHERE path = $1';
+      ? `SELECT * FROM files WHERE path = $1${order}`
+      : `SELECT id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta FROM files WHERE path = $1${order}`;
 
     const result = await db.exec<DbRow>(query, [path]);
     if (result.rows.length === 0) return null;
@@ -283,7 +288,15 @@ export class DocumentDB {
       return { success: true, errors: [] };
     } catch (error: any) {
       try { await db.exec('ROLLBACK'); } catch { /* ignore secondary rollback errors */ }
-      return { success: false, errors: [{ id: failedId, error: error.message ?? String(error) }] };
+      // A unique violation here means another PUBLISHED file already occupies this path (drafts are
+      // exempt from path uniqueness — see idx_files_path_published_unique). Surface a clear,
+      // actionable message instead of the raw Postgres constraint error.
+      const isPathConflict = error?.code === '23505'
+        || /idx_files_path_published_unique|unique constraint/i.test(String(error?.message ?? ''));
+      const message = isPathConflict
+        ? 'A published file already exists at this path. Rename this file before saving.'
+        : (error.message ?? String(error));
+      return { success: false, errors: [{ id: failedId, error: message }] };
     }
   }
 

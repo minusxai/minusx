@@ -109,8 +109,9 @@ export const POSTGRES_SCHEMA = `
     meta JSONB DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE(path)
+    PRIMARY KEY (id)
+    -- NOTE: path uniqueness is enforced by a PARTIAL unique index (published files only) created
+    -- below — NOT a table constraint — so drafts can share a path. See idx_files_path_published_unique.
   );
 
   -- File Architecture v2 server-only secrets store (resolved at query time, never a files row)
@@ -179,6 +180,22 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
   -- Partial index on draft for efficient "hide drafts" queries
   CREATE INDEX IF NOT EXISTS idx_files_draft ON files (draft) WHERE draft = true;
+
+  -- Path uniqueness applies to PUBLISHED files only. Drafts (draft = true) are exempt, so the agent
+  -- can create several drafts at the same display path without colliding. A path becomes unique
+  -- again when a draft is published (draft to false). Migrate existing DBs off the old global
+  -- UNIQUE(path) table constraint to this partial unique index.
+  -- (NOTE: keep these comments free of semicolons -- splitSQLStatements is comment-unaware.)
+  DO $$
+  BEGIN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.table_constraints
+      WHERE table_schema = current_schema() AND table_name = 'files' AND constraint_name = 'files_path_key'
+    ) THEN
+      ALTER TABLE files DROP CONSTRAINT files_path_key;
+    END IF;
+  END $$;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_files_path_published_unique ON files (path) WHERE draft = false;
 
   -- Drop redundant standalone type index (replaced by composite index below)
   DROP INDEX IF EXISTS idx_files_type;
