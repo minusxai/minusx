@@ -39,9 +39,11 @@ export function useClearChat(container?: 'page' | 'sidebar') {
 export function useSlashCommands({
   appState,
   container,
+  onContextSize,
 }: {
   appState?: AppState | null;
   container?: 'page' | 'sidebar';
+  onContextSize?: () => void;
 }) {
   const clearChat = useClearChat(container);
   const fileId = appState?.type === 'file' ? appState.state?.fileState?.id : null;
@@ -50,6 +52,7 @@ export function useSlashCommands({
 
   const availableCommands = useMemo((): SlashCommand[] => [
     { type: 'command', name: 'clear', label: '/clear', description: 'Start a new chat' },
+    { type: 'command', name: 'view-context-size', label: '/view-context-size', description: 'View estimated next-message context size' },
     {
       type: 'command', name: 'save', label: '/save', description: 'Save current file',
       ...(fileId == null ? { disabled: true, disabledReason: 'No file to save' } :
@@ -73,8 +76,12 @@ export function useSlashCommands({
           });
         }
         break;
+      case 'view-context-size':
+      case 'context-size':
+        onContextSize?.();
+        break;
     }
-  }, [clearChat, fileId]);
+  }, [clearChat, fileId, onContextSize]);
 
   return { availableCommands, handleCommandExecute };
 }
@@ -90,7 +97,9 @@ export function tryExecuteSlashCommand(
 ): boolean {
   const match = input.match(/^\/([\w-]+)$/);
   if (!match) return false;
-  const cmd = commands.find(c => c.name === match[1].toLowerCase());
+  const name = match[1].toLowerCase();
+  const normalizedName = name === 'context-size' ? 'view-context-size' : name;
+  const cmd = commands.find(c => c.name === normalizedName);
   if (cmd && !cmd.disabled) {
     execute(cmd);
     return true;

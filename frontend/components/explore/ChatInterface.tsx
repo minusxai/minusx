@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, type ComponentProps } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare } from 'react-icons/lu';
+import { Box, VStack, HStack, Text, Icon, IconButton, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare, LuX } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
+import type { ContextSizeEstimate, ContextSizeSection } from '@/lib/chat/context-size-estimate';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
@@ -18,7 +19,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
-import { selectShowExpandedMessages, selectUnrestrictedMode } from '@/store/uiSlice';
+import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
@@ -43,6 +44,160 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 // circular dependency workaround.
 // eslint-disable-next-line no-restricted-syntax
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
+
+const CONTEXT_SIZE_LIMIT_TOKENS = 100_000;
+const CONTEXT_SIZE_SQUARES = 100;
+const CONTEXT_SECTION_COLORS = [
+  'accent.teal',
+  'accent.cyan',
+  'accent.warning',
+  'accent.primary',
+  'accent.secondary',
+  'accent.success',
+  'accent.info',
+  'fg.muted',
+] as const;
+
+type ContextSizePanelState =
+  | { status: 'loading' }
+  | { status: 'ready'; estimate: ContextSizeEstimate }
+  | { status: 'error'; error: string };
+
+function sectionColor(index: number): string {
+  return CONTEXT_SECTION_COLORS[index % CONTEXT_SECTION_COLORS.length];
+}
+
+function squareColorForIndex(
+  index: number,
+  sections: ContextSizeSection[],
+  limitTokens: number,
+): string | null {
+  const tokenPosition = ((index + 0.5) / CONTEXT_SIZE_SQUARES) * limitTokens;
+  let cumulative = 0;
+  for (let i = 0; i < sections.length; i++) {
+    cumulative += sections[i].tokens;
+    if (tokenPosition <= cumulative) return sectionColor(i);
+  }
+  return null;
+}
+
+function ContextSizePanel({
+  state,
+  onClose,
+  colSpan,
+  colStart,
+}: {
+  state: ContextSizePanelState;
+  onClose: () => void;
+  colSpan: ComponentProps<typeof GridItem>['colSpan'];
+  colStart: ComponentProps<typeof GridItem>['colStart'];
+}) {
+  const estimate = state.status === 'ready' ? state.estimate : null;
+  const totalTokens = estimate?.totalTokens ?? 0;
+  const percent = estimate ? Math.min(999, Math.round((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * 100)) : 0;
+  const filledSquares = estimate
+    ? Math.min(CONTEXT_SIZE_SQUARES, Math.ceil((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * CONTEXT_SIZE_SQUARES))
+    : 0;
+  const displaySections = estimate
+    ? estimate.sections.filter(s => s.tokens > 0)
+    : [];
+
+  return (
+    <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+      <GridItem colSpan={colSpan} colStart={colStart}>
+        <Box
+          bg="bg.muted"
+          borderWidth="1px"
+          borderColor={totalTokens > CONTEXT_SIZE_LIMIT_TOKENS ? 'accent.warning' : 'border.default'}
+          borderRadius="md"
+          px={3}
+          py={2.5}
+          mb={3}
+          fontFamily="mono"
+        >
+          <HStack justify="space-between" align="start" gap={3}>
+            <VStack align="stretch" gap={2} flex="1" minW={0}>
+              <HStack gap={2} justify="space-between" align="center">
+                <Text fontSize="xs" fontWeight="700" color="fg.default">
+                  Estimated next context
+                </Text>
+                {estimate && (
+                  <Text fontSize="xs" color={totalTokens > CONTEXT_SIZE_LIMIT_TOKENS ? 'accent.warning' : 'fg.muted'}>
+                    {totalTokens.toLocaleString()} / {CONTEXT_SIZE_LIMIT_TOKENS.toLocaleString()} tokens ({percent}%)
+                  </Text>
+                )}
+              </HStack>
+
+              {state.status === 'loading' && (
+                <HStack gap={2} color="fg.muted">
+                  <Spinner size="xs" />
+                  <Text fontSize="xs">Estimating context...</Text>
+                </HStack>
+              )}
+
+              {state.status === 'error' && (
+                <Text fontSize="xs" color="accent.danger">{state.error}</Text>
+              )}
+
+              {estimate && (
+                <>
+                  <Box
+                    display="grid"
+                    gridTemplateColumns="repeat(10, 10px)"
+                    gap="3px"
+                    justifyContent="center"
+                    mx="auto"
+                    aria-label="context size squares"
+                  >
+                    {Array.from({ length: CONTEXT_SIZE_SQUARES }, (_, index) => {
+                      const color = index < filledSquares
+                        ? squareColorForIndex(index, estimate.sections, CONTEXT_SIZE_LIMIT_TOKENS)
+                        : null;
+                      return (
+                        <Box
+                          key={index}
+                          w="10px"
+                          h="10px"
+                          borderRadius="2px"
+                          bg={color ?? 'bg.canvas'}
+                          border="1px solid"
+                          borderColor={color ? color : 'border.muted'}
+                        />
+                      );
+                    })}
+                  </Box>
+
+                  <VStack align="stretch" gap={1}>
+                    {displaySections.map((section, index) => (
+                      <HStack key={section.key} gap={2} justify="space-between" fontSize="2xs" color="fg.muted">
+                        <HStack gap={1.5} minW={0}>
+                          <Box w="8px" h="8px" bg={sectionColor(index)} borderRadius="1px" flexShrink={0} />
+                          <Text truncate>{section.label}</Text>
+                        </HStack>
+                        <Text flexShrink={0}>{section.tokens.toLocaleString()} tok</Text>
+                      </HStack>
+                    ))}
+                  </VStack>
+                </>
+              )}
+            </VStack>
+
+            <IconButton
+              aria-label={state.status === 'loading' ? 'Cancel context size estimate' : 'Close context size estimate'}
+              size="2xs"
+              variant="ghost"
+              color="fg.muted"
+              onClick={onClose}
+              flexShrink={0}
+            >
+              <Icon as={LuX} boxSize={3.5} />
+            </IconButton>
+          </HStack>
+        </Box>
+      </GridItem>
+    </Grid>
+  );
+}
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -223,6 +378,7 @@ export default function ChatInterface({
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
   const devMode = useAppSelector(selectDevMode);
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
+  const chatAttachments = useAppSelector(selectChatAttachments);
   // queryResultsMap / colorMode / disableAppStateImages / unrestrictedMode are
   // ONLY needed inside handleSendMessage. Read them on demand via useAppStore
   // instead of subscribing — otherwise this parent re-renders every time any
@@ -439,6 +595,8 @@ export default function ChatInterface({
   const [localError, setLocalError] = useState<LoadError | null>(null);
   // Only show runtime/execution errors here (not loadError - that's shown in dedicated section above)
   const error = conversation?.error || localError;
+  const [contextSizePanel, setContextSizePanel] = useState<ContextSizePanelState | null>(null);
+  const contextSizeAbortRef = useRef<AbortController | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -562,7 +720,133 @@ export default function ChatInterface({
     }
   };
 
-  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container });
+  const closeContextSizePanel = useCallback(() => {
+    contextSizeAbortRef.current?.abort();
+    contextSizeAbortRef.current = null;
+    setContextSizePanel(null);
+  }, []);
+
+  const buildAgentArgsForMessage = useCallback((userInput: string, allAttachments: Attachment[] = []) => {
+    const simplifiedSchema = database?.schemas?.map(s => ({
+      schema: s.schema,
+      tables: s.tables.map(t => t.table)
+    })) ?? null;
+
+    const selectedSkillMentions = getSkillsFromMessage(userInput);
+    const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
+    const selectedUserNames = new Set(
+      uniqueSelectedSkills
+        .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
+        .map(skill => skill.name)
+    );
+    const agentSelectedSkills: AgentSkillSelection[] = uniqueSelectedSkills.map(skill => {
+      if (skill.source === 'system') {
+        return { type: 'system', name: skill.name };
+      }
+      return {
+        type: 'user',
+        name: skill.name,
+        description: skill.description || '',
+        content: skill.content || '',
+      };
+    });
+
+    const LARGE_APP_STATE_THRESHOLD = 200_000;
+    const appStateSize = appState ? JSON.stringify(appState).length : 0;
+    if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
+      agentSelectedSkills.push({ type: 'system', name: 'large_file' });
+    }
+
+    const uniqueUserCatalog: AgentUserSkillCatalogItem[] = uniqueSkills(chatSkills)
+      .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
+      .filter(skill => !selectedUserNames.has(skill.name))
+      .map(skill => ({
+        name: skill.name,
+        description: skill.description || '',
+      }));
+
+    return {
+      connection_id: database?.databaseName || selectedDatabase || null,
+      context_path: contextPath || null,
+      context_version: contextVersion ?? null,
+      context_file_id: contextInfo.contextId ?? null,
+      schema: simplifiedSchema,
+      context: markdown || '',
+      app_state: appState,
+      city: config.city,
+      agent_name: config.branding.agentName || 'MinusX',
+      unrestricted_mode: selectUnrestrictedMode(store.getState()),
+      skills: {
+        selected: agentSelectedSkills,
+        user_catalog: uniqueUserCatalog,
+      },
+      ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
+      ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
+    };
+  }, [
+    appState,
+    chatSkills,
+    config.allowedVizTypes,
+    config.branding.agentName,
+    config.city,
+    contextInfo.contextId,
+    contextPath,
+    contextVersion,
+    database,
+    getSkillsFromMessage,
+    markdown,
+    selectedDatabase,
+    store,
+    uniqueSkills,
+  ]);
+
+  const handleContextSize = useCallback(async () => {
+    if (connectionsLoading || contextsLoading) {
+      setContextSizePanel({ status: 'error', error: 'Still loading connections and context' });
+      return;
+    }
+    if (!conversationID) {
+      setContextSizePanel({ status: 'error', error: 'Preparing chat. Try again in a moment.' });
+      return;
+    }
+
+    contextSizeAbortRef.current?.abort();
+    const controller = new AbortController();
+    contextSizeAbortRef.current = controller;
+    setContextSizePanel({ status: 'loading' });
+
+    try {
+      const res = await fetch('/api/chat/context-size', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          conversationID,
+          user_message: ' ',
+          source: container === 'sidebar' ? 'side_chat' : 'explore',
+          agent: 'AnalystAgent',
+          agent_args: buildAgentArgsForMessage(' ', chatAttachments),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error?.message || data.error || 'Failed to estimate context size');
+      }
+      setContextSizePanel({ status: 'ready', estimate: data as ContextSizeEstimate });
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setContextSizePanel({
+        status: 'error',
+        error: err instanceof Error ? err.message : 'Failed to estimate context size',
+      });
+    } finally {
+      if (contextSizeAbortRef.current === controller) {
+        contextSizeAbortRef.current = null;
+      }
+    }
+  }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container]);
+
+  const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize });
 
   // Stable callback wrapper for memo'd children (e.g. ExampleQuestions, ChatInput).
   // handleSendMessage closes over many stateful values and is recreated each
@@ -588,8 +872,6 @@ export default function ChatInterface({
 
     // Safety net: intercept slash commands typed directly without dropdown
     if (tryExecuteSlashCommand(userInput, availableCommands, handleCommandExecute)) return;
-
-    const selectedSkillMentions = getSkillsFromMessage(userInput);
 
     // Block sending if connections or contexts are still loading
     if (connectionsLoading || contextsLoading) {
@@ -630,15 +912,6 @@ export default function ChatInterface({
         return;
       }
     }
-
-    // Simplify schema for agent.
-    // null  = no active context → no restriction (agent can search full schema)
-    // []    = context with empty whitelist → restrict to nothing
-    // [...] = context with whitelisted tables → filter to those
-    const simplifiedSchema = database?.schemas?.map(s => ({
-      schema: s.schema,
-      tables: s.tables.map(t => t.table)
-    })) ?? null;
 
     // Render chart images for the current file and upload to S3.
     // Question: 1 image. Dashboard: one image per chart with data.
@@ -682,61 +955,10 @@ export default function ChatInterface({
       dispatch(clearQueuedMessages({ conversationID: convId }));
     }
 
-    const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
-    const selectedUserNames = new Set(
-      uniqueSelectedSkills
-        .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
-        .map(skill => skill.name)
-    );
-    const agentSelectedSkills: AgentSkillSelection[] = uniqueSelectedSkills.map(skill => {
-      if (skill.source === 'system') {
-        return { type: 'system', name: skill.name };
-      }
-      return {
-        type: 'user',
-        name: skill.name,
-        description: skill.description || '',
-        content: skill.content || '',
-      };
-    });
-    // Auto-inject large_file skill when app state is very large
-    const LARGE_APP_STATE_THRESHOLD = 200_000; // characters
-    const appStateSize = appState ? JSON.stringify(appState).length : 0;
-    if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
-      agentSelectedSkills.push({ type: 'system', name: 'large_file' });
-    }
-
-    const uniqueUserCatalog: AgentUserSkillCatalogItem[] = uniqueSkills(chatSkills)
-      .filter((skill): skill is Extract<SkillMention, { source: 'user' }> => skill.source === 'user')
-      .filter(skill => !selectedUserNames.has(skill.name))
-      .map(skill => ({
-        name: skill.name,
-        description: skill.description || '',
-      }));
-
     // Update agent_args with fresh appState before sending message
     dispatch(updateAgentArgs({
       conversationID: convId,
-      agent_args: {
-        connection_id: database?.databaseName || selectedDatabase || null,
-        context_path: contextPath || null,
-        context_version: contextVersion ?? null,
-        // v2 (server-authoritative) resolves the selected context from this id;
-        // without it the v2 server falls back to the home-folder context.
-        context_file_id: contextInfo.contextId ?? null,
-        schema: simplifiedSchema,
-        context: markdown || '',
-        app_state: appState,
-        city: config.city,
-        agent_name: config.branding.agentName || 'MinusX',
-        unrestricted_mode: selectUnrestrictedMode(store.getState()),
-        skills: {
-          selected: agentSelectedSkills,
-          user_catalog: uniqueUserCatalog,
-        },
-        ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
-        ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
-      }
+      agent_args: buildAgentArgsForMessage(userInput, allAttachments)
     }));
 
     // Send message
@@ -1227,6 +1449,15 @@ export default function ChatInterface({
                 <ThinkingIndicator waitingForInput={isWaitingForUserInput} onStop={handleStopAgent} queuedMessages={conversation?.queuedMessages || []} />
               </GridItem>
             </Grid>
+          )}
+
+          {contextSizePanel && (
+            <ContextSizePanel
+              state={contextSizePanel}
+              onClose={closeContextSizePanel}
+              colSpan={colSpan}
+              colStart={colStart}
+            />
           )}
 
 {tokenLimitExceeded && !isAgentRunning && !isStreaming ? (
