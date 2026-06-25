@@ -25,11 +25,11 @@ import type { Mock } from 'vitest';
 
 const TEST_DB_PATH = getTestDbPath('chat_v2_route');
 
-function makeRequest(url: string, body: Record<string, unknown>): NextRequest {
+function makeRequest(url: string, body?: Record<string, unknown>): NextRequest {
   return new NextRequest(url, {
     method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' } }),
   });
 }
 
@@ -213,6 +213,15 @@ describe('chat v2 route', () => {
 
     it('default URL → meta.version === 2 (v2 is the default)', async () => {
       const res = await chatInitHandler(makeRequest('http://localhost/api/chat/init', { firstMessage: 'hi default' }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.conversationID).toBeGreaterThan(0);
+      const meta = await getFileMeta(body.conversationID);
+      expect(meta?.version).toBe(2);
+    });
+
+    it('empty body → creates a blank v2 conversation', async () => {
+      const res = await chatInitHandler(makeRequest('http://localhost/api/chat/init'));
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.conversationID).toBeGreaterThan(0);

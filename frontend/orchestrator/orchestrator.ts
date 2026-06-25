@@ -202,6 +202,12 @@ export class Orchestrator {
     return stream;
   }
 
+  previewRootContext(root: MXAgent): Context {
+    this.appendInterruptResultsForDanglers();
+    root.threadHistory = this.projectRootThreadHistory();
+    return root.buildLLMContext();
+  }
+
   resume(completed: ToolResultMessage[]): EventStream<StreamEvent, AssistantMessage | null> {
     if (this.used) {
       throw new Error('Orchestrator is single-use: this instance already executed run() or resume(). Construct a fresh Orchestrator with the saved log.');

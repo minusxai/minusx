@@ -73,6 +73,7 @@ import type {
   ChatRequest,
   CompletedToolCallResult,
 } from '@/lib/chat-orchestration';
+import { estimateContextSize, type ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
 import type {
   ToolCall as LegacyToolCall,
   ConversationLogEntry as LegacyLogEntry,
@@ -80,6 +81,7 @@ import type {
 } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
+import type { MXAgent } from '@/orchestrator/types';
 
 // Persist each LLM call's pi-format request the moment it's made; the response
 // is filled into the same row after the turn (see recordLlmCalls), and a failed
@@ -243,6 +245,7 @@ interface OrchestrationSetup {
   expectedLogIndex: number;
   orchestrator: Orchestrator;
   rawStream: ReturnType<Orchestrator['run']> | null;
+  rootAgent?: MXAgent;
   fatalError?: string;
 }
 
@@ -360,6 +363,7 @@ async function setupOrchestration(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,
+  options?: { preview?: boolean },
 ): Promise<OrchestrationSetup> {
   const file = await FilesAPI.loadFile(conversationId, user);
   const content = file.data.content as unknown as ConversationFileContent | undefined;
@@ -517,7 +521,8 @@ async function setupOrchestration(
         conversationId,
         expectedLogIndex,
         orchestrator: orch,
-        rawStream: orch.run(agent),
+        rootAgent: agent,
+        rawStream: options?.preview ? null : orch.run(agent),
       };
     }
     const ctx: RemoteAnalystContext = {
@@ -546,7 +551,8 @@ async function setupOrchestration(
       conversationId,
       expectedLogIndex,
       orchestrator: orch,
-      rawStream: orch.run(agent),
+      rootAgent: agent,
+      rawStream: options?.preview ? null : orch.run(agent),
     };
   }
 
@@ -557,6 +563,28 @@ async function setupOrchestration(
     rawStream: null,
     fatalError: 'v=2 chat: must supply either `user_message` or `completed_tool_calls`',
   };
+}
+
+export async function estimateNextChatContextV2(
+  body: ChatRequest,
+  user: EffectiveUser,
+  conversationId: number,
+): Promise<ContextSizeEstimate> {
+  const bodyWithProbe: ChatRequest = {
+    ...body,
+    user_message: body.user_message?.length ? body.user_message : ' ',
+    completed_tool_calls: undefined,
+    resume: undefined,
+  };
+  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, { preview: true });
+  if (setup.fatalError) {
+    throw new Error(setup.fatalError);
+  }
+  if (!setup.rootAgent) {
+    throw new Error('Unable to build next chat context');
+  }
+  const context = setup.orchestrator.previewRootContext(setup.rootAgent);
+  return estimateContextSize(context);
 }
 
 /**

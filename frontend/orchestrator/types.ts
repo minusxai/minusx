@@ -197,17 +197,21 @@ export class MXAgent<
     return (this.constructor as typeof MXAgent).callOptions;
   }
 
-  protected async llm(): Promise<AssistantMessage> {
+  buildLLMContext(): Context {
     const ctor = this.constructor as typeof MXAgent;
     // Soft cap: once the thread reaches
     // maxSteps − 5, withhold tools so the model must give a final answer.
     const tools = this.toolThread.length >= ctor.maxSteps - 5 ? [] : ctor.tools;
-    const context: Context = {
+    return {
       systemPrompt: this.getSystemPrompt(),
       messages: this.buildMessages(),
       tools,
     };
-    return this.orchestrator.callLLM(ctor.model, context, this.id, this.resolveCallOptions());
+  }
+
+  protected async llm(): Promise<AssistantMessage> {
+    const ctor = this.constructor as typeof MXAgent;
+    return this.orchestrator.callLLM(ctor.model, this.buildLLMContext(), this.id, this.resolveCallOptions());
   }
 
   async run(): Promise<AssistantMessage> {

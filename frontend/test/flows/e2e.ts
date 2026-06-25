@@ -13,10 +13,18 @@ import { expect, type Page } from '@playwright/test';
  * instead of throwing on `undefined.getState()`.
  */
 export async function getState<T = unknown>(page: Page): Promise<T> {
-  return page.evaluate(() => {
-    const store = (window as unknown as { __MX_STORE__?: { getState(): unknown } }).__MX_STORE__;
-    return (store?.getState() ?? null) as unknown;
-  }) as Promise<T>;
+  try {
+    return await page.evaluate(() => {
+      const store = (window as unknown as { __MX_STORE__?: { getState(): unknown } }).__MX_STORE__;
+      return (store?.getState() ?? null) as unknown;
+    }) as T;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('Execution context was destroyed')) {
+      return null as T;
+    }
+    throw error;
+  }
 }
 
 /** Poll the Redux state until `predicate` holds (or time out). */
