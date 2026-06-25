@@ -110,11 +110,15 @@ export interface Conversation {
 
 interface ChatState {
   conversations: Record<number, Conversation>;  // Changed key type
+  inputHistory: string[];
 }
 
 const initialState: ChatState = {
-  conversations: {}
+  conversations: {},
+  inputHistory: []
 };
+
+const MAX_INPUT_HISTORY = 25;
 
 const chatSlice = createSlice({
   name: 'chat',
@@ -202,6 +206,18 @@ const chatSlice = createSlice({
       conv.executionState = 'WAITING';
       conv.error = undefined;
       conv.wasInterrupted = false;
+    },
+
+    addInputHistoryEntry(state, action: PayloadAction<string>) {
+      const message = action.payload.trim();
+      if (!message) return;
+
+      state.inputHistory = state.inputHistory.filter(entry => entry !== message);
+      state.inputHistory.push(message);
+
+      if (state.inputHistory.length > MAX_INPUT_HISTORY) {
+        state.inputHistory = state.inputHistory.slice(-MAX_INPUT_HISTORY);
+      }
     },
 
     // Queue a message while agent is running — will be sent when current turn finishes
@@ -618,6 +634,7 @@ export const {
   createConversation,
   loadConversation,
   sendMessage,
+  addInputHistoryEntry,
   queueMessage,
   clearQueuedMessages,
   flushQueuedMessages,
@@ -644,6 +661,8 @@ export const selectAllToolsCompleted = (state: RootState, conversationID: number
   if (!conv) return false;
   return conv.pending_tool_calls.every(p => p.result !== undefined);
 };
+
+export const selectChatInputHistory = (state: RootState) => state.chat.inputHistory;
 
 // Walk the fork chain starting from a given conversation ID and return the
 // tail (latest) conversation. Memoized so that — even though state.chat.conversations

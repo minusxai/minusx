@@ -46,21 +46,32 @@ vi.mock('@/components/chat/LexicalMentionEditor', () => {
   return {
     __esModule: true,
     LexicalMentionEditor: React.forwardRef(function MockLexicalMentionEditor(props: any, ref: any) {
-      const { placeholder, disabled, onSubmit, onChange } = props;
+      const { placeholder, disabled, onSubmit, onChange, onArrowKey } = props;
+      const [value, setValue] = React.useState('');
       React.useImperativeHandle(ref, () => ({
         clear: vi.fn(),
-        setText: vi.fn(),
+        setText: (text: string) => setValue(text),
         focus: vi.fn(),
       }));
       return React.createElement('textarea', {
         'aria-label': 'Chat editor',
         placeholder,
         disabled,
-        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(e.target.value),
+        value,
+        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+          setValue(e.target.value);
+          onChange?.(e.target.value);
+        },
         onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             onSubmit?.();
+          }
+          if (e.key === 'ArrowUp') {
+            onArrowKey?.('up', e.nativeEvent);
+          }
+          if (e.key === 'ArrowDown') {
+            onArrowKey?.('down', e.nativeEvent);
           }
         },
       });
@@ -74,6 +85,7 @@ import userEvent from '@testing-library/user-event';
 
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
+import { addInputHistoryEntry } from '@/store/chatSlice';
 import { selectChatAttachments, addPendingUpload } from '@/store/uiSlice';
 import { uploadFile } from '@/lib/object-store/client';
 import { extractTextFromDocument } from '@/lib/utils/attachment-extract';
@@ -294,5 +306,65 @@ describe('ChatInput queue toggle', () => {
     await user.click(sendButton);
 
     expect(onSend).toHaveBeenCalledWith('follow up', []);
+  });
+});
+
+// ─── ChatInput: input history ────────────────────────────────────────────────
+
+describe('ChatInput input history', () => {
+  beforeEach(() => { window.HTMLElement.prototype.scrollTo = vi.fn(); });
+  afterEach(() => vi.clearAllMocks());
+
+  it('stores sent text in Redux input history', async () => {
+    const store = storeModule.makeStore();
+    const onSend = vi.fn();
+    renderWithProviders(
+      <ChatInput
+        onSend={onSend}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        isCompact={true}
+      />,
+      { store }
+    );
+
+    fireEvent.change(screen.getByLabelText('Chat editor'), { target: { value: 'show sales' } });
+    fireEvent.click(screen.getByLabelText('Send message'));
+
+    expect(onSend).toHaveBeenCalledWith('show sales', []);
+    expect(store.getState().chat.inputHistory).toEqual(['show sales']);
+  });
+
+  it('recalls history with ArrowUp and moves forward with ArrowDown', async () => {
+    const store = storeModule.makeStore();
+    store.dispatch(addInputHistoryEntry('first message'));
+    store.dispatch(addInputHistoryEntry('second message'));
+
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        isCompact={true}
+      />,
+      { store }
+    );
+
+    const editor = screen.getByLabelText('Chat editor') as HTMLTextAreaElement;
+    fireEvent.keyDown(editor, { key: 'ArrowUp' });
+    expect(editor.value).toBe('second message');
+
+    fireEvent.keyDown(editor, { key: 'ArrowUp' });
+    expect(editor.value).toBe('first message');
+
+    fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    expect(editor.value).toBe('second message');
+
+    fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    expect(editor.value).toBe('');
   });
 });
