@@ -51,7 +51,9 @@ describe('RegionCaptureButton', () => {
     expect(store.getState().ui.pendingUploads).toHaveLength(0);
     expect(captureRegionBlob).toHaveBeenCalledWith(
       { x: 20, y: 20, width: 200, height: 150 },
-      expect.objectContaining({ filter: expect.any(Function) }),
+      // targetBox is snapshotted synchronously at selection time and passed through so the crop
+      // frame matches the selection frame (the dev-vs-prod offset fix) — must not be dropped.
+      expect.objectContaining({ filter: expect.any(Function), targetBox: expect.objectContaining({ left: expect.any(Number), top: expect.any(Number) }) }),
     );
   });
 

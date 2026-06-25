@@ -25,6 +25,16 @@ export default function RegionCaptureButton() {
   const [selecting, setSelecting] = useState(false);
 
   const handleSelect = useCallback(async (rect: SelectionRect) => {
+    // Snapshot the capture target AND its viewport rect NOW — synchronously, in the same layout frame
+    // as the user's selection (`rect` is in viewport coords) and BEFORE addPendingUpload reflows the
+    // chat input or the async render runs. Passing this frozen box to captureRegionBlob keeps the crop
+    // aligned no matter how slow the render is — without it the crop reads a drifted rect post-render,
+    // which is the dev-vs-prod offset (prod renders fast enough to not drift; dev doesn't).
+    // Capture the file view (the relevant content) rather than the whole document.body — body capture
+    // is slow/unreliable on a complex SPA (it clones the entire app + inlines every stylesheet). Fall
+    // back to body on pages with no file view (explore/folder).
+    const target = (document.querySelector('[data-file-id]') as HTMLElement | null) ?? undefined;
+    const targetBox = (target ?? document.body).getBoundingClientRect();
     setSelecting(false);
     // Register a pending upload so the chat input shows a "processing" chip and blocks send until
     // the image is ready (cancellable). Then YIELD so that chip paints before html-to-image runs —
@@ -33,13 +43,10 @@ export default function RegionCaptureButton() {
     dispatch(addPendingUpload({ id: uploadId, name: 'Screen selection' }));
     await new Promise((r) => setTimeout(r, 32));
     try {
-      // Capture the file view (the relevant content) rather than the whole document.body —
-      // body capture is slow/unreliable on a complex SPA (it clones the entire app + inlines
-      // every stylesheet). Fall back to body on pages with no file view (explore/folder).
-      const target = (document.querySelector('[data-file-id]') as HTMLElement | null) ?? undefined;
       const blob = await captureRegionBlob(rect, {
         colorMode,
         target,
+        targetBox,
         // Exclude the selection overlay from its own screenshot.
         filter: (node) => !(node instanceof HTMLElement && node.hasAttribute('data-region-select-overlay')),
       });
