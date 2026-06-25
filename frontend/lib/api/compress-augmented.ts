@@ -159,6 +159,26 @@ function compressFileState(fs: FileState): CompressedFileState {
 }
 
 /**
+ * Drop the JSON `content` from a CompressedFileState, keeping `markup` (+ id/name/path/
+ * type/queryResultId). The agent reads + edits the `markup` projection, so the raw JSON
+ * `content` is duplicate context — stripped at the LLM serialization boundary only (the
+ * client keeps `content` for chart rendering, params, viz-change detection, etc.).
+ */
+export function omitFileStateContent(fs: CompressedFileState): CompressedFileState {
+  const { content: _omit, ...rest } = fs;
+  return rest;
+}
+
+/** Strip JSON `content` from a CompressedAugmentedFile (primary + references) for the LLM. */
+export function stripAugmentedContentForLlm(aug: CompressedAugmentedFile): CompressedAugmentedFile {
+  return {
+    ...aug,
+    fileState: omitFileStateContent(aug.fileState),
+    references: aug.references.map(omitFileStateContent),
+  };
+}
+
+/**
  * Compress an AugmentedFile (Redux FileState + references + queryResults) into the
  * model-ready CompressedAugmentedFile shape.
  *

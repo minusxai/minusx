@@ -3,7 +3,7 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/api/file-state.server';
-import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { FileType, ReadFilesResult } from '@/lib/types';
 import type { AnalystAgentContext } from './types';
@@ -66,7 +66,8 @@ export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContex
         executeQueries: this.parameters.runQueries ?? false,
         maxChars,
       });
-      const result: ReadFilesResult = { success: true, files };
+      // The agent reads `markup`, not JSON `content` — strip the duplicate content.
+      const result: ReadFilesResult = { success: true, files: files.map(stripAugmentedContentForLlm) };
       return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
     });
   }

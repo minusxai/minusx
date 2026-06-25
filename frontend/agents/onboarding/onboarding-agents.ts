@@ -16,6 +16,7 @@ import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+import { appStateForLlm, type AppState } from '@/lib/appState';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-onboarding-api',
@@ -45,7 +46,7 @@ function onboardingUserContent(
   raw: string | (TextContent | ImageContent)[],
   promptId: string,
 ): (TextContent | ImageContent)[] {
-  const appState = ctx.appState !== undefined ? JSON.stringify(ctx.appState) : 'null';
+  const appState = ctx.appState !== undefined ? JSON.stringify(appStateForLlm(ctx.appState as AppState)) : 'null';
   const text = renderPrompt(promptId, {
     app_state: appState,
     current_date: new Date().toISOString().slice(0, 10),

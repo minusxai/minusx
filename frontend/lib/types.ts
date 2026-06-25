@@ -1221,7 +1221,8 @@ export interface CompressedFileState {
   type: FileType;
   isDirty: boolean;             // true if unpublished changes exist
   queryResultId?: string;        // computed hash of query+params+database (questions only)
-  content: FileState['content']; // merged: { ...content, ...persistableChanges }
+  content?: FileState['content']; // merged: { ...content, ...persistableChanges }. Optional: stripped
+                                 // at the LLM boundary (the agent reads `markup`, not JSON content).
   markup?: string;               // File Architecture v2 — the agent's edit surface (jsx body
                                  // for documents, keyvalue→XML for props); mirrors buildCurrentFileStr
 }

@@ -11,6 +11,7 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
+import { appStateForLlm, type AppState } from '@/lib/appState';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-feed-summary-api',
@@ -41,7 +42,7 @@ export class FeedSummaryAgent extends RemoteAnalystAgent {
 
   protected override buildUserContent(): (TextContent | ImageContent)[] {
     const appStateJson =
-      this.context.appState !== undefined ? JSON.stringify(this.context.appState, null, 2) : 'null';
+      this.context.appState !== undefined ? JSON.stringify(appStateForLlm(this.context.appState as AppState), null, 2) : 'null';
     const text = renderPrompt('feed_summary.user', {
       app_state: appStateJson,
       current_date: new Date().toISOString().slice(0, 10),
