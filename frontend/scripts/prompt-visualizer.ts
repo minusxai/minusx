@@ -21,7 +21,8 @@
 import { config } from 'dotenv';
 import { writeFileSync } from 'fs';
 import { Type } from 'typebox';
-import { PROMPTS, renderPrompt, getSkill, pyFormat } from '@/orchestrator/prompts';
+import { PROMPTS, renderPrompt, pyFormat } from '@/orchestrator/prompts';
+import { loadSkill as getSkill } from '@/agents/skill-content';
 import {
   PAGE_SKILL_MAP,
   getPreloadedSkillNames,

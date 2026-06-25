@@ -10,7 +10,8 @@ import 'server-only';
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool, TextContent, ImageContent } from '@/orchestrator/llm';
-import { renderPrompt, getSkill } from '@/orchestrator/prompts';
+import { renderPrompt } from '@/orchestrator/prompts';
+import { loadSkill } from '@/agents/skill-content';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
@@ -86,7 +87,7 @@ export class OnboardingContextAgent extends WebAnalystAgent {
       schema: schemaString(this.context),
       connection_id: this.context.connectionId ?? '',
       max_steps: String(ctor.maxSteps),
-      contexts_skill: getSkill('contexts') ?? '',
+      contexts_skill: loadSkill('contexts') ?? '',
     });
   }
 
@@ -129,7 +130,7 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
       connection_id: this.context.connectionId ?? '',
       max_steps: String(ctor.maxSteps),
       // Verbatim var insertion — see the note in OnboardingContextAgent.
-      dashboards_skill: getSkill('dashboards') ?? '',
+      dashboards_skill: loadSkill('dashboards') ?? '',
     });
   }
 
