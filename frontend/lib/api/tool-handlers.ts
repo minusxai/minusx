@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type CompressedFileState } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type CompressedFileState, type ScreenshotDetails } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -494,7 +494,9 @@ registerFrontendTool('Screenshot', async (args, context) => {
         { type: 'text', text: `Screenshot of file ${fileId} (rendered view).` },
         { type: 'image_url', image_url: { url } },
       ],
-      details: { success: true },
+      // screenshotUrl rides in `details` (UI-only, survives the turn) so the chat image
+      // doesn't vanish when the persisted content is reloaded in a different shape.
+      details: { success: true, screenshotUrl: url } as ScreenshotDetails,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

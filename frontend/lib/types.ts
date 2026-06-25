@@ -980,6 +980,13 @@ export interface EditFileDetails extends ToolCallDetails {
   diff: string;
 }
 
+export interface ScreenshotDetails extends ToolCallDetails {
+  /** The captured image URL, for the chat display. The LLM gets the image via the content
+   *  image_url block; this UI-only `details` field survives the turn (content can be reloaded
+   *  stringified), so the displayed image doesn't vanish after the turn completes. */
+  screenshotUrl?: string;
+}
+
 export interface ClarifyDetails extends ToolCallDetails {
   selection?: any;  // the user's selection (for highlighting chosen option)
 }

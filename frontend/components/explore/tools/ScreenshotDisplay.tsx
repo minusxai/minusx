@@ -2,13 +2,13 @@
 
 import { Box, GridItem, HStack, VStack, Text, Icon, Image } from '@chakra-ui/react';
 import { LuCamera, LuX } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
-import { type DetailCardProps, parseToolContent } from './DetailCarousel';
+import { DisplayProps, type ScreenshotDetails } from '@/lib/types';
+import { type DetailCardProps } from './DetailCarousel';
 
 const IMG_LABEL = 'Captured screenshot';
 
-/** Pull the captured image URL out of the Screenshot tool result (its image_url content block). */
-function screenshotUrl(content: unknown): string | null {
+/** Find an image_url block's url inside a content array. */
+function urlFromContentArray(content: unknown): string | null {
   const arr = Array.isArray(content)
     ? content
     : Array.isArray((content as { content?: unknown } | null)?.content)
@@ -19,9 +19,27 @@ function screenshotUrl(content: unknown): string | null {
   return img?.image_url?.url ?? null;
 }
 
+/**
+ * Robustly extract the screenshot URL from a tool message in ANY shape it can take:
+ *  - live stream: `details.screenshotUrl` (preferred) or a content array with an image_url block;
+ *  - after the turn: content reloaded as a JSON string, or an object whose `details.screenshotUrl`
+ *    rides along. `details` is the UI-only channel that survives the turn, so it's tried first.
+ */
+function extractScreenshotUrl(msg: { details?: unknown; content?: unknown }): string | null {
+  const fromDetails = (msg.details as ScreenshotDetails | undefined)?.screenshotUrl;
+  if (fromDetails) return fromDetails;
+  let c: unknown = msg.content;
+  if (typeof c === 'string') {
+    try { c = JSON.parse(c); } catch { return null; }
+  }
+  const nested = (c as { details?: ScreenshotDetails } | null)?.details?.screenshotUrl;
+  if (nested) return nested;
+  return urlFromContentArray(c);
+}
+
 // ─── Detail card (AgentTurnContainer carousel) — the full screenshot ──────────
 export function ScreenshotDetailCard({ msg }: DetailCardProps) {
-  const url = screenshotUrl(parseToolContent(msg));
+  const url = extractScreenshotUrl(msg as { details?: unknown; content?: unknown });
   if (!url) {
     return (
       <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
@@ -45,7 +63,7 @@ export default function ScreenshotDisplay({ toolCallTuple }: DisplayProps) {
   // Still capturing — render nothing until the result lands (timeline shows the pending tool).
   if (toolMessage.content === '(executing...)') return null;
 
-  const url = screenshotUrl(toolMessage.content);
+  const url = extractScreenshotUrl(toolMessage);
   if (!url) {
     return (
       <GridItem colSpan={12} my={1}>

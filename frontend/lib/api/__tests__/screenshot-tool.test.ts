@@ -30,6 +30,8 @@ describe('Screenshot tool (frontend bridge)', () => {
     const content = res.content as Array<{ type: string; image_url?: { url: string } }>;
     const img = content.find(b => b.type === 'image_url');
     expect(img?.image_url?.url).toBe('https://cdn.example/screenshot.jpg');
+    // also in details (UI-only, survives the turn) so the chat image doesn't vanish on reload
+    expect((res.details as { screenshotUrl?: string }).screenshotUrl).toBe('https://cdn.example/screenshot.jpg');
   });
 
   it('passes fullHeight through to the capture', async () => {
