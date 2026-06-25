@@ -9,7 +9,7 @@ vi.mock('html-to-image', () => ({
 }));
 
 import { toJpeg, toPng } from 'html-to-image';
-import { captureElementBlob, captureFileViewBlob, cropSourceRect } from '../capture';
+import { captureElementBlob, captureFileViewBlob, cropSourceRect, cappedOutputDims } from '../capture';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -73,5 +73,20 @@ describe('cropSourceRect — viewport selection → source crop within the captu
   it('clamps negative offsets to 0 and zero sizes to at least 1', () => {
     expect(cropSourceRect({ x: 0, y: 0, width: 0, height: 0 }, { left: 10, top: 10 }, 1))
       .toEqual({ sx: 0, sy: 0, sw: 1, sh: 1 });
+  });
+});
+
+describe('cappedOutputDims — keep region crops from becoming huge', () => {
+  it('leaves dimensions untouched when both are within the cap', () => {
+    expect(cappedOutputDims(800, 600, 1024)).toEqual({ w: 800, h: 600 });
+  });
+
+  it('scales down (preserving aspect) when the longest side exceeds the cap', () => {
+    expect(cappedOutputDims(2000, 1000, 1024)).toEqual({ w: 1024, h: 512 });
+    expect(cappedOutputDims(1000, 2000, 1024)).toEqual({ w: 512, h: 1024 });
+  });
+
+  it('never returns a zero dimension', () => {
+    expect(cappedOutputDims(0.4, 0.2, 1024)).toEqual({ w: 1, h: 1 });
   });
 });

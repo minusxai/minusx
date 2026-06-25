@@ -16,6 +16,7 @@ import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { MINUSX_TAGLINE } from '@/lib/og/og-helpers';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
+import ImageLightbox from '@/components/ImageLightbox';
 import FileModal from '@/components/modals/FileModal';
 
 const getEffectiveUserCached = cache(() => getEffectiveUser().catch(() => null));
@@ -168,6 +169,7 @@ export default async function RootLayout({
             {children}
           </LayoutWrapper>
           <Toaster />
+          <ImageLightbox />
         </Providers>
       </body>
     </html>

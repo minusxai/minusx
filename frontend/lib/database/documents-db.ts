@@ -5,6 +5,33 @@
 import { DbFile, BaseFileContent } from '../types';
 import { getModules } from '../modules/registry';
 import { DEFAULT_CONVERSATION_NAME } from '../constants';
+import { UserFacingError } from '../errors';
+
+/**
+ * Path uniqueness applies to PUBLISHED files only (partial index
+ * idx_files_path_published_unique, WHERE draft = false); drafts are exempt. A 23505 here therefore
+ * means another PUBLISHED file already occupies this path — translate it into a clear, actionable
+ * message instead of letting the raw Postgres constraint error surface to the user.
+ */
+const PUBLISHED_PATH_CONFLICT_MSG =
+  'A published file already exists at this path. Rename this file before saving.';
+
+function isPublishedPathConflict(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  if (!e) return false;
+  return e.code === '23505'
+    || /idx_files_path_published_unique|unique constraint|duplicate key/i.test(String(e.message ?? ''));
+}
+
+/** Run a write, translating a published-path unique violation into a UserFacingError. */
+async function withPathConflictTranslation<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (isPublishedPathConflict(error)) throw new UserFacingError(PUBLISHED_PATH_CONFLICT_MSG);
+    throw error;
+  }
+}
 
 /**
  * Type for raw database row returned by database
@@ -63,7 +90,10 @@ export class DocumentDB {
 
     const db = getModules().db;
 
-    const result = await db.exec<{ id: number }>(`
+    // Drafts (draft = true, the default) never collide on path. A published-file create
+    // (draft = false) at a path another published file already occupies hits the partial unique
+    // index — translate it to the same clear "rename" message rather than a raw 23505.
+    const result = await withPathConflictTranslation(() => db.exec<{ id: number }>(`
       WITH lock AS (
         SELECT pg_advisory_xact_lock(1) AS lock_acquired
       ),
@@ -74,7 +104,7 @@ export class DocumentDB {
       SELECT next_id, $1, $2, $3, $4, $5, 1, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM next_id_gen, lock
       RETURNING id
-    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]);
+    `, [name, path, type, content, references, editId ?? null, draft, meta ?? null]));
 
     return result.rows[0].id;
   }
@@ -131,9 +161,14 @@ export class DocumentDB {
   static async getByPath(path: string, includeContent: boolean = true): Promise<DbFile | null> {
     const db = getModules().db;
 
+    // Multiple DRAFTS can share a path (only published files are path-unique — see
+    // idx_files_path_published_unique). Prefer the published file (draft ASC → false first), then
+    // the most recently updated, so path lookups are deterministic and a draft never shadows the
+    // canonical published file.
+    const order = ' ORDER BY draft ASC, updated_at DESC LIMIT 1';
     const query = includeContent
-      ? 'SELECT * FROM files WHERE path = $1'
-      : 'SELECT id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta FROM files WHERE path = $1';
+      ? `SELECT * FROM files WHERE path = $1${order}`
+      : `SELECT id, name, path, type, file_references, created_at, updated_at, version, last_edit_id, draft, meta FROM files WHERE path = $1${order}`;
 
     const result = await db.exec<DbRow>(query, [path]);
     if (result.rows.length === 0) return null;
@@ -233,10 +268,12 @@ export class DocumentDB {
       return { conflict: true, file: currentRow };
     }
 
-    await db.exec(
+    // This UPDATE sets draft = false (publish). If another PUBLISHED file already occupies `path`,
+    // the partial unique index rejects it — surface a clear "rename" message, not a raw 23505.
+    await withPathConflictTranslation(() => db.exec(
       'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, version = $5, last_edit_id = $6, draft = false, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
       [name, path, content, references, (currentRow.version ?? 1) + 1, editId ?? null, id]
-    );
+    ));
 
     const updated = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
     return { file: updated.rows[0] };
@@ -283,6 +320,8 @@ export class DocumentDB {
       return { success: true, errors: [] };
     } catch (error: any) {
       try { await db.exec('ROLLBACK'); } catch { /* ignore secondary rollback errors */ }
+      // DocumentDB.update already translates a published-path unique violation into a clear
+      // UserFacingError ("rename this file before saving"), so error.message is user-ready here.
       return { success: false, errors: [{ id: failedId, error: error.message ?? String(error) }] };
     }
   }

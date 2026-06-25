@@ -7,7 +7,7 @@ import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } 
 import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
-import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
+import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments, selectPendingUploads, removePendingUpload } from '@/store/uiSlice';
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
@@ -81,6 +81,10 @@ function ChatInputInner({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const attachments = useAppSelector(selectChatAttachments);
+  const pendingUploads = useAppSelector(selectPendingUploads);
+  // Block send while any image/file is still capturing/uploading (so a quick Enter doesn't
+  // fire the message without the in-flight attachment).
+  const hasPendingUploads = pendingUploads.length > 0 || uploadingNames.length > 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<LexicalMentionEditorRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -158,7 +162,7 @@ function ChatInputInner({
   // The stable wrapper preserves callback identity while always invoking the
   // latest impl. Regression test: components/__tests__/chat-input-enter.ui.test.tsx.
   const handleSend = useStableCallback(() => {
-    if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading && !chatLocked) {
+    if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading && !chatLocked && !hasPendingUploads) {
       onSend(input.trim(), attachments);
       // Don't clear here — input stays greyed while isPreparing=true,
       // then cleared by the useEffect when isPreparing transitions to false.
@@ -324,7 +328,7 @@ function ChatInputInner({
                       <IconButton
                         aria-label="Send message"
                         onClick={handleSend}
-                        disabled={disabled || !input.trim()}
+                        disabled={disabled || !input.trim() || hasPendingUploads}
                         bg="accent.teal"
                         color="white"
                         _hover={{ bg: 'accent.teal', opacity: 0.9 }}
@@ -356,8 +360,38 @@ function ChatInputInner({
                   overflow="hidden"
                   transition={isFloating ? 'max-height 0.2s ease 0.05s, opacity 0.2s ease 0.05s' : undefined}
                 >
-                  {(attachments.length > 0 || uploadingNames.length > 0) && (
+                  {(attachments.length > 0 || uploadingNames.length > 0 || pendingUploads.length > 0) && (
                     <HStack px={3} py={1} gap={2} flexWrap="wrap" borderTop="1px solid" borderColor="border.muted">
+                      {pendingUploads.map((u) => (
+                        <HStack
+                          key={u.id}
+                          aria-label={`Processing: ${u.name}`}
+                          bg="accent.teal/20"
+                          borderRadius="md"
+                          border="1px solid"
+                          borderColor="accent.teal"
+                          px={2}
+                          py={1}
+                          gap={1}
+                          fontSize="xs"
+                          fontFamily="mono"
+                          color="white"
+                        >
+                          <Spinner size="xs" color="accent.teal" />
+                          <Text truncate maxW="150px" color="fg.muted">{u.name}</Text>
+                          <IconButton
+                            aria-label={`Cancel ${u.name}`}
+                            onClick={() => dispatch(removePendingUpload(u.id))}
+                            variant="ghost"
+                            size="2xs"
+                            minW="auto"
+                            h="auto"
+                            p={0}
+                          >
+                            <Icon as={LuX} boxSize={3} />
+                          </IconButton>
+                        </HStack>
+                      ))}
                       {uploadingNames.map((name, idx) => (
                         <HStack
                           key={`uploading-${idx}`}
@@ -483,7 +517,7 @@ function ChatInputInner({
                       <IconButton
                         aria-label="Send message"
                         onClick={handleSend}
-                        disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked}
+                        disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked || hasPendingUploads}
                         bg="accent.teal"
                         color="white"
                         _hover={{ bg: 'accent.teal', opacity: 0.9 }}
