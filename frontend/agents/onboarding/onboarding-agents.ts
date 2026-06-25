@@ -4,7 +4,7 @@
 // CreateFile tools), so they extend WebAnalystAgent and just (a) restrict the
 // toolset, (b) cap maxSteps for low latency, (c) render the onboarding-specific
 // prompts (`onboarding_context.*` / `onboarding_dashboard.*`, already in
-// `orchestrator/prompts/prompts.json`), and (d) disable web search
+// `orchestrator/prompts/prompts.yaml`), and (d) disable web search
 // (no web search).
 import 'server-only';
 import { Type } from 'typebox';

@@ -2,7 +2,7 @@
 //
 // A leaf agent with NO tools: a single LLM call that turns recent-file app
 // state into a 2-3 sentence home-feed summary. Renders the `feed_summary.system`
-// / `feed_summary.user` prompts (in `orchestrator/prompts/prompts.json`). Runs
+// / `feed_summary.user` prompts (in `orchestrator/prompts/prompts.yaml`). Runs
 // headless via `runFeedSummaryV2`.
 import 'server-only';
 import { Type } from 'typebox';

@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/chat': ['./node_modules/@aws-sdk/**/*', './node_modules/@smithy/**/*'],
     '/api/chat/stream': ['./node_modules/@aws-sdk/**/*', './node_modules/@smithy/**/*'],
+    // The prompts module reads orchestrator/prompts/prompts.yaml at runtime (see
+    // orchestrator/prompts/index.ts). `new URL(import.meta.url)` should auto-trace it;
+    // this is belt-and-suspenders so the standalone image always ships the file.
+    '/api/**/*': ['./orchestrator/prompts/prompts.yaml'],
   },
 
   // Exclude heavy packages from the server bundle — they are loaded from node_modules

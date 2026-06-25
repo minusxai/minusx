@@ -1,6 +1,6 @@
 // Pure prompt render engine: resolves
 // nested {template.ref}s and substitutes {variables}. Operates on an in-memory
-// PromptTree — see ./index.ts, which binds it to the bundled prompts.json.
+// PromptTree — see ./index.ts, which binds it to the bundled prompts.yaml.
 
 export interface PromptTree {
   templates: Record<string, unknown>;

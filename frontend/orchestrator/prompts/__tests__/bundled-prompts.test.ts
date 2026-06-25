@@ -1,4 +1,4 @@
-// The v2 (JS) orchestrator renders system prompts from prompts.json imported
+// The v2 (JS) orchestrator renders system prompts from prompts.yaml imported
 // straight into the bundle — no backend filesystem read (the frontend standalone
 // Docker image has no backend/ tree, which previously caused ENOENT → empty v2
 // chat stream). These tests pin that the index API renders the real bundled
