@@ -14,11 +14,15 @@ export async function extractReferenceIds(
   file: DbFile,
   resolveChildIds: ChildIdResolver
 ): Promise<number[]> {
-  // Phase 6: For document types, return cached references from DB column
+  // Phase 6: For document types, return cached references from DB column. Stories included:
+  // a story's saved <Question id>/<Number id> embeds are stored in its references column, and
+  // without this the load path resolves NO references — so the agent never sees the referenced
+  // queries' results (only the body's inline embeds run).
   if (
     file.type === 'dashboard' ||
     file.type === 'notebook' ||
-    file.type === 'question'
+    file.type === 'question' ||
+    file.type === 'story'
   ) {
     return file.references || [];
   }
