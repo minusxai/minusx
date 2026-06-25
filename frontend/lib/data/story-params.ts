@@ -11,7 +11,7 @@
  */
 import type { ParameterType, QuestionParameter } from '@/lib/validation/atlas-schemas';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { escAttr, unescAttr, styleAttr } from './html-attr';
+import { escAttr, unescAttr, styleAttr, serializeJsonAttr } from './html-attr';
 
 /** Autocomplete / import source: a column of an embedded question. */
 export interface StoryParamSource {
@@ -76,8 +76,8 @@ export function paramToPlaceholder(p: StoryParam): string {
     `data-param-nullable="${p.nullable}"`,
   ];
   if (p.source) a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
-  if (p.style) a.push(`data-param-style="${escAttr(JSON.stringify(p.style))}"`);
-  if (p.labelStyle) a.push(`data-param-labelstyle="${escAttr(JSON.stringify(p.labelStyle))}"`);
+  if (p.style) a.push(`data-param-style="${serializeJsonAttr(p.style)}"`);
+  if (p.labelStyle) a.push(`data-param-labelstyle="${serializeJsonAttr(p.labelStyle)}"`);
   if (p.widget) a.push(`data-param-widget="${p.widget}"`);
   if (p.min != null) a.push(`data-param-min="${p.min}"`);
   if (p.max != null) a.push(`data-param-max="${p.max}"`);

@@ -9,7 +9,7 @@
  * renders inline where the agent placed it; AgentHtml mounts the live figure there). Pure
  * (client + server safe).
  */
-import { escAttr, unescAttr, escTemplate, styleAttr } from './html-attr';
+import { escTemplate, styleAttr, serializeJsonAttr, parseJsonAttr } from './html-attr';
 import { normalizeInlineQuery } from './story-question';
 
 /** An inline number embedded directly in a story body. One of `id` / `query` is required. */
@@ -48,22 +48,15 @@ export function numberFromJsxAttrs(attrs: Record<string, unknown>): InlineNumber
 
 /** Inline-number embed → the `<span data-number-inline>` placeholder stored inside content.story. */
 export function numberToPlaceholder(e: InlineNumberEmbed): string {
-  const json = escAttr(JSON.stringify(e));
   // data-number-id is emitted for a saved embed so its dependency is discoverable without parsing.
   const idAttr = e.id != null ? ` data-number-id="${e.id}"` : '';
-  return `<span data-number-inline="${json}"${idAttr}></span>`;
+  return `<span data-number-inline="${serializeJsonAttr(e)}"${idAttr}></span>`;
 }
 
 const NUMBER_SPAN_RE = /<span\s+[^>]*?data-number-inline="([^"]*)"[^>]*?>\s*<\/span>/g;
 
-function embedFromJson(raw: string): InlineNumberEmbed | null {
-  try {
-    const e = JSON.parse(unescAttr(raw)) as InlineNumberEmbed;
-    return (e.id != null || e.query) ? e : null;
-  } catch {
-    return null;
-  }
-}
+const isNumberEmbed = (e: InlineNumberEmbed) => e.id != null || !!e.query;
+const embedFromJson = (raw: string): InlineNumberEmbed | null => parseJsonAttr<InlineNumberEmbed>(raw, isNumberEmbed);
 
 /** Extract all inline-number embeds from a story's HTML (the `data-number-inline` placeholders). */
 export function extractInlineNumbers(html: string | null | undefined): InlineNumberEmbed[] {
@@ -77,14 +70,7 @@ export function extractInlineNumbers(html: string | null | undefined): InlineNum
 
 /** Read a number embed from a rendered placeholder element (browser entity-decodes the attr). */
 export function numberFromEl(el: { getAttribute(name: string): string | null }): InlineNumberEmbed | null {
-  const raw = el.getAttribute('data-number-inline');
-  if (raw == null) return null;
-  try {
-    const e = JSON.parse(raw) as InlineNumberEmbed;
-    return (e.id != null || e.query) ? e : null;
-  } catch {
-    return null;
-  }
+  return parseJsonAttr<InlineNumberEmbed>(el.getAttribute('data-number-inline'), isNumberEmbed);
 }
 
 /** Saved-question ids a story body references via `<Number id={N}>` (for the dependency graph). */

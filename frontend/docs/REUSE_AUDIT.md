@@ -18,6 +18,7 @@
 | `escTemplate`, `styleAttr` | `lib/data/html-attr.ts` | story-number.ts, story-question.ts, story-params.ts (3×) |
 | `normalizeInlineQuery` (cook `\n`/`\t`) | `lib/data/story-question.ts` | now reused by `<Number>` (was `<Question>`-only) |
 | **SqlEditor reuse** — edit an inline `<Number>`'s query | `components/SqlEditor.tsx` via `NumberQueryEditor` | replaced a hand-rolled `<textarea>` |
+| `serializeJsonAttr(obj)` / `parseJsonAttr<T>(raw, isValid?)` — JSON ⇄ placeholder attr | `lib/data/html-attr.ts` | `numberToPlaceholder`/`embedFromJson`/`numberFromEl`, `inlineQuestionToPlaceholder`/`inlineFromDivInner`/`inlineQuestionFromEl`, `paramToPlaceholder` style attrs (≈7 call sites across the 3 codecs) |
 
 ## 🔜 Pending — story codecs (`story-question.ts` / `story-number.ts` / `story-params.ts`)
 
@@ -63,4 +64,20 @@ These three codecs are near-mirror images; the shared shape should live in one p
   shallow duplication; reusing SqlEditor (in a light-DOM modal, since Monaco can't live in the story
   shadow root) is the elegant call.
 
-_A broader codebase-wide sweep is in progress; findings will be appended here._
+## 🔜 Pending — broader codebase sweep (prioritized; impact × low-risk first)
+
+From a codebase-wide audit. Highest-value first; each is a small, mechanical, test-guarded extraction.
+
+| # | Concept | Duplicate locations | Suggested home | Risk |
+|---|---|---|---|---|
+| 1 | **`buildJsxAttrs(attrs)`** — "push `name={v}`/`name="v"` to an array, join" | `numberToJsx` (story-number.ts), `inlineQuestionToJsx` (story-question.ts), `paramToJsx` (story-params.ts) | `lib/data/jsx-builder.ts` | low |
+| 2 | **`buildDataAttrs` / `buildPlaceholder(tag, attrs)`** — data-attr array + wrap | `numberToPlaceholder`, `inlineQuestionToPlaceholder`, `paramToPlaceholder` | `lib/data/html-attr.ts` | low |
+| 3 | **`extractPlaceholders<T>(html, re, parse)`** — `for (m of html.matchAll(re)) { push parse(m) }` | `extractInlineNumbers`, `extractInlineQuestions`, `extractSavedQuestionIds`, `extractStoryParams` (4×) | `lib/data/placeholder-extractor.ts` | low-med |
+| 4 | **`discoverAndCollect<T>(root, selector, parse)`** — DOM discovery loop | AgentHtml.tsx ~212/221/235/243 (4×, ~60 lines) | `components/views/shared/discovery-utils.ts` | med (effect ordering) |
+| 5 | **`autoExecuteQuery(...)`** — clear cache + setEphemeral/setExecuted + best-effort `getQueryResult` | tool-handlers.ts EditFile-question/notebook/story + CreateFile-question (~80 lines) | `lib/api/query-utils.ts` | med (critical path; guarded by editFile.test.ts) |
+| 6 | **`ensureArray<T>(v)`** — `Array.isArray(x) ? x : []` | param-resolution.ts, file-selectors.ts, extract-references.ts, files.server.ts, migrations.ts (8+×) | `lib/utils/safe-array.ts` | low |
+| 7 | **`extractSingleCellValue(data, col, fmt)`** — `formatCell` + `rows[0][col]` | InlineNumber.tsx (2×); likely EmbeddedQuestionContainer single_value | `lib/chart/chart-utils.ts` | low |
+| 8 | **`fromDomAttr<T>(el, attr, parse)`** — `getAttribute` → parse | `numberFromEl`, `inlineQuestionFromEl`, `paramFromPlaceholderEl` | `lib/data/dom-codec.ts` | low |
+
+**Already-good (no action):** `getQueryHash` is centralized; `param-resolution.ts` is a clean cascade
+module; the codecs are isolated per file. Estimated total cleanup ≈200 lines, all low-risk.
