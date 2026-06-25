@@ -5,7 +5,7 @@ import { LuCopy, LuCheck } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import Editor from '@monaco-editor/react';
 import { useState } from 'react';
-import { AppState } from '@/lib/appState';
+import { AppState, appStateForLlm } from '@/lib/appState';
 
 interface AppStateViewerProps {
   appState: AppState | null | undefined;
@@ -16,7 +16,9 @@ export default function AppStateViewer({ appState, maxHeight = '400px' }: AppSta
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const [copied, setCopied] = useState(false);
 
-  const jsonString = JSON.stringify(appState, null, 2);
+  // Show what the AGENT sees: `content` is stripped at the LLM boundary (the agent reads
+  // `markup`), so mirror that here rather than displaying the raw client app state.
+  const jsonString = JSON.stringify(appState ? appStateForLlm(appState) : appState, null, 2);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(jsonString);
