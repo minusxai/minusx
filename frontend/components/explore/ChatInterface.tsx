@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback, type ComponentProps } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { Box, VStack, HStack, Text, Icon, IconButton, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare, LuX } from 'react-icons/lu';
+import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
-import type { ContextSizeEstimate, ContextSizeSection } from '@/lib/chat/context-size-estimate';
+import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
+import { ContextSizePanel, type ContextSizePanelState } from './ContextSizePanel';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
@@ -44,160 +45,6 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 // circular dependency workaround.
 // eslint-disable-next-line no-restricted-syntax
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
-
-const CONTEXT_SIZE_LIMIT_TOKENS = 100_000;
-const CONTEXT_SIZE_SQUARES = 100;
-const CONTEXT_SECTION_COLORS = [
-  'accent.teal',
-  'accent.cyan',
-  'accent.warning',
-  'accent.primary',
-  'accent.secondary',
-  'accent.success',
-  'accent.info',
-  'fg.muted',
-] as const;
-
-type ContextSizePanelState =
-  | { status: 'loading' }
-  | { status: 'ready'; estimate: ContextSizeEstimate }
-  | { status: 'error'; error: string };
-
-function sectionColor(index: number): string {
-  return CONTEXT_SECTION_COLORS[index % CONTEXT_SECTION_COLORS.length];
-}
-
-function squareColorForIndex(
-  index: number,
-  sections: ContextSizeSection[],
-  limitTokens: number,
-): string | null {
-  const tokenPosition = ((index + 0.5) / CONTEXT_SIZE_SQUARES) * limitTokens;
-  let cumulative = 0;
-  for (let i = 0; i < sections.length; i++) {
-    cumulative += sections[i].tokens;
-    if (tokenPosition <= cumulative) return sectionColor(i);
-  }
-  return null;
-}
-
-function ContextSizePanel({
-  state,
-  onClose,
-  colSpan,
-  colStart,
-}: {
-  state: ContextSizePanelState;
-  onClose: () => void;
-  colSpan: ComponentProps<typeof GridItem>['colSpan'];
-  colStart: ComponentProps<typeof GridItem>['colStart'];
-}) {
-  const estimate = state.status === 'ready' ? state.estimate : null;
-  const totalTokens = estimate?.totalTokens ?? 0;
-  const percent = estimate ? Math.min(999, Math.round((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * 100)) : 0;
-  const filledSquares = estimate
-    ? Math.min(CONTEXT_SIZE_SQUARES, Math.ceil((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * CONTEXT_SIZE_SQUARES))
-    : 0;
-  const displaySections = estimate
-    ? estimate.sections.filter(s => s.tokens > 0)
-    : [];
-
-  return (
-    <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
-      <GridItem colSpan={colSpan} colStart={colStart}>
-        <Box
-          bg="bg.muted"
-          borderWidth="1px"
-          borderColor={totalTokens > CONTEXT_SIZE_LIMIT_TOKENS ? 'accent.warning' : 'border.default'}
-          borderRadius="md"
-          px={3}
-          py={2.5}
-          mb={3}
-          fontFamily="mono"
-        >
-          <HStack justify="space-between" align="start" gap={3}>
-            <VStack align="stretch" gap={2} flex="1" minW={0}>
-              <HStack gap={2} justify="space-between" align="center">
-                <Text fontSize="xs" fontWeight="700" color="fg.default">
-                  Estimated next context
-                </Text>
-                {estimate && (
-                  <Text fontSize="xs" color={totalTokens > CONTEXT_SIZE_LIMIT_TOKENS ? 'accent.warning' : 'fg.muted'}>
-                    {totalTokens.toLocaleString()} / {CONTEXT_SIZE_LIMIT_TOKENS.toLocaleString()} tokens ({percent}%)
-                  </Text>
-                )}
-              </HStack>
-
-              {state.status === 'loading' && (
-                <HStack gap={2} color="fg.muted">
-                  <Spinner size="xs" />
-                  <Text fontSize="xs">Estimating context...</Text>
-                </HStack>
-              )}
-
-              {state.status === 'error' && (
-                <Text fontSize="xs" color="accent.danger">{state.error}</Text>
-              )}
-
-              {estimate && (
-                <>
-                  <Box
-                    display="grid"
-                    gridTemplateColumns="repeat(10, 10px)"
-                    gap="3px"
-                    justifyContent="center"
-                    mx="auto"
-                    aria-label="context size squares"
-                  >
-                    {Array.from({ length: CONTEXT_SIZE_SQUARES }, (_, index) => {
-                      const color = index < filledSquares
-                        ? squareColorForIndex(index, estimate.sections, CONTEXT_SIZE_LIMIT_TOKENS)
-                        : null;
-                      return (
-                        <Box
-                          key={index}
-                          w="10px"
-                          h="10px"
-                          borderRadius="2px"
-                          bg={color ?? 'bg.canvas'}
-                          border="1px solid"
-                          borderColor={color ? color : 'border.muted'}
-                        />
-                      );
-                    })}
-                  </Box>
-
-                  <VStack align="stretch" gap={1}>
-                    {displaySections.map((section, index) => (
-                      <HStack key={section.key} gap={2} justify="space-between" fontSize="2xs" color="fg.muted">
-                        <HStack gap={1.5} minW={0}>
-                          <Box w="8px" h="8px" bg={sectionColor(index)} borderRadius="1px" flexShrink={0} />
-                          <Text truncate>{section.label}</Text>
-                        </HStack>
-                        <Text flexShrink={0}>{section.tokens.toLocaleString()} tok</Text>
-                      </HStack>
-                    ))}
-                  </VStack>
-                </>
-              )}
-            </VStack>
-
-            <IconButton
-              aria-label={state.status === 'loading' ? 'Cancel context size estimate' : 'Close context size estimate'}
-              size="2xs"
-              variant="ghost"
-              color="fg.muted"
-              onClick={onClose}
-              flexShrink={0}
-            >
-              <Icon as={LuX} boxSize={3.5} />
-            </IconButton>
-          </HStack>
-        </Box>
-      </GridItem>
-    </Grid>
-  );
-}
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation

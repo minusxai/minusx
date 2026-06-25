@@ -1,4 +1,5 @@
 import type { Context, ImageContent, Message, TextContent } from '@/orchestrator/llm';
+import { immutableMap } from '@/lib/utils/immutable-collections';
 
 export interface ContextSizeSection {
   key: string;
@@ -16,6 +17,37 @@ export interface ContextSizeEstimate {
 
 const APPROX_CHARS_PER_TOKEN = 4;
 const IMAGE_TOKEN_ESTIMATE = 1_000;
+// The next user message hasn't been typed yet — reserve a flat approximation for it.
+const NEXT_USER_MESSAGE_TOKEN_ESTIMATE = 100;
+
+// Single source of truth for the breakdown sections: both display ORDER and LABELS.
+// Reorder these entries to reorder the legend + colored squares; edit `label` to
+// rename. Any section whose key is missing here is appended last, in computed order.
+const SECTIONS = [
+  { key: 'system_prompt', label: 'System prompt' },
+  { key: 'tool_definitions', label: 'Tool definitions' },
+  { key: 'app_state', label: 'App state' },
+  { key: 'file_markup', label: 'File markup' },
+  { key: 'conversation_history', label: 'Conv Text history' },
+  { key: 'tool_call_history', label: 'Conv Toolcall history' },
+  { key: 'text_attachments', label: 'Text attachments' },
+  { key: 'image_attachments', label: 'Images attachments' },
+  { key: 'misc_other', label: 'Misc / other' },
+  { key: 'next_user_message', label: 'Next user msg approx' },
+] as const;
+
+
+const SECTION_RANK = immutableMap<string, number>(SECTIONS.map((s, i) => [s.key, i]));
+const SECTION_LABELS = immutableMap<string, string>(SECTIONS.map((s) => [s.key, s.label]));
+
+function labelFor(key: string): string {
+  return SECTION_LABELS.get(key) ?? key;
+}
+
+function orderSections(sections: ContextSizeSection[]): ContextSizeSection[] {
+  const rank = (key: string) => SECTION_RANK.get(key) ?? SECTION_RANK.size;
+  return [...sections].sort((a, b) => rank(a.key) - rank(b.key));
+}
 
 function estimateTextTokens(text: string): number {
   if (!text) return 0;
@@ -27,14 +59,12 @@ function estimateJsonTokens(value: unknown): { tokens: number; chars: number } {
   return { tokens: estimateTextTokens(text), chars: text.length };
 }
 
-function addSection(sections: ContextSizeSection[], key: string, label: string, text: string): void {
-  if (!text) return;
-  sections.push({ key, label, tokens: estimateTextTokens(text), chars: text.length });
+function addSection(sections: ContextSizeSection[], key: string, text: string): void {
+  sections.push({ key, label: labelFor(key), tokens: text ? estimateTextTokens(text) : 0, chars: text.length });
 }
 
-function addTokenSection(sections: ContextSizeSection[], key: string, label: string, tokens: number, chars = 0): void {
-  if (tokens <= 0) return;
-  sections.push({ key, label, tokens, chars });
+function addTokenSection(sections: ContextSizeSection[], key: string, tokens: number, chars = 0): void {
+  sections.push({ key, label: labelFor(key), tokens: Math.max(0, tokens), chars });
 }
 
 function contentToText(content: Message['content']): string {
@@ -62,32 +92,37 @@ function stripTagged(text: string, tag: string): string {
 }
 
 function splitCurrentUserMessage(message: Message | undefined, sections: ContextSizeSection[]): void {
-  if (!message) return;
-  const text = contentToText(message.content);
-  const images = countImages(message.content);
-  addTokenSection(sections, 'image_attachments', 'Images', images * IMAGE_TOKEN_ESTIMATE);
+  const text = message ? contentToText(message.content) : '';
+  const images = message ? countImages(message.content) : 0;
+  addTokenSection(sections, 'image_attachments', images * IMAGE_TOKEN_ESTIMATE);
 
   const appState = extractTagged(text, 'AppState').join('\n');
-  addSection(sections, 'app_state', 'App state', appState);
+  addSection(sections, 'app_state', appState);
 
   const attachments = extractTagged(text, 'Attachment').join('\n');
-  addSection(sections, 'text_attachments', 'Text attachments', attachments);
+  addSection(sections, 'text_attachments', attachments);
 
-  const withoutContextBlocks = stripTagged(stripTagged(text, 'AppState'), 'Attachment');
-  const parts = withoutContextBlocks.split(/\n/).filter(Boolean);
-  const nextUserMessage = parts.at(-1) ?? '';
-  const wrapper = parts.slice(0, -1).join('\n');
-  addSection(sections, 'current_turn_wrapper', 'Current turn wrapper', wrapper);
-  addSection(sections, 'next_user_message', 'Next user message', nextUserMessage);
+  const fileMarkup = extractTagged(text, 'file_markup').join('\n');
+  addSection(sections, 'file_markup', fileMarkup);
+
+  // Everything left after stripping the known blocks (incl. the <CurrentDate> line)
+  // is lumped into "Misc / other".
+  const withoutContextBlocks = ['AppState', 'Attachment', 'file_markup']
+    .reduce((acc, tag) => stripTagged(acc, tag), text);
+  const wrapper = withoutContextBlocks.split(/\n/).filter(Boolean).join('\n');
+  addSection(sections, 'misc_other', wrapper);
+
+  // The upcoming user message isn't known yet — reserve a flat estimate for it.
+  addTokenSection(sections, 'next_user_message', NEXT_USER_MESSAGE_TOKEN_ESTIMATE);
 }
 
 export function estimateContextSize(context: Context): ContextSizeEstimate {
   const sections: ContextSizeSection[] = [];
 
-  addSection(sections, 'system_prompt', 'System prompt', context.systemPrompt ?? '');
+  addSection(sections, 'system_prompt', context.systemPrompt ?? '');
 
   const tools = estimateJsonTokens(context.tools ?? []);
-  addTokenSection(sections, 'tool_definitions', 'Tool definitions', tools.tokens, tools.chars);
+  addTokenSection(sections, 'tool_definitions', tools.tokens, tools.chars);
 
   const messages = context.messages ?? [];
   const currentUser = messages.at(-1);
@@ -97,17 +132,18 @@ export function estimateContextSize(context: Context): ContextSizeEstimate {
     const role = 'role' in m ? m.role : 'message';
     return `${role}\n${contentToText(m.content)}`;
   }).join('\n\n');
-  addSection(sections, 'conversation_history', 'Conversation history', historyText);
+  addSection(sections, 'conversation_history', historyText);
 
   const historicalToolCalls = history
     .filter((m) => 'role' in m && m.role === 'assistant' && Array.isArray(m.content))
     .flatMap((m) => (m.content as Array<{ type?: string }>).filter((c) => c.type === 'toolCall'));
   const toolCallHistory = estimateJsonTokens(historicalToolCalls);
-  addTokenSection(sections, 'tool_call_history', 'Tool call history', toolCallHistory.tokens, toolCallHistory.chars);
+  addTokenSection(sections, 'tool_call_history', toolCallHistory.tokens, toolCallHistory.chars);
 
   splitCurrentUserMessage(currentUser, sections);
 
-  const totalTokens = sections.reduce((sum, section) => sum + section.tokens, 0);
-  const totalChars = sections.reduce((sum, section) => sum + section.chars, 0);
-  return { totalTokens, totalChars, method: 'estimated', sections };
+  const ordered = orderSections(sections);
+  const totalTokens = ordered.reduce((sum, section) => sum + section.tokens, 0);
+  const totalChars = ordered.reduce((sum, section) => sum + section.chars, 0);
+  return { totalTokens, totalChars, method: 'estimated', sections: ordered };
 }
