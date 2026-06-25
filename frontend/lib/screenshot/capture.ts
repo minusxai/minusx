@@ -76,6 +76,17 @@ export function cropSourceRect(
   };
 }
 
+/**
+ * Cap output dimensions so the longest side is ≤ maxPx, preserving aspect ratio. Keeps a region
+ * crop from becoming a multi-megapixel image on a retina screen (2× device pixel ratio, no width
+ * limit). Pure → unit-testable.
+ */
+export function cappedOutputDims(sw: number, sh: number, maxPx: number): { w: number; h: number } {
+  const longest = Math.max(sw, sh);
+  const scale = longest > maxPx ? maxPx / longest : 1;
+  return { w: Math.max(1, Math.round(sw * scale)), h: Math.max(1, Math.round(sh * scale)) };
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -97,7 +108,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
  */
 export async function captureRegionBlob(
   selection: { x: number; y: number; width: number; height: number },
-  opts: CaptureOptions & { target?: HTMLElement },
+  opts: CaptureOptions & { target?: HTMLElement; maxOutputPx?: number },
 ): Promise<Blob> {
   const target = opts.target ?? document.body;
   const pixelRatio = opts.pixelRatio ?? Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
@@ -110,12 +121,14 @@ export async function captureRegionBlob(
   });
   const img = await loadImage(dataURL);
   const { sx, sy, sw, sh } = cropSourceRect(selection, target.getBoundingClientRect(), pixelRatio);
+  // Cap the OUTPUT so a large selection on a retina screen doesn't yield a multi-megapixel image.
+  const { w, h } = cappedOutputDims(sw, sh, opts.maxOutputPx ?? 1024);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(sw);
-  canvas.height = Math.round(sh);
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get a 2D canvas context for cropping');
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
   return canvasToBlob(canvas, (opts.format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? 0.92);
 }
 
