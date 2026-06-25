@@ -29,6 +29,7 @@ interface UIState {
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
   viewStack: ViewStackItem[];
   chatAttachments: Attachment[];
+  pendingUploads: { id: string; name: string }[];  // in-flight image/file uploads — block send until empty
   lightboxImageUrl: string | null;  // global image lightbox — open when non-null
   showSuggestedQuestions: boolean;
   showTrustScore: boolean;
@@ -70,6 +71,7 @@ const initialState: UIState = {
   modalFile: null,
   viewStack: [],
   chatAttachments: [],
+  pendingUploads: [],
   lightboxImageUrl: null,
   showSuggestedQuestions: true,
   showTrustScore: true,
@@ -244,6 +246,12 @@ const uiSlice = createSlice({
     clearChatAttachments: (state) => {
       state.chatAttachments = [];
     },
+    addPendingUpload: (state, action: PayloadAction<{ id: string; name: string }>) => {
+      state.pendingUploads.push(action.payload);
+    },
+    removePendingUpload: (state, action: PayloadAction<string>) => {
+      state.pendingUploads = state.pendingUploads.filter(u => u.id !== action.payload);
+    },
     openImageLightbox: (state, action: PayloadAction<string>) => {
       state.lightboxImageUrl = action.payload;
     },
@@ -332,6 +340,8 @@ export const {
   addChatAttachment,
   removeChatAttachment,
   clearChatAttachments,
+  addPendingUpload,
+  removePendingUpload,
   openImageLightbox,
   closeImageLightbox,
   setAllowChatQueue,
@@ -396,6 +406,7 @@ export const selectProposedQuery = (state: RootState, fileId: number | undefined
   fileId ? state.ui.proposedQueries[fileId] : undefined;
 export const selectModalFile = (state: RootState) => state.ui.modalFile;
 export const selectChatAttachments = (state: RootState) => state.ui.chatAttachments;
+export const selectPendingUploads = (state: RootState) => state.ui.pendingUploads;
 export const selectLightboxImageUrl = (state: RootState) => state.ui.lightboxImageUrl;
 export const selectViewStack = (state: RootState) => state.ui.viewStack;
 export const selectTopView = (state: RootState): ViewStackItem | undefined =>

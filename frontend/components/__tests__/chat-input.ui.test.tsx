@@ -74,7 +74,7 @@ import userEvent from '@testing-library/user-event';
 
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
-import { selectChatAttachments } from '@/store/uiSlice';
+import { selectChatAttachments, addPendingUpload } from '@/store/uiSlice';
 import { uploadFile } from '@/lib/object-store/client';
 import { extractTextFromDocument } from '@/lib/utils/attachment-extract';
 
@@ -196,6 +196,50 @@ describe('ChatInput: image attachment upload', () => {
       const attachments = selectChatAttachments(store.getState());
       expect(attachments).toHaveLength(0);
     });
+  });
+});
+
+// ─── ChatInput: pending-upload send gating ────────────────────────────────────
+
+function renderChatInputPrefill(store: ReturnType<typeof storeModule.makeStore>, prefillText: string) {
+  return renderWithProviders(
+    <ChatInput
+      onSend={vi.fn()}
+      onStop={vi.fn()}
+      isAgentRunning={false}
+      databaseName="test_db"
+      onDatabaseChange={vi.fn()}
+      isCompact={true}
+      prefillText={prefillText}
+    />,
+    { store }
+  );
+}
+
+describe('ChatInput: pending-upload send gating', () => {
+  beforeEach(() => { window.HTMLElement.prototype.scrollTo = vi.fn(); });
+  afterEach(() => vi.clearAllMocks());
+
+  it('with text and no pending upload, Send is enabled', async () => {
+    const store = storeModule.makeStore();
+    renderChatInputPrefill(store, 'hello there');
+    await waitFor(() =>
+      expect((screen.getAllByLabelText('Send message')[0] as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('disables Send while an upload is pending, shows a cancelable chip, and cancel re-enables it', async () => {
+    const store = storeModule.makeStore();
+    store.dispatch(addPendingUpload({ id: 'u1', name: 'Screen selection' }));
+    renderChatInputPrefill(store, 'hello there');
+
+    expect(screen.getByLabelText('Processing: Screen selection')).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getAllByLabelText('Send message')[0] as HTMLButtonElement).disabled).toBe(true));
+
+    fireEvent.click(screen.getByLabelText('Cancel Screen selection'));
+    expect(store.getState().ui.pendingUploads).toHaveLength(0);
+    await waitFor(() =>
+      expect((screen.getAllByLabelText('Send message')[0] as HTMLButtonElement).disabled).toBe(false));
   });
 });
 
