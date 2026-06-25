@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Box } from '@chakra-ui/react';
+import { Box, EnvironmentProvider } from '@chakra-ui/react';
 
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
@@ -339,9 +339,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
           textAlign: 'left',
         }}
       />
+      {/* Portaled content lives in the story SHADOW ROOT, but ark-ui (Chakra Popover/Menu/Tooltip)
+          defaults its root node + Portal target to the top `document`. The mismatch breaks floating
+          positioning — the trigger is measured in the wrong tree and the panel pins to the top-left
+          corner (0,0). EnvironmentProvider tells ark to use the shadow root (each target's
+          getRootNode()), so popovers/menus portal into and position against the same tree as their
+          trigger. mirrorAppStyles already mirrors Chakra styles into the shadow root, so they're styled. */}
       {targets.map((t, i) => createPortal(
-        // The same tile the dashboard renders (DashboardView grid item):
-        // flex-column box + SmartEmbedded with clickable title and actions.
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+        {/* The same tile the dashboard renders (DashboardView grid item):
+            flex-column box + SmartEmbedded with clickable title and actions. */}
         <Box
           className="mx-chart-fill"
           bg="bg.subtle"
@@ -363,16 +370,18 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             externalParameters={externalParameters.length ? externalParameters : undefined}
             externalParamValues={externalParameters.length ? values : undefined}
           />
-        </Box>,
+        </Box>
+        </EnvironmentProvider>,
         t.el,
         `${i}-${t.questionId}`,
       ))}
       {inlineTargets.map((t, i) => createPortal(
-        // Inline story-local question. A regular chart gets the same chart-card chrome as a saved
-        // embed (border + bg, no title bar). A single_value (`bare`) renders CHROME-LIGHT —
-        // transparent, no border — so the styled number blends into the surrounding design; the
-        // agent owns its look via singleValueConfig + its own container. Renders straight from the
-        // inline content (no file load).
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+        {/* Inline story-local question. A regular chart gets the same chart-card chrome as a saved
+            embed (border + bg, no title bar). A single_value (`bare`) renders CHROME-LIGHT —
+            transparent, no border — so the styled number blends into the surrounding design; the
+            agent owns its look via singleValueConfig + its own container. Renders straight from the
+            inline content (no file load). */}
         <Box
           className="mx-chart-fill"
           {...(t.bare
@@ -389,17 +398,22 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             externalParamValues={externalParameters.length ? values : undefined}
             enableDrilldown={false}
           />
-        </Box>,
+        </Box>
+        </EnvironmentProvider>,
         t.el,
         `inline-${i}`,
       ))}
       {numberTargets.map((t, i) => createPortal(
-        <InlineNumber embed={t.embed} externalParamValues={externalParameters.length ? values : undefined} />,
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+          <InlineNumber embed={t.embed} externalParamValues={externalParameters.length ? values : undefined} />
+        </EnvironmentProvider>,
         t.el,
         `number-${i}`,
       ))}
       {paramTargets.map((t, i) => createPortal(
-        <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />,
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+          <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />
+        </EnvironmentProvider>,
         t.el,
         `param-${i}-${t.param.name}`,
       ))}
