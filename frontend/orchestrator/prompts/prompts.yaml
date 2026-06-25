@@ -116,7 +116,7 @@ templates:
       </trust_info>
   file_state_schema: |
     ## File State Schema
-    All file data — in AppState, ReadFiles responses, and EditFile responses — follows this single consistent structure:
+    All file metadata — in AppState, ReadFiles, EditFile, and CreateFile responses — follows this single consistent JSON structure. The file's JSX content is NOT a field in this JSON; it is delivered separately as a raw `<file_markup>` block (see below):
 
     ```typescript
     type CompressedFileState = {{
@@ -125,10 +125,13 @@ templates:
       path: string;         // effective path
       type: 'question' | 'dashboard' | 'report' | 'alert' | 'folder' | string;
       isDirty: boolean;     // true if there are unpublished edits (user publishes via the Publish All button)
-      markup: string;       // the file's content projected to ONE JSX/XML document — THIS is what you read + edit (there is no JSON content field)
+      // The file's content is NOT a field here. Each file's `markup` (its content as ONE JSX/XML
+      // document — what you read + edit) is printed AFTER the JSON as a separate raw
+      // `<file_markup file_id=… type=…>` block (real JSX, never an escaped JSON string).
     }};
 
-    // Both ReadFiles and EditFile return this:
+    // AppState, ReadFiles, EditFile, and CreateFile responses use this JSON shape, with each
+    // file's content alongside as a separate <file_markup> block (matched by file_id):
     type CompressedAugmentedFile = {{
       fileState: CompressedFileState;
       references: CompressedFileState[];   // Referenced files (e.g. questions embedded in a dashboard)
@@ -145,7 +148,7 @@ templates:
     }};
     ```
 
-    - **`markup`** — the file's entire content as ONE JSX/XML document, and the ONLY edit surface: copy `oldMatch` substrings directly from here for EditFile. There is NO JSON `content` field — never write or match escaped JSON. (Objects → nested `<field>…</field>`, arrays → `<item>` children, raw SQL/strings in a {{`…`}} child. See the EditFile tool for the full markup format.)
+    - **`<file_markup>` block** — each file's entire content as ONE JSX/XML document, printed after the JSON and matched to its file by `file_id`. It is the ONLY edit surface: copy `oldMatch` substrings directly from this raw block for EditFile. The content is NEVER an escaped JSON string, and there is NO JSON `content` field. (Objects → nested `<field>…</field>`, arrays → `<item>` children, raw SQL/strings in a {{`…`}} child. See the EditFile tool for the full markup format.)
     - **`isDirty`** — `true` when there are unpublished edits. After completing all edits, ask the user if they'd like to save changes (simple text is okay, no need for Clarify). Only when they confirm, call PublishAll to save.
     - **parameter values** — a question's saved parameter values live in the markup under `<parameterValues>` (e.g. `<parameterValues><limit type="number">100</limit></parameterValues>`). Edit them with EditFile like any other markup field. These ARE saved when the user publishes.
     - **`queryResults` truncation** — AppState embeds a compact preview of query data (small limit). If `truncated: true` in AppState, call `ReadFiles` on the same file to get more rows (default 10k chars, up to 100k via `maxChars`). Chart image attachments in the conversation are always full-fidelity regardless of text truncation.
