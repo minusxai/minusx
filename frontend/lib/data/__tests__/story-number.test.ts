@@ -26,6 +26,16 @@ describe('story-number — jsx attrs ⇄ embed', () => {
   it('returns null without an id or a query', () => {
     expect(numberFromJsxAttrs({ prefix: '$' })).toBeNull();
   });
+
+  it('cooks \\n / \\t escapes in the query (agent wrote a double-quoted attr, not a template literal)', () => {
+    // A double-quoted JSX attr `query="…\n…"` resolves to a LITERAL backslash-n (JSX doesn't
+    // process escapes), which DuckDB/Postgres reject: 'syntax error at or near "\"'. Cook it to
+    // real whitespace — the same normalization inline <Question> embeds already get — so the
+    // agent's most common query mistake is harmless. (A template literal arrives already cooked,
+    // so this is a no-op on the correct form.)
+    const e = numberFromJsxAttrs({ query: 'SELECT a\\nFROM t\\tWHERE x = 1', connection: 'duck' });
+    expect(e?.query).toBe('SELECT a\nFROM t\tWHERE x = 1');
+  });
 });
 
 describe('story-number — placeholder round-trip (inline SPAN, not a block)', () => {

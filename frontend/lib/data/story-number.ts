@@ -10,6 +10,7 @@
  * (client + server safe).
  */
 import { escAttr, unescAttr } from './html-attr';
+import { normalizeInlineQuery } from './story-question';
 
 /** An inline number embedded directly in a story body. One of `id` / `query` is required. */
 export interface InlineNumberEmbed {
@@ -30,7 +31,11 @@ export interface InlineNumberEmbed {
 export function numberFromJsxAttrs(attrs: Record<string, unknown>): InlineNumberEmbed | null {
   const e: InlineNumberEmbed = {};
   if (typeof attrs.id === 'number') e.id = attrs.id;
-  if (typeof attrs.query === 'string' && attrs.query) e.query = attrs.query;
+  // Cook \n / \t escapes — same as inline <Question> embeds. The agent sometimes writes the query
+  // as a double-quoted attr (`query="…\n…"`) instead of a backtick template literal, which leaves a
+  // LITERAL backslash in the SQL ('syntax error at or near "\"'). A correct template literal arrives
+  // already cooked, so this is a no-op on it.
+  if (typeof attrs.query === 'string' && attrs.query) e.query = normalizeInlineQuery(attrs.query);
   if (e.id == null && !e.query) return null; // need a source
   if (typeof attrs.connection === 'string') e.connection = attrs.connection;
   if (typeof attrs.col === 'string') e.col = attrs.col;
