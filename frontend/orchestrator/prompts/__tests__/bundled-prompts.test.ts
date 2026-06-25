@@ -22,7 +22,7 @@ const SYSTEM_VARS = {
 };
 
 describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
-  it('renders the real default.system prompt from the bundled JSON', () => {
+  it('renders the real default.system prompt from the bundled YAML', () => {
     const out = renderPrompt('default.system', SYSTEM_VARS);
     expect(out.length).toBeGreaterThan(100);
     expect(out).toContain('MinusX');

@@ -45,10 +45,6 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/chat': ['./node_modules/@aws-sdk/**/*', './node_modules/@smithy/**/*'],
     '/api/chat/stream': ['./node_modules/@aws-sdk/**/*', './node_modules/@smithy/**/*'],
-    // The prompts module reads orchestrator/prompts/prompts.yaml at runtime (see
-    // orchestrator/prompts/index.ts). `new URL(import.meta.url)` should auto-trace it;
-    // this is belt-and-suspenders so the standalone image always ships the file.
-    '/api/**/*': ['./orchestrator/prompts/prompts.yaml'],
   },
 
   // Exclude heavy packages from the server bundle — they are loaded from node_modules
@@ -83,10 +79,21 @@ const nextConfig: NextConfig = {
     if (isServer) {
       config.externals = [...(Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean)), 'duckdb'];
     }
+    // Native YAML imports (e.g. orchestrator/prompts/prompts.yaml) for --no-turbopack /
+    // Sentry webpack builds. yaml-loader parses the YAML at build and emits a JS module
+    // that exports the parsed object — inlined into the bundle, no runtime fs read.
+    config.module.rules.push({ test: /\.ya?ml$/, use: 'yaml-loader' });
     return config;
   },
 
-  turbopack: {},
+  turbopack: {
+    // Native YAML imports for Turbopack (dev + `next build`). Mirrors the webpack rule
+    // above so `import x from './x.yaml'` works identically in both bundlers.
+    rules: {
+      '*.yaml': { loaders: ['yaml-loader'], as: '*.js' },
+      '*.yml': { loaders: ['yaml-loader'], as: '*.js' },
+    },
+  },
 
   devIndicators: {
     position: 'bottom-right',

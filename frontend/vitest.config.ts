@@ -1,11 +1,14 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import yaml from '@rollup/plugin-yaml';
 import path from 'node:path';
 
 const projectRoot = path.dirname(new URL(import.meta.url).pathname);
 
 export default defineConfig({
-  plugins: [react()],
+  // @rollup/plugin-yaml lets Vitest resolve native `import x from './x.yaml'` (the
+  // bundlers' yaml-loader doesn't run under Vitest). Default export = parsed doc.
+  plugins: [react(), yaml()],
   resolve: {
     tsconfigPaths: true,
     alias: {

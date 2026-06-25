@@ -1,28 +1,19 @@
-import { readFileSync } from 'fs';
-import yaml from 'js-yaml';
 import {
   renderPrompt as renderFromTree,
   listSkills as listSkillsFromTree,
   getSkill as getSkillFromTree,
   type PromptTree,
 } from './prompt-loader';
+import prompts from './prompts.yaml';
 
 // `prompts.yaml` is the single human-edited source of truth (block scalars → real
-// newlines, no \n / \" escaping). Parsed once here at module load — there is no
-// generated JSON artifact and no build step. This module is server-only (agents +
-// API routes), so the filesystem read is safe.
-//
-// `new URL('./prompts.yaml', import.meta.url)` is the nft-friendly pattern: Next's
-// file tracer detects it and copies prompts.yaml into the standalone Docker output
-// next to this module, where import.meta.url resolves at runtime.
-const promptsData = yaml.load(
-  readFileSync(new URL('./prompts.yaml', import.meta.url), 'utf8'),
-) as Partial<PromptTree>;
-
-export const PROMPTS: PromptTree = {
-  templates: promptsData.templates ?? {},
-  prompts: promptsData.prompts ?? {},
-};
+// newlines, no \n / \" escaping). It is imported NATIVELY and typed as PromptTree
+// (see prompts-yaml.d.ts). A yaml loader parses it at BUILD time and inlines the
+// object into the bundle — yaml-loader for Turbopack/webpack (next.config.ts) and
+// @rollup/plugin-yaml for Vitest — so there is no runtime filesystem read and
+// nothing to file-trace: it ships in the standalone Docker bundle exactly like the
+// old prompts.json did.
+export const PROMPTS: PromptTree = prompts;
 
 export function renderPrompt(promptId: string, vars: Record<string, unknown>): string {
   return renderFromTree(PROMPTS, promptId, vars);
