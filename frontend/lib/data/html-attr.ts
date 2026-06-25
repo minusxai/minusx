@@ -9,3 +9,14 @@ export const escAttr = (s: string) =>
 
 export const unescAttr = (s: string) =>
   s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/**
+ * Escape a raw string so it can ride inside a jsx template literal — `query={`…`}` — keeping
+ * multi-line SQL (with `<`, `>`, `{`) intact. Shared by the `<Question>` / `<Number>` emitters.
+ */
+export const escTemplate = (s: string) =>
+  s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+
+/** A jsx `style={{…}}` / `viz={{…}}` attr value is only usable when it's a non-array object. */
+export const styleAttr = (v: unknown): Record<string, string | number> | undefined =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string | number>) : undefined;

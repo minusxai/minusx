@@ -12,7 +12,7 @@
  * Pure (client + server safe).
  */
 import type { QuestionParameter, VizSettings, QuestionContent } from '@/lib/validation/atlas-schemas';
-import { escAttr, unescAttr } from './html-attr';
+import { escAttr, unescAttr, escTemplate } from './html-attr';
 
 /** An inline question embedded directly in a story body (no saved file). */
 export interface InlineQuestionEmbed {
@@ -121,9 +121,6 @@ export function extractInlineQuestions(html: string | null | undefined): InlineQ
   }
   return out;
 }
-
-// Template-literal escaping for the query so multi-line SQL with <, >, { stays raw in jsx.
-const escTemplate = (s: string) => s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
 /** Inline embed → the `<Question/>` jsx the agent reads/edits (query as a raw template literal). */
 export function inlineQuestionToJsx(e: InlineQuestionEmbed): string {

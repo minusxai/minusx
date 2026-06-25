@@ -11,7 +11,7 @@
  */
 import type { ParameterType, QuestionParameter } from '@/lib/validation/atlas-schemas';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { escAttr, unescAttr } from './html-attr';
+import { escAttr, unescAttr, styleAttr } from './html-attr';
 
 /** Autocomplete / import source: a column of an embedded question. */
 export interface StoryParamSource {
@@ -38,11 +38,6 @@ export interface StoryParam {
   min?: number;
   max?: number;
   step?: number;
-}
-
-/** Read a plain CSS object from a `<Param>` attribute value (object expressions parse to JSON). */
-function styleAttr(v: unknown): Record<string, string | number> | undefined {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string | number>) : undefined;
 }
 
 const TYPES = ['text', 'number', 'date'];

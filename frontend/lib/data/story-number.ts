@@ -9,7 +9,7 @@
  * renders inline where the agent placed it; AgentHtml mounts the live figure there). Pure
  * (client + server safe).
  */
-import { escAttr, unescAttr } from './html-attr';
+import { escAttr, unescAttr, escTemplate, styleAttr } from './html-attr';
 import { normalizeInlineQuery } from './story-question';
 
 /** An inline number embedded directly in a story body. One of `id` / `query` is required. */
@@ -41,9 +41,8 @@ export function numberFromJsxAttrs(attrs: Record<string, unknown>): InlineNumber
   if (typeof attrs.col === 'string') e.col = attrs.col;
   if (typeof attrs.prefix === 'string') e.prefix = attrs.prefix;
   if (typeof attrs.suffix === 'string') e.suffix = attrs.suffix;
-  if (attrs.style && typeof attrs.style === 'object' && !Array.isArray(attrs.style)) {
-    e.style = attrs.style as Record<string, string | number>;
-  }
+  const st = styleAttr(attrs.style);
+  if (st) e.style = st;
   return e;
 }
 
@@ -94,9 +93,6 @@ export function extractNumberQuestionIds(html: string | null | undefined): numbe
   for (const m of (html ?? '').matchAll(/data-number-id="(\d+)"/g)) ids.add(Number(m[1]));
   return [...ids];
 }
-
-// Template-literal escaping so multi-line SQL with <, >, { stays raw in jsx.
-const escTemplate = (s: string) => s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
 /** Inline-number embed → the `<Number/>` jsx the agent reads/edits. */
 export function numberToJsx(e: InlineNumberEmbed): string {
