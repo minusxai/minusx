@@ -98,6 +98,9 @@ function createFileTool(args: Record<string, any>): ToolCall {
 
 function parseContent(result: { content: any }): Record<string, any> {
   const raw = result.content;
+  // CreateFile now returns a content-block array: [ {text: json}, {text: <file_markup>…}, ...images ].
+  // The JSX markup is a separate raw block — pull the JSON from the first text block.
+  if (Array.isArray(raw)) return JSON.parse(raw.find((b: any) => b?.type === 'text').text);
   return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
 

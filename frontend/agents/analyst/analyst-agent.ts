@@ -17,7 +17,8 @@ import {
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
-import { appStateForLlm, type AppState } from '@/lib/appState';
+import { appStateForLlm, takeAppStateMarkup, type AppState } from '@/lib/appState';
+import { renderMarkupBlocks } from '@/lib/api/markup-blocks';
 
 // Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
@@ -139,11 +140,18 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       })
       .join('\n');
 
-    const appStateJson =
-      this.context.appState !== undefined ? JSON.stringify(appStateForLlm(this.context.appState as AppState)) : 'null';
+    // The file's JSX `markup` is pulled OUT of the AppState JSON and printed as a raw
+    // <file_markup> block right after it — real JSX, never an escaped JSON string value.
+    let appStateJson = 'null';
+    let markupText = '';
+    if (this.context.appState !== undefined) {
+      const { value, blocks } = takeAppStateMarkup(appStateForLlm(this.context.appState as AppState));
+      appStateJson = JSON.stringify(value);
+      if (blocks.length) markupText = `\n${renderMarkupBlocks(blocks)}`;
+    }
     const date = new Date().toISOString().slice(0, 10);
     const contextText =
-      `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` +
+      `<AppState>${appStateJson}</AppState>${markupText}\n<CurrentDate>${date}</CurrentDate>` +
       (textAttachments ? `\n${textAttachments}` : '');
 
     // Goal is a raw text block (no <Question> wrapper) — the bare goal text.

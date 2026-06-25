@@ -6,18 +6,25 @@
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import { HIDDEN_SKILLS, listSkills, getSkill, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
 
-/** Page type → skills preloaded into the system prompt. */
+/**
+ * Page type → skills preloaded into the system prompt.
+ *
+ * Viz-authoring pages (question/dashboard/story/notebook) preload `visualizations`
+ * so the agent knows the FULL viz schema (geo, pivot, combo/dual-axis, single_value,
+ * …) from the first turn — otherwise a blank question page starts viz-blind and has
+ * to LoadSkill("visualizations") before it can author anything beyond a basic chart.
+ */
 export const PAGE_SKILL_MAP: Record<string, string[]> = {
-  question: ['questions'],
-  dashboard: ['dashboards', 'questions'],
+  question: ['questions', 'visualizations'],
+  dashboard: ['dashboards', 'questions', 'visualizations'],
   context: ['contexts'],
   report: ['reports'],
   alert: ['alerts'],
   explore: ['explore'],
   folder: ['explore'],
   slack: ['explore'],
-  story: ['data_stories', 'questions'],
-  notebook: ['notebooks', 'questions'],
+  story: ['data_stories', 'questions', 'visualizations'],
+  notebook: ['notebooks', 'questions', 'visualizations'],
 };
 
 /** Used when the page type is unknown or null. */

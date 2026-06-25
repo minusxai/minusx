@@ -7,6 +7,7 @@
 import type { FileState } from '@/store/filesSlice';
 import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
 import { stripAugmentedContentForLlm, omitFileStateContent } from '@/lib/api/compress-augmented';
+import { takeAugmentedMarkup, takeFileStateMarkup, type MarkupBlock } from '@/lib/api/markup-blocks';
 
 /**
  * Folder state (from useFolder / navigationSlice)
@@ -71,4 +72,33 @@ export function appStateForLlm(appState: AppState): AppState {
     return { ...appState, state: stripAugmentedContentForLlm(fileState), ui };
   }
   return { ...appState, ui };
+}
+
+/**
+ * Pull every file's JSX `markup` OUT of an (LLM-projected) AppState, returning the
+ * markup-free AppState + the raw blocks to print after the `<AppState>` JSON. Covers the
+ * focused file + its references and any open-modal file state. Pairs with appStateForLlm
+ * (which strips JSON `content`): together the agent gets clean metadata JSON + raw JSX,
+ * never escaped JSX as a stringified JSON value.
+ */
+export function takeAppStateMarkup(appState: AppState): { value: AppState; blocks: MarkupBlock[] } {
+  if (!appState || typeof appState !== 'object') return { value: appState, blocks: [] };
+  const blocks: MarkupBlock[] = [];
+  let value: AppState = appState;
+
+  if (appState.type === 'file' && appState.state) {
+    const t = takeAugmentedMarkup(appState.state as CompressedAugmentedFile);
+    blocks.push(...t.blocks);
+    value = { ...appState, state: t.value };
+  }
+
+  if (value.ui?.openModal?.fileState) {
+    const t = takeFileStateMarkup(value.ui.openModal.fileState);
+    if (t.block) {
+      blocks.push(t.block);
+      value = { ...value, ui: { ...value.ui, openModal: { ...value.ui.openModal, fileState: t.fileState } } };
+    }
+  }
+
+  return { value, blocks };
 }

@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { omitFileStateContent, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
-import { appStateForLlm } from '@/lib/appState';
+import { appStateForLlm, takeAppStateMarkup } from '@/lib/appState';
 import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
 
 function fs(id: number): CompressedFileState {
@@ -61,5 +61,29 @@ describe('strip content for LLM', () => {
     expect(folder.type).toBe('folder');
     const explore = appStateForLlm({ type: 'explore', state: null });
     expect(explore.type).toBe('explore');
+  });
+});
+
+describe('takeAppStateMarkup — JSX pulled out of the AppState JSON into raw blocks', () => {
+  it('pulls markup from the file state, its references, AND the open-modal file', () => {
+    const { value, blocks } = takeAppStateMarkup({
+      type: 'file',
+      state: augmented(),
+      ui: { openModal: { type: 'question', fileId: 9, fileState: fs(9) } },
+    });
+    if (value.type !== 'file') throw new Error('expected file app state');
+    // No markup left anywhere in the JSON-serializable value.
+    expect(value.state.fileState).not.toHaveProperty('markup');
+    expect(value.state.references[0]).not.toHaveProperty('markup');
+    expect(value.ui?.openModal?.fileState).not.toHaveProperty('markup');
+    expect(JSON.stringify(value)).not.toContain('<query>');
+    // Blocks carry the markup for the primary, the reference, and the modal file.
+    expect(blocks.map((b) => b.fileId).sort()).toEqual([1, 2, 9]);
+    expect(blocks.every((b) => b.markup === '<query>SELECT 1</query>')).toBe(true);
+  });
+
+  it('returns no blocks for folder/explore app-states', () => {
+    expect(takeAppStateMarkup({ type: 'folder', state: { files: [], loading: false, error: null } }).blocks).toEqual([]);
+    expect(takeAppStateMarkup({ type: 'explore', state: null }).blocks).toEqual([]);
   });
 });

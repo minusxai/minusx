@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type CompressedFileState } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -21,6 +21,7 @@ import { getRootParams, storyEmbedRuns } from '@/lib/data/helpers/param-resoluti
 import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
+import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType, canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -460,14 +461,15 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   const result = await readFiles(fileIds, { runQueries });
-  // The agent reads `markup`, not JSON `content` — strip the duplicate content for the LLM.
-  const textContent: ReadFilesResult = { success: true, files: result.map(f => stripAugmentedContentForLlm(compressAugmentedFile(f, maxChars))) };
+  // The agent reads `markup`, not JSON `content` — strip the duplicate content, then pull the
+  // JSX `markup` out into a separate raw <file_markup> block (real JSX, not escaped JSON).
+  const { files: noMarkup, blocks } = takeFilesMarkup(
+    result.map(f => stripAugmentedContentForLlm(compressAugmentedFile(f, maxChars))),
+  );
+  const textContent: ReadFilesResult = { success: true, files: noMarkup };
   const imageBlocks = await renderFileChartImageBlocks(result);
-  if (imageBlocks.length === 0) {
-    return { content: textContent, details: { success: true } };
-  }
   return {
-    content: [{ type: 'text', text: JSON.stringify(textContent) }, ...imageBlocks],
+    content: [{ type: 'text', text: JSON.stringify(textContent) }, ...markupTextBlocks(blocks), ...imageBlocks],
     details: { success: true },
   };
 });
@@ -760,10 +762,23 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const vizWarning = fileState?.type === 'question' ? vizWarningForQuestion(fileId) : null;
 
   const diff = diffs.join('\n');
+  // Pull the JSX `markup` out of the JSON (primary fileState + any FULL changed reference;
+  // unchanged-stub refs have none) → a separate raw <file_markup> block. The agent reads real
+  // JSX, and its next EditFile oldMatch matches that exact text rather than escaped JSON.
+  const { fileState: fsNoMarkup, block: primaryBlock } = takeFileStateMarkup(compressed.fileState);
+  const markupBlocks: MarkupBlock[] = primaryBlock ? [primaryBlock] : [];
+  const refsNoMarkup = deltaReferences.map(ref => {
+    if (ref && typeof (ref as CompressedFileState).markup === 'string') {
+      const t = takeFileStateMarkup(ref as CompressedFileState);
+      if (t.block) markupBlocks.push(t.block);
+      return t.fileState;
+    }
+    return ref;
+  });
   const content: Record<string, any> = {
     success: true,
-    fileState: compressed.fileState,
-    references: deltaReferences,
+    fileState: fsNoMarkup,
+    references: refsNoMarkup,
     queryResults: deltaQueryResults,
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
     ...(vizWarning ? { vizWarning } : {}),
@@ -783,11 +798,8 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const imageBlocks = (queryResultChanged || vizSettingsChanged)
     ? await renderFileChartImageBlocks([augmented])
     : [];
-  if (imageBlocks.length === 0) {
-    return { content, details: { success: true, diff } as EditFileDetails };
-  }
   return {
-    content: [{ type: 'text', text: JSON.stringify(content) }, ...imageBlocks],
+    content: [{ type: 'text', text: JSON.stringify(content) }, ...markupTextBlocks(markupBlocks), ...imageBlocks],
     details: { success: true, diff } as EditFileDetails,
   };
 });
@@ -972,15 +984,14 @@ registerFrontendTool('CreateFile', async (args, context) => {
   // Check viz constraint violations (incl. type-dependent ones) to feed back to the LLM
   const vizWarning = file_type === 'question' ? vizWarningForQuestion(draftId) : null;
 
-  const result: Record<string, any> = { success: true, state: compressAugmentedFile(augmented) };
+  // Pull the new file's JSX `markup` out of its `state` JSON → a separate raw <file_markup> block.
+  const { value: stateNoMarkup, blocks: createBlocks } = takeAugmentedMarkup(compressAugmentedFile(augmented));
+  const result: Record<string, any> = { success: true, state: stateNoMarkup };
   if (vizWarning) result.vizWarning = vizWarning;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
   const imageBlocks = await renderFileChartImageBlocks([augmented]);
-  if (imageBlocks.length === 0) {
-    return { content: result, details: { success: true } };
-  }
   return {
-    content: [{ type: 'text', text: JSON.stringify(result) }, ...imageBlocks],
+    content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(createBlocks), ...imageBlocks],
     details: { success: true },
   };
 });

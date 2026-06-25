@@ -4,6 +4,7 @@ import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
+import { takeFilesMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { FileType, ReadFilesResult } from '@/lib/types';
 import type { AnalystAgentContext } from './types';
@@ -66,9 +67,15 @@ export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContex
         executeQueries: this.parameters.runQueries ?? false,
         maxChars,
       });
-      // The agent reads `markup`, not JSON `content` — strip the duplicate content.
-      const result: ReadFilesResult = { success: true, files: files.map(stripAugmentedContentForLlm) };
-      return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
+      // The agent reads `markup`, not JSON `content` — strip the duplicate content, then
+      // pull the JSX `markup` out of the JSON and emit it as a separate raw <file_markup>
+      // block so the agent reads real JSX (not an escaped JSON string value).
+      const { files: noMarkup, blocks } = takeFilesMarkup(files.map(stripAugmentedContentForLlm));
+      const result: ReadFilesResult = { success: true, files: noMarkup };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(blocks)],
+        isError: false,
+      };
     });
   }
 }

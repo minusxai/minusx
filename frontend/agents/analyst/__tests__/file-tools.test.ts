@@ -19,6 +19,7 @@ import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner
 import { FilesAPI } from '@/lib/data/files.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { TOOL_DEFAULT_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
+import { takeFilesMarkup } from '@/lib/api/markup-blocks';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
 import { numberToPlaceholder } from '@/lib/data/story-number';
@@ -154,10 +155,15 @@ describe('ReadFiles', () => {
     //    readFilesServer === compressAugmentedFile(selectAugmentedFiles(...)) (live AppState),
     //    so tool output === stripContent(readFilesServer) === stripped live AppState.
     const appState = await readFilesServer([dash.data.id], ADMIN, { maxChars: TOOL_DEFAULT_LIMIT_CHARS });
-    expect(out.files).toEqual(appState.map(stripAugmentedContentForLlm));
-    // And the stripped payload carries `markup` but not `content`.
-    expect(out.files[0].fileState.markup).toBeDefined();
+    const { files: expectedFiles } = takeFilesMarkup(appState.map(stripAugmentedContentForLlm));
+    expect(out.files).toEqual(expectedFiles);
+    // markup is NO LONGER stringified into the JSON — it's pulled out into a separate raw block.
+    expect(out.files[0].fileState.markup).toBeUndefined();
     expect(out.files[0].fileState.content).toBeUndefined();
+    // The raw <file_markup> block is a SECOND content block — real JSX, never escaped JSON.
+    const markupBlock = (res.content[1] as { text: string }).text;
+    expect(markupBlock).toContain(`<file_markup file_id="${dash.data.id}" type="dashboard">`);
+    expect(markupBlock).not.toContain('\\n');
   });
 
   it('runs a story\'s INLINE questions and includes their query results (live numbers for the agent)', async () => {
