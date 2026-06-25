@@ -19,7 +19,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
-import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode } from '@/store/uiSlice';
+import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
@@ -379,6 +379,7 @@ export default function ChatInterface({
   const devMode = useAppSelector(selectDevMode);
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
   const chatAttachments = useAppSelector(selectChatAttachments);
+  const sidebarPendingSlashCommand = useAppSelector(state => state.ui.sidebarPendingSlashCommand);
   // queryResultsMap / colorMode / disableAppStateImages / unrestrictedMode are
   // ONLY needed inside handleSendMessage. Read them on demand via useAppStore
   // instead of subscribing — otherwise this parent re-renders every time any
@@ -847,6 +848,34 @@ export default function ChatInterface({
   }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container]);
 
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize });
+
+  useEffect(() => {
+    if (container !== 'sidebar') return;
+    if (!sidebarPendingSlashCommand) return;
+    if (sidebarPendingSlashCommand === 'view-context-size' && (!conversationID || connectionsLoading || contextsLoading)) return;
+
+    const command = availableCommands.find(cmd => cmd.name === sidebarPendingSlashCommand);
+    dispatch(setSidebarPendingSlashCommand(null));
+
+    if (!command) {
+      toaster.create({ title: `Unknown command: /${sidebarPendingSlashCommand}`, type: 'error' });
+      return;
+    }
+    if (command.disabled) {
+      toaster.create({ title: command.disabledReason || `/${command.name} is unavailable`, type: 'info' });
+      return;
+    }
+    handleCommandExecute(command);
+  }, [
+    availableCommands,
+    connectionsLoading,
+    contextsLoading,
+    container,
+    conversationID,
+    dispatch,
+    handleCommandExecute,
+    sidebarPendingSlashCommand,
+  ]);
 
   // Stable callback wrapper for memo'd children (e.g. ExampleQuestions, ChatInput).
   // handleSendMessage closes over many stateful values and is recreated each

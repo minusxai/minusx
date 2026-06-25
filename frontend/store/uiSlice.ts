@@ -13,6 +13,7 @@ interface UIState {
   colorMode: 'light' | 'dark';
   devMode: boolean;
   sidebarPendingMessage: string | null;
+  sidebarPendingSlashCommand: string | null;
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
@@ -52,6 +53,7 @@ const initialState: UIState = {
   colorMode: 'dark',
   devMode: false,
   sidebarPendingMessage: null,
+  sidebarPendingSlashCommand: null,
   activeSidebarSection: null,
   askForConfirmation: false,
   showAdvanced: false,
@@ -126,6 +128,9 @@ const uiSlice = createSlice({
     },
     setSidebarPendingMessage: (state, action: PayloadAction<string | null>) => {
       state.sidebarPendingMessage = action.payload;
+    },
+    setSidebarPendingSlashCommand: (state, action: PayloadAction<UIState['sidebarPendingSlashCommand']>) => {
+      state.sidebarPendingSlashCommand = action.payload;
     },
     setActiveSidebarSection: (state, action: PayloadAction<string | null>) => {
       state.activeSidebarSection = action.payload;
@@ -294,6 +299,7 @@ export const {
   setDevMode,
   toggleDevMode,
   setSidebarPendingMessage,
+  setSidebarPendingSlashCommand,
   setActiveSidebarSection,
   setAskForConfirmation,
   setShowAdvanced,
