@@ -1,4 +1,4 @@
-// The v2 (JS) orchestrator renders system prompts from prompts.json imported
+// The v2 (JS) orchestrator renders system prompts from prompts.yaml imported
 // straight into the bundle — no backend filesystem read (the frontend standalone
 // Docker image has no backend/ tree, which previously caused ENOENT → empty v2
 // chat stream). These tests pin that the index API renders the real bundled
@@ -22,7 +22,7 @@ const SYSTEM_VARS = {
 };
 
 describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
-  it('renders the real default.system prompt from the bundled JSON', () => {
+  it('renders the real default.system prompt from the bundled YAML', () => {
     const out = renderPrompt('default.system', SYSTEM_VARS);
     expect(out.length).toBeGreaterThan(100);
     expect(out).toContain('MinusX');

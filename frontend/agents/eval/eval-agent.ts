@@ -3,7 +3,7 @@
 // A RemoteAnalystAgent variant for the eval harness: it answers a question using
 // the analyst's read-only tools, then calls a Submit tool exactly once. The run
 // terminates as soon as a Submit tool result appears. The assertion-type instruction comes from the
-// `eval_addendum.*` prompts (already in orchestrator/prompts/prompts.json).
+// `eval_addendum.*` prompts (already in orchestrator/prompts/prompts.yaml).
 import 'server-only';
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';

@@ -4,13 +4,13 @@
 // CreateFile tools), so they extend WebAnalystAgent and just (a) restrict the
 // toolset, (b) cap maxSteps for low latency, (c) render the onboarding-specific
 // prompts (`onboarding_context.*` / `onboarding_dashboard.*`, already in
-// `orchestrator/prompts/prompts.json`), and (d) disable web search
+// `orchestrator/prompts/prompts.yaml`), and (d) disable web search
 // (no web search).
 import 'server-only';
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool, TextContent, ImageContent } from '@/orchestrator/llm';
-import { renderPrompt } from '@/orchestrator/prompts';
+import { renderPrompt, getSkill } from '@/orchestrator/prompts';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
@@ -86,6 +86,7 @@ export class OnboardingContextAgent extends WebAnalystAgent {
       schema: schemaString(this.context),
       connection_id: this.context.connectionId ?? '',
       max_steps: String(ctor.maxSteps),
+      contexts_skill: getSkill('contexts') ?? '',
     });
   }
 
@@ -127,6 +128,8 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
       context: this.context.contextDocs ?? '',
       connection_id: this.context.connectionId ?? '',
       max_steps: String(ctor.maxSteps),
+      // Verbatim var insertion — see the note in OnboardingContextAgent.
+      dashboards_skill: getSkill('dashboards') ?? '',
     });
   }
 
