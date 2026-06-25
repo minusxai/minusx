@@ -35,6 +35,8 @@ interface SourceDropdownWidgetProps {
   paramName: string;
   onChange: (value: string | number) => void;
   onSubmit?: (paramName?: string, value?: string | number) => void;
+  /** Agent-supplied CSS for the input (story `<Param style={{…}}>`) — literal CSS, wins over defaults. */
+  inputStyle?: React.CSSProperties;
 }
 
 // Format a number string to max 2 decimal places, removing trailing zeros
@@ -44,7 +46,7 @@ function formatNumStr(v: string): string {
   return String(parseFloat(n.toFixed(2)));
 }
 
-export function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit }: SourceDropdownWidgetProps) {
+export function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit, inputStyle }: SourceDropdownWidgetProps) {
   const augmented = useFile(source.id);
   const content = augmented?.fileState.content as QuestionContent | undefined | null;
 
@@ -137,6 +139,7 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
           borderColor: 'accent.teal',
           boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
         }}
+        style={inputStyle}
         onChange={(e) => commit(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {

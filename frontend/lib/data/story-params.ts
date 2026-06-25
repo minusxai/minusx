@@ -11,7 +11,7 @@
  */
 import type { ParameterType, QuestionParameter } from '@/lib/validation/atlas-schemas';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { escAttr, unescAttr } from './html-attr';
+import { escAttr, unescAttr, styleAttr, serializeJsonAttr } from './html-attr';
 
 /** Autocomplete / import source: a column of an embedded question. */
 export interface StoryParamSource {
@@ -26,6 +26,18 @@ export interface StoryParam {
   nullable: boolean;
   /** `<Param id={N} column="c">` — autocomplete from / import the def of question N's column. */
   source?: StoryParamSource;
+  /** Agent-supplied CSS applied to the filter INPUT (`<Param style={{…}}>`), so the control can
+   *  match the story design — literal CSS, not theme tokens (overrides the default legible look). */
+  style?: Record<string, string | number>;
+  /** Agent-supplied CSS applied to the param LABEL (`<Param labelStyle={{…}}>`). */
+  labelStyle?: Record<string, string | number>;
+  /** Control widget override. `'slider'` (number params) renders a range slider instead of an
+   *  input; default is a typed input / autocomplete. */
+  widget?: 'slider';
+  /** Slider bounds (only used when widget==='slider'). */
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 const TYPES = ['text', 'number', 'date'];
@@ -45,6 +57,14 @@ export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | 
   if (typeof attrs.id === 'number') {
     param.source = { questionId: attrs.id, column: typeof attrs.column === 'string' ? attrs.column : name };
   }
+  const style = styleAttr(attrs.style);
+  if (style) param.style = style;
+  const labelStyle = styleAttr(attrs.labelStyle);
+  if (labelStyle) param.labelStyle = labelStyle;
+  if (attrs.widget === 'slider') param.widget = 'slider';
+  if (typeof attrs.min === 'number') param.min = attrs.min;
+  if (typeof attrs.max === 'number') param.max = attrs.max;
+  if (typeof attrs.step === 'number') param.step = attrs.step;
   return param;
 }
 
@@ -56,6 +76,12 @@ export function paramToPlaceholder(p: StoryParam): string {
     `data-param-nullable="${p.nullable}"`,
   ];
   if (p.source) a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
+  if (p.style) a.push(`data-param-style="${serializeJsonAttr(p.style)}"`);
+  if (p.labelStyle) a.push(`data-param-labelstyle="${serializeJsonAttr(p.labelStyle)}"`);
+  if (p.widget) a.push(`data-param-widget="${p.widget}"`);
+  if (p.min != null) a.push(`data-param-min="${p.min}"`);
+  if (p.max != null) a.push(`data-param-max="${p.max}"`);
+  if (p.step != null) a.push(`data-param-step="${p.step}"`);
   return `<div ${a.join(' ')}></div>`;
 }
 
@@ -66,6 +92,12 @@ export function paramToJsx(p: StoryParam): string {
     a.push(`id={${p.source.questionId}}`);
     if (p.source.column !== p.name) a.push(`column="${p.source.column}"`);
   }
+  if (p.style) a.push(`style={${JSON.stringify(p.style)}}`);
+  if (p.labelStyle) a.push(`labelStyle={${JSON.stringify(p.labelStyle)}}`);
+  if (p.widget) a.push(`widget="${p.widget}"`);
+  if (p.min != null) a.push(`min={${p.min}}`);
+  if (p.max != null) a.push(`max={${p.max}}`);
+  if (p.step != null) a.push(`step={${p.step}}`);
   return `<Param ${a.join(' ')} />`;
 }
 
@@ -77,7 +109,21 @@ function paramFromPlaceholderInner(inner: string): StoryParam | null {
   if (!a.name) return null;
   const p: StoryParam = { name: a.name, type: normalizeParamType(a.type), nullable: a.nullable !== 'false' };
   if (a['source-id']) p.source = { questionId: Number(a['source-id']), column: a['source-col'] ?? a.name };
+  const style = parseStyleJson(a.style);
+  if (style) p.style = style;
+  const labelStyle = parseStyleJson(a.labelstyle);
+  if (labelStyle) p.labelStyle = labelStyle;
+  if (a.widget === 'slider') p.widget = 'slider';
+  if (a.min != null && a.min !== '') p.min = Number(a.min);
+  if (a.max != null && a.max !== '') p.max = Number(a.max);
+  if (a.step != null && a.step !== '') p.step = Number(a.step);
   return p;
+}
+
+/** Parse a stored style JSON string (already entity-decoded by unescAttr / getAttribute). */
+function parseStyleJson(v: string | null | undefined): Record<string, string | number> | undefined {
+  if (!v) return undefined;
+  try { return styleAttr(JSON.parse(v)); } catch { return undefined; }
 }
 
 /** Extract all declared params from a story's HTML (the `data-param` placeholders). */
@@ -105,6 +151,17 @@ export function paramFromPlaceholderEl(el: { getAttribute(name: string): string 
   const p: StoryParam = { name, type: normalizeParamType(el.getAttribute('data-param-type')), nullable: el.getAttribute('data-param-nullable') !== 'false' };
   const sid = el.getAttribute('data-param-source-id');
   if (sid) p.source = { questionId: Number(sid), column: el.getAttribute('data-param-source-col') ?? name };
+  const style = parseStyleJson(el.getAttribute('data-param-style'));
+  if (style) p.style = style;
+  const labelStyle = parseStyleJson(el.getAttribute('data-param-labelstyle'));
+  if (labelStyle) p.labelStyle = labelStyle;
+  if (el.getAttribute('data-param-widget') === 'slider') p.widget = 'slider';
+  const min = el.getAttribute('data-param-min');
+  if (min != null && min !== '') p.min = Number(min);
+  const max = el.getAttribute('data-param-max');
+  if (max != null && max !== '') p.max = Number(max);
+  const step = el.getAttribute('data-param-step');
+  if (step != null && step !== '') p.step = Number(step);
   return p;
 }
 

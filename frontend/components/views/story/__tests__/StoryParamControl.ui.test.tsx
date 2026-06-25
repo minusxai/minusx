@@ -35,6 +35,39 @@ describe('StoryParamControl', () => {
   });
 });
 
+describe('StoryParamControl — slider widget (<Param widget="slider">)', () => {
+  const slider: StoryParam = { name: 'limit', type: 'number', nullable: false, widget: 'slider', min: 0, max: 100, step: 5 };
+
+  it('renders a range input with the declared bounds', () => {
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={slider} value={20} onChange={() => {}} />);
+    const input = getByLabelText('param limit') as HTMLInputElement;
+    expect(input.type).toBe('range');
+    expect(input.min).toBe('0');
+    expect(input.max).toBe('100');
+    expect(input.step).toBe('5');
+    expect(input.value).toBe('20');
+  });
+
+  it('reports the new value as the slider moves', () => {
+    const onChange = vi.fn();
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={slider} value={20} onChange={onChange} />);
+    fireEvent.change(getByLabelText('param limit'), { target: { value: '45' } });
+    expect(onChange).toHaveBeenCalledWith('45');
+  });
+
+  it('falls back to a plain input when widget="slider" is set on a non-number param', () => {
+    const bad: StoryParam = { name: 'city', type: 'text', nullable: true, widget: 'slider' };
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={bad} value="" onChange={() => {}} />);
+    expect((getByLabelText('param city') as HTMLInputElement).type).not.toBe('range');
+  });
+
+  it('applies the agent style override to the slider', () => {
+    const styled: StoryParam = { ...slider, style: { accentColor: '#c8781a' } };
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={styled} value={10} onChange={() => {}} />);
+    expect((getByLabelText('param limit') as HTMLInputElement).style.accentColor).toBe('#c8781a');
+  });
+});
+
 describe('StoryParamControl — autocomplete (param with a question source)', () => {
   it('renders the source autocomplete combobox (not a plain input) when the param imports a question column', () => {
     const sourced: StoryParam = { name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'city' } };
@@ -48,6 +81,19 @@ describe('StoryParamControl — autocomplete (param with a question source)', ()
   it('source-less param renders a plain (non-combobox) input', () => {
     const { getByLabelText } = renderWithProviders(<StoryParamControl param={city} value="" onChange={() => {}} />);
     expect((getByLabelText('param city') as HTMLInputElement).getAttribute('role')).not.toBe('combobox');
+  });
+
+  it('applies the agent <Param style={{…}}> override to the input (source-less + sourced)', () => {
+    const plain: StoryParam = { name: 'region', type: 'text', nullable: true, style: { width: '250px', fontStyle: 'italic' } };
+    const { getByLabelText, unmount } = renderWithProviders(<StoryParamControl param={plain} value="" onChange={() => {}} />);
+    const input = getByLabelText('param region') as HTMLInputElement;
+    expect(input.style.width).toBe('250px');
+    expect(input.style.fontStyle).toBe('italic');
+    unmount();
+
+    const sourced: StoryParam = { name: 'region', type: 'text', nullable: true, source: { questionId: 5, column: 'region' }, style: { width: '250px' } };
+    const { getByLabelText: get2 } = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
+    expect((get2('param region') as HTMLInputElement).style.width).toBe('250px');
   });
 
   it('does NOT remount the source input when the committed value changes (focus-loss regression)', () => {

@@ -21,7 +21,7 @@ vi.mock('@/lib/connections/load-schema', () => ({
 
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
-import { ReportAgent, type ReportAgentContext } from '../report-agent';
+import { ReportAgent, buildGoal, type ReportAgentContext } from '../report-agent';
 import {
   RemoteAnalystAgent,
   ExecuteQuery,
@@ -171,5 +171,19 @@ describe('ReportAgent (v2)', () => {
     const agent = await runAgent(baseContext({ emails: ['team@example.com'] }));
 
     expect(agent.runResult.generatedReport).toContain('This report will be sent to: team@example.com');
+  });
+});
+
+describe('buildGoal — embed guidance', () => {
+  it('instructs the analyst to embed charts with the <Question id={N}/> component', () => {
+    const goal = buildGoal('Weekly revenue');
+    expect(goal).toContain('<Question id={123} />');
+    expect(goal).not.toContain('data-question-id'); // old syntax retired from the prompt
+  });
+
+  it('tells the analyst to keep KPI numbers live (embed a saved single-number question)', () => {
+    const goal = buildGoal('Weekly revenue');
+    expect(goal.toLowerCase()).toContain('single-number question');
+    expect(goal).toContain('never guess');
   });
 });

@@ -1,5 +1,6 @@
 import { BaseFileContent, FileType } from '@/lib/types';
 import { extractSavedQuestionIds } from '@/lib/data/story-question';
+import { extractNumberQuestionIds } from '@/lib/data/story-number';
 
 /**
  * CLIENT-SIDE: Extract reference IDs from content for caching in references column
@@ -9,10 +10,11 @@ import { extractSavedQuestionIds } from '@/lib/data/story-question';
  */
 export function extractReferencesFromContent(content: BaseFileContent, type: FileType): number[] {
   // A story's body is the single source of truth: its saved-question dependencies are the
-  // `data-question-id` embeds in content.story (inline questions carry no file id, so they
-  // are not file references). No `assets` field — references derive from the body.
+  // `data-question-id` (chart embeds) and `data-number-id` (<Number id> figures) in content.story.
+  // Inline `<Question query>` / `<Number query>` carry no file id, so they are not references.
   if (type === 'story') {
-    return extractSavedQuestionIds((content as any)?.story);
+    const story = (content as { story?: string | null } | null)?.story;
+    return [...new Set([...extractSavedQuestionIds(story), ...extractNumberQuestionIds(story)])];
   }
 
   // Dashboards have no body — their content IS the ordered `assets` (tiles), so question

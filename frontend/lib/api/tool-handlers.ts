@@ -17,6 +17,7 @@ import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/api/file-state';
+import { getRootParams, storyEmbedRuns } from '@/lib/data/helpers/param-resolution';
 import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
@@ -703,6 +704,27 @@ registerFrontendTool('EditFile', async (args, _context) => {
         await getQueryResult({ query: cell.query, params, database: cell.connection_name, filePath: fileState?.path });
       } catch (execErr) {
         console.warn('[EditFile] Notebook cell auto-execute failed (edit still staged):', execErr);
+      }
+    }
+  }
+
+  // Auto-execute a story's INLINE questions + inline numbers so the agent sees their LIVE results
+  // in this EditFile response (and the next app-state). The agent edited the body, so a changed
+  // inline query has a NEW hash and isn't cached — without this it would come back with NO rows.
+  // Saved <Question id>/<Number id> embeds resolve via references (already cached on render). Run
+  // each under the SAME param key augmentWithParams uses (story root params), so the result lands
+  // in the cache the response reads from. Best-effort: a failed run never fails the staged edit.
+  if (fileState?.type === 'story') {
+    const state = getStore().getState();
+    const html = (selectMergedContent(state, fileId) as { story?: string | null } | undefined)?.story;
+    const inheritedParams = getRootParams(state, fileState);
+    // storyEmbedRuns is the SAME extraction the client + server augmentation use, so the params
+    // (and therefore query hashes) match the cache the response reads from.
+    for (const r of storyEmbedRuns(html, inheritedParams)) {
+      try {
+        await getQueryResult({ query: r.query, params: r.params, database: r.connection, filePath: fileState?.path });
+      } catch (execErr) {
+        console.warn('[EditFile] Story embed auto-execute failed (edit still staged):', execErr);
       }
     }
   }

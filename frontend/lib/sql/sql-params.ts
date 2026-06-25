@@ -75,6 +75,32 @@ export function buildQueryParamValues(
   return out;
 }
 
+/**
+ * Bind the story param values a raw query actually references. Used for inline `<Number query>`
+ * embeds, which (unlike `<Question>`) declare no `parameters` list — so we derive the referenced
+ * `:names` straight from the SQL and pull each one's value from the param-value map (a missing
+ * one → `null`, i.e. None / "no filter").
+ *
+ * Type-agnostic on purpose: the renderer and the server/client augmentation must produce the
+ * IDENTICAL params object so their query hashes line up, and the renderer only has values (not
+ * declared types). So it depends solely on (query, values).
+ */
+export function bindReferencedParams(
+  query: string | undefined,
+  values: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const vals = values ?? {};
+  for (const name of extractParametersFromSQL(query ?? '')) {
+    // An unset param (missing) OR an empty value ('') binds as None (null) so the filter is
+    // removed via the None round-trip — an empty `min_mrr` slider must NOT inject `>= ''` (which
+    // breaks a numeric query); the number then shows its full, unfiltered value.
+    const v = name in vals ? vals[name] : null;
+    out[name] = v === '' ? null : v;
+  }
+  return out;
+}
+
 /** Infer a parameter's type from its name (internal — used by syncParametersWithSQL). */
 function inferParameterType(paramName: string): 'text' | 'number' | 'date' {
   const lowerName = paramName.toLowerCase();

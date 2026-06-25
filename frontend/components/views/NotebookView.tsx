@@ -191,7 +191,8 @@ export default function NotebookView({
     // No own scroll container — the shared FileLayout column owns page scroll,
     // so the horizontal gutters scroll too (a nested scroller leaves them dead).
     <Box p={4}>
-      <Box maxW="900px" mx="auto">
+      {/* data-file-id → standard FileView capture (useScreenshot / Dev Tools "Download Image"). */}
+      <Box maxW="900px" mx="auto" {...(fileId !== undefined ? { 'data-file-id': fileId } : {})}>
       <VStack align="stretch" gap={0} pl={{ base: 0, md: '40px' }}>
         {cells.length === 0 ? (
           <>

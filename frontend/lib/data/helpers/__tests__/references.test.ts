@@ -82,6 +82,16 @@ describe('extractReferenceIds — document types', () => {
     expect(await extractReferenceIds(file!, noopResolver)).toEqual([child]);
   });
 
+  it('returns cached references for a story (its saved <Question id>/<Number id> embeds)', async () => {
+    // Regression: stories were missing from extractReferenceIds, so the load path resolved NO
+    // references — the agent never saw a story's REFERENCED query results (only inline embeds ran).
+    const q = await DocumentDB.create('RefStoryQ', '/org/refstoryq', 'question', { query: 'SELECT 1' }, []);
+    const id = await DocumentDB.create('RefStory', '/org/refstory', 'story', { story: `<div data-question-id="${q}"></div>` }, [q]);
+    const file = await DocumentDB.getById(id);
+
+    expect(await extractReferenceIds(file!, noopResolver)).toEqual([q]);
+  });
+
   it('does not treat reports as reference-bearing (freeform reportPrompt, no references)', async () => {
     const child = await DocumentDB.create('RefRptChild', '/org/refrptchild', 'question', {}, []);
     // Even if a stale references array lingers in the column, reports expose none.

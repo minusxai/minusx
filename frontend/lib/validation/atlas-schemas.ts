@@ -349,7 +349,21 @@ export const StoryContent = Type.Object({
     '(prefix/suffix/label/valueSize/valueColor) — the digits are read from the query, never written by you. ' +
     'The renderer fills the div exactly with a chart card (title bar + live chart), so do NOT add your own ' +
     'duplicate title caption inside or directly above it. SIZING: always give an explicit px height (a missing ' +
-    'height defaults to 430px; percentages do NOT work); width is 100%; minimum height 340px is enforced.'),
+    'height defaults to 430px; percentages do NOT work); width is 100%; minimum height 340px is enforced. ' +
+    'INLINE LIVE NUMBER — for a figure that sits IN A SENTENCE (not a chart card), use <Number/> instead of a ' +
+    'single_value <Question/>. It renders the live digits in a <span> that flows with the prose, e.g. ' +
+    '`grew to <Number id={142} prefix="$" />` (saved) or ' +
+    '`<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="<db>" col="mrr" prefix="$" suffix=" MRR" />` ' +
+    '(inline). `col` picks the column (default first), `prefix`/`suffix` wrap it, `style={{…}}` themes the span ' +
+    '(literal CSS); clicking it reveals the source question as a footnote. Still LIVE — never hand-type the number. ' +
+    'READER FILTERS — declare shared, reader-changeable filters with <Param>: ' +
+    '`<Param name="city" type="text" nullable={false} />` (typed input), ' +
+    '`<Param name="city" type="text" id={5} column="city" />` (autocomplete from question 5\'s column), or ' +
+    '`<Param name="limit" type="number" widget="slider" min={0} max={100} step={5} />` (range slider). ' +
+    'Every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds on ' +
+    'change (so a `<Number query={`… WHERE mrr >= :min_mrr`}>` is driven live by a `min_mrr` slider); the story\'s ' +
+    '`parameterValues` are the defaults. Theme with `style={{…}}` (control) and `labelStyle={{…}}` (label) — LITERAL ' +
+    'CSS objects, not theme tokens (they vanish across the shadow boundary).'),
   suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
     'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +

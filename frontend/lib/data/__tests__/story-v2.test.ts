@@ -58,6 +58,31 @@ describe('parseStoryJsx — inline <Question>', () => {
   });
 });
 
+describe('parseStoryJsx — inline <Number>', () => {
+  it('maps <Number id> and <Number query> to inline span placeholders (not chart cards)', () => {
+    const jsx = '<div class="story"><p>MRR is <Number id={1026} prefix="$" style={{color:"#0a0"}} /> and growth <Number query={`SELECT g FROM t`} connection="duckdb" suffix="%" /></p></div>';
+    const r = parseStoryJsx(jsx);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.html).toContain('data-number-inline');
+      expect(r.value.html).toContain('data-number-id="1026"');
+      expect(r.value.html).toContain('<span'); // inline, not a <div> block
+      expect(r.value.html).not.toContain('<Number');
+    }
+  });
+
+  it('round-trips a <Number> story (jsx → html → jsx → same html)', () => {
+    const jsx = '<div class="story">Latest: <Number id={1026} prefix="$" /></div>';
+    const parsed = parseStoryJsx(jsx);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const rebuilt = buildStoryJsx({ story: parsed.value.html } as never);
+    expect(validateJsxSource(rebuilt, ['Question', 'Param', 'Number'])).toEqual([]);
+    const reparsed = parseStoryJsx(rebuilt);
+    expect(reparsed.ok && reparsed.value.html).toBe(parsed.value.html);
+  });
+});
+
 describe('buildStoryJsx', () => {
   it('round-trips an agent-authored story (jsx → content → jsx → same html)', () => {
     const jsx = '<div class="story"><style>{`.s{color:blue}`}</style><h2>T</h2><Question id={42} /></div>';

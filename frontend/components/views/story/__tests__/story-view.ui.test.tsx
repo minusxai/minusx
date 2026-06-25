@@ -30,6 +30,12 @@ vi.mock('@/components/containers/EmbeddedQuestionContainer', () => ({
     React.createElement('div', { 'aria-label': `Inline question ${question.vizSettings.type}` }, question.query),
 }));
 
+vi.mock('@/components/views/story/InlineNumber', () => ({
+  __esModule: true,
+  default: ({ embed }: { embed: { id?: number; prefix?: string } }) =>
+    React.createElement('span', { 'aria-label': `inline number ${embed.id ?? 'query'}` }, embed.prefix ?? ''),
+}));
+
 import StoryView from '@/components/views/story/StoryView';
 
 // Real-world Google Fonts @import — note the SEMICOLONS inside the URL
@@ -113,6 +119,57 @@ describe('StoryView', () => {
       const el = within(storyRoot() as unknown as HTMLElement).getByLabelText('Inline question single_value');
       expect(el.textContent).toContain('SELECT SUM(mrr) AS mrr FROM metrics');
     });
+  });
+
+  it('sizes an inline single_value embed COMPACT — honors a small height, no 340px chart floor', async () => {
+    const story =
+      '<div class="hs"><div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;single_value&quot;}}" style="width:100%;height:90px"></div></div>';
+    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    await waitFor(() => {
+      const div = storyRoot().querySelector('[data-question-inline]') as HTMLElement;
+      expect(div?.style.height).toBe('90px'); // honored, NOT clamped up to 340px
+    });
+  });
+
+  it('still applies the 340px chart floor to a NON-single_value inline embed', async () => {
+    const story =
+      '<div class="hs"><div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;,&quot;vizSettings&quot;:{&quot;type&quot;:&quot;table&quot;}}" style="width:100%;height:90px"></div></div>';
+    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    await waitFor(() => {
+      const div = storyRoot().querySelector('[data-question-inline]') as HTMLElement;
+      expect(div?.style.height).toBe('340px'); // clamped up to the chart floor
+    });
+  });
+
+  it('marks the story with data-file-id so FileView capture (Dev Tools "Download Image") finds it', async () => {
+    // Regression: stories rendered without data-file-id, so useScreenshot.captureFileView threw
+    // "FileView with id N not found" (questions/dashboards set it on their content region).
+    renderWithProviders(<StoryView content={content} fileId={1029} />);
+    await waitFor(() => {
+      expect(document.querySelector('[data-file-id="1029"]')).toBeTruthy();
+    });
+  });
+
+  it('hydrates a <Number> placeholder into an INLINE figure span (not a chart card)', async () => {
+    const story = '<div class="hs"><p>Latest MRR is <span data-number-inline="{&quot;id&quot;:1026,&quot;prefix&quot;:&quot;$&quot;}"></span>.</p></div>';
+    renderWithProviders(<StoryView content={{ description: null, story }} />);
+    await waitFor(() => {
+      const el = within(storyRoot() as unknown as HTMLElement).getByLabelText('inline number 1026');
+      expect(el.tagName).toBe('SPAN'); // inline in the prose, not a block embed
+    });
+  });
+
+  it('renders the new story when content changes (AgentHtml remounts on a content hash)', async () => {
+    // The real bug this guards against — a portal "removeChild: not a child" crash when content.story
+    // changes under mounted portals — only reproduces in a real browser (jsdom's react-dom tolerates
+    // the portal-host removal). So this is a smoke check that a content change cleanly shows the new
+    // story; the crash fix (keying AgentHtml on a content hash → REMOUNT instead of resetting
+    // innerHTML under live portals) is verified in the browser.
+    const { rerender } = renderWithProviders(<StoryView content={content} fileId={1} />);
+    await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
+    const next: StoryContent = { ...content, story: STORY.replace('The year demand went vertical', 'A brand-new headline') };
+    expect(() => rerender(<StoryView content={next} fileId={1} />)).not.toThrow();
+    await waitFor(() => expect(storyRoot().textContent).toContain('A brand-new headline'));
   });
 
   it('sanitizes hostile HTML', async () => {

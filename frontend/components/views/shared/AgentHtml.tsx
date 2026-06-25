@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Box } from '@chakra-ui/react';
+import { Box, EnvironmentProvider } from '@chakra-ui/react';
 
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
@@ -12,6 +12,9 @@ import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionC
 import StoryParamControl from '@/components/views/story/StoryParamControl';
 import { paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story-question';
+import { numberFromEl } from '@/lib/data/story-number';
+import type { InlineNumberEmbed } from '@/lib/data/story-number';
+import InlineNumber from '@/components/views/story/InlineNumber';
 import type { QuestionContent } from '@/lib/types';
 
 interface ChartTarget {
@@ -19,9 +22,16 @@ interface ChartTarget {
   questionId: number;
 }
 
+interface NumberTarget {
+  el: HTMLElement;
+  embed: InlineNumberEmbed;
+}
+
 interface InlineChartTarget {
   el: HTMLElement;
   content: QuestionContent;
+  /** single_value: render compact + without the chart-card chrome so the number blends in. */
+  bare?: boolean;
 }
 
 interface ParamTarget {
@@ -58,6 +68,18 @@ interface AgentHtmlProps {
   paramValues?: Record<string, unknown>;
   /** Called when the reader changes a param (so the page can persist/submit the values). */
   onParamValuesChange?: (values: Record<string, unknown>) => void;
+  /**
+   * Request to edit an inline `<Number>`'s query. The footnote popover can't host Monaco's
+   * autocomplete inside the story shadow root, so StoryView opens the full SqlEditor in a
+   * light-DOM drawer; `apply(newQuery)` writes the edit back to the body placeholder + re-runs.
+   */
+  onEditNumber?: (req: NumberQueryEditRequest) => void;
+}
+
+export interface NumberQueryEditRequest {
+  query: string;
+  connection?: string;
+  apply: (newQuery: string) => void;
 }
 
 export interface AgentHtmlHandle {
@@ -71,6 +93,9 @@ export interface AgentHtmlHandle {
 const MIN_CHART_W = 320;
 const MIN_CHART_H = 340;
 const DEFAULT_CHART_H = 400;
+// single_value embeds are just a number — far smaller floors so they read as inline figures.
+const SINGLE_VALUE_MIN_H = 48;
+const SINGLE_VALUE_DEFAULT_H = 120;
 
 /**
  * Renders one agent-authored HTML document into a shadow root on a
@@ -86,7 +111,7 @@ const DEFAULT_CHART_H = 400;
  * font-faces declared inside shadow trees don't load.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -94,6 +119,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const importsRef = useRef<string[]>([]);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
+  const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
   // The shared param context: the reader's current values, seeded once from the story
   // defaults. (AgentHtml remounts via `key` when the story reloads, re-seeding.)
@@ -170,7 +196,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // units): honor explicit px sizes, default a missing height, and clamp below-minimum boxes —
     // the tile (title bar + the chart's built-in 300px minHeight) can't physically render
     // smaller, it would just clip. Applied identically to saved and inline embeds.
-    const sizeEmbedEl = (el: HTMLElement) => {
+    const sizeEmbedEl = (el: HTMLElement, minH = MIN_CHART_H, defaultH = DEFAULT_CHART_H) => {
       el.replaceChildren(); // drop authored fallback content; the portal takes over
       // Snapshot the AUTHORED inline style before we clamp, so edit-mode serialization can restore it.
       el.setAttribute('data-mx-osz', el.getAttribute('style') ?? '');
@@ -179,7 +205,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (Number.isFinite(w)) el.style.width = `${Math.max(w, MIN_CHART_W)}px`;
       else if (!el.style.width) el.style.width = '100%';
       const h = px(el.style.height);
-      el.style.height = `${Number.isFinite(h) ? Math.max(h, MIN_CHART_H) : DEFAULT_CHART_H}px`;
+      el.style.height = `${Number.isFinite(h) ? Math.max(h, minH) : defaultH}px`;
     };
 
     const found: ChartTarget[] = [];
@@ -195,8 +221,22 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     root.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
       const embed = inlineQuestionFromEl(el);
       if (!embed) return;
-      sizeEmbedEl(el);
-      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed) });
+      // A single_value embed is just a styled number — it should NOT get the tall 340px chart-card
+      // treatment. Render it COMPACT (small height floor + compact default) and CHROME-LIGHT (no
+      // card border/bg) so it blends into the surrounding editorial layout; the agent styles the
+      // figure via singleValueConfig + its own container.
+      const isSingleValue = embed.vizSettings?.type === 'single_value';
+      sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
+      inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue });
+    });
+    // <span data-number-inline="…"> → an inline LIVE figure (not a chart card). Stays inline in
+    // the text flow — no sizing/clamping; InlineNumber renders the value in the span.
+    const numbersFound: NumberTarget[] = [];
+    root.querySelectorAll<HTMLElement>('[data-number-inline]').forEach((el) => {
+      const embed = numberFromEl(el);
+      if (!embed) return;
+      el.replaceChildren();
+      numbersFound.push({ el, embed });
     });
     // <div data-param-name="…"> → a reader filter control bound to the shared param context.
     const paramsFound: ParamTarget[] = [];
@@ -212,6 +252,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     setTargets(found);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInlineTargets(inlineFound);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNumberTargets(numbersFound);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setParamTargets(paramsFound);
   }, [sanitized, fluid]);
@@ -233,10 +275,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (el.tagName === 'STYLE') return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
     });
-    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline]').forEach(el => {
+    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
-  }, [editable, targets, inlineTargets, sanitized]);
+  }, [editable, targets, inlineTargets, numberTargets, sanitized]);
 
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
@@ -309,9 +351,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
           textAlign: 'left',
         }}
       />
+      {/* Portaled content lives in the story SHADOW ROOT, but ark-ui (Chakra Popover/Menu/Tooltip)
+          defaults its root node + Portal target to the top `document`. The mismatch breaks floating
+          positioning — the trigger is measured in the wrong tree and the panel pins to the top-left
+          corner (0,0). EnvironmentProvider tells ark to use the shadow root (each target's
+          getRootNode()), so popovers/menus portal into and position against the same tree as their
+          trigger. mirrorAppStyles already mirrors Chakra styles into the shadow root, so they're styled. */}
       {targets.map((t, i) => createPortal(
-        // The same tile the dashboard renders (DashboardView grid item):
-        // flex-column box + SmartEmbedded with clickable title and actions.
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+        {/* The same tile the dashboard renders (DashboardView grid item):
+            flex-column box + SmartEmbedded with clickable title and actions. */}
         <Box
           className="mx-chart-fill"
           bg="bg.subtle"
@@ -333,20 +382,23 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             externalParameters={externalParameters.length ? externalParameters : undefined}
             externalParamValues={externalParameters.length ? values : undefined}
           />
-        </Box>,
+        </Box>
+        </EnvironmentProvider>,
         t.el,
         `${i}-${t.questionId}`,
       ))}
       {inlineTargets.map((t, i) => createPortal(
-        // Inline story-local question: same chart-card chrome as a saved embed, but no title
-        // bar (there is no saved file / name) — the chart fills the card. Ideal for a styled
-        // single_value live number. Renders straight from the inline content (no file load).
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+        {/* Inline story-local question. A regular chart gets the same chart-card chrome as a saved
+            embed (border + bg, no title bar). A single_value (`bare`) renders CHROME-LIGHT —
+            transparent, no border — so the styled number blends into the surrounding design; the
+            agent owns its look via singleValueConfig + its own container. Renders straight from the
+            inline content (no file load). */}
         <Box
           className="mx-chart-fill"
-          bg="bg.subtle"
-          borderWidth="1px"
-          borderColor="border.default"
-          borderRadius="md"
+          {...(t.bare
+            ? {}
+            : { bg: 'bg.subtle', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'md' })}
           overflow="hidden"
           display="flex"
           flexDirection="column"
@@ -358,12 +410,37 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             externalParamValues={externalParameters.length ? values : undefined}
             enableDrilldown={false}
           />
-        </Box>,
+        </Box>
+        </EnvironmentProvider>,
         t.el,
         `inline-${i}`,
       ))}
+      {numberTargets.map((t, i) => createPortal(
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+          <InlineNumber
+            embed={t.embed}
+            externalParamValues={externalParameters.length ? values : undefined}
+            editable={editable}
+            onRequestEdit={(editable && onEditNumber && t.embed.query) ? () => onEditNumber({
+              query: t.embed.query ?? '',
+              connection: t.embed.connection,
+              apply: (newQuery) => {
+                // Write the edited query back to the body placeholder so serialize() captures it on
+                // Save (serialize keeps the embed's attrs), then re-render the figure so it re-runs live.
+                const next = { ...t.embed, query: newQuery };
+                t.el.setAttribute('data-number-inline', JSON.stringify(next));
+                setNumberTargets(prev => prev.map((x, idx) => (idx === i ? { ...x, embed: next } : x)));
+              },
+            }) : undefined}
+          />
+        </EnvironmentProvider>,
+        t.el,
+        `number-${i}`,
+      ))}
       {paramTargets.map((t, i) => createPortal(
-        <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />,
+        <EnvironmentProvider value={() => t.el.getRootNode()}>
+          <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />
+        </EnvironmentProvider>,
         t.el,
         `param-${i}-${t.param.name}`,
       ))}

@@ -28,6 +28,52 @@ describe('story-params — jsx attrs ⇄ StoryParam', () => {
   });
 });
 
+describe('story-params — agent style override', () => {
+  it('reads style + labelStyle objects from <Param> attrs', () => {
+    expect(paramFromJsxAttrs({ name: 'region', type: 'text', style: { background: '#111', color: '#fff' }, labelStyle: { color: '#888' } }))
+      .toMatchObject({ style: { background: '#111', color: '#fff' }, labelStyle: { color: '#888' } });
+  });
+
+  it('round-trips style + labelStyle through the placeholder', () => {
+    const p: StoryParam = { name: 'region', type: 'text', nullable: true, style: { background: '#111' }, labelStyle: { color: '#888' } };
+    expect(extractStoryParams(paramToPlaceholder(p))).toEqual([p]);
+  });
+
+  it('paramToJsx emits the style object as a JSX object literal', () => {
+    expect(paramToJsx({ name: 'region', type: 'text', nullable: true, style: { background: '#111' } }))
+      .toContain('style={{"background":"#111"}}');
+  });
+
+  it('reads style from a rendered placeholder element (render path)', () => {
+    const attrs: Record<string, string> = {
+      'data-param-name': 'region', 'data-param-type': 'text', 'data-param-nullable': 'true',
+      'data-param-style': '{"background":"#111"}', // getAttribute returns the entity-decoded value
+    };
+    const el = { getAttribute: (n: string) => attrs[n] ?? null };
+    expect(paramFromPlaceholderEl(el)?.style).toEqual({ background: '#111' });
+  });
+});
+
+describe('story-params — widget override (slider etc.)', () => {
+  it('reads widget + slider bounds from <Param> attrs', () => {
+    expect(paramFromJsxAttrs({ name: 'limit', type: 'number', widget: 'slider', min: 0, max: 100, step: 5 }))
+      .toMatchObject({ widget: 'slider', min: 0, max: 100, step: 5 });
+  });
+
+  it('round-trips widget + bounds through the placeholder', () => {
+    const p: StoryParam = { name: 'limit', type: 'number', nullable: true, widget: 'slider', min: 0, max: 100, step: 5 };
+    expect(extractStoryParams(paramToPlaceholder(p))).toEqual([p]);
+  });
+
+  it('paramToJsx emits widget + numeric bounds', () => {
+    const jsx = paramToJsx({ name: 'limit', type: 'number', nullable: true, widget: 'slider', min: 0, max: 100, step: 5 });
+    expect(jsx).toContain('widget="slider"');
+    expect(jsx).toContain('min={0}');
+    expect(jsx).toContain('max={100}');
+    expect(jsx).toContain('step={5}');
+  });
+});
+
 describe('story-params — placeholder round-trip (through content.story HTML)', () => {
   const params: StoryParam[] = [
     { name: 'city', type: 'text', nullable: false, source: { questionId: 5, column: 'region' } },

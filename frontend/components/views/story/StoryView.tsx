@@ -4,8 +4,11 @@ import { useRef, useState } from 'react';
 import { Box, Button, HStack, Icon, Text } from '@chakra-ui/react';
 import { LuBookOpen, LuCheck, LuPencil, LuX } from 'react-icons/lu';
 
-import AgentHtml, { type AgentHtmlHandle } from '@/components/views/shared/AgentHtml';
+import AgentHtml, { type AgentHtmlHandle, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
+import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryContent } from '@/lib/types';
+import { useAppSelector } from '@/store/hooks';
+import { selectFile } from '@/store/filesSlice';
 import { applyStoryHtmlEdit } from '@/lib/api/file-state';
 import { toaster } from '@/components/ui/toaster';
 import { STORY_W } from './ScaledStoryFrame';
@@ -15,6 +18,21 @@ import { STORY_W } from './ScaledStoryFrame';
 // against a ~1280px canvas, so cap at the same so desktop matches the design
 // while everything below reflows responsively (container queries + cqi).
 const STORY_MAX_W = '1280px';
+
+/**
+ * Cheap stable hash of the story HTML, used to KEY (and thus remount) AgentHtml whenever the story
+ * content changes. AgentHtml renders by imperatively resetting its shadow root's innerHTML and then
+ * portals the live embeds (charts / numbers / params) into nodes inside it. If the content changes
+ * while AgentHtml stays mounted, its effect resets innerHTML — destroying the nodes the portals are
+ * mounted into — and React then crashes unmounting them ("removeChild: not a child of this node").
+ * Remounting on content change makes React unmount the old portals from the still-intact old shadow
+ * root before a fresh one is built. (Cancel still bumps renderKey to discard in-DOM edits.)
+ */
+function hashStory(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return h;
+}
 
 interface StoryViewProps {
   content: StoryContent;
@@ -39,6 +57,10 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
   // current story — used to discard unsaved inline edits on Cancel.
   const [renderKey, setRenderKey] = useState(0);
   const agentRef = useRef<AgentHtmlHandle>(null);
+  // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
+  // in the story shadow root). The story's path feeds schema/connection autocomplete.
+  const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
+  const storyPath = useAppSelector(s => (fileId !== undefined ? selectFile(s, fileId)?.path : undefined));
 
   const handleSave = () => {
     if (fileId === undefined) return;
@@ -103,9 +125,13 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
         </HStack>
       )}
       <Box display="flex" justifyContent="center">
-        <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId } : {})}>
+        {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView
+            capture (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
+        <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId, 'data-file-id': fileId } : {})}>
           <AgentHtml
-            key={renderKey}
+            // Remount on Cancel (renderKey) AND whenever the story content changes (hash) — a live
+            // innerHTML reset under mounted portals crashes React's unmount. See hashStory above.
+            key={`${renderKey}:${hashStory(content.story ?? '')}`}
             ref={agentRef}
             html={content.story}
             width={STORY_W}
@@ -113,9 +139,11 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             editable={canEdit && editing}
             readOnly={readOnly}
             paramValues={content.parameterValues ?? undefined}
+            onEditNumber={setNumberEdit}
           />
         </Box>
       </Box>
+      <NumberQueryEditor request={numberEdit} filePath={storyPath} onClose={() => setNumberEdit(null)} />
     </Box>
   );
 }

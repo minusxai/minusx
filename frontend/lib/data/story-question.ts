@@ -12,7 +12,7 @@
  * Pure (client + server safe).
  */
 import type { QuestionParameter, VizSettings, QuestionContent } from '@/lib/validation/atlas-schemas';
-import { escAttr, unescAttr } from './html-attr';
+import { escTemplate, serializeJsonAttr, parseJsonAttr } from './html-attr';
 
 /** An inline question embedded directly in a story body (no saved file). */
 export interface InlineQuestionEmbed {
@@ -57,9 +57,8 @@ export function inlineQuestionToPlaceholder(e: InlineQuestionEmbed): string {
   if (e.vizSettings) payload.vizSettings = e.vizSettings;
   if (e.parameters) payload.parameters = e.parameters;
   if (e.height) payload.height = e.height;
-  const json = escAttr(JSON.stringify(payload));
   const h = (e.height ? String(e.height) : '430px').replace(/["']/g, '');
-  return `<div data-question-inline="${json}" style="width:100%;height:${h}"></div>`;
+  return `<div data-question-inline="${serializeJsonAttr(payload)}" style="width:100%;height:${h}"></div>`;
 }
 
 const INLINE_Q_DIV_RE = /<div\s+([^>]*?data-question-inline="[^"]*"[^>]*?)>\s*<\/div>/g;
@@ -80,16 +79,13 @@ function payloadToEmbed(payload: Record<string, unknown> | null | undefined): In
 
 function inlineFromDivInner(inner: string): InlineQuestionEmbed | null {
   const m = inner.match(/data-question-inline="([^"]*)"/);
-  if (!m) return null;
-  try { return payloadToEmbed(JSON.parse(unescAttr(m[1]))); } catch { return null; }
+  return m ? payloadToEmbed(parseJsonAttr<Record<string, unknown>>(m[1])) : null;
 }
 
 /** Read an inline embed from a rendered placeholder element (AgentHtml has the DOM node — the
  *  browser has already entity-decoded the attribute, so its value is plain JSON). */
 export function inlineQuestionFromEl(el: { getAttribute(name: string): string | null }): InlineQuestionEmbed | null {
-  const raw = el.getAttribute('data-question-inline');
-  if (raw == null) return null;
-  try { return payloadToEmbed(JSON.parse(raw)); } catch { return null; }
+  return payloadToEmbed(parseJsonAttr<Record<string, unknown>>(el.getAttribute('data-question-inline')));
 }
 
 const SAVED_Q_DIV_RE = /data-question-id="(\d+)"/g;
@@ -121,9 +117,6 @@ export function extractInlineQuestions(html: string | null | undefined): InlineQ
   }
   return out;
 }
-
-// Template-literal escaping for the query so multi-line SQL with <, >, { stays raw in jsx.
-const escTemplate = (s: string) => s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
 /** Inline embed → the `<Question/>` jsx the agent reads/edits (query as a raw template literal). */
 export function inlineQuestionToJsx(e: InlineQuestionEmbed): string {
