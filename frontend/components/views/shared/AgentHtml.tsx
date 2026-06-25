@@ -68,6 +68,18 @@ interface AgentHtmlProps {
   paramValues?: Record<string, unknown>;
   /** Called when the reader changes a param (so the page can persist/submit the values). */
   onParamValuesChange?: (values: Record<string, unknown>) => void;
+  /**
+   * Request to edit an inline `<Number>`'s query. The footnote popover can't host Monaco's
+   * autocomplete inside the story shadow root, so StoryView opens the full SqlEditor in a
+   * light-DOM drawer; `apply(newQuery)` writes the edit back to the body placeholder + re-runs.
+   */
+  onEditNumber?: (req: NumberQueryEditRequest) => void;
+}
+
+export interface NumberQueryEditRequest {
+  query: string;
+  connection?: string;
+  apply: (newQuery: string) => void;
 }
 
 export interface AgentHtmlHandle {
@@ -99,7 +111,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * font-faces declared inside shadow trees don't load.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -409,12 +421,17 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             embed={t.embed}
             externalParamValues={externalParameters.length ? values : undefined}
             editable={editable}
-            onEmbedChange={(next) => {
-              // Write the edited query back to the body placeholder so serialize() captures it on
-              // Save (serialize keeps the embed's attrs), then re-render the figure so it re-runs live.
-              t.el.setAttribute('data-number-inline', JSON.stringify(next));
-              setNumberTargets(prev => prev.map((x, idx) => (idx === i ? { ...x, embed: next } : x)));
-            }}
+            onRequestEdit={(editable && onEditNumber && t.embed.query) ? () => onEditNumber({
+              query: t.embed.query ?? '',
+              connection: t.embed.connection,
+              apply: (newQuery) => {
+                // Write the edited query back to the body placeholder so serialize() captures it on
+                // Save (serialize keeps the embed's attrs), then re-render the figure so it re-runs live.
+                const next = { ...t.embed, query: newQuery };
+                t.el.setAttribute('data-number-inline', JSON.stringify(next));
+                setNumberTargets(prev => prev.map((x, idx) => (idx === i ? { ...x, embed: next } : x)));
+              },
+            }) : undefined}
           />
         </EnvironmentProvider>,
         t.el,

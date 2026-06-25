@@ -7,7 +7,8 @@
  * it to reveal the source question's chart in a popover (footnote-style).
  */
 import { useState } from 'react';
-import { Box, Popover, Portal } from '@chakra-ui/react';
+import { Box, Button, Popover, Portal } from '@chakra-ui/react';
+import { LuPencil } from 'react-icons/lu';
 import type { CSSProperties } from 'react';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
@@ -26,51 +27,33 @@ function formatCell(v: unknown): string {
 }
 
 /**
- * The footnote's query panel: shows the SQL the figure runs (so it's auditable). For an inline
- * `<Number query>` in the story's EDIT mode it becomes editable — Apply writes the new query back
- * to the body. Native <textarea>/<pre> with inline styles (shadow-boundary safe, like the param
- * controls). `key`-resetting the textarea on a new `query` keeps the draft in sync after Apply.
+ * The footnote's query panel: shows the SQL the figure runs (read-only, for tracing). Editing the
+ * inline query opens the FULL SqlEditor (with autocomplete) in a light-DOM drawer at the StoryView
+ * level — Monaco's floating widgets (suggest/hover) mis-anchor inside the story shadow root, so the
+ * editor must live outside it. In edit mode this panel just offers the "Edit query" trigger.
  */
-function QueryPanel({ query, editable, onApply }: { query: string; editable?: boolean; onApply?: (q: string) => void }) {
-  const [draft, setDraft] = useState(query);
-  const wrap: CSSProperties = { padding: '10px 12px', borderBottom: '1px solid #e5e7eb', background: '#fff' };
+function QueryPanel({ query, editable, onEdit }: { query: string; editable?: boolean; onEdit?: () => void }) {
+  const wrap: CSSProperties = { padding: '10px 12px', borderBottom: '1px solid #e5e7eb', background: '#fafafa' };
   const label: CSSProperties = { fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6b7280', marginBottom: '4px' };
   const mono: CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: '11px', color: '#111827', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, maxHeight: '120px', overflow: 'auto' };
-  if (editable && onApply) {
-    return (
-      <div style={wrap}>
-        <div style={label}>Inline query — edit &amp; apply</div>
-        <textarea
-          aria-label="inline number query"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={5}
-          style={{ ...mono, width: '100%', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', padding: '6px', resize: 'vertical' }}
-        />
-        <button
-          type="button"
-          aria-label="apply inline number query"
-          disabled={draft === query}
-          onClick={() => onApply(draft)}
-          style={{ marginTop: '6px', fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: draft === query ? '#f3f4f6' : '#c8781a', color: draft === query ? '#9ca3af' : '#fff', cursor: draft === query ? 'default' : 'pointer' }}
-        >
-          Apply
-        </button>
-      </div>
-    );
-  }
   return (
     <div style={wrap}>
       <div style={label}>Source query</div>
       <pre aria-label="inline number query" style={mono}>{query}</pre>
+      {editable && onEdit && (
+        <Button size="xs" mt={2} variant="outline" aria-label="edit inline number query" onClick={onEdit}>
+          <LuPencil /> Edit query
+        </Button>
+      )}
     </div>
   );
 }
 
-/** The clickable figure + footnote popover. `source` is the source-question chart. */
+/** The clickable figure + footnote popover. `source` is the source-question chart. `onEditQuery`
+ *  (inline numbers, edit mode) opens the full SqlEditor drawer at the StoryView level. */
 function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
   embed: InlineNumberEmbed; text: string; source: React.ReactNode;
-  query?: string; editable?: boolean; onEditQuery?: (q: string) => void;
+  query?: string; editable?: boolean; onEditQuery?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const display = `${embed.prefix ?? ''}${text}${embed.suffix ?? ''}`;
@@ -92,7 +75,7 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
             <Popover.Arrow />
             <Popover.Body p={0}>
               {query != null && query !== '' && (
-                <QueryPanel key={query} query={query} editable={editable} onApply={onEditQuery} />
+                <QueryPanel key={query} query={query} editable={editable} onEdit={onEditQuery} />
               )}
               <Box height="260px" overflow="hidden" borderRadius="md">{source}</Box>
             </Popover.Body>
@@ -119,10 +102,10 @@ function SavedNumber({ id, embed, externalParamValues }: { id: number; embed: In
 }
 
 /** Inline-query figure: run the query, read its value, show the result chart in the footnote. In
- *  edit mode the query is editable (onEditQuery writes it back to the story body). */
-function InlineQueryNumber({ embed, externalParamValues, editable, onEmbedChange }: {
+ *  edit mode the popover offers "Edit query", which opens the full SqlEditor drawer (onRequestEdit). */
+function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit }: {
   embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown>;
-  editable?: boolean; onEmbedChange?: (next: InlineNumberEmbed) => void;
+  editable?: boolean; onRequestEdit?: () => void;
 }) {
   // Bind the story <Param> values this number's SQL references (`:name`) so a reader's slider /
   // the story's default params drive the figure live. Same helper the augmentation uses → the
@@ -139,16 +122,16 @@ function InlineQueryNumber({ embed, externalParamValues, editable, onEmbedChange
     parameters: [], parameterValues: null, references: null,
   };
   return <NumberSpan embed={embed} text={text} query={embed.query} editable={editable}
-    onEditQuery={onEmbedChange ? (q) => onEmbedChange({ ...embed, query: q }) : undefined}
+    onEditQuery={onRequestEdit}
     source={<EmbeddedQuestionContainer question={previewContent} questionId={0} enableDrilldown={false} />} />;
 }
 
-export default function InlineNumber({ embed, externalParamValues, editable, onEmbedChange }: {
+export default function InlineNumber({ embed, externalParamValues, editable, onRequestEdit }: {
   embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown>;
-  editable?: boolean; onEmbedChange?: (next: InlineNumberEmbed) => void;
+  editable?: boolean; onRequestEdit?: () => void;
 }) {
   // Conditional RENDER (not conditional hooks) so each path calls its hooks unconditionally.
   return embed.id != null
     ? <SavedNumber id={embed.id} embed={embed} externalParamValues={externalParamValues} />
-    : <InlineQueryNumber embed={embed} externalParamValues={externalParamValues} editable={editable} onEmbedChange={onEmbedChange} />;
+    : <InlineQueryNumber embed={embed} externalParamValues={externalParamValues} editable={editable} onRequestEdit={onRequestEdit} />;
 }

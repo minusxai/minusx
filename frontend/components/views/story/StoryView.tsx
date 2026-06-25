@@ -4,8 +4,11 @@ import { useRef, useState } from 'react';
 import { Box, Button, HStack, Icon, Text } from '@chakra-ui/react';
 import { LuBookOpen, LuCheck, LuPencil, LuX } from 'react-icons/lu';
 
-import AgentHtml, { type AgentHtmlHandle } from '@/components/views/shared/AgentHtml';
+import AgentHtml, { type AgentHtmlHandle, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
+import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryContent } from '@/lib/types';
+import { useAppSelector } from '@/store/hooks';
+import { selectFile } from '@/store/filesSlice';
 import { applyStoryHtmlEdit } from '@/lib/api/file-state';
 import { toaster } from '@/components/ui/toaster';
 import { STORY_W } from './ScaledStoryFrame';
@@ -39,6 +42,10 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
   // current story — used to discard unsaved inline edits on Cancel.
   const [renderKey, setRenderKey] = useState(0);
   const agentRef = useRef<AgentHtmlHandle>(null);
+  // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
+  // in the story shadow root). The story's path feeds schema/connection autocomplete.
+  const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
+  const storyPath = useAppSelector(s => (fileId !== undefined ? selectFile(s, fileId)?.path : undefined));
 
   const handleSave = () => {
     if (fileId === undefined) return;
@@ -115,9 +122,11 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             editable={canEdit && editing}
             readOnly={readOnly}
             paramValues={content.parameterValues ?? undefined}
+            onEditNumber={setNumberEdit}
           />
         </Box>
       </Box>
+      <NumberQueryEditor request={numberEdit} filePath={storyPath} onClose={() => setNumberEdit(null)} />
     </Box>
   );
 }
