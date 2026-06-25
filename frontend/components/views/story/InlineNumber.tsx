@@ -3,8 +3,8 @@
 /**
  * InlineNumber — renders a story `<Number/>` embed as a LIVE figure inside the prose (a styled
  * <span>, not a chart card). Polymorphic: a saved question (`id`) or an inline query (`query`).
- * The agent styles it freely via `style`. A subtle dotted underline marks it as traceable: click
- * it to reveal the source question's chart in a popover (footnote-style).
+ * The agent styles it freely via `style` (no opinionated default decoration). It stays traceable:
+ * click it to reveal the source question's chart in a popover (footnote-style).
  */
 import { useState } from 'react';
 import { Box, Button, Popover, Portal } from '@chakra-ui/react';
@@ -63,8 +63,9 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
         <span
           role="button"
           aria-label={`live number ${display}`}
-          // dotted underline = "traceable to a question"; the agent's style still wins.
-          style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '3px', ...(embed.style as CSSProperties) }}
+          // No default decoration — the agent styles the figure via `style` (add an underline
+          // only if it wants one). cursor:pointer hints it's clickable → reveals the source.
+          style={{ cursor: 'pointer', ...(embed.style as CSSProperties) }}
         >
           {display}
         </span>

@@ -53,3 +53,19 @@ describe('InlineNumber footnote — source query (read) + Edit-query trigger', (
     expect(screen.queryByLabelText('edit inline number query')).toBeNull();
   });
 });
+
+describe('InlineNumber styling — no opinionated default decoration', () => {
+  it('renders the live number with NO default underline (the agent styles it, not us)', () => {
+    renderWithProviders(<InlineNumber embed={{ query: QUERY, connection: 'duck', col: 'v' }} />);
+    const span = screen.getByLabelText(/^live number/);
+    expect(span.style.textDecoration).toBe('');
+    expect(span.getAttribute('style') || '').not.toMatch(/underline|dotted/);
+  });
+
+  it('applies an underline ONLY when the agent asks for it via style', () => {
+    renderWithProviders(
+      <InlineNumber embed={{ query: QUERY, connection: 'duck', col: 'v', style: { textDecoration: 'underline' } }} />,
+    );
+    expect(screen.getByLabelText(/^live number/).style.textDecoration).toContain('underline');
+  });
+});
