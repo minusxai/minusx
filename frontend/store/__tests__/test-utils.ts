@@ -178,3 +178,17 @@ export async function mkPublished(
   return DocumentDB.create(name, path, type, content as any, refs, editId, false);
 }
 
+/**
+ * Parse a tool result's JSON payload, whether `content` is a plain string (object
+ * auto-stringified by the orchestrator) or a content-block array (the file tools now
+ * emit `[ {text: json}, {text: <file_markup>…}, ...images ]` — the JSX markup as a
+ * separate raw block). Returns the JSON from the first text block.
+ */
+export function parseToolJson(content: unknown): any {
+  if (Array.isArray(content)) {
+    const textBlock = content.find((b: any) => b?.type === 'text');
+    return textBlock ? JSON.parse((textBlock as { text: string }).text) : undefined;
+  }
+  return typeof content === 'string' ? JSON.parse(content) : content;
+}
+

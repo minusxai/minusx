@@ -2,7 +2,7 @@
  * Test for editFile functionality - verifies that editing a file properly
  * updates persistableChanges and isDirty state
  */
-import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
+import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase, parseToolJson } from './test-utils';
 import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted, selectPersistableContent } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
@@ -894,7 +894,7 @@ describe('CreateFile tool - auto-execute query results', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
 
     const qr = parsed.state.queryResults[0];
@@ -972,7 +972,7 @@ describe('CreateFile tool - content validation', () => {
       makeToolCall({ file_type: 'question' }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect(parsed.state.fileState.type).toBe('question');
     expect(parsed.state.fileState.isDirty).toBe(false);
@@ -987,7 +987,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect(parsed.state.fileState.content.query).toBe('SELECT * FROM users');
   });
@@ -1000,7 +1000,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect((parsed.validation ?? []).length).toBeGreaterThan(0);
   });
@@ -1013,7 +1013,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect((parsed.validation ?? []).join(' ')).toMatch(/pivotConfig/);
   });
@@ -1035,7 +1035,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
   });
 
@@ -1048,7 +1048,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(false);
     expect(parsed.error).toMatch(/Cannot create a dashboard in the background/);
   });
@@ -1064,7 +1064,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect(parsed.vizWarning).toBeTruthy();
     expect(parsed.vizWarning).toMatch(/X-axis/i);
@@ -1081,7 +1081,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect(parsed.vizWarning).toBeTruthy();
   });
@@ -1097,7 +1097,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect(parsed.vizWarning).toBeUndefined();
   });
@@ -1113,7 +1113,7 @@ describe('CreateFile tool - content validation', () => {
       }),
       {} as any
     );
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
     expect(parsed.vizWarning).toBeUndefined();
   });
@@ -1378,7 +1378,7 @@ describe('EditFile - notebook cell auto-execute', () => {
     expect(executed?.['cell-1']?.database).toBe('mxfood');
 
     // The fresh result flows back to the agent in the response.
-    const parsed = JSON.parse(result.content as string);
+    const parsed = parseToolJson(result.content);
     const qr = parsed.queryResults?.[0];
     expect(qr).toBeDefined();
     expect(qr.data).toContain('| 2 |');

@@ -29,7 +29,7 @@ templates:
     - Current Connection ID: The current database connection you should use for all queries
     - Home Folder: Your home folder path for file operations
     - Max Steps: You have a maximum of {max_steps} tool calls to answer the user's question
-    - AppState: Page state at the time of the user request (file type and the file's `markup` — its content as a JSX/XML document). The markup reflects saved state plus any unsaved edits. Use this to understand the current state of the file, and as the `oldMatch` source for EditFile. The markup is the only edit surface, everything else is metadata for your reference.
+    - AppState: Page state at the time of the user request, as a JSON block of file metadata. Each file's `markup` (its content as a JSX/XML document) is NOT inside that JSON — it is printed right after it as a raw `<file_markup file_id=…>` block (real JSX with real newlines, never an escaped JSON string). The markup reflects saved state plus any unsaved edits. Use the JSON for metadata and the `<file_markup>` block to understand + edit the file: it is the only edit surface, and the verbatim `oldMatch` source for EditFile. ReadFiles, CreateFile, and EditFile responses use the same split (metadata JSON + raw `<file_markup>` block).
     - CurrentTime
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
     - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list.
@@ -154,7 +154,7 @@ templates:
 
     ### File Reading & Editing
     - **ReadFiles(fileIds: int[], maxChars?: int, runQueries?: bool)**: Load one or more files. Returns `CompressedAugmentedFile` objects (see File State Schema). Only needed for files not already in AppState. Chart images are full-fidelity; text table data is truncated at maxChars chars (default 10k, max 100k) — increase to see more rows. Set runQueries: false to skip query execution and load metadata only.
-    - **EditFile(fileId: int, changes: [{{oldMatch, newMatch, replaceAll?}}])**: Apply each find-and-replace in order on the file's `markup` (the JSX/XML edit surface — NOT JSON). Copy each `oldMatch` directly from the markup in AppState. Changes are staged as drafts — not saved until published. Returns updated `CompressedAugmentedFile` so you can verify `isDirty: true`.
+    - **EditFile(fileId: int, changes: [{{oldMatch, newMatch, replaceAll?}}])**: Apply each find-and-replace in order on the file's `markup` (the JSX/XML edit surface — NOT JSON). Copy each `oldMatch` directly from the file's `<file_markup>` block (in AppState / ReadFiles). Changes are staged as drafts — not saved until published. Returns updated `CompressedAugmentedFile` so you can verify `isDirty: true`.
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
@@ -993,7 +993,7 @@ templates:
     4. **Respond**: Summarize insights, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
 
     ### EditFile Tips
-    - Copy the `oldMatch` snippet verbatim from the file's `markup` in AppState. **Shortest unique match wins** — longer matches fail more often.
+    - Copy the `oldMatch` snippet verbatim from the file's `<file_markup>` block (in AppState / ReadFiles). **Shortest unique match wins** — longer matches fail more often.
     - Match the markup text directly — e.g. `<type>table</type>`, or a raw SQL fragment inside the query's {{`…`}} child. The markup is clean text (no JSON escaping), so `oldMatch` is a short literal substring.
     - **One element per change entry**. Don't span multiple markup elements in a single oldMatch (e.g. `<query>` + `<parameters>` together) — use separate entries in `changes` instead.
     - Group related changes (e.g. updating both a query and its viz settings) into a single EditFile call with multiple entries in `changes` — this is more efficient and atomic than multiple tool calls.

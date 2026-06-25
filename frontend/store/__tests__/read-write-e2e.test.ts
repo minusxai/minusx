@@ -9,7 +9,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
+import { getTestDbPath, initTestDatabase, cleanupTestDatabase, parseToolJson } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
 import { readFiles, publishFile, editFileStr, editFile } from '@/lib/api/file-state';
@@ -1544,7 +1544,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       );
 
       // Result content should be a CompressedAugmentedFile JSON
-      const content = JSON.parse(result.content as string);
+      const content = parseToolJson(result.content);
 
       // Should have fileState with isDirty and updated content
       expect(content.fileState).toBeDefined();
@@ -1601,7 +1601,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       );
 
       // Edit must have succeeded (staged in Redux)
-      const parsed = JSON.parse(result.content as string);
+      const parsed = parseToolJson(result.content);
       expect(parsed.fileState.isDirty).toBe(true);
       expect((parsed.fileState.content as any).description).toBe('Step 1: parameters updated next');
 
