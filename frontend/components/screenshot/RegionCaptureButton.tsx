@@ -26,8 +26,13 @@ export default function RegionCaptureButton() {
   const handleSelect = useCallback(async (rect: SelectionRect) => {
     setSelecting(false);
     try {
+      // Capture the file view (the relevant content) rather than the whole document.body —
+      // body capture is slow/unreliable on a complex SPA (it clones the entire app + inlines
+      // every stylesheet). Fall back to body on pages with no file view (explore/folder).
+      const target = (document.querySelector('[data-file-id]') as HTMLElement | null) ?? undefined;
       const blob = await captureRegionBlob(rect, {
         colorMode,
+        target,
         // Exclude the selection overlay from its own screenshot.
         filter: (node) => !(node instanceof HTMLElement && node.hasAttribute('data-region-select-overlay')),
       });
