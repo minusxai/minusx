@@ -5,7 +5,8 @@ import { LuCopy, LuCheck } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import Editor from '@monaco-editor/react';
 import { useState } from 'react';
-import { AppState, appStateForLlm } from '@/lib/appState';
+import { AppState, appStateForLlm, takeAppStateMarkup } from '@/lib/appState';
+import { renderMarkupBlocks } from '@/lib/api/markup-blocks';
 
 interface AppStateViewerProps {
   appState: AppState | null | undefined;
@@ -16,9 +17,16 @@ export default function AppStateViewer({ appState, maxHeight = '400px' }: AppSta
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const [copied, setCopied] = useState(false);
 
-  // Show what the AGENT sees: `content` is stripped at the LLM boundary (the agent reads
-  // `markup`), so mirror that here rather than displaying the raw client app state.
-  const jsonString = JSON.stringify(appState ? appStateForLlm(appState) : appState, null, 2);
+  // Show what the AGENT actually sees, mirroring `buildUserContent`: `content` is stripped
+  // (`appStateForLlm`) and each file's `markup` is pulled OUT of the JSON into separate raw
+  // `<file_markup>` blocks (`takeAppStateMarkup`) — so this is not valid JSON, it's the
+  // prompt-shaped text. Rendered as plaintext below.
+  const jsonString = (() => {
+    if (!appState) return JSON.stringify(appState, null, 2);
+    const { value, blocks } = takeAppStateMarkup(appStateForLlm(appState));
+    const markupText = blocks.length ? `\n${renderMarkupBlocks(blocks)}` : '';
+    return `<AppState>${JSON.stringify(value, null, 2)}</AppState>${markupText}`;
+  })();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(jsonString);
@@ -61,7 +69,7 @@ export default function AppStateViewer({ appState, maxHeight = '400px' }: AppSta
       >
         <Editor
           height="300px"
-          defaultLanguage="json"
+          defaultLanguage="plaintext"
           value={jsonString}
           theme={colorMode === 'dark' ? 'vs-dark' : 'vs-light'}
           options={{
