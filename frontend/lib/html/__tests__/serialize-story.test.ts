@@ -23,6 +23,7 @@ function makeRoot(): HTMLDivElement {
     '<div data-question-inline="{&quot;query&quot;:&quot;SELECT 1&quot;,&quot;connection_name&quot;:&quot;duckdb&quot;}" data-mx-osz="width:100%;height:200px" contenteditable="false">' +
     '<div class="rendered-chart">inline echarts junk</div>' +
     '</div>' +
+    '<span data-number-inline="{&quot;query&quot;:&quot;SELECT 1 AS v&quot;,&quot;connection&quot;:&quot;duck&quot;}" contenteditable="false">$1</span>' +
     '</div>';
   return root;
 }
@@ -62,6 +63,18 @@ describe('serializeEditedStory', () => {
   it('strips all contenteditable attributes', () => {
     const out = serializeEditedStory(makeRoot(), []);
     expect(out).not.toContain('contenteditable');
+  });
+
+  it('preserves an inline <Number> placeholder — incl. a query EDITED via the footnote popover', () => {
+    // The popover edit writes the new query onto the placeholder via setAttribute(rawJSON); on Save
+    // serialize() must keep it (empty span, attr intact) so the edit persists into content.story.
+    const root = makeRoot();
+    const span = root.querySelector('[data-number-inline]') as HTMLElement;
+    span.setAttribute('data-number-inline', JSON.stringify({ query: 'SELECT 2 AS v', connection: 'duck' }));
+    const out = serializeEditedStory(root, []);
+    expect(out).toContain('data-number-inline');
+    expect(out).toContain('SELECT 2 AS v');   // the EDITED query survived
+    expect(out).not.toContain('SELECT 1 AS v'); // the old one is gone
   });
 
   it('re-injects hoisted @import font lines into the first style block', () => {

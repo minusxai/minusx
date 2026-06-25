@@ -405,7 +405,17 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       ))}
       {numberTargets.map((t, i) => createPortal(
         <EnvironmentProvider value={() => t.el.getRootNode()}>
-          <InlineNumber embed={t.embed} externalParamValues={externalParameters.length ? values : undefined} />
+          <InlineNumber
+            embed={t.embed}
+            externalParamValues={externalParameters.length ? values : undefined}
+            editable={editable}
+            onEmbedChange={(next) => {
+              // Write the edited query back to the body placeholder so serialize() captures it on
+              // Save (serialize keeps the embed's attrs), then re-render the figure so it re-runs live.
+              t.el.setAttribute('data-number-inline', JSON.stringify(next));
+              setNumberTargets(prev => prev.map((x, idx) => (idx === i ? { ...x, embed: next } : x)));
+            }}
+          />
         </EnvironmentProvider>,
         t.el,
         `number-${i}`,
