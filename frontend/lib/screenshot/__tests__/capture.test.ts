@@ -9,7 +9,7 @@ vi.mock('html-to-image', () => ({
 }));
 
 import { toJpeg, toPng } from 'html-to-image';
-import { captureElementBlob, captureFileViewBlob } from '../capture';
+import { captureElementBlob, captureFileViewBlob, cropSourceRect } from '../capture';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,5 +54,24 @@ describe('captureFileViewBlob', () => {
 
   it('throws a clear error when no element has that data-file-id', async () => {
     await expect(captureFileViewBlob(999, { colorMode: 'light' })).rejects.toThrow(/not found/);
+  });
+});
+
+describe('cropSourceRect — viewport selection → source crop within the captured image', () => {
+  it('maps a selection inside an element (no scroll) scaled by pixelRatio', () => {
+    // target at (100,50); selection at viewport (150,80) sized 200x100; pr=2
+    expect(cropSourceRect({ x: 150, y: 80, width: 200, height: 100 }, { left: 100, top: 50 }, 2))
+      .toEqual({ sx: 100, sy: 60, sw: 400, sh: 200 });
+  });
+
+  it('handles a scrolled document.body (negative box top) so coords stay in image space', () => {
+    // body scrolled down 300px → box.top = -300; a selection at viewport y=20 is 320px into the doc
+    expect(cropSourceRect({ x: 0, y: 20, width: 50, height: 50 }, { left: 0, top: -300 }, 1))
+      .toEqual({ sx: 0, sy: 320, sw: 50, sh: 50 });
+  });
+
+  it('clamps negative offsets to 0 and zero sizes to at least 1', () => {
+    expect(cropSourceRect({ x: 0, y: 0, width: 0, height: 0 }, { left: 10, top: 10 }, 1))
+      .toEqual({ sx: 0, sy: 0, sw: 1, sh: 1 });
   });
 });
