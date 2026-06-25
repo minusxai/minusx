@@ -23,7 +23,7 @@ const EditFileParams = Type.Object({
   })),
 });
 
-// The agent edits the file's MARKUP (the `markup` field in AppState / ReadFiles), not JSON.
+// The agent edits the file's MARKUP (the raw `<file_markup>` block in AppState / ReadFiles), not JSON.
 const MARKUP_FORMAT = `Every file projects to a single JSX document — that is what you edit. It is delivered as a raw \`<file_markup file_id=…>\` block printed after the AppState / ReadFiles / CreateFile / EditFile JSON (real JSX, never an escaped JSON string value). The content object's fields are the top-level elements (no wrapper). It is all JSX.
 
 Rules (uniform for every file type):
