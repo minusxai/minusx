@@ -4,6 +4,8 @@ import { Box, GridItem, HStack, VStack, Text, Icon, Image } from '@chakra-ui/rea
 import { LuCamera, LuX } from 'react-icons/lu';
 import { DisplayProps, type ScreenshotDetails } from '@/lib/types';
 import { type DetailCardProps } from './DetailCarousel';
+import { useAppDispatch } from '@/store/hooks';
+import { openImageLightbox } from '@/store/uiSlice';
 
 const IMG_LABEL = 'Captured screenshot';
 
@@ -39,6 +41,7 @@ function extractScreenshotUrl(msg: { details?: unknown; content?: unknown }): st
 
 // ─── Detail card (AgentTurnContainer carousel) — the full screenshot ──────────
 export function ScreenshotDetailCard({ msg }: DetailCardProps) {
+  const dispatch = useAppDispatch();
   const url = extractScreenshotUrl(msg as { details?: unknown; content?: unknown });
   if (!url) {
     return (
@@ -52,13 +55,15 @@ export function ScreenshotDetailCard({ msg }: DetailCardProps) {
   }
   return (
     <Box mx={3} mb={2} borderRadius="md" border="1px solid" borderColor="border.default" overflow="hidden" bg="bg.canvas">
-      <Image aria-label={IMG_LABEL} alt={IMG_LABEL} src={url} w="full" objectFit="contain" />
+      <Image aria-label={IMG_LABEL} alt={IMG_LABEL} src={url} w="full" objectFit="contain"
+        cursor="zoom-in" onClick={() => dispatch(openImageLightbox(url))} />
     </Box>
   );
 }
 
 // ─── Compact display — a thumbnail inline under the response ──────────────────
 export default function ScreenshotDisplay({ toolCallTuple }: DisplayProps) {
+  const dispatch = useAppDispatch();
   const [, toolMessage] = toolCallTuple;
   // Still capturing — render nothing until the result lands (timeline shows the pending tool).
   if (toolMessage.content === '(executing...)') return null;
@@ -93,6 +98,8 @@ export default function ScreenshotDisplay({ toolCallTuple }: DisplayProps) {
           border="1px solid"
           borderColor="border.muted"
           bg="bg.canvas"
+          cursor="zoom-in"
+          onClick={() => dispatch(openImageLightbox(url))}
         />
       </VStack>
     </GridItem>
