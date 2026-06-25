@@ -46,12 +46,6 @@ Changes are applied sequentially in order — later entries can depend on earlie
 All changes succeed or the batch fails: on failure the response includes \`succeededCount\`
 and \`failedIndex\` so you know exactly where to retry. On fail, retry with a shortened/uniquer oldMatch.
 
-Example — change the SQL ordering and the viz type in one call:
-EditFile(fileId=123, changes=[
-    {"oldMatch": 'GROUP BY 1 ORDER BY 1', "newMatch": 'GROUP BY 1 ORDER BY 2 DESC'},
-    {"oldMatch": '<type>table</type>', "newMatch": '<type>bar</type>'}
-])
-
 CRITICAL — query + parameters must stay in sync:
 If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
 change to the \`<parameters>\` in the same call — orphaned or missing parameters fail execution.
