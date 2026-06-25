@@ -34,6 +34,8 @@ describe('InlineNumber footnote — source query (read) + Edit-query trigger', (
     });
     // not editable → no Edit-query trigger
     expect(screen.queryByLabelText('edit inline number query')).toBeNull();
+    // no redundant single_value source chart (that empty 260px box was the white block)
+    expect(screen.queryByLabelText('inline chart')).toBeNull();
   });
 
   it('in EDIT mode offers "Edit query", which requests the editor (onRequestEdit)', async () => {
@@ -51,5 +53,21 @@ describe('InlineNumber footnote — source query (read) + Edit-query trigger', (
     fireEvent.click(screen.getByLabelText(/^live number/));
     await waitFor(() => expect(screen.getByLabelText('saved chart')).toBeInTheDocument());
     expect(screen.queryByLabelText('edit inline number query')).toBeNull();
+  });
+});
+
+describe('InlineNumber styling — no opinionated default decoration', () => {
+  it('renders the live number with NO default underline (the agent styles it, not us)', () => {
+    renderWithProviders(<InlineNumber embed={{ query: QUERY, connection: 'duck', col: 'v' }} />);
+    const span = screen.getByLabelText(/^live number/);
+    expect(span.style.textDecoration).toBe('');
+    expect(span.getAttribute('style') || '').not.toMatch(/underline|dotted/);
+  });
+
+  it('applies an underline ONLY when the agent asks for it via style', () => {
+    renderWithProviders(
+      <InlineNumber embed={{ query: QUERY, connection: 'duck', col: 'v', style: { textDecoration: 'underline' } }} />,
+    );
+    expect(screen.getByLabelText(/^live number/).style.textDecoration).toContain('underline');
   });
 });

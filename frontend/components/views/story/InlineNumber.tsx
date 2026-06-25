@@ -3,8 +3,8 @@
 /**
  * InlineNumber — renders a story `<Number/>` embed as a LIVE figure inside the prose (a styled
  * <span>, not a chart card). Polymorphic: a saved question (`id`) or an inline query (`query`).
- * The agent styles it freely via `style`. A subtle dotted underline marks it as traceable: click
- * it to reveal the source question's chart in a popover (footnote-style).
+ * The agent styles it freely via `style` (no opinionated default decoration). It stays traceable:
+ * click it to reveal the source question's chart in a popover (footnote-style).
  */
 import { useState } from 'react';
 import { Box, Button, Popover, Portal } from '@chakra-ui/react';
@@ -18,7 +18,6 @@ import { buildQueryParamValues, bindReferencedParams } from '@/lib/sql/sql-param
 import type { InlineNumberEmbed } from '@/lib/data/story-number';
 import type { QuestionContent } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
-import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
 
 function formatCell(v: unknown): string {
   if (v == null) return '—';
@@ -52,7 +51,7 @@ function QueryPanel({ query, editable, onEdit }: { query: string; editable?: boo
 /** The clickable figure + footnote popover. `source` is the source-question chart. `onEditQuery`
  *  (inline numbers, edit mode) opens the full SqlEditor drawer at the StoryView level. */
 function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
-  embed: InlineNumberEmbed; text: string; source: React.ReactNode;
+  embed: InlineNumberEmbed; text: string; source?: React.ReactNode;
   query?: string; editable?: boolean; onEditQuery?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -63,8 +62,9 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
         <span
           role="button"
           aria-label={`live number ${display}`}
-          // dotted underline = "traceable to a question"; the agent's style still wins.
-          style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: '3px', ...(embed.style as CSSProperties) }}
+          // No default decoration — the agent styles the figure via `style` (add an underline
+          // only if it wants one). cursor:pointer hints it's clickable → reveals the source.
+          style={{ cursor: 'pointer', ...(embed.style as CSSProperties) }}
         >
           {display}
         </span>
@@ -77,7 +77,9 @@ function NumberSpan({ embed, text, source, query, editable, onEditQuery }: {
               {query != null && query !== '' && (
                 <QueryPanel key={query} query={query} editable={editable} onEdit={onEditQuery} />
               )}
-              <Box height="260px" overflow="hidden" borderRadius="md">{source}</Box>
+              {source != null && (
+                <Box height="260px" overflow="hidden" borderRadius="md">{source}</Box>
+              )}
             </Popover.Body>
           </Popover.Content>
         </Popover.Positioner>
@@ -97,8 +99,11 @@ function SavedNumber({ id, embed, externalParamValues }: { id: number; embed: In
   });
   const col = embed.col ?? data?.columns?.[0];
   const text = formatCell(data?.rows?.[0] && col ? data.rows[0][col] : null);
+  // Show the saved question's chart in the footnote — but skip a single_value question, whose
+  // "chart" is just the figure again (a redundant empty block, like the inline case).
+  const showChart = content?.vizSettings?.type !== 'single_value';
   return <NumberSpan embed={embed} text={text} query={content?.query ?? undefined}
-    source={<SmartEmbeddedQuestionContainer questionId={id} showTitle enableDrilldown={false} />} />;
+    source={showChart ? <SmartEmbeddedQuestionContainer questionId={id} showTitle enableDrilldown={false} /> : undefined} />;
 }
 
 /** Inline-query figure: run the query, read its value, show the result chart in the footnote. In
@@ -116,14 +121,10 @@ function InlineQueryNumber({ embed, externalParamValues, editable, onRequestEdit
   });
   const col = embed.col ?? data?.columns?.[0];
   const text = formatCell(data?.rows?.[0] && col ? data.rows[0][col] : null);
-  const previewContent: QuestionContent = {
-    description: null, query: embed.query ?? '', connection_name: embed.connection ?? '',
-    vizSettings: { type: 'single_value', yCols: col ? [col] : null } as QuestionContent['vizSettings'],
-    parameters: [], parameterValues: null, references: null,
-  };
-  return <NumberSpan embed={embed} text={text} query={embed.query} editable={editable}
-    onEditQuery={onRequestEdit}
-    source={<EmbeddedQuestionContainer question={previewContent} questionId={0} enableDrilldown={false} />} />;
+  // No source chart in the footnote: an inline number's "chart" is a single_value of the same
+  // query — identical to the figure already shown, and it left an empty white block. The popover
+  // shows the SQL (the useful trace) instead.
+  return <NumberSpan embed={embed} text={text} query={embed.query} editable={editable} onEditQuery={onRequestEdit} />;
 }
 
 export default function InlineNumber({ embed, externalParamValues, editable, onRequestEdit }: {

@@ -1,166 +1,54 @@
 /**
- * useScreenshot hook - Client-side screenshot capture
- *
- * Uses html-to-image for fast, high-quality screenshots with native canvas support.
- * Works with ECharts (canvas-based) out of the box.
+ * useScreenshot hook — thin React wrapper over the plain capture core
+ * (lib/screenshot/capture.ts). It only reads `colorMode` from Redux and forwards it;
+ * all real capture logic lives in capture.ts so tool handlers / region-select can
+ * reuse it without a hook.
  */
 import { useCallback } from 'react';
-import { toJpeg, toPng } from 'html-to-image'; // toPng used when format: 'png' is set
 import { useAppSelector } from '@/store/hooks';
 import { ScreenshotOptions, ScreenshotResult } from '../screenshot/types';
+import {
+  captureElementBlob,
+  captureElementFullHeightBlob,
+  captureFileViewBlob,
+  type CaptureOptions,
+} from '../screenshot/capture';
 
 export function useScreenshot(options?: ScreenshotOptions) {
   const colorMode = useAppSelector(state => state.ui.colorMode);
 
-  /**
-   * Generic element capture using html-to-image
-   * Returns a Blob that can be downloaded or sent to API
-   */
-  const captureElement = useCallback(async (element: HTMLElement): Promise<Blob> => {
-    const defaultBgColor = colorMode === 'dark' ? '#0D1117' : '#FAFBFC';
+  const captureElement = useCallback(
+    (element: HTMLElement): Promise<Blob> =>
+      captureElementBlob(element, { ...options, colorMode } as CaptureOptions),
+    [colorMode, options],
+  );
 
-    const pixelRatio = options?.maxWidth != null
-      ? options.maxWidth / element.offsetWidth
-      : (options?.pixelRatio ?? 0.75);
+  const captureElementFullHeight = useCallback(
+    (element: HTMLElement): Promise<Blob> =>
+      captureElementFullHeightBlob(element, { ...options, colorMode } as CaptureOptions),
+    [colorMode, options],
+  );
 
-    const format = options?.format ?? 'jpeg';
-    const capture = format === 'png' ? toPng : toJpeg;
-    const blobFromDataURL = (dataURL: string) =>
-      fetch(dataURL).then(r => r.blob());
+  const captureFileView = useCallback(
+    (fileId: number, o?: { fullHeight?: boolean }): Promise<Blob> =>
+      captureFileViewBlob(fileId, { ...options, colorMode, fullHeight: o?.fullHeight } as CaptureOptions & { fullHeight?: boolean }),
+    [colorMode, options],
+  );
 
-    const dataURL = await capture(element, {
-      pixelRatio,
-      backgroundColor: options?.backgroundColor ?? defaultBgColor,
-      filter: options?.filter,
-      quality: options?.quality ?? 0.9,
-    });
-    const blob = await blobFromDataURL(dataURL);
-
-    if (!blob) throw new Error('Screenshot capture failed');
-    return blob;
-  }, [colorMode, options]);
-
-  /**
-   * Capture element with full height (including scrolled content)
-   * Temporarily expands all scrollable containers to their full height
-   */
-  const captureElementFullHeight = useCallback(async (element: HTMLElement): Promise<Blob> => {
-    // Find all scrollable containers within the element
-    const scrollableElements = Array.from(element.querySelectorAll('*')).filter(el => {
-      const computedStyle = window.getComputedStyle(el);
-      const hasScroll = computedStyle.overflow === 'auto' ||
-                       computedStyle.overflow === 'scroll' ||
-                       computedStyle.overflowY === 'auto' ||
-                       computedStyle.overflowY === 'scroll';
-      return hasScroll && (el as HTMLElement).scrollHeight > (el as HTMLElement).clientHeight;
-    }) as HTMLElement[];
-
-    // Store original styles
-    const originalStyles = scrollableElements.map(el => ({
-      element: el,
-      height: el.style.height,
-      maxHeight: el.style.maxHeight,
-      overflow: el.style.overflow,
-      overflowY: el.style.overflowY,
-    }));
-
-    try {
-      // Expand all scrollable containers to full height
-      scrollableElements.forEach(el => {
-        el.style.height = `${el.scrollHeight}px`;
-        el.style.maxHeight = 'none';
-        el.style.overflow = 'visible';
-        el.style.overflowY = 'visible';
-      });
-
-      // Also handle the root element if it's scrollable
-      const rootOriginalStyle = {
-        height: element.style.height,
-        maxHeight: element.style.maxHeight,
-        overflow: element.style.overflow,
-        overflowY: element.style.overflowY,
-      };
-
-      if (element.scrollHeight > element.clientHeight) {
-        element.style.height = `${element.scrollHeight}px`;
-        element.style.maxHeight = 'none';
-        element.style.overflow = 'visible';
-        element.style.overflowY = 'visible';
-      }
-
-      // Small delay to let layout settle
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Capture the expanded element
-      const blob = await captureElement(element);
-
-      // Restore original styles
-      originalStyles.forEach(({ element, height, maxHeight, overflow, overflowY }) => {
-        element.style.height = height;
-        element.style.maxHeight = maxHeight;
-        element.style.overflow = overflow;
-        element.style.overflowY = overflowY;
-      });
-
-      element.style.height = rootOriginalStyle.height;
-      element.style.maxHeight = rootOriginalStyle.maxHeight;
-      element.style.overflow = rootOriginalStyle.overflow;
-      element.style.overflowY = rootOriginalStyle.overflowY;
-
-      return blob;
-    } catch (error) {
-      // Ensure we restore styles even if capture fails
-      originalStyles.forEach(({ element, height, maxHeight, overflow, overflowY }) => {
-        element.style.height = height;
-        element.style.maxHeight = maxHeight;
-        element.style.overflow = overflow;
-        element.style.overflowY = overflowY;
-      });
-
-      throw error;
-    }
-  }, [captureElement]);
-
-  /**
-   * FileView-specific capture (finds element by data-file-id)
-   * This is the primary method for capturing question/dashboard views
-   *
-   * @param fileId - File ID to capture
-   * @param options - Capture options
-   * @param options.fullHeight - If true, expands scrollable containers to capture full height
-   */
-  const captureFileView = useCallback(async (
-    fileId: number,
-    options?: { fullHeight?: boolean }
-  ): Promise<Blob> => {
-    const element = document.querySelector(`[data-file-id="${fileId}"]`);
-    if (!element) throw new Error(`FileView with id ${fileId} not found`);
-
-    if (options?.fullHeight) {
-      return captureElementFullHeight(element as HTMLElement);
-    }
-
-    return captureElement(element as HTMLElement);
-  }, [captureElement]);
-
-  /**
-   * Capture with result metadata (includes dataURL and timestamp)
-   * Useful for debugging or when you need the base64 string
-   */
-  const captureElementWithMetadata = useCallback(async (element: HTMLElement): Promise<ScreenshotResult> => {
-    const blob = await captureElement(element);
-    const dataURL = await new Promise<string>((resolve, reject) => {
+  const blobToDataURL = useCallback((blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
-    });
-    return { blob, dataURL, timestamp: new Date().toISOString() };
-  }, [captureElement]);
+    }), []);
 
-  /**
-   * Download helper - triggers browser download
-   */
+  const captureElementWithMetadata = useCallback(async (element: HTMLElement): Promise<ScreenshotResult> => {
+    const blob = await captureElementBlob(element, { ...options, colorMode } as CaptureOptions);
+    const dataURL = await blobToDataURL(blob);
+    return { blob, dataURL, timestamp: new Date().toISOString() };
+  }, [colorMode, options, blobToDataURL]);
+
   const download = useCallback((blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -170,24 +58,5 @@ export function useScreenshot(options?: ScreenshotOptions) {
     URL.revokeObjectURL(url);
   }, []);
 
-  /**
-   * Convert Blob to base64 dataURL (for API uploads)
-   */
-  const blobToDataURL = useCallback((blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }, []);
-
-  return {
-    captureElement,
-    captureElementFullHeight,
-    captureFileView,
-    captureElementWithMetadata,
-    download,
-    blobToDataURL
-  };
+  return { captureElement, captureElementFullHeight, captureFileView, captureElementWithMetadata, download, blobToDataURL };
 }

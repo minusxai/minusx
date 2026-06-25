@@ -175,6 +175,27 @@ export class Navigate extends MXTool<typeof NavigateParams, RemoteAnalystContext
   }
 }
 
+// ─── Screenshot ──────────────────────────────────────────────────────────────
+// Schema matches `registerFrontendTool('Screenshot', ...)`. Frontend-only: it
+// captures the LIVE rendered DOM (html-to-image) of the file currently open in the
+// browser, so it can't run headless (no DOM).
+const ScreenshotParams = Type.Object({
+  fileId: Type.Number({ description: 'ID of the file to screenshot — must be the file currently open in the browser (its rendered view is captured).' }),
+  fullHeight: Type.Optional(Type.Boolean({ description: 'Capture the full scrolled height including off-screen content (default false — visible area only).' })),
+});
+
+export class Screenshot extends MXTool<typeof ScreenshotParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof ScreenshotParams> = {
+    name: 'Screenshot',
+    description: 'See a rendered screenshot of the current file (question/dashboard/story/notebook/report) as an image. Use after authoring visual content — especially a data story, report, or notebook — to verify the layout, styling, and embeds render as intended before telling the user it is done.',
+    parameters: ScreenshotParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    throw new UserInputException(this.id);
+  }
+}
+
 // ─── ClarifyFrontend ─────────────────────────────────────────────────────────
 // Schema matches `registerFrontendTool('ClarifyFrontend', ...)` at line 382 —
 // handler reads `question`, `options[{label, description?}]`, `multiSelect?`.

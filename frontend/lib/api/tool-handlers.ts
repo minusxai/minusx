@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type CompressedFileState } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type CompressedFileState, type ScreenshotDetails } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -22,6 +22,8 @@ import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
+import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType, canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -472,6 +474,37 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
     content: [{ type: 'text', text: JSON.stringify(textContent) }, ...markupTextBlocks(blocks), ...imageBlocks],
     details: { success: true },
   };
+});
+
+// Screenshot — capture the LIVE rendered DOM of the current file as an image the agent can
+// see. Frontend-only (needs the browser DOM). Reuses the shared capture core + the SAME upload
+// path (S3 / base64 / local FS, per config) as the auto chart-image attachments.
+registerFrontendTool('Screenshot', async (args, context) => {
+  const fileId = Number(args.fileId);
+  const fullHeight = !!args.fullHeight;
+  const colorMode: 'light' | 'dark' = context.state?.ui?.colorMode === 'dark' ? 'dark' : 'light';
+  try {
+    // Yield once so the chat's "Capturing" tool state can paint before html-to-image runs —
+    // the capture is synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
+    await new Promise((r) => setTimeout(r, 0));
+    const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: 1024, format: 'jpeg' });
+    const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
+    return {
+      content: [
+        { type: 'text', text: `Screenshot of file ${fileId} (rendered view).` },
+        { type: 'image_url', image_url: { url } },
+      ],
+      // screenshotUrl rides in `details` (UI-only, survives the turn) so the chat image
+      // doesn't vanish when the persisted content is reloaded in a different shape.
+      details: { success: true, screenshotUrl: url } as ScreenshotDetails,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      content: [{ type: 'text', text: `Could not capture a screenshot of file ${fileId}: ${message}` }],
+      details: { success: false, error: message },
+    };
+  }
 });
 
 /**

@@ -22,6 +22,7 @@ const EXPECTED_TOOLS = [
   'CreateFile',
   'LoadSkill',
   'FuzzyMatch',
+  'Screenshot',
 ].sort();
 
 describe('WebAnalystAgent tool-set', () => {

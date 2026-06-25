@@ -10,6 +10,7 @@ import ChartCarousel from './tools/ChartCarousel';
 import DetailCarousel, { type DetailCardProps, getToolNameFromMsg, isToolSuccess } from './tools/DetailCarousel';
 import { embeddedQuestionCount } from '@/lib/data/story-question';
 import { NavigateDetailCard } from './tools/NavigateDisplay';
+import { ScreenshotDetailCard } from './tools/ScreenshotDisplay';
 import { PublishAllDetailCard } from './tools/PublishAllDisplay';
 import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
 import { SearchFilesDetailCard } from './tools/SearchFilesDisplay';
@@ -447,6 +448,7 @@ function AgentTurnContainerImpl({
   // null = skip this tool in the carousel (e.g. Clarify is redundant with ClarifyFrontend)
   const DETAIL_CARD_BY_TOOL: Record<string, React.ComponentType<DetailCardProps> | null> = {
     'Navigate': NavigateDetailCard,
+    'Screenshot': ScreenshotDetailCard,
     'PublishAll': PublishAllDetailCard,
     'LoadSkill': LoadSkillDetailCard,
     'Clarify': ClarifyDetailCard,
