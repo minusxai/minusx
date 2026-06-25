@@ -7,27 +7,36 @@ import { useState } from 'react';
 
 interface JsonEditorProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   originalValue?: string; // If provided, shows diff view
   readOnly?: boolean;
   /** External error (e.g. schema validation from the parent) shown in the banner */
   error?: string | null;
+  /** Monaco language. Defaults to 'json' (with parse validation). Use e.g. 'xml' for read-only markup. */
+  language?: string;
 }
 
-export default function JsonEditor({ value, onChange, originalValue, readOnly = true, error }: JsonEditorProps) {
+export default function JsonEditor({ value, onChange, originalValue, readOnly = true, error, language = 'json' }: JsonEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const [parseError, setParseError] = useState<string | null>(null);
   const isDiffMode = originalValue !== undefined;
   const displayError = parseError ?? error ?? null;
+  const isJson = language === 'json';
 
   const handleChange = (newValue: string | undefined) => {
     if (!newValue) return;
+
+    // Non-JSON languages (e.g. read-only xml markup view) skip JSON validation.
+    if (!isJson) {
+      onChange?.(newValue);
+      return;
+    }
 
     try {
       // Validate JSON
       JSON.parse(newValue);
       setParseError(null);
-      onChange(newValue);
+      onChange?.(newValue);
     } catch (e) {
       // Show error but don't update state
       setParseError(e instanceof Error ? e.message : 'Invalid JSON');
@@ -36,7 +45,7 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
 
   const editorOptions = {
     readOnly,
-    ariaLabel: 'JSON editor',
+    ariaLabel: `${language.toUpperCase()} editor`,
     minimap: { enabled: false },
     fontFamily: 'var(--font-jetbrains-mono)',
     formatOnPaste: true,
@@ -79,7 +88,7 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
         {isDiffMode ? (
           <DiffEditor
             height="100%"
-            language="json"
+            language={language}
             original={originalValue}
             modified={value}
             theme={colorMode === 'dark' ? 'vs-dark' : 'vs-light'}
@@ -104,7 +113,7 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
         ) : (
           <Editor
             height="100%"
-            defaultLanguage="json"
+            defaultLanguage={language}
             // Editable mode keeps Monaco's own buffer (defaultValue): re-rendering
             // with a re-serialized `value` on every keystroke would reset the cursor.
             {...(readOnly ? { value } : { defaultValue: value })}

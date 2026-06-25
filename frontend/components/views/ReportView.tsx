@@ -13,7 +13,7 @@ import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import Markdown from '@/components/Markdown';
 import { useAppSelector } from '@/store/hooks';
-import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 
 interface ReportViewProps {
@@ -49,9 +49,9 @@ export default function ReportView({
   onSelectRun
 }: ReportViewProps) {
   const reportOutput = runFileContent?.output as ReportOutput | undefined;
-  // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
+  // editMode and isDirty sourced from Redux (managed by FileHeader). The Code view
+  // is rendered centrally by FileView, so this view only renders the visual surface.
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
-  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Resizable panel state
@@ -147,15 +147,8 @@ export default function ReportView({
         onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
-      {/* JSON View */}
-      {activeTab === 'json' && (
-        <Box p={4} bg="bg.muted" borderRadius="md" fontFamily="mono" fontSize="sm" overflow="auto">
-          <pre>{JSON.stringify(report, null, 2)}</pre>
-        </Box>
-      )}
-
-      {/* Visual View - Two Column Layout */}
-      {activeTab === 'visual' && (
+      {/* Visual View - Two Column Layout (the Code view is rendered upstream by FileView) */}
+      {(
         <Box
           ref={mainContentRef}
           display="flex"

@@ -19,7 +19,7 @@ import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/api/file-state';
 import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType, canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -459,7 +459,8 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   const result = await readFiles(fileIds, { runQueries });
-  const textContent: ReadFilesResult = { success: true, files: result.map(f => compressAugmentedFile(f, maxChars)) };
+  // The agent reads `markup`, not JSON `content` — strip the duplicate content for the LLM.
+  const textContent: ReadFilesResult = { success: true, files: result.map(f => stripAugmentedContentForLlm(compressAugmentedFile(f, maxChars))) };
   const imageBlocks = await renderFileChartImageBlocks(result);
   if (imageBlocks.length === 0) {
     return { content: textContent, details: { success: true } };

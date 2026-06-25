@@ -17,8 +17,10 @@ import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
 import { type FileId } from '@/store/filesSlice';
 import { useAppSelector } from '@/store/hooks';
 import { selectView } from '@/store/authSlice';
+import { selectFileViewMode } from '@/store/uiSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import FileHeader from './FileHeader';
+import CodeView from './views/CodeView';
 import { FileToolbarProvider } from './file-toolbar/FileToolbarContext';
 
 export interface FileViewProps {
@@ -36,6 +38,8 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
   // view >= content strips the file header (title + save/publish actions) too.
   const view = useAppSelector(selectView);
   const hideHeader = hideHeaderProp || viewAtLeast(view, 'content');
+  // The admin "Code view" (JSON + agent XML) is selected centrally here, not per file view.
+  const viewMode = useAppSelector(state => selectFileViewMode(state, typeof fileId === 'number' ? fileId : undefined));
 
   // Loading state
   if (!file || file.loading) {
@@ -131,6 +135,11 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
   const READ_ONLY_FILE_TYPES: FileType[] = ['alert_run', 'report_run', 'transformation_run', 'conversation'];
   const showFileHeader = !hideHeader && typeof fileId === 'number' && !isSystemFileType(file.type as FileType) && !READ_ONLY_FILE_TYPES.includes(file.type as FileType);
 
+  // When the header's view mode is "Code", render the shared CodeView instead of the
+  // type-specific visual view. Only possible where the header (and its toggle) is shown.
+  const showCodeView = showFileHeader && viewMode === 'json';
+  const codeEditable = mode !== 'preview' && !viewAtLeast(view, 'content');
+
   // Render file-specific component
   // getFileComponent returns a stable reference from a lookup table
   return (
@@ -140,12 +149,16 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
           <FileHeader fileId={fileId as number} fileType={file.type} mode={mode} />
         </Box>
       )}
-      {/* eslint-disable-next-line react-hooks/static-components */}
-      <Component
-        fileId={fileId}
-        mode={mode}
-        defaultFolder={defaultFolder}
-      />
+      {showCodeView ? (
+        <CodeView fileId={fileId as number} fileType={file.type as FileType} editable={codeEditable} />
+      ) : (
+        /* eslint-disable-next-line react-hooks/static-components */
+        <Component
+          fileId={fileId}
+          mode={mode}
+          defaultFolder={defaultFolder}
+        />
+      )}
     </FileToolbarProvider>
   );
 }

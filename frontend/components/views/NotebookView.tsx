@@ -22,10 +22,9 @@ import NotebookSqlCell, { type Executed } from './notebook/NotebookSqlCell';
 import NotebookTextCell from './notebook/NotebookTextCell';
 import CellInsertZone from './notebook/CellInsertZone';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
-import JsonEditor from '@/components/slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectPersistableContent, selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
-import { applyJsonContentEdit, captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
+import { selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
+import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
 import type {
   NotebookContent, NotebookCell, NotebookSqlCell as SqlCell,
 } from '@/lib/types';
@@ -37,7 +36,6 @@ interface NotebookViewProps {
   /** Notebook file path, for SQL-cell schema autocomplete / context lookup. */
   filePath?: string;
   fileId?: number;
-  viewMode?: 'visual' | 'json';
   /** Id of the cell the user is currently working on (highlighted + sent to the agent). */
   activeCellId?: string;
   onActivateCell?: (cellId: string) => void;
@@ -49,7 +47,7 @@ const newId = (): string => crypto.randomUUID();
 const EMPTY_EXECUTED: Record<string, Executed> = {};
 
 export default function NotebookView({
-  content, onChange, readOnly = false, filePath, fileId, viewMode = 'visual', activeCellId, onActivateCell,
+  content, onChange, readOnly = false, filePath, fileId, activeCellId, onActivateCell,
 }: NotebookViewProps) {
   const cells = content.cells ?? [];
 
@@ -87,11 +85,6 @@ export default function NotebookView({
     commit([...list.slice(0, at), makeCell(type), ...list.slice(at)]);
   }, [commit, makeCell]);
 
-  // JSON view edits the persistable content (content + persistableChanges).
-  const persistableContent = useAppSelector(state =>
-    fileId !== undefined ? selectPersistableContent(state, fileId) : undefined
-  );
-  const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Per-cell collapse + a run-all nonce, driven by header toolbar actions.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
@@ -153,21 +146,6 @@ export default function NotebookView({
     ];
   }, [present, readOnly, cells.length, runAll, collapseAll, expandAll, togglePresent]);
   useFileToolbarActions(toolbarActions);
-
-  if (viewMode === 'json') {
-    return (
-      <JsonEditor
-        value={JSON.stringify(persistableContent ?? content, null, 2)}
-        readOnly={fileId === undefined || readOnly}
-        error={jsonError}
-        onChange={(value) => {
-          if (fileId === undefined) return;
-          const result = applyJsonContentEdit({ fileId, jsonString: value });
-          setJsonError(result.success ? null : result.error ?? null);
-        }}
-      />
-    );
-  }
 
   if (present) {
     return (

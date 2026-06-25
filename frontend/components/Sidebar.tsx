@@ -1,6 +1,6 @@
 'use client';
 
-import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder } from 'react-icons/lu';
+import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -13,7 +13,7 @@ import ImpersonationSelector from './ImpersonationSelector';
 import CreateMenu from './CreateMenu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { toggleLeftSidebar, selectDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
+import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -579,7 +579,7 @@ export default function Sidebar() {
             </Menu.Trigger>
             <Portal>
               <Menu.Positioner zIndex={200}>
-                <Menu.Content minW="220px" p={2} bg="bg.surface" shadow="lg" borderRadius="lg" fontFamily="mono">
+                <Menu.Content minW="250px" p={2} bg="bg.surface" shadow="lg" borderRadius="lg" fontFamily="mono" border={"0.5px solid"} borderColor="border.default">
                 {/* User info header */}
                 <Box px={3} py={2} mb={1}>
                   <Text fontSize="xs" color="fg.subtle" fontFamily="mono">Signed in as</Text>
@@ -621,6 +621,43 @@ export default function Sidebar() {
                     <Text fontWeight="500" fontSize="sm">{colorMode === 'dark' ? 'Light Mode' : 'Dark Mode'}</Text>
                   </HStack>
                 </Menu.Item>
+
+                {/* Developer Mode Toggle (admins only) — exposes the Code view, impersonation, debug info */}
+                {userIsAdmin && (
+                  <Menu.Item
+                    value="dev-mode"
+                    aria-label={'Dev mode toggle'}
+                    cursor="pointer"
+                    borderRadius="md"
+                    px={3}
+                    py={2}
+                    _hover={{ bg: 'bg.muted' }}
+                    onClick={() => dispatch(setDevMode(!showDebug))}
+                    closeOnSelect={false}
+                  >
+                    <HStack gap={3}>
+                      <Icon as={LuWrench} boxSize={4} color="accent.teal" />
+                      <Text fontWeight="500" fontSize="sm">Dev Mode</Text>
+                      <Box
+                        px={1.5}
+                        py={0.5}
+                        borderRadius="full"
+                        fontFamily="mono"
+                        fontSize="2xs"
+                        fontWeight="700"
+                        lineHeight="1"
+                        textTransform="uppercase"
+                        letterSpacing="0.05em"
+                        bg={showDebug ? 'accent.teal/15' : 'bg.muted'}
+                        color={showDebug ? 'accent.teal' : 'fg.subtle'}
+                        borderWidth="1px"
+                        borderColor={showDebug ? 'accent.teal/30' : 'border.muted'}
+                      >
+                        {showDebug ? 'On' : 'Off'}
+                      </Box>
+                    </HStack>
+                  </Menu.Item>
+                )}
 
                 <Box h="1px" bg="border.muted" my={1} />
 

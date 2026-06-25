@@ -5,11 +5,8 @@ import { Box, Button, HStack, Icon, Text } from '@chakra-ui/react';
 import { LuBookOpen, LuCheck, LuPencil, LuX } from 'react-icons/lu';
 
 import AgentHtml, { type AgentHtmlHandle } from '@/components/views/shared/AgentHtml';
-import JsonEditor from '@/components/slides/JsonEditor';
 import { StoryContent } from '@/lib/types';
-import { useAppSelector } from '@/store/hooks';
-import { selectPersistableContent } from '@/store/filesSlice';
-import { applyJsonContentEdit, applyStoryHtmlEdit } from '@/lib/api/file-state';
+import { applyStoryHtmlEdit } from '@/lib/api/file-state';
 import { toaster } from '@/components/ui/toaster';
 import { STORY_W } from './ScaledStoryFrame';
 
@@ -21,10 +18,8 @@ const STORY_MAX_W = '1280px';
 
 interface StoryViewProps {
   content: StoryContent;
-  /** File id — enables JSON-tab editing (same as question/dashboard). */
+  /** File id — enables inline visual editing (owned, non-public stories). */
   fileId?: number;
-  /** Header eye/code toggle (uiSlice fileViewMode) — same as dashboards. */
-  viewMode?: 'visual' | 'json';
   /** Public read-only render (shared story): embedded charts hide actions + auth-gated links. */
   readOnly?: boolean;
 }
@@ -33,17 +28,9 @@ interface StoryViewProps {
  * Story view: a single-page scrolling data story — one agent-authored HTML
  * document on a fixed 1280px-wide canvas (any height), with live chart embeds.
  * The visual canvas is a viewer (the story is written by the agent via EditFile
- * on `content.story`); the JSON tab is an editable full-content editor — same as
- * question/dashboard — when a `fileId` is supplied.
+ * on `content.story`). The JSON/XML "Code view" is rendered centrally by FileView.
  */
-export default function StoryView({ content, fileId, viewMode = 'visual', readOnly = false }: StoryViewProps) {
-  // JSON tab edits the persistable content (content + persistableChanges, no ephemerals)
-  const persistableContent = useAppSelector(state =>
-    fileId !== undefined ? selectPersistableContent(state, fileId) : undefined
-  );
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const jsonEditable = fileId !== undefined;
-
+export default function StoryView({ content, fileId, readOnly = false }: StoryViewProps) {
   // Inline visual editing: a contenteditable canvas behind an Edit toggle, only
   // when this is an owned (non-public) story file.
   const canEdit = !readOnly && fileId !== undefined;
@@ -70,21 +57,6 @@ export default function StoryView({ content, fileId, viewMode = 'visual', readOn
     setEditing(false);
     setRenderKey(k => k + 1); // discard in-DOM edits by rebuilding from content
   };
-
-  if (viewMode === 'json') {
-    return (
-      <JsonEditor
-        value={JSON.stringify(persistableContent ?? content, null, 2)}
-        readOnly={!jsonEditable}
-        error={jsonError}
-        onChange={(value) => {
-          if (fileId === undefined) return;
-          const result = applyJsonContentEdit({ fileId, jsonString: value });
-          setJsonError(result.success ? null : result.error ?? null);
-        }}
-      />
-    );
-  }
 
   if (!content.story) {
     return (

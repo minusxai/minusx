@@ -25,6 +25,7 @@ import ContextDocsEditor from './ContextDocsEditor';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 import DocumentHeader from '../DocumentHeader';
+import CodeView from '../views/CodeView';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { selectConnectionsLoading } from '@/store/filesSlice';
@@ -839,7 +840,18 @@ export default function ContextEditorV2({
         />
       )}
 
-      {/* Top-level Tabs */}
+      {/* Code view (whole-file JSON + agent XML) replaces the picker tabs when toggled. */}
+      {activeTab === 'yaml' && file?.id !== undefined ? (
+        // Hide loader-computed, inherited fields (fullSchema/parentSchema/fullDocs) — they're
+        // derived, not authored — so the Code view shows just the editable content. They're
+        // preserved on save (CodeView merges them back).
+        <CodeView
+          fileId={file.id}
+          fileType="context"
+          editable={editMode}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullSkills', 'fullAnnotations', 'fullMetrics']}
+        />
+      ) : (
       <Tabs.Root
         value={topTab}
         onValueChange={(e) => setTopTab(e.value as TopTab)}
@@ -1439,6 +1451,7 @@ export default function ContextEditorV2({
           )}
         </Tabs.Content>
       </Tabs.Root>
+      )}
     </VStack>
   );
 }

@@ -17,6 +17,7 @@ import {
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
+import { appStateForLlm, type AppState } from '@/lib/appState';
 
 // Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
@@ -139,7 +140,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       .join('\n');
 
     const appStateJson =
-      this.context.appState !== undefined ? JSON.stringify(this.context.appState) : 'null';
+      this.context.appState !== undefined ? JSON.stringify(appStateForLlm(this.context.appState as AppState)) : 'null';
     const date = new Date().toISOString().slice(0, 10);
     const contextText =
       `<AppState>${appStateJson}</AppState>\n<CurrentDate>${date}</CurrentDate>` +

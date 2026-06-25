@@ -6,6 +6,7 @@
 
 import type { FileState } from '@/store/filesSlice';
 import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
+import { stripAugmentedContentForLlm, omitFileStateContent } from '@/lib/api/compress-augmented';
 
 /**
  * Folder state (from useFolder / navigationSlice)
@@ -49,3 +50,25 @@ export type AppState =
       state: null; // No additional state needed for explore page at this time
       ui?: AppStateUI;
     };
+
+/**
+ * Project AppState for the LLM: strip the JSON `content` from file states (the agent reads the
+ * `markup` projection instead — `content` is duplicate context). Applied only when serializing
+ * into a prompt / tool result; the in-memory AppState (and the wire request body) keep `content`
+ * for client use. Covers the focused file + its references and any open-modal file state.
+ */
+export function appStateForLlm(appState: AppState): AppState {
+  if (!appState || typeof appState !== 'object') return appState;
+  const ui: AppStateUI | undefined = appState.ui?.openModal?.fileState
+    ? { ...appState.ui, openModal: { ...appState.ui.openModal, fileState: omitFileStateContent(appState.ui.openModal.fileState) } }
+    : appState.ui;
+
+  if (appState.type === 'file') {
+    // `state` is typed as always-present, but partial app-state payloads (e.g. headless
+    // callers / tests) may omit it — guard at runtime before stripping content.
+    const fileState = appState.state as CompressedAugmentedFile | undefined;
+    if (!fileState) return { ...appState, ui };
+    return { ...appState, state: stripAugmentedContentForLlm(fileState), ui };
+  }
+  return { ...appState, ui };
+}

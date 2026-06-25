@@ -18,7 +18,7 @@ import {
 import { runAgentTestSpec, type TestSpec } from '@/orchestrator/test-spec-runner';
 import { FilesAPI } from '@/lib/data/files.server';
 import { readFilesServer } from '@/lib/api/file-state.server';
-import { TOOL_DEFAULT_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import { TOOL_DEFAULT_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -147,12 +147,16 @@ describe('ReadFiles', () => {
     expect(f.references).toHaveLength(1);
     expect(f.references[0].id).toBe(q.data.id);
 
-    // 3) Byte-identical to the certified app-state-equivalent server builder. The
-    //    transitive guarantee: file-state-server-parity.test.ts proves
+    // 3) Identical to the certified app-state-equivalent server builder, minus the JSON
+    //    `content` (the agent reads `markup`; ReadFiles strips the duplicate content).
+    //    Transitive guarantee: file-state-server-parity.test.ts proves
     //    readFilesServer === compressAugmentedFile(selectAugmentedFiles(...)) (live AppState),
-    //    so tool output === readFilesServer === live AppState.
+    //    so tool output === stripContent(readFilesServer) === stripped live AppState.
     const appState = await readFilesServer([dash.data.id], ADMIN, { maxChars: TOOL_DEFAULT_LIMIT_CHARS });
-    expect(out.files).toEqual(appState);
+    expect(out.files).toEqual(appState.map(stripAugmentedContentForLlm));
+    // And the stripped payload carries `markup` but not `content`.
+    expect(out.files[0].fileState.markup).toBeDefined();
+    expect(out.files[0].fileState.content).toBeUndefined();
   });
 
   it('runs a story\'s INLINE questions and includes their query results (live numbers for the agent)', async () => {

@@ -189,12 +189,6 @@ describe('NotebookView', () => {
     expect(onActivateCell).toHaveBeenCalledWith('a');
   });
 
-  it('shows a JSON view of the notebook content', async () => {
-    renderWithProviders(
-      <NotebookView content={{ description: null, cells: [sqlCell()] }} onChange={onChange} viewMode="json" />
-    );
-    const editor = await screen.findByLabelText('JSON editor') as HTMLTextAreaElement;
-    expect(editor.value).toContain('cells');
-    expect(editor.value).toContain('SELECT 42');
-  });
+  // The JSON/XML "Code view" moved out of NotebookView into the shared CodeView
+  // (rendered centrally by FileView) — see components/views/__tests__/code-view.ui.test.tsx.
 });
