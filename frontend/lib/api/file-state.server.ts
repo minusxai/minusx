@@ -17,9 +17,8 @@ import {
   getRootParamsFromContent,
   resolveEffectiveParams,
   buildEffectiveReference,
+  storyEmbedRuns,
 } from '@/lib/data/helpers/param-resolution';
-import { extractInlineQuestions } from '@/lib/data/story-question';
-import { extractInlineNumbers } from '@/lib/data/story-number';
 import type { QuestionParameter } from '@/lib/validation/atlas-schemas';
 import type {
   IFileStateRead,
@@ -174,25 +173,15 @@ async function executeQueriesForFile(
 ): Promise<QueryResult[]> {
   const results: QueryResult[] = [];
 
-  // Run one question (saved or inline) and push its result, keyed by the same query hash the
-  // client cache uses so ids line up. Params inherit from the root file (story/dashboard) params.
-  const runOne = async (
-    query: string | undefined,
-    connectionName: string | undefined,
-    parameters: QuestionParameter[] | null | undefined,
-    ownParamValues: Record<string, unknown>,
-  ): Promise<void> => {
-    if (!query || !connectionName) return;
-    const params = parameters?.length
-      ? resolveEffectiveParams(parameters, ownParamValues, inheritedParams)
-      : ownParamValues;
-
+  // Execute one query with ALREADY-RESOLVED params and push its result, keyed by the same query
+  // hash the client cache uses so ids line up. Errors (incl. SQL parser errors) are pushed as a
+  // result-with-error so the agent SEES them, never thrown.
+  const runResolved = async (query: string, connectionName: string, params: Record<string, unknown>): Promise<void> => {
     const paramRecord: Record<string, string | number> = {};
     for (const [k, v] of Object.entries(params)) {
       if (typeof v === 'string' || typeof v === 'number') paramRecord[k] = v;
       else if (v != null) paramRecord[k] = String(v);
     }
-
     const id = getQueryHash(query, params, connectionName);
     try {
       const result = await runQuery(connectionName, query, paramRecord, user);
@@ -205,38 +194,41 @@ async function executeQueriesForFile(
     }
   };
 
+  // Run one question (saved or inline), resolving its declared params against the inherited
+  // (story/dashboard) params first.
+  const runOne = async (
+    query: string | undefined,
+    connectionName: string | undefined,
+    parameters: QuestionParameter[] | null | undefined,
+    ownParamValues: Record<string, unknown>,
+  ): Promise<void> => {
+    if (!query || !connectionName) return;
+    const params = parameters?.length
+      ? resolveEffectiveParams(parameters, ownParamValues, inheritedParams)
+      : ownParamValues;
+    await runResolved(query, connectionName, params);
+  };
+
   const execQuestion = async (q: DbFile): Promise<void> => {
     if (q.type !== 'question') return;
     const content = q.content as QuestionContent;
     await runOne(content.query, content.connection_name, content.parameters, content.parameterValues ?? {});
   };
 
-  // A story's INLINE questions live in its body (no saved file) — run them too so the agent's
-  // read sees their LIVE results, exactly like the saved-question embeds. They bind to the
-  // story's shared params (inheritedParams) via runOne.
-  const execInlineQuestions = async (storyFile: DbFile): Promise<void> => {
+  // A story's INLINE <Question> + <Number> embeds (no saved file) are live queries the agent must
+  // see the result — and crucially the parser ERROR — of. storyEmbedRuns is the SAME extraction
+  // the client augmentation uses, so params (and therefore query hashes) line up exactly. Saved
+  // <Question id>/<Number id> figures point to a question file and run via execQuestion (references).
+  const execStoryEmbeds = async (storyFile: DbFile): Promise<void> => {
     if (storyFile.type !== 'story') return;
     const html = (storyFile.content as { story?: string | null } | null)?.story;
-    for (const e of extractInlineQuestions(html)) {
-      await runOne(e.query, e.connection, e.parameters, {});
-    }
-  };
-
-  // A story's INLINE <Number> figures (`data-number-inline`, no saved file) are also live
-  // queries the agent must see the result — and crucially the parser ERROR — of. They carry
-  // no declared params, so they run with {} (matching the InlineNumber renderer + the EditFile
-  // auto-execute). Saved <Number id> figures point to a question file and run via execQuestion.
-  const execInlineNumbers = async (storyFile: DbFile): Promise<void> => {
-    if (storyFile.type !== 'story') return;
-    const html = (storyFile.content as { story?: string | null } | null)?.story;
-    for (const e of extractInlineNumbers(html)) {
-      await runOne(e.query, e.connection, null, {});
+    for (const r of storyEmbedRuns(html, inheritedParams)) {
+      await runResolved(r.query, r.connection, r.params);
     }
   };
 
   await execQuestion(file);
-  await execInlineQuestions(file);
-  await execInlineNumbers(file);
+  await execStoryEmbeds(file);
   await Promise.all(references.map(ref => execQuestion(ref)));
 
   return results;

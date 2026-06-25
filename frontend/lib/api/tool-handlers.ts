@@ -17,10 +17,7 @@ import { getTemplateDefaults } from '@/lib/data/template-defaults';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createDraftFile, editFile as editFileOp } from '@/lib/api/file-state';
-import { getRootParams, resolveEffectiveParams } from '@/lib/data/helpers/param-resolution';
-import { extractInlineQuestions } from '@/lib/data/story-question';
-import { extractInlineNumbers } from '@/lib/data/story-number';
-import type { QuestionParameter } from '@/lib/validation/atlas-schemas';
+import { getRootParams, storyEmbedRuns } from '@/lib/data/helpers/param-resolution';
 import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
@@ -721,17 +718,15 @@ registerFrontendTool('EditFile', async (args, _context) => {
     const state = getStore().getState();
     const html = (selectMergedContent(state, fileId) as { story?: string | null } | undefined)?.story;
     const inheritedParams = getRootParams(state, fileState);
-    const runEmbed = async (query?: string, connection?: string, parameters?: QuestionParameter[] | null) => {
-      if (!query || !connection) return;
-      const params = parameters?.length ? resolveEffectiveParams(parameters, {}, inheritedParams) : {};
+    // storyEmbedRuns is the SAME extraction the client + server augmentation use, so the params
+    // (and therefore query hashes) match the cache the response reads from.
+    for (const r of storyEmbedRuns(html, inheritedParams)) {
       try {
-        await getQueryResult({ query, params, database: connection, filePath: fileState?.path });
+        await getQueryResult({ query: r.query, params: r.params, database: r.connection, filePath: fileState?.path });
       } catch (execErr) {
         console.warn('[EditFile] Story embed auto-execute failed (edit still staged):', execErr);
       }
-    };
-    for (const e of extractInlineQuestions(html)) await runEmbed(e.query, e.connection, e.parameters);
-    for (const e of extractInlineNumbers(html)) await runEmbed(e.query, e.connection, undefined);
+    }
   }
 
   // Validate parameter source changes (best-effort — never blocks the edit)
