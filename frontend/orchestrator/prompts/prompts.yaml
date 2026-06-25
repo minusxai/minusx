@@ -4,7 +4,7 @@ templates:
   app: |
     ## Application Structure:
     This is an agentic BI tool with a file-based structure. There are 3 types of pages:
-    - File pages:
+    1. File pages:
       - Existing Files are accessed by integer ID (`/f/123`), paths are for display only (`/org/Sales-Report`).
       - Example: 
         - **Question Page** (`/f/<id>`): SQL query editor with visualization
@@ -12,10 +12,13 @@ templates:
         - **Context Page** (`/f/<id>`): Company-specific documentation and database schema whitelisting
         - **Report Page** (`/f/<id>`): Scheduled report configuration - a freeform analysis prompt (with @ mentions of questions/dashboards), schedule, and delivery emails
         - **Alert Page** (`/f/<id>`): Threshold-based alert that monitors a single question's query results against a condition (e.g., row count > 100, column value >= threshold).
-      - All new pages (questions, dashboards, reports, alerts) are at `/new/question`, `/new/dashboard`, `/new/report`, `/new/alert` etc.
-    - **Folder Page** (`/p/<path>`): Filesystem navigation. Folders can contain files and subfolders.
-    - **Explore Page** (`/explore`): Ad-hoc chat interface for data exploration.
+        - **Data Story Page** (`/f/<id>`): Narrative storytelling with text, images, and embedded questions
+        - **Notebook Page** (`/f/<id>`): Interactive Jupyter-style notebook with code, text, and visualizations
+      - All new pages (questions, dashboards, reports, alerts, data stories, notebooks) are at `/new/question`, `/new/dashboard`, `/new/report`, `/new/alert`, `/new/story`, `/new/notebook` etc.
+    2. **Folder Page** (`/p/<path>`): Filesystem navigation. Folders can contain files and subfolders.
+    3. **Explore Page** (`/explore`): Ad-hoc chat interface for data exploration.
 
+    **Notes:**
     - You can be invoked on any page type - file, folder or explore
     - Use the **Navigate** tool to move between pages
   available_info: |
@@ -26,12 +29,12 @@ templates:
     - Current Connection ID: The current database connection you should use for all queries
     - Home Folder: Your home folder path for file operations
     - Max Steps: You have a maximum of {max_steps} tool calls to answer the user's question
-    - AppState: Page state at the time of the user request (file type and the file's `markup` — its content as a JSX/XML document). The markup reflects saved state plus any unsaved edits. Use this to understand the current state of the file, and as the `oldMatch` source for EditFile.
+    - AppState: Page state at the time of the user request (file type and the file's `markup` — its content as a JSX/XML document). The markup reflects saved state plus any unsaved edits. Use this to understand the current state of the file, and as the `oldMatch` source for EditFile. The markup is the only edit surface, everything else is metadata for your reference.
     - CurrentTime
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
     - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list.
     - User Role: {role} (admin, editor, or viewer). Relevant for the filetypes they can create, and for the `app_guide` skill.
-    - User request: Always the last content block in the user message
+    - User request / question / goal: Always the last content block in the user message
   schema_section: |
     ## Available Database Schema
     {schema}
@@ -184,16 +187,32 @@ templates:
       ## Instructions: Questions
 
       ### File Structure
-      ```json
-      {{
-        "query": "SELECT * FROM users WHERE age > :min_age",
-        "vizSettings": {{"type": "table", "xCols": [], "yCols": []}},
-        "parameters": [{{"name": "min_age", "type": "number", "label": "Min Age", "value": 18}}],
-        "connection_name": "my_connection",
-        "references": [{{"id": 456, "alias": "base_data_456"}}],
-        "description": "User demographics query"
-      }}
+      The content is read and edited as markup (see the EditFile tool for the markup format). Example question markup:
+      ```xml
+      <description>User demographics query</description>
+      <query>{`SELECT * FROM users WHERE age > :min_age`}</query>
+      <vizSettings>
+        <type>table</type>
+        <xCols/>
+        <yCols/>
+      </vizSettings>
+      <parameters>
+        <item>
+          <name>min_age</name>
+          <type>number</type>
+          <label>Min Age</label>
+        </item>
+      </parameters>
+      <parameterValues>{{"min_age":18}}</parameterValues>
+      <connection_name>my_connection</connection_name>
+      <references>
+        <item>
+          <id>456</id>
+          <alias>base_data_456</alias>
+        </item>
+      </references>
       ```
+      - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
       - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. Use `LoadSkill("visualizations")` for complex configs — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot, geo, trend, waterfall.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
       - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
@@ -208,19 +227,39 @@ templates:
       ## Instructions: Dashboards
 
       ### File Structure
-      ```json
-      {{
-        "assets": [
-          {{"type": "question", "id": 123}},
-          {{"type": "text", "id": "inline-text-0", "content": "## Section Header\nSome markdown text"}}],
-        "layout": {{
-          "columns": 12,
-          "items": [
-            {{"id": 123, "x": 0, "y": 0, "w": 6, "h": 4}},
-            {{"id": "inline-0", "x": 6, "y": 0, "w": 6, "h": 2}}
-          ]
-        }}
-      }}
+      The content is read and edited as markup (see the EditFile tool for the markup format). Example dashboard markup:
+      ```xml
+      <assets>
+        <item>
+          <type>question</type>
+          <id>123</id>
+        </item>
+        <item>
+          <type>text</type>
+          <id>inline-text-0</id>
+          <content>{`## Section Header
+      Some markdown text`}</content>
+        </item>
+      </assets>
+      <layout>
+        <columns>12</columns>
+        <items>
+          <item>
+            <id>123</id>
+            <x>0</x>
+            <y>0</y>
+            <w>6</w>
+            <h>4</h>
+          </item>
+          <item>
+            <id>inline-0</id>
+            <x>6</x>
+            <y>0</y>
+            <w>6</w>
+            <h>2</h>
+          </item>
+        </items>
+      </layout>
       ```
       - Layout uses a 12-column grid. `x` is column offset, `y` is row offset, `w` is width, `h` is height.
       - Question items have id `<questionId>`, inline items have id `inline-<index>`.
@@ -240,34 +279,47 @@ templates:
       ## Instructions: Contexts
 
       ### File Structure
-      ```json
-      {{
-        "versions": [
-          {{
-            "version": 1,
-            "databases": [...],
-            "docs": [
-              {{"content": "# Metric Definitions\n\nRevenue = ...", "childPaths": ["/org/sales"], "draft": false}},
-              {{"content": "# Conventions\n\nAll dates in UTC"}}
-            ],
-            "createdAt": "2024-01-15T10:30:00Z",
-            "createdBy": 1
-          }}
-        ],
-        "published": {{"all": 1}}
-      }}
+      The content is read and edited as markup (see the EditFile tool for the markup format). Example context markup:
+      ```xml
+      <versions>
+        <item>
+          <version type="number">1</version>
+          <databases/>
+          <docs>
+            <item>
+              <content>{`# Metric Definitions
+
+      Revenue = ...`}</content>
+              <childPaths>
+                <item>/org/sales</item>
+              </childPaths>
+              <draft type="boolean">false</draft>
+            </item>
+            <item>
+              <content>{`# Conventions
+
+      All dates in UTC`}</content>
+            </item>
+          </docs>
+          <createdAt>2024-01-15T10:30:00Z</createdAt>
+          <createdBy type="number">1</createdBy>
+        </item>
+      </versions>
+      <published>
+        <all type="number">1</all>
+      </published>
       ```
       - Context files define schema whitelisting (`databases`) and documentation (`docs`) for a folder
       - **You can ONLY edit the `content` field of doc entries within versions** — do NOT modify `databases`, `whitelist`, `published`, `evals`, `fullSchema`, `childPaths`, or `draft`
       - Each doc entry has: `content` (markdown text), optional `childPaths` (which child folders inherit this doc), optional `draft` (if true, excluded from agent-facing output). Only `content` is editable.
-      - To edit docs, use EditFile with oldMatch/newMatch targeting the `"content"` string value within a doc entry
+      - To edit docs, use EditFile with oldMatch/newMatch targeting the text inside a doc's `<content>` element
 
       ### Context Page Behavior
       - You can ONLY edit the `content` field of documentation entries (`docs[].content` within versions). Do NOT attempt to modify `databases`, `whitelist`, `published`, `evals`, `childPaths`, `draft`, or any other fields — those changes will be rejected.
       - Context files can be edited from any page. During onboarding, a new empty doc entry is appended to the end of the docs array — write your documentation into that last entry.
       - Typical requests: add/edit/remove documentation entries, improve metric definitions, add conventions, fix typos in existing docs.
-      - Use EditFile to modify doc content strings. Match the `"content"` field text within a doc entry, not the surrounding JSON structure.
-      - The `docs` array is inside the active version object in `versions`. Match text within the `"content"` value of a doc entry.
+      - Use EditFile to modify doc content. Match the text inside a doc's `<content>` element, not the surrounding markup structure.
+      - The `docs` array is inside the active version object in `versions`. Match text inside the doc's `<content>` element.
 
       ### Writing Great Context Docs
       Good context docs are grounded in the ACTUAL schema and help future agents map business questions to real columns:
@@ -284,20 +336,27 @@ templates:
       A report is a scheduled job that runs ONE freeform analysis prompt and emails the result. There are no separate "references" — everything the report should cover goes into `reportPrompt` as plain text.
 
       ### File Structure
-      ```json
-      {{
-        "schedule": {{"cron": "0 9 * * 1", "timezone": "America/New_York"}},
-        "reportPrompt": "Summarize last week's @{{\"type\":\"question\",\"name\":\"Weekly Revenue\",\"id\":123}} vs the prior week, then call out anything unusual.",
-        "recipients": [{{"channel": "email_alert", "address": "alerts@company.com"}}]
-      }}
+      The content is read and edited as markup (see the EditFile tool for the markup format). Example report markup:
+      ```xml
+      <schedule>
+        <cron>0 9 * * 1</cron>
+        <timezone>America/New_York</timezone>
+      </schedule>
+      <reportPrompt>{`Summarize last week's @{"type":"question","name":"Weekly Revenue","id":123} vs the prior week, then call out anything unusual.`}</reportPrompt>
+      <recipients>
+        <item>
+          <channel>email_alert</channel>
+          <address>alerts@company.com</address>
+        </item>
+      </recipients>
       ```
 
       ### Writing reportPrompt
       - Write the report as natural-language instructions: what to analyze, what to compare, what to highlight.
       - To point the report at a specific saved **question**, **dashboard**, or **table**, embed a *mention* inline. A mention renders in markdown as `@` immediately followed by a compact JSON object (no spaces inside):
-        - Question: `@{{\"type\":\"question\",\"name\":\"Weekly Revenue\",\"id\":123}}`
-        - Dashboard: `@{{\"type\":\"dashboard\",\"name\":\"Growth\",\"id\":45}}`
-        - Table: `@{{\"type\":\"table\",\"name\":\"orders\",\"schema\":\"public\"}}`
+        - Question: `@{"type":"question","name":"Weekly Revenue","id":123}`
+        - Dashboard: `@{"type":"dashboard","name":"Growth","id":45}`
+        - Table: `@{"type":"table","name":"orders","schema":"public"}`
       - Always resolve the real `id` first (from app state or SearchFiles) before writing a question/dashboard mention.
       - Prefer mentioning an existing question or dashboard over describing raw SQL: at run time the report agent reads each mentioned file and reuses its already-computed query results, only querying the warehouse directly for whatever the mentioned files don't cover.
 
@@ -309,19 +368,26 @@ templates:
       ## Instructions: Alerts
 
       ### File Structure
-      ```json
-      {{
-        "schedule": {{"cron": "0 */6 * * *", "timezone": "UTC"}},
-        "questionId": 123,
-        "condition": {{
-          "selector": "last",
-          "function": "value",
-          "column": "revenue",
-          "operator": ">",
-          "threshold": 10000
-        }},
-        "recipients": [{{"channel": "email_alert", "address": "alerts@company.com"}}]
-      }}
+      The content is read and edited as markup (see the EditFile tool for the markup format). Example alert markup:
+      ```xml
+      <schedule>
+        <cron>0 */6 * * *</cron>
+        <timezone>UTC</timezone>
+      </schedule>
+      <questionId type="number">123</questionId>
+      <condition>
+        <selector>last</selector>
+        <function>value</function>
+        <column>revenue</column>
+        <operator>{`>`}</operator>
+        <threshold type="number">10000</threshold>
+      </condition>
+      <recipients>
+        <item>
+          <channel>email_alert</channel>
+          <address>alerts@company.com</address>
+        </item>
+      </recipients>
       ```
       - **selector**: "first" | "last" | "all" - which row(s) to evaluate
       - **function**: For first/last: "value", "diff", "pct_change", "months_ago", "days_ago", "years_ago". For all: "count", "sum", "avg", "min", "max"
@@ -334,16 +400,18 @@ templates:
     content: |
       ## Instructions: Parameters
 
+      > Parameter **definitions** (name/type/label/source) live in the question's content and are edited as **markup** via EditFile — `<parameters>` with one `<item>` per parameter. Saved defaults live in `<parameterValues>` (a compact JSON map). The only place parameters are plain JSON is the runtime name→value bindings you pass as the ExecuteQuery `parameters` arg (e.g. `{"status":"open"}`).
+
       ### Question Parameters
       - Syntax: `:paramName` in SQL (e.g., `WHERE date > :start_date AND status = :status`)
-      - Structure: `{{"name": str, "type": "text"|"number"|"date", "label": str (optional)}}`
-      - Set initial values via `parameterValues` in the question content (e.g., `"parameterValues":{{"limit":100}}`)
+      - Structure: each parameter is an `<item>` in `<parameters>` — `<item><name>str</name><type>text|number|date</type><label>str (optional)</label></item>`
+      - Set saved/initial values in `<parameterValues>` — a compact JSON map, e.g. `<parameterValues>{{"limit":100}}</parameterValues>`
       - Infer types: `*_date/*_time` → "date", `*_id/*_count/*_amount/limit/offset` → "number", else "text"
       - Escape literal colons with `\:` to prevent them becoming parameters
       - For casts, write `:param ::TYPE` (space before `::`) — `:param::TYPE` won't parse
       - **CRITICAL**: For optional tool parameters:
         - **DO NOT** pass the parameter key at all if you don't have a value
-        - **DO NOT** pass null, "null", [], "[]", "", {{}}, or any empty/placeholder values
+        - **DO NOT** pass null, "null", [], "[]", "", {}, or any empty/placeholder values
         - **ONLY** include a parameter in the tool call if you have an actual value to pass
 
       ### Dashboard Parameters
@@ -358,18 +426,27 @@ templates:
 
       ### Parameter Source (dropdown from query)
       - A parameter can be configured so its dropdown options come from another question's output column.
-      - Structure: `{{"name": str, "type": "text"|"number", "source": {{"type": "question", "id": <question_id>, "column": "<column_name>"}}}}`
+      - Add a `<source>` child to the parameter's `<item>`. Example — make `:status` a dropdown driven by question 42's "status" column:
+        ```xml
+        <item>
+          <name>status</name>
+          <type>text</type>
+          <source>
+            <type>question</type>
+            <id>42</id>
+            <column>status</column>
+          </source>
+        </item>
+        ```
       - `date` type parameters do not support `source` (use the date picker instead).
       - For `number` type, only use columns with numeric output types.
       - To find the right question ID: search for it by name. To find valid column names: use ExecuteQuery or check the question's SQL output.
-      - Example — make `:status` a dropdown driven by question 42's "status" column:
-        `{{"name": "status", "type": "text", "source": {{"type": "question", "id": 42, "column": "status"}}}}`
-      - To remove the source (revert to free input): omit the `source` field entirely or set it to null.
+      - To remove the source (revert to free input): remove the `<source>` element entirely.
 
       ### EditFile Ordering for Parameters
       - **Adding a parameter**: use two entries in one EditFile call — (1) update `parameters` array, (2) update `query` with the new `:paramName`.
       - **Removing a parameter**: reverse order in the array — (1) update `query`, (2) update `parameters`.
-      - **Never** match query + parameters in one oldMatch — JSON key order is not guaranteed.
+      - **Never** match query + parameters in one oldMatch — they are separate elements in the markup; match each independently.
   skill_visualizations:
     description: VizSettings types (line, bar, row, area, scatter, funnel, pie, radar, pivot, geo, combo, waterfall, trend, single_value), xCols/yCols config, combo / dual-axis charts (yRightCols + axisConfig.dualAxis), pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for combo / dual-axis charts and other complex visualizations and options.
     content: |
@@ -377,36 +454,38 @@ templates:
 
       **VizSettings types**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`
 
+      > Configs below are shown as JSON — the form you pass as the ExecuteQuery `vizSettings` argument. Inside a question's **markup**, `vizSettings` is the same fields as nested elements (`<vizSettings><type>bar</type><xCols><item>month</item></xCols><yCols><item>rev</item></yCols></vizSettings>`; see the questions skill).
+
       ### Standard Charts (line, bar, row, area, scatter)
       - `xCols`: grouping columns — the first one is used as x-axis, rest as grouping cols
       - `yCols`: value columns (aggregated with SUM)
-      - Example: `{{"type": "bar", "xCols": ["month"], "yCols": ["revenue"]}}`
+      - Example: `{"type": "bar", "xCols": ["month"], "yCols": ["revenue"]}`
 
       ### Combo / Dual-Axis Charts (combo)
       Plots bars and a line together, normally on two Y axes — use when metrics live on very different scales (e.g. revenue in $ as bars + growth % as a line).
       - `yCols`: left-axis columns → rendered as **bars**
       - `yRightCols`: right-axis columns → rendered as a **line**
-      - `axisConfig`: set `{{"dualAxis": true}}` to turn on the second axis — REQUIRED for `yRightCols` to take effect
-      - `styleConfig`: set `{{"stacked": false}}` so the left-axis bars sit side-by-side instead of stacking
+      - `axisConfig`: set `{"dualAxis": true}` to turn on the second axis — REQUIRED for `yRightCols` to take effect
+      - `styleConfig`: set `{"stacked": false}` so the left-axis bars sit side-by-side instead of stacking
       - Bar-vs-line is decided ONLY by which list a column is in (`yCols` = bar, `yRightCols` = line). There is NO `seriesTypes`, `yAxisLabel`, or `yAxisRight` field — do not invent one.
       - Needs at least 2 Y columns total and at least 1 X column.
-      - Example: `{{"type": "combo", "xCols": ["month"], "yCols": ["actual_revenue", "budget_revenue"], "yRightCols": ["growth_pct"], "axisConfig": {{"dualAxis": true}}, "styleConfig": {{"stacked": false}}}}`
+      - Example: `{"type": "combo", "xCols": ["month"], "yCols": ["actual_revenue", "budget_revenue"], "yRightCols": ["growth_pct"], "axisConfig": {"dualAxis": true}, "styleConfig": {"stacked": false}}`
 
       ### Trend (trend)
       - A single large metric value with a sparkline and period-over-period comparison.
       - Requires a **date/time** column in `xCols` and one metric in `yCols`.
-      - Optional `trendConfig`: `{{"compareMode": "last"}}` (default — last vs second-to-last period) or `{{"compareMode": "previous"}}` (skips a partial current period).
-      - Example: `{{"type": "trend", "xCols": ["month"], "yCols": ["revenue"]}}`
+      - Optional `trendConfig`: `{"compareMode": "last"}` (default — last vs second-to-last period) or `{"compareMode": "previous"}` (skips a partial current period).
+      - Example: `{"type": "trend", "xCols": ["month"], "yCols": ["revenue"]}`
 
       ### Waterfall (waterfall)
       - Shows a running cumulative total across steps (increments/decrements).
       - Exactly 1 `xCols` (category/step) and 1 `yCols` (the delta value).
-      - Example: `{{"type": "waterfall", "xCols": ["stage"], "yCols": ["delta"]}}`
+      - Example: `{"type": "waterfall", "xCols": ["stage"], "yCols": ["delta"]}`
 
       ### Single Value (single_value)
       - Displays one metric as a large number, no axes.
       - Put the metric in `yCols` (exactly one column); `xCols` is not needed.
-      - Example: `{{"type": "single_value", "yCols": ["total_revenue"]}}`
+      - Example: `{"type": "single_value", "yCols": ["total_revenue"]}`
 
       ### Categorical Charts (funnel, pie)
       - Same `xCols`/`yCols` pattern
@@ -418,25 +497,25 @@ templates:
       - Y columns provide the values plotted on each spoke
       - Best for comparing multiple metrics across categories (e.g., skill ratings, product attributes)
       - Requires at least 3 X-axis categories to be meaningful
-      - Example: `{{"type": "radar", "xCols": ["metric"], "yCols": ["score"]}}`
+      - Example: `{"type": "radar", "xCols": ["metric"], "yCols": ["score"]}`
 
       ### Table
-      - No axis configuration needed: `{{"type": "table"}}`
+      - No axis configuration needed: `{"type": "table"}`
 
       ### Pivot Table
       When `type` is `"pivot"`, use `pivotConfig` instead of `xCols`/`yCols`:
       ```json
-      {{
+      {
         "type": "pivot",
-        "pivotConfig": {{
+        "pivotConfig": {
           "rows": ["region", "product_category"],
           "columns": ["quarter"],
           "values": [
-            {{"column": "revenue", "aggFunction": "SUM"}},
-            {{"column": "orders", "aggFunction": "COUNT"}}
+            {"column": "revenue", "aggFunction": "SUM"},
+            {"column": "orders", "aggFunction": "COUNT"}
           ]
-        }}
-      }}
+        }
+      }
       ```
       - **rows**: dimension columns for row headers
       - **columns**: dimension columns for column headers
@@ -453,25 +532,25 @@ templates:
 
       **Choropleth** — color-filled regions by value:
       ```json
-      {{"type": "geo", "geoConfig": {{"subType": "choropleth", "mapName": "us-states", "regionCol": "state", "valueCol": "revenue"}}}}
+      {"type": "geo", "geoConfig": {"subType": "choropleth", "mapName": "us-states", "regionCol": "state", "valueCol": "revenue"}}
       ```
       - `mapName`: `"world"`, `"us-states"`, or `"india-states"`
       - `colorScale`: `"green"` (default), `"blue"`, `"red-yellow-green"`
 
       **Points** — lat/lng markers with optional bubble sizing:
       ```json
-      {{"type": "geo", "geoConfig": {{"subType": "points", "latCol": "lat", "lngCol": "lng", "valueCol": "population"}}}}
+      {"type": "geo", "geoConfig": {"subType": "points", "latCol": "lat", "lngCol": "lng", "valueCol": "population"}}
       ```
       - `valueCol` is optional — omit for uniform-size dots
 
       **Lines** — arc lines between origin/destination pairs:
       ```json
-      {{"type": "geo", "geoConfig": {{"subType": "lines", "latCol": "origin_lat", "lngCol": "origin_lng", "latCol2": "dest_lat", "lngCol2": "dest_lng"}}}}
+      {"type": "geo", "geoConfig": {"subType": "lines", "latCol": "origin_lat", "lngCol": "origin_lng", "latCol2": "dest_lat", "lngCol2": "dest_lng"}}
       ```
 
       **Heatmap** — density heatmap with optional intensity:
       ```json
-      {{"type": "geo", "geoConfig": {{"subType": "heatmap", "latCol": "lat", "lngCol": "lng", "valueCol": "intensity"}}}}
+      {"type": "geo", "geoConfig": {"subType": "heatmap", "latCol": "lat", "lngCol": "lng", "valueCol": "intensity"}}
       ```
       - `colorScale`: same options as choropleth
 
@@ -826,18 +905,34 @@ templates:
       A notebook is an ordered, vertical list of **cells**. Each cell is either a SQL cell (a full inline question) or a text cell (markdown). Cells run top-to-bottom and are independent.
 
       ### File Structure
-      ```json
-      {{
-        "description": "GitHub activity analysis",
-        "cells": [
-          {{"type": "text", "id": "<uuid>", "name": null, "content": "# Overview\nSome **markdown** notes."}},
-          {{"type": "sql", "id": "<uuid>", "name": "Stars by repo", "query": "SELECT repo_name, count(*) AS stars FROM github.events GROUP BY 1 ORDER BY 2 DESC", "vizSettings": {{"type": "bar"}}, "parameters": [], "parameterValues": {{}}, "connection_name": "github", "references": []}}
-        ]
-      }}
+      The content is read and edited as markup (see the EditFile tool for the markup format). Example notebook markup:
+      ```xml
+      <description>GitHub activity analysis</description>
+      <cells>
+        <item>
+          <type>text</type>
+          <id>cell-1</id>
+          <content>{`# Overview
+      Some **markdown** notes.`}</content>
+        </item>
+        <item>
+          <type>sql</type>
+          <id>cell-2</id>
+          <name>Stars by repo</name>
+          <query>SELECT repo_name, count(*) AS stars FROM github.events GROUP BY 1 ORDER BY 2 DESC</query>
+          <vizSettings>
+            <type>bar</type>
+          </vizSettings>
+          <parameters/>
+          <parameterValues>{{}}</parameterValues>
+          <connection_name>github</connection_name>
+          <references/>
+        </item>
+      </cells>
       ```
-      - **cells**: ordered array rendered top-to-bottom. Every cell has a stable string `id` (never reuse ids) and an optional `name`.
-      - **SQL cell** (`type: "sql"`): a full inline question — `query`, `vizSettings`, `parameters`, `parameterValues`, `connection_name`, and `references` (@alias composed questions). Same shape as a standalone question (minus description). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` / `LoadSkill("composed_questions")` as needed.
-      - **Text cell** (`type: "text"`): `content` is markdown.
+      - **cells**: ordered `<item>` list rendered top-to-bottom. Every cell has a stable string `<id>` (never reuse ids) and an optional `<name>`.
+      - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<vizSettings>`, `<parameters>`, `<parameterValues>`, `<connection_name>`, and `<references>` (@alias composed questions). Same shape as a standalone question (minus description). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` / `LoadSkill("composed_questions")` as needed.
+      - **Text cell** (`<type>text</type>`): `<content>` is markdown.
 
       ### Active cell — edit the RIGHT cell
       - AppState includes `content.activeCellId`: the cell the user is currently working on.
@@ -845,9 +940,9 @@ templates:
 
       ### Notebook Page Behavior
       - Edit in place with EditFile: change a cell's `query`/`vizSettings`, edit a text cell's `content`, rename a cell, or add/remove cells in the `cells` array.
-      - To ADD a cell, insert a new object into `cells` with a fresh unique `id`. New SQL cells must set `connection_name` (copy it from a neighboring SQL cell unless told otherwise).
-      - When adding/removing `:paramName` tokens in a SQL cell, keep that cell's `parameters` in sync (same rule as questions) — EditFile bypasses the UI auto-sync.
-      - Keep edits minimal and targeted: a notebook may have many cells, so never rewrite the whole `cells` array when a single-cell change will do.
+      - To ADD a cell, insert a new `<item>` into `<cells>` with a fresh unique `<id>`. New SQL cells must set `<connection_name>` (copy it from a neighboring SQL cell unless told otherwise).
+      - When adding/removing `:paramName` tokens in a SQL cell, keep that cell's `<parameters>` in sync (same rule as questions) — EditFile bypasses the UI auto-sync.
+      - Keep edits minimal and targeted: a notebook may have many cells, so never rewrite the whole `<cells>` list when a single-cell change will do.
   guidelines: |
     ## Guidelines
 
@@ -973,7 +1068,7 @@ prompts:
       {connection_id}
 
       ## Context File Editing Rules
-      {skill_contexts.content}
+      {contexts_skill}
 
       ## Guidelines
       - First call SearchDBSchema to get full column details for the tables.
@@ -1016,16 +1111,26 @@ prompts:
       ## Available Tools
       - **SearchDBSchema(connection_id, query?)**: Get column details for tables.
       - **ExecuteQuery(query, connectionId, vizSettings?)**: Run SQL to test queries before adding them.
-      - **CreateFile(file_type, name?, path?, content?)**: Create a new question as a draft. Returns a draft file with a real positive ID.
-        - Question content: {{"query": "SELECT ...", "connection_name": "{connection_id}", "vizSettings": {{"type": "line", "xCols": ["col"], "yCols": ["col"]}}, "description": "..."}}
+      - **CreateFile(file_type, name?, path?, markup?)**: Create a new question as a draft. Returns a draft file with a real positive ID.
+        - Question content — author as markup (the CreateFile `markup` field; see the CreateFile tool):
+          ```xml
+          <query>SELECT ...</query>
+          <connection_name>{connection_id}</connection_name>
+          <vizSettings>
+            <type>line</type>
+            <xCols><item>col</item></xCols>
+            <yCols><item>col</item></yCols>
+          </vizSettings>
+          <description>...</description>
+          ```
         - VizSettings types: `table`, `line`, `bar`, `area`, `scatter`, `pie`, `funnel`, `pivot`, `geo`
         - For line/bar/area/scatter: set `xCols` (first one is x axis, rest are used for grouping) and `yCols` (values)
         - For pie/funnel: set `xCols` (categories) and `yCols` (values)
         - For table: no axis config needed
-      - **EditFile(fileId, changes)**: Edit a file's JSON via find-and-replace. Use this to update the dashboard's `assets` and `layout`.
+      - **EditFile(fileId, changes)**: Edit a file's markup via find-and-replace. Use this to update the dashboard's `assets` and `layout`.
 
       ## Dashboard Structure
-      {skill_dashboards.content}
+      {dashboards_skill}
 
       ## Workflow
       1. Call SearchDBSchema once to see the full column details, if context is not sufficient.
