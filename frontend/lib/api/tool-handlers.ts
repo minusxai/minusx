@@ -484,6 +484,9 @@ registerFrontendTool('Screenshot', async (args, context) => {
   const fullHeight = !!args.fullHeight;
   const colorMode: 'light' | 'dark' = context.state?.ui?.colorMode === 'dark' ? 'dark' : 'light';
   try {
+    // Yield once so the chat's "Capturing" tool state can paint before html-to-image runs —
+    // the capture is synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
+    await new Promise((r) => setTimeout(r, 0));
     const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: 1024, format: 'jpeg' });
     const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
     return {

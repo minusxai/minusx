@@ -13,7 +13,7 @@ vi.mock('@/lib/screenshot/capture', () => ({
 vi.mock('@/lib/object-store/client', () => ({
   uploadBlobOrEmbed: vi.fn(async () => 'https://cdn.example/selection.jpg'),
 }));
-vi.mock('@/components/ui/toaster', () => ({ toaster: { create: vi.fn() } }));
+vi.mock('@/components/ui/toaster', () => ({ toaster: { create: vi.fn(() => 'toast-1'), update: vi.fn(), dismiss: vi.fn() } }));
 
 import { captureRegionBlob } from '@/lib/screenshot/capture';
 import RegionCaptureButton from '../RegionCaptureButton';

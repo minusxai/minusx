@@ -4,6 +4,7 @@ import DefaultToolDisplay from '@/components/explore/tools/DefaultToolDisplay';
 import ContentDisplay from '@/components/explore/tools/ContentDisplay';
 import ClarifyDisplay from '@/components/explore/tools/ClarifyDisplay';
 import NavigateDisplay from '@/components/explore/tools/NavigateDisplay';
+import ScreenshotDisplay from '@/components/explore/tools/ScreenshotDisplay';
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
 import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
 import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
@@ -19,7 +20,7 @@ import type { IconType } from 'react-icons/lib';
 import {
   LuDatabase, LuMessageSquare, LuBadgeInfo, LuArrowRight,
   LuPencilLine, LuBookOpen, LuSearch, LuFilePlus2,
-  LuUpload, LuBookMarked, LuWrench, LuBrain, LuGlobe,
+  LuUpload, LuBookMarked, LuWrench, LuBrain, LuGlobe, LuCamera,
 } from 'react-icons/lu';
 
 // Tool configuration interface
@@ -131,6 +132,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipIcon: LuArrowRight,
 
     timelineVerb: 'Navigating',
+  },
+  'Screenshot': {
+    displayComponent: ScreenshotDisplay,
+
+    chipLabel: 'screenshot',
+    chipLabelPlural: 'screenshots',
+    chipIcon: LuCamera,
+
+    timelineVerb: 'Capturing',
   },
   'EditFile': {
     displayComponent: EditFileDisplay,
