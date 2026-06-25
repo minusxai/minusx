@@ -213,7 +213,7 @@ templates:
       </references>
       ```
       - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
-      - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. Use `LoadSkill("visualizations")` for complex configs — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot, geo, trend, waterfall.
+      - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
       - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
 

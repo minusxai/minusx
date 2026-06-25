@@ -61,9 +61,23 @@ describe('getPageType', () => {
 describe('getPreloadedSkillNames', () => {
   it('maps page type to skills and appends the restricted nav skill by default', () => {
     expect(getPreloadedSkillNames({ pageType: 'question', selected: [], unrestrictedMode: false }))
-      .toEqual(['questions', 'navigation_restricted']);
+      .toEqual(['questions', 'visualizations', 'navigation_restricted']);
     expect(getPreloadedSkillNames({ pageType: 'dashboard', selected: [], unrestrictedMode: false }))
-      .toEqual(['dashboards', 'questions', 'navigation_restricted']);
+      .toEqual(['dashboards', 'questions', 'visualizations', 'navigation_restricted']);
+  });
+
+  it('preloads the visualizations skill on every viz-authoring page (so a blank question page knows geo/pivot/etc.)', () => {
+    for (const pageType of ['question', 'dashboard', 'story', 'notebook']) {
+      expect(getPreloadedSkillNames({ pageType, selected: [], unrestrictedMode: false }),
+        `${pageType} should preload visualizations`).toContain('visualizations');
+    }
+  });
+
+  it('does NOT preload visualizations on non-viz page types', () => {
+    for (const pageType of ['context', 'report', 'alert', 'explore', 'folder']) {
+      expect(getPreloadedSkillNames({ pageType, selected: [], unrestrictedMode: false }),
+        `${pageType} should not preload visualizations`).not.toContain('visualizations');
+    }
   });
 
   it('falls back to the default skill set when page type is null/unknown', () => {
