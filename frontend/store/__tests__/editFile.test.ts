@@ -7,6 +7,7 @@ import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile, selectNotebookCellExecuted, selectPersistableContent } from '@/store/filesSlice';
 import { selectQueryResult } from '@/store/queryResultsSlice';
 import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
+import { numberToPlaceholder } from '@/lib/data/story-number';
 import { executeToolCall } from '@/lib/api/tool-handlers';
 import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';
@@ -726,6 +727,83 @@ describe('editFile - Story auto-executes inline questions (agent sees the new re
     const qr = selectQueryResult(testStore.getState(), 'SELECT 2 AS v', {}, 'test');
     expect(qr?.data?.rows).toEqual([{ v: 99 }]);
     expect(qr?.data?.finalQuery).toBe('SELECT 2 AS v'); // the edited query, not the old one
+  });
+});
+
+describe('editFile - Story inline <Number> is visible to the agent (EditFile response: data + error)', () => {
+  let storyId: number;
+
+  function setupStore() {
+    return configureStore({ reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer, ui: uiReducer } });
+  }
+
+  // /api/query echoes finalQuery; a query containing BADSQL returns a parser-style ERROR (non-ok),
+  // mirroring the real "Failed to extract statements" the agent hits when it mis-writes a query.
+  beforeAll(() => {
+    global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, { method: 'POST', ...init, headers: { ...init?.headers, 'x-user-id': '1' } } as any);
+        const response = await batchPostHandler(request as NextRequest);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      if (urlStr.includes('/api/query')) {
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        if (typeof body.query === 'string' && body.query.includes('BADSQL')) {
+          return { ok: false, status: 400, json: async () => ({
+            success: false,
+            error: { message: 'Failed to extract statements: Parser Error: syntax error at or near "BADSQL"' },
+          }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({
+          success: true,
+          data: { columns: ['n'], types: ['INTEGER'], rows: [{ n: 7 }], finalQuery: body.query },
+        }) } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+  afterAll(() => { vi.restoreAllMocks(); });
+
+  beforeEach(async () => { await clearFilesExceptOrg(); testStore = setupStore(); vi.clearAllMocks(); });
+  afterEach(() => { testStore = null; if (global.gc) global.gc(); });
+
+  // EditFile content is either the JSON object (no chart images) or a [text, ...images] array.
+  function editContent(res: any): any {
+    const c = res.content;
+    if (Array.isArray(c)) return JSON.parse((c.find((b: any) => b.type === 'text') as any).text);
+    return typeof c === 'string' ? JSON.parse(c) : c;
+  }
+
+  async function makeStory(numberQuery: string): Promise<number> {
+    const body = `<div class="story"><h1>HEAD</h1><p>MRR is ${numberToPlaceholder({ query: numberQuery, connection: 'test', col: 'n', prefix: '$' })} today.</p></div>`;
+    return DocumentDB.create('num-story', '/org/num-story', 'story', { description: null, story: body } as any, []);
+  }
+
+  async function editHead(id: number) {
+    return executeToolCall(
+      { id: 'c1', type: 'function', function: { name: 'EditFile', arguments: { fileId: id, changes: [{ oldMatch: 'HEAD', newMatch: 'HEADLINE' }] } } } as any,
+      {} as any,
+    );
+  }
+
+  it('EditFile response queryResults include the inline <Number> result (the agent sees its data)', async () => {
+    storyId = await makeStory('SELECT 7 AS n');
+    await readFiles([storyId]);
+    const parsed = editContent(await editHead(storyId));
+    const finals = (parsed.queryResults ?? []).map((q: any) => q.finalQuery);
+    expect(finals).toContain('SELECT 7 AS n');
+  });
+
+  it('EditFile response surfaces the inline <Number> query ERROR (so the agent self-corrects)', async () => {
+    storyId = await makeStory('SELECT BADSQL AS n');
+    await readFiles([storyId]);
+    const parsed = editContent(await editHead(storyId));
+    const errored = (parsed.queryResults ?? []).filter((q: any) => q.error);
+    expect(errored.length).toBeGreaterThan(0);
+    expect(errored[0].error).toContain('Parser Error');
   });
 });
 

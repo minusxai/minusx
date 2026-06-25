@@ -21,6 +21,7 @@ import { readFilesServer } from '@/lib/api/file-state.server';
 import { TOOL_DEFAULT_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { inlineQuestionToPlaceholder } from '@/lib/data/story-question';
+import { numberToPlaceholder } from '@/lib/data/story-number';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent, FolderContent, DocumentContent, CompressedAugmentedFile, ReadFilesResult } from '@/lib/types';
 import {
@@ -173,6 +174,23 @@ describe('ReadFiles', () => {
     const expectedId = getQueryHash(inlineQuery, {}, 'test');
     const ids = out[0].queryResults.map(r => r.id);
     expect(ids).toContain(expectedId);
+  });
+
+  it("runs a story's INLINE <Number> embeds and includes their results (live inline numbers for the agent)", async () => {
+    // A <Number query=…> figure in the prose is a query the agent must SEE the result of —
+    // same guarantee as an inline <Question>. Previously inline numbers were not executed,
+    // so the agent edited them blind (no data, and crucially no parser ERROR feedback).
+    const numberQuery = 'SELECT 7 AS n';
+    const body = `<div class="story"><p>MRR is ${numberToPlaceholder({ query: numberQuery, connection: 'test', col: 'n', prefix: '$' })} today.</p></div>`;
+    const story = await FilesAPI.createFile(
+      { name: 'inline-number-story', path: `${TEST_FOLDER}/inline-number-story`, type: 'story', content: { description: 'x', story: body } as unknown as DocumentContent },
+      ADMIN,
+    );
+
+    const out = await readFilesServer([story.data.id], ADMIN, { executeQueries: true, maxChars: TOOL_DEFAULT_LIMIT_CHARS });
+    // Keyed by the SAME hash (params {}, matching the InlineNumber renderer + EditFile auto-execute).
+    const expectedId = getQueryHash(numberQuery, {}, 'test');
+    expect(out[0].queryResults.map(r => r.id)).toContain(expectedId);
   });
 
   it('enforces ACL — restricted viewer cannot read a file outside their home folder', async () => {

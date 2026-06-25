@@ -19,6 +19,7 @@ import {
   buildEffectiveReference,
 } from '@/lib/data/helpers/param-resolution';
 import { extractInlineQuestions } from '@/lib/data/story-question';
+import { extractInlineNumbers } from '@/lib/data/story-number';
 import type { QuestionParameter } from '@/lib/validation/atlas-schemas';
 import type {
   IFileStateRead,
@@ -221,8 +222,21 @@ async function executeQueriesForFile(
     }
   };
 
+  // A story's INLINE <Number> figures (`data-number-inline`, no saved file) are also live
+  // queries the agent must see the result — and crucially the parser ERROR — of. They carry
+  // no declared params, so they run with {} (matching the InlineNumber renderer + the EditFile
+  // auto-execute). Saved <Number id> figures point to a question file and run via execQuestion.
+  const execInlineNumbers = async (storyFile: DbFile): Promise<void> => {
+    if (storyFile.type !== 'story') return;
+    const html = (storyFile.content as { story?: string | null } | null)?.story;
+    for (const e of extractInlineNumbers(html)) {
+      await runOne(e.query, e.connection, null, {});
+    }
+  };
+
   await execQuestion(file);
   await execInlineQuestions(file);
+  await execInlineNumbers(file);
   await Promise.all(references.map(ref => execQuestion(ref)));
 
   return results;

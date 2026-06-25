@@ -11,6 +11,7 @@ import { selectFile, selectMergedContent, type FileState } from '@/store/filesSl
 import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { extractInlineQuestions } from '@/lib/data/story-question';
+import { extractInlineNumbers } from '@/lib/data/story-number';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 
 /**
@@ -148,6 +149,19 @@ export function augmentWithParams(
       const params = e.parameters?.length ? resolveEffectiveParams(e.parameters, {}, inheritedParams) : {};
       const qr = selectQueryResult(state, e.query, params, e.connection);
       const id = getQueryHash(e.query, params, e.connection);
+      if (qr?.data) {
+        result.set(id, { ...(qr.data || {}), id });
+      } else if (qr?.error) {
+        result.set(id, { columns: [], types: [], rows: [], id, error: qr.error } as QueryResult & { error: string });
+      }
+    }
+    // Inline <Number> figures are queries too — surface their result AND parser error so the
+    // agent sees them after an EditFile (mirrors the server's executeQueriesForFile). They carry
+    // no declared params, so they key on {} — the same hash the renderer + EditFile auto-execute use.
+    for (const e of extractInlineNumbers(content?.story)) {
+      if (!e.query || !e.connection) continue;
+      const qr = selectQueryResult(state, e.query, {}, e.connection);
+      const id = getQueryHash(e.query, {}, e.connection);
       if (qr?.data) {
         result.set(id, { ...(qr.data || {}), id });
       } else if (qr?.error) {
