@@ -360,8 +360,10 @@ export const StoryContent = Type.Object({
     '`<Param name="city" type="text" nullable={false} />` (typed input), ' +
     '`<Param name="city" type="text" id={5} column="city" />` (autocomplete from question 5\'s column), or ' +
     '`<Param name="limit" type="number" widget="slider" min={0} max={100} step={5} />` (range slider). ' +
-    'Every embedded question whose SQL has a matching `:param` rebinds on change. Theme with `style={{…}}` (control) ' +
-    'and `labelStyle={{…}}` (label) — LITERAL CSS objects, not theme tokens (they vanish across the shadow boundary).'),
+    'Every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds on ' +
+    'change (so a `<Number query={`… WHERE mrr >= :min_mrr`}>` is driven live by a `min_mrr` slider); the story\'s ' +
+    '`parameterValues` are the defaults. Theme with `style={{…}}` (control) and `labelStyle={{…}}` (label) — LITERAL ' +
+    'CSS objects, not theme tokens (they vanish across the shadow boundary).'),
   suggestedQuestions: Type.Optional(Nullable(Type.Array(Type.String(), { description:
     'Up to ~3 short follow-up questions a reader might ask about THIS story, shown as "try these questions" ' +
     'prompts in the chat panel. Make them specific to the story\'s data and narrative (e.g. "Which region drove ' +

@@ -12,15 +12,18 @@ import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { extractInlineQuestions } from '@/lib/data/story-question';
 import { extractInlineNumbers } from '@/lib/data/story-number';
+import { bindReferencedParams } from '@/lib/sql/sql-params';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 
 /**
  * Extracts inherited params from a file's content directly.
  * Shared by both client (via selectMergedContent) and server (via DbFile.content).
- * Dashboards pass their parameterValues down to all references; everything else returns {}.
+ * Dashboards AND stories pass their parameterValues down to all embeds/references (so a story
+ * <Param> default drives its inline <Question>/<Number> embeds the same way a dashboard filter
+ * drives its tiles); everything else returns {}.
  */
 export function getRootParamsFromContent(type: string, content: any): Record<string, any> {
-  if (type === 'dashboard') {
+  if (type === 'dashboard' || type === 'story') {
     return (content as DocumentContent)?.parameterValues || {};
   }
   return {};
@@ -120,7 +123,10 @@ export function storyEmbedRuns(
   }
   for (const e of extractInlineNumbers(html)) {
     if (!e.query || !e.connection) continue;
-    runs.push({ query: e.query, connection: e.connection, params: {} });
+    // Inline numbers declare no `parameters` list, so bind the story params their SQL references
+    // (`:name`) directly — this is what lets a story <Param> (e.g. a min_mrr slider) drive a live
+    // <Number>. The renderer (InlineNumber) binds with the SAME helper, so the hashes line up.
+    runs.push({ query: e.query, connection: e.connection, params: bindReferencedParams(e.query, inheritedParams) });
   }
   return runs;
 }

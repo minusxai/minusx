@@ -13,7 +13,7 @@ import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
 import { formatLargeNumber } from '@/lib/chart/chart-utils';
-import { buildQueryParamValues } from '@/lib/sql/sql-params';
+import { buildQueryParamValues, bindReferencedParams } from '@/lib/sql/sql-params';
 import type { InlineNumberEmbed } from '@/lib/data/story-number';
 import type { QuestionContent } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
@@ -70,7 +70,10 @@ function SavedNumber({ id, embed, externalParamValues }: { id: number; embed: In
 
 /** Inline-query figure: run the query, read its value, show the result chart in the footnote. */
 function InlineQueryNumber({ embed, externalParamValues }: { embed: InlineNumberEmbed; externalParamValues?: Record<string, unknown> }) {
-  const params = buildQueryParamValues([], {}, externalParamValues);
+  // Bind the story <Param> values this number's SQL references (`:name`) so a reader's slider /
+  // the story's default params drive the figure live. Same helper the augmentation uses → the
+  // rendered number and the agent-seen number share a cache key.
+  const params = bindReferencedParams(embed.query, externalParamValues);
   const { data } = useQueryResult(embed.query ?? '', params, embed.connection ?? '', undefined, {
     skip: !embed.query || !embed.connection,
   });
