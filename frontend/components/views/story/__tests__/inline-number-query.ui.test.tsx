@@ -34,6 +34,8 @@ describe('InlineNumber footnote — source query (read) + Edit-query trigger', (
     });
     // not editable → no Edit-query trigger
     expect(screen.queryByLabelText('edit inline number query')).toBeNull();
+    // no redundant single_value source chart (that empty 260px box was the white block)
+    expect(screen.queryByLabelText('inline chart')).toBeNull();
   });
 
   it('in EDIT mode offers "Edit query", which requests the editor (onRequestEdit)', async () => {
