@@ -1,7 +1,7 @@
 import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
-import { getSkill } from '@/orchestrator/prompts';
+import { loadSkill } from '@/agents/skill-content';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
@@ -253,7 +253,7 @@ export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystConte
       return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
     }
     // System skills live in the shared prompts.yaml — resolve them here.
-    const content = getSkill(name);
+    const content = loadSkill(name);
     if (content === null) {
       // Not a system skill → user-defined; resolve on the frontend.
       throw new UserInputException(this.id);

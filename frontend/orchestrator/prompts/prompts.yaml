@@ -190,30 +190,9 @@ templates:
       ## Instructions: Questions
 
       ### File Structure
-      The content is read and edited as markup (see the EditFile tool for the markup format). Example question markup:
-      ```xml
-      <description>User demographics query</description>
-      <query>{`SELECT * FROM users WHERE age > :min_age`}</query>
-      <vizSettings>
-        <type>table</type>
-        <xCols/>
-        <yCols/>
-      </vizSettings>
-      <parameters>
-        <item>
-          <name>min_age</name>
-          <type>number</type>
-          <label>Min Age</label>
-        </item>
-      </parameters>
-      <parameterValues>{{"min_age":18}}</parameterValues>
-      <connection_name>my_connection</connection_name>
-      <references>
-        <item>
-          <id>456</id>
-          <alias>base_data_456</alias>
-        </item>
-      </references>
+      The content is edited as MARKUP — the JSX projection of the schema below (see the EditFile tool for how fields map to JSX). The question content schema is generated LIVE from code (the single source of truth — never invent fields):
+      ```json
+      {schema_question}
       ```
       - A question's saved parameter default values live in `<parameterValues>` (a compact JSON object), not on the `<parameters>` items.
       - **VizSettings**: `table`, `line`, `bar`, `row`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`, `combo`, `waterfall`, `trend`, `single_value`. The full viz schema — combo / dual-axis (`yRightCols` + `axisConfig.dualAxis`), pivot (`pivotConfig`), geo (`geoConfig`), trend, waterfall, single_value (`singleValueConfig`) — is in the **visualizations** instructions preloaded below; consult it before authoring any non-basic chart.
@@ -230,39 +209,9 @@ templates:
       ## Instructions: Dashboards
 
       ### File Structure
-      The content is read and edited as markup (see the EditFile tool for the markup format). Example dashboard markup:
-      ```xml
-      <assets>
-        <item>
-          <type>question</type>
-          <id>123</id>
-        </item>
-        <item>
-          <type>text</type>
-          <id>inline-text-0</id>
-          <content>{`## Section Header
-      Some markdown text`}</content>
-        </item>
-      </assets>
-      <layout>
-        <columns>12</columns>
-        <items>
-          <item>
-            <id>123</id>
-            <x>0</x>
-            <y>0</y>
-            <w>6</w>
-            <h>4</h>
-          </item>
-          <item>
-            <id>inline-0</id>
-            <x>6</x>
-            <y>0</y>
-            <w>6</w>
-            <h>2</h>
-          </item>
-        </items>
-      </layout>
+      The content is edited as MARKUP — the JSX projection of the schema below (see the EditFile tool for how fields map to JSX). The dashboard content schema is generated LIVE from code (the single source of truth — never invent fields):
+      ```json
+      {schema_dashboard}
       ```
       - Layout uses a 12-column grid. `x` is column offset, `y` is row offset, `w` is width, `h` is height.
       - Question items have id `<questionId>`, inline items have id `inline-<index>`.
@@ -747,6 +696,13 @@ templates:
 
       Approach this as a hybrid of two people: the graphics editor at a major newsroom (think the teams behind award-winning visual journalism) and the design lead at a studio known for unforgettable visual identities. The deliverable is a long-scroll HTML data story — a single fragment (a `<style>` block plus one root `<div>`, no JavaScript) with platform chart embeds — mostly static, beautifully designed, where scrolling reveals a narrative built from real data. The reader should finish knowing exactly one thing they didn't know before — and remember how it looked.
 
+      ## Story file structure
+
+      A story's content is edited as MARKUP — most fields are simple, and the `body` is authored INLINE as real JSX (the long-scroll HTML fragment this skill describes; charts/numbers via `<Question>`/`<Number>`/`<Param>` embeds). The content schema is generated LIVE from code (the single source of truth — never invent fields):
+      ```json
+      {schema_story}
+      ```
+
       ## Before anything: clarify, then gather
 
       Do not start writing or designing until two things are settled:
@@ -932,30 +888,9 @@ templates:
       A notebook is an ordered, vertical list of **cells**. Each cell is either a SQL cell (a full inline question) or a text cell (markdown). Cells run top-to-bottom and are independent.
 
       ### File Structure
-      The content is read and edited as markup (see the EditFile tool for the markup format). Example notebook markup:
-      ```xml
-      <description>GitHub activity analysis</description>
-      <cells>
-        <item>
-          <type>text</type>
-          <id>cell-1</id>
-          <content>{`# Overview
-      Some **markdown** notes.`}</content>
-        </item>
-        <item>
-          <type>sql</type>
-          <id>cell-2</id>
-          <name>Stars by repo</name>
-          <query>SELECT repo_name, count(*) AS stars FROM github.events GROUP BY 1 ORDER BY 2 DESC</query>
-          <vizSettings>
-            <type>bar</type>
-          </vizSettings>
-          <parameters/>
-          <parameterValues>{{}}</parameterValues>
-          <connection_name>github</connection_name>
-          <references/>
-        </item>
-      </cells>
+      The content is edited as MARKUP — the JSX projection of the schema below (see the EditFile tool for how fields map to JSX). The notebook content schema is generated LIVE from code (the single source of truth — never invent fields):
+      ```json
+      {schema_notebook}
       ```
       - **cells**: ordered `<item>` list rendered top-to-bottom. Every cell has a stable string `<id>` (never reuse ids) and an optional `<name>`.
       - **SQL cell** (`<type>sql</type>`): a full inline question — `<query>`, `<vizSettings>`, `<parameters>`, `<parameterValues>`, `<connection_name>`, and `<references>` (@alias composed questions). Same shape as a standalone question (minus description). Use `LoadSkill("visualizations")` / `LoadSkill("parameters")` / `LoadSkill("composed_questions")` as needed.

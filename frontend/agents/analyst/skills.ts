@@ -4,7 +4,8 @@
 // piece is unit-testable in isolation.
 
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
-import { HIDDEN_SKILLS, listSkills, getSkill, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
+import { HIDDEN_SKILLS, listSkills, type PromptTree } from '@/orchestrator/prompts/prompt-loader';
+import { loadSkillFromTree } from '@/agents/skill-content';
 
 /**
  * Page type → skills preloaded into the system prompt.
@@ -109,7 +110,7 @@ export function buildPreloadedSkillsContent(opts: {
   const { tree, skillNames, selected } = opts;
   const sections: string[] = [];
   for (const name of skillNames) {
-    const content = getSkill(tree, name);
+    const content = loadSkillFromTree(tree, name);
     if (content) sections.push(content);
   }
   for (const skill of selected) {

@@ -96,3 +96,34 @@ export const atlasSchemaNoViz: Record<string, unknown> = topLevel({
   AtlasStoryFile: stripViz(toJson(AtlasStoryFile)),
   AtlasNotebookFile: stripViz(toJson(AtlasNotebookFile)),
 });
+
+// ── Per-file-type content schema for SKILL prompts ───────────────────────────
+// Each file type's skill embeds the LIVE content schema (below) instead of a hand-typed example,
+// so the prompt the LLM sees can never drift from the actual validation schema. Source of truth =
+// the TypeBox `*Content` defs in atlas-schemas.ts. vizSettings is collapsed to a pointer (the full
+// viz schema lives in the visualizations skill), matching the no-viz tool schema.
+const CONTENT_DEF_BY_TYPE = {
+  question: 'QuestionContent',
+  dashboard: 'DashboardContent',
+  story: 'StoryContent',
+  notebook: 'NotebookContent',
+} as const;
+
+export type AtlasSchemaFileType = keyof typeof CONTENT_DEF_BY_TYPE;
+export const ATLAS_SCHEMA_FILE_TYPES = Object.keys(CONTENT_DEF_BY_TYPE) as AtlasSchemaFileType[];
+
+/** The LIVE, viz-collapsed JSON-Schema for a file type's editable content, pretty-printed. */
+export function contentSchemaText(fileType: AtlasSchemaFileType): string {
+  const defs = atlasSchema.$defs as Record<string, unknown>;
+  const def = defs[CONTENT_DEF_BY_TYPE[fileType]];
+  if (!def) throw new Error(`No Atlas content schema for file type '${fileType}'`);
+  const clone = toJson(def);
+  stripVizDeep(clone); // collapse vizSettings → pointer, drop system-managed cellResults
+  return JSON.stringify(clone, null, 2);
+}
+
+/** `schema_question` … → rendered schema. Merged into the prompt template tree so skills can
+ *  reference `{schema_question}` etc. (see orchestrator/prompts/index.ts). */
+export const SCHEMA_TEMPLATE_VARS: Record<string, string> = Object.fromEntries(
+  ATLAS_SCHEMA_FILE_TYPES.map((t) => [`schema_${t}`, contentSchemaText(t)]),
+);
