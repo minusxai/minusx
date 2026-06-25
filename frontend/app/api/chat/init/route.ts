@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
+    const rawBody = await request.text();
+    const body = rawBody ? JSON.parse(rawBody) as { firstMessage?: string } : {};
     const { firstMessage } = body;
 
     // The resolved chat version marks the conversation: v2 (the default; see
