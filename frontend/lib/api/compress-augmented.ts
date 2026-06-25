@@ -165,16 +165,18 @@ function compressFileState(fs: FileState): CompressedFileState {
  * client keeps `content` for chart rendering, params, viz-change detection, etc.).
  */
 export function omitFileStateContent(fs: CompressedFileState): CompressedFileState {
+  if (!fs || typeof fs !== 'object') return fs;
   const { content: _omit, ...rest } = fs;
   return rest;
 }
 
 /** Strip JSON `content` from a CompressedAugmentedFile (primary + references) for the LLM. */
 export function stripAugmentedContentForLlm(aug: CompressedAugmentedFile): CompressedAugmentedFile {
+  if (!aug || typeof aug !== 'object') return aug;
   return {
     ...aug,
     fileState: omitFileStateContent(aug.fileState),
-    references: aug.references.map(omitFileStateContent),
+    references: Array.isArray(aug.references) ? aug.references.map(omitFileStateContent) : aug.references,
   };
 }
 

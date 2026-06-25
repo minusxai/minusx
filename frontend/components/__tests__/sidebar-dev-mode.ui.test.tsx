@@ -43,7 +43,7 @@ describe('Sidebar developer-mode toggle', () => {
 
     fireEvent.click(screen.getByLabelText('Account menu'));
 
-    const toggle = await screen.findByLabelText('Turn on developer mode');
+    const toggle = await screen.findByLabelText('Dev mode toggle');
     expect(store.getState().ui.devMode).toBe(false);
 
     fireEvent.click(toggle);
@@ -58,7 +58,6 @@ describe('Sidebar developer-mode toggle', () => {
 
     // The menu is open (Dark/Light toggle is present) but the dev toggle is not.
     await screen.findByLabelText('Account menu');
-    expect(screen.queryByLabelText('Turn on developer mode')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Turn off developer mode')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dev mode toggle')).not.toBeInTheDocument();
   });
 });

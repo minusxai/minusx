@@ -64,7 +64,11 @@ export function appStateForLlm(appState: AppState): AppState {
     : appState.ui;
 
   if (appState.type === 'file') {
-    return { ...appState, state: stripAugmentedContentForLlm(appState.state), ui };
+    // `state` is typed as always-present, but partial app-state payloads (e.g. headless
+    // callers / tests) may omit it — guard at runtime before stripping content.
+    const fileState = appState.state as CompressedAugmentedFile | undefined;
+    if (!fileState) return { ...appState, ui };
+    return { ...appState, state: stripAugmentedContentForLlm(fileState), ui };
   }
   return { ...appState, ui };
 }
