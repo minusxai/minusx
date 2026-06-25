@@ -8,6 +8,7 @@ import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
+import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -470,6 +471,10 @@ function ChatInputInner({
                       >
                         <Icon as={LuPaperclip} boxSize={3.5} />
                       </IconButton>
+                    </Tooltip>
+
+                    <Tooltip content="Select a screen region to add as context" positioning={{ placement: 'top' }}>
+                      <span><RegionCaptureButton /></span>
                     </Tooltip>
 
                     {isPreparing ? (
