@@ -33,4 +33,13 @@ describe('storyEmbedRuns — inline <Number> binds story :params', () => {
     const html = `<div>${numberToPlaceholder({ query: 'SELECT 1 WHERE x >= :ghost', connection: 'duck' })}</div>`;
     expect(storyEmbedRuns(html, {})[0].params).toEqual({ ghost: null });
   });
+
+  it('an EMPTY param value → null (None) — an unset min_mrr filter must not break the numeric query', () => {
+    // A number <Param> with no value holds '' (or null). Binding '' into `… >= :min_mrr` errors /
+    // empties the result; None removes the filter, so the number shows its full value (as it did
+    // before it was bound). Both '' and null must collapse to null.
+    const html = `<div>${numberToPlaceholder({ query: numQuery, connection: 'duck', col: 'm' })}</div>`;
+    expect(storyEmbedRuns(html, { min_mrr: '' })[0].params).toEqual({ min_mrr: null });
+    expect(storyEmbedRuns(html, { min_mrr: null })[0].params).toEqual({ min_mrr: null });
+  });
 });

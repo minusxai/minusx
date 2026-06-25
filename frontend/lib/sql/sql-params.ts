@@ -92,7 +92,11 @@ export function bindReferencedParams(
   const out: Record<string, unknown> = {};
   const vals = values ?? {};
   for (const name of extractParametersFromSQL(query ?? '')) {
-    out[name] = name in vals ? vals[name] : null;
+    // An unset param (missing) OR an empty value ('') binds as None (null) so the filter is
+    // removed via the None round-trip — an empty `min_mrr` slider must NOT inject `>= ''` (which
+    // breaks a numeric query); the number then shows its full, unfiltered value.
+    const v = name in vals ? vals[name] : null;
+    out[name] = v === '' ? null : v;
   }
   return out;
 }
