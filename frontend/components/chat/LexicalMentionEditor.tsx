@@ -11,7 +11,7 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { Box } from '@chakra-ui/react';
 import { MentionNode } from './lexical/MentionNode';
 import { MentionsPlugin } from './lexical/MentionsPlugin';
-import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, KEY_ENTER_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND, TextNode } from 'lexical';
+import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, COMMAND_PRIORITY_LOW, KEY_ENTER_COMMAND, KEY_ARROW_UP_COMMAND, KEY_ARROW_DOWN_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND, TextNode } from 'lexical';
 import { useEffect } from 'react';
 import { $createMentionNode, MentionData as MentionNodeData } from './lexical/MentionNode';
 import type { ChatMentionData, DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
@@ -31,6 +31,7 @@ interface LexicalMentionEditorProps {
   availableSkills?: SkillMention[];
   availableCommands?: SlashCommand[];
   onCommandExecute?: (command: SlashCommand) => void;
+  onArrowKey?: (direction: 'up' | 'down', event: KeyboardEvent) => boolean | void;
 }
 
 export interface LexicalMentionEditorRef {
@@ -184,6 +185,37 @@ function PastePlugin() {
   return null;
 }
 
+function ArrowKeyPlugin({ onArrowKey }: { onArrowKey?: (direction: 'up' | 'down', event: KeyboardEvent) => boolean | void }) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    if (!onArrowKey) return;
+
+    const handleArrow = (direction: 'up' | 'down', event: KeyboardEvent | null) => {
+      if (!event) return false;
+      return onArrowKey(direction, event) === true;
+    };
+
+    const unregisterArrowUp = editor.registerCommand(
+      KEY_ARROW_UP_COMMAND,
+      (event: KeyboardEvent | null) => handleArrow('up', event),
+      COMMAND_PRIORITY_LOW
+    );
+    const unregisterArrowDown = editor.registerCommand(
+      KEY_ARROW_DOWN_COMMAND,
+      (event: KeyboardEvent | null) => handleArrow('down', event),
+      COMMAND_PRIORITY_LOW
+    );
+
+    return () => {
+      unregisterArrowUp();
+      unregisterArrowDown();
+    };
+  }, [editor, onArrowKey]);
+
+  return null;
+}
+
 function FocusPlugin({
   onFocus,
   onBlur,
@@ -240,7 +272,7 @@ const lexicalEditorPropsEqual = (prev: LexicalMentionEditorProps, next: LexicalM
   if (!isEqual(prev.availableCommands, next.availableCommands)) return false;
   return shallowEqualExcept(prev, next, [
     'whitelistedSchemas', 'availableSkills', 'availableCommands',
-    'onSubmit', 'onChange', 'onFocus', 'onBlur', 'onCommandExecute',
+    'onSubmit', 'onChange', 'onFocus', 'onBlur', 'onCommandExecute', 'onArrowKey',
   ]);
 };
 
@@ -260,6 +292,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
       availableSkills = [],
       availableCommands,
       onCommandExecute,
+      onArrowKey,
     },
     ref
   ) {
@@ -360,6 +393,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
             <OnSubmitPlugin onSubmit={onSubmit} />
             <EditablePlugin disabled={disabled} />
             <PastePlugin />
+            <ArrowKeyPlugin onArrowKey={onArrowKey} />
             <FocusPlugin onFocus={onFocus} onBlur={onBlur} editorRef={editorRef} />
             <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} availableSkills={availableSkills} availableCommands={availableCommands} onCommandExecute={onCommandExecute} />
           </Box>

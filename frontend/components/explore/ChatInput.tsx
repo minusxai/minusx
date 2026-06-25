@@ -1,12 +1,13 @@
 'use client';
 
-import { memo, useState, useRef, KeyboardEvent, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import isEqual from 'lodash/isEqual';
 import { shallowEqualExcept, useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
 import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
+import { addInputHistoryEntry, selectChatInputHistory } from '@/store/chatSlice';
 import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments, selectPendingUploads, removePendingUpload } from '@/store/uiSlice';
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import DatabaseSelector from '@/components/DatabaseSelector';
@@ -73,6 +74,7 @@ function ChatInputInner({
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const pendingMessage = useAppSelector((state) => state.ui.sidebarPendingMessage);
+  const inputHistory = useAppSelector(selectChatInputHistory);
 
 
   // Use Redux for draft text (persists across unmount)
@@ -89,6 +91,9 @@ function ChatInputInner({
   const editorRef = useRef<LexicalMentionEditorRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const prevIsPreparingRef = useRef(false);
+  const historyCursorRef = useRef<number | null>(null);
+  const draftBeforeHistoryRef = useRef('');
+  const skipNextHistoryResetRef = useRef(false);
 
   const isFloating = container === 'floating';
   const hasContent = input.trim().length > 0 || attachments.length > 0;
@@ -163,10 +168,67 @@ function ChatInputInner({
   // latest impl. Regression test: components/__tests__/chat-input-enter.ui.test.tsx.
   const handleSend = useStableCallback(() => {
     if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading && !chatLocked && !hasPendingUploads) {
+      dispatch(addInputHistoryEntry(input));
+      historyCursorRef.current = null;
+      draftBeforeHistoryRef.current = '';
       onSend(input.trim(), attachments);
       // Don't clear here — input stays greyed while isPreparing=true,
       // then cleared by the useEffect when isPreparing transitions to false.
     }
+  });
+
+  const handleInputChange = useStableCallback((value: string) => {
+    setInput(value);
+    if (skipNextHistoryResetRef.current) {
+      skipNextHistoryResetRef.current = false;
+      return;
+    }
+    historyCursorRef.current = null;
+    draftBeforeHistoryRef.current = value;
+  });
+
+  const setEditorTextFromHistory = useStableCallback((value: string) => {
+    skipNextHistoryResetRef.current = true;
+    setInput(value);
+    editorRef.current?.setText(value);
+  });
+
+  const handleHistoryArrow = useStableCallback((direction: 'up' | 'down', event: globalThis.KeyboardEvent) => {
+    if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false;
+    if (inputHistory.length === 0) return false;
+    if (document.getElementById('typeahead-menu')) return false;
+
+    const currentCursor = historyCursorRef.current;
+    if (direction === 'up') {
+      if (currentCursor === null && input.trim().length > 0) return false;
+
+      const nextCursor = currentCursor === null
+        ? inputHistory.length - 1
+        : Math.max(0, currentCursor - 1);
+
+      if (currentCursor === null) {
+        draftBeforeHistoryRef.current = input;
+      }
+
+      historyCursorRef.current = nextCursor;
+      setEditorTextFromHistory(inputHistory[nextCursor]);
+      event.preventDefault();
+      return true;
+    }
+
+    if (currentCursor === null) return false;
+
+    if (currentCursor >= inputHistory.length - 1) {
+      historyCursorRef.current = null;
+      setEditorTextFromHistory(draftBeforeHistoryRef.current);
+    } else {
+      const nextCursor = currentCursor + 1;
+      historyCursorRef.current = nextCursor;
+      setEditorTextFromHistory(inputHistory[nextCursor]);
+    }
+
+    event.preventDefault();
+    return true;
   });
 
   const processFile = async (file: File) => {
@@ -221,13 +283,6 @@ function ChatInputInner({
 
   const removeAttachment = (index: number) => {
     dispatch(removeChatAttachment(index));
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   const colSpan = colSpanProp ?? (isFloating ? 12 : isCompact ? 12 : { base: 12, md: 8, lg: 6 });
@@ -289,7 +344,8 @@ function ChatInputInner({
                         disabled={disabled || isPreparing || chatLocked}
                         singleLine={isCollapsed}
                         onSubmit={handleSend}
-                        onChange={setInput}
+                        onChange={handleInputChange}
+                        onArrowKey={handleHistoryArrow}
                         onFocus={() => setIsFocused(true)}
                         onBlur={() => {
                           // Delay check so activeElement updates after blur
