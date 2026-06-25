@@ -108,9 +108,16 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
  */
 export async function captureRegionBlob(
   selection: { x: number; y: number; width: number; height: number },
-  opts: CaptureOptions & { target?: HTMLElement; maxOutputPx?: number },
+  opts: CaptureOptions & { target?: HTMLElement; targetBox?: { left: number; top: number }; maxOutputPx?: number },
 ): Promise<Blob> {
   const target = opts.target ?? document.body;
+  // Snapshot the crop reference frame BEFORE the async html-to-image render. `selection` is in
+  // viewport coords captured at drag time; reading the target's rect AFTER the render (which is slow,
+  // especially in dev) lets any layout drift in between — page scroll, the pending-upload chip
+  // reflow — slide the crop. That race is why the crop is aligned in prod (fast render) but visibly
+  // offset in dev (slow render). Prefer a caller-provided box captured synchronously at selection
+  // time (matches the selection's frame exactly); otherwise read it here, still pre-render.
+  const targetBox = opts.targetBox ?? target.getBoundingClientRect();
   const pixelRatio = opts.pixelRatio ?? Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
   const toImage = (opts.format ?? 'jpeg') === 'png' ? toPng : toJpeg;
   const dataURL = await toImage(target, {
@@ -120,7 +127,7 @@ export async function captureRegionBlob(
     quality: opts.quality ?? 0.92,
   });
   const img = await loadImage(dataURL);
-  const { sx, sy, sw, sh } = cropSourceRect(selection, target.getBoundingClientRect(), pixelRatio);
+  const { sx, sy, sw, sh } = cropSourceRect(selection, targetBox, pixelRatio);
   // Cap the OUTPUT so a large selection on a retina screen doesn't yield a multi-megapixel image.
   const { w, h } = cappedOutputDims(sw, sh, opts.maxOutputPx ?? 1024);
   const canvas = document.createElement('canvas');

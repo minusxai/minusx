@@ -9,7 +9,7 @@ vi.mock('html-to-image', () => ({
 }));
 
 import { toJpeg, toPng } from 'html-to-image';
-import { captureElementBlob, captureFileViewBlob, cropSourceRect, cappedOutputDims } from '../capture';
+import { captureElementBlob, captureFileViewBlob, captureRegionBlob, cropSourceRect, cappedOutputDims } from '../capture';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -73,6 +73,66 @@ describe('cropSourceRect — viewport selection → source crop within the captu
   it('clamps negative offsets to 0 and zero sizes to at least 1', () => {
     expect(cropSourceRect({ x: 0, y: 0, width: 0, height: 0 }, { left: 10, top: 10 }, 1))
       .toEqual({ sx: 0, sy: 0, sw: 1, sh: 1 });
+  });
+});
+
+describe('captureRegionBlob — crop frame is snapshotted BEFORE the async render (no drift offset)', () => {
+  // Why this matters: the selection rect is in viewport coords captured at drag time. If the crop
+  // reads the target's getBoundingClientRect() AFTER the (slow, esp. in dev) html-to-image render,
+  // any layout shift in between (page scroll, the pending-upload chip reflow) slides the crop — the
+  // dev-vs-prod offset. These tests pin the crop to the pre-render frame.
+  let drawImage: ReturnType<typeof vi.fn>;
+  let createElementSpy: ReturnType<typeof vi.spyOn>;
+  let OriginalImage: typeof Image;
+
+  beforeEach(() => {
+    drawImage = vi.fn();
+    const fakeCanvas = {
+      width: 0, height: 0,
+      getContext: () => ({ drawImage }),
+      toBlob: (cb: (b: Blob | null) => void) => cb(new Blob(['x'], { type: 'image/jpeg' })),
+    };
+    const realCreate = document.createElement.bind(document);
+    createElementSpy = vi.spyOn(document, 'createElement').mockImplementation(
+      (tag: string) => (tag === 'canvas' ? (fakeCanvas as unknown as HTMLCanvasElement) : realCreate(tag)),
+    );
+    OriginalImage = global.Image;
+    // Image whose `src` setter resolves onload on the next microtask (no real decode).
+    global.Image = class {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_v: string) { Promise.resolve().then(() => this.onload?.()); }
+      get src() { return ''; }
+    } as unknown as typeof Image;
+  });
+
+  afterEach(() => {
+    createElementSpy.mockRestore();
+    global.Image = OriginalImage;
+  });
+
+  function targetAt(left: number, top: number): HTMLElement {
+    const d = document.createElement('div');
+    d.getBoundingClientRect = () => ({ left, top, right: left, bottom: top, width: 0, height: 0, x: left, y: top, toJSON() {} }) as DOMRect;
+    return d;
+  }
+
+  it('uses the rect read at entry, even if the element moves DURING the render', async () => {
+    const target = targetAt(100, 50);
+    // Simulate layout drift: while html-to-image "renders", the target slides up 40px.
+    vi.mocked(toJpeg).mockImplementationOnce(async () => {
+      target.getBoundingClientRect = () => ({ left: 100, top: 10, right: 100, bottom: 10, width: 0, height: 0, x: 100, y: 10, toJSON() {} }) as DOMRect;
+      return 'data:image/jpeg;base64,AAAA';
+    });
+    await captureRegionBlob({ x: 150, y: 80, width: 200, height: 100 }, { colorMode: 'light', target, pixelRatio: 1 });
+    // sy must use the PRE-render top (50) → 80-50=30, NOT the drifted top (10) → 70.
+    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 50, 30, 200, 100, 0, 0, 200, 100);
+  });
+
+  it('prefers an explicit targetBox (snapshotted at selection time) over the live element rect', async () => {
+    const target = targetAt(999, 999); // live rect is already wrong/drifted
+    await captureRegionBlob({ x: 150, y: 80, width: 200, height: 100 }, { colorMode: 'light', target, targetBox: { left: 100, top: 50 }, pixelRatio: 1 });
+    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 50, 30, 200, 100, 0, 0, 200, 100);
   });
 });
 
