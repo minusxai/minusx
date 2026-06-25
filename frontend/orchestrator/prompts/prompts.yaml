@@ -850,6 +850,14 @@ templates:
 
       The query, connection, and viz live right in the story body — no saved file, no separate assets list. Prefer a saved question when one already shows the beat's evidence; reach for inline only for genuine one-offs.
 
+      **(C) Inline number — a live figure IN THE PROSE.** When a number belongs inside a sentence or a tight callout rather than its own chart card, use `<Number>` instead of a `single_value` `<Question>`. It renders the live digits in a `<span>` that flows with the text — no card, no title bar:
+
+      ```
+      MRR has grown to <Number id={142} prefix="$" /> this quarter.
+      ```
+
+      Like `<Question>` it is polymorphic: `<Number id={142} />` reads from a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs an inline query. `col` picks the column (defaults to the first), `prefix`/`suffix` wrap the value, and `style={{…}}` themes the span (`style={{color:"#c8781a", fontWeight:700, fontSize:"1.4em"}}` — literal CSS, same shadow-safe rule as `<Param>`). The reader can click the figure to reveal its source question as a footnote, so the number is always auditable. Reach for `<Number>` for "X grew to $Y" sentences and inline stat callouts; reach for a `single_value` `<Question>` for a big hero figure that owns its own framed card. A `<Number>`'s inline `query` may reference the story's declared `<Param>` values (`:name`) — they bind automatically, so a number can react to a reader's filter. Either way the digits are LIVE — never type a metric into the prose.
+
       **Write the `query` as a TEMPLATE LITERAL in backticks** — `query={`…`}` — with real, multi-line SQL: actual line breaks, indentation, and `-- comments` all belong inside the backticks, and `<`, `>`, quotes, and `:param` tokens are all fine there. NEVER put the query in a double-quoted string (`query="…"`) and NEVER use `\n` / `\t` escape sequences — a quoted JSX attribute keeps them literal, and the SQL parser then breaks on the stray backslash (and a `--` comment swallows the rest of the query). Backticks + real newlines = the SQL is stored and runs exactly as written.
 
       **Live numbers — non-negotiable.** Every figure that conveys data — the hero number, a pull-quote stat, a KPI in a card, a ratio — is rendered by a `single_value` question (saved or inline), NOT typed into the prose. The digits are read from the query at render; you never write them. Get the display-type look by styling the number with `singleValueConfig`:
@@ -869,6 +877,22 @@ templates:
 
       **The ONLY hand-built numeric is pure ornament** — an oversized ghost numeral behind a section, an outlined ratio used as graphic texture, carrying no data meaning. A *single-fact proportion drawn as a styled bar* (a 5.5% progress bar whose width is computed from real numbers) remains a legitimate rhetorical device. Everything that states a fact is a live embed.
 
+      ## Reader filters (`<Param>`) — optional, platform-rendered
+
+      A story can expose interactive filters the reader can change to re-run every embed live — these are rendered by the platform (you are NOT writing JS; the no-`<script>` rule is intact). Declare one with `<Param>` anywhere in the body; every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds to it on change (a `<Number query={`… WHERE mrr >= :min_mrr`}>` is driven live by a `min_mrr` slider, just like a chart):
+
+      ```
+      <Param name="region" type="text" nullable={false} />
+      <Param name="region" type="text" id={142} column="region" />   <!-- autocompletes from question 142's region column -->
+      <Param name="limit"  type="number" widget="slider" min={0} max={100} step={5} />
+      ```
+
+      - `type` is `text` | `number` | `date`; `nullable` (default true) lets the reader clear it to "Any".
+      - `id={N} column="c"` turns the input into an autocomplete sourced from question N's distinct values for that column.
+      - `widget="slider"` (number params only) renders a range slider with `min`/`max`/`step` instead of a typed box.
+      - **Theme it to the story.** `style={{…}}` styles the control and `labelStyle={{…}}` the label — LITERAL CSS objects (`style={{background:"#1a1a1a", color:"#fff", borderColor:"#444"}}`), never theme tokens: the story renders in a shadow root, so app color-mode tokens resolve against the host and can vanish. The default control is a light box; override it so it belongs on your surface.
+      - Use filters sparingly and only when reader-driven exploration genuinely serves the goal (e.g. a metric the reader wants to slice by their own region or threshold). A data story is an argument first; a filter is a coda, not the point.
+
       ## Page mechanics (HTML fragment, no JS)
 
       The output format is a single HTML fragment: one root `<div>`, optionally preceded by a `<style>` block. No `<html>`/`<head>`/`<body>`, and strictly **no `<script>`** — the platform injects the fragment and hydrates the embeds. Within that:
@@ -878,7 +902,7 @@ templates:
       - **No JS means no scroll triggers or interactivity.** CSS-only entrance animations (`@keyframes` fade/rise on load, staggered with `animation-delay`) are permitted garnish, but the story must read perfectly with zero motion — composition carries the tempo, not triggers. Respect `prefers-reduced-motion`.
       - **Pacing through composition.** Alternate density and polarity: a dark full-bleed hero, the ticker, a light prologue grid, a measured text-and-figure beat, a dark interstitial breath, the next beat. Generous vertical rhythm between beats, set fluid so it tightens on phones (e.g. `clamp(48px, 7cqi, 100px)` section padding rather than a fixed 80–100px).
       - **Depth without assets.** Atmosphere from CSS only: oversized ghost numerals at low opacity, offset hard shadows (`box-shadow: 12px 12px 0 #16130e`), slight rotations (±0.5–2°) on stamps and cards for a hand-placed feel, dashed rules, outlined text via `-webkit-text-stroke`, subtle gradient or repeating-pattern backgrounds.
-      - **Static means readable anywhere.** Every insight is carried by headlines, caption bars, and the charts themselves — no hover dependencies, no filters or controls.
+      - **The static read must always work.** Every insight is carried by headlines, caption bars, and the charts themselves — never gated behind a hover or a filter. Reader `<Param>` filters (below) are a legitimate ENHANCEMENT, but the story must tell its whole story before anyone touches one.
       - **Quality floor, unannounced:** real text not images, sufficient contrast, numbers formatted with locale-appropriate separators and sensible precision, fluid widths where possible, embed heights explicit.
 
       Watch CSS specificity inside the `<style>` block: section-level and element selectors cancelling each other (especially margins between beats) is the common way the rhythm breaks.
