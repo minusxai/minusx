@@ -29,18 +29,10 @@ const MARKUP_FORMAT = `Every file projects to a single JSX document — that is 
 Rules (uniform for every file type):
 - object → nested \`<field>…</field>\`; array → \`<field>\` with repeated \`<item>\` children.
 - scalar → \`<field>value</field>\`. A string containing <, >, {, backtick, or a newline (e.g. SQL) rides in a RAW template-literal child: \`<query>{\`SELECT a WHERE x < 5\`}</query>\` — no escaping inside.
-- a jsx field (e.g. a story's HTML body) is emitted INLINE as real elements, with \`<Question/>\` embeds. \`<Question/>\` is polymorphic: \`<Question id={5}/>\` embeds a SAVED question (preferred — reuse one when it fits); \`<Question query={\`SELECT …\`} connection="…" viz={{type:"single_value", yCols:["mrr"], singleValueConfig:{prefix:"$"}}} height="200px"/>\` embeds an INLINE story-local question whose query lives in the body (use for one-off live numbers). The query MUST be a backtick template literal with real newlines — never a quoted string or \\n escapes. NUMBERS shown to the reader must be LIVE embeds, never typed into the prose. For a number that sits INLINE IN A SENTENCE (not a chart card), use \`<Number/>\` — a live figure in a \`<span>\`: \`<Number id={142} prefix="$" />\` (reads from saved question 142) or \`<Number query={\`SELECT SUM(mrr) AS mrr FROM metrics\`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />\` (inline). Optional \`col\` picks the column (else the first), \`prefix\`/\`suffix\` wrap it, \`style={{…}}\` themes the span (e.g. \`style={{color:"#c8781a", fontWeight:700}}\`); clicking it reveals the source question as a footnote. Use \`<Number/>\` for "MRR grew to $X" prose; use \`<Question viz={{type:"single_value"}}/>\` for a big hero number in its own card. A story can also declare shared filters with \`<Param name="city" type="text" nullable={false} id={5} />\` — every embedded question's matching \`:param\` binds to it (\`id={N}\` autocompletes/imports from question N's column). Style the filter to match the story with \`style={{…}}\` (the input) and \`labelStyle={{…}}\` (the label) — LITERAL CSS objects (e.g. \`style={{background:"#1a1a1a", color:"#fff", borderColor:"#444"}}\`), not theme tokens. For a NUMBER param you can swap the input for a range slider: \`<Param name="limit" type="number" widget="slider" min={0} max={100} step={5} />\`. Both inline \`<Question>\` AND inline \`<Number>\` queries bind these \`:param\` values automatically (a \`<Number query={\`… WHERE mrr >= :min_mrr\`}>\` reacts live to a \`min_mrr\` slider), and the story's \`parameterValues\` are their defaults. If an embedded question/number uses a \`:param\` with no \`<Param>\`, you'll get a validation warning (non-blocking).
+- a \`jsx\` field (e.g. a data story's body) is emitted INLINE as real JSX elements (never an escaped string); its embeds/components (e.g. data stories' \`<Question>\`/\`<Number>\`/\`<Param>\`) are documented in that file type's skill.
 - config types with no schema (connection/config/context/…) annotate non-string scalars so they round-trip: \`<port type="number">5432</port>\`, \`<enabled type="boolean">true</enabled>\`.
 
-Example question markup:
-<description>Revenue by month</description>
-<query>{\`SELECT month, SUM(revenue) AS rev FROM sales WHERE rev < 5000 GROUP BY 1\`}</query>
-<vizSettings>
-  <type>bar</type>
-  <xCols><item>month</item></xCols>
-  <yCols><item>rev</item></yCols>
-</vizSettings>
-<connection_name>saas_metrics</connection_name>`;
+The exact fields (and any embeds) for each file type are defined in that type's skill — questions, dashboards, reports, alerts, data_stories, notebooks — the single source of truth for its markup. Load/consult the relevant skill before authoring; never invent fields.`;
 
 // Keep this description in sync with the EditFile behavior in tool-handlers.ts —
 // the query/parameters warning in particular prevents broken queries.
@@ -70,9 +62,7 @@ replaceAll behaviour (per change):
 
 Changes are staged as drafts in Redux. The user reviews and publishes via Publish All. You do not need to call Navigate or PublishFile.
 
-String Matching: copy \`oldMatch\` directly from the \`markup\` in AppState — never call ReadFiles just to get markup already in AppState.
-
-Notebooks: the markup has a \`<cells>\` element (ordered; each cell has a stable \`<id>\` and is a \`sql\` or \`text\` cell). AppState also carries \`activeCellId\` — scope edits to that cell unless told otherwise.`;
+String Matching: copy \`oldMatch\` directly from the \`markup\` in AppState — never call ReadFiles just to get markup already in AppState.`;
 
 export class EditFile extends MXTool<typeof EditFileParams, RemoteAnalystContext> {
   static readonly schema: Tool<typeof EditFileParams> = {
