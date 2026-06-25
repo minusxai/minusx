@@ -27,13 +27,31 @@ interface CodeViewProps {
   fileType: FileType;
   /** When true the JSON tab is editable (writes back via applyJsonContentEdit). */
   editable?: boolean;
+  /**
+   * Content keys to HIDE from the JSON/XML view (e.g. context's loader-computed
+   * `fullSchema`/`parentSchema`/`fullDocs` — derived, not authored). They're still
+   * preserved on edit: the omitted values are merged back before saving, so editing
+   * the trimmed JSON never drops them.
+   */
+  omitKeys?: readonly string[];
 }
 
-export default function CodeView({ fileId, fileType, editable = false }: CodeViewProps) {
+/** Shallow-copy `obj` without the given top-level keys. */
+function omit(obj: unknown, keys: readonly string[]): unknown {
+  if (!keys.length || !obj || typeof obj !== 'object') return obj;
+  const rest: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+  for (const k of keys) delete rest[k];
+  return rest;
+}
+
+export default function CodeView({ fileId, fileType, editable = false, omitKeys = [] }: CodeViewProps) {
   const [tab, setTab] = useState<'json' | 'xml'>('json');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const persistableContent = useAppSelector(state => selectPersistableContent(state, fileId));
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
+
+  const fullContent = (persistableContent ?? mergedContent ?? {}) as Record<string, unknown>;
+  const displayContent = omit(fullContent, omitKeys);
 
   return (
     <Box p={4} data-file-id={fileId}>
@@ -54,17 +72,32 @@ export default function CodeView({ fileId, fileType, editable = false }: CodeVie
         // text (and language) in the editor. Distinct keys force a clean remount.
         <JsonEditor
           key="json"
-          value={JSON.stringify(persistableContent ?? mergedContent ?? {}, null, 2)}
+          value={JSON.stringify(displayContent, null, 2)}
           readOnly={!editable}
           error={jsonError}
           onChange={(value) => {
-            const result = applyJsonContentEdit({ fileId, jsonString: value });
+            // Merge the hidden keys back so editing the trimmed JSON never drops them.
+            let toApply = value;
+            if (omitKeys.length) {
+              try {
+                const parsed = JSON.parse(value);
+                if (parsed && typeof parsed === 'object') {
+                  for (const k of omitKeys) {
+                    if (k in fullContent) (parsed as Record<string, unknown>)[k] = fullContent[k];
+                  }
+                  toApply = JSON.stringify(parsed, null, 2);
+                }
+              } catch {
+                // Leave `value` as-is; applyJsonContentEdit surfaces the parse error.
+              }
+            }
+            const result = applyJsonContentEdit({ fileId, jsonString: toApply });
             setJsonError(result.success ? null : result.error ?? null);
           }}
         />
       ) : (
-        // The exact agent-facing markup — read-only (it's a derived projection of content).
-        <JsonEditor key="xml" language="xml" readOnly value={fileToMarkup(fileType, mergedContent ?? {})} />
+        // The agent-facing markup — read-only (it's a derived projection of content).
+        <JsonEditor key="xml" language="xml" readOnly value={fileToMarkup(fileType, displayContent)} />
       )}
     </Box>
   );

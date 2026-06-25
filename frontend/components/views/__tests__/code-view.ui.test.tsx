@@ -35,6 +35,37 @@ function setup() {
   return testStore;
 }
 
+const CTX_ID = 5151;
+
+function makeContextDbFile() {
+  return {
+    id: CTX_ID,
+    name: 'Sales context',
+    type: 'context' as const,
+    path: '/configs/contexts/sales',
+    content: {
+      published: { all: 1 },
+      versions: [{ version: 1, whitelist: [], docs: [], createdAt: 'x', createdBy: 1 }],
+      // Loader-computed / inherited — should be hidden from the Code view.
+      fullSchema: [{ databaseName: 'db', schemas: [{ schema: 'public', tables: [] }] }],
+      parentSchema: [{ databaseName: 'parent_db', schemas: [] }],
+      fullDocs: [{ title: 'inherited', body: 'x' }],
+    } as Record<string, unknown>,
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-02T00:00:00Z',
+    references: [] as number[],
+    version: 1,
+    last_edit_id: null,
+  };
+}
+
+function setupContext() {
+  const testStore = storeModule.makeStore();
+  vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+  testStore.dispatch(setFile({ file: makeContextDbFile() as never, references: [] }));
+  return testStore;
+}
+
 describe('CodeView', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -92,5 +123,46 @@ describe('CodeView', () => {
 
     const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(json.readOnly).toBe(false);
+  });
+
+  it('hides omitKeys from both the JSON and XML views', () => {
+    const store = setupContext();
+    const omit = ['fullSchema', 'parentSchema', 'fullDocs'];
+    renderWithProviders(
+      <CodeView fileId={CTX_ID} fileType="context" editable omitKeys={omit} />, { store },
+    );
+
+    const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
+    expect(json.value).toContain('"versions"');
+    expect(json.value).not.toContain('fullSchema');
+    expect(json.value).not.toContain('parentSchema');
+    expect(json.value).not.toContain('fullDocs');
+
+    fireEvent.click(screen.getByLabelText('XML'));
+    const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
+    expect(xml.value).toContain('<versions');
+    expect(xml.value).not.toContain('fullSchema');
+    expect(xml.value).not.toContain('parentSchema');
+  });
+
+  it('preserves omitKeys when the trimmed JSON is edited', () => {
+    const store = setupContext();
+    const omit = ['fullSchema', 'parentSchema', 'fullDocs'];
+    renderWithProviders(
+      <CodeView fileId={CTX_ID} fileType="context" editable omitKeys={omit} />, { store },
+    );
+
+    // Edit the trimmed JSON (no derived fields present) and confirm they survive on the file.
+    const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
+    fireEvent.change(json, {
+      target: { value: JSON.stringify({ published: { all: 2 }, versions: [] }) },
+    });
+
+    const saved = store.getState().files.files[CTX_ID];
+    const content = { ...saved.content, ...saved.persistableChanges } as Record<string, unknown>;
+    expect((content.published as { all: number }).all).toBe(2);
+    expect(content.fullSchema).toBeDefined();
+    expect(content.parentSchema).toBeDefined();
+    expect(content.fullDocs).toBeDefined();
   });
 });
