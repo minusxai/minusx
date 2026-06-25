@@ -159,6 +159,19 @@ describe('StoryView', () => {
     });
   });
 
+  it('renders the new story when content changes (AgentHtml remounts on a content hash)', async () => {
+    // The real bug this guards against — a portal "removeChild: not a child" crash when content.story
+    // changes under mounted portals — only reproduces in a real browser (jsdom's react-dom tolerates
+    // the portal-host removal). So this is a smoke check that a content change cleanly shows the new
+    // story; the crash fix (keying AgentHtml on a content hash → REMOUNT instead of resetting
+    // innerHTML under live portals) is verified in the browser.
+    const { rerender } = renderWithProviders(<StoryView content={content} fileId={1} />);
+    await waitFor(() => expect(storyRoot().textContent).toContain('The year demand went vertical'));
+    const next: StoryContent = { ...content, story: STORY.replace('The year demand went vertical', 'A brand-new headline') };
+    expect(() => rerender(<StoryView content={next} fileId={1} />)).not.toThrow();
+    await waitFor(() => expect(storyRoot().textContent).toContain('A brand-new headline'));
+  });
+
   it('sanitizes hostile HTML', async () => {
     renderWithProviders(
       <StoryView content={{ ...emptyContent, story: '<script>window.__pwned = true;</script><div onclick="alert(1)">Safe</div>' }} />

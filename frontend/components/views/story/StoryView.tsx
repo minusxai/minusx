@@ -19,6 +19,21 @@ import { STORY_W } from './ScaledStoryFrame';
 // while everything below reflows responsively (container queries + cqi).
 const STORY_MAX_W = '1280px';
 
+/**
+ * Cheap stable hash of the story HTML, used to KEY (and thus remount) AgentHtml whenever the story
+ * content changes. AgentHtml renders by imperatively resetting its shadow root's innerHTML and then
+ * portals the live embeds (charts / numbers / params) into nodes inside it. If the content changes
+ * while AgentHtml stays mounted, its effect resets innerHTML — destroying the nodes the portals are
+ * mounted into — and React then crashes unmounting them ("removeChild: not a child of this node").
+ * Remounting on content change makes React unmount the old portals from the still-intact old shadow
+ * root before a fresh one is built. (Cancel still bumps renderKey to discard in-DOM edits.)
+ */
+function hashStory(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return h;
+}
+
 interface StoryViewProps {
   content: StoryContent;
   /** File id — enables inline visual editing (owned, non-public stories). */
@@ -114,7 +129,9 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             capture (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
         <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId, 'data-file-id': fileId } : {})}>
           <AgentHtml
-            key={renderKey}
+            // Remount on Cancel (renderKey) AND whenever the story content changes (hash) — a live
+            // innerHTML reset under mounted portals crashes React's unmount. See hashStory above.
+            key={`${renderKey}:${hashStory(content.story ?? '')}`}
             ref={agentRef}
             html={content.story}
             width={STORY_W}
