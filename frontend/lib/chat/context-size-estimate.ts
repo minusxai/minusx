@@ -1,4 +1,5 @@
 import type { Context, ImageContent, Message, TextContent } from '@/orchestrator/llm';
+import { immutableMap } from '@/lib/utils/immutable-collections';
 
 export interface ContextSizeSection {
   key: string;
@@ -36,8 +37,8 @@ const SECTIONS = [
 ] as const;
 
 
-const SECTION_RANK = new Map<string, number>(SECTIONS.map((s, i) => [s.key, i]));
-const SECTION_LABELS = new Map<string, string>(SECTIONS.map((s) => [s.key, s.label]));
+const SECTION_RANK = immutableMap<string, number>(SECTIONS.map((s, i) => [s.key, i]));
+const SECTION_LABELS = immutableMap<string, string>(SECTIONS.map((s) => [s.key, s.label]));
 
 function labelFor(key: string): string {
   return SECTION_LABELS.get(key) ?? key;
