@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveContextDocs } from '../schema-filter';
+import { resolveContextDocs, formatContextDocsSection } from '../schema-filter';
 import type { ContextContent, ContextVersion, DocEntry } from '@/lib/types';
 
 /** Minimal context with one published version carrying the given docs. */
@@ -20,79 +20,70 @@ function makeContext(docs: (DocEntry | string)[], overrides: Partial<ContextVers
 }
 
 describe('resolveContextDocs', () => {
-  it('keeps lazy docs out of the inline string — catalog shows key + title + description, never the body', () => {
+  // Helpers to read the two partitions out of the one docs list.
+  const lazy = (r: ReturnType<typeof resolveContextDocs>) => r.docs.filter((d) => !d.alwaysInclude);
+  const pinned = (r: ReturnType<typeof resolveContextDocs>) => r.docs.filter((d) => d.alwaysInclude);
+
+  it('keeps lazy docs out of the inline set — they carry key + title + description + body', () => {
     const ctx = makeContext([
       { title: 'Revenue Glossary', description: 'How revenue terms map to columns', content: 'SECRET BODY revenue = sum(amount)' },
     ]);
-    const { inline, catalog, library } = resolveContextDocs(ctx, 1);
+    const r = resolveContextDocs(ctx, 1);
 
-    // Catalog advertises the doc by key + title + description, but not its body.
-    expect(catalog).toContain('"revenue_glossary"');           // the key (slug) to pass
-    expect(catalog).toContain('Revenue Glossary');             // the human title
-    expect(catalog).toContain('How revenue terms map to columns');
-    expect(catalog).not.toContain('SECRET BODY');
-
-    // The body is not inlined into the prompt string.
-    expect(inline).not.toContain('SECRET BODY');
-
-    // The library separates key (slug) from title, and carries the full content.
-    expect(library).toHaveLength(1);
-    expect(library[0].key).toBe('revenue_glossary');
-    expect(library[0].title).toBe('Revenue Glossary');
-    expect(library[0].content).toContain('SECRET BODY');
+    // Nothing is pinned inline; the doc is a lazy entry carrying its full body.
+    expect(pinned(r)).toHaveLength(0);
+    expect(lazy(r)).toHaveLength(1);
+    expect(lazy(r)[0]).toMatchObject({
+      key: 'revenue_glossary',
+      title: 'Revenue Glossary',
+      description: 'How revenue terms map to columns',
+      alwaysInclude: false,
+    });
+    expect(lazy(r)[0].content).toContain('SECRET BODY');
   });
 
-  it('inlines alwaysInclude docs and excludes them from catalog/library', () => {
+  it('marks alwaysInclude docs pinned and the rest lazy, in one list', () => {
     const ctx = makeContext([
       { title: 'Pinned Rules', description: 'Always-on rules', content: 'INLINE BODY pinned', alwaysInclude: true },
       { title: 'Lazy Doc', description: 'Loaded on demand', content: 'LAZY BODY' },
     ]);
-    const { inline, catalog, library } = resolveContextDocs(ctx, 1);
+    const r = resolveContextDocs(ctx, 1);
 
-    expect(inline).toContain('INLINE BODY pinned');
-    expect(inline).not.toContain('LAZY BODY');
-
-    expect(catalog).toContain('Lazy Doc');
-    expect(catalog).not.toContain('Pinned Rules');
-
-    expect(library.map((d) => d.key)).toEqual(['lazy_doc']);
-    expect(library.map((d) => d.title)).toEqual(['Lazy Doc']);
+    expect(pinned(r).map((d) => d.content)).toContain('INLINE BODY pinned');
+    expect(lazy(r).map((d) => d.key)).toEqual(['lazy_doc']);
+    expect(lazy(r).map((d) => d.title)).toEqual(['Lazy Doc']);
   });
 
   it('derives title/description from the body for legacy docs missing them (and keeps them lazy)', () => {
     const ctx = makeContext([
       { content: '# Revenue Notes\nRevenue is recognized on delivery.\nRefunds net out.\nMORE BODY' },
     ]);
-    const { inline, catalog, library } = resolveContextDocs(ctx, 1);
+    const r = resolveContextDocs(ctx, 1);
 
     // Derived title (heading marker stripped) + description (next 2 lines).
-    expect(library).toHaveLength(1);
-    expect(library[0].key).toBe('revenue_notes');
-    expect(library[0].title).toBe('Revenue Notes');
-    expect(library[0].description).toBe('Revenue is recognized on delivery. Refunds net out.');
-    expect(catalog).toContain('Revenue Notes');
-    // Body is lazy, not inlined.
-    expect(inline).not.toContain('MORE BODY');
-    expect(library[0].content).toContain('MORE BODY');
+    expect(lazy(r)).toHaveLength(1);
+    expect(lazy(r)[0].key).toBe('revenue_notes');
+    expect(lazy(r)[0].title).toBe('Revenue Notes');
+    expect(lazy(r)[0].description).toBe('Revenue is recognized on delivery. Refunds net out.');
+    expect(lazy(r)[0].content).toContain('MORE BODY');
   });
 
-  it('pins bare string docs inline (they carry no title to key off)', () => {
-    const ctx = makeContext(['plain string doc body']);
-    const { inline, catalog, library } = resolveContextDocs(ctx, 1);
-    expect(inline).toContain('plain string doc body');
-    expect(catalog).toBe('');
-    expect(library).toHaveLength(0);
+  it('pins bare string docs (they carry no title to key off)', () => {
+    const r = resolveContextDocs(makeContext(['plain string doc body']), 1);
+    expect(r.docs).toHaveLength(1);
+    expect(r.docs[0]).toMatchObject({ alwaysInclude: true, title: '', content: 'plain string doc body' });
+    expect(lazy(r)).toHaveLength(0);
   });
 
-  it('keeps Schema Notes (annotations + metrics) inline', () => {
+  it('carries Schema Notes (annotations + metrics) separately', () => {
     const ctx = makeContext([{ title: 'Lazy', description: 'd', content: 'LAZY' }], {
       annotations: [{ schema: 'public', table: 'orders', description: 'Customer orders' }],
       metrics: [{ name: 'Monthly Revenue', schema: 'public', table: 'orders' }],
     });
-    const { inline } = resolveContextDocs(ctx, 1);
-    expect(inline).toContain('## Schema Notes');
-    expect(inline).toContain('- public.orders — Customer orders');
-    expect(inline).toContain('- Monthly Revenue [public.orders]');
+    const { schemaNotes } = resolveContextDocs(ctx, 1);
+    expect(schemaNotes).toContain('## Schema Notes');
+    expect(schemaNotes).toContain('- public.orders — Customer orders');
+    expect(schemaNotes).toContain('- Monthly Revenue [public.orders]');
   });
 
   it('de-dupes colliding titles into unique keys', () => {
@@ -100,13 +91,9 @@ describe('resolveContextDocs', () => {
       { title: 'Glossary', description: 'first', content: 'A' },
       { title: 'Glossary', description: 'second', content: 'B' },
     ]);
-    const { library } = resolveContextDocs(ctx, 1);
-    const keys = library.map((d) => d.key);
+    const keys = lazy(resolveContextDocs(ctx, 1)).map((d) => d.key);
     expect(new Set(keys).size).toBe(2);
-    expect(keys[0]).toBe('glossary');
-    expect(keys[1]).toBe('glossary_2');
-    // Both keep the same human title.
-    expect(library.map((d) => d.title)).toEqual(['Glossary', 'Glossary']);
+    expect(keys).toEqual(['glossary', 'glossary_2']);
   });
 
   it('excludes draft docs entirely', () => {
@@ -114,16 +101,111 @@ describe('resolveContextDocs', () => {
       { title: 'Draft Doc', description: 'wip', content: 'DRAFT BODY', draft: true },
       { title: 'Live Doc', description: 'ok', content: 'LIVE BODY' },
     ]);
-    const { inline, catalog, library } = resolveContextDocs(ctx, 1);
-    expect(inline).not.toContain('DRAFT BODY');
-    expect(catalog).not.toContain('Draft Doc');
-    expect(library.map((d) => d.key)).toEqual(['live_doc']);
+    const r = resolveContextDocs(ctx, 1);
+    expect(r.docs.find((d) => d.content.includes('DRAFT BODY'))).toBeUndefined();
+    expect(lazy(r).map((d) => d.key)).toEqual(['live_doc']);
   });
 
-  it('returns an empty catalog/library when there are no lazy docs', () => {
+  it('produces no lazy docs when every doc is alwaysInclude', () => {
     const ctx = makeContext([{ content: 'just inline', alwaysInclude: true, title: 'x' }]);
-    const { catalog, library } = resolveContextDocs(ctx, 1);
-    expect(catalog).toBe('');
-    expect(library).toHaveLength(0);
+    expect(lazy(resolveContextDocs(ctx, 1))).toHaveLength(0);
+  });
+});
+
+describe('resolveContextDocs — version override', () => {
+  // Two published-vs-draft versions; the published one is v1.
+  function makeVersionedContext(): ContextContent {
+    return {
+      published: { all: 1 },
+      versions: [
+        {
+          version: 1,
+          whitelist: '*',
+          docs: [{ title: 'V1 Doc', description: 'published', content: 'V1 BODY' }],
+          createdAt: '2026-01-01',
+          createdBy: 1,
+        },
+        {
+          version: 2,
+          whitelist: '*',
+          docs: [{ title: 'V2 Doc', description: 'draft', content: 'V2 BODY' }],
+          createdAt: '2026-01-02',
+          createdBy: 1,
+        },
+      ],
+    } as ContextContent;
+  }
+
+  it('resolves the published version by default', () => {
+    const { docs } = resolveContextDocs(makeVersionedContext(), 1);
+    expect(docs.map((d) => d.title)).toEqual(['V1 Doc']);
+  });
+
+  it('resolves a specific version when one is requested', () => {
+    const { docs } = resolveContextDocs(makeVersionedContext(), 1, 2);
+    expect(docs.map((d) => d.key)).toEqual(['v2_doc']);
+    expect(docs.map((d) => d.title)).toEqual(['V2 Doc']);
+  });
+
+  it('falls back to published when the requested version does not exist', () => {
+    const { docs } = resolveContextDocs(makeVersionedContext(), 1, 99);
+    expect(docs.map((d) => d.title)).toEqual(['V1 Doc']);
+  });
+});
+
+// The shared formatter is the single source of truth for the "## Context" body
+// layout — the agent prompt and the docs sidebar both render its output, so these
+// pin the headers/omission rules both depend on.
+describe('formatContextDocsSection', () => {
+  const inlineDoc = { key: '', title: '', content: 'INLINE DOCS', alwaysInclude: true };
+  const lazyFoo = { key: 'foo', title: 'Foo', content: 'body', alwaysInclude: false };
+
+  it('renders both sections from one docs list, partitioning by alwaysInclude', () => {
+    const out = formatContextDocsSection({ docs: [inlineDoc, lazyFoo] });
+    expect(out).toBe(
+      '### Default Context Docs\n\nINLINE DOCS\n\n### Context Library (to be loaded on demand)\n\n  - `"foo"` — Foo',
+    );
+  });
+
+  it('includes a description in the catalog line when present', () => {
+    const out = formatContextDocsSection({ docs: [{ key: 'foo', title: 'Foo', description: 'all about foo', content: 'b', alwaysInclude: false }] });
+    expect(out).toContain('  - `"foo"` — Foo: all about foo');
+  });
+
+  it('renders an alwaysInclude doc with a title header inline', () => {
+    const out = formatContextDocsSection({ docs: [{ key: '', title: 'Pinned', description: 'd', content: 'BODY', alwaysInclude: true }] });
+    expect(out).toBe('### Default Context Docs\n\n# Pinned\n\nd\n\nBODY');
+  });
+
+  it('puts schema notes under Default Context Docs (separate concern, no doc)', () => {
+    const out = formatContextDocsSection({ docs: [], schemaNotes: '## Schema Notes\n- public.orders' });
+    expect(out).toContain('### Default Context Docs');
+    expect(out).toContain('## Schema Notes');
+  });
+
+  it('omits the Default section when there are no inline docs or schema notes', () => {
+    const out = formatContextDocsSection({ docs: [lazyFoo] });
+    expect(out).not.toContain('Default Context Docs');
+    expect(out).toContain('### Context Library (to be loaded on demand)');
+  });
+
+  it('omits the Context Library section in the sidebar (no fallback) when there are no lazy docs', () => {
+    const out = formatContextDocsSection({ docs: [inlineDoc] });
+    expect(out).toBe('### Default Context Docs\n\nINLINE DOCS');
+    expect(out).not.toContain('Context Library');
+  });
+
+  it('falls back to emptyCatalogText for the prompt so the agent always sees a Context Library line', () => {
+    const out = formatContextDocsSection(
+      { docs: [] },
+      { emptyCatalogText: 'No additional context documents are available.' },
+    );
+    expect(out).toBe(
+      '### Context Library (to be loaded on demand)\n\nNo additional context documents are available.',
+    );
+  });
+
+  it('returns an empty string when there is nothing to show and no fallback', () => {
+    expect(formatContextDocsSection({})).toBe('');
   });
 });

@@ -624,12 +624,11 @@ describe('Client-Server File State Parity', () => {
 
       // Server output must equal client pure-function output.
       expect(args.schema).toEqual(clientSchema);
-      expect(args.context).toBe(clientDocs.inline);
-      expect(args.context_docs_catalog).toBe(clientDocs.catalog);
+      expect(args.context_docs).toEqual(clientDocs);
       // Docs survive the context loader (unlike fullSchema which is overwritten).
       // The seed doc has no explicit title, so it's lazy-loadable with a title
-      // derived from its body — surfaced in the catalog, not inlined.
-      expect(args.context_docs_catalog).toContain('Agent documentation for testing');
+      // derived from its body — carried in the docs list (structure), not inlined.
+      expect(args.context_docs.docs.map(d => d.title)).toContain('Agent documentation for testing');
     });
 
     // ── Test 2: Slack — all agent_args fields ────────────────────────────────
@@ -664,7 +663,7 @@ describe('Client-Server File State Parity', () => {
         ? (await FilesAPI.loadFileByPath(nearestPath, slackUser)).data.content as ContextContent
         : loadedContext;
 
-      const whitelisted = getWhitelistedSchemaForUser(resolvedContext, slackUser.userId, effectiveHomeFolder);
+      const whitelisted = getWhitelistedSchemaForUser(resolvedContext, slackUser.userId);
       const selectedDbName = selectDatabase(whitelisted, null);
       const selectedDb = whitelisted.find(d => d.databaseName === selectedDbName) ?? whitelisted[0];
       const expectedSchema = selectedDb
@@ -673,8 +672,8 @@ describe('Client-Server File State Parity', () => {
       const expectedDocs = resolveContextDocs(resolvedContext, slackUser.userId);
 
       expect(slack.schema).toEqual(expectedSchema);
-      expect(slack.context).toBe(expectedDocs.inline);
-      expect(slack.context_docs_catalog).toContain('Agent documentation for testing');
+      expect(slack.context_docs).toEqual(expectedDocs);
+      expect(slack.context_docs?.docs.map(d => d.title)).toContain('Agent documentation for testing');
 
       // ── Slack-specific field ──
       expect(slack.app_state).toEqual({ type: 'slack' });
@@ -687,15 +686,15 @@ describe('Client-Server File State Parity', () => {
     // not from the nearest ancestor of the cron user's home folder.
     it('buildServerAgentArgs with contextFileId: uses specified context file, not nearest ancestor', async () => {
       // Without override: picks /org/test-context (nearest / first available).
-      // The seed docs have no explicit title → lazy, surfaced via the catalog.
+      // The seed docs have no explicit title → lazy, carried in the docs list.
       const baseArgs = await buildServerAgentArgs(agentUser);
-      expect(baseArgs.context_docs_catalog).toContain('Agent documentation for testing');
-      expect(baseArgs.context_docs_catalog).not.toContain('Eval-specific context documentation');
+      expect(baseArgs.context_docs.docs.map(d => d.title)).toContain('Agent documentation for testing');
+      expect(baseArgs.context_docs.docs.map(d => d.title)).not.toContain('Eval-specific context documentation');
 
       // With override: must use the second context's docs regardless of path.
       const overriddenArgs = await buildServerAgentArgs(agentUser, { contextFileId: secondContextId });
-      expect(overriddenArgs.context_docs_catalog).toContain('Eval-specific context documentation');
-      expect(overriddenArgs.context_docs_catalog).not.toContain('Agent documentation for testing');
+      expect(overriddenArgs.context_docs.docs.map(d => d.title)).toContain('Eval-specific context documentation');
+      expect(overriddenArgs.context_docs.docs.map(d => d.title)).not.toContain('Agent documentation for testing');
 
       // Connection fields are independent of the context override.
       expect(overriddenArgs.connection_id).toBe(baseArgs.connection_id);
