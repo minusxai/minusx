@@ -426,7 +426,7 @@ export default function ChatInterface({
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
 
   // Check if conversation has exceeded the token limit
-  const TOKEN_LIMIT = 250_000;
+  const TOKEN_LIMIT = 150_000;
   const tokenLimitExceeded = useMemo(() => {
     if (!conversation?.messages) return false;
     // Gate only makes sense once there's accumulated history to shed by starting
@@ -599,7 +599,7 @@ export default function ChatInterface({
       };
     });
 
-    const LARGE_APP_STATE_THRESHOLD = 200_000;
+    const LARGE_APP_STATE_THRESHOLD = 200_000; //~50k tokens
     const appStateSize = appState ? JSON.stringify(appState).length : 0;
     if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
       agentSelectedSkills.push({ type: 'system', name: 'large_file' });
