@@ -7,7 +7,7 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // LoadContext soft over-fetch nudge: if the agent requests at least this many docs
 // in a single call, return them but warn it to be more selective. Absolute (not a
 // fraction of the library) since contexts often start with only 1-2 docs.
-const LOAD_CONTEXT_OVERFETCH_THRESHOLD = 5;
+const LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING = 5;
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
 // throw UserInputException so the orchestrator pauses; the bridge (Redux
@@ -311,8 +311,18 @@ export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystC
 
     const byKey = new Map(library.map((d) => [d.key, d]));
     // Fallback: also resolve by (case-insensitive) title, in case the agent passes
-    // the human title instead of the key.
-    const byTitle = new Map(library.map((d) => [d.title.trim().toLowerCase(), d]));
+    // the human title instead of the key. Keys are always unique, but titles need
+    // not be — so only resolve titles that uniquely identify one doc.
+    const titleCounts = new Map<string, number>();
+    for (const d of library) {
+      const t = d.title.trim().toLowerCase();
+      titleCounts.set(t, (titleCounts.get(t) ?? 0) + 1);
+    }
+    const byTitle = new Map(
+      library
+        .filter((d) => titleCounts.get(d.title.trim().toLowerCase()) === 1)
+        .map((d) => [d.title.trim().toLowerCase(), d]),
+    );
     const docs: { key: string; title: string; content: string }[] = [];
     const missing: string[] = [];
     const seen = new Set<string>();
@@ -332,7 +342,7 @@ export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystC
       warning?: string;
     } = { success: true, docs };
     if (missing.length > 0) payload.missing = missing;
-    if (docs.length >= LOAD_CONTEXT_OVERFETCH_THRESHOLD) {
+    if (docs.length >= LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING) {
       payload.warning =
         `You loaded ${docs.length} documents at once. In future, load only the docs relevant to the user's question.`;
     }

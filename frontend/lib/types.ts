@@ -219,6 +219,8 @@ export interface DocEntry {
   description?: string;      // Optional: one-line summary of what this doc covers
   childPaths?: string[];     // Optional: which child paths inherit this doc
   draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
+  alwaysInclude?: boolean;   // Optional: if true, stays inline in the system prompt every
+                             // turn; otherwise lazy-loaded on demand via the LoadContext tool
 }
 
 /**
@@ -365,7 +367,8 @@ export interface User {
 export interface ContextInfo {
   contextId: number | undefined;          // ID of context file (undefined if no context)
   databases: DatabaseWithSchema[];        // Whitelisted schemas (or all if no context)
-  documentation: string | undefined;      // Context docs (undefined if no context)
+  documentation: string | undefined;      // Always-inline context docs (undefined if no context)
+  documentationCatalog?: string;          // Catalog of lazy-loadable docs (title + description only)
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
   availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for # mentions
   hasContext: boolean;                    // True if context file found

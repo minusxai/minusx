@@ -4,7 +4,7 @@ import { selectContextFromPath } from '@/store/filesSlice';
 import { useFile } from './file-state-hooks';
 import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo, SkillMention } from '@/lib/types';
-import { getWhitelistedSchemaForUser, getDocumentationForUser, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
+import { getWhitelistedSchemaForUser, resolveContextDocs, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
 import { getPublishedVersion, mergeSkillsByName } from '@/lib/context/context-utils';
 
 let cachedSystemSkills: SkillMention[] | null = null;
@@ -168,13 +168,14 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
         ? path
         : path.substring(0, path.lastIndexOf('/')) || '/';
       const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, scopePath, contextDir);
-      const documentation = getDocumentationForUser(contextContent, currentUser.id);
+      const resolvedDocs = resolveContextDocs(contextContent, currentUser.id);
       const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
 
       return {
         contextId: loadedContext.id,
         databases,
-        documentation,
+        documentation: resolvedDocs.inline || undefined,
+        documentationCatalog: resolvedDocs.catalog || undefined,
         skills,
         availableSkills: toAvailableSkills(skills),
         hasContext: true,

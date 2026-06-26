@@ -23,6 +23,7 @@ import {
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
+  LoadContext,
 } from '@/agents/web-analyst/web-analyst';
 import { SearchFiles, ReadFiles as ServerReadFiles } from '@/agents/analyst/file-tools';
 import { SlackAgent } from '@/agents/slack/slack-agent';
@@ -108,6 +109,7 @@ export const V2_REGISTRABLES: RegistrableClass[] = [
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
+  LoadContext,
   WebAnalystAgent,
   // Slack chat runs the v2 orchestrator headlessly (see runChatOrchestrationV2).
   // SlackAgent extends RemoteAnalystAgent and advertises ListDBConnections (which
@@ -324,6 +326,10 @@ export async function setupOrchestration(
     typeof (agentArgs as { context?: unknown }).context === 'string'
       ? (agentArgs as { context: string }).context
       : undefined;
+  const clientContextDocsCatalog =
+    typeof (agentArgs as { context_docs_catalog?: unknown }).context_docs_catalog === 'string'
+      ? (agentArgs as { context_docs_catalog: string }).context_docs_catalog
+      : undefined;
   const clientSchema = Array.isArray((agentArgs as { schema?: unknown }).schema)
     ? (agentArgs as { schema: { schema: string; tables: string[] }[] }).schema
     : undefined;
@@ -462,6 +468,10 @@ export async function setupOrchestration(
       connectionId: clientConnectionId ?? serverArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
       contextDocs: clientContext || serverArgs.context || undefined,
+      contextDocsCatalog: clientContextDocsCatalog ?? serverArgs.context_docs_catalog ?? undefined,
+      // Library (full content) is always server-resolved so LoadContext matches the
+      // catalog the model sees, regardless of what the client sent.
+      contextDocsLibrary: serverArgs.context_docs_library,
       allowedVizTypes: clientAllowedVizTypes,
       schema: clientSchema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),

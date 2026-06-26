@@ -13,6 +13,7 @@ import { NavigateDetailCard } from './tools/NavigateDisplay';
 import { ScreenshotDetailCard } from './tools/ScreenshotDisplay';
 import { PublishAllDetailCard } from './tools/PublishAllDisplay';
 import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
+import { LoadContextDetailCard } from './tools/LoadContextDisplay';
 import { SearchFilesDetailCard } from './tools/SearchFilesDisplay';
 import { SearchDBSchemaDetailCard } from './tools/SearchDBSchemaDisplay';
 import { ListDBConnectionsDetailCard } from './tools/ListDBConnectionsDisplay';
@@ -451,6 +452,7 @@ function AgentTurnContainerImpl({
     'Screenshot': ScreenshotDetailCard,
     'PublishAll': PublishAllDetailCard,
     'LoadSkill': LoadSkillDetailCard,
+    'LoadContext': LoadContextDetailCard,
     'Clarify': ClarifyDetailCard,
     'ClarifyFrontend': ClarifyDetailCard,
     'EditFile': EditFileDetailCard,

@@ -187,7 +187,7 @@ export default function ChatInterface({
 
   // Load context using useContext hook (reuse existing hook)
   const contextInfo = useContext(contextPath, contextVersion, true);
-  const { databases, documentation: markdown, contextLoading } = contextInfo;
+  const { databases, documentation: markdown, documentationCatalog, contextLoading } = contextInfo;
   const { navigate } = useNavigationGuard();
 
   // Get config for location
@@ -658,6 +658,7 @@ export default function ChatInterface({
       context_file_id: contextInfo.contextId ?? null,
       schema: simplifiedSchema,
       context: markdown || '',
+      context_docs_catalog: documentationCatalog || '',
       app_state: appState,
       city: config.city,
       agent_name: config.branding.agentName || 'MinusX',
@@ -681,6 +682,7 @@ export default function ChatInterface({
     database,
     getSkillsFromMessage,
     markdown,
+    documentationCatalog,
     selectedDatabase,
     store,
     uniqueSkills,

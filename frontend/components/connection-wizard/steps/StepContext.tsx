@@ -663,6 +663,7 @@ export default function StepContext({
           showHelperText={false}
           showEmptyWarning={false}
           showDraftToggle={true}
+          showAlwaysIncludeToggle={false}
           showChildPaths={false}
           showTitleDescription={true}
           expandedIndices={expandedDocIndices}

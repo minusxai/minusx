@@ -15,12 +15,13 @@ import PublishAllDisplay from '@/components/explore/tools/PublishAllDisplay';
 import LoadSkillDisplay from '@/components/explore/tools/LoadSkillDisplay';
 import FuzzyMatchDisplay from '@/components/explore/tools/FuzzyMatchDisplay';
 import ExploreDatasetDisplay from '@/components/explore/tools/ExploreDatasetDisplay';
+import LoadContextDisplay from '@/components/explore/tools/LoadContextDisplay';
 import { DisplayProps } from '@/lib/types';
 import type { IconType } from 'react-icons/lib';
 import {
   LuDatabase, LuMessageSquare, LuBadgeInfo, LuArrowRight,
   LuPencilLine, LuBookOpen, LuSearch, LuFilePlus2,
-  LuUpload, LuBookMarked, LuWrench, LuBrain, LuGlobe, LuCamera,
+  LuUpload, LuBookMarked, LuWrench, LuBrain, LuGlobe, LuCamera, LuLibrary,
 } from 'react-icons/lu';
 
 // Tool configuration interface
@@ -231,6 +232,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipIcon: LuBookMarked,
 
     timelineVerb: 'Loading',
+  },
+  'LoadContext': {
+    displayComponent: LoadContextDisplay,
+
+    chipLabel: 'context load',
+    chipLabelPlural: 'context loads',
+    chipIcon: LuLibrary,
+
+    timelineVerb: 'Loading context',
   },
   'ExploreDataset': {
     displayComponent: ExploreDatasetDisplay,
