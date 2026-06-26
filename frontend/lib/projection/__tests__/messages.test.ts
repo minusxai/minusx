@@ -51,6 +51,17 @@ describe('projectMessages — app state', () => {
     expect(text).toContain('"unchanged":true');
   });
 
+  it('ships query SUMMARY but NOT the rows in app state (data fetched via ReadFiles)', () => {
+    // caf() has a query result WITH data (markdown rows). App state must drop the rows, keep summary.
+    const [out] = projectMessages([userMsg('q', fileAppState('<question id="1"/>'))]);
+    const text = (out.content as TextContent[])[0].text;
+    expect(text).toContain('"summary"');           // query shape is present
+    expect(text).not.toContain('<query_data');     // rows are NOT emitted as a block
+    expect(text).not.toContain('| a |');           // the markdown table is absent
+    // the query-result entry carries only queryResultId + summary (no row data)
+    expect(text).toMatch(/"queryResults":\[\{"queryResultId":"h1","summary":\{[^}]*\}\}\]/);
+  });
+
   it('renders folder/explore app state as inline JSON (no facet projection)', () => {
     const explore: AppState = { type: 'explore', state: null };
     const [out] = projectMessages([userMsg('q', explore)]);

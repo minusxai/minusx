@@ -45,11 +45,25 @@ function hasAugmented(details: unknown): details is AugmentedToolDetails {
   );
 }
 
+/**
+ * Drop the query-result `data` (rows) facet from every file in app state, keeping `summary`. App
+ * state ships the SHAPE (columns/types/totalRows) + a screenshot image; the agent pulls exact rows
+ * on demand via ReadFiles. (Tool results — ReadFiles/EditFile — keep their `data` so the agent can
+ * read the values it explicitly asked for.) Returns a shallow copy; the source is untouched.
+ */
+function stripQueryData(files: AugmentedFiles): AugmentedFiles {
+  const stripEntry = (e: AugmentedFiles['file']) =>
+    e.queryResults?.length
+      ? { ...e, queryResults: e.queryResults.map(({ data: _drop, ...qr }) => qr) }
+      : e;
+  return { file: stripEntry(files.file), references: files.references.map(stripEntry) };
+}
+
 /** Render the app-state blocks for one user turn, advancing the memo. File pages go through the
- *  facet projector; folder/explore (small, no heavy facets) render their JSON inline. */
+ *  facet projector (summary only — no row data); folder/explore render their JSON inline. */
 function renderAppState(memo: FacetMemo, appState: AppState | undefined): (TextContent | ImageContent)[] {
   if (appState?.type === 'file' && appState.state) {
-    const files: AugmentedFiles = compressedToAugmentedFiles(appState.state);
+    const files: AugmentedFiles = stripQueryData(compressedToAugmentedFiles(appState.state));
     return renderProjectedFiles(projectFiles(memo, files), { jsonTag: 'AppState' });
   }
   const json = appState !== undefined ? JSON.stringify(appStateForLlm(appState)) : 'null';
