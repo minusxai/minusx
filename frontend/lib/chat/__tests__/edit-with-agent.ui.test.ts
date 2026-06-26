@@ -15,6 +15,8 @@ import {
   composeInteractMessage,
   sendInteractSelection,
   computeMonacoPopoverPosition,
+  computeSelectionPopoverPosition,
+  getShadowRootSelection,
   AGENT_ACTIONS,
   type EditWithAgentSource,
 } from '@/lib/chat/edit-with-agent';
@@ -108,5 +110,58 @@ describe('computeMonacoPopoverPosition', () => {
   it('returns null for a whitespace-only selection', () => {
     const editor = makeEditor({ getModel: () => ({ getValueInRange: () => '   \n  ' }) });
     expect(computeMonacoPopoverPosition(editor as never)).toBeNull();
+  });
+});
+
+describe('getShadowRootSelection', () => {
+  it("prefers the shadow root's own getSelection (Chrome) when present", () => {
+    const shadowSel = { isCollapsed: false } as unknown as Selection;
+    const root = { getSelection: () => shadowSel } as unknown as ShadowRoot;
+    expect(getShadowRootSelection(root)).toBe(shadowSel);
+  });
+
+  it('falls back to the document selection when the root lacks getSelection (Firefox/Safari) or is null', () => {
+    const docSel = { isCollapsed: true } as unknown as Selection;
+    const orig = window.getSelection;
+    window.getSelection = (() => docSel) as typeof window.getSelection;
+    try {
+      expect(getShadowRootSelection({} as ShadowRoot)).toBe(docSel);
+      expect(getShadowRootSelection(null)).toBe(docSel);
+    } finally {
+      window.getSelection = orig;
+    }
+  });
+});
+
+describe('computeSelectionPopoverPosition', () => {
+  const makeSel = (overrides: Partial<Record<string, unknown>> = {}) => ({
+    isCollapsed: false,
+    rangeCount: 1,
+    toString: () => 'hello world',
+    getRangeAt: () => ({
+      // Anchor at the END of the selection → the LAST client rect.
+      getClientRects: () => [{ right: 40, bottom: 10 }, { right: 120, bottom: 40 }],
+      getBoundingClientRect: () => ({ right: 200, bottom: 80 }),
+    }),
+    ...overrides,
+  });
+
+  it('anchors at the right/bottom of the last client rect (+4px gap)', () => {
+    expect(computeSelectionPopoverPosition(makeSel() as never)).toEqual({ x: 120, y: 44, text: 'hello world' });
+  });
+
+  it('falls back to the bounding rect when there are no client rects', () => {
+    const sel = makeSel({ getRangeAt: () => ({ getClientRects: () => [], getBoundingClientRect: () => ({ right: 200, bottom: 80 }) }) });
+    expect(computeSelectionPopoverPosition(sel as never)).toEqual({ x: 200, y: 84, text: 'hello world' });
+  });
+
+  it('returns null for a null, collapsed, or range-less selection', () => {
+    expect(computeSelectionPopoverPosition(null)).toBeNull();
+    expect(computeSelectionPopoverPosition(makeSel({ isCollapsed: true }) as never)).toBeNull();
+    expect(computeSelectionPopoverPosition(makeSel({ rangeCount: 0 }) as never)).toBeNull();
+  });
+
+  it('returns null for a whitespace-only selection', () => {
+    expect(computeSelectionPopoverPosition(makeSel({ toString: () => '   ' }) as never)).toBeNull();
   });
 });
