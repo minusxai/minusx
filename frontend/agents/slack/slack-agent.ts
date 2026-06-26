@@ -33,6 +33,9 @@ export class SlackAgent extends RemoteAnalystAgent {
       role: '',
       schema: '',
       context: '',
+      // Slack keeps the system prompt minimal (no inline context docs); preserve
+      // that — render no Context Library either.
+      context_docs_catalog: 'No additional context documents are available.',
       skills_catalog: '',
       connection_id: this.context.connectionId ?? '',
       home_folder: '',
