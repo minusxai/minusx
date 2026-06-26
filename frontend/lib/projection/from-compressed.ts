@@ -78,8 +78,18 @@ export function compressedToAugmentedFiles(aug: CompressedAugmentedFile): Augmen
     const a = toAugmentedQueryResult(cqr);
     if (a) qrById.set(a.queryResultId, a);
   }
-  return {
-    file: toEntry(aug.fileState, qrById),
-    references: (aug.references ?? []).map((r) => toEntry(r, qrById)),
+  const consumed = new Set<string>();
+  const toTracked = (fs: CompressedFileState): AugmentedFileEntry => {
+    const entry = toEntry(fs, qrById);
+    for (const q of entry.queryResults ?? []) consumed.add(q.queryResultId);
+    return entry;
   };
+  const file = toTracked(aug.fileState);
+  const references = (aug.references ?? []).map(toTracked);
+  // Orphaned results — a story's/notebook's inline questions run with their own queryResultId, which
+  // no file's `queryResultId` matches. Attach them to the PRIMARY file so the agent still sees them
+  // (otherwise they'd be silently dropped from app state / ReadFiles / EditFile responses).
+  const orphans = [...qrById.values()].filter((q) => !consumed.has(q.queryResultId));
+  if (orphans.length) file.queryResults = [...(file.queryResults ?? []), ...orphans];
+  return { file, references };
 }

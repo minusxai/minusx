@@ -45,6 +45,17 @@ export function stripEntryQueryData(entry: AugmentedFileEntry): AugmentedFileEnt
   return { ...entry, queryResults: entry.queryResults.map(({ data: _drop, ...qr }) => qr) };
 }
 
+/**
+ * Drop the JSX `content` (markup) facet from a file entry, keeping data / image / queryResults.
+ * Used by EditFile: the agent already knows the new markup from the prior app state + the edit args,
+ * so EditFile echoes the new query RESULT (data it can't derive) but not the markup.
+ */
+export function stripEntryMarkup(entry: AugmentedFileEntry): AugmentedFileEntry {
+  if (entry.content === undefined) return entry;
+  const { content: _drop, ...rest } = entry;
+  return rest;
+}
+
 interface EntryProjection {
   json: ProjectedFileJson;
   textBlocks: ProjectionTextBlock[];

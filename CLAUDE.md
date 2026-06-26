@@ -8,19 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## ⚠️ PRIMARY WORKING STYLE: TEST-DRIVEN DEVELOPMENT
 
-**This is non-negotiable. Every feature and refactor MUST follow one of these two flows.**
+**This is non-negotiable and SUPER IMPORTANT — do not deviate. Every feature and refactor MUST follow this exact order. Do NOT implement first and back-fill tests.**
 
-### New features — Red → Green
-1. Write the failing test first (red). Confirm it fails before implementing.
-2. Implement until the test passes (green).
-3. Run the full suite to confirm no regressions.
+### The required order (every change)
+1. **Contracts first** — define robust types, interfaces, and method signatures. Reuse existing types; no duplication; keep it elegant.
+2. **Tests second** — write tests that fully exercise the ACTUAL behavior (not just helpers), and **confirm they FAIL (red) before implementing**. A green test that was never red is decoration.
+3. **Implementation third** — write the code until the tests pass (green).
+4. **Run the full suite** to confirm no regressions.
+5. **Commit and push to the PR.**
+6. **Browser-verify on the running dev server** — drive the real flow; for chat, open the side-chat **debug message** and expand the model to read the EXACT request/response sent to the LLM. Don't assume; check.
 
 ### Refactoring — Blue → Red → Blue
 1. Identify tests covering existing behaviour — they must pass (blue).
 2. Break the old implementation and confirm tests fail (red). This proves the tests guard the behaviour.
-3. Re-implement until all tests pass (blue). Run the full suite.
+3. Re-implement until all tests pass (blue). Run the full suite, push, browser-verify.
 
-> A green test that was never red is not a test — it's decoration.
+> A green test that was never red is not a test — it's decoration. When asked "did you do TDD / browser-test?", answer honestly.
 
 ---
 

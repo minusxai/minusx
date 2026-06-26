@@ -5,7 +5,7 @@
 // facets live OUTSIDE the JSON; images diff on key not payload; ids dedup across primary/reference.
 import { describe, it, expect } from 'vitest';
 import { FacetMemo, isUnchanged } from '../facets';
-import { projectFiles } from '../project';
+import { projectFiles, stripEntryMarkup, stripEntryQueryData } from '../project';
 import type { AugmentedFileEntry, AugmentedFiles } from '../types';
 import type { ImageContent } from '@/orchestrator/llm';
 
@@ -173,6 +173,25 @@ describe('projectFiles — references (policy: metadata-only)', () => {
     expect(isUnchanged(out.json.references[0].data)).toBe(true);
     expect(out.json.references[0].content).toBeUndefined(); // references are metadata-only (markup suppressed)
     expect(out.json.references[0].image).toEqual({ state: 'unchanged' });
+  });
+});
+
+describe('stripEntryMarkup / stripEntryQueryData', () => {
+  it('stripEntryMarkup drops content (markup), keeps data/image/queryResults', () => {
+    const e = question(1);
+    const out = stripEntryMarkup(e);
+    expect(out.content).toBeUndefined();
+    expect(out.data).toEqual(e.data);
+    expect(out.image).toEqual(e.image);
+    expect(out.queryResults).toEqual(e.queryResults);
+  });
+
+  it('stripEntryQueryData drops row data, keeps summary + everything else', () => {
+    const e = question(1, { queryResults: [{ queryResultId: 'h1', summary: { columns: ['a'], types: ['number'], totalRows: 2 }, data: { markdown: '| a |\n', shownRows: 1, truncated: false } }] });
+    const out = stripEntryQueryData(e);
+    expect(out.queryResults?.[0].data).toBeUndefined();
+    expect(out.queryResults?.[0].summary).toEqual({ columns: ['a'], types: ['number'], totalRows: 2 });
+    expect(out.content).toEqual(e.content); // markup untouched
   });
 });
 

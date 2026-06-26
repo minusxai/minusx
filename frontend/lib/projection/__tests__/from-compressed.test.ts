@@ -102,6 +102,23 @@ describe('compressedToAugmentedFiles', () => {
     });
   });
 
+  it("attaches orphan query results (a story's inline questions) to the primary file", () => {
+    // A story has no fileState.queryResultId; its inline <Number>/<Question> results have their own
+    // ids that match no file. They must land on the primary file, not be dropped.
+    const story: CompressedAugmentedFile = {
+      fileState: { id: 9, name: 'num story', path: '/org/s', type: 'story', isDirty: false },
+      references: [],
+      queryResults: [
+        { columns: ['n'], types: ['INTEGER'], data: '| n |\n| --- |\n| 7 |\n', totalRows: 1, shownRows: 1, truncated: false, id: 'inlineA', finalQuery: 'SELECT 7 AS n' },
+        { columns: [], types: [], data: '', totalRows: 0, shownRows: 0, truncated: false, id: 'inlineB', error: 'Parser Error: boom' },
+      ],
+    };
+    const out = compressedToAugmentedFiles(story);
+    expect(out.file.queryResults?.map((q) => q.queryResultId)).toEqual(['inlineA', 'inlineB']);
+    expect(out.file.queryResults?.find((q) => q.queryResultId === 'inlineA')?.finalQuery).toBe('SELECT 7 AS n');
+    expect(out.file.queryResults?.find((q) => q.queryResultId === 'inlineB')?.error).toBe('Parser Error: boom');
+  });
+
   it('omits the content facet when the file has no markup', () => {
     const noMarkup: CompressedAugmentedFile = {
       fileState: { id: 5, name: 'f', path: '/org/f', type: 'folder', isDirty: false },
