@@ -7,6 +7,7 @@ import { LuBookOpen, LuCheck, LuPencil, LuX } from 'react-icons/lu';
 import AgentHtml, { type AgentHtmlHandle, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryContent } from '@/lib/types';
+import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { useAppSelector } from '@/store/hooks';
 import { selectFile } from '@/store/filesSlice';
 import { applyStoryHtmlEdit } from '@/lib/api/file-state';
@@ -60,7 +61,14 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
   // in the story shadow root). The story's path feeds schema/connection autocomplete.
   const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
-  const storyPath = useAppSelector(s => (fileId !== undefined ? selectFile(s, fileId)?.path : undefined));
+  const storyFile = useAppSelector(s => (fileId !== undefined ? selectFile(s, fileId) : undefined));
+  const storyPath = storyFile?.path;
+  // Select-to-chat provenance: only for an owned story (canEdit); the popover itself
+  // is gated to edit mode inside AgentHtml. The selection is rich-text (HTML).
+  const selectionSource: EditWithAgentSource | undefined =
+    canEdit && fileId !== undefined
+      ? { editorKind: 'richtext', fileName: storyFile?.name ?? 'Story', filePath: storyPath, fileId }
+      : undefined;
 
   const handleSave = () => {
     if (fileId === undefined) return;
@@ -140,6 +148,7 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
             readOnly={readOnly}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}
+            selectionSource={selectionSource}
           />
         </Box>
       </Box>

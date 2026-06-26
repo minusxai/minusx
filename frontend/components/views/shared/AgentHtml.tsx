@@ -15,6 +15,8 @@ import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/s
 import { numberFromEl } from '@/lib/data/story-number';
 import type { InlineNumberEmbed } from '@/lib/data/story-number';
 import InlineNumber from '@/components/views/story/InlineNumber';
+import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
+import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import type { QuestionContent } from '@/lib/types';
 
 interface ChartTarget {
@@ -74,6 +76,12 @@ interface AgentHtmlProps {
    * light-DOM drawer; `apply(newQuery)` writes the edit back to the body placeholder + re-runs.
    */
   onEditNumber?: (req: NumberQueryEditRequest) => void;
+  /**
+   * When set, a "Interact with {agentName}" pill appears on any text selection inside
+   * the story (edit mode only) — Ask / Edit that selection via chat. Omit for public /
+   * read-only renders. See StorySelectionPopover.
+   */
+  selectionSource?: EditWithAgentSource;
 }
 
 export interface NumberQueryEditRequest {
@@ -111,7 +119,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * font-faces declared inside shadow trees don't load.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -444,6 +452,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         t.el,
         `param-${i}-${t.param.name}`,
       ))}
+      {/* Select-to-chat: a floating Ask/Edit pill on any text selection while editing the story. */}
+      {selectionSource && <StorySelectionPopover hostRef={hostRef} source={selectionSource} active={editable} />}
     </>
   );
 });

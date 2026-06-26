@@ -130,6 +130,51 @@ export function useEditWithAgent(): (args: SendInteractArgs) => void {
   return useCallback((args: SendInteractArgs) => sendInteractSelection(dispatch, args), [dispatch]);
 }
 
+/** Minimal slice of a DOM Selection used to position the popover — keeps this file DOM-type-free. */
+interface SelectionLike {
+  isCollapsed: boolean;
+  rangeCount: number;
+  toString(): string;
+  getRangeAt(index: number): {
+    getClientRects?: () => ArrayLike<{ right: number; bottom: number }>;
+    getBoundingClientRect: () => { right: number; bottom: number };
+  };
+}
+
+/**
+ * Read the active text selection within a story's shadow root. Chrome scopes a
+ * shadow selection to the non-standard `shadowRoot.getSelection()`; Firefox/Safari
+ * surface shadow-tree content through the document selection, so fall back to
+ * `window.getSelection()` (also the path when `root` is null).
+ */
+export function getShadowRootSelection(root: ShadowRoot | null): SelectionLike | null {
+  const shadowGetSelection = (root as unknown as { getSelection?: () => SelectionLike | null } | null)?.getSelection;
+  if (shadowGetSelection) return shadowGetSelection.call(root);
+  return window.getSelection() as unknown as SelectionLike | null;
+}
+
+export interface SelectionPopoverPosition {
+  x: number;
+  y: number;
+  text: string;
+}
+
+/**
+ * Viewport coords + text for the popover anchored at the END of a DOM text selection
+ * (last client rect, right/bottom edge — mirrors the Lexical & SQL editors). Returns
+ * null when the selection is null, collapsed, or whitespace-only. Pure given the
+ * selection, so it's unit-testable with a fake. The DOM analog of computeMonacoPopoverPosition.
+ */
+export function computeSelectionPopoverPosition(sel: SelectionLike | null): SelectionPopoverPosition | null {
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+  const text = sel.toString();
+  if (!text.trim()) return null;
+  const range = sel.getRangeAt(0);
+  const rects = range.getClientRects?.();
+  const rect = rects && rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+  return { x: rect.right, y: rect.bottom + 4, text };
+}
+
 /** Minimal slice of the Monaco editor API used for positioning — keeps this file monaco-type-free. */
 interface MonacoLikeEditor {
   getSelection(): { isEmpty(): boolean; startLineNumber: number; endLineNumber: number; getEndPosition(): unknown } | null;
