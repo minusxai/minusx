@@ -7,17 +7,13 @@
  * Browser-only (uses the DOM + html-to-image).
  */
 import { toJpeg, toPng } from 'html-to-image';
+import { getCachedFontEmbedCSS } from './font-embed-cache';
+import { AGENT_IMAGE_MAX_PX } from './constants';
 import type { ScreenshotOptions } from './types';
 
 export type CaptureOptions = ScreenshotOptions & { colorMode: 'light' | 'dark' };
 
 const bgFor = (colorMode: 'light' | 'dark'): string => (colorMode === 'dark' ? '#0D1117' : '#FAFBFC');
-
-/**
- * Longest-side cap (px) for images sent to the agent. Chart attachments render at this same width
- * (lib/chart/chart-attachments.ts) — keep them consistent so every agent-facing image is ~512px.
- */
-export const AGENT_IMAGE_MAX_PX = 512;
 
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
@@ -28,6 +24,7 @@ export async function captureElementBlob(element: HTMLElement, opts: CaptureOpti
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     filter: opts.filter,
     quality: opts.quality ?? 0.9,
+    fontEmbedCSS: await getCachedFontEmbedCSS(element),
   });
   const blob = await fetch(dataURL).then(r => r.blob());
   if (!blob) throw new Error('Screenshot capture failed');
@@ -152,6 +149,7 @@ export async function captureRegionBlob(
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     filter: opts.filter,
     quality: opts.quality ?? 0.92,
+    fontEmbedCSS: await getCachedFontEmbedCSS(target),
   });
   const img = await loadImage(dataURL);
   const { sx, sy, sw, sh } = cropSourceRect(selection, targetBox, pixelRatio);

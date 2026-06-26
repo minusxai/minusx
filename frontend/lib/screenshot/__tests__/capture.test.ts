@@ -6,10 +6,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('html-to-image', () => ({
   toJpeg: vi.fn(async () => 'data:image/jpeg;base64,AAAA'),
   toPng: vi.fn(async () => 'data:image/png;base64,BBBB'),
+  getFontEmbedCSS: vi.fn(async () => '@font-face{font-family:Embedded;src:url(data:,)}'),
 }));
 
 import { toJpeg, toPng } from 'html-to-image';
-import { captureElementBlob, captureFileViewBlob, captureRegionBlob, cropSourceRect, cappedOutputDims, regionPixelRatio, AGENT_IMAGE_MAX_PX } from '../capture';
+import { captureElementBlob, captureFileViewBlob, captureRegionBlob, cropSourceRect, cappedOutputDims, regionPixelRatio } from '../capture';
+import { AGENT_IMAGE_MAX_PX } from '../constants';
 
 beforeEach(() => {
   vi.clearAllMocks();
