@@ -151,6 +151,18 @@ describe('projectFiles — references (policy: metadata-only)', () => {
     expect(out.textBlocks).toEqual([{ kind: 'markup', fileId: 1, type: 'dashboard', text: '<dashboard/>' }]);
   });
 
+  it('suppresses a reference markup even when the entry carries content (policy)', () => {
+    const memo = new FacetMemo();
+    const refWithMarkup = question(2); // has content + image
+    const out = projectFiles(memo, files(question(1), [refWithMarkup]));
+    expect(out.json.references[0].content).toBeUndefined();        // markup never projected for refs
+    expect(out.json.references[0].image).toEqual({ state: 'present' }); // images still allowed for refs
+    // only the primary file's markup is a block; the reference's markup is not emitted
+    expect(out.textBlocks.filter((b) => b.kind === 'markup')).toEqual([
+      { kind: 'markup', fileId: 1, type: 'question', text: '<question id="1"/>' },
+    ]);
+  });
+
   it('dedups a file by id whether it appears as primary or reference', () => {
     const memo = new FacetMemo();
     // turn 1: file 2 is the focused (primary) question — full
@@ -159,7 +171,7 @@ describe('projectFiles — references (policy: metadata-only)', () => {
     const ref = question(2);
     const out = projectFiles(memo, files(question(1), [ref]));
     expect(isUnchanged(out.json.references[0].data)).toBe(true);
-    expect(out.json.references[0].content).toEqual({ state: 'unchanged' });
+    expect(out.json.references[0].content).toBeUndefined(); // references are metadata-only (markup suppressed)
     expect(out.json.references[0].image).toEqual({ state: 'unchanged' });
   });
 });

@@ -41,7 +41,16 @@ interface EntryProjection {
   images: ImageContent[];
 }
 
-function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry): EntryProjection {
+interface EntryOptions {
+  /**
+   * Whether to project this file's JSX `markup` at all. References are metadata-only by policy
+   * (the agent reads a reference's markup by ReadFile-ing it, not from app state), so they pass
+   * `false`: the `content` facet is neither diffed nor emitted. The primary file passes `true`.
+   */
+  includeMarkup: boolean;
+}
+
+function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry, opts: EntryOptions): EntryProjection {
   const { id } = entry;
   const textBlocks: ProjectionTextBlock[] = [];
   const images: ImageContent[] = [];
@@ -52,8 +61,8 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry): EntryProjecti
     data: memo.diff(`file:${id}:data`, entry.data)!,
   };
 
-  // markup — out-of-JSON block when changed.
-  if (entry.content) {
+  // markup — out-of-JSON block when changed. Suppressed entirely for references (policy).
+  if (opts.includeMarkup && entry.content) {
     const d = memo.diff(`file:${id}:content`, entry.content);
     if (isUnchanged(d)) {
       json.content = UNCHANGED;
@@ -114,8 +123,8 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry): EntryProjecti
  * Returns the lean JSON plus every out-of-JSON block to splice in after it.
  */
 export function projectFiles(memo: FacetMemo, augmented: AugmentedFiles): ProjectedFilesOutput {
-  const primary = projectEntry(memo, augmented.file);
-  const refs = augmented.references.map((r) => projectEntry(memo, r));
+  const primary = projectEntry(memo, augmented.file, { includeMarkup: true });
+  const refs = augmented.references.map((r) => projectEntry(memo, r, { includeMarkup: false }));
 
   const json: ProjectedFilesJson = {
     file: primary.json,
