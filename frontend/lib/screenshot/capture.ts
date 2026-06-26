@@ -22,15 +22,17 @@ const blobType = (format: ScreenshotOptions['format']): 'png' | 'jpeg' => (forma
 
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
-  // maxWidth → exact output width; otherwise scale by pixelRatio (default 0.75). dpr:1 keeps the
-  // output at the literal target size (snapdom would otherwise multiply by the device pixel ratio).
-  const sizing = opts.maxWidth != null ? { width: opts.maxWidth } : { scale: opts.pixelRatio ?? 0.75 };
+  // Always scale the RASTER, never snapdom's `width` — `width` re-lays-out the element at that width
+  // (e.g. a fixed-width story rewraps and its fixed CSS heights collide), whereas `scale` downscales
+  // the captured bitmap with no reflow. maxWidth → scale to hit that width; else use pixelRatio
+  // (default 0.75). dpr:1 keeps `scale` the literal multiplier (snapdom would otherwise ×devicePR).
+  const scale = opts.maxWidth != null ? opts.maxWidth / element.offsetWidth : (opts.pixelRatio ?? 0.75);
   return snapdom.toBlob(element, {
     type: blobType(opts.format),
     quality: opts.quality ?? AGENT_IMAGE_JPEG_QUALITY,
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     dpr: 1,
-    ...sizing,
+    scale,
     filter: opts.filter,
     embedFonts: true,
   });

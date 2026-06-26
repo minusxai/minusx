@@ -38,9 +38,11 @@ describe('captureElementBlob', () => {
     expect(snapdom.toBlob).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ backgroundColor: '#FAFBFC', type: 'png' }));
   });
 
-  it('targets an exact output width when maxWidth is given', async () => {
+  it('scales the RASTER to hit maxWidth (no reflow) — maxWidth/offsetWidth', async () => {
+    // 400 / 800 = 0.5. Must be `scale` (raster downscale), NOT snapdom `width` (which re-lays-out).
     await captureElementBlob(el(800), { colorMode: 'light', maxWidth: 400 });
-    expect(snapdom.toBlob).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ width: 400, dpr: 1 }));
+    expect(snapdom.toBlob).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ scale: 0.5, dpr: 1 }));
+    expect(snapdom.toBlob).toHaveBeenCalledWith(expect.any(HTMLElement), expect.not.objectContaining({ width: expect.anything() }));
   });
 
   it('scales by pixelRatio (default 0.75) when no maxWidth is given', async () => {
