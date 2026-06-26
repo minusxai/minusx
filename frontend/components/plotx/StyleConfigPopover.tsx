@@ -25,8 +25,9 @@ const MARKER_SIZE_OPTIONS = [
   { label: 'xl', value: 30 },
 ] as const
 
-const Circle = ({ color, size, selected, onClick }: { color: string; size: string; selected: boolean; onClick: () => void }) => (
+const Circle = ({ color, size, selected, onClick, label }: { color: string; size: string; selected: boolean; onClick: () => void; label?: string }) => (
   <Box
+    aria-label={label}
     w={size}
     h={size}
     borderRadius="full"
@@ -169,6 +170,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
           {Array.from({ length: seriesCount }, (_, i) => (
             <Circle
               key={i}
+              label={`Series ${i + 1} color`}
               color={getSeriesColor(i)}
               size="14px"
               selected={activeSeriesIndex === i}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Box, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
@@ -76,6 +76,8 @@ interface ChartBuilderProps {
   enableDrilldown?: boolean
   /** Receives a getter for the live geo map's center/zoom once the map mounts. Lets a parent wire the "Pin current view" button (which lives in a sibling config panel) to this map. */
   onMapReady?: (getView: () => { center: [number, number]; zoom: number } | null) => void
+  /** Reports the number of rendered series whenever it changes. Lets a parent feed the exact count to a sibling config panel (color swatches) without re-aggregating the rows. */
+  onSeriesCountChange?: (count: number) => void
 }
 
 interface GroupedColumns {
@@ -84,7 +86,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, singleValueConfig, exportBranding, enableDrilldown = true, onMapReady }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, singleValueConfig, exportBranding, enableDrilldown = true, onMapReady, onSeriesCountChange }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const { config } = useConfigs()
   const configPalette = config.chartColorPalette
@@ -196,6 +198,18 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const aggregatedData = useMemo(() => {
     return aggregateData(rows, xAxisColumns, allYColumns, chartType, tooltipColumns, columnTypes)
   }, [rows, xAxisColumns, allYColumns, chartType, tooltipColumns, columnTypes])
+
+  // Number of distinct colors the chart actually paints, reported up so a sibling
+  // config panel can size its color swatches without re-aggregating the rows.
+  // Pie colors one slice per category (xAxisData); every other chart type colors
+  // one entry per value series.
+  const renderedColorCount = useMemo(
+    () => (chartType === 'pie' ? aggregatedData.xAxisData.length : aggregatedData.series.length),
+    [chartType, aggregatedData.xAxisData.length, aggregatedData.series.length],
+  )
+  useEffect(() => {
+    onSeriesCountChange?.(renderedColorCount)
+  }, [renderedColorCount, onSeriesCountChange])
 
   // Compute axis mapping for multi-X-column charts (needed for drill-down click handler)
   const axisMapping = useMemo(() => {
