@@ -10,6 +10,7 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
+import { assertValidProviderImages } from '@/lib/projection/image-validate';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { POST as chatInitHandler } from '@/app/api/chat/init/route';
@@ -145,6 +146,50 @@ describe('chat v2 route', () => {
 
       const metadata = (file.data.content as unknown as { metadata?: { name?: string } }).metadata;
       expect(metadata?.name).toBe(userMessage);
+    });
+
+    // Regression guards for bugs that single-turn / faux tests missed: the prompt cache breaks when a
+    // turn's bytes change between current and prior (CurrentDate was per-message), and Debug Info
+    // duplicated when the server built debug from the full log. Both only show up across TWO turns.
+    it('multi-turn: per-turn debug only (no dup), cache-stable prefix, date in system prompt not messages', async () => {
+      const contexts: Array<{ systemPrompt: string; messages: Array<{ role: string; content: unknown }> }> = [];
+      const capture = (label: string) => (context: { systemPrompt?: string; messages?: Array<{ role: string; content: unknown }> }) => {
+        contexts.push({ systemPrompt: context.systemPrompt ?? '', messages: context.messages ?? [] });
+        return fauxAssistantMessage(label, { stopReason: 'stop' });
+      };
+      webAnalystFaux.setResponses([capture('first answer'), capture('second answer')]);
+
+      const res1 = await chatPostHandler(makeRequest('http://localhost/api/chat?v=2', { user_message: 'first question' }));
+      const body1 = (await res1.json()) as LegacyChatResponse;
+      expect(body1.debug.length).toBe(1); // exactly this turn's one LLM call
+
+      const res2 = await chatPostHandler(makeRequest('http://localhost/api/chat?v=2', { conversationID: body1.conversationID, user_message: 'second question' }));
+      const body2 = (await res2.json()) as LegacyChatResponse;
+
+      // #3 — debug is PER-TURN, not cumulative (was 2: turn 1's call was re-sent and re-appended).
+      expect(body2.debug.length).toBe(1);
+
+      // #1 — current date lives in the SYSTEM PROMPT, never in a user message.
+      expect(contexts).toHaveLength(2);
+      expect(contexts[1].systemPrompt).toMatch(/Current date: \d{4}-\d{2}-\d{2}/);
+      const userMsgs = (c: (typeof contexts)[number]) => c.messages.filter((m) => m.role === 'user');
+      for (const m of contexts.flatMap(userMsgs)) {
+        expect(JSON.stringify(m.content)).not.toContain('<CurrentDate>');
+      }
+      // #1 — prefix stability: turn 1's user TEXT is unchanged when re-projected as a prior turn in
+      // turn 2 — no volatile per-turn content (like a date) injected into history. (Compared on text,
+      // not exact shape: a prior turn is a plain string while the current turn is a [{text}] block.)
+      const textOf = (content: unknown): string =>
+        typeof content === 'string'
+          ? content
+          : (content as Array<{ type: string; text?: string }>).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n');
+      expect(textOf(userMsgs(contexts[1])[0]?.content)).toBe(textOf(userMsgs(contexts[0])[0]?.content));
+
+      // every image the provider would receive is provider-valid (no data: URL stuffed in `url`).
+      for (const c of contexts) {
+        const imgs = c.messages.flatMap((m) => (Array.isArray(m.content) ? m.content : []));
+        assertValidProviderImages(imgs as Parameters<typeof assertValidProviderImages>[0]);
+      }
     });
 
     it('forks ?v=2 against an existing v=1 conversation and continues in v=2 (original preserved)', async () => {
