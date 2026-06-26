@@ -44,6 +44,8 @@ interface AgentHtmlProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** When set, a "Interact with {agentName}" pill appears on text selection (edit mode only). */
   selectionSource?: EditWithAgentSource;
+  /** Fired (debounced) with the serialized story while editing, so the caller can sync dirty state. */
+  onChange?: (story: string) => void;
 }
 
 export interface NumberQueryEditRequest {
@@ -77,7 +79,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource },
+  { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource, onChange },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -293,6 +295,23 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       el.contentEditable = 'false';
     });
   }, [editable, targets, inlineTargets, numberTargets, sanitized]);
+
+  // While editing, sync inline edits out (debounced + flush on focus loss) so the caller can mark the
+  // file dirty and the shared header's Save persists them — the iframe DOM is the source of truth.
+  useEffect(() => {
+    const doc = docRef.current;
+    if (!doc || !editable || !onChange) return;
+    let t = 0;
+    const flush = () => { if (docRef.current) onChange(serializeEditedStory(docRef.current.body, [])); };
+    const schedule = () => { if (t) window.clearTimeout(t); t = window.setTimeout(() => { t = 0; flush(); }, 400); };
+    doc.body.addEventListener('input', schedule);
+    doc.body.addEventListener('focusout', flush);
+    return () => {
+      doc.body.removeEventListener('input', schedule);
+      doc.body.removeEventListener('focusout', flush);
+      if (t) window.clearTimeout(t);
+    };
+  }, [editable, onChange, targets]);
 
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({

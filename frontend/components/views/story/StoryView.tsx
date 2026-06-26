@@ -1,17 +1,17 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Box, Button, HStack, Icon, Text } from '@chakra-ui/react';
-import { LuBookOpen, LuCheck, LuPencil, LuX } from 'react-icons/lu';
+import { useCallback, useState } from 'react';
+import { Box, Text } from '@chakra-ui/react';
+import { LuBookOpen } from 'react-icons/lu';
 
-import AgentHtml, { type AgentHtmlHandle, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
+import AgentHtml, { type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import { StoryContent } from '@/lib/types';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { useAppSelector } from '@/store/hooks';
 import { selectFile } from '@/store/filesSlice';
+import { selectFileEditMode } from '@/store/uiSlice';
 import { applyStoryHtmlEdit } from '@/lib/api/file-state';
-import { toaster } from '@/components/ui/toaster';
 import { STORY_W } from './ScaledStoryFrame';
 
 // Max on-screen width of the reading column. Stories render FLUID (no transform
@@ -21,13 +21,10 @@ import { STORY_W } from './ScaledStoryFrame';
 const STORY_MAX_W = '1280px';
 
 /**
- * Cheap stable hash of the story HTML, used to KEY (and thus remount) AgentHtml whenever the story
- * content changes. AgentHtml renders by imperatively resetting its shadow root's innerHTML and then
- * portals the live embeds (charts / numbers / params) into nodes inside it. If the content changes
- * while AgentHtml stays mounted, its effect resets innerHTML — destroying the nodes the portals are
- * mounted into — and React then crashes unmounting them ("removeChild: not a child of this node").
- * Remounting on content change makes React unmount the old portals from the still-intact old shadow
- * root before a fresh one is built. (Cancel still bumps renderKey to discard in-DOM edits.)
+ * Cheap stable hash of the story HTML, used to KEY (and thus remount) AgentHtml whenever the
+ * RENDERED story changes — an external content change (agent edit, reload) while viewing, or
+ * entering/leaving edit mode (the session counter). Remounting rebuilds the iframe cleanly instead
+ * of resetting it under live portals (which crashes React's unmount).
  */
 function hashStory(s: string): number {
   let h = 5381;
@@ -44,49 +41,50 @@ interface StoryViewProps {
 }
 
 /**
- * Story view: a single-page scrolling data story — one agent-authored HTML
- * document on a fixed 1280px-wide canvas (any height), with live chart embeds.
- * The visual canvas is a viewer (the story is written by the agent via EditFile
- * on `content.story`). The JSON/XML "Code view" is rendered centrally by FileView.
+ * Story view: a single-page scrolling data story — one agent-authored HTML document on a fixed
+ * 1280px-wide canvas (any height), with live chart embeds. Editing is driven by the SHARED file
+ * header's Edit/Save/Cancel (the file's `fileEditMode`), exactly like questions/dashboards — there is
+ * no story-specific Edit button. While editing, inline edits stream into the file's dirty content via
+ * `onChange` (so the header's Save persists them and Cancel reverts them); the html is frozen during
+ * the session so the iframe doesn't rebuild mid-edit.
  */
 export default function StoryView({ content, fileId, readOnly = false }: StoryViewProps) {
-  // Inline visual editing: a contenteditable canvas behind an Edit toggle, only
-  // when this is an owned (non-public) story file.
-  const canEdit = !readOnly && fileId !== undefined;
-  const [editing, setEditing] = useState(false);
-  // Bumped to force-remount AgentHtml, rebuilding the shadow DOM from the
-  // current story — used to discard unsaved inline edits on Cancel.
-  const [renderKey, setRenderKey] = useState(0);
-  const agentRef = useRef<AgentHtmlHandle>(null);
+  const numericId = typeof fileId === 'number' ? fileId : undefined;
+  const canEdit = !readOnly && numericId !== undefined;
+  const headerEditMode = useAppSelector(s => (numericId !== undefined ? selectFileEditMode(s, numericId) : false));
+  const editing = canEdit && headerEditMode;
+
   // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
-  // in the story shadow root). The story's path feeds schema/connection autocomplete.
+  // in the story iframe). The story's path feeds schema/connection autocomplete.
   const [numberEdit, setNumberEdit] = useState<NumberQueryEditRequest | null>(null);
-  const storyFile = useAppSelector(s => (fileId !== undefined ? selectFile(s, fileId) : undefined));
+  const storyFile = useAppSelector(s => (numericId !== undefined ? selectFile(s, numericId) : undefined));
   const storyPath = storyFile?.path;
-  // Select-to-chat provenance: only for an owned story (canEdit); the popover itself
-  // is gated to edit mode inside AgentHtml. The selection is rich-text (HTML).
+  // Select-to-chat provenance: only for an owned story (canEdit); the popover itself is gated to edit
+  // mode inside AgentHtml. The selection is rich-text (HTML).
   const selectionSource: EditWithAgentSource | undefined =
-    canEdit && fileId !== undefined
-      ? { editorKind: 'richtext', fileName: storyFile?.name ?? 'Story', filePath: storyPath, fileId }
+    canEdit && numericId !== undefined
+      ? { editorKind: 'richtext', fileName: storyFile?.name ?? 'Story', filePath: storyPath, fileId: numericId }
       : undefined;
 
-  const handleSave = () => {
-    if (fileId === undefined) return;
-    const story = agentRef.current?.serialize();
-    if (story == null) return;
-    const result = applyStoryHtmlEdit({ fileId, story });
-    if (result.success) {
-      setEditing(false);
-      toaster.create({ title: 'Story updated — Publish to save', type: 'success' });
-    } else {
-      toaster.create({ title: 'Could not save story', description: result.error, type: 'error' });
-    }
-  };
+  // Freeze the html the iframe renders for the duration of an edit session: inline edits stream to
+  // the dirty content via onChange, but feeding that back as `html` would rebuild the iframe and lose
+  // the cursor. A session counter forces ONE clean remount when edit mode exits (Save → persisted
+  // content; Cancel → reverted content), so the post-edit DOM always reflects the final content.
+  // Managed via the "adjust state during render" pattern (React re-renders synchronously) — no effects.
+  const liveStory = content.story ?? '';
+  const [session, setSession] = useState({ editing: false, snapshot: liveStory, key: 0 });
+  if (editing !== session.editing) {
+    setSession(s => ({
+      editing,
+      snapshot: editing ? liveStory : s.snapshot, // freeze on enter
+      key: editing ? s.key : s.key + 1,           // bump on exit → one clean remount
+    }));
+  }
+  const htmlForRender = session.editing ? session.snapshot : liveStory;
 
-  const handleCancel = () => {
-    setEditing(false);
-    setRenderKey(k => k + 1); // discard in-DOM edits by rebuilding from content
-  };
+  const onStoryChange = useCallback((story: string) => {
+    if (numericId !== undefined) applyStoryHtmlEdit({ fileId: numericId, story });
+  }, [numericId]);
 
   if (!content.story) {
     return (
@@ -98,56 +96,25 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
     );
   }
 
-  // Render the story as a FLUID responsive document — no transform scale.
-  // Full-bleed on mobile; capped at STORY_MAX_W and centered on desktop so it
-  // matches its ~1280px design canvas. Everything below STORY_MAX_W reflows via
-  // the story's own container queries / cqi units.
+  // Render the story as a FLUID responsive document — no transform scale. Full-bleed on mobile;
+  // capped at STORY_MAX_W and centered on desktop so it matches its ~1280px design canvas.
   return (
     <Box aria-label="Story page" w="100%" minH="420px">
-      {canEdit && (
-        <HStack
-          position="sticky"
-          top={0}
-          zIndex={30}
-          justify="flex-end"
-          gap={2}
-          px={3}
-          py={2}
-          bg="bg.canvas/85"
-          backdropFilter="blur(6px)"
-        >
-          {editing ? (
-            <>
-              <Button size="xs" variant="outline" aria-label="Cancel story edits" onClick={handleCancel}>
-                <Icon as={LuX} boxSize={4} /> Cancel
-              </Button>
-              <Button size="xs" colorPalette="teal" aria-label="Save story edits" onClick={handleSave}>
-                <Icon as={LuCheck} boxSize={4} /> Save
-              </Button>
-            </>
-          ) : (
-            <Button size="xs" variant="outline" aria-label="Edit story" onClick={() => setEditing(true)}>
-              <Icon as={LuPencil} boxSize={4} /> Edit
-            </Button>
-          )}
-        </HStack>
-      )}
       <Box display="flex" justifyContent="center">
-        {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView
-            capture (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
-        <Box w="100%" maxW={STORY_MAX_W} {...(fileId !== undefined ? { 'data-story-capture': fileId, 'data-file-id': fileId } : {})}>
+        {/* data-story-capture → OG share-card preview; data-file-id → the standard FileView capture
+            (useScreenshot / Dev Tools "Download Image"), like question/dashboard views. */}
+        <Box w="100%" maxW={STORY_MAX_W} {...(numericId !== undefined ? { 'data-story-capture': numericId, 'data-file-id': numericId } : {})}>
           <AgentHtml
-            // Remount on Cancel (renderKey) AND whenever the story content changes (hash) — a live
-            // innerHTML reset under mounted portals crashes React's unmount. See hashStory above.
-            key={`${renderKey}:${hashStory(content.story ?? '')}`}
-            ref={agentRef}
-            html={content.story}
+            // Remount on external content change (viewing) AND once per edit-session exit (see above).
+            key={`${session.key}:${hashStory(htmlForRender)}`}
+            html={htmlForRender}
             width={STORY_W}
             fluid
-            editable={canEdit && editing}
+            editable={editing}
             readOnly={readOnly}
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={setNumberEdit}
+            onChange={onStoryChange}
             selectionSource={selectionSource}
           />
         </Box>
