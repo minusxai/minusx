@@ -1,30 +1,36 @@
 /**
  * Capture a story's social-share card, client-side, when the story is made public.
  *
- * Screenshots the rendered story (charts + custom CSS) via html-to-image and POSTs it to
- * the preview route, which composes the final card (blur + title + logo) and stores it.
+ * Screenshots the rendered story (charts + custom CSS, inside its shadow root) via snapdom and
+ * POSTs it to the preview route, which composes the final card (blur + title + logo) and stores it.
  * Best-effort — returns true on success, false on failure (e.g. the story isn't on-screen).
- * Requires the `[data-story-capture]` element, present when the share modal opens over the
- * story page.
+ * Requires the `[data-story-capture]` element, present when the share modal opens over the story page.
  */
-import { toJpeg } from 'html-to-image';
+import { snapdom } from '@zumer/snapdom';
+import { AGENT_IMAGE_JPEG_QUALITY } from '@/lib/screenshot/constants';
 
 const OG_ASPECT = 1200 / 630;
+const OG_SOURCE_W = 1200; // render the card source ~1200px wide
 
 export async function captureStoryPreview(fileId: number): Promise<boolean> {
   try {
     const el = document.querySelector(`[data-story-capture="${fileId}"]`) as HTMLElement | null;
     const width = el?.offsetWidth ?? 0;
     if (!el || !width) return false;
-    const height = Math.round(width / OG_ASPECT); // top band at OG aspect
-    const screenshot = await toJpeg(el, {
-      width,
-      height,
-      pixelRatio: Math.max(1, 1200 / width), // ~1200px-wide source for the card
-      backgroundColor: '#ffffff',
-      quality: 0.9,
-      cacheBust: true,
-    });
+    // Render the whole story at ~1200px wide, then crop the TOP BAND to the OG aspect (the card only
+    // shows the story header). snapdom captures the shadow-root content + styles; dpr:1 keeps `scale`
+    // as the literal pixel ratio so the source is exactly width*scale.
+    const scale = Math.max(1, OG_SOURCE_W / width);
+    const source = await snapdom.toCanvas(el, { scale, dpr: 1, backgroundColor: '#ffffff', embedFonts: true });
+    const outW = Math.round(width * scale);
+    const outH = Math.round((width / OG_ASPECT) * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.drawImage(source, 0, 0, outW, outH, 0, 0, outW, outH);
+    const screenshot = canvas.toDataURL('image/jpeg', AGENT_IMAGE_JPEG_QUALITY);
     const res = await fetch(`/api/files/${fileId}/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

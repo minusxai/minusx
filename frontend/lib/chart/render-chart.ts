@@ -14,6 +14,7 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { renderChartToSvg, BG_COLORS } from './render-chart-svg';
+import { AGENT_IMAGE_JPEG_QUALITY, CHART_WATERMARK_PADDING_PX, CHART_WATERMARK_LOGO_SCALE } from '@/lib/screenshot/constants';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/validation/atlas-schemas';
 
@@ -88,8 +89,8 @@ export async function renderChartToJpeg(
   const chartPng = svgToPngBuffer(svg);
 
   const usePadding = options.padding ?? false;
-  const P = 48;                // constant padding px — matches client-side
-  const logoSize = Math.round(P * 0.6); // 28px, fits in P×P with equal gaps
+  const P = CHART_WATERMARK_PADDING_PX;     // shared with the client renderer (single source)
+  const logoSize = Math.round(P * CHART_WATERMARK_LOGO_SCALE); // 28px, fits in P×P with equal gaps
   const topPad    = usePadding ? P : 0;
   const bottomPad = usePadding ? P : 0;
   const totalHeight = topPad + height + bottomPad;
@@ -117,7 +118,7 @@ export async function renderChartToJpeg(
     create: { width, height: totalHeight, channels: 4, background: bgColor },
   })
     .composite(layers)
-    .jpeg({ quality: 85 })
+    .jpeg({ quality: Math.round(AGENT_IMAGE_JPEG_QUALITY * 100) })
     .toBuffer();
 }
 

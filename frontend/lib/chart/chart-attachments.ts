@@ -14,6 +14,7 @@
  * Browser-only — safe to import only from 'use client' components.
  */
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
+import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import type { AppState } from '@/lib/appState';
@@ -128,7 +129,7 @@ export async function buildChartAttachments(
 
         const [rendered] = await clientChartImageRenderer.renderCharts(
           [{ queryResult, vizSettings, titleOverride }],
-          { width: 512, colorMode, addWatermark: false, padding: false },
+          { width: AGENT_IMAGE_MAX_PX, colorMode, addWatermark: false, padding: false },
         );
         if (!rendered) return null;
 

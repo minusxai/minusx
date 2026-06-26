@@ -37,7 +37,7 @@ export default function RegionCaptureButton() {
     const targetBox = (target ?? document.body).getBoundingClientRect();
     setSelecting(false);
     // Register a pending upload so the chat input shows a "processing" chip and blocks send until
-    // the image is ready (cancellable). Then YIELD so that chip paints before html-to-image runs —
+    // the image is ready (cancellable). Then YIELD so that chip paints before the capture runs —
     // the capture is synchronous DOM-clone + rasterize work that briefly freezes the main thread.
     const uploadId = crypto.randomUUID();
     dispatch(addPendingUpload({ id: uploadId, name: 'Screen selection' }));

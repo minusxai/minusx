@@ -23,6 +23,7 @@ import {
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
 import { getChartHeight } from '@/lib/chart/render-chart-svg'
+import { AGENT_IMAGE_PIXEL_RATIO } from '@/lib/screenshot/constants'
 import type { IChartImageRenderer, ChartInput, ChartRenderOptions, RenderedChart } from './IChartImageRenderer'
 import type { QueryResult } from '@/lib/types'
 import type { VizSettings } from '@/lib/validation/atlas-schemas'
@@ -105,7 +106,7 @@ async function renderSingleChartToDataUrl(
     const bgColor = colorMode === 'dark' ? '#161b22' : '#ffffff'
     const chart = echarts.init(container, null, { renderer: 'canvas', width, height })
     chart.setOption({ ...option, animation: false, backgroundColor: bgColor })
-    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: bgColor, excludeComponents: ['toolbox'] })
+    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: AGENT_IMAGE_PIXEL_RATIO, backgroundColor: bgColor, excludeComponents: ['toolbox'] })
     chart.dispose()
     return dataUrl
   } finally {
