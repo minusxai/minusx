@@ -22,7 +22,7 @@ import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
-import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { captureFileViewBlob, AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/capture';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType, canCreateFileByRole } from '@/lib/auth/access-rules.client';
@@ -487,7 +487,7 @@ registerFrontendTool('Screenshot', async (args, context) => {
     // Yield once so the chat's "Capturing" tool state can paint before html-to-image runs —
     // the capture is synchronous main-thread work (DOM clone + rasterize) that briefly freezes the UI.
     await new Promise((r) => setTimeout(r, 0));
-    const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: 1024, format: 'jpeg' });
+    const blob = await captureFileViewBlob(fileId, { colorMode, fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
     const url = await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg');
     return {
       content: [

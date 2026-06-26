@@ -9,7 +9,7 @@ vi.mock('html-to-image', () => ({
 }));
 
 import { toJpeg, toPng } from 'html-to-image';
-import { captureElementBlob, captureFileViewBlob, captureRegionBlob, cropSourceRect, cappedOutputDims } from '../capture';
+import { captureElementBlob, captureFileViewBlob, captureRegionBlob, cropSourceRect, cappedOutputDims, regionPixelRatio, AGENT_IMAGE_MAX_PX } from '../capture';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -133,6 +133,38 @@ describe('captureRegionBlob — crop frame is snapshotted BEFORE the async rende
     const target = targetAt(999, 999); // live rect is already wrong/drifted
     await captureRegionBlob({ x: 150, y: 80, width: 200, height: 100 }, { colorMode: 'light', target, targetBox: { left: 100, top: 50 }, pixelRatio: 1 });
     expect(drawImage).toHaveBeenCalledWith(expect.anything(), 50, 30, 200, 100, 0, 0, 200, 100);
+  });
+
+  it('rasterizes the target at a REDUCED pixelRatio when the selection exceeds the 512px cap (no wasted work)', async () => {
+    const target = targetAt(0, 0);
+    // 2000px-wide selection, default 512 cap, deviceCap forced to 2 → render whole target at 512/2000 = 0.256×,
+    // NOT at device DPR. The cropped selection (2000×0.256 = 512) already lands at the cap → drawn ~1:1.
+    await captureRegionBlob({ x: 0, y: 0, width: 2000, height: 1000 }, { colorMode: 'light', target, pixelRatio: 2 });
+    expect(toJpeg).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ pixelRatio: expect.closeTo(0.256) }));
+    expect(drawImage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.closeTo(0), expect.closeTo(0), expect.closeTo(512), expect.closeTo(256),
+      0, 0, 512, 256,
+    );
+  });
+});
+
+describe('regionPixelRatio — render no finer than the output cap needs', () => {
+  it('exposes the agent image cap as 512px', () => {
+    expect(AGENT_IMAGE_MAX_PX).toBe(512);
+  });
+
+  it('scales DOWN for a selection larger than the cap (less rasterization work)', () => {
+    // 2000px-wide selection, cap 512 → render the target at 512/2000 = 0.256×
+    expect(regionPixelRatio({ width: 2000, height: 1000 }, 512, 2)).toBeCloseTo(0.256);
+  });
+
+  it('never exceeds the device cap for a small selection (no upscaling past the screen)', () => {
+    expect(regionPixelRatio({ width: 100, height: 80 }, 512, 2)).toBe(2);
+  });
+
+  it('uses the longest side so a tall-narrow selection still fits the cap', () => {
+    expect(regionPixelRatio({ width: 100, height: 2000 }, 512, 1)).toBeCloseTo(0.256);
   });
 });
 

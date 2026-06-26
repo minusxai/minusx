@@ -13,6 +13,12 @@ export type CaptureOptions = ScreenshotOptions & { colorMode: 'light' | 'dark' }
 
 const bgFor = (colorMode: 'light' | 'dark'): string => (colorMode === 'dark' ? '#0D1117' : '#FAFBFC');
 
+/**
+ * Longest-side cap (px) for images sent to the agent. Chart attachments render at this same width
+ * (lib/chart/chart-attachments.ts) — keep them consistent so every agent-facing image is ~512px.
+ */
+export const AGENT_IMAGE_MAX_PX = 512;
+
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
   const pixelRatio = opts.maxWidth != null ? opts.maxWidth / element.offsetWidth : (opts.pixelRatio ?? 0.75);
@@ -87,6 +93,23 @@ export function cappedOutputDims(sw: number, sh: number, maxPx: number): { w: nu
   return { w: Math.max(1, Math.round(sw * scale)), h: Math.max(1, Math.round(sh * scale)) };
 }
 
+/**
+ * Pick the html-to-image pixelRatio for a region capture so we never rasterize FINER than the
+ * final output cap needs. html-to-image can only render a whole node (not a sub-rect), so the
+ * target is rendered then cropped to `selection`; rendering at device DPR when the crop will be
+ * downscaled to `maxOutputPx` anyway is wasted work. Scale so the cropped selection lands ~at
+ * `maxOutputPx` on its longest side, never exceeding the device cap (no upscaling past the screen).
+ * Pure → unit-testable.
+ */
+export function regionPixelRatio(
+  selection: { width: number; height: number },
+  maxOutputPx: number,
+  deviceCap: number,
+): number {
+  const longest = Math.max(1, selection.width, selection.height);
+  return Math.min(deviceCap, maxOutputPx / longest);
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -118,7 +141,11 @@ export async function captureRegionBlob(
   // offset in dev (slow render). Prefer a caller-provided box captured synchronously at selection
   // time (matches the selection's frame exactly); otherwise read it here, still pre-render.
   const targetBox = opts.targetBox ?? target.getBoundingClientRect();
-  const pixelRatio = opts.pixelRatio ?? Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+  const maxOutputPx = opts.maxOutputPx ?? AGENT_IMAGE_MAX_PX;
+  // `opts.pixelRatio` (when given) is the device cap, not the render ratio: we render no finer than
+  // the output cap needs, so a large selection rasterizes the target at <1× instead of device DPR.
+  const deviceCap = opts.pixelRatio ?? Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+  const pixelRatio = regionPixelRatio(selection, maxOutputPx, deviceCap);
   const toImage = (opts.format ?? 'jpeg') === 'png' ? toPng : toJpeg;
   const dataURL = await toImage(target, {
     pixelRatio,
@@ -128,8 +155,8 @@ export async function captureRegionBlob(
   });
   const img = await loadImage(dataURL);
   const { sx, sy, sw, sh } = cropSourceRect(selection, targetBox, pixelRatio);
-  // Cap the OUTPUT so a large selection on a retina screen doesn't yield a multi-megapixel image.
-  const { w, h } = cappedOutputDims(sw, sh, opts.maxOutputPx ?? 1024);
+  // Cap the OUTPUT as a safety net — with the reduced pixelRatio the crop is already ~maxOutputPx.
+  const { w, h } = cappedOutputDims(sw, sh, maxOutputPx);
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
