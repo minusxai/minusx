@@ -18,6 +18,7 @@ import { clearQueryResult } from '@/store/queryResultsSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
+import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent } from '@/lib/types';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
@@ -70,7 +71,9 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   const lastExecuted = file?.ephemeralChanges?.lastExecuted;
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
-    params: mergedContent?.parameterValues || {},
+    // Canonical params (effective + None-coerced) so the execution cache key matches the
+    // augmentation lookup / queryResultId — see buildQueryParamValues / resolveEffectiveParams.
+    params: buildQueryParamValues(mergedContent?.parameters ?? [], mergedContent?.parameterValues ?? {}, {}),
     database: mergedContent?.connection_name || '',
     references: mergedContent?.references || []
   };
@@ -129,8 +132,10 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
 
     // Priority: explicit override > URL params merged with content > content params
     const baseValues = mergedContent.parameterValues ?? {};
-    const effectiveValues = overrideParamValues
+    const sourceValues = overrideParamValues
       ?? (urlParamOverrides ? { ...baseValues, ...urlParamOverrides } : baseValues);
+    // Canonicalize (effective + None-coerced) so the cache key matches the augmentation lookup.
+    const effectiveValues = buildQueryParamValues(mergedContent.parameters ?? [], sourceValues, {});
 
     const newQuery = {
       query: mergedContent.query,
@@ -164,7 +169,8 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   useEffect(() => {
     if (!mergedContent || !hasAutoExecutedRef.current || lastExecuted) return;
     const baseValues = mergedContent.parameterValues || {};
-    const restoredParams = urlParamOverrides ? { ...baseValues, ...urlParamOverrides } : baseValues;
+    const sourceValues = urlParamOverrides ? { ...baseValues, ...urlParamOverrides } : baseValues;
+    const restoredParams = buildQueryParamValues(mergedContent.parameters ?? [], sourceValues, {});
     dispatch(setEphemeral({
       fileId,
       changes: {
