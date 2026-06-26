@@ -142,6 +142,8 @@ export default function ContextDocsEditor({
   const expandedDocs = isExpandedControlled ? new Set(expandedIndices) : internalExpanded;
   // Which entries currently show the read-only Monaco diff (vs the WYSIWYG editor).
   const [diffOpen, setDiffOpen] = useState<Record<number, boolean>>({});
+  // Inherited docs are collapsed by default (empty set); expand on click.
+  const [expandedInherited, setExpandedInherited] = useState<Set<number>>(() => new Set());
 
   // The editor owns its buffer while typing, so we read the latest docs via ref
   // when an entry's markdown changes and write the whole array back.
@@ -164,6 +166,14 @@ export default function ContextDocsEditor({
 
   const toggleDiff = (index: number) => {
     setDiffOpen(prev => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const toggleInherited = (index: number) => {
+    setExpandedInherited(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) { next.delete(index); } else { next.add(index); }
+      return next;
+    });
   };
 
   const handleMarkdownChange = useCallback((index: number, newMarkdown: string) => {
@@ -250,26 +260,63 @@ export default function ContextDocsEditor({
             Inherited Documentation (from parent contexts)
           </Text>
           <VStack gap={2} align="stretch">
-            {inheritedDocs.map((docEntry, idx) => (
-              <Box
-                key={`inherited-${idx}`}
-                p={3}
-                border="1px solid"
-                borderColor="border.default"
-                borderRadius="md"
-                bg="bg.muted"
-                opacity={0.7}
-              >
-                {docEntry.title?.trim() && (
-                  <Text fontSize="sm" fontWeight="600" mb={1}>{docEntry.title}</Text>
-                )}
-                {docEntry.description?.trim() && (
-                  <Text fontSize="xs" color="fg.muted" mb={2}>{docEntry.description}</Text>
-                )}
-                <LexicalTextViewer key={docEntry.content} markdown={docEntry.content} padding="0" />
-              </Box>
-            ))}
+            {inheritedDocs.map((docEntry, idx) => {
+              const isString = typeof docEntry === 'string';
+              const title = (!isString && docEntry.title?.trim()) || '';
+              const description = (!isString && docEntry.description?.trim()) || '';
+              const content = isString ? docEntry : docEntry.content;
+              const isOpen = expandedInherited.has(idx);
+              return (
+                <Box
+                  key={`inherited-${idx}`}
+                  border="1px solid"
+                  borderColor="border.default"
+                  borderRadius="md"
+                  bg="bg.muted"
+                  opacity={0.7}
+                  overflow="hidden"
+                >
+                  <Collapsible.Root open={isOpen} onOpenChange={() => toggleInherited(idx)}>
+                    <Collapsible.Trigger asChild>
+                      <Box
+                        aria-label={`Toggle inherited documentation ${idx + 1}`}
+                        px={3}
+                        py={2}
+                        cursor="pointer"
+                        _hover={{ bg: 'bg.emphasized' }}
+                        {...(isOpen ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
+                      >
+                        <HStack gap={2} align="center" flex={1} minW={0}>
+                          <Icon as={isOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
+                          <Text fontSize="sm" fontWeight="600" flexShrink={0}>{title || `Inherited Documentation ${idx + 1}`}</Text>
+                          {description && (
+                            <>
+                              <Text fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
+                              <Text fontSize="xs" color="fg.muted" truncate>{description}</Text>
+                            </>
+                          )}
+                        </HStack>
+                      </Box>
+                    </Collapsible.Trigger>
+                    <Collapsible.Content>
+                      <Box px={3} py={3}>
+                        <LexicalTextViewer key={content} markdown={content} padding="0" />
+                      </Box>
+                    </Collapsible.Content>
+                  </Collapsible.Root>
+                </Box>
+              );
+            })}
           </VStack>
+        </Box>
+      )}
+
+      {/* Separator + heading distinguishing this context's own docs from inherited ones */}
+      {showInheritedDocs && inheritedDocs && inheritedDocs.length > 0 && (
+        <Box borderTop="1px solid" borderColor="border.default" mb={4} pt={4}>
+          <Text fontSize="sm" fontWeight="600" color="fg.muted">
+            This context&apos;s documentation
+          </Text>
         </Box>
       )}
 
