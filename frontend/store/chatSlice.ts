@@ -2,6 +2,7 @@ import { createSlice, createSelector, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import type { UserInput } from '@/lib/api/user-input-exception';
 import type { MessageDebugInfo, ErrorLogEntry } from '@/lib/types';
+import type { AppState } from '@/lib/appState';
 
 // Types
 interface ToolCall {
@@ -27,6 +28,12 @@ export type UserMessage = {
   created_at: string;
   attachments?: import('@/lib/types').Attachment[];
   logIndex?: number;  // Index of this task entry in the conversation log — used to fork from this point
+  // The page state that was sent to the LLM with THIS turn, read off the pi root invocation's
+  // `context` (the append-only log stores it per turn). Carries the lean app-state JSON + the file
+  // markup + the rendered-file screenshot, so the inspector can show exactly what the model saw.
+  appState?: AppState;
+  // The frozen <CurrentTime> for this turn (hour granularity), also from the invocation context.
+  currentTime?: string;
 };
 
 export type CompletedToolCall = {

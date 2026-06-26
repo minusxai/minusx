@@ -1,5 +1,8 @@
 import { ConversationLogEntry, ErrorLogEntry } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
+import { piLogToLegacy } from '@/lib/chat-translator';
+import type { ConversationLog, ConversationLogEntry as PiLogEntry } from '@/orchestrator/types';
+import type { AppState } from '@/lib/appState';
 
 /**
  * Aggregate task_debug entries from a log (or logDiff) into DebugMessages.
@@ -33,6 +36,36 @@ export function extractDebugMessages(log: ConversationLogEntry[]): DebugMessage[
   return Array.from(debugByTaskId.values())
     .sort((a, b) => a.firstIndex - b.firstIndex)
     .map(({ debugInfo }) => ({ role: 'debug' as const, ...debugInfo }));
+}
+
+/**
+ * Parse a pi (orchestrator) ConversationLog directly into displayable messages — the single
+ * frontend-side parse that replaces the read-path `piLogToLegacy` (server) → `parseLogToMessages`
+ * (frontend) two-hop. It REUSES the existing pi→legacy mapping + legacy parse (no duplication of
+ * that intricate logic), and additionally carries each turn's `appState` + `currentTime` onto its
+ * user message — read off the pi root invocation's `context`, which the append-only log persists
+ * per turn (the legacy translation dropped it). Render structs are unchanged, so renderers are
+ * untouched; the inspector can now show exactly what the model saw each turn.
+ */
+export function parsePiLogToMessages(piLog: ConversationLog, errors?: ErrorLogEntry[]): any[] {
+  const messages = parseLogToMessages(piLogToLegacy(piLog), errors);
+
+  // Root invocations (pi `toolCall` entries with parent_id === null) are the user turns, in order.
+  // Each carries that turn's appState + frozen currentTime in its `context`. Zip them onto the user
+  // messages (1:1, chronological — both sequences are in turn order).
+  const rootContexts = piLog
+    .filter((e) => (e as { type?: string }).type === 'toolCall' && (e as { parent_id?: unknown }).parent_id === null)
+    .map((e) => (e as PiLogEntry & { context?: { appState?: AppState; currentTime?: string } }).context);
+
+  let r = 0;
+  for (const m of messages) {
+    if (m.role !== 'user') continue;
+    const ctx = rootContexts[r++];
+    if (ctx?.appState !== undefined) m.appState = ctx.appState;
+    if (ctx?.currentTime !== undefined) m.currentTime = ctx.currentTime;
+  }
+
+  return messages;
 }
 
 /**
