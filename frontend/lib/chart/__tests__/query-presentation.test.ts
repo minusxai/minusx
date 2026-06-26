@@ -1,7 +1,22 @@
 // The pure ReadFiles/ExecuteQuery presentation decision: image for server-renderable viz (default),
 // rows otherwise or when rawData is explicitly requested.
 import { describe, it, expect } from 'vitest';
-import { queryPresentation, shouldDropRows } from '../query-presentation';
+import { queryPresentation, shouldDropRows, isImageViz } from '../query-presentation';
+
+describe('isImageViz', () => {
+  it('is true for every server-renderable chart viz (rawData-independent)', () => {
+    for (const t of ['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'combo']) {
+      expect(isImageViz(t)).toBe(true);
+    }
+  });
+
+  it('is false for non-renderable viz and for no viz', () => {
+    for (const t of ['table', 'pivot', 'single_value', 'number', 'trend', 'heatmap']) {
+      expect(isImageViz(t)).toBe(false);
+    }
+    expect(isImageViz(undefined)).toBe(false);
+  });
+});
 
 describe('queryPresentation', () => {
   it('returns image for a server-renderable chart viz by default', () => {
@@ -52,5 +67,12 @@ describe('shouldDropRows', () => {
     // EditFile re-render is skipped when the result is unchanged; the chart image was already sent in
     // app state / a prior turn, and the projection dedups rows — so dropping is safe.
     expect(shouldDropRows({ imagePresentation: true, imageRendered: false, resultUnchanged: true })).toBe(true);
+  });
+
+  it('ALWAYS keeps rows when rawData is requested — the image is additive, never a replacement', () => {
+    // rawData: true means "give me the rows too". The image is still shown (decided separately via
+    // isImageViz), but rawData must never let the rows be dropped — consistent across all file tools.
+    expect(shouldDropRows({ imagePresentation: true, imageRendered: true, rawData: true })).toBe(false);
+    expect(shouldDropRows({ imagePresentation: true, imageRendered: false, resultUnchanged: true, rawData: true })).toBe(false);
   });
 });

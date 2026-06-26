@@ -14,12 +14,29 @@ import { RENDERABLE_CHART_TYPES } from './render-chart-svg';
 
 export type QueryPresentation = 'image' | 'data';
 
+/**
+ * Whether a viz can be server-rendered to a chart IMAGE — the rawData-INDEPENDENT half of the
+ * presentation decision. Every file tool (ReadFiles / EditFile / ExecuteQuery) renders the chart
+ * image whenever this is true and the chart actually renders, REGARDLESS of `rawData`: the image is
+ * cheap and conveys shape, so it's always worth showing. `rawData` only governs whether the row data
+ * is ADDITIONALLY included (see `shouldDropRows`) — it never suppresses the image.
+ */
+export function isImageViz(vizType: string | undefined): boolean {
+  return vizType !== undefined && RENDERABLE_CHART_TYPES.has(vizType);
+}
+
+/**
+ * The DEFAULT presentation for a result: image for a server-renderable viz, else rows. `rawData`
+ * forces rows. NOTE: this folds rawData into a single 'image'|'data' verdict; the file tools instead
+ * decide the image and the rows SEPARATELY (`isImageViz` for the image, `shouldDropRows` for the
+ * rows) so that `rawData` returns image + rows rather than rows-only.
+ */
 export function queryPresentation(
   vizType: string | undefined,
   rawData: boolean | undefined,
 ): QueryPresentation {
   if (rawData) return 'data';
-  return vizType !== undefined && RENDERABLE_CHART_TYPES.has(vizType) ? 'image' : 'data';
+  return isImageViz(vizType) ? 'image' : 'data';
 }
 
 /**
@@ -29,11 +46,17 @@ export function queryPresentation(
  * sent in app state / a prior turn (the projection dedups rows). If image presentation was wanted
  * but nothing rendered (no rows, render failure, server path with no DOM, query-cache miss), KEEP
  * the rows — never leave the agent with neither an image nor data.
+ *
+ * `rawData: true` ALWAYS keeps the rows — the image is additive, never a replacement. This is what
+ * makes the three file tools consistent: a renderable viz returns the image either way, and rawData
+ * just adds the rows on top.
  */
 export function shouldDropRows(opts: {
   imagePresentation: boolean;
   imageRendered: boolean;
   resultUnchanged?: boolean;
+  rawData?: boolean;
 }): boolean {
+  if (opts.rawData) return false;
   return opts.imagePresentation && (opts.imageRendered || opts.resultUnchanged === true);
 }

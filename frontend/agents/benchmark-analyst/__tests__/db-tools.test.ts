@@ -705,9 +705,13 @@ describe('BaseExecuteQuery — rawData presentation', () => {
     expect(text).toContain('rawData');        // hint to fetch rows
   });
 
-  it('returns ROWS (no image) when rawData is true', async () => {
+  it('returns the IMAGE *and* the ROWS when rawData is true (image is additive)', async () => {
     const res = await run({ connectionId: 'tiny', query: 'SELECT name, price FROM products ORDER BY id', vizSettings: { type: 'bar' }, rawData: true });
-    expect(res.content.find((c) => c.type === 'image')).toBeUndefined();
+    // A renderable viz still returns the chart image regardless of rawData...
+    const img = res.content.find((c) => c.type === 'image') as { type: string; mimeType?: string } | undefined;
+    expect(img).toBeDefined();
+    expect(img!.mimeType).toBe('image/jpeg');
+    // ...and rawData ADDITIONALLY keeps the row table in the summary.
     expect((res.content[0] as { text: string }).text).toContain('| name |');
   });
 
