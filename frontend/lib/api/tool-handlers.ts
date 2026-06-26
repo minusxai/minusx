@@ -24,7 +24,7 @@ import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, 
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import { stripEntryQueryData, stripEntryMarkup } from '@/lib/projection/project';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
-import { queryPresentation } from '@/lib/chart/query-presentation';
+import { queryPresentation, shouldDropRows } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
@@ -169,7 +169,9 @@ async function renderFileChartImageBlocks(
   const entries = files.flatMap(f => {
     const vizType = (f.fileState.content as any)?.vizSettings?.type;
     const qr = f.queryResults?.[0];
-    if (!qr || !RENDERABLE_CHART_TYPES.has(vizType)) return [];
+    // Need actual rows to render — an empty/errored result yields no chart (the renderer returns
+    // null), so skip it here rather than emit a blank image block.
+    if (!qr || !qr.rows?.length || !RENDERABLE_CHART_TYPES.has(vizType)) return [];
     return [{ queryResult: qr, vizSettings: (f.fileState.content as any).vizSettings, titleOverride: f.fileState.name }];
   });
   if (entries.length === 0) return [];
@@ -475,6 +477,14 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   );
   const textContent: ReadFilesResult = { success: true, files: noMarkup };
   const imageBlocks = await renderFileChartImageBlocks(result);
+  // Only present-as-image (drop rows) when an image was ACTUALLY rendered. If the chart couldn't
+  // render (no rows, render failure, server-side path with no DOM), keep the rows so the agent is
+  // never left with neither an image nor data. `result[i]` and `__augmented[i]` are 1:1.
+  const imageByFileId = new Set(
+    imageBlocks.length > 0
+      ? result.filter(f => f.queryResults?.[0]?.rows?.length && RENDERABLE_CHART_TYPES.has((f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type as string)).map(f => f.fileState.id)
+      : [],
+  );
   // Rich payload for the projection pass (cross-turn diffing): the same files in the projector's
   // shape. The `content` above is kept verbatim for the chat UI; projectMessages rebuilds the
   // LLM-facing content from `__augmented` (diffed against the conversation) at send time.
@@ -484,7 +494,7 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
     __augmented: result.map(f => {
       const aug = compressedToAugmentedFiles(compressAugmentedFile(f, maxChars));
       const vizType = (f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
-      if (queryPresentation(vizType, rawData) === 'image') {
+      if (shouldDropRows({ imagePresentation: queryPresentation(vizType, rawData) === 'image', imageRendered: imageByFileId.has(f.fileState.id) })) {
         aug.file = stripEntryQueryData(aug.file);
       }
       return aug;
@@ -809,8 +819,6 @@ registerFrontendTool('EditFile', async (args, _context) => {
   // rawData); table/number/no-viz → rows + summary. Markup facet is always stripped.
   const vizType = (augmented.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
   const showImage = queryPresentation(vizType, rawData) === 'image';
-  let entry = stripEntryMarkup(compressedToAugmentedFiles(compressed).file);
-  if (showImage) entry = stripEntryQueryData(entry); // image conveys the result; keep summary, drop rows
 
   // Render the chart image only for the image presentation AND when the result/viz actually changed.
   const queryResultChanged = compressed.queryResults.some((qr: { id?: string }) => {
@@ -823,6 +831,15 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const imageBlocks = showImage && (queryResultChanged || vizSettingsChanged)
     ? await renderFileChartImageBlocks([augmented])
     : [];
+
+  // Drop the rows ONLY when an image actually conveys the result: either a fresh image was rendered,
+  // or it's an image-presented question whose result is unchanged (so the chart image was already
+  // sent in app state / a prior turn — the projection dedups rows either way). If no image exists
+  // (render failed / no rows), keep the rows so the agent is never left with neither image nor data.
+  let entry = stripEntryMarkup(compressedToAugmentedFiles(compressed).file);
+  if (shouldDropRows({ imagePresentation: showImage, imageRendered: imageBlocks.length > 0, resultUnchanged: !queryResultChanged && !vizSettingsChanged })) {
+    entry = stripEntryQueryData(entry); // keep summary, drop rows
+  }
 
   // projectMessages rebuilds the LLM-facing content from __status + __augmented (diffed query result,
   // no markup) and preserves the image block above. `content` here is kept for the chat UI.
