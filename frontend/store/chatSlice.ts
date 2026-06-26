@@ -148,12 +148,16 @@ const chatSlice = createSlice({
 
       const messages: any[] = [];
       if (message) {
+        const turnAppState = (agent_args as { app_state?: AppState } | undefined)?.app_state;
+        const turnCurrentTime = (agent_args as { currentTime?: string } | undefined)?.currentTime;
         messages.push({
           role: 'user',
           content: message,
           created_at: new Date().toISOString(),
           logIndex: 0,  // First message always lands at log index 0
           ...(attachments?.length ? { attachments } : {}),
+          ...(turnAppState !== undefined ? { appState: turnAppState } : {}),
+          ...(turnCurrentTime !== undefined ? { currentTime: turnCurrentTime } : {}),
         });
       }
 
@@ -202,6 +206,13 @@ const chatSlice = createSlice({
       const conv = state.conversations[conversationID];
       if (!conv) return;
 
+      // Snapshot the current per-turn app state (set on agent_args by ChatInterface right before
+      // this dispatch, screenshot included) onto the user message — same shape the read-path parser
+      // attaches from the persisted pi log. Powers the "Inspect tool calls" modal's App-state entry
+      // (screenshot / markup / JSON) for the LIVE conversation, not just reloaded ones.
+      const turnAppState = (conv.agent_args as { app_state?: AppState } | undefined)?.app_state;
+      const turnCurrentTime = (conv.agent_args as { currentTime?: string } | undefined)?.currentTime;
+
       // Add user message with timestamp
       conv.messages.push({
         role: 'user',
@@ -209,6 +220,8 @@ const chatSlice = createSlice({
         created_at: new Date().toISOString(),
         logIndex: conv.log_index ?? 0,
         ...(attachments?.length ? { attachments } : {}),
+        ...(turnAppState !== undefined ? { appState: turnAppState } : {}),
+        ...(turnCurrentTime !== undefined ? { currentTime: turnCurrentTime } : {}),
       });
       conv.executionState = 'WAITING';
       conv.error = undefined;
