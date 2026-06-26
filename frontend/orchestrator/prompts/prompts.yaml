@@ -1002,7 +1002,7 @@ prompts:
       {home_folder_section}
     user: |
       <AppState>{app_state}</AppState>
-      <CurrentDate>{current_date}</CurrentDate>
+      <CurrentTime>{current_date}</CurrentTime>
       {attachments}
       <Question>{goal}</Question>
   slack_addendum: |
