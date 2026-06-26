@@ -383,7 +383,7 @@ export function resolveContextDocs(
     }
     if (doc.alwaysInclude === true) {
       resolved.push({
-        key: '',
+        key: slugifyDocKey(doc.title?.trim() ?? ''),
         title: doc.title?.trim() ?? '',
         description: doc.description?.trim() || undefined,
         content: doc.content,
