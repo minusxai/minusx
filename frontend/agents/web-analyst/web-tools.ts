@@ -288,7 +288,7 @@ export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystC
     name: 'LoadContext',
     description:
       'Load the full content of one or more context documents by their key, as listed in the Context Library. ' +
-      'Request only the specific docs relevant to the user\'s question — avoid loading everything at once.',
+      'Request only the specific docs relevant to the user\'s question or app state — avoid loading everything at once.',
     parameters: LoadContextParams,
   };
 

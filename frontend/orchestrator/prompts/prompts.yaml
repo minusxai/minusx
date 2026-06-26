@@ -24,7 +24,7 @@ templates:
   available_info: |
     ## Available Info:
     - Available Database Schema: Whitelisted schema, and tables you can access
-    - Context: Company-specific documentation, metrics definitions and conventions
+    - Context: Org-specific documentation, metrics definitions and conventions. We have default context docs, and a catalog of additional context docs you can load on demand via LoadContext tool.
     - Tools: List of tools you can use to interact with the app and database
     - Current Connection ID: The current database connection you should use for all queries
     - Home Folder: Your home folder path for file operations
@@ -46,7 +46,12 @@ templates:
     - FuzzyMatch has semantic_expansion enabled by default: when no lexical matches are found, it automatically finds semantically similar terms in the column and retries. Pay close attention to these expanded results — they reveal the actual vocabulary the data uses, which may differ significantly from the user's wording.
   context_section: |
     ## Context
+
+    ### Default Context Docs
       {context}
+
+    ### Context Library (to be loaded on demand)
+    {context_docs_catalog}
   connection_section: |
     **Current connection ID**: {connection_id}
   home_folder_section: |
@@ -194,6 +199,9 @@ templates:
     - **FuzzyMatch(connection_id: string, table: string, column: string, search_term: string, schema?: string, limit?: int, semantic_expansion?: bool, return_columns?: string[])**: Match a known term against stored values in a text or categorical column (typo/casing/spacing correction). When semantic_expansion is enabled (default: true), if no lexical matches are found, it automatically finds semantically similar terms in the column and retries — pay close attention to these expanded results as they reveal the data's actual vocabulary. Use return_columns to include identifying columns (e.g. name, category) in results.
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
+    ### Context management tools
+    - **LoadContext(keys: string[])**: Load the full text of org-specific documentation, metrics definitions, and conventions by key. Use this when you need more context for a question or dashboard. Only load the documents relevant to the user's question; do not load all of them at once.
+
     ### Skills (Dynamic Context)
     - **LoadSkill(name: string)**: Load detailed instructions for a system or user-defined skill by name. Use this before working with file types or features you need more context on. Available skills:
     {skills_catalog}
@@ -205,6 +213,9 @@ templates:
       - External reference data to contextualize internal analytics (e.g., "how does our churn compare to industry average?")
       - Any question that requires real-world data not available in the connected databases
       - **Do NOT use web search** for questions answerable from the connected databases or existing saved questions — always check internal data first.
+    ### Feedback/Validation tools (to close the loop on changes you make)
+    - **Screenshot**: Capture a screenshot of the current page to see your changes.
+
   skill_questions:
     description: Question file structure (query, vizSettings, parameters, references), question page behavior guidelines
     content: |
