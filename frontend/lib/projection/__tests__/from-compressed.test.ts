@@ -66,7 +66,7 @@ describe('compressedToAugmentedFiles', () => {
     expect(out.file.queryResults?.[0].data).toBeUndefined();
   });
 
-  it('maps a file screenshot (CompressedFileState.image) into the image facet', () => {
+  it('passes a remote (http) screenshot URL through as image.url', () => {
     const withImg: CompressedAugmentedFile = {
       fileState: { id: 1, name: 'q1', path: '/org/q1', type: 'question', isDirty: false, image: { key: 'file:1:abc', url: 'https://s3/shot.jpg' } },
       references: [],
@@ -78,7 +78,19 @@ describe('compressedToAugmentedFiles', () => {
     });
   });
 
-  it('maps a base64 file screenshot (no url) into the image facet', () => {
+  it('SPLITS a data: URL screenshot into {data, mimeType} (provider needs the MIME, not a url)', () => {
+    const withImg: CompressedAugmentedFile = {
+      fileState: { id: 1, name: 'q1', path: '/org/q1', type: 'question', isDirty: false, image: { key: 'k', url: 'data:image/jpeg;base64,QUJD' } },
+      references: [],
+      queryResults: [],
+    };
+    expect(compressedToAugmentedFiles(withImg).file.image).toEqual({
+      key: 'k',
+      image: { type: 'image', mimeType: 'image/jpeg', data: 'QUJD' },
+    });
+  });
+
+  it('maps an already-split base64 file screenshot into the image facet', () => {
     const withImg: CompressedAugmentedFile = {
       fileState: { id: 1, name: 'q1', path: '/org/q1', type: 'question', isDirty: false, image: { key: 'k', data: 'B64', mimeType: 'image/jpeg' } },
       references: [],
