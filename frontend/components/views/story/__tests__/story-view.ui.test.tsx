@@ -86,10 +86,11 @@ describe('StoryView', () => {
     });
   });
 
-  it('keeps the @import (web fonts) inside the iframe story styles — loads natively, no hoisting', async () => {
+  it('keeps the @import (web fonts) intact inside the iframe story styles (loaded natively)', async () => {
     // Unlike a shadow root, an iframe document loads @import web-fonts natively, so the import stays
-    // in place (it is NOT hoisted to the top document.head). The complete import — including the part
-    // after the in-URL semicolons — must survive intact.
+    // in place. The complete import — including the part after the in-URL semicolons — must survive
+    // intact. (For CAPTURE, the import is separately resolved to real @font-face in the top
+    // document.head — see resolve-story-fonts; that path is network-driven and unit-tested there.)
     renderWithProviders(<StoryView content={content} />);
     await waitFor(() => {
       const storyStyle = Array.from(storyRoot().querySelectorAll('style'))
@@ -97,8 +98,6 @@ describe('StoryView', () => {
       expect(storyStyle?.textContent).toContain(FONT_IMPORT);
       expect(storyStyle?.textContent).toContain('.hs{--ink:#e8dfc8;');
     });
-    // Nothing hoisted into the top document any more.
-    expect(document.head.querySelector('style[data-mx-story-fonts]')).toBeNull();
   });
 
   it('hydrates chart placeholders with live embedded questions', async () => {

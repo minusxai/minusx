@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
+import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
 import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
 } from '@/components/views/shared/StoryEmbeds';
@@ -255,6 +256,29 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     doc.documentElement.classList.toggle('light', colorMode !== 'dark');
     mirrorAppStyles(doc); // token rules switch on the html.dark/light class
   }, [colorMode]);
+
+  // Resolve the story's @import web-fonts into real @font-face rules in the TOP document.head, so the
+  // capture embeds the actual fonts. snapdom's embedCustomFonts reads the GLOBAL document for
+  // @font-face (snapdom #441), so fonts that live only in the iframe (or behind a cross-origin
+  // @import, snapdom #309) are ignored and the captured title falls back to a wider serif — which
+  // wraps an extra line and overlaps the next block. The live iframe keeps using its own @import.
+  useEffect(() => {
+    const doc = docRef.current;
+    if (!doc) return;
+    let cancelled = false;
+    let tag: HTMLStyleElement | null = null;
+    const urls = collectStoryFontImports(doc);
+    if (urls.length) {
+      resolveImportFontCss(urls).then(css => {
+        if (cancelled || !css) return;
+        tag = document.createElement('style');
+        tag.setAttribute('data-mx-story-fonts', '');
+        tag.textContent = css;
+        document.head.appendChild(tag);
+      }).catch(() => {});
+    }
+    return () => { cancelled = true; tag?.remove(); };
+  }, [sanitized]);
 
   // Inline edit mode: make the story's top-level text containers contenteditable while keeping chart
   // embeds locked as atomic, non-editable islands. Runs after the doc + targets exist.
