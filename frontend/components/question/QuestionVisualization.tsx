@@ -56,6 +56,8 @@ interface QuestionVisualizationProps {
   onTrendConfigChange?: (config: import('@/lib/types').TrendConfig) => void;
   /** Receives a getter for the live geo map's center/zoom, so a sibling config panel's "Pin current view" button can read this map. */
   onMapReady?: (getView: () => { center: [number, number]; zoom: number } | null) => void;
+  /** Reports the rendered series count, so a sibling config panel can size its color swatches without re-aggregating the rows. */
+  onSeriesCountChange?: (count: number) => void;
   /** Called when user clicks "Show Viz Config" to open/switch left panel to Viz tab */
   onOpenVizTab?: () => void;
   /** Called when user clicks "Hide Viz Config" to collapse the left panel */
@@ -153,6 +155,7 @@ function QuestionVisualizationInner({
   onAnnotationsChange,
   onTrendConfigChange,
   onMapReady,
+  onSeriesCountChange,
   onOpenVizTab,
   onHideVizTab,
   vizTabOpen,
@@ -483,6 +486,7 @@ function QuestionVisualizationInner({
                       exportBranding={appConfig.branding}
                       enableDrilldown={config.enableDrilldown !== false}
                       onMapReady={onMapReady}
+                      onSeriesCountChange={onSeriesCountChange}
                     />
                   </Box>
                 )}

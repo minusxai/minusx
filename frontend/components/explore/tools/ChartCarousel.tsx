@@ -147,6 +147,9 @@ export default function ChartCarousel({
     getMapViewRef.current = getView;
   }, []);
   const getMapView = useCallback(() => getMapViewRef.current?.() ?? null, []);
+  // Rendered series count, reported by the chart so the sibling VizConfigPanel's
+  // color swatches match split-by charts without re-aggregating the rows.
+  const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   if (current?.question !== prevQuestionRef.current) {
     prevQuestionRef.current = current?.question;
     setLocalContent(current?.question ?? null);
@@ -339,6 +342,7 @@ export default function ChartCarousel({
                       onAnnotationsChange={(annotations) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, annotations } })}
                       trendConfig={localContent.vizSettings?.trendConfig ?? undefined}
                       onTrendConfigChange={(trendConfig) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, trendConfig } })}
+                      seriesCount={chartSeriesCount}
                       getMapView={getMapView}
                     />
                   )}
@@ -372,6 +376,7 @@ export default function ChartCarousel({
               onVizTypeChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
               onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
               onMapReady={handleMapReady}
+              onSeriesCountChange={setChartSeriesCount}
             />
           ) : (
             <Text fontSize="xs" color="fg.muted" fontFamily="mono" p={3}>No data</Text>

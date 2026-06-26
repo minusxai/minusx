@@ -293,6 +293,55 @@ describe('ChartBuilder axis selection', () => {
   })
 })
 
+// ─── ChartBuilder onSeriesCountChange ────────────────────────────────────────
+
+describe('ChartBuilder onSeriesCountChange', () => {
+  it('reports one count per Y column for a line chart', () => {
+    const onSeriesCountChange = vi.fn()
+    renderWithProviders(
+      <ChartBuilder
+        columns={['day', 'last_month', 'this_month']}
+        types={['BIGINT', 'DOUBLE', 'DOUBLE']}
+        rows={[
+          { day: 1, last_month: 100, this_month: 120 },
+          { day: 2, last_month: 110, this_month: 90 },
+        ]}
+        chartType="line"
+        initialXCols={['day']}
+        initialYCols={['last_month', 'this_month']}
+        onSeriesCountChange={onSeriesCountChange}
+      />
+    )
+
+    expect(onSeriesCountChange).toHaveBeenLastCalledWith(2)
+  })
+
+  it('reports one count per slice (category) for a pie chart', () => {
+    const onSeriesCountChange = vi.fn()
+    renderWithProviders(
+      <ChartBuilder
+        columns={['vessel_type', 'share']}
+        types={['VARCHAR', 'DOUBLE']}
+        rows={[
+          { vessel_type: 'Tanker', share: 36 },
+          { vessel_type: 'Cargo', share: 32 },
+          { vessel_type: 'Dry Bulk', share: 13 },
+          { vessel_type: 'Container', share: 12 },
+          { vessel_type: 'General Cargo', share: 5 },
+          { vessel_type: 'RoRo', share: 2 },
+        ]}
+        chartType="pie"
+        initialXCols={['vessel_type']}
+        initialYCols={['share']}
+        onSeriesCountChange={onSeriesCountChange}
+      />
+    )
+
+    // 6 slices → 6 colors, not 1 (the single value series)
+    expect(onSeriesCountChange).toHaveBeenLastCalledWith(6)
+  })
+})
+
 // ─── ChartBuilder viz type constraints ───────────────────────────────────────
 
 describe('ChartBuilder viz type constraints', () => {
@@ -527,6 +576,81 @@ describe('VizConfigPanel dual axis', () => {
     await user.click(settingsTab)
 
     expect(screen.getByLabelText('Dual Y-axis toggle')).toBeInTheDocument()
+  })
+
+  it('renders one color swatch per Y-axis series in the style panel', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <VizConfigPanel
+        columns={columns}
+        types={types}
+        chartType="line"
+        initialXCols={['month']}
+        initialYCols={['revenue', 'orders']}
+        styleConfig={{}}
+        onStyleConfigChange={vi.fn()}
+        axisConfig={{}}
+        onAxisConfigChange={vi.fn()}
+      />
+    )
+
+    const settingsTab = screen.getByText('Settings')
+    await user.click(settingsTab)
+
+    // Two Y columns → two series → two color swatches (not a single one)
+    expect(screen.getByLabelText('Series 1 color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Series 2 color')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Series 3 color')).not.toBeInTheDocument()
+  })
+
+  it('honors an explicit seriesCount from the chart over the column-derived count', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <VizConfigPanel
+        columns={columns}
+        types={types}
+        chartType="line"
+        initialXCols={['month', 'category']}
+        initialYCols={['revenue']}
+        // One Y column, but the chart split it by `category` into 3 real series
+        seriesCount={3}
+        styleConfig={{}}
+        onStyleConfigChange={vi.fn()}
+        axisConfig={{}}
+        onAxisConfigChange={vi.fn()}
+      />
+    )
+
+    const settingsTab = screen.getByText('Settings')
+    await user.click(settingsTab)
+
+    expect(screen.getByLabelText('Series 1 color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Series 2 color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Series 3 color')).toBeInTheDocument()
+  })
+
+  it('counts dual-axis right columns as additional series in the style panel', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <VizConfigPanel
+        columns={columns}
+        types={types}
+        chartType="line"
+        initialXCols={['month']}
+        initialYCols={['revenue']}
+        initialYRightCols={['orders']}
+        styleConfig={{}}
+        onStyleConfigChange={vi.fn()}
+        axisConfig={{ dualAxis: true }}
+        onAxisConfigChange={vi.fn()}
+      />
+    )
+
+    const settingsTab = screen.getByText('Settings')
+    await user.click(settingsTab)
+
+    expect(screen.getByLabelText('Series 1 color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Series 2 color')).toBeInTheDocument()
   })
 })
 

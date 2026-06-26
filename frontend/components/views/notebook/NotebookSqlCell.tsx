@@ -115,6 +115,9 @@ export default function NotebookSqlCell({
 
   // Query mode: SQL editor, visual GUI builder, or chart config.
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
+  // Rendered series count, reported by the chart so the sibling VizConfigPanel's
+  // color swatches match split-by charts without re-aggregating the rows.
+  const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const [canUseGUI, setCanUseGUI] = useState(true);
   const [guiError, setGuiError] = useState<string | null>(null);
 
@@ -312,6 +315,7 @@ export default function NotebookSqlCell({
               onAnnotationsChange={(annotations) => setViz({ annotations })}
               trendConfig={cell.vizSettings?.trendConfig ?? undefined}
               onTrendConfigChange={(trendConfig) => setViz({ trendConfig })}
+              seriesCount={chartSeriesCount}
             />
           )}
         </Box>
@@ -356,6 +360,7 @@ export default function NotebookSqlCell({
             onAxisConfigChange={(axisConfig) => setViz({ axisConfig })}
             onAnnotationsChange={(annotations) => setViz({ annotations })}
             onTrendConfigChange={(trendConfig) => setViz({ trendConfig })}
+            onSeriesCountChange={setChartSeriesCount}
             onOpenVizTab={() => setQueryMode('viz')}
             onHideVizTab={() => setQueryMode('sql')}
             vizTabOpen={queryMode === 'viz'}

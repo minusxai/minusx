@@ -44,6 +44,15 @@ interface VizConfigPanelProps {
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void
   trendConfig?: TrendConfig
   onTrendConfigChange?: (config: TrendConfig) => void
+  /**
+   * Actual number of rendered series, reported up by the live chart
+   * (`aggregateData(...).series.length`). Drives how many color swatches the
+   * style panel exposes. Pass this so split-by charts (where the series count is
+   * data-dependent) show the right number without the panel re-aggregating the
+   * rows. When absent (chart not mounted yet), the panel falls back to the
+   * value-column count, which is exact for the common single-dimension case.
+   */
+  seriesCount?: number
   /** Returns the live geo map's current center/zoom, or null when no map is mounted. Powers the "Pin current view" button. */
   getMapView?: () => { center: [number, number]; zoom: number } | null
 }
@@ -66,6 +75,7 @@ export const VizConfigPanel = ({
   axisConfig, onAxisConfigChange,
   annotations, onAnnotationsChange,
   trendConfig, onTrendConfigChange,
+  seriesCount,
   getMapView,
 }: VizConfigPanelProps) => {
 
@@ -118,6 +128,16 @@ export const VizConfigPanel = ({
   }, [initialTooltipCols, columns])
 
   const supportsAnnotations = ['line', 'bar', 'row', 'area', 'scatter'].includes(chartType) && xAxisColumns.length === 1
+
+  // Number of color series the style panel should expose. The live chart reports
+  // the exact count (`seriesCount` prop) since only it has the rows to resolve
+  // data-dependent split-by series. Until it does, fall back to the value-column
+  // count — exact for the common single-dimension case — rather than
+  // re-aggregating here (this panel is intentionally data-aggregation-free).
+  const effectiveSeriesCount = useMemo(
+    () => (seriesCount && seriesCount > 0 ? seriesCount : Math.max(yAxisColumns.length + yRightColumns.length, 1)),
+    [seriesCount, yAxisColumns.length, yRightColumns.length],
+  )
 
   const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
     const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat && !config.prefix && !config.suffix
@@ -327,7 +347,7 @@ export const VizConfigPanel = ({
           <StyleConfigPopover
             chartType={chartType}
             styleConfig={styleConfig}
-            numSeries={0}
+            numSeries={effectiveSeriesCount}
             onChange={onStyleConfigChange}
             displayMode="inline"
           />

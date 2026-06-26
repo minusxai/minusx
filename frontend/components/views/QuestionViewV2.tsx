@@ -165,6 +165,10 @@ export default function QuestionViewV2({
     getMapViewRef.current = getView;
   }, []);
   const getMapView = useCallback(() => getMapViewRef.current?.() ?? null, []);
+  // Rendered series count, reported by the chart (which has the rows) and handed
+  // to the sibling VizConfigPanel so its color swatches match the chart exactly
+  // for split-by charts — without the panel re-aggregating the rows.
+  const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const dispatch = useAppDispatch();
   const toggleCollapsedPanel = useCallback((panel: 'none' | 'left' | 'right') => {
     dispatch(setQuestionCollapsedPanel(panel));
@@ -769,6 +773,7 @@ export default function QuestionViewV2({
                         onAnnotationsChange={handleAnnotationsChange}
                         trendConfig={content.vizSettings?.trendConfig ?? undefined}
                         onTrendConfigChange={handleTrendConfigChange}
+                        seriesCount={chartSeriesCount}
                         getMapView={getMapView}
                       />
                     )}
@@ -1012,6 +1017,7 @@ export default function QuestionViewV2({
                 onAnnotationsChange={handleAnnotationsChange}
                 onTrendConfigChange={handleTrendConfigChange}
                 onMapReady={handleMapReady}
+                onSeriesCountChange={setChartSeriesCount}
                 onOpenVizTab={() => {
                   if (collapsedPanel === 'left') toggleCollapsedPanel('none');
                   setQueryMode('viz');
