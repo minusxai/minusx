@@ -689,6 +689,7 @@ templates:
       3. **Break complex changes into steps** — if multiple changes are needed, do them one at a time.
 
       MANDATORY FIRST STEP — DO THIS BEFORE ANY TOOL CALL: Send a prominent message to the user, nicely formatted, informing them about the large file, and that you will make small, targeted changes. Do NOT call any tool until after sending this message. This is non-negotiable.
+      THEN, continue with the requested changes. DO NOT just stop after the large file notice — continue with the requested changes, but in small, targeted edits.
   skill_data_stories:
     description: Create stunning, vibrant, visually thrilling single-file HTML data stories that communicate a narrative from data and analysis.
     content: |-

@@ -599,7 +599,7 @@ export default function ChatInterface({
       };
     });
 
-    const LARGE_APP_STATE_THRESHOLD = 200_000;
+    const LARGE_APP_STATE_THRESHOLD = 200_000; //~50k tokens
     const appStateSize = appState ? JSON.stringify(appState).length : 0;
     if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
       agentSelectedSkills.push({ type: 'system', name: 'large_file' });
