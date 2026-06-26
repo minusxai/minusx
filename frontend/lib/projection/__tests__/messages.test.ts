@@ -122,6 +122,35 @@ describe('projectMessages — tool results', () => {
     expect(text).toContain('"unchanged":true');
   });
 
+  it('preserves a non-text (chart image) block the handler attached, after the projected file blocks', () => {
+    // ReadFiles/ExecuteQuery present a renderable chart as a rendered IMAGE block in `content`.
+    // projectMessages rebuilds the textual content from __augmented but must PRESERVE that image
+    // (origNonText) so the rendered chart actually reaches the LLM.
+    const files: AugmentedFiles = {
+      file: {
+        id: 7,
+        data: { id: 7, name: 'q7', path: '/org/q7', type: 'question', isDirty: false },
+        content: { markup: '<question id="7"/>' },
+      },
+      references: [],
+    };
+    const tr: ToolResultMessage = {
+      role: 'toolResult', toolCallId: 'tc7', toolName: 'ReadFiles',
+      content: [
+        { type: 'text', text: 'placeholder' },
+        { type: 'image', url: 'https://s3/chart7.jpg' },
+      ],
+      details: { __augmented: [files], __jsonTag: 'Files' } satisfies AugmentedToolDetails,
+      isError: false, timestamp: 0,
+    };
+    const [out] = projectMessages([tr]);
+    const images = (out.content as Array<{ type: string }>).filter((c) => c.type === 'image');
+    expect(images).toEqual([{ type: 'image', url: 'https://s3/chart7.jpg' }]);
+    // and the image comes AFTER the projected text/file blocks
+    const lastBlock = out.content[out.content.length - 1] as { type: string };
+    expect(lastBlock.type).toBe('image');
+  });
+
   it('leaves a tool result without __augmented untouched', () => {
     const tr: Message = {
       role: 'toolResult', toolCallId: 'x', toolName: 'ExecuteQuery',

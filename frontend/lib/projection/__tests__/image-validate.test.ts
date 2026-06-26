@@ -1,7 +1,7 @@
 // Guard against the image-format bug class (data: URL in `url` → provider 400). The faux LLM never
 // validates images, so this asserts the contract directly AND end-to-end through the projection.
 import { describe, it, expect } from 'vitest';
-import { isValidProviderImage, assertValidProviderImages } from '../image-validate';
+import { isValidProviderImage, assertValidProviderImages, imageContentFromUrl } from '../image-validate';
 import { projectMessages, type WithAppState } from '../messages';
 import type { AppState } from '@/lib/appState';
 import type { CompressedAugmentedFile } from '@/lib/types';
@@ -22,6 +22,19 @@ describe('isValidProviderImage', () => {
   });
   it('rejects an empty image', () => {
     expect(isValidProviderImage({ type: 'image' })).toBe(false);
+  });
+});
+
+describe('imageContentFromUrl', () => {
+  it('passes a remote http(s) url through as `url`', () => {
+    expect(imageContentFromUrl('https://s3/chart.jpg')).toEqual({ type: 'image', url: 'https://s3/chart.jpg' });
+  });
+  it('SPLITS a data: URL into {data, mimeType} (provider needs the MIME, not a url)', () => {
+    expect(imageContentFromUrl('data:image/jpeg;base64,QUJD')).toEqual({ type: 'image', mimeType: 'image/jpeg', data: 'QUJD' });
+  });
+  it('always yields a provider-valid image (round-trips through isValidProviderImage)', () => {
+    expect(isValidProviderImage(imageContentFromUrl('https://s3/x.png'))).toBe(true);
+    expect(isValidProviderImage(imageContentFromUrl('data:image/png;base64,AAAA'))).toBe(true);
   });
 });
 

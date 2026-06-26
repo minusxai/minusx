@@ -12,7 +12,7 @@ import type {
   AgentInvocation,
   StreamEvent,
 } from '@/orchestrator/types';
-import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent } from '@/orchestrator/llm';
+import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent, ImageContent } from '@/orchestrator/llm';
 import type {
   ConversationLogEntry as LegacyLogEntry,
   TaskLogEntry,
@@ -713,6 +713,62 @@ describe('legacyToolResultToPi — reverse mapping for orchestrator resume', () 
     };
     const out = legacyToolResultToPi(legacy);
     expect(out.toolName).toBe('WeirdName');
+  });
+
+  // ─── image blocks must survive the round-trip (chart-image presentation) ───
+  // ReadFiles/ExecuteQuery/EditFile attach an OpenAI-style `image_url` block to their content when
+  // a renderable chart is presented as an image. Collapsing the whole content array into one
+  // JSON.stringify'd text block (the old behavior) destroyed the image before the projection's
+  // `origNonText` pass could preserve it — so the rendered chart never reached the LLM.
+  it('preserves an image_url block as an orchestrator image block (not stringified into text)', () => {
+    const legacy: CompletedToolCallResult = {
+      role: 'tool',
+      tool_call_id: 'tc1',
+      content: [
+        { type: 'text', text: '{"success":true}' },
+        { type: 'image_url', image_url: { url: 'https://s3/chart.jpg' } },
+      ] as unknown as CompletedToolCallResult['content'],
+      run_id: 'run-1',
+      function: { name: 'ReadFiles', arguments: {} },
+      created_at: '2025-01-01T00:00:00Z',
+    };
+    const out = legacyToolResultToPi(legacy);
+    expect(out.content).toContainEqual({ type: 'text', text: '{"success":true}' });
+    expect(out.content).toContainEqual({ type: 'image', url: 'https://s3/chart.jpg' });
+    // exactly one image block, preserved (not buried in a stringified text block)
+    expect(out.content.filter((c): c is ImageContent => c.type === 'image')).toHaveLength(1);
+  });
+
+  it('SPLITS an image_url with a data: URL into {data, mimeType} (provider needs the MIME)', () => {
+    const legacy: CompletedToolCallResult = {
+      role: 'tool',
+      tool_call_id: 'tc1',
+      content: [
+        { type: 'text', text: '{"success":true}' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,QUJD' } },
+      ] as unknown as CompletedToolCallResult['content'],
+      run_id: 'run-1',
+      function: { name: 'ExecuteQuery', arguments: {} },
+      created_at: '2025-01-01T00:00:00Z',
+    };
+    const out = legacyToolResultToPi(legacy);
+    expect(out.content).toContainEqual({ type: 'image', mimeType: 'image/jpeg', data: 'QUJD' });
+  });
+
+  it('passes an existing orchestrator image block ({type:image,url}) through unchanged', () => {
+    const legacy: CompletedToolCallResult = {
+      role: 'tool',
+      tool_call_id: 'tc1',
+      content: [
+        { type: 'text', text: 'ok' },
+        { type: 'image', url: 'https://s3/x.jpg' },
+      ] as unknown as CompletedToolCallResult['content'],
+      run_id: 'run-1',
+      function: { name: 'ReadFiles', arguments: {} },
+      created_at: '2025-01-01T00:00:00Z',
+    };
+    const out = legacyToolResultToPi(legacy);
+    expect(out.content).toContainEqual({ type: 'image', url: 'https://s3/x.jpg' });
   });
 });
 

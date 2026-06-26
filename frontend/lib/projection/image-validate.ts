@@ -8,6 +8,21 @@
  */
 import type { ImageContent, TextContent } from '@/orchestrator/llm';
 
+const DATA_URL_RE = /^data:([^;]+);base64,(.*)$/;
+
+/**
+ * Normalize an image URL into a provider-valid {@link ImageContent}. A `data:` URL (dev/base64
+ * uploads) MUST be split into `{ data, mimeType }` — sending it verbatim in `url` makes the provider
+ * report an undefined MIME type. A remote http(s) URL (S3) is passed through as `url`. This is the
+ * single source for that contract: reused by the app-state adapter (`from-compressed`) and the
+ * tool-result resume mapping (`legacyToolResultToPi`).
+ */
+export function imageContentFromUrl(url: string): ImageContent {
+  const m = DATA_URL_RE.exec(url);
+  if (m) return { type: 'image', mimeType: m[1], data: m[2] };
+  return { type: 'image', url };
+}
+
 export function isValidProviderImage(img: ImageContent): boolean {
   if (img.url !== undefined && img.url !== '') {
     // A remote URL is fine; a data: URL in `url` is NOT — it must be split to {data, mimeType}.

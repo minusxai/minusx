@@ -14,7 +14,8 @@ import type {
   AgentInvocation,
   StreamEvent,
 } from '@/orchestrator/types';
-import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent } from '@/orchestrator/llm';
+import type { AssistantMessage, ToolResultMessage, ToolCall as PiToolCall, TextContent, ThinkingContent, ImageContent } from '@/orchestrator/llm';
+import { imageContentFromUrl } from '@/lib/projection/image-validate';
 import type {
   ConversationLogEntry as LegacyLogEntry,
   TaskLogEntry,
@@ -545,19 +546,42 @@ export function translateConversationForFrontend<T extends {
  * the orchestrator actually reads.
  */
 export function legacyToolResultToPi(toolResult: CompletedToolCallResult): ToolResultMessage {
-  const text =
-    typeof toolResult.content === 'string'
-      ? toolResult.content
-      : JSON.stringify(toolResult.content);
+  const content = toolResultContentToPi(toolResult.content);
   const details = toolResult.details as { success?: boolean } | undefined;
   const isError = details ? details.success === false : false;
   return {
     role: 'toolResult',
     toolCallId: toolResult.tool_call_id,
     toolName: toolResult.function.name,
-    content: [{ type: 'text', text }],
+    content,
     isError,
     timestamp: Date.parse(toolResult.created_at) || 0,
     ...(toolResult.details ? { details: toolResult.details } : {}),
   };
+}
+
+/**
+ * Convert a legacy tool-result `content` into the orchestrator's `(TextContent | ImageContent)[]`.
+ *
+ * A string (or non-array object) collapses to a single text block. An ARRAY is mapped block-by-block
+ * so that image blocks SURVIVE: ReadFiles/ExecuteQuery/EditFile attach a rendered chart as an
+ * OpenAI-style `image_url` block, which must become an orchestrator `image` block (data: URLs split
+ * to `{data, mimeType}`) — collapsing the array into one JSON.stringify'd text block silently
+ * destroyed the image, so the rendered chart never reached the LLM.
+ */
+function toolResultContentToPi(
+  content: CompletedToolCallResult['content'],
+): (TextContent | ImageContent)[] {
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (!Array.isArray(content)) return [{ type: 'text', text: JSON.stringify(content) }];
+  return content.map((block): TextContent | ImageContent => {
+    const b = block as Record<string, unknown>;
+    if (b.type === 'image') return b as unknown as ImageContent;
+    if (b.type === 'image_url') {
+      const url = (b.image_url as { url?: string } | undefined)?.url ?? '';
+      return imageContentFromUrl(url);
+    }
+    if (b.type === 'text' && typeof b.text === 'string') return { type: 'text', text: b.text };
+    return { type: 'text', text: JSON.stringify(block) };
+  });
 }

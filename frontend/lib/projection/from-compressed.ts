@@ -14,6 +14,7 @@
  */
 import type { CompressedAugmentedFile, CompressedFileState, CompressedQueryResult } from '@/lib/types';
 import type { ImageContent } from '@/orchestrator/llm';
+import { imageContentFromUrl } from './image-validate';
 import type {
   AugmentedFileEntry,
   AugmentedFiles,
@@ -21,18 +22,14 @@ import type {
   FileData,
 } from './types';
 
-const DATA_URL_RE = /^data:([^;]+);base64,(.*)$/;
-
 /**
  * Normalize a stored file image into an {@link ImageContent}. A `data:` URL (dev/base64 uploads)
- * MUST be split into `{ data, mimeType }` — sending it verbatim in `url` makes the provider report
- * an undefined MIME type (mirrors the attachment normalization in attachments.server.ts). A remote
- * http(s) URL (S3) is passed through as `url`.
+ * is split into `{ data, mimeType }` via the shared {@link imageContentFromUrl} (sending it verbatim
+ * in `url` makes the provider report an undefined MIME type). An already-split `{ data, mimeType }`
+ * (no url) passes through as-is.
  */
 function toImageContent(img: NonNullable<CompressedFileState['image']>): ImageContent {
-  const m = img.url ? DATA_URL_RE.exec(img.url) : null;
-  if (m) return { type: 'image', mimeType: m[1], data: m[2] };
-  if (img.url) return { type: 'image', url: img.url };
+  if (img.url) return imageContentFromUrl(img.url);
   return { type: 'image', data: img.data, mimeType: img.mimeType };
 }
 
