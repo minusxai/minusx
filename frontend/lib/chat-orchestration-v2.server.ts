@@ -311,32 +311,28 @@ export async function setupOrchestration(
     typeof (agentArgs as { context_file_id?: number }).context_file_id === 'number'
       ? (agentArgs as { context_file_id: number }).context_file_id
       : undefined;
-
-  const serverArgs = await buildServerAgentArgs(
-    user,
-    contextFileId != null ? { contextFileId } : undefined,
-  );
-
-  // Prefer the client-resolved context + schema (the selected context the user
-  // picked in the UI) — it uses agent_args.context / agent_args.schema verbatim. Server re-resolution
-  // (serverArgs) is only a fallback for requests that arrive without them.
-  // (Genuinely clientless callers — Slack, report jobs — call
-  // buildServerAgentArgs directly and never reach this chat path.)
-  const clientContext =
-    typeof (agentArgs as { context?: unknown }).context === 'string'
-      ? (agentArgs as { context: string }).context
+  const contextVersion =
+    typeof (agentArgs as { context_version?: number }).context_version === 'number'
+      ? (agentArgs as { context_version: number }).context_version
       : undefined;
-  const clientContextDocsCatalog =
-    typeof (agentArgs as { context_docs_catalog?: unknown }).context_docs_catalog === 'string'
-      ? (agentArgs as { context_docs_catalog: string }).context_docs_catalog
-      : undefined;
-  const clientSchema = Array.isArray((agentArgs as { schema?: unknown }).schema)
-    ? (agentArgs as { schema: { schema: string; tables: string[] }[] }).schema
-    : undefined;
-  const clientConnectionId =
+  const requestedConnectionId =
     typeof (agentArgs as { connection_id?: unknown }).connection_id === 'string'
       ? (agentArgs as { connection_id: string }).connection_id
       : undefined;
+
+  // The client sends only POINTERS (context_file_id, context_version,
+  // connection_id) — the server resolves the actual context docs, catalog,
+  // library, and schema from the DB here. This is the single source of truth:
+  // the same resolveContextDocs / getWhitelistedSchemaForUser the docs sidebar
+  // uses, so the prompt and the UI can never disagree, and the browser can't
+  // inject context it didn't earn. (Clientless callers — Slack, report jobs —
+  // call buildServerAgentArgs directly and never reach this chat path.)
+  const serverArgs = await buildServerAgentArgs(user, {
+    contextFileId,
+    contextVersion,
+    connectionId: requestedConnectionId,
+  });
+
   const clientAllowedVizTypes = Array.isArray((agentArgs as { allowed_viz_types?: unknown }).allowed_viz_types)
     ? (agentArgs as { allowed_viz_types: string[] }).allowed_viz_types
     : undefined;
@@ -366,7 +362,7 @@ export async function setupOrchestration(
   // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we
   // just parse them; text passes through. Remote URLs are ignored (no fetch).
   const attachments = normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
-  const schemaForWhitelist = clientSchema ?? serverArgs.schema;
+  const schemaForWhitelist = serverArgs.schema;
   const whitelistedTables: string[] = [];
   for (const s of schemaForWhitelist) {
     for (const t of s.tables) {
@@ -465,15 +461,14 @@ export async function setupOrchestration(
       userId: String(user.userId ?? user.email),
       mode: narrowedMode,
       effectiveUser: user,
-      connectionId: clientConnectionId ?? serverArgs.connection_id,
+      connectionId: serverArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
-      contextDocs: clientContext || serverArgs.context || undefined,
-      contextDocsCatalog: clientContextDocsCatalog ?? serverArgs.context_docs_catalog ?? undefined,
-      // Library (full content) is always server-resolved so LoadContext matches the
-      // catalog the model sees, regardless of what the client sent.
-      contextDocsLibrary: serverArgs.context_docs_library,
+      // Context docs (structure) and schema are server-resolved from the request's
+      // pointers (see buildServerAgentArgs above) — never taken from the client
+      // payload. The agent renders the whole Context section from this one object.
+      resolvedContextDocs: serverArgs.context_docs,
       allowedVizTypes: clientAllowedVizTypes,
-      schema: clientSchema,
+      schema: serverArgs.schema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
       role: user.role,
       agentName: clientAgentName,

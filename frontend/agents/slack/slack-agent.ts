@@ -4,6 +4,7 @@ import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
+import { formatContextDocsSection } from '@/lib/sql/schema-filter';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-slack-api',
@@ -32,10 +33,12 @@ export class SlackAgent extends RemoteAnalystAgent {
       allowed_viz_types: '',
       role: '',
       schema: '',
-      context: '',
-      // Slack keeps the system prompt minimal (no inline context docs); preserve
-      // that — render no Context Library either.
-      context_docs_catalog: 'No additional context documents are available.',
+      // Slack keeps the system prompt minimal: no inline docs, and an explicit
+      // "nothing to load" Context Library line (via the shared formatter).
+      context: formatContextDocsSection(
+        { docs: [] },
+        { emptyCatalogText: 'No additional context documents are available.' },
+      ),
       skills_catalog: '',
       connection_id: this.context.connectionId ?? '',
       home_folder: '',

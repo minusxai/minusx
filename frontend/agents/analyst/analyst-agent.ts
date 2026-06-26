@@ -17,6 +17,7 @@ import {
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import { LoadContext } from '@/agents/web-analyst/web-tools';
+import { formatContextDocsSection } from '@/lib/sql/schema-filter';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
 import type { AppState } from '@/lib/appState';
 import { projectMessages, type WithAppState } from '@/lib/projection/messages';
@@ -89,15 +90,15 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       role: this.context.role ?? '',
       // Whitelisted table list (client-resolved).
       schema: this.context.schema ? JSON.stringify(this.context.schema) : '',
-      // Markdown context docs from the chat's bound `type: 'context'` file
-      // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
-      // Only alwaysInclude docs + Schema Notes are inlined here; the rest are
-      // advertised via the catalog below and fetched on demand with LoadContext.
-      context: this.context.contextDocs ?? '',
-      // Catalog of lazy-loadable context docs (title + description only). Mirror
-      // the buildSkillsCatalog "none" fallback so pyFormat always has a value.
-      context_docs_catalog:
-        this.context.contextDocsCatalog || 'No additional context documents are available.',
+      // Fully-formatted "## Context" body: alwaysInclude docs + Schema Notes under
+      // "Default Context Docs", then the lazy-loadable catalog (title + description,
+      // fetched on demand via LoadContext) under "Context Library". Built by the
+      // shared formatter so the prompt and the docs sidebar render identically.
+      // (Resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration.)
+      context: formatContextDocsSection(
+        this.context.resolvedContextDocs ?? { docs: [] },
+        { emptyCatalogText: 'No additional context documents are available.' },
+      ),
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded).
       skills_catalog: buildSkillsCatalog({
