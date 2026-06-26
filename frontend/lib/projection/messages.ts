@@ -75,7 +75,10 @@ export function projectMessages(messages: Message[]): Message[] {
       const fileBlocks = __augmented.flatMap((f) =>
         renderProjectedFiles(projectFiles(memo, f), { jsonTag: __jsonTag ?? 'Files' }),
       );
-      return { ...m, content: [...statusBlocks, ...fileBlocks] };
+      // Preserve any non-text blocks (e.g. chart images) the handler attached to the original
+      // content — the facet projector only emits text/markup/query blocks today.
+      const origNonText = (Array.isArray(m.content) ? m.content : []).filter((c) => c.type !== 'text');
+      return { ...m, content: [...statusBlocks, ...fileBlocks, ...origNonText] };
     }
     return m;
   });

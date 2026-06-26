@@ -21,6 +21,8 @@ import { getRootParams, storyEmbedRuns } from '@/lib/data/helpers/param-resoluti
 import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
+import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
+import type { AugmentedToolDetails } from '@/lib/projection/messages';
 import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
@@ -471,9 +473,17 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   );
   const textContent: ReadFilesResult = { success: true, files: noMarkup };
   const imageBlocks = await renderFileChartImageBlocks(result);
+  // Rich payload for the projection pass (cross-turn diffing): the same files in the projector's
+  // shape. The `content` above is kept verbatim for the chat UI; projectMessages rebuilds the
+  // LLM-facing content from `__augmented` (diffed against the conversation) at send time.
+  const augmented: AugmentedToolDetails = {
+    __augmented: result.map(f => compressedToAugmentedFiles(compressAugmentedFile(f, maxChars))),
+    __jsonTag: 'Files',
+    __status: { success: true },
+  };
   return {
     content: [{ type: 'text', text: JSON.stringify(textContent) }, ...markupTextBlocks(blocks), ...imageBlocks],
-    details: { success: true },
+    details: { success: true, ...augmented },
   };
 });
 
@@ -832,9 +842,24 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const imageBlocks = (queryResultChanged || vizSettingsChanged)
     ? await renderFileChartImageBlocks([augmented])
     : [];
+  // Rich payload for the projection pass: the edited file in the projector's shape + the small
+  // non-file status (success, diff, warnings). projectMessages rebuilds the LLM-facing content
+  // (status block + diffed <file_markup>/<query_data> + the image above) at send time; `content`
+  // here is kept for the chat UI.
+  const augmentedDetails: AugmentedToolDetails = {
+    __augmented: [compressedToAugmentedFiles(compressed)],
+    __jsonTag: 'Files',
+    __status: {
+      success: true,
+      ...(diff ? { diff } : {}),
+      ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
+      ...(vizWarning ? { vizWarning } : {}),
+      ...(result.validation?.length ? { validation: result.validation } : {}),
+    },
+  };
   return {
     content: [{ type: 'text', text: JSON.stringify(content) }, ...markupTextBlocks(markupBlocks), ...imageBlocks],
-    details: { success: true, diff } as EditFileDetails,
+    details: { success: true, diff, ...augmentedDetails } as EditFileDetails,
   };
 });
 
@@ -1024,9 +1049,19 @@ registerFrontendTool('CreateFile', async (args, context) => {
   if (vizWarning) result.vizWarning = vizWarning;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
   const imageBlocks = await renderFileChartImageBlocks([augmented]);
+  // Rich payload for the projection pass (see ReadFiles/EditFile); content kept for the chat UI.
+  const augmentedDetails: AugmentedToolDetails = {
+    __augmented: [compressedToAugmentedFiles(compressAugmentedFile(augmented))],
+    __jsonTag: 'Files',
+    __status: {
+      success: true,
+      ...(vizWarning ? { vizWarning } : {}),
+      ...(createValidation.length ? { validation: createValidation } : {}),
+    },
+  };
   return {
     content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(createBlocks), ...imageBlocks],
-    details: { success: true },
+    details: { success: true, ...augmentedDetails },
   };
 });
 
