@@ -44,14 +44,13 @@ templates:
     - Never guess column names. You can use column names if you already have seen it, or you have to use SearchDBSchema to get exact columns for tables.
     - Use FuzzyMatch BEFORE writing WHERE filters on text/categorical columns. Never assume the user's wording matches the data exactly. Use 1-3 short, specific keywords — NOT full phrases (e.g. "green energy" not "green energy production in northern regions"). Prioritize similarity matches (typo correction) over substring matches (containment).
     - FuzzyMatch has semantic_expansion enabled by default: when no lexical matches are found, it automatically finds semantically similar terms in the column and retries. Pay close attention to these expanded results — they reveal the actual vocabulary the data uses, which may differ significantly from the user's wording.
+  # `context` carries the fully-formatted body (Default Context Docs + Context
+  # Library), built by formatContextDocsSection so the layout lives in exactly
+  # one place (shared with the docs sidebar).
   context_section: |
     ## Context
 
-    ### Default Context Docs
-      {context}
-
-    ### Context Library (to be loaded on demand)
-    {context_docs_catalog}
+    {context}
   connection_section: |
     **Current connection ID**: {connection_id}
   home_folder_section: |
