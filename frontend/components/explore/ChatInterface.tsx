@@ -426,7 +426,7 @@ export default function ChatInterface({
   }, [conversation?.executionState, conversation?.messages, conversation?.agent]);
 
   // Check if conversation has exceeded the token limit
-  const TOKEN_LIMIT = 250_000;
+  const TOKEN_LIMIT = 150_000;
   const tokenLimitExceeded = useMemo(() => {
     if (!conversation?.messages) return false;
     // Gate only makes sense once there's accumulated history to shed by starting
