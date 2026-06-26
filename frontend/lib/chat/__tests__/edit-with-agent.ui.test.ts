@@ -114,18 +114,18 @@ describe('computeMonacoPopoverPosition', () => {
 });
 
 describe('getShadowRootSelection', () => {
-  it("prefers the shadow root's own getSelection (Chrome) when present", () => {
-    const shadowSel = { isCollapsed: false } as unknown as Selection;
-    const root = { getSelection: () => shadowSel } as unknown as ShadowRoot;
-    expect(getShadowRootSelection(root)).toBe(shadowSel);
+  it("prefers the scoped getSelection (iframe contentWindow / Chrome shadow root) when present", () => {
+    const scopedSel = { isCollapsed: false } as unknown as Selection;
+    const root = { getSelection: () => scopedSel };
+    expect(getShadowRootSelection(root)).toBe(scopedSel);
   });
 
-  it('falls back to the document selection when the root lacks getSelection (Firefox/Safari) or is null', () => {
+  it('falls back to the document selection when the root lacks getSelection or is null', () => {
     const docSel = { isCollapsed: true } as unknown as Selection;
     const orig = window.getSelection;
     window.getSelection = (() => docSel) as typeof window.getSelection;
     try {
-      expect(getShadowRootSelection({} as ShadowRoot)).toBe(docSel);
+      expect(getShadowRootSelection({})).toBe(docSel);
       expect(getShadowRootSelection(null)).toBe(docSel);
     } finally {
       window.getSelection = orig;

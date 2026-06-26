@@ -35,12 +35,12 @@ const STORY =
 
 const content: StoryContent = { description: null, story: STORY };
 
-function storyRoot(): ShadowRoot {
-  return screen.getByLabelText('Story document').shadowRoot!;
+function storyRoot(): HTMLElement {
+  return (screen.getByLabelText('Story document') as HTMLIFrameElement).contentDocument!.body;
 }
 
-describe('InlineNumber footnote popover — positioning context (shadow root)', () => {
-  it('opens the footnote INSIDE the story shadow root (not document.body → no top-left pin)', async () => {
+describe('InlineNumber footnote popover — positioning context (iframe document)', () => {
+  it('opens the footnote INSIDE the story iframe (not the top document.body → no top-left pin)', async () => {
     renderWithProviders(<StoryView content={content} />);
 
     // The number hydrates into a clickable figure inside the shadow root.
