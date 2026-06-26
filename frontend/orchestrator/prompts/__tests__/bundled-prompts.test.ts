@@ -19,7 +19,6 @@ const SYSTEM_VARS = {
   connection_id: '',
   home_folder: '',
   preloaded_skills: '',
-  current_date: '2026-06-26',
 };
 
 describe('bundled prompts (standalone-safe, no backend filesystem)', () => {

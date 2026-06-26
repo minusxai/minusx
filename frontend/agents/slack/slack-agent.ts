@@ -1,5 +1,4 @@
 import { Type } from 'typebox';
-import { todayISO } from '@/lib/utils/today';
 import type { Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt } from '@/orchestrator/prompts';
@@ -38,7 +37,6 @@ export class SlackAgent extends RemoteAnalystAgent {
       connection_id: this.context.connectionId ?? '',
       home_folder: '',
       preloaded_skills: '',
-      current_date: todayISO(),
     });
     const addendum = renderPrompt('slack_addendum', {});
     return `${base}\n\n${addendum}`;

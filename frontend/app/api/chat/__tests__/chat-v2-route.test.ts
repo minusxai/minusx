@@ -169,20 +169,23 @@ describe('chat v2 route', () => {
       // #3 — debug is PER-TURN, not cumulative (was 2: turn 1's call was re-sent and re-appended).
       expect(body2.debug.length).toBe(1);
 
-      // #1 — current date lives in the SYSTEM PROMPT, never in a user message.
+      // #1 — the current time is a per-turn <CurrentTime> in the user message (the system prompt only
+      // DESCRIBES it; no concrete date/time baked in, so the system-prompt cache holds).
       expect(contexts).toHaveLength(2);
-      expect(contexts[1].systemPrompt).toMatch(/Current date: \d{4}-\d{2}-\d{2}/);
+      expect(contexts[1].systemPrompt).not.toMatch(/<CurrentTime>\d/);
       const userMsgs = (c: (typeof contexts)[number]) => c.messages.filter((m) => m.role === 'user');
-      for (const m of contexts.flatMap(userMsgs)) {
-        expect(JSON.stringify(m.content)).not.toContain('<CurrentDate>');
-      }
-      // #1 — prefix stability: turn 1's user TEXT is unchanged when re-projected as a prior turn in
-      // turn 2 — no volatile per-turn content (like a date) injected into history. (Compared on text,
-      // not exact shape: a prior turn is a plain string while the current turn is a [{text}] block.)
       const textOf = (content: unknown): string =>
         typeof content === 'string'
           ? content
           : (content as Array<{ type: string; text?: string }>).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n');
+      // every user turn carries a frozen <CurrentTime> block...
+      for (const m of contexts.flatMap(userMsgs)) {
+        expect(textOf(m.content)).toMatch(/<CurrentTime>.+<\/CurrentTime>/);
+      }
+      // #1 — prefix stability: turn 1's user content (INCLUDING its frozen <CurrentTime>) is byte-for-
+      // byte identical when re-projected as a prior turn in turn 2 — nothing volatile re-stamped into
+      // history, so the provider prompt-cache prefix stays valid. (Compared on text since a prior turn
+      // is a plain string while the current turn is a [{text}] block.)
       expect(textOf(userMsgs(contexts[1])[0]?.content)).toBe(textOf(userMsgs(contexts[0])[0]?.content));
 
       // every image the provider would receive is provider-valid (no data: URL stuffed in `url`).
@@ -441,8 +444,9 @@ describe('chat v2 route', () => {
       const image = blocks.find((b) => b.type === 'image');
       expect(image?.data).toBe('Q0hBUlQ=');
       expect(image?.mimeType).toBe('image/jpeg');
-      const contextBlock = blocks[0];
-      expect(contextBlock.text).toContain('<Attachment [notes.txt] (2 pages)>\nNOTES_BODY\n</Attachment>');
+      // The text attachment block appears in the user message (after AppState / CurrentTime).
+      const allText = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+      expect(allText).toContain('<Attachment [notes.txt] (2 pages)>\nNOTES_BODY\n</Attachment>');
     });
   });
 });

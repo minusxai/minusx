@@ -1,5 +1,4 @@
 import { Type } from 'typebox';
-import { todayISO } from '@/lib/utils/today';
 import type { TSchema } from 'typebox';
 import type { ImageContent, Message, TextContent, Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
@@ -43,9 +42,9 @@ const RemoteAnalystAgentParams = Type.Object({
 
 /**
  * Production analyst agent. Extends BenchmarkAnalystAgent (DB tools) with file
- * tools (ReadFiles, SearchFiles) and the production system-prompt rendering
- * (connectionId/home_folder/current_date). App state + markup are rendered by the
- * single projection pass in buildMessages (see lib/projection), not inline here.
+ * tools (ReadFiles, SearchFiles) and the production system-prompt rendering. App
+ * state, markup, and the frozen <CurrentTime> are rendered by the single projection
+ * pass in buildMessages (see lib/projection), not inline here.
  */
 export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystContext> {
   static readonly schema: Tool<typeof RemoteAnalystAgentParams> = {
@@ -101,10 +100,6 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       }),
       connection_id: this.context.connectionId ?? '',
       home_folder: this.context.homeFolder ?? '',
-      // Current date lives in the system prompt (changes at most once a day), NOT in each user
-      // message — a per-turn <CurrentDate> block changed a message's bytes when it scrolled from
-      // current to prior, breaking the message-history prompt cache every turn.
-      current_date: todayISO(),
       // Full content of page-relevant + selected skills, injected upfront.
       preloaded_skills: buildPreloadedSkillsContent({
         tree: PROMPTS,
@@ -116,10 +111,9 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
 
   /**
    * Builds the NON-app-state part of the user turn: text `<Attachment>` blocks, message +
-   * attachment images, and the bare goal text. The `<AppState>` block is attached as rich state in
-   * {@link buildMessages} and rendered/diffed by the single `projectMessages` pass. The current
-   * date is NOT here — it lives in the system prompt (see getSystemPrompt), so a turn's bytes don't
-   * change when it scrolls from current to prior (which would break the message-history cache).
+   * attachment images, and the bare goal text. The `<AppState>` block and the frozen `<CurrentTime>`
+   * are attached as markers in {@link buildMessages} and rendered by the single `projectMessages`
+   * pass (CurrentTime right after the AppState).
    */
   protected buildUserContent(): (TextContent | ImageContent)[] {
     const raw = this.userMessage;
@@ -163,8 +157,13 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     const msgs = super.buildMessages();
     const idx = this.threadHistory.length; // the current user message
     const cur = msgs[idx];
-    if (cur?.role === 'user' && this.context.appState !== undefined) {
-      msgs[idx] = { ...cur, _appState: this.context.appState as AppState } as Message & WithAppState;
+    if (cur?.role === 'user') {
+      const ctx = this.context as { currentTime?: string };
+      msgs[idx] = {
+        ...cur,
+        ...(this.context.appState !== undefined ? { _appState: this.context.appState as AppState } : {}),
+        ...(ctx.currentTime !== undefined ? { _currentTime: ctx.currentTime } : {}),
+      } as Message & WithAppState;
     }
     return projectMessages(msgs);
   }

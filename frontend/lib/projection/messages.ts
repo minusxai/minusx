@@ -21,9 +21,12 @@ import { projectFiles, stripEntryQueryData } from './project';
 import { renderProjectedFiles } from './render';
 import type { AugmentedFiles } from './types';
 
-/** Non-wire marker: the page context a user message was sent with (for app-state projection). */
+/** Non-wire markers a user message carries between assembly and this pass. */
 export interface WithAppState {
   _appState?: AppState;
+  /** The turn's wall-clock hour, frozen at creation (orchestrator.run) — rendered as <CurrentTime>
+   *  after the app state. Identical when the turn is current vs prior, so the cache prefix holds. */
+  _currentTime?: string;
 }
 
 /**
@@ -70,13 +73,17 @@ export function projectMessages(messages: Message[]): Message[] {
   const memo = new FacetMemo();
   return messages.map((m): Message => {
     if (m.role === 'user') {
-      const appState = (m as Message & WithAppState)._appState;
-      if (appState === undefined) return m;
-      const blocks = renderAppState(memo, appState);
+      const wm = m as Message & WithAppState;
+      if (wm._appState === undefined && wm._currentTime === undefined) return m;
+      const appStateBlocks = wm._appState !== undefined ? renderAppState(memo, wm._appState) : [];
+      // <CurrentTime> rides right after the app state — frozen per turn, so prior turns are stable.
+      const timeBlocks: TextContent[] = wm._currentTime
+        ? [{ type: 'text', text: `<CurrentTime>${wm._currentTime}</CurrentTime>` }]
+        : [];
       const rest: (TextContent | ImageContent)[] =
         typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content;
-      const { _appState: _omit, ...clean } = m as Message & WithAppState;
-      return { ...clean, content: [...blocks, ...rest] } as Message;
+      const { _appState: _a, _currentTime: _t, ...clean } = wm;
+      return { ...clean, content: [...appStateBlocks, ...timeBlocks, ...rest] } as Message;
     }
     if (m.role === 'toolResult' && hasAugmented(m.details)) {
       const { __augmented, __jsonTag, __status } = m.details;

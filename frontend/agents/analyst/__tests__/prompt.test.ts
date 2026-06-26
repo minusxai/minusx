@@ -87,12 +87,13 @@ describe('AnalystAgent buildUserContent (no app state / no per-message date)', (
     expect(content[0].text).toBe('how many users?');
   });
 
-  it('the current date is in the SYSTEM PROMPT, not in any user message (cache stability)', () => {
-    const today = new Date().toISOString().slice(0, 10);
+  it('no concrete date/time is baked into the system prompt (it is a per-turn <CurrentTime>)', () => {
     const sp: string = newAgent().getSystemPrompt();
-    expect(sp).toContain(`Current date: ${today}`);
-    // and it must NOT leak into the per-turn user content
-    expect(newAgent().buildUserContent().every((c: { type: string; text?: string }) => !(c.type === 'text' && c.text?.includes('<CurrentDate>')))).toBe(true);
+    // The system prompt only DESCRIBES CurrentTime; it must not embed a concrete date/time (which
+    // would change daily/hourly and bust the system-prompt cache). The value rides in the user turn.
+    expect(sp).toContain('CurrentTime');
+    expect(sp).not.toMatch(/Current date: \d{4}-\d{2}-\d{2}/);
+    expect(sp).not.toMatch(/<CurrentTime>\d/);
   });
 
   it('threads ImageContent items before the raw goal', () => {
@@ -146,5 +147,18 @@ describe('AnalystAgent buildMessages (app state via projection)', () => {
     const user = msgs[msgs.length - 1];
     const joined = user.content.map((c: { text?: string }) => c.text ?? '').join('\n');
     expect(joined).not.toContain('<AppState>');
+  });
+
+  it('renders the frozen <CurrentTime> right AFTER the AppState block', () => {
+    const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
+    // orchestrator.run() normally freezes this onto the context; set it directly for the unit test.
+    (agent.context as { currentTime?: string }).currentTime = '2026-06-26 14:00 UTC';
+    const msgs = agent.buildMessages();
+    const texts = (msgs[msgs.length - 1].content as Array<{ type: string; text?: string }>)
+      .filter((c) => c.type === 'text').map((c) => c.text ?? '');
+    const appStateIdx = texts.findIndex((t) => t.includes('<AppState>'));
+    const timeIdx = texts.findIndex((t) => t.includes('<CurrentTime>2026-06-26 14:00 UTC</CurrentTime>'));
+    expect(appStateIdx).toBeGreaterThanOrEqual(0);
+    expect(timeIdx).toBe(appStateIdx + 1); // immediately after app state
   });
 });

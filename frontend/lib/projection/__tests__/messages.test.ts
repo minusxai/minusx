@@ -62,6 +62,17 @@ describe('projectMessages — app state', () => {
     expect(text).toMatch(/"queryResults":\[\{"queryResultId":"h1","summary":\{[^}]*\}\}\]/);
   });
 
+  it('renders a frozen <CurrentTime> immediately after the AppState block', () => {
+    const um = userMsg('q', fileAppState('<question id="1"/>')) as Message & WithAppState;
+    um._currentTime = '2026-06-26 14:00 UTC';
+    const [out] = projectMessages([um]);
+    const texts = (out.content as TextContent[]).filter((c) => c.type === 'text').map((c) => c.text);
+    const appIdx = texts.findIndex((t) => t.includes('<AppState>'));
+    expect(texts[appIdx + 1]).toBe('<CurrentTime>2026-06-26 14:00 UTC</CurrentTime>');
+    // marker stripped from the wire message
+    expect((out as WithAppState)._currentTime).toBeUndefined();
+  });
+
   it('renders folder/explore app state as inline JSON (no facet projection)', () => {
     const explore: AppState = { type: 'explore', state: null };
     const [out] = projectMessages([userMsg('q', explore)]);

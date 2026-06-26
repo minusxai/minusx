@@ -30,7 +30,7 @@ templates:
     - Home Folder: Your home folder path for file operations
     - Max Steps: You have a maximum of {max_steps} tool calls to answer the user's question
     - AppState: Page state at the time of the user request, as a LEAN JSON block (see File State Schema). Heavy parts live OUTSIDE the JSON, right after it: each file's `markup` as a raw `<file_markup file_id=…>` block (the only edit surface, verbatim `oldMatch` source — real JSX, never an escaped JSON string), query rows as a `<query_data query_result_id=…>` block (only when present; default is a summary, fetch rows via ReadFiles), and a screenshot image of the rendered file. App state is re-sent every turn, but parts identical to an earlier turn are shown as `{{unchanged:true}}` / `{{state:'unchanged'}}` and NOT re-sent — reuse what you already saw. ReadFiles, CreateFile, and EditFile responses use the same lean-JSON + blocks shape.
-    - Current date: {current_date}
+    - CurrentTime: the current time (hour granularity) is given in each user turn as a `<CurrentTime>` block right after the AppState. Use it for any "today"/"recent"/relative-date reasoning.
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
     - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list.
     - User Role: {role} (admin, editor, or viewer). Relevant for the filetypes they can create, and for the `app_guide` skill.
