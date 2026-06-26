@@ -1,12 +1,12 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe } from 'react-icons/lu';
+import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe, LuCopy } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { FileType } from '@/lib/types';
-import { deleteFile } from '@/lib/api/file-state';
+import { deleteFile, duplicateFile } from '@/lib/api/file-state';
 import { useAppSelector } from '@/store/hooks';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import MoveFileModal from './MoveFileModal';
@@ -27,8 +27,9 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const { canDeleteFileType } = useAccessRules();
+  const { canDeleteFileType, canCreateFileType } = useAccessRules();
   const canDeleteOrMove = canDeleteFileType(fileType);
+  const canDuplicate = fileType !== 'folder' && canCreateFileType(fileType);
   const canDeleteFile = canDelete !== undefined ? canDelete : canDeleteOrMove;
   // Public sharing is admin-only and story-only in v1.
   const userRole = useAppSelector(state => state.auth.user?.role);
@@ -39,6 +40,14 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
   };
   // Stable identity to keep Dialog.Root from churning on parent re-renders.
   const handleDeleteDialogOpenChange = useStableCallback((e: { open: boolean }) => setIsDeleteDialogOpen(e.open));
+
+  const handleDuplicate = async () => {
+    try {
+      await duplicateFile(fileId);
+    } catch (error) {
+      console.error('Error duplicating file:', error);
+    }
+  };
 
   const handleDeleteConfirm = async () => {
     try {
@@ -76,32 +85,6 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
             shadow="lg"
             p={1}
           >
-            {/* <Menu.Item
-              value="open"
-              cursor="pointer"
-              borderRadius="sm"
-              px={3}
-              py={2}
-              _hover={{ bg: 'bg.muted' }}
-            >
-              <HStack gap={2}>
-                <Icon as={LuExternalLink} boxSize={4} />
-                <span>Open</span>
-              </HStack>
-            </Menu.Item>
-            <Menu.Item
-              value="duplicate"
-              cursor="pointer"
-              borderRadius="sm"
-              px={3}
-              py={2}
-              _hover={{ bg: 'bg.muted' }}
-            >
-              <HStack gap={2}>
-                <Icon as={LuCopy} boxSize={4} />
-                <span>Duplicate</span>
-              </HStack>
-            </Menu.Item> */}
             {onSelect && (
               <Menu.Item
                 value="select"
@@ -116,6 +99,23 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 <HStack gap={2}>
                   <Icon as={LuListChecks} boxSize={4} />
                   <span>Select</span>
+                </HStack>
+              </Menu.Item>
+            )}
+            {canDuplicate && (
+              <Menu.Item
+                value="duplicate"
+                cursor="pointer"
+                borderRadius="sm"
+                px={3}
+                py={2}
+                _hover={{ bg: 'bg.muted' }}
+                onClick={handleDuplicate}
+                aria-label="Duplicate"
+              >
+                <HStack gap={2}>
+                  <Icon as={LuCopy} boxSize={4} />
+                  <span>Duplicate</span>
                 </HStack>
               </Menu.Item>
             )}

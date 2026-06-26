@@ -1272,6 +1272,74 @@ export async function createDraftFile(
 }
 
 
+/**
+ * duplicateFile - Create a copy of an existing file in the same folder.
+ *
+ * Loads the source file's saved content, then creates a new file with the same
+ * type/content/references and a name suffixed with " [duplicate]". The path uses
+ * a slug + random token to guarantee uniqueness in the DB.
+ *
+ * @param fileId - The file to duplicate.
+ * @returns The new file's id.
+ */
+export async function duplicateFile(fileId: number): Promise<number> {
+  // Ensure the source file's content is loaded (the list view may be partial).
+  await loadFiles([fileId], CACHE_TTL.FILE, false);
+
+  const state = getStore().getState();
+  const source = selectFile(state, fileId);
+  if (!source) {
+    throw new Error(`File ${fileId} not found`);
+  }
+  if (source.type === 'folder') {
+    throw new Error('Cannot duplicate a folder');
+  }
+
+  const content = source.content;
+  const type = source.type as FileType;
+
+  // Same folder as the source.
+  const folder = source.path.substring(0, source.path.lastIndexOf('/')) || '/org';
+  const baseFolder = folder.replace(/\/+$/, '');
+
+  const newName = source.name ? `${source.name} [duplicate]` : '';
+  const slugBase = (source.name || 'copy').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'copy';
+  const token = Math.random().toString(36).slice(2, 10);
+  const newPath = `${baseFolder}/${slugBase}-${token}`;
+
+  const references = extractReferencesFromContent(content as any, type);
+
+  const result = await FilesAPI.createFile({
+    name: newName,
+    path: newPath,
+    type,
+    content: content as any,
+    references,
+  });
+
+  // createFile creates user-content types as a draft (draft = true), which the
+  // server excludes from folder listings — so the copy would vanish on reload.
+  // Publish it immediately via saveFile (sets draft = false) so it persists.
+  const created = result.data;
+  const published = await FilesAPI.saveFile(
+    created.id,
+    created.name,
+    created.path,
+    content as any,
+    references,
+    undefined,
+    undefined,
+    created.version
+  );
+
+  const file = published.data;
+  // addFile (not setFile) so the new file surfaces in its parent folder's
+  // child list — the list view reads folder children from the parent's refs.
+  getStore().dispatch(addFile(file));
+  return file.id;
+}
+
+
 // ============================================================================
 // Dry Run Save
 // ============================================================================
