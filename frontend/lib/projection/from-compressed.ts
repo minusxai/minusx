@@ -47,6 +47,12 @@ function toAugmentedQueryResult(cqr: CompressedQueryResult): AugmentedQueryResul
 function toEntry(fs: CompressedFileState, qrById: Map<string, AugmentedQueryResult>): AugmentedFileEntry {
   const entry: AugmentedFileEntry = { id: fs.id, data: toFileData(fs) };
   if (typeof fs.markup === 'string') entry.content = { markup: fs.markup };
+  if (fs.image?.key) {
+    entry.image = {
+      key: fs.image.key,
+      image: { type: 'image', ...(fs.image.url ? { url: fs.image.url } : { data: fs.image.data, mimeType: fs.image.mimeType }) },
+    };
+  }
   const qr = fs.queryResultId ? qrById.get(fs.queryResultId) : undefined;
   if (qr) entry.queryResults = [qr];
   return entry;

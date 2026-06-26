@@ -45,7 +45,6 @@ vi.mock('@/lib/hooks/useConfigs', () => ({ useConfigs: () => ({ config: { brandi
 vi.mock('@/lib/hooks/useContext', () => ({
   useContext: () => ({ contextId: 1, databases: [], documentation: '', availableSkills: [], contextLoading: false }),
 }));
-vi.mock('@/lib/chart/chart-attachments', () => ({ buildChartAttachments: vi.fn().mockResolvedValue([]) }));
 // Markdown → plain text so answer text is visible inside the "Answer block".
 vi.mock('@/components/Markdown', () => ({
   __esModule: true,

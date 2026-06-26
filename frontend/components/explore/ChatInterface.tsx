@@ -22,7 +22,10 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
-import { buildChartAttachments } from '@/lib/chart/chart-attachments';
+import { captureFileViewBlob } from '@/lib/screenshot/capture';
+import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
+import { uploadBlobOrEmbed } from '@/lib/object-store/client';
+import { facetHash } from '@/lib/projection/facets';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -45,6 +48,39 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 // circular dependency workaround.
 // eslint-disable-next-line no-restricted-syntax
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
+
+// Cross-turn capture cache: skip re-shooting when nothing visible changed (key matches).
+let lastFileShot: { key: string; url: string } | null = null;
+
+/**
+ * Attach a SINGLE screenshot of the current file to the app-state image facet (replacing the old
+ * per-chart image series). The projection pass dedups it across turns via the stable `key` (file id
+ * + a hash of what's rendered), so an unchanged view is never re-sent. Best-effort: on any failure
+ * (or non-file page / opt-out) the app state is returned unchanged.
+ */
+async function appStateWithFileScreenshot(
+  appState: AppState | null | undefined,
+  colorMode: 'light' | 'dark',
+  disabled: boolean,
+): Promise<AppState | null | undefined> {
+  if (disabled || typeof document === 'undefined') return appState;
+  if (!appState || appState.type !== 'file' || !appState.state?.fileState?.id) return appState;
+  const fs = appState.state.fileState;
+  const key = `file:${fs.id}:${facetHash({ markup: fs.markup, qr: appState.state.queryResults, colorMode })}`;
+  try {
+    let url: string;
+    if (lastFileShot?.key === key) {
+      url = lastFileShot.url;
+    } else {
+      const blob = await captureFileViewBlob(fs.id, { colorMode, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg' });
+      url = await uploadBlobOrEmbed(blob, 'file.jpg', 'image/jpeg');
+      lastFileShot = { key, url };
+    }
+    return { ...appState, state: { ...appState.state, fileState: { ...fs, image: { key, url } } } };
+  } catch {
+    return appState;
+  }
+}
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -789,20 +825,18 @@ export default function ChatInterface({
       }
     }
 
-    // Render chart images for the current file and upload to S3.
-    // Question: 1 image. Dashboard: one image per chart with data.
-    // Show preparing indicator so user knows something is happening after pressing send.
+    // Capture a SINGLE screenshot of the current file → app-state image facet (replaces the old
+    // per-chart series). Show preparing indicator so the user knows something is happening.
     setIsPreparing(true);
-    let allAttachments: Attachment[];
+    const allAttachments: Attachment[] = [...attachments];
+    let appStateForSend: AppState | null | undefined = appState;
     let convId = conversationID;
     try {
       // Pull handler-only state here so the component doesn't subscribe to it.
       const sendState = store.getState();
-      const queryResultsMap = sendState.queryResults.results;
       const colorMode = sendState.ui.colorMode as 'light' | 'dark';
       const disableAppStateImages = selectDisableAppStateImages(sendState);
-      const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode, disableAppStateImages);
-      allAttachments = [...attachments, ...fileAttachments];
+      appStateForSend = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
 
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation
       // if the user sends before the pre-creation fetch completes (rare race condition).
@@ -831,11 +865,11 @@ export default function ChatInterface({
       dispatch(clearQueuedMessages({ conversationID: convId }));
     }
 
-    // Update agent_args with fresh appState before sending message
-    dispatch(updateAgentArgs({
-      conversationID: convId,
-      agent_args: buildAgentArgsForMessage(userInput, allAttachments)
-    }));
+    // Update agent_args with fresh appState before sending message. Inject the screenshot-bearing
+    // app state (image facet) so the projection pass can render + dedup it.
+    const agentArgs = buildAgentArgsForMessage(userInput, allAttachments);
+    agentArgs.app_state = appStateForSend;
+    dispatch(updateAgentArgs({ conversationID: convId, agent_args: agentArgs }));
 
     // Send message
     dispatch(sendMessage({

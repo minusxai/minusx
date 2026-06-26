@@ -21,7 +21,6 @@ vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
 vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({ config: { branding: { agentName: 'MinusX' }, city: 'SF', allowedVizTypes: undefined } }),
 }));
-vi.mock('@/lib/chart/chart-attachments', () => ({ buildChartAttachments: vi.fn().mockResolvedValue([]) }));
 vi.mock('@/lib/hooks/useConversation', () => ({
   useConversation: () => ({
     conversation: { conversationID: 1, executionState: 'FINISHED', messages: [], pending_tool_calls: [], agent_args: {} },

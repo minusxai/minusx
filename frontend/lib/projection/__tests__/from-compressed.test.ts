@@ -66,6 +66,30 @@ describe('compressedToAugmentedFiles', () => {
     expect(out.file.queryResults?.[0].data).toBeUndefined();
   });
 
+  it('maps a file screenshot (CompressedFileState.image) into the image facet', () => {
+    const withImg: CompressedAugmentedFile = {
+      fileState: { id: 1, name: 'q1', path: '/org/q1', type: 'question', isDirty: false, image: { key: 'file:1:abc', url: 'https://s3/shot.jpg' } },
+      references: [],
+      queryResults: [],
+    };
+    expect(compressedToAugmentedFiles(withImg).file.image).toEqual({
+      key: 'file:1:abc',
+      image: { type: 'image', url: 'https://s3/shot.jpg' },
+    });
+  });
+
+  it('maps a base64 file screenshot (no url) into the image facet', () => {
+    const withImg: CompressedAugmentedFile = {
+      fileState: { id: 1, name: 'q1', path: '/org/q1', type: 'question', isDirty: false, image: { key: 'k', data: 'B64', mimeType: 'image/jpeg' } },
+      references: [],
+      queryResults: [],
+    };
+    expect(compressedToAugmentedFiles(withImg).file.image).toEqual({
+      key: 'k',
+      image: { type: 'image', data: 'B64', mimeType: 'image/jpeg' },
+    });
+  });
+
   it('omits the content facet when the file has no markup', () => {
     const noMarkup: CompressedAugmentedFile = {
       fileState: { id: 5, name: 'f', path: '/org/f', type: 'folder', isDirty: false },
