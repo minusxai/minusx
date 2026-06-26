@@ -9,6 +9,7 @@
  *
  * Not safe for server/Node.js bundles — uses Canvas API.
  */
+import { AGENT_IMAGE_JPEG_QUALITY, CHART_WATERMARK_PADDING_PX, CHART_WATERMARK_LOGO_SCALE } from '@/lib/screenshot/constants';
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -52,7 +53,7 @@ export async function toJpegObjectUrl(
 
     // When padding=true, add a constant P px strip on both top and bottom so the
     // chart is symmetrically framed. The watermark sits in the bottom-right P×P square.
-    const P = 48; // constant padding in px
+    const P = CHART_WATERMARK_PADDING_PX; // constant padding in px
     const topPad    = padding && addWatermark ? P : 0;
     const bottomPad = padding && addWatermark ? P : 0;
 
@@ -75,7 +76,7 @@ export async function toJpegObjectUrl(
         if (padding) {
           // Logo sized to 60% of P, centred in the bottom-right P×P square.
           // With a square logo (logox is 65×65) this gives equal gaps on all four sides.
-          const logoSize = Math.round(P * 0.6); // fits within P with 20% gap each side
+          const logoSize = Math.round(P * CHART_WATERMARK_LOGO_SCALE); // fits within P with 20% gap each side
           const logoW = Math.round(logoSize * aspect);
           const logoH = logoSize;
           const logoX = (canvasW - P) + Math.floor((P - logoW) / 2);
@@ -99,7 +100,7 @@ export async function toJpegObjectUrl(
       canvas.toBlob(
         blob => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('Canvas toBlob failed'))),
         'image/jpeg',
-        0.85,
+        AGENT_IMAGE_JPEG_QUALITY,
       );
     });
   } finally {

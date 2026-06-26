@@ -9,6 +9,7 @@
  */
 import { toJpeg } from 'html-to-image';
 import { getCachedFontEmbedCSS } from '@/lib/screenshot/font-embed-cache';
+import { AGENT_IMAGE_JPEG_QUALITY } from '@/lib/screenshot/constants';
 
 const OG_ASPECT = 1200 / 630;
 
@@ -23,7 +24,7 @@ export async function captureStoryPreview(fileId: number): Promise<boolean> {
       height,
       pixelRatio: Math.max(1, 1200 / width), // ~1200px-wide source for the card
       backgroundColor: '#ffffff',
-      quality: 0.9,
+      quality: AGENT_IMAGE_JPEG_QUALITY,
       // cacheBust was forcing a re-fetch of every embedded resource on each capture — dropped.
       // Reuse the cached, font-agnostic @font-face embedding instead of html-to-image re-doing it.
       fontEmbedCSS: await getCachedFontEmbedCSS(el),

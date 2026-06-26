@@ -8,7 +8,7 @@
  */
 import { toJpeg, toPng } from 'html-to-image';
 import { getCachedFontEmbedCSS } from './font-embed-cache';
-import { AGENT_IMAGE_MAX_PX } from './constants';
+import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_PIXEL_RATIO, AGENT_IMAGE_JPEG_QUALITY } from './constants';
 import type { ScreenshotOptions } from './types';
 
 export type CaptureOptions = ScreenshotOptions & { colorMode: 'light' | 'dark' };
@@ -23,7 +23,7 @@ export async function captureElementBlob(element: HTMLElement, opts: CaptureOpti
     pixelRatio,
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     filter: opts.filter,
-    quality: opts.quality ?? 0.9,
+    quality: opts.quality ?? AGENT_IMAGE_JPEG_QUALITY,
     fontEmbedCSS: await getCachedFontEmbedCSS(element),
   });
   const blob = await fetch(dataURL).then(r => r.blob());
@@ -141,14 +141,14 @@ export async function captureRegionBlob(
   const maxOutputPx = opts.maxOutputPx ?? AGENT_IMAGE_MAX_PX;
   // `opts.pixelRatio` (when given) is the device cap, not the render ratio: we render no finer than
   // the output cap needs, so a large selection rasterizes the target at <1× instead of device DPR.
-  const deviceCap = opts.pixelRatio ?? Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+  const deviceCap = opts.pixelRatio ?? Math.min(AGENT_IMAGE_PIXEL_RATIO, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
   const pixelRatio = regionPixelRatio(selection, maxOutputPx, deviceCap);
   const toImage = (opts.format ?? 'jpeg') === 'png' ? toPng : toJpeg;
   const dataURL = await toImage(target, {
     pixelRatio,
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     filter: opts.filter,
-    quality: opts.quality ?? 0.92,
+    quality: opts.quality ?? AGENT_IMAGE_JPEG_QUALITY,
     fontEmbedCSS: await getCachedFontEmbedCSS(target),
   });
   const img = await loadImage(dataURL);
@@ -161,7 +161,7 @@ export async function captureRegionBlob(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get a 2D canvas context for cropping');
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
-  return canvasToBlob(canvas, (opts.format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? 0.92);
+  return canvasToBlob(canvas, (opts.format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
 }
 
 /** Capture a FileView (question/dashboard/story/notebook/report) by its `data-file-id`. */

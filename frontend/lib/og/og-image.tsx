@@ -18,6 +18,8 @@ async function blurScreenshot(screenshot: string, tone: CoverTone): Promise<stri
     input = Buffer.from(new Uint8Array(ab));
   }
   const brightness = tone === 'light' ? 1.12 : 0.85;
+  // Intentionally NOT AGENT_IMAGE_JPEG_QUALITY: this is a heavily blurred decorative backdrop for
+  // the OG card, so a lower quality is fine and keeps the card small.
   const out = await sharp(input).blur(5).modulate({ brightness }).jpeg({ quality: 80 }).toBuffer();
   return `data:image/jpeg;base64,${out.toString('base64')}`;
 }
