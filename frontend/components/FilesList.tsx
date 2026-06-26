@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, HStack, Text, Icon, VStack, Flex, SimpleGrid, Button, Dialog, Portal, CloseButton } from '@chakra-ui/react';
-import { LuFiles, LuChevronDown, LuChevronRight, LuCopy, LuTrash2 } from 'react-icons/lu';
+import { LuFiles, LuChevronDown, LuChevronRight, LuCopy, LuTrash2, LuFolderInput } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
 import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
@@ -431,10 +431,20 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected
             </Text>
           </HStack>
-          <HStack gap={2}>
+          <HStack gap={1.5}>
+            {/* Neutral actions — Duplicate & Move share one identical chip treatment */}
             <Button
               size="xs"
+              h={7}
+              px={3}
+              gap={1.5}
               variant="outline"
+              bg="bg.surface"
+              borderColor="border.emphasized"
+              color="fg.default"
+              fontFamily="mono"
+              fontWeight="500"
+              _hover={{ bg: 'bg.muted' }}
               onClick={handleBulkDuplicate}
               loading={bulkBusy}
               disabled={duplicableSelected.length === 0}
@@ -445,21 +455,36 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
             </Button>
             <Button
               size="xs"
-              bg="accent.teal"
-              color="white"
-              _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+              h={7}
+              px={3}
+              gap={1.5}
+              variant="outline"
+              bg="bg.surface"
+              borderColor="border.emphasized"
+              color="fg.default"
+              fontFamily="mono"
+              fontWeight="500"
+              _hover={{ bg: 'bg.muted' }}
               onClick={() => setShowBulkMoveModal(true)}
               disabled={selectedFileIds.size === 0}
               aria-label="Move"
             >
+              <Icon as={LuFolderInput} boxSize={3.5} />
               Move
             </Button>
+            {/* Destructive action — same chip shape, red accent only */}
             <Button
               size="xs"
+              h={7}
+              px={3}
+              gap={1.5}
               variant="outline"
+              bg="bg.surface"
+              borderColor="fg.error/30"
               color="fg.error"
-              borderColor="fg.error/40"
-              _hover={{ bg: 'fg.error/10' }}
+              fontFamily="mono"
+              fontWeight="500"
+              _hover={{ bg: 'fg.error/10', borderColor: 'fg.error/50' }}
               onClick={() => setShowBulkDeleteDialog(true)}
               disabled={deletableSelected.length === 0}
               aria-label="Delete"
@@ -467,9 +492,17 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               <Icon as={LuTrash2} boxSize={3.5} />
               Delete
             </Button>
+            {/* Divider sets the dismissive action apart from the operations */}
+            <Box w="1px" h={4} bg="border.emphasized" mx={1} />
             <Button
               size="xs"
+              h={7}
+              px={3}
               variant="ghost"
+              color="fg.muted"
+              fontFamily="mono"
+              fontWeight="500"
+              _hover={{ bg: 'bg.muted', color: 'fg.default' }}
               onClick={exitSelectionMode}
               aria-label="Cancel selection"
             >
