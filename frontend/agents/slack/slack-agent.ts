@@ -37,6 +37,7 @@ export class SlackAgent extends RemoteAnalystAgent {
       connection_id: this.context.connectionId ?? '',
       home_folder: '',
       preloaded_skills: '',
+      current_date: new Date().toISOString().slice(0, 10),
     });
     const addendum = renderPrompt('slack_addendum', {});
     return `${base}\n\n${addendum}`;

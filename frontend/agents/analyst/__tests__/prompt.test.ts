@@ -72,20 +72,30 @@ describe('AnalystAgent skills rendering', () => {
 });
 
 // App state moved OUT of buildUserContent into the single projection pass (buildMessages →
-// projectMessages). buildUserContent now emits only <CurrentDate> + attachments + goal.
-describe('AnalystAgent buildUserContent (no app state here anymore)', () => {
-  it('emits the <CurrentDate> context block then the RAW goal — no <AppState>', () => {
+// projectMessages). The current date moved INTO the system prompt (NOT per-message), so a turn's
+// bytes don't change when it scrolls from current to prior (which broke the message-history cache).
+// buildUserContent now emits only attachments + images + the raw goal — NO <CurrentDate>, NO <AppState>.
+describe('AnalystAgent buildUserContent (no app state / no per-message date)', () => {
+  it('emits just the RAW goal — no <AppState>, no <CurrentDate>', () => {
     const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
     const content = agent.buildUserContent();
-    expect(content).toHaveLength(2);
+    expect(content).toHaveLength(1);
     expect(content[0].type).toBe('text');
     expect(content[0].text).not.toContain('<AppState>');
-    expect(content[0].text).toMatch(/<CurrentDate>\d{4}-\d{2}-\d{2}<\/CurrentDate>/);
+    expect(content[0].text).not.toContain('<CurrentDate>');
     // The goal is a raw text block — no <Question> wrapper.
-    expect(content[1].text).toBe('how many users?');
+    expect(content[0].text).toBe('how many users?');
   });
 
-  it('threads ImageContent items between the context block and the raw goal', () => {
+  it('the current date is in the SYSTEM PROMPT, not in any user message (cache stability)', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const sp: string = newAgent().getSystemPrompt();
+    expect(sp).toContain(`Current date: ${today}`);
+    // and it must NOT leak into the per-turn user content
+    expect(newAgent().buildUserContent().every((c: { type: string; text?: string }) => !(c.type === 'text' && c.text?.includes('<CurrentDate>')))).toBe(true);
+  });
+
+  it('threads ImageContent items before the raw goal', () => {
     const orch = new Orchestrator([AnalystAgent]);
     const userMessage = [
       { type: 'text' as const, text: 'see chart' },
@@ -94,10 +104,9 @@ describe('AnalystAgent buildUserContent (no app state here anymore)', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agent: any = new AnalystAgent(orch, { userMessage } as any, ctx);
     const content = agent.buildUserContent();
-    expect(content).toHaveLength(3);
-    expect(content[0].text).toContain('<CurrentDate>');
-    expect(content[1].type).toBe('image');
-    expect(content[2].text).toBe('see chart');
+    expect(content).toHaveLength(2);
+    expect(content[0].type).toBe('image');
+    expect(content[1].text).toBe('see chart');
   });
 
   it('injects image attachments (base64) and text attachments from context', () => {

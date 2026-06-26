@@ -100,6 +100,10 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       }),
       connection_id: this.context.connectionId ?? '',
       home_folder: this.context.homeFolder ?? '',
+      // Current date lives in the system prompt (changes at most once a day), NOT in each user
+      // message — a per-turn <CurrentDate> block changed a message's bytes when it scrolled from
+      // current to prior, breaking the message-history prompt cache every turn.
+      current_date: new Date().toISOString().slice(0, 10),
       // Full content of page-relevant + selected skills, injected upfront.
       preloaded_skills: buildPreloadedSkillsContent({
         tree: PROMPTS,
@@ -110,12 +114,11 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
   }
 
   /**
-   * Builds the NON-app-state part of the user turn: `<CurrentDate>`, text `<Attachment>` blocks,
-   * message + attachment images, and the bare goal text. The `<AppState>` block (with its
-   * `<file_markup>` and image facets) is NOT rendered here — it is attached as rich state in
-   * {@link buildMessages} and rendered, diffed against the whole conversation, by the single
-   * `projectMessages` pass. (Previously app state was stripped + markup-pulled inline here; that
-   * scattered boundary logic now lives in `lib/projection`.)
+   * Builds the NON-app-state part of the user turn: text `<Attachment>` blocks, message +
+   * attachment images, and the bare goal text. The `<AppState>` block is attached as rich state in
+   * {@link buildMessages} and rendered/diffed by the single `projectMessages` pass. The current
+   * date is NOT here — it lives in the system prompt (see getSystemPrompt), so a turn's bytes don't
+   * change when it scrolls from current to prior (which would break the message-history cache).
    */
   protected buildUserContent(): (TextContent | ImageContent)[] {
     const raw = this.userMessage;
@@ -129,7 +132,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       .join('\n');
 
     // Attachments (server-normalized): images → ImageContent (base64), text →
-    // <Attachment …> blocks appended to the context block.
+    // <Attachment …> blocks.
     const attachments = this.context.attachments ?? [];
     const attachmentImages: ImageContent[] = attachments
       .filter((a): a is Extract<AgentAttachment, { type: 'image' }> => a.type === 'image')
@@ -142,15 +145,10 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       })
       .join('\n');
 
-    const date = new Date().toISOString().slice(0, 10);
-    const contextText = `<CurrentDate>${date}</CurrentDate>` + (textAttachments ? `\n${textAttachments}` : '');
-
-    return [
-      { type: 'text', text: contextText },
-      ...msgImages,
-      ...attachmentImages,
-      { type: 'text', text: goal },
-    ];
+    const blocks: (TextContent | ImageContent)[] = [];
+    if (textAttachments) blocks.push({ type: 'text', text: textAttachments });
+    blocks.push(...msgImages, ...attachmentImages, { type: 'text', text: goal });
+    return blocks;
   }
 
   /**
