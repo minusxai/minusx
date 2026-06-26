@@ -15,25 +15,43 @@ export interface ContextSizeEstimate {
   sections: ContextSizeSection[];
 }
 
+// The provider's prompt cache covers a contiguous PREFIX of the WIRE serialization, which is:
+// system prompt → tool definitions → PRIOR-turn messages (conversation + tool-call history). Only
+// these "stable" sections can be cached, and this is the order the cached prefix fills.
+const CACHEABLE_WIRE_ORDER = [
+  'system_prompt',
+  'tool_definitions',
+  'conversation_history',
+  'tool_call_history',
+  'misc_other',
+] as const;
+
 /**
  * How many tokens of EACH section were served from the provider's prompt cache last turn.
  *
- * The provider caches a contiguous PREFIX of the context; `cachedTokens` (usage.cacheRead) is the
- * length of that prefix. `sections` are in prefix order, so each section's cached portion is the
- * overlap of its `[start, end)` token range with `[0, cachedTokens)`. Returns a number per section,
- * positionally aligned to `sections`.
+ * `cachedTokens` (usage.cacheRead) is the length of the cached prefix. That prefix only ever covers
+ * the STABLE sections ({@link CACHEABLE_WIRE_ORDER}); the CURRENT turn's content (app state, file
+ * markup, attachments, and the not-yet-sent next user message) is fresh and is never cached — it
+ * always reports 0, no matter how large the prefix. The prefix is distributed across the cacheable
+ * sections in wire order; a section straddling the boundary is approximate (the boundary is the
+ * provider's exact token count, the section sizes are char-based estimates). Returns a number per
+ * section, positionally aligned to `sections`.
  */
 export function cachedTokensPerSection(
   sections: ContextSizeSection[],
   cachedTokens: number | undefined,
 ): number[] {
-  const cached = Math.max(0, cachedTokens ?? 0);
-  let start = 0;
-  return sections.map((section) => {
-    const inPrefix = Math.min(section.tokens, Math.max(0, cached - start));
-    start += section.tokens;
-    return inPrefix;
-  });
+  const tokensByKey = new Map(sections.map((s) => [s.key, s.tokens]));
+  const cachedByKey = new Map<string, number>();
+  let remaining = Math.max(0, cachedTokens ?? 0);
+  for (const key of CACHEABLE_WIRE_ORDER) {
+    const tokens = tokensByKey.get(key);
+    if (tokens === undefined) continue;
+    const take = Math.min(tokens, remaining);
+    cachedByKey.set(key, take);
+    remaining -= take;
+  }
+  return sections.map((section) => cachedByKey.get(section.key) ?? 0);
 }
 
 const APPROX_CHARS_PER_TOKEN = 4;
