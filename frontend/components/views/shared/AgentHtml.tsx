@@ -98,8 +98,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
 
     // Fresh document each build. <style data-mx-app-styles> sits FIRST (in <head>) so the story's own
     // <style> blocks (in <body>, later in document order) win ties.
+    // `<base target="_top">`: links inside an iframe navigate the IFRAME by default, which would load
+    // the whole app inside it (e.g. clicking an embedded chart's title → /f/<id>). Targeting _top sends
+    // every link navigation (chart titles, author links) to the top window instead.
     doc.open();
-    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style data-mx-app-styles></style></head><body></body></html>');
+    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top"><style data-mx-app-styles></style></head><body></body></html>');
     doc.close();
     docRef.current = doc;
     const root = doc.documentElement;
