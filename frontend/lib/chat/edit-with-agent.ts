@@ -142,14 +142,14 @@ interface SelectionLike {
 }
 
 /**
- * Read the active text selection within a story's shadow root. Chrome scopes a
- * shadow selection to the non-standard `shadowRoot.getSelection()`; Firefox/Safari
- * surface shadow-tree content through the document selection, so fall back to
- * `window.getSelection()` (also the path when `root` is null).
+ * Read the active text selection within a story. The story renders inside a same-origin iframe, so
+ * pass its `contentWindow` (which has its own `getSelection()` scoped to the iframe document). Falls
+ * back to the top `window.getSelection()` when `root` is null or has no `getSelection` (also covers a
+ * shadow root's non-standard `shadowRoot.getSelection()` for back-compat).
  */
-export function getShadowRootSelection(root: ShadowRoot | null): SelectionLike | null {
-  const shadowGetSelection = (root as unknown as { getSelection?: () => SelectionLike | null } | null)?.getSelection;
-  if (shadowGetSelection) return shadowGetSelection.call(root);
+export function getShadowRootSelection(root: { getSelection?: () => SelectionLike | null } | null): SelectionLike | null {
+  const scopedGetSelection = root?.getSelection;
+  if (scopedGetSelection) return scopedGetSelection.call(root);
   return window.getSelection() as unknown as SelectionLike | null;
 }
 

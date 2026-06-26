@@ -1,10 +1,9 @@
 /**
  * StorySelectionPopover — shows the "Interact with {agentName}" pill once a selection
- * gesture completes (mouse-up) inside the story shadow root, but ONLY while the story
- * is in edit mode (active). The story body lives in a shadow tree, so selection is read
- * via getShadowRootSelection; jsdom's ShadowRoot has no getSelection, so the component
- * falls back to window.getSelection — which we stub with a real range rect. Queries use
- * aria-labels only. (Sibling of components/lexical/__tests__/edit-selection-plugin.ui.test.tsx.)
+ * gesture completes (mouse-up) inside the story iframe, but ONLY while the story is in edit
+ * mode (active). The story body lives in a same-origin iframe, so selection is read via the
+ * iframe's contentWindow.getSelection (stubbed here with a real range rect) and the gesture is
+ * listened for on the iframe's contentDocument. Queries use aria-labels only.
  */
 
 vi.mock('@/lib/hooks/useConfigs', () => ({
@@ -19,21 +18,24 @@ import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
 const SOURCE: EditWithAgentSource = { editorKind: 'richtext', fileName: 'Q3 Story', filePath: '/org/Q3-Story', fileId: 12 };
 
-/** Render the popover with a host element that owns an (empty) shadow root. */
+/** Render the popover wired to a real (empty) iframe — the story's rendering surface. */
 function Harness({ active }: { active: boolean }) {
-  const hostRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   return (
     <>
-      <div ref={hostRef} />
-      <StorySelectionPopover hostRef={hostRef} source={SOURCE} active={active} />
+      <iframe ref={iframeRef} title="story frame" />
+      <StorySelectionPopover iframeRef={iframeRef} source={SOURCE} active={active} />
     </>
   );
 }
 
-const finishSelection = () => fireEvent.mouseUp(document.body);
+function getIframe(): HTMLIFrameElement {
+  return document.querySelector('iframe[title="story frame"]') as HTMLIFrameElement;
+}
 
-const stubSelection = (text: string, collapsed = false) => {
-  window.getSelection = (() => ({
+const stubSelection = (iframe: HTMLIFrameElement, text: string, collapsed = false) => {
+  // The component reads the selection from the iframe's contentWindow.
+  (iframe.contentWindow as unknown as { getSelection: () => unknown }).getSelection = () => ({
     isCollapsed: collapsed,
     rangeCount: 1,
     toString: () => text,
@@ -41,37 +43,42 @@ const stubSelection = (text: string, collapsed = false) => {
       getClientRects: () => [{ right: 120, bottom: 40 }],
       getBoundingClientRect: () => ({ right: 120, bottom: 40 }),
     }),
-  })) as unknown as typeof window.getSelection;
+  });
 };
 
-beforeEach(() => {
-  stubSelection('hello world');
-});
+// A selection gesture fires inside the iframe document (iframe events don't reach the top document).
+const finishSelection = (iframe: HTMLIFrameElement) => fireEvent.mouseUp(iframe.contentDocument!.body);
 
 describe('StorySelectionPopover', () => {
   it('shows the pill once the selection gesture finishes (mouse-up) in edit mode', async () => {
     renderWithProviders(<Harness active />);
-    finishSelection();
+    const iframe = getIframe();
+    stubSelection(iframe, 'hello world');
+    finishSelection(iframe);
     expect(await screen.findByLabelText('Interact with MinusX')).toBeInTheDocument();
   });
 
   it('does NOT show the pill when not in edit mode (active=false)', async () => {
     renderWithProviders(<Harness active={false} />);
-    finishSelection();
+    const iframe = getIframe();
+    stubSelection(iframe, 'hello world');
+    finishSelection(iframe);
     await waitFor(() => expect(screen.queryByLabelText('Interact with MinusX')).not.toBeInTheDocument());
   });
 
   it('does not show the pill for a collapsed (caret) selection', async () => {
     renderWithProviders(<Harness active />);
-    stubSelection('hello world', /* collapsed */ true);
-    finishSelection();
+    const iframe = getIframe();
+    stubSelection(iframe, 'hello world', /* collapsed */ true);
+    finishSelection(iframe);
     await waitFor(() => expect(screen.queryByLabelText('Interact with MinusX')).not.toBeInTheDocument());
   });
 
   it('does not show the pill for a whitespace-only selection', async () => {
     renderWithProviders(<Harness active />);
-    stubSelection('   ');
-    finishSelection();
+    const iframe = getIframe();
+    stubSelection(iframe, '   ');
+    finishSelection(iframe);
     await waitFor(() => expect(screen.queryByLabelText('Interact with MinusX')).not.toBeInTheDocument());
   });
 });

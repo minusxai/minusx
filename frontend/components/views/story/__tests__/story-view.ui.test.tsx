@@ -57,10 +57,10 @@ const content: StoryContent = {
 
 const emptyContent: StoryContent = { description: null, story: null };
 
-/** The story renders inside a shadow root on the story host. */
-function storyRoot(): ShadowRoot {
-  const host = screen.getByLabelText('Story document');
-  return host.shadowRoot!;
+/** The story renders inside a same-origin iframe (its contentDocument). */
+function storyRoot(): HTMLElement {
+  const iframe = screen.getByLabelText('Story document') as HTMLIFrameElement;
+  return iframe.contentDocument!.body;
 }
 
 describe('StoryView', () => {
@@ -86,20 +86,18 @@ describe('StoryView', () => {
     });
   });
 
-  it('hoists the COMPLETE @import (web fonts) to document.head and out of the shadow styles', async () => {
-    const { unmount } = renderWithProviders(<StoryView content={content} />);
+  it('keeps the @import (web fonts) inside the iframe story styles — loads natively, no hoisting', async () => {
+    // Unlike a shadow root, an iframe document loads @import web-fonts natively, so the import stays
+    // in place (it is NOT hoisted to the top document.head). The complete import — including the part
+    // after the in-URL semicolons — must survive intact.
+    renderWithProviders(<StoryView content={content} />);
     await waitFor(() => {
-      const fontTag = document.head.querySelector('style[data-mx-story-fonts]');
-      // The full import survives, including the part after the in-URL semicolons
-      expect(fontTag?.textContent).toContain(FONT_IMPORT);
+      const storyStyle = Array.from(storyRoot().querySelectorAll('style'))
+        .find(s => s.textContent?.includes('.hs h1'));
+      expect(storyStyle?.textContent).toContain(FONT_IMPORT);
+      expect(storyStyle?.textContent).toContain('.hs{--ink:#e8dfc8;');
     });
-    const storyStyle = Array.from(storyRoot().querySelectorAll('style'))
-      .find(s => s.textContent?.includes('.hs h1'));
-    // No import remnants left behind to poison the following rules
-    expect(storyStyle?.textContent).not.toContain('@import');
-    expect(storyStyle?.textContent).not.toContain('fonts.googleapis.com');
-    expect(storyStyle?.textContent).toContain('.hs{--ink:#e8dfc8;');
-    unmount();
+    // Nothing hoisted into the top document any more.
     expect(document.head.querySelector('style[data-mx-story-fonts]')).toBeNull();
   });
 

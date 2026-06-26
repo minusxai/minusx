@@ -26,7 +26,7 @@ const APP_STYLES_BASE_CSS =
  * blocks win ties. Re-run after portals mount: emotion injects styles lazily
  * on first render.
  */
-export function mirrorAppStyles(root: ShadowRoot) {
+export function mirrorAppStyles(root: ShadowRoot | Document) {
   const tag = root.querySelector('style[data-mx-app-styles]');
   if (!tag) return;
   const css: string[] = [APP_STYLES_BASE_CSS];

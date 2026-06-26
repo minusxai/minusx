@@ -2,15 +2,15 @@
 
 /**
  * StorySelectionPopover — renders the floating "Interact with {agentName}" pill anchored
- * to a non-collapsed text selection inside a story's shadow root (see EditWithAgentPopover).
+ * to a non-collapsed text selection inside a story's iframe (see EditWithAgentPopover).
  * It is the story-edit-mode counterpart of EditSelectionPlugin (Lexical) and the SQL
  * editor's popover: selecting text → Ask / Edit that selection via chat.
  *
  * Two story-specific wrinkles vs. the Lexical plugin:
- *  - The story body lives in a SHADOW ROOT, so the selection is read via
- *    getShadowRootSelection (Chrome's shadowRoot.getSelection, else the document one).
- *    mouse/key events from an OPEN shadow root are composed → they still bubble to
- *    `document`, so the document-level listeners fire as usual.
+ *  - The story body lives in a same-origin IFRAME, so the selection is read via the iframe's
+ *    `contentWindow.getSelection()` and its events are listened for on the iframe's `contentDocument`
+ *    (iframe events do NOT bubble to the parent document). The selection rect is in the iframe's
+ *    coordinate space, so we offset it by the iframe's bounding box to position the pill in the page.
  *  - It is gated on `active` (edit mode only) — reading is a non-editable surface.
  */
 
@@ -23,14 +23,14 @@ import {
 } from '@/lib/chat/edit-with-agent';
 
 interface StorySelectionPopoverProps {
-  /** Host element whose `.shadowRoot` holds the rendered story. */
-  hostRef: RefObject<HTMLDivElement | null>;
+  /** The iframe whose document holds the rendered story. */
+  iframeRef: RefObject<HTMLIFrameElement | null>;
   source: EditWithAgentSource;
   /** Only watch for selections while the story is in edit mode. */
   active: boolean;
 }
 
-export default function StorySelectionPopover({ hostRef, source, active }: StorySelectionPopoverProps) {
+export default function StorySelectionPopover({ iframeRef, source, active }: StorySelectionPopoverProps) {
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   // Once the user opens the textbox, focus leaves the story and the selection
@@ -43,35 +43,39 @@ export default function StorySelectionPopover({ hostRef, source, active }: Story
     setSelectedText('');
   }, []);
 
-  // Show the pill at the CURRENT selection — only called once a selection gesture
-  // finishes (mouse-up / key-up), so the pill doesn't follow the cursor mid-drag.
+  // Show the pill at the CURRENT selection (in iframe coords → offset to page coords) — only called
+  // once a selection gesture finishes, so the pill doesn't follow the cursor mid-drag.
   const showAtSelection = useCallback(() => {
     if (pinnedRef.current) return;
-    const root = hostRef.current?.shadowRoot ?? null;
-    const result = computeSelectionPopoverPosition(getShadowRootSelection(root));
-    if (!result) { hide(); return; }
-    setPosition({ x: result.x, y: result.y });
+    const iframe = iframeRef.current;
+    const win = iframe?.contentWindow ?? null;
+    const result = computeSelectionPopoverPosition(getShadowRootSelection(win));
+    if (!result || !iframe) { hide(); return; }
+    const box = iframe.getBoundingClientRect();
+    setPosition({ x: result.x + box.left, y: result.y + box.top });
     setSelectedText(result.text);
-  }, [hostRef, hide]);
+  }, [iframeRef, hide]);
 
-  // Reveal only when a selection gesture completes, and only in edit mode. When edit
-  // mode turns off (or on unmount) the cleanup unpins + clears any stale pill.
+  // Reveal only when a selection gesture completes, and only in edit mode. Listen on the IFRAME's
+  // document — its events don't reach the parent. Re-bind when the iframe document changes.
   useEffect(() => {
     if (!active) return;
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
     const onMouseUp = () => requestAnimationFrame(showAtSelection);
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.shiftKey || e.key === 'Shift') requestAnimationFrame(showAtSelection);
     };
-    document.addEventListener('mouseup', onMouseUp);
-    document.addEventListener('keyup', onKeyUp);
+    doc.addEventListener('mouseup', onMouseUp);
+    doc.addEventListener('keyup', onKeyUp);
     return () => {
-      document.removeEventListener('mouseup', onMouseUp);
-      document.removeEventListener('keyup', onKeyUp);
+      doc.removeEventListener('mouseup', onMouseUp);
+      doc.removeEventListener('keyup', onKeyUp);
       pinnedRef.current = false;
       setPosition(null);
       setSelectedText('');
     };
-  }, [active, showAtSelection]);
+  }, [active, showAtSelection, iframeRef]);
 
   // Hide on scroll (the anchored rect would otherwise drift).
   useEffect(() => {

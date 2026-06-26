@@ -1,45 +1,20 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Box, EnvironmentProvider } from '@chakra-ui/react';
+import { createRoot, type Root } from 'react-dom/client';
 
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { serializeEditedStory } from '@/lib/html/serialize-story';
-import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
-import EmbeddedQuestionContainer from '@/components/containers/EmbeddedQuestionContainer';
-import StoryParamControl from '@/components/views/story/StoryParamControl';
-import { paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story-params';
+import StoryEmbeds, {
+  type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
+} from '@/components/views/shared/StoryEmbeds';
+import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
+import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent } from '@/lib/data/story-question';
 import { numberFromEl } from '@/lib/data/story-number';
-import type { InlineNumberEmbed } from '@/lib/data/story-number';
-import InlineNumber from '@/components/views/story/InlineNumber';
-import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
-import type { QuestionContent } from '@/lib/types';
-
-interface ChartTarget {
-  el: HTMLElement;
-  questionId: number;
-}
-
-interface NumberTarget {
-  el: HTMLElement;
-  embed: InlineNumberEmbed;
-}
-
-interface InlineChartTarget {
-  el: HTMLElement;
-  content: QuestionContent;
-  /** single_value: render compact + without the chart-card chrome so the number blends in. */
-  bare?: boolean;
-}
-
-interface ParamTarget {
-  el: HTMLElement;
-  param: StoryParam;
-}
+import { useAppSelector } from '@/store/hooks';
 
 interface AgentHtmlProps {
   html: string;
@@ -51,10 +26,7 @@ interface AgentHtmlProps {
   readOnly?: boolean;
   /**
    * Fluid mode (mobile): render at 100% of the container width and let the
-   * authored flow layout reflow, instead of pinning to `width`px (which the
-   * parent then transform-scales). A small CSS shim caps fixed-width chart
-   * embeds / media to the viewport so they don't overflow. Designed for the
-   * agent's encouraged "stacked full-width sections" layout.
+   * authored flow layout reflow, instead of pinning to `width`px.
    */
   fluid?: boolean;
   /**
@@ -63,24 +35,13 @@ interface AgentHtmlProps {
    * imperative `serialize()` handle.
    */
   editable?: boolean;
-  /**
-   * Shared story param values (keyed by `<Param name>`). Default/current values; the reader
-   * changes them via the inline `<Param>` controls and every embedded `<Question>` re-runs.
-   */
+  /** Shared story param values (keyed by `<Param name>`). Default/current values. */
   paramValues?: Record<string, unknown>;
   /** Called when the reader changes a param (so the page can persist/submit the values). */
   onParamValuesChange?: (values: Record<string, unknown>) => void;
-  /**
-   * Request to edit an inline `<Number>`'s query. The footnote popover can't host Monaco's
-   * autocomplete inside the story shadow root, so StoryView opens the full SqlEditor in a
-   * light-DOM drawer; `apply(newQuery)` writes the edit back to the body placeholder + re-runs.
-   */
+  /** Request to edit an inline `<Number>`'s query (opens a light-DOM Monaco drawer). */
   onEditNumber?: (req: NumberQueryEditRequest) => void;
-  /**
-   * When set, a "Interact with {agentName}" pill appears on any text selection inside
-   * the story (edit mode only) — Ask / Edit that selection via chat. Omit for public /
-   * read-only renders. See StorySelectionPopover.
-   */
+  /** When set, a "Interact with {agentName}" pill appears on text selection (edit mode only). */
   selectionSource?: EditWithAgentSource;
 }
 
@@ -91,122 +52,84 @@ export interface NumberQueryEditRequest {
 }
 
 export interface AgentHtmlHandle {
-  /** Serialize the live (edited) shadow DOM back to a clean content.story string. */
+  /** Serialize the live (edited) iframe DOM back to a clean content.story string. */
   serialize: () => string | null;
 }
 
-// Placeholder sizing floors/defaults: title bar (~40px) + chart minHeight
-// (300px, ChartHost DEFAULT_CHART_STYLE) is the smallest tile that renders
-// without clipping.
+// Placeholder sizing floors/defaults (same contract as the dashboard grid).
 const MIN_CHART_W = 320;
 const MIN_CHART_H = 340;
 const DEFAULT_CHART_H = 400;
-// single_value embeds are just a number — far smaller floors so they read as inline figures.
 const SINGLE_VALUE_MIN_H = 48;
 const SINGLE_VALUE_DEFAULT_H = 120;
 
 /**
- * Renders one agent-authored HTML document into a shadow root on a
- * fixed-width logical canvas (fixed height for slides, content-driven for
- * story pages). The shadow tree natively scopes the document's <style>
- * blocks — they can't leak into the app and app CSS can't restyle the story —
- * while CSS variables (color-mode tokens) and document fonts still inherit,
- * so embedded charts keep the app theme. Scripts and event handlers are
- * stripped by sanitizeAgentHtml before injection. Every
- * `<div data-question-id="N">` placeholder is hydrated with a live embedded
- * question chart via a portal into the shadow root. @import lines in the
- * document's <style> blocks (web fonts) are hoisted to document.head —
- * font-faces declared inside shadow trees don't load.
+ * Renders one agent-authored HTML document into a SAME-ORIGIN IFRAME on a fixed-width logical canvas
+ * (fixed height for slides, content-driven for story pages). The iframe natively scopes the
+ * document's <style> blocks and @import web-fonts (which, unlike a shadow root, just load), while the
+ * app's stylesheet rules are mirrored in (mirrorAppStyles) so embedded charts keep the app theme.
+ * Scripts/handlers are stripped by sanitizeAgentHtml before injection.
+ *
+ * Live embeds (charts, inline questions, inline numbers, params) are rendered by a NESTED React root
+ * mounted INSIDE the iframe (see StoryEmbeds) and portaled into their `<div data-question-id="N">`-style
+ * placeholders — a nested root is required because iframe DOM events don't bubble to the parent
+ * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
   { html, width, height, readOnly = false, fluid = false, editable = false, paramValues, onParamValuesChange, onEditNumber, selectionSource },
   ref,
 ) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const fontTagRef = useRef<HTMLStyleElement | null>(null);
-  const importsRef = useRef<string[]>([]);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const docRef = useRef<Document | null>(null);
+  const reactRootRef = useRef<Root | null>(null);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
   const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
-  // The shared param context: the reader's current values, seeded once from the story
-  // defaults. (AgentHtml remounts via `key` when the story reloads, re-seeding.)
-  const [values, setValues] = useState<Record<string, unknown>>(paramValues ?? {});
-  const setParamValue = (name: string, v: unknown) => setValues((prev) => {
-    const next = { ...prev, [name]: v };
-    onParamValuesChange?.(next);
-    return next;
-  });
-  // Param defs (from the placeholders) → the QuestionParameter shape the embeds consume.
-  const externalParameters = useMemo(() => paramTargets.map((t) => storyParamToQuestionParameter(t.param)), [paramTargets]);
+  const colorMode = useAppSelector(s => s.ui.colorMode);
 
   const sanitized = useMemo(() => sanitizeAgentHtml(html || ''), [html]);
 
+  // ── Build the iframe document + discover embed placeholders ──────────────────────────────────
   useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!iframe || !doc) return;
 
-    // App styles first (story styles below win ties), then the document.
-    // <style> elements added via innerHTML DO apply (unlike <script>, which
-    // wouldn't execute — and is stripped anyway).
-    root.innerHTML = `<style data-mx-app-styles></style>${sanitized}`;
-    mirrorAppStyles(root);
+    // Fresh document each build. <style data-mx-app-styles> sits FIRST (in <head>) so the story's own
+    // <style> blocks (in <body>, later in document order) win ties.
+    doc.open();
+    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style data-mx-app-styles></style></head><body></body></html>');
+    doc.close();
+    docRef.current = doc;
+    const root = doc.documentElement;
+    root.classList.toggle('dark', colorMode === 'dark');
+    root.classList.toggle('light', colorMode !== 'dark');
+    doc.body.style.margin = '0';
+    // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
+    doc.body.innerHTML = sanitized;
+    mirrorAppStyles(doc);
 
-    // Fluid (mobile) shim: cap fixed-width chart embeds and media to the
-    // viewport so the authored 1280px layout reflows instead of overflowing.
-    // Appended last so it wins ties against the story's own rules. Charts keep
-    // their fixed px height (ECharts re-fits width); we never touch <canvas>.
+    // A hidden host for the nested React root that portals the live embeds into the placeholders below.
+    const embedRoot = doc.createElement('div');
+    embedRoot.setAttribute('data-mx-embed-root', '');
+    embedRoot.style.display = 'none';
+    doc.body.appendChild(embedRoot);
+
+    // Fluid (mobile) shim: cap fixed-width chart embeds / media to the viewport so the authored layout
+    // reflows instead of overflowing. Appended last so it wins ties. Never touches <canvas>.
     if (fluid) {
-      const shim = document.createElement('style');
+      const shim = doc.createElement('style');
       shim.setAttribute('data-mx-fluid-shim', '');
       shim.textContent =
-        // min-width:0 lets the embed shrink to its container when it's a flex/grid
-        // item (default min-width:auto would otherwise let a wide child — e.g. a
-        // many-column table with its own min-width — blow past the story's edge
-        // instead of letting the embed's internal overflow:auto scroll).
         '[data-question-id]{max-width:100%!important;width:100%!important;min-width:0!important}' +
-        'img,svg,video,table,pre{max-width:100%!important}' +
-        'img,video{height:auto!important}';
-      root.appendChild(shim);
+        'img,svg,video,table,pre{max-width:100%!important}img,video{height:auto!important}';
+      doc.body.appendChild(shim);
     }
 
-    // Hoist @import (web fonts) to document.head — font-faces don't load
-    // inside shadow trees. One reused tag, removed on unmount.
-    // Quoted URLs are matched atomically: Google Fonts URLs contain SEMICOLONS
-    // (weight lists like wght@0,700;0,900), so a naive [^;]+ would cut the
-    // import short and leave URL garbage to poison the next CSS rule.
-    const importRe = /@import\s+(?:"[^"]*"|'[^']*'|url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\))[^;{]*;/g;
-    const imports: string[] = [];
-    root.querySelectorAll('style:not([data-mx-app-styles])').forEach(style => {
-      const text = style.textContent || '';
-      const found = text.match(importRe);
-      if (!found) return;
-      imports.push(...found);
-      style.textContent = found.reduce((t, imp) => t.replace(imp, ''), text);
-    });
-    if (imports.length > 0) {
-      if (!fontTagRef.current) {
-        fontTagRef.current = document.createElement('style');
-        fontTagRef.current.setAttribute('data-mx-story-fonts', '');
-        document.head.appendChild(fontTagRef.current);
-      }
-      fontTagRef.current.textContent = imports.join('\n');
-    } else {
-      fontTagRef.current?.remove();
-      fontTagRef.current = null;
-    }
-    // Remember the hoisted @imports so edit-mode serialization can put them back
-    // into the saved story (they were stripped out of the story's <style>).
-    importsRef.current = imports;
-
-    // Sizing contract (dashboards enforce the same idea via DashboardLayoutItem min w/h grid
-    // units): honor explicit px sizes, default a missing height, and clamp below-minimum boxes —
-    // the tile (title bar + the chart's built-in 300px minHeight) can't physically render
-    // smaller, it would just clip. Applied identically to saved and inline embeds.
+    // Sizing contract: honor explicit px sizes, default a missing height, clamp below-minimum boxes.
     const sizeEmbedEl = (el: HTMLElement, minH = MIN_CHART_H, defaultH = DEFAULT_CHART_H) => {
-      el.replaceChildren(); // drop authored fallback content; the portal takes over
-      // Snapshot the AUTHORED inline style before we clamp, so edit-mode serialization can restore it.
+      el.replaceChildren();
       el.setAttribute('data-mx-osz', el.getAttribute('style') ?? '');
       const px = (v: string) => (v.endsWith('px') ? parseFloat(v) : NaN);
       const w = px(el.style.width);
@@ -217,45 +140,39 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     };
 
     const found: ChartTarget[] = [];
-    root.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
+    doc.querySelectorAll<HTMLElement>('[data-question-id]').forEach(el => {
       const questionId = parseInt(el.getAttribute('data-question-id') || '', 10);
       if (Number.isNaN(questionId)) return;
       sizeEmbedEl(el);
       found.push({ el, questionId });
     });
-    // <div data-question-inline="…"> → a story-local inline question (query/connection/viz live
-    // in the body, no saved file). Rendered live, just like a saved embed.
     const inlineFound: InlineChartTarget[] = [];
-    root.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
+    doc.querySelectorAll<HTMLElement>('[data-question-inline]').forEach(el => {
       const embed = inlineQuestionFromEl(el);
       if (!embed) return;
-      // A single_value embed is just a styled number — it should NOT get the tall 340px chart-card
-      // treatment. Render it COMPACT (small height floor + compact default) and CHROME-LIGHT (no
-      // card border/bg) so it blends into the surrounding editorial layout; the agent styles the
-      // figure via singleValueConfig + its own container.
       const isSingleValue = embed.vizSettings?.type === 'single_value';
       sizeEmbedEl(el, isSingleValue ? SINGLE_VALUE_MIN_H : MIN_CHART_H, isSingleValue ? SINGLE_VALUE_DEFAULT_H : DEFAULT_CHART_H);
       inlineFound.push({ el, content: inlineEmbedToQuestionContent(embed), bare: isSingleValue });
     });
-    // <span data-number-inline="…"> → an inline LIVE figure (not a chart card). Stays inline in
-    // the text flow — no sizing/clamping; InlineNumber renders the value in the span.
     const numbersFound: NumberTarget[] = [];
-    root.querySelectorAll<HTMLElement>('[data-number-inline]').forEach((el) => {
+    doc.querySelectorAll<HTMLElement>('[data-number-inline]').forEach(el => {
       const embed = numberFromEl(el);
       if (!embed) return;
       el.replaceChildren();
       numbersFound.push({ el, embed });
     });
-    // <div data-param-name="…"> → a reader filter control bound to the shared param context.
     const paramsFound: ParamTarget[] = [];
-    root.querySelectorAll<HTMLElement>('[data-param-name]').forEach((el) => {
-      const param = paramFromPlaceholderEl(el);
+    doc.querySelectorAll<HTMLElement>('[data-param-name]').forEach(el => {
+      const param: StoryParam | null = paramFromPlaceholderEl(el);
       if (!param) return;
       el.replaceChildren();
       paramsFound.push({ el, param });
     });
-    // Portal targets only exist after the shadow-root write, so discovery is
-    // necessarily effect → state.
+
+    // Mount the nested React root for this fresh document.
+    reactRootRef.current = createRoot(embedRoot);
+
+    // Discovery is necessarily effect → state (placeholders exist only after the doc write).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTargets(found);
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -264,26 +181,88 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     setNumberTargets(numbersFound);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setParamTargets(paramsFound);
-  }, [sanitized, fluid]);
 
-  // Remove the hoisted font tag when the story unmounts.
-  useEffect(() => () => {
-    fontTagRef.current?.remove();
-    fontTagRef.current = null;
-  }, []);
+    // Content-driven height: keep the iframe as tall as its content (no inner scrollbar).
+    let ro: ResizeObserver | undefined;
+    const syncHeight = () => {
+      if (height === undefined && iframeRef.current && docRef.current) {
+        iframeRef.current.style.height = `${docRef.current.body.scrollHeight}px`;
+      }
+    };
+    syncHeight();
+    if (height === undefined && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(syncHeight);
+      ro.observe(doc.body);
+    }
 
-  // Inline edit mode: make the story's top-level text containers contenteditable
-  // while keeping chart embeds locked as atomic, non-editable islands. Runs after
-  // the shadow tree + chart targets exist, and re-applies when `editable` flips —
-  // WITHOUT rebuilding the shadow root (that would re-mount the chart portals).
+    // Re-mirror app styles whenever the iframe tree mutates — emotion injects each tile's styles lazily
+    // (into the MAIN document.head) only when that tile mounts; mirrorAppStyles copies them across.
+    let debounce = 0;
+    const schedule = () => {
+      if (debounce) return;
+      debounce = window.setTimeout(() => { debounce = 0; if (docRef.current) mirrorAppStyles(docRef.current); }, 80);
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(doc.body, { childList: true, subtree: true });
+    const timers = [250, 1500, 3000].map(ms => window.setTimeout(() => { if (docRef.current) mirrorAppStyles(docRef.current); }, ms));
+
+    return () => {
+      ro?.disconnect();
+      observer.disconnect();
+      if (debounce) window.clearTimeout(debounce);
+      timers.forEach(t => window.clearTimeout(t));
+      // Defer unmount: cleanup runs during the parent's commit, and synchronously unmounting another
+      // root then warns ("unmount while React was already rendering"). The iframe doc is torn down with
+      // this component, so a microtask-later unmount is safe.
+      const root = reactRootRef.current;
+      reactRootRef.current = null;
+      // Defer so we don't unmount during the parent's commit (React warns about that). Only unmount if
+      // the embed host is STILL connected: on a remount / teardown the iframe document is already gone,
+      // so its nodes are detached and React's unmount would throw NOT_FOUND trying to detach them — in
+      // that case skip and let GC reclaim the orphaned fiber along with the destroyed document.
+      if (root) setTimeout(() => { if (embedRoot.isConnected) root.unmount(); }, 0);
+    };
+  }, [sanitized, fluid, height]); // colorMode handled separately so it doesn't rebuild the doc
+
+  // Render (and re-render) the nested embeds root with the latest targets/props.
   useEffect(() => {
-    const root = hostRef.current?.shadowRoot;
-    if (!root) return;
-    Array.from(root.children).forEach(el => {
-      if (el.tagName === 'STYLE') return;
+    const doc = docRef.current;
+    if (!doc || !reactRootRef.current) return;
+    reactRootRef.current.render(
+      <StoryEmbeds
+        doc={doc}
+        targets={targets}
+        inlineTargets={inlineTargets}
+        numberTargets={numberTargets}
+        paramTargets={paramTargets}
+        readOnly={readOnly}
+        editable={editable}
+        paramValues={paramValues}
+        onParamValuesChange={onParamValuesChange}
+        onEditNumber={onEditNumber}
+      />,
+    );
+  }, [targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber]);
+
+  // Keep the iframe's color-mode class in sync without rebuilding the whole document.
+  useEffect(() => {
+    const doc = docRef.current;
+    if (!doc) return;
+    doc.documentElement.classList.toggle('dark', colorMode === 'dark');
+    doc.documentElement.classList.toggle('light', colorMode !== 'dark');
+    mirrorAppStyles(doc); // token rules switch on the html.dark/light class
+  }, [colorMode]);
+
+  // Inline edit mode: make the story's top-level text containers contenteditable while keeping chart
+  // embeds locked as atomic, non-editable islands. Runs after the doc + targets exist.
+  useEffect(() => {
+    const doc = docRef.current;
+    if (!doc) return;
+    Array.from(doc.body.children).forEach(el => {
+      if (el.tagName === 'STYLE' || el.hasAttribute('data-mx-embed-root')) return;
       (el as HTMLElement).contentEditable = editable ? 'true' : 'inherit';
     });
-    root.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
+    doc.body.querySelectorAll<HTMLElement>('[data-question-id],[data-question-inline],[data-number-inline]').forEach(el => {
       el.contentEditable = 'false';
     });
   }, [editable, targets, inlineTargets, numberTargets, sanitized]);
@@ -291,169 +270,28 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // Read the edited story back out as a clean content.story string.
   useImperativeHandle(ref, () => ({
     serialize: () => {
-      const root = hostRef.current?.shadowRoot;
-      return root ? serializeEditedStory(root, importsRef.current) : null;
+      const doc = docRef.current;
+      return doc ? serializeEditedStory(doc.body, []) : null;
     },
   }), []);
 
-  // Emotion injects each embedded chart's styles lazily — only when that tile's
-  // body mounts. Tiles mount staggered on idle time (SmartEmbeddedQuestion
-  // Container gates each on requestIdleCallback), so a couple of fixed re-mirror
-  // timeouts race the late ones: a CSS-based viz like TrendPlot (vs. a
-  // self-sizing ECharts canvas) then renders unstyled — collapsed, top-left.
-  // Instead, re-mirror whenever the shadow tree itself mutates. A tile mounting
-  // its chart DOM is exactly such a mutation, and by then emotion has already
-  // inserted that tile's rules into the document sheets, so the copy catches
-  // them. Debounced to coalesce bursts; mirrorAppStyles no-ops when unchanged.
-  useEffect(() => {
-    const root = hostRef.current?.shadowRoot;
-    if (!root) return;
-    mirrorAppStyles(root);
-    let debounce = 0;
-    const schedule = () => {
-      if (debounce) return;
-      debounce = window.setTimeout(() => { debounce = 0; mirrorAppStyles(root); }, 80);
-    };
-    // childList only (not attributes) — ECharts mutates its canvas attributes
-    // every animation frame, which would thrash the (O(rules)) re-mirror.
-    const observer = new MutationObserver(schedule);
-    observer.observe(root, { childList: true, subtree: true });
-    // Belt-and-suspenders for any rule inserted without a shadow-DOM mutation.
-    const timers = [250, 1500, 3000].map(ms => window.setTimeout(() => mirrorAppStyles(root), ms));
-    return () => {
-      observer.disconnect();
-      if (debounce) window.clearTimeout(debounce);
-      timers.forEach(t => window.clearTimeout(t));
-    };
-  }, [targets]);
-
   return (
     <>
-      <Box
-        ref={hostRef}
+      <iframe
+        ref={iframeRef}
+        title="Story document"
         aria-label="Story document"
-        width={fluid ? '100%' : `${width}px`}
-        height={height !== undefined ? `${height}px` : 'auto'}
-        position="relative"
-        overflow="hidden"
-        // Edit-mode affordance on the host (outside the shadow root, so it is
-        // never serialized into the saved story).
-        outline={editable ? '2px dashed' : undefined}
-        outlineColor="accent.teal"
-        outlineOffset="3px"
-        // Fluid stories paint their own full-bleed background; a transparent
-        // host avoids white gutters when the story's max-width is narrower than
-        // the column (and lets dark stories sit on a dark page).
-        bg={fluid ? 'transparent' : 'white'}
-        color="black"
-        // Pin every inheritable typography property inline: inherited
-        // properties cross the shadow boundary, so this is the document's
-        // baseline regardless of wrapper context (e.g. UA styles that don't
-        // inherit, like a <button>'s font).
         style={{
-          fontFamily: 'Helvetica, Arial, sans-serif',
-          fontSize: '16px',
-          fontWeight: 'normal',
-          lineHeight: 1.4,
-          letterSpacing: 'normal',
-          textAlign: 'left',
+          width: fluid ? '100%' : `${width}px`,
+          height: height !== undefined ? `${height}px` : undefined,
+          border: 0,
+          display: 'block',
+          colorScheme: 'normal',
+          background: 'transparent',
         }}
       />
-      {/* Portaled content lives in the story SHADOW ROOT, but ark-ui (Chakra Popover/Menu/Tooltip)
-          defaults its root node + Portal target to the top `document`. The mismatch breaks floating
-          positioning — the trigger is measured in the wrong tree and the panel pins to the top-left
-          corner (0,0). EnvironmentProvider tells ark to use the shadow root (each target's
-          getRootNode()), so popovers/menus portal into and position against the same tree as their
-          trigger. mirrorAppStyles already mirrors Chakra styles into the shadow root, so they're styled. */}
-      {targets.map((t, i) => createPortal(
-        <EnvironmentProvider value={() => t.el.getRootNode()}>
-        {/* The same tile the dashboard renders (DashboardView grid item):
-            flex-column box + SmartEmbedded with clickable title and actions. */}
-        <Box
-          className="mx-chart-fill"
-          bg="bg.subtle"
-          borderWidth="1px"
-          borderColor="border.default"
-          borderRadius="md"
-          overflow="hidden"
-          display="flex"
-          flexDirection="column"
-        >
-          {/* Stories are a reading surface — charts display only; never open the
-              click-to-drill-down popup (regardless of read-only/public). */}
-          <SmartEmbeddedQuestionContainer
-            questionId={t.questionId}
-            showTitle={true}
-            index={i}
-            readOnly={readOnly}
-            enableDrilldown={false}
-            externalParameters={externalParameters.length ? externalParameters : undefined}
-            externalParamValues={externalParameters.length ? values : undefined}
-          />
-        </Box>
-        </EnvironmentProvider>,
-        t.el,
-        `${i}-${t.questionId}`,
-      ))}
-      {inlineTargets.map((t, i) => createPortal(
-        <EnvironmentProvider value={() => t.el.getRootNode()}>
-        {/* Inline story-local question. A regular chart gets the same chart-card chrome as a saved
-            embed (border + bg, no title bar). A single_value (`bare`) renders CHROME-LIGHT —
-            transparent, no border — so the styled number blends into the surrounding design; the
-            agent owns its look via singleValueConfig + its own container. Renders straight from the
-            inline content (no file load). */}
-        <Box
-          className="mx-chart-fill"
-          {...(t.bare
-            ? {}
-            : { bg: 'bg.subtle', borderWidth: '1px', borderColor: 'border.default', borderRadius: 'md' })}
-          overflow="hidden"
-          display="flex"
-          flexDirection="column"
-        >
-          <EmbeddedQuestionContainer
-            question={t.content}
-            questionId={0}
-            externalParameters={externalParameters.length ? externalParameters : undefined}
-            externalParamValues={externalParameters.length ? values : undefined}
-            enableDrilldown={false}
-          />
-        </Box>
-        </EnvironmentProvider>,
-        t.el,
-        `inline-${i}`,
-      ))}
-      {numberTargets.map((t, i) => createPortal(
-        <EnvironmentProvider value={() => t.el.getRootNode()}>
-          <InlineNumber
-            embed={t.embed}
-            externalParamValues={externalParameters.length ? values : undefined}
-            editable={editable}
-            onRequestEdit={(editable && onEditNumber && t.embed.query) ? () => onEditNumber({
-              query: t.embed.query ?? '',
-              connection: t.embed.connection,
-              apply: (newQuery) => {
-                // Write the edited query back to the body placeholder so serialize() captures it on
-                // Save (serialize keeps the embed's attrs), then re-render the figure so it re-runs live.
-                const next = { ...t.embed, query: newQuery };
-                t.el.setAttribute('data-number-inline', JSON.stringify(next));
-                setNumberTargets(prev => prev.map((x, idx) => (idx === i ? { ...x, embed: next } : x)));
-              },
-            }) : undefined}
-          />
-        </EnvironmentProvider>,
-        t.el,
-        `number-${i}`,
-      ))}
-      {paramTargets.map((t, i) => createPortal(
-        <EnvironmentProvider value={() => t.el.getRootNode()}>
-          <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />
-        </EnvironmentProvider>,
-        t.el,
-        `param-${i}-${t.param.name}`,
-      ))}
       {/* Select-to-chat: a floating Ask/Edit pill on any text selection while editing the story. */}
-      {selectionSource && <StorySelectionPopover hostRef={hostRef} source={selectionSource} active={editable} />}
+      {selectionSource && <StorySelectionPopover iframeRef={iframeRef} source={selectionSource} active={editable} />}
     </>
   );
 });

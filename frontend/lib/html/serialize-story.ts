@@ -17,7 +17,7 @@
  */
 // AgentHtml-injected style tags that are NOT part of the authored story and
 // must be stripped on save: the mirrored app CSS and the fluid/mobile shim.
-const INJECTED_STYLE_SELECTOR = 'style[data-mx-app-styles], style[data-mx-fluid-shim]';
+const INJECTED_STYLE_SELECTOR = 'style[data-mx-app-styles], style[data-mx-fluid-shim], [data-mx-embed-root]';
 const ORIG_STYLE_ATTR = 'data-mx-osz';
 
 export function serializeEditedStory(
