@@ -4,10 +4,12 @@
  * of reading it from Redux via a hook. `useScreenshot` delegates here so there is a
  * single capture implementation.
  *
- * Browser-only (uses the DOM + html-to-image).
+ * Browser-only (uses the DOM + snapdom). snapdom deep-clones the subtree WITH its styles,
+ * including Shadow DOM — which html-to-image's <foreignObject> approach could not, so
+ * shadow-scoped content (e.g. story charts) now rasterizes correctly. It also embeds fonts
+ * and caches resources/style-maps internally, so there is no separate font-embed step.
  */
-import { toJpeg, toPng } from 'html-to-image';
-import { getCachedFontEmbedCSS } from './font-embed-cache';
+import { snapdom } from '@zumer/snapdom';
 import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_PIXEL_RATIO, AGENT_IMAGE_JPEG_QUALITY } from './constants';
 import type { ScreenshotOptions } from './types';
 
@@ -15,20 +17,23 @@ export type CaptureOptions = ScreenshotOptions & { colorMode: 'light' | 'dark' }
 
 const bgFor = (colorMode: 'light' | 'dark'): string => (colorMode === 'dark' ? '#0D1117' : '#FAFBFC');
 
+/** snapdom blob type for the requested output format. */
+const blobType = (format: ScreenshotOptions['format']): 'png' | 'jpeg' => (format === 'png' ? 'png' : 'jpeg');
+
 /** Render a single DOM element to an image Blob (jpeg by default). */
 export async function captureElementBlob(element: HTMLElement, opts: CaptureOptions): Promise<Blob> {
-  const pixelRatio = opts.maxWidth != null ? opts.maxWidth / element.offsetWidth : (opts.pixelRatio ?? 0.75);
-  const toImage = (opts.format ?? 'jpeg') === 'png' ? toPng : toJpeg;
-  const dataURL = await toImage(element, {
-    pixelRatio,
-    backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
-    filter: opts.filter,
+  // maxWidth → exact output width; otherwise scale by pixelRatio (default 0.75). dpr:1 keeps the
+  // output at the literal target size (snapdom would otherwise multiply by the device pixel ratio).
+  const sizing = opts.maxWidth != null ? { width: opts.maxWidth } : { scale: opts.pixelRatio ?? 0.75 };
+  return snapdom.toBlob(element, {
+    type: blobType(opts.format),
     quality: opts.quality ?? AGENT_IMAGE_JPEG_QUALITY,
-    fontEmbedCSS: await getCachedFontEmbedCSS(element),
+    backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
+    dpr: 1,
+    ...sizing,
+    filter: opts.filter,
+    embedFonts: true,
   });
-  const blob = await fetch(dataURL).then(r => r.blob());
-  if (!blob) throw new Error('Screenshot capture failed');
-  return blob;
 }
 
 /**
@@ -91,12 +96,11 @@ export function cappedOutputDims(sw: number, sh: number, maxPx: number): { w: nu
 }
 
 /**
- * Pick the html-to-image pixelRatio for a region capture so we never rasterize FINER than the
- * final output cap needs. html-to-image can only render a whole node (not a sub-rect), so the
- * target is rendered then cropped to `selection`; rendering at device DPR when the crop will be
- * downscaled to `maxOutputPx` anyway is wasted work. Scale so the cropped selection lands ~at
- * `maxOutputPx` on its longest side, never exceeding the device cap (no upscaling past the screen).
- * Pure → unit-testable.
+ * Pick the render scale for a region capture so we never rasterize FINER than the final output
+ * cap needs. snapdom renders the whole node (not a sub-rect), so the target is rendered then
+ * cropped to `selection`; rendering at device DPR when the crop will be downscaled to `maxOutputPx`
+ * anyway is wasted work. Scale so the cropped selection lands ~at `maxOutputPx` on its longest side,
+ * never exceeding the device cap (no upscaling past the screen). Pure → unit-testable.
  */
 export function regionPixelRatio(
   selection: { width: number; height: number },
@@ -107,15 +111,6 @@ export function regionPixelRatio(
   return Math.min(deviceCap, maxOutputPx / longest);
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load captured image'));
-    img.src = src;
-  });
-}
-
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('canvas.toBlob failed'))), type, quality));
@@ -123,35 +118,32 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 
 /**
  * Capture a user-selected viewport REGION as an image Blob: render `target` (default
- * document.body) via html-to-image, then crop to `selection` (viewport coords). Used by
- * the drag-select context tool. `opts.filter` should exclude the selection overlay itself.
+ * document.body) via snapdom, then crop to `selection` (viewport coords). Used by the
+ * drag-select context tool. `opts.filter` should exclude the selection overlay itself.
  */
 export async function captureRegionBlob(
   selection: { x: number; y: number; width: number; height: number },
   opts: CaptureOptions & { target?: HTMLElement; targetBox?: { left: number; top: number }; maxOutputPx?: number },
 ): Promise<Blob> {
   const target = opts.target ?? document.body;
-  // Snapshot the crop reference frame BEFORE the async html-to-image render. `selection` is in
-  // viewport coords captured at drag time; reading the target's rect AFTER the render (which is slow,
-  // especially in dev) lets any layout drift in between — page scroll, the pending-upload chip
-  // reflow — slide the crop. That race is why the crop is aligned in prod (fast render) but visibly
-  // offset in dev (slow render). Prefer a caller-provided box captured synchronously at selection
-  // time (matches the selection's frame exactly); otherwise read it here, still pre-render.
+  // Snapshot the crop reference frame BEFORE the async render. `selection` is in viewport coords
+  // captured at drag time; reading the target's rect AFTER the render lets any layout drift in
+  // between — page scroll, the pending-upload chip reflow — slide the crop. Prefer a caller-provided
+  // box captured synchronously at selection time; otherwise read it here, still pre-render.
   const targetBox = opts.targetBox ?? target.getBoundingClientRect();
   const maxOutputPx = opts.maxOutputPx ?? AGENT_IMAGE_MAX_PX;
   // `opts.pixelRatio` (when given) is the device cap, not the render ratio: we render no finer than
   // the output cap needs, so a large selection rasterizes the target at <1× instead of device DPR.
   const deviceCap = opts.pixelRatio ?? Math.min(AGENT_IMAGE_PIXEL_RATIO, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
   const pixelRatio = regionPixelRatio(selection, maxOutputPx, deviceCap);
-  const toImage = (opts.format ?? 'jpeg') === 'png' ? toPng : toJpeg;
-  const dataURL = await toImage(target, {
-    pixelRatio,
+  // snapdom returns the rasterized canvas directly (dpr:1 so `scale` is the literal pixel ratio).
+  const source = await snapdom.toCanvas(target, {
+    scale: pixelRatio,
+    dpr: 1,
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     filter: opts.filter,
-    quality: opts.quality ?? AGENT_IMAGE_JPEG_QUALITY,
-    fontEmbedCSS: await getCachedFontEmbedCSS(target),
+    embedFonts: true,
   });
-  const img = await loadImage(dataURL);
   const { sx, sy, sw, sh } = cropSourceRect(selection, targetBox, pixelRatio);
   // Cap the OUTPUT as a safety net — with the reduced pixelRatio the crop is already ~maxOutputPx.
   const { w, h } = cappedOutputDims(sw, sh, maxOutputPx);
@@ -160,7 +152,7 @@ export async function captureRegionBlob(
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get a 2D canvas context for cropping');
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  ctx.drawImage(source, sx, sy, sw, sh, 0, 0, w, h);
   return canvasToBlob(canvas, (opts.format ?? 'jpeg') === 'png' ? 'image/png' : 'image/jpeg', opts.quality ?? AGENT_IMAGE_JPEG_QUALITY);
 }
 

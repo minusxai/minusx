@@ -4,9 +4,10 @@ A lightweight client-side screenshot system for capturing FileView components (q
 
 ## Features
 
-- **Client-side capture** using `html-to-image` (fast, secure, no backend required)
+- **Client-side capture** using [`@zumer/snapdom`](https://github.com/zumerlab/snapdom) (fast, secure, no backend required)
+- **Shadow DOM + style aware** - deep-clones with styles, so shadow-scoped content (e.g. story charts) rasterizes correctly
 - **Native canvas support** - ECharts work out-of-the-box
-- **Retina quality** - 2x pixel ratio for crisp screenshots
+- **Built-in font embedding + resource cache** - no separate font-embed step
 - **Color mode aware** - Captures correct background for dark/light themes
 - **Multiple output formats** - PNG (default), JPEG, Blob, or base64 dataURL
 - **FileView targeting** - Automatically finds elements by `data-file-id` attribute
@@ -98,7 +99,7 @@ Screenshots are captured by file ID using `data-file-id` attributes:
 
 2. **Hook** uses `document.querySelector('[data-file-id="123"]')` to find the element
 
-3. **Capture** converts the element to PNG using `html-to-image`
+3. **Capture** converts the element to an image using `@zumer/snapdom`
 
 ### UI Integration
 
@@ -110,7 +111,7 @@ The "Export PNG" button is integrated into `DocumentHeader.tsx`:
 
 ### Dependencies
 
-- **html-to-image** (v1.11.x, ~40KB) - Fast, TypeScript-native, excellent canvas support
+- **@zumer/snapdom** - ultra-fast DOM→image, Shadow DOM + style support, built-in font/resource cache
 
 ## Performance
 

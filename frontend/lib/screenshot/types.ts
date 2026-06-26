@@ -8,7 +8,7 @@ export interface ScreenshotOptions {
   backgroundColor?: string;    // Background color
   quality?: number;            // JPEG quality (0-1, default: 1.0)
   format?: 'png' | 'jpeg';     // Output format (default: 'png')
-  filter?: (node: HTMLElement) => boolean; // Element filter
+  filter?: (el: Element) => boolean; // Node filter (return true to keep) — matches snapdom's signature
 }
 
 export interface ScreenshotResult {
