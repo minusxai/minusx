@@ -25,6 +25,28 @@ function imageSrc(img: CompressedFileState['image'] | undefined): string | undef
   return undefined;
 }
 
+/** Drop the heavy image payload (url/base64) from a file state, keeping only the dedup `key`. The
+ *  screenshot is rendered as its own image part, and the real prompt sends it as a separate image
+ *  block (never base64 in the JSON) — so the JSON part should only carry the lean key. */
+function leanImageFileState(fs: CompressedFileState | undefined): CompressedFileState | undefined {
+  if (!fs?.image) return fs;
+  return { ...fs, image: { key: fs.image.key } };
+}
+
+/** Strip every image payload in a file app state down to its key, for the JSON part only. */
+function leanImageAppState(appState: AppState): AppState {
+  if (appState.type !== 'file' || !appState.state) return appState;
+  const s = appState.state;
+  return {
+    ...appState,
+    state: {
+      ...s,
+      fileState: leanImageFileState(s.fileState)!,
+      references: Array.isArray(s.references) ? s.references.map((r) => leanImageFileState(r)!) : s.references,
+    },
+  };
+}
+
 /** The user's turn: the goal text + each attachment (images inline, text as text). */
 export function userMessageParts(msg: { content?: string; attachments?: Attachment[] }): InspectPart[] {
   const parts: InspectPart[] = [];
@@ -75,7 +97,9 @@ export function appStateParts(appState: AppState | undefined | null): InspectPar
   for (const b of blocks) {
     parts.push({ kind: 'markup', label: b.fileId != null ? `Markup — file ${b.fileId}` : 'Markup', text: renderMarkupBlock(b) });
   }
-  parts.push({ kind: 'json', label: 'App state JSON', value });
+  // Lean the JSON: the screenshot is its own image part above (and a separate block in the real
+  // prompt), so the JSON keeps only the image `key`, never the heavy base64/url.
+  parts.push({ kind: 'json', label: 'App state JSON', value: leanImageAppState(value) });
 
   return parts;
 }

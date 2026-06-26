@@ -73,6 +73,12 @@ describe('appStateParts', () => {
     const jsonStr = JSON.stringify(json.value);
     expect(jsonStr).not.toContain('"markup"');   // markup pulled out into its own part
     expect(jsonStr).not.toContain('select 1');    // raw JSON content stripped at the LLM boundary
+    // The image payload is rendered as its own image part (above) AND, in the real prompt, is a
+    // separate image block — so the JSON keeps only the dedup `key`, never the heavy base64/url
+    // (mirrors lib/projection: "we never hash base64").
+    expect(jsonStr).not.toContain('chart.jpg');   // image url NOT duplicated into the JSON
+    const jsonImage = (json.value as { state?: { fileState?: { image?: unknown } } })?.state?.fileState?.image;
+    expect(jsonImage).toEqual({ key: 'k' });       // lean: just the stable key
   });
 
   it('builds an image src from inline base64 when there is no url', () => {
