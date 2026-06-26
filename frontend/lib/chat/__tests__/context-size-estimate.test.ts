@@ -77,4 +77,39 @@ describe('estimateContextSize', () => {
     expect(keys).toContain('image_attachments');
     expect(keys).toContain('next_user_message');
   });
+
+  it('counts each image in the current user turn under image_attachments (~1k tokens each)', () => {
+    // The current page's screenshot is attached to the app-state image facet and rendered into the
+    // CURRENT user message as an ImageContent block (see lib/projection). This is what the
+    // /view-context-size panel must surface — a renderable file page carries one screenshot, so the
+    // estimate must report ~1k image tokens (not 0).
+    const withImage = (n: number): Context => ({
+      systemPrompt: 's',
+      tools: [],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '<AppState>{"id":1}</AppState>' },
+            ...Array.from({ length: n }, () => ({ type: 'image' as const, data: 'abc', mimeType: 'image/png' })),
+            { type: 'text', text: 'go' },
+          ],
+          timestamp: 1,
+        },
+      ],
+    });
+
+    const img1 = estimateContextSize(withImage(1)).sections.find((s) => s.key === 'image_attachments');
+    expect(img1?.tokens).toBe(1000);
+
+    const img2 = estimateContextSize(withImage(2)).sections.find((s) => s.key === 'image_attachments');
+    expect(img2?.tokens).toBe(2000);
+
+    // No image (e.g. a non-file page, or an unchanged view deduped by the projection) → 0 tokens.
+    const img0 = estimateContextSize({
+      systemPrompt: 's', tools: [],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'go' }], timestamp: 1 }],
+    }).sections.find((s) => s.key === 'image_attachments');
+    expect(img0?.tokens).toBe(0);
+  });
 });

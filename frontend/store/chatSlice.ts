@@ -2,6 +2,7 @@ import { createSlice, createSelector, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
 import type { UserInput } from '@/lib/api/user-input-exception';
 import type { MessageDebugInfo, ErrorLogEntry } from '@/lib/types';
+import type { AppState } from '@/lib/appState';
 
 // Types
 interface ToolCall {
@@ -27,6 +28,12 @@ export type UserMessage = {
   created_at: string;
   attachments?: import('@/lib/types').Attachment[];
   logIndex?: number;  // Index of this task entry in the conversation log — used to fork from this point
+  // The page state that was sent to the LLM with THIS turn, read off the pi root invocation's
+  // `context` (the append-only log stores it per turn). Carries the lean app-state JSON + the file
+  // markup + the rendered-file screenshot, so the inspector can show exactly what the model saw.
+  appState?: AppState;
+  // The frozen <CurrentTime> for this turn (hour granularity), also from the invocation context.
+  currentTime?: string;
 };
 
 export type CompletedToolCall = {
@@ -141,12 +148,16 @@ const chatSlice = createSlice({
 
       const messages: any[] = [];
       if (message) {
+        const turnAppState = (agent_args as { app_state?: AppState } | undefined)?.app_state;
+        const turnCurrentTime = (agent_args as { currentTime?: string } | undefined)?.currentTime;
         messages.push({
           role: 'user',
           content: message,
           created_at: new Date().toISOString(),
           logIndex: 0,  // First message always lands at log index 0
           ...(attachments?.length ? { attachments } : {}),
+          ...(turnAppState !== undefined ? { appState: turnAppState } : {}),
+          ...(turnCurrentTime !== undefined ? { currentTime: turnCurrentTime } : {}),
         });
       }
 
@@ -195,6 +206,13 @@ const chatSlice = createSlice({
       const conv = state.conversations[conversationID];
       if (!conv) return;
 
+      // Snapshot the current per-turn app state (set on agent_args by ChatInterface right before
+      // this dispatch, screenshot included) onto the user message — same shape the read-path parser
+      // attaches from the persisted pi log. Powers the "Inspect tool calls" modal's App-state entry
+      // (screenshot / markup / JSON) for the LIVE conversation, not just reloaded ones.
+      const turnAppState = (conv.agent_args as { app_state?: AppState } | undefined)?.app_state;
+      const turnCurrentTime = (conv.agent_args as { currentTime?: string } | undefined)?.currentTime;
+
       // Add user message with timestamp
       conv.messages.push({
         role: 'user',
@@ -202,6 +220,8 @@ const chatSlice = createSlice({
         created_at: new Date().toISOString(),
         logIndex: conv.log_index ?? 0,
         ...(attachments?.length ? { attachments } : {}),
+        ...(turnAppState !== undefined ? { appState: turnAppState } : {}),
+        ...(turnCurrentTime !== undefined ? { currentTime: turnCurrentTime } : {}),
       });
       conv.executionState = 'WAITING';
       conv.error = undefined;

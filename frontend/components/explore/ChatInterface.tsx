@@ -700,6 +700,16 @@ export default function ChatInterface({
     setContextSizePanel({ status: 'loading' });
 
     try {
+      // Mirror the SEND path: attach the file screenshot to the app-state image facet so the
+      // estimate's preview context carries the same image the real request would. The projection
+      // pass dedups it across turns (unchanged view → not re-sent → 0 image tokens), so the count
+      // is faithful — including respecting the "disable app-state images" opt-out.
+      const sizeState = store.getState();
+      const colorMode = sizeState.ui.colorMode as 'light' | 'dark';
+      const disableAppStateImages = selectDisableAppStateImages(sizeState);
+      const agentArgs = buildAgentArgsForMessage(' ', chatAttachments);
+      agentArgs.app_state = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
+
       const res = await fetch('/api/chat/context-size', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -709,7 +719,7 @@ export default function ChatInterface({
           user_message: ' ',
           source: container === 'sidebar' ? 'side_chat' : 'explore',
           agent: 'AnalystAgent',
-          agent_args: buildAgentArgsForMessage(' ', chatAttachments),
+          agent_args: agentArgs,
         }),
       });
       const data = await res.json();
@@ -734,7 +744,7 @@ export default function ChatInterface({
         contextSizeAbortRef.current = null;
       }
     }
-  }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container, conversation]);
+  }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container, conversation, appState, store]);
 
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize });
 

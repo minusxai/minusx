@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Dialog,
   Portal,
@@ -12,11 +12,13 @@ import {
   Badge,
   IconButton,
 } from '@chakra-ui/react';
-import { LuPencil } from 'react-icons/lu';
+import { LuPencil, LuUser, LuLayoutDashboard } from 'react-icons/lu';
 import type { CompletedToolCall as ToolCallTuple, ToolCall, ToolMessage } from '@/lib/types';
-import type { CompletedToolCall as FlatToolCall } from '@/store/chatSlice';
+import type { CompletedToolCall as FlatToolCall, UserMessage } from '@/store/chatSlice';
 import type { MessageWithFlags } from './message/messageHelpers';
 import ToolInspectModal from './ToolInspectModal';
+import ContentInspectModal from './ContentInspectModal';
+import { userMessageParts, appStateParts, type InspectPart } from './inspect-content';
 
 interface ToolCallListModalProps {
   messages: MessageWithFlags[];
@@ -47,12 +49,55 @@ function toInspectTuple(msg: FlatToolCall): ToolCallTuple {
   return [toolCall, toolMessage];
 }
 
+// A single inspectable row in the conversation log: a tool call, the user's message, or the app
+// state sent with that user turn. User message + app state are rendered by content type (images,
+// markup, query data, JSON) — identical rendering, via the shared inspect-content codec.
+type Entry =
+  | { kind: 'tool'; key: string; name: string; hasError: boolean; preview: string; msg: FlatToolCall }
+  | { kind: 'content'; key: string; entryKind: 'user' | 'appState'; title: string; preview: string; parts: InspectPart[] };
+
+function previewParts(parts: InspectPart[]): string {
+  return parts.map((p) => p.kind).join(' · ');
+}
+
+function buildEntries(messages: MessageWithFlags[]): Entry[] {
+  const entries: Entry[] = [];
+  messages.forEach((m, i) => {
+    if (m.role === 'user') {
+      const um = m as UserMessage & MessageWithFlags;
+      const userParts = userMessageParts({ content: um.content, attachments: um.attachments });
+      if (userParts.length > 0) {
+        entries.push({
+          kind: 'content', key: `user-${i}`, entryKind: 'user', title: 'User message',
+          preview: typeof um.content === 'string' ? um.content : previewParts(userParts), parts: userParts,
+        });
+      }
+      const stateParts = appStateParts(um.appState);
+      if (stateParts.length > 0) {
+        entries.push({
+          kind: 'content', key: `appstate-${i}`, entryKind: 'appState', title: 'App state',
+          preview: previewParts(stateParts), parts: stateParts,
+        });
+      }
+    } else if (m.role === 'tool') {
+      const msg = m as FlatToolCall & MessageWithFlags;
+      const hasError = typeof msg.content === 'string' && msg.content.includes('"success":false');
+      let preview = '';
+      try {
+        const parsed = typeof msg.function.arguments === 'string' ? JSON.parse(msg.function.arguments) : msg.function.arguments;
+        preview = Object.entries(parsed as Record<string, unknown>).slice(0, 2).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('  ');
+      } catch { /* skip preview */ }
+      entries.push({ kind: 'tool', key: `${msg.tool_call_id}-${i}`, name: msg.function.name, hasError, preview, msg });
+    }
+  });
+  return entries;
+}
+
 export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCallListModalProps) {
   const [inspecting, setInspecting] = useState<ToolCallTuple | null>(null);
+  const [contentInspect, setContentInspect] = useState<{ title: string; parts: InspectPart[] } | null>(null);
 
-  const toolCalls = messages.filter(
-    (m): m is FlatToolCall & MessageWithFlags => m.role === 'tool'
-  );
+  const entries = useMemo(() => buildEntries(messages), [messages]);
 
   return (
     <>
@@ -63,37 +108,26 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
           <Dialog.Content maxW="600px" borderRadius="lg" bg="bg.surface" overflow="hidden">
             <Dialog.Header px={5} py={4} borderBottom="1px solid" borderColor="border.default">
               <HStack gap={2}>
-                <Text fontWeight="bold" fontSize="md">Tool Calls</Text>
-                <Badge colorPalette="gray" size="sm">{toolCalls.length}</Badge>
+                <Text fontWeight="bold" fontSize="md">Conversation</Text>
+                <Badge colorPalette="gray" size="sm">{entries.length}</Badge>
               </HStack>
             </Dialog.Header>
 
             <Dialog.Body p={4}>
-              {toolCalls.length === 0 ? (
+              {entries.length === 0 ? (
                 <Text fontSize="sm" color="fg.muted" textAlign="center" py={6}>
-                  No tool calls in this conversation yet.
+                  Nothing in this conversation yet.
                 </Text>
               ) : (
                 <VStack gap={2} align="stretch">
-                  {toolCalls.map((msg, idx) => {
-                    const hasError =
-                      typeof msg.content === 'string' &&
-                      msg.content.includes('"success":false');
-
-                    let argPreview = '';
-                    try {
-                      const parsed = typeof msg.function.arguments === 'string'
-                        ? JSON.parse(msg.function.arguments)
-                        : msg.function.arguments;
-                      argPreview = Object.entries(parsed as Record<string, unknown>)
-                        .slice(0, 2)
-                        .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
-                        .join('  ');
-                    } catch { /* skip preview */ }
-
+                  {entries.map((entry) => {
+                    const isContent = entry.kind === 'content';
+                    const onOpen = () => isContent
+                      ? setContentInspect({ title: entry.title, parts: entry.parts })
+                      : setInspecting(toInspectTuple(entry.msg));
                     return (
                       <Box
-                        key={`${msg.tool_call_id}-${idx}`}
+                        key={entry.key}
                         px={3}
                         py={2}
                         border="1px solid"
@@ -102,43 +136,39 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
                         bg="bg.canvas"
                         cursor="pointer"
                         _hover={{ borderColor: 'accent.teal' }}
-                        onClick={() => setInspecting(toInspectTuple(msg))}
+                        onClick={onOpen}
                       >
                         <HStack justify="space-between" gap={3}>
                           <HStack gap={2} minW="0" flex="1">
-                            <Badge
-                              colorPalette={hasError ? 'red' : 'green'}
-                              size="xs"
-                              flexShrink={0}
-                            >
-                              {hasError ? 'err' : 'ok'}
-                            </Badge>
-                            <Text
-                              fontFamily="mono"
-                              fontSize="sm"
-                              fontWeight="600"
-                              truncate
-                            >
-                              {msg.function.name}
+                            {entry.kind === 'tool' ? (
+                              <Badge colorPalette={entry.hasError ? 'red' : 'green'} size="xs" flexShrink={0}>
+                                {entry.hasError ? 'err' : 'ok'}
+                              </Badge>
+                            ) : (
+                              <Box flexShrink={0} color={entry.entryKind === 'user' ? 'accent.primary' : 'accent.cyan'}>
+                                {entry.entryKind === 'user' ? <LuUser size={14} /> : <LuLayoutDashboard size={14} />}
+                              </Box>
+                            )}
+                            <Text fontFamily="mono" fontSize="sm" fontWeight="600" truncate>
+                              {entry.kind === 'tool' ? entry.name : entry.title}
                             </Text>
                           </HStack>
-                          <IconButton
-                            aria-label="Inspect tool call"
-                            size="xs"
-                            variant="ghost"
-                            flexShrink={0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setInspecting(toInspectTuple(msg));
-                            }}
-                          >
-                            <LuPencil />
-                          </IconButton>
+                          {entry.kind === 'tool' && (
+                            <IconButton
+                              aria-label="Inspect tool call"
+                              size="xs"
+                              variant="ghost"
+                              flexShrink={0}
+                              onClick={(e) => { e.stopPropagation(); setInspecting(toInspectTuple(entry.msg)); }}
+                            >
+                              <LuPencil />
+                            </IconButton>
+                          )}
                         </HStack>
 
-                        {argPreview && (
+                        {entry.preview && (
                           <Text fontSize="xs" color="fg.subtle" fontFamily="mono" mt={1} truncate>
-                            {argPreview}
+                            {entry.preview}
                           </Text>
                         )}
                       </Box>
@@ -158,13 +188,23 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
         </Portal>
       </Dialog.Root>
 
-      {/* Detail inspector — opens on top of list */}
+      {/* Tool-call detail inspector — opens on top of list */}
       {inspecting && (
         <ToolInspectModal
           toolCall={inspecting[0]}
           toolMessage={inspecting[1]}
           isOpen={!!inspecting}
           onClose={() => setInspecting(null)}
+        />
+      )}
+
+      {/* User-message / App-state detail inspector */}
+      {contentInspect && (
+        <ContentInspectModal
+          title={contentInspect.title}
+          parts={contentInspect.parts}
+          isOpen={!!contentInspect}
+          onClose={() => setContentInspect(null)}
         />
       )}
     </>

@@ -5,7 +5,6 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFile, saveFile, moveFile, deleteFile, ConflictError } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { translateConversationForFrontend } from '@/lib/chat-translator';
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -45,9 +44,9 @@ export const GET = withAuth(async (
 
         mode: user.mode,
       });
-      // v=2 conversations: translate orchestrator content.log → legacy task-log so
-      // the frontend never sees orchestrator log shape. v=1 files pass through.
-      return successResponse(translateConversationForFrontend(result.data));
+      // v=2 conversations: serve the orchestrator pi ConversationLog as-is (the frontend parses it
+      // via parsePiConversation). v=1 files pass through unchanged. No down-translation on read.
+      return successResponse(result.data);
     }
 
     const result = await loadFile(id, user, options);
@@ -66,7 +65,7 @@ export const GET = withAuth(async (
     });
     return successResponse({
       ...result,
-      data: translateConversationForFrontend(result.data),
+      data: result.data,
     });
   } catch (error) {
     return handleApiError(error);

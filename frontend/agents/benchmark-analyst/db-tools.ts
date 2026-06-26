@@ -8,7 +8,7 @@ import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool, ImageContent } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
-import { queryPresentation } from '@/lib/chart/query-presentation';
+import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
@@ -364,21 +364,27 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       maxChars,
     );
 
-    // Presentation: with a renderable chart viz (and rawData off), return an IMAGE of the chart +
-    // a summary instead of the row markdown — see queryPresentation. Falls back to rows when the
-    // image can't be rendered (e.g. headless base with no renderer).
+    // Presentation: a renderable chart viz returns an IMAGE of the chart REGARDLESS of rawData (the
+    // image is cheap + conveys shape — see isImageViz). `rawData` is additive: it ADDITIONALLY keeps
+    // the row data in the summary. Falls back to rows when the image can't be rendered (e.g. headless
+    // base with no renderer). Consistent with ReadFiles / EditFile.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vizSettings = this.parameters.vizSettings as any;
     const vizType: string | undefined = vizSettings?.type;
-    const wantImage = queryPresentation(vizType, this.parameters.rawData) === 'image';
     let imageContent: ImageContent | null = null;
-    if (wantImage && vizSettings) {
+    if (isImageViz(vizType) && vizSettings) {
       const jpeg = await this._renderVizJpeg({ columns, types, rows: result.rows, finalQuery: result.finalQuery }, vizSettings);
       if (jpeg) imageContent = { type: 'image', data: jpeg.toString('base64'), mimeType: 'image/jpeg' };
     }
 
+    // Drop rows only when the image actually conveys the result AND rawData wasn't requested.
+    const dropRows = shouldDropRows({
+      imagePresentation: !!imageContent,
+      imageRendered: !!imageContent,
+      rawData: this.parameters.rawData,
+    });
     const summaryText = JSON.stringify(
-      imageContent
+      dropRows
         // Image carries the result → send shape + a pointer, not the rows.
         ? { success: true, columns, types, totalRows: compressed.totalRows, finalQuery: result.finalQuery, note: 'Chart image returned in lieu of rows. Call again with rawData: true for the table.' }
         : { success: true, ...compressed, finalQuery: result.finalQuery },

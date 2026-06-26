@@ -27,8 +27,9 @@ import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
 import { FilesAPI } from '@/lib/data/files';
-import { parseLogToMessages } from '@/lib/conversations-utils';
+import { parseLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
 import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
+import type { ConversationLog } from '@/orchestrator/types';
 import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
 import { getCurrentMode } from '@/lib/mode/mode-utils';
 import type { AgentSkillSelection } from '@/lib/types';
@@ -410,20 +411,34 @@ async function tryRecoverConversationFromFile(
     const content = result.data?.content as ConversationFileContent | undefined;
     if (!content?.log || content.log.length <= preSendLogIndex) return false;
 
-    const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
     const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
+
+    // v2 conversations are served as the orchestrator pi ConversationLog; parse them pi-natively.
+    // v1 stays on the legacy task-log parse + first-task agent derivation.
+    let messages: any[];
+    let agent: string;
+    let agent_args: Record<string, any>;
+    if (version >= 2) {
+      ({ messages, agent, agent_args } = parsePiConversation(content.log as unknown as ConversationLog));
+    } else {
+      messages = parseLogToMessages(content.log);
+      const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
+      agent = firstTask?.agent || 'DefaultAgent';
+      agent_args = (firstTask?.args as Record<string, any>) || {};
+    }
+
     dispatch(loadConversation({
       conversation: {
         _id: stableId,
         conversationID,
         log_index: content.log.length,
-        messages: parseLogToMessages(content.log),
+        messages,
         executionState: 'FINISHED',
         pending_tool_calls: [],
         streamedCompletedToolCalls: [],
         streamedThinking: '',
-        agent: firstTask?.agent || 'DefaultAgent',
-        agent_args: firstTask?.args || {},
+        agent,
+        agent_args,
         version,
       },
       setAsActive: false,

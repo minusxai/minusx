@@ -24,7 +24,7 @@ import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, 
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import { stripEntryQueryData, stripEntryMarkup } from '@/lib/projection/project';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
-import { queryPresentation, shouldDropRows } from '@/lib/chart/query-presentation';
+import { isImageViz, shouldDropRows } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
@@ -494,7 +494,7 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
     __augmented: result.map(f => {
       const aug = compressedToAugmentedFiles(compressAugmentedFile(f, maxChars));
       const vizType = (f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
-      if (shouldDropRows({ imagePresentation: queryPresentation(vizType, rawData) === 'image', imageRendered: imageByFileId.has(f.fileState.id) })) {
+      if (shouldDropRows({ imagePresentation: isImageViz(vizType), imageRendered: imageByFileId.has(f.fileState.id), rawData })) {
         aug.file = stripEntryQueryData(aug.file);
       }
       return aug;
@@ -815,10 +815,11 @@ registerFrontendTool('EditFile', async (args, _context) => {
 
   // EditFile echoes the new query RESULT (data the agent can't derive) + a summary + diff/status, but
   // NOT the markup — the agent already knows its edit from the prior app state + the change args.
-  // Result presentation matches ReadFiles/ExecuteQuery: renderable chart → image + summary (unless
-  // rawData); table/number/no-viz → rows + summary. Markup facet is always stripped.
+  // Result presentation matches ReadFiles/ExecuteQuery: a renderable chart returns the IMAGE
+  // regardless of rawData (the image is additive); rawData ADDITIONALLY keeps the rows. table/number/
+  // no-viz → rows + summary. Markup facet is always stripped.
   const vizType = (augmented.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
-  const showImage = queryPresentation(vizType, rawData) === 'image';
+  const showImage = isImageViz(vizType);
 
   // Render the chart image only for the image presentation AND when the result/viz actually changed.
   const queryResultChanged = compressed.queryResults.some((qr: { id?: string }) => {
@@ -837,7 +838,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
   // sent in app state / a prior turn — the projection dedups rows either way). If no image exists
   // (render failed / no rows), keep the rows so the agent is never left with neither image nor data.
   let entry = stripEntryMarkup(compressedToAugmentedFiles(compressed).file);
-  if (shouldDropRows({ imagePresentation: showImage, imageRendered: imageBlocks.length > 0, resultUnchanged: !queryResultChanged && !vizSettingsChanged })) {
+  if (shouldDropRows({ imagePresentation: showImage, imageRendered: imageBlocks.length > 0, resultUnchanged: !queryResultChanged && !vizSettingsChanged, rawData })) {
     entry = stripEntryQueryData(entry); // keep summary, drop rows
   }
 

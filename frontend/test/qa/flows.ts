@@ -469,22 +469,30 @@ export async function assertAgentStopped(page: Page): Promise<void> {
  * user message matching `needle`. Catches the interrupt-drops-the-first-message
  * bug: an aborted turn never wrote its user message to the log, so a later
  * "Continue" resumed an empty conversation and the model saw no history.
+ *
+ * v=2 conversations are served as the orchestrator pi log — the user turn is a root invocation
+ * (`{ type:'toolCall', arguments: { userMessage } }`). v=1 conversations serve the legacy task log
+ * (`{ args: { user_message } }`). Match either shape so this works across both.
  */
 export async function assertUserMessagePersisted(
   request: APIRequestContext,
   conversationId: number,
   needle: string,
 ): Promise<void> {
+  const userMessageOf = (e: unknown): string | undefined => {
+    const pi = (e as { arguments?: { userMessage?: unknown } })?.arguments?.userMessage;
+    if (typeof pi === 'string') return pi;
+    const legacy = (e as { args?: { user_message?: unknown } })?.args?.user_message;
+    if (typeof legacy === 'string') return legacy;
+    return undefined;
+  };
   await expect
     .poll(
       async () => {
         const res = await request.get(`/api/files/${conversationId}?mode=${QA_MODE}`);
         if (!res.ok()) return false;
         const log: unknown[] = (await res.json())?.data?.content?.log ?? [];
-        return log.some(
-          (e) => typeof (e as { args?: { user_message?: unknown } })?.args?.user_message === 'string'
-            && ((e as { args: { user_message: string } }).args.user_message).includes(needle),
-        );
+        return log.some((e) => userMessageOf(e)?.includes(needle) ?? false);
       },
       // Generous: against a live deployment the abort-persist must round-trip over
       // the network under real load, so 30s occasionally raced it on the first try.

@@ -4,7 +4,6 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFiles } from '@/lib/data/files.server';
 import { validateFileIds } from '@/lib/data/helpers/validation';
 import { FileEventType, trackFileEvents } from '@/lib/analytics/file-analytics.server';
-import { translateConversationForFrontend } from '@/lib/chat-translator';
 
 /**
  * POST /api/files/batch
@@ -37,15 +36,13 @@ export const POST = withAuth(async (
       userId: user.userId,
     })));
 
-    // v=2 conversations: translate orchestrator content.log → legacy task-log so
-    // the frontend never sees orchestrator log shape. v=1 files pass through unchanged.
-    const translatedData = result.data.map(translateConversationForFrontend);
-
+    // v=2 conversations serve the orchestrator pi ConversationLog as-is (frontend parses it via
+    // parsePiConversation); v=1 + other files pass through unchanged. No down-translation on read.
     if (include !== 'references') {
-      return successResponse(translatedData);
+      return successResponse(result.data);
     }
 
-    return successResponse({ ...result, data: translatedData });
+    return successResponse({ ...result, data: result.data });
   } catch (error) {
     return handleApiError(error);
   }
