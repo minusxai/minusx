@@ -23,6 +23,7 @@ import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
+import { queryPresentation } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
@@ -462,7 +463,7 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
  * model always sees a single flat content layer (no layer reasoning needed).
  */
 registerFrontendTool('ReadFiles', async (args, _context) => {
-  const { fileIds, maxChars: rawMaxChars, runQueries = true } = args;
+  const { fileIds, maxChars: rawMaxChars, runQueries = true, rawData = false } = args;
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   const result = await readFiles(fileIds, { runQueries });
@@ -476,8 +477,17 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   // Rich payload for the projection pass (cross-turn diffing): the same files in the projector's
   // shape. The `content` above is kept verbatim for the chat UI; projectMessages rebuilds the
   // LLM-facing content from `__augmented` (diffed against the conversation) at send time.
+  // Presentation: a question with a renderable chart viz returns the rendered IMAGE (above) + summary
+  // instead of rows (unless rawData). Drop the row data facet for those files; keep it otherwise.
   const augmented: AugmentedToolDetails = {
-    __augmented: result.map(f => compressedToAugmentedFiles(compressAugmentedFile(f, maxChars))),
+    __augmented: result.map(f => {
+      const aug = compressedToAugmentedFiles(compressAugmentedFile(f, maxChars));
+      const vizType = (f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
+      if (queryPresentation(vizType, rawData) === 'image' && aug.file.queryResults?.length) {
+        aug.file = { ...aug.file, queryResults: aug.file.queryResults.map(({ data: _d, ...qr }) => qr) };
+      }
+      return aug;
+    }),
     __jsonTag: 'Files',
     __status: { success: true },
   };

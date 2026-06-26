@@ -17,6 +17,8 @@ import type { QueryResult, SchemaEntry } from '@/lib/connections/base';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { executeFuzzyMatch } from '@/lib/connections/fuzzy-match-tool';
+import { renderChartToJpeg } from '@/lib/chart/render-chart';
+import type { VizSettings } from '@/lib/validation/atlas-schemas';
 import {
   BaseExecuteQuery,
   BaseSearchDBSchema,
@@ -63,6 +65,18 @@ export class ExecuteQuery extends BaseExecuteQuery {
       );
     }
     return runQuery(connectionId, query, params, user);
+  }
+
+  /** Server-side ECharts-SSR → JPEG render of the result viz (used when rawData is off). */
+  protected override async _renderVizJpeg(
+    queryResult: QueryResult,
+    vizSettings: unknown,
+  ): Promise<Buffer | null> {
+    try {
+      return await renderChartToJpeg(queryResult, vizSettings as VizSettings, { width: 512, colorMode: 'dark' });
+    } catch {
+      return null; // fall back to row data on any render failure
+    }
   }
 }
 
