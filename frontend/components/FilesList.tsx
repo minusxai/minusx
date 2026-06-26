@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, Icon, VStack, Flex, SimpleGrid, Button } from '@chakra-ui/react';
-import { LuFiles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { Box, HStack, Text, Icon, VStack, Flex, SimpleGrid, Button, Dialog, Portal, CloseButton } from '@chakra-ui/react';
+import { LuFiles, LuChevronDown, LuChevronRight, LuCopy, LuTrash2 } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
 import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
@@ -12,9 +12,9 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from './DashboardUsageBadge';
-import { moveFile } from '@/lib/api/file-state';
+import { moveFile, deleteFile, duplicateFile } from '@/lib/api/file-state';
 import BulkMoveFileModal from './BulkMoveFileModal';
-import { canDeleteFileType } from '@/lib/auth/access-rules.client';
+import { canDeleteFileType, canCreateFileType } from '@/lib/auth/access-rules.client';
 
 interface FilesListProps {
   files: DbFile[];
@@ -36,6 +36,8 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set());
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Exit selection mode on ESC
   useEffect(() => {
@@ -75,6 +77,43 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     files.filter(f => selectedFileIds.has(f.id)).map(f => ({ id: f.id, name: f.name, path: f.path, type: f.type })),
     [files, selectedFileIds]
   );
+
+  // Subsets of the selection that the user is allowed to act on in bulk.
+  const deletableSelected = useMemo(
+    () => selectedFiles.filter(f => f.type !== 'folder' && canDeleteFileType(f.type)),
+    [selectedFiles]
+  );
+  const duplicableSelected = useMemo(
+    () => selectedFiles.filter(f => f.type !== 'folder' && canCreateFileType(f.type)),
+    [selectedFiles]
+  );
+
+  const handleBulkDuplicate = useCallback(async () => {
+    setBulkBusy(true);
+    try {
+      await Promise.allSettled(duplicableSelected.map(f => duplicateFile(f.id)));
+    } catch (error) {
+      console.error('[FilesList] Bulk duplicate failed:', error);
+    } finally {
+      setBulkBusy(false);
+      setSelectionMode(false);
+      setSelectedFileIds(new Set());
+    }
+  }, [duplicableSelected]);
+
+  const handleBulkDelete = useCallback(async () => {
+    setBulkBusy(true);
+    try {
+      await Promise.allSettled(deletableSelected.map(f => deleteFile({ fileId: f.id })));
+    } catch (error) {
+      console.error('[FilesList] Bulk delete failed:', error);
+    } finally {
+      setBulkBusy(false);
+      setShowBulkDeleteDialog(false);
+      setSelectionMode(false);
+      setSelectedFileIds(new Set());
+    }
+  }, [deletableSelected]);
 
   // Determine which types to show in the dropdown
   // If availableTypes is provided, use that; otherwise infer from files
@@ -395,6 +434,17 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
           <HStack gap={2}>
             <Button
               size="xs"
+              variant="outline"
+              onClick={handleBulkDuplicate}
+              loading={bulkBusy}
+              disabled={duplicableSelected.length === 0}
+              aria-label="Duplicate"
+            >
+              <Icon as={LuCopy} boxSize={3.5} />
+              Duplicate
+            </Button>
+            <Button
+              size="xs"
               bg="accent.teal"
               color="white"
               _hover={{ bg: 'accent.teal', opacity: 0.9 }}
@@ -403,6 +453,19 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               aria-label="Move"
             >
               Move
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              color="fg.error"
+              borderColor="fg.error/40"
+              _hover={{ bg: 'fg.error/10' }}
+              onClick={() => setShowBulkDeleteDialog(true)}
+              disabled={deletableSelected.length === 0}
+              aria-label="Delete"
+            >
+              <Icon as={LuTrash2} boxSize={3.5} />
+              Delete
             </Button>
             <Button
               size="xs"
@@ -897,6 +960,42 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
         }}
         files={selectedFiles}
       />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog.Root open={showBulkDeleteDialog} onOpenChange={(e) => !bulkBusy && setShowBulkDeleteDialog(e.open)}>
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content
+              bg="bg.surface"
+              borderRadius="lg"
+              border="1px solid"
+              borderColor="border.default"
+              shadow="xl"
+              p={0}
+              my={12}
+            >
+              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
+                <Dialog.Title fontSize="lg" fontWeight="700" fontFamily="mono">Delete Files</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body px={6} py={5}>
+                <Text fontSize="sm" lineHeight="1.6">
+                  Are you sure you want to delete <Text as="span" fontWeight="600" fontFamily="mono">{deletableSelected.length} file{deletableSelected.length !== 1 ? 's' : ''}</Text>? This action cannot be undone.
+                </Text>
+              </Dialog.Body>
+              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
+                <Button px={4} variant="outline" fontFamily="mono" disabled={bulkBusy} onClick={() => setShowBulkDeleteDialog(false)}>Cancel</Button>
+                <Button px={4} bg="fg.error" color="white" onClick={handleBulkDelete} loading={bulkBusy} _hover={{ opacity: 0.9 }} fontFamily="mono">
+                  Delete
+                </Button>
+              </Dialog.Footer>
+              <Dialog.CloseTrigger asChild>
+                <CloseButton size="sm" top={4} right={4} disabled={bulkBusy} />
+              </Dialog.CloseTrigger>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
     </Box>
   );
 }
