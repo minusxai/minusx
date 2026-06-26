@@ -56,6 +56,12 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
     wordWrap: 'on' as const,
     wrappingIndent: 'indent' as const,
     automaticLayout: true,
+    fixedOverflowWidgets: true,
+    hover: {
+      enabled: true,
+      sticky: false,
+      hidingDelay: 0,
+    },
     tabSize: 2,
     padding: {
       top: 12,
@@ -84,7 +90,17 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
         borderColor="border.default"
         borderRadius="md"
         overflow="hidden"
+        className="json-monaco-editor"
       >
+        <style>{`
+          .json-monaco-editor .monaco-editor .find-widget {
+            z-index: 45;
+          }
+
+          body:has(.json-monaco-editor .monaco-editor .find-widget.visible) .workbench-hover-container {
+            display: none !important;
+          }
+        `}</style>
         {isDiffMode ? (
           <DiffEditor
             height="100%"

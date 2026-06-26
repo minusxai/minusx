@@ -83,6 +83,9 @@ vi.mock('@monaco-editor/react', () => {
       onChange: (e: any) => onChange?.(e.target.value),
       // Honor an explicit options.readOnly (JsonEditor); else infer from onChange
       readOnly: props.options?.readOnly ?? !onChange,
+      'data-fixed-overflow-widgets': String(props.options?.fixedOverflowWidgets ?? false),
+      'data-hover-sticky': String(props.options?.hover?.sticky ?? true),
+      'data-hover-hiding-delay': String(props.options?.hover?.hidingDelay ?? ''),
     });
   };
   // __esModule: true is required so that `import Editor from '@monaco-editor/react'`

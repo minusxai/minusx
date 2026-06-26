@@ -46,4 +46,18 @@ describe('JsonEditor', () => {
     const banner = screen.getByLabelText('JSON editor error');
     expect(banner.textContent).toContain('Invalid question content');
   });
+
+  it('keeps Monaco find controls above hover overlays', () => {
+    renderWithProviders(<JsonEditor value={VALID_JSON} onChange={vi.fn()} readOnly={false} />);
+    const editor = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
+
+    expect(editor.dataset.fixedOverflowWidgets).toBe('true');
+    expect(editor.dataset.hoverSticky).toBe('false');
+    expect(editor.dataset.hoverHidingDelay).toBe('0');
+    expect(
+      Array.from(document.querySelectorAll('style')).some(style =>
+        style.textContent?.includes('body:has(.json-monaco-editor .monaco-editor .find-widget.visible) .workbench-hover-container')
+      )
+    ).toBe(true);
+  });
 });
