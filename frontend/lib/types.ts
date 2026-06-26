@@ -1130,6 +1130,9 @@ export interface LLMDebugInfo {
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
+  /** Tokens served from / written to the provider prompt cache (from usage.cacheRead/cacheWrite). */
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
   cost: number;
   completion_tokens_details?: any;
   prompt_tokens_details?: any;
@@ -1232,6 +1235,10 @@ export interface CompressedFileState {
                                  // at the LLM boundary (the agent reads `markup`, not JSON content).
   markup?: string;               // File Architecture v2 — the agent's edit surface (jsx body
                                  // for documents, keyvalue→XML for props); mirrors buildCurrentFileStr
+  /** A single screenshot of the rendered file, attached client-side at send time. `key` is a
+   *  stable identity for cross-turn dedup by the projection pass. Replaces the old per-chart
+   *  image series. */
+  image?: { key: string; url?: string; data?: string; mimeType?: string };
 }
 
 export interface CompressedAugmentedFile {

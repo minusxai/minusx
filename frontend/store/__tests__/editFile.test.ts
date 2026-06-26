@@ -789,19 +789,23 @@ describe('editFile - Story inline <Number> is visible to the agent (EditFile res
     );
   }
 
+  // EditFile no longer echoes file markup; it carries the query RESULT in details.__augmented (what
+  // the projection renders to the LLM). The inline <Number> result/error must be there.
+  function editQueryResults(res: any): any[] {
+    return res?.details?.__augmented?.[0]?.file?.queryResults ?? [];
+  }
+
   it('EditFile response queryResults include the inline <Number> result (the agent sees its data)', async () => {
     storyId = await makeStory('SELECT 7 AS n');
     await readFiles([storyId]);
-    const parsed = editContent(await editHead(storyId));
-    const finals = (parsed.queryResults ?? []).map((q: any) => q.finalQuery);
+    const finals = editQueryResults(await editHead(storyId)).map((q: any) => q.finalQuery);
     expect(finals).toContain('SELECT 7 AS n');
   });
 
   it('EditFile response surfaces the inline <Number> query ERROR (so the agent self-corrects)', async () => {
     storyId = await makeStory('SELECT BADSQL AS n');
     await readFiles([storyId]);
-    const parsed = editContent(await editHead(storyId));
-    const errored = (parsed.queryResults ?? []).filter((q: any) => q.error);
+    const errored = editQueryResults(await editHead(storyId)).filter((q: any) => q.error);
     expect(errored.length).toBeGreaterThan(0);
     expect(errored[0].error).toContain('Parser Error');
   });
@@ -1377,11 +1381,11 @@ describe('EditFile - notebook cell auto-execute', () => {
     expect(executed?.['cell-1']?.query).toBe('SELECT 2');
     expect(executed?.['cell-1']?.database).toBe('mxfood');
 
-    // The fresh result flows back to the agent in the response.
-    const parsed = parseToolJson(result.content);
-    const qr = parsed.queryResults?.[0];
+    // The fresh result flows back to the agent in the response — EditFile carries it in
+    // details.__augmented (no markup), which the projection renders to the LLM.
+    const qr = (result.details as any)?.__augmented?.[0]?.file?.queryResults?.[0];
     expect(qr).toBeDefined();
-    expect(qr.data).toContain('| 2 |');
+    expect(qr.data.markdown).toContain('| 2 |');
   });
 
   it('does not execute when the edit leaves the cell query unchanged', async () => {

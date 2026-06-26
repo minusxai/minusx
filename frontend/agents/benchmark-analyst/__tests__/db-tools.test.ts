@@ -34,6 +34,7 @@ vi.mock('mongodb', () => ({
 }));
 
 import {
+  BaseExecuteQuery,
   ChainedExecuteQuery,
   clampQueryTimeoutSeconds,
   DEFAULT_QUERY_TIMEOUT_SEC,
@@ -659,5 +660,66 @@ describe('CatalogSearchDBSchema', () => {
     expect(res.isError).toBe(true);
     const payload = JSON.parse((res.content[0] as { text: string }).text);
     expect(payload.error).toMatch(/at least one query/i);
+  });
+});
+
+// ─── BaseExecuteQuery — rawData presentation (image vs rows) ──────────────────
+describe('BaseExecuteQuery — rawData presentation', () => {
+  let tmpDir: string;
+  let sqlitePath: string;
+
+  beforeAll(() => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), 'db-tools-viz-'));
+    sqlitePath = path.join(tmpDir, 'tiny.sqlite');
+    const db = new RealDatabase(sqlitePath);
+    db.exec(`
+      CREATE TABLE products (id INTEGER, name TEXT, price INTEGER);
+      INSERT INTO products VALUES (1, 'Widget', 10), (2, 'Gadget', 20), (3, 'Doodad', 30);
+    `);
+    db.close();
+  });
+  afterAll(() => {});
+
+  // Stub the server-only renderer so we can assert the content shaping without sharp/resvg.
+  class StubVizExecuteQuery extends BaseExecuteQuery {
+    protected override async _renderVizJpeg(): Promise<Buffer | null> {
+      return Buffer.from('FAKEJPEGBYTES');
+    }
+  }
+  const ctx = (): BenchmarkAnalystContext => ({
+    datasetKey: 'test-viz',
+    connections: [{ name: 'tiny', dialect: 'sqlite', config: { file_path: sqlitePath } }],
+  });
+  const run = (params: Record<string, unknown>) =>
+    new StubVizExecuteQuery(undefined as never, params as never, ctx()).run();
+
+  it('returns an IMAGE + summary (no row table) for a renderable viz by default', async () => {
+    const res = await run({ connectionId: 'tiny', query: 'SELECT name, price FROM products ORDER BY id', vizSettings: { type: 'bar' } });
+    expect(res.isError).toBe(false);
+    const img = res.content.find((c) => c.type === 'image') as { type: string; mimeType?: string } | undefined;
+    expect(img).toBeDefined();
+    expect(img!.mimeType).toBe('image/jpeg');
+    const text = (res.content[0] as { text: string }).text;
+    expect(text).toContain('"columns"');     // summary present
+    expect(text).not.toContain('| name |');  // row table NOT included
+    expect(text).toContain('rawData');        // hint to fetch rows
+  });
+
+  it('returns ROWS (no image) when rawData is true', async () => {
+    const res = await run({ connectionId: 'tiny', query: 'SELECT name, price FROM products ORDER BY id', vizSettings: { type: 'bar' }, rawData: true });
+    expect(res.content.find((c) => c.type === 'image')).toBeUndefined();
+    expect((res.content[0] as { text: string }).text).toContain('| name |');
+  });
+
+  it('returns ROWS (no image) for a non-renderable viz (table)', async () => {
+    const res = await run({ connectionId: 'tiny', query: 'SELECT name FROM products', vizSettings: { type: 'table' } });
+    expect(res.content.find((c) => c.type === 'image')).toBeUndefined();
+    expect((res.content[0] as { text: string }).text).toContain('| name |');
+  });
+
+  it('returns ROWS (no image) when there is no viz at all', async () => {
+    const res = await run({ connectionId: 'tiny', query: 'SELECT name FROM products' });
+    expect(res.content.find((c) => c.type === 'image')).toBeUndefined();
+    expect((res.content[0] as { text: string }).text).toContain('| name |');
   });
 });

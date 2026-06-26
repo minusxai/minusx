@@ -47,6 +47,7 @@ const ReadFilesParams = Type.Object({
   fileIds: Type.Array(Type.Number(), { description: 'IDs of files to load.' }),
   maxChars: Type.Optional(Type.Number({ description: 'Max characters of compressed text per file (default 10,000).' })),
   runQueries: Type.Optional(Type.Boolean({ description: 'When true, executes saved queries and returns their results (default false).' })),
+  rawData: Type.Optional(Type.Boolean({ description: "Default false. When false, a question whose viz is a renderable chart returns an IMAGE of the chart (plus a column/row summary) instead of the row data — set true to get the actual rows. Files with no chart viz (table/pivot/number/single_value) always return rows." })),
 });
 
 export class ReadFiles extends MXTool<typeof ReadFilesParams, AnalystAgentContext> {

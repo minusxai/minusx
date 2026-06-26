@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type CompressedFileState, type ScreenshotDetails } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type ScreenshotDetails } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -21,7 +21,11 @@ import { getRootParams, storyEmbedRuns } from '@/lib/data/helpers/param-resoluti
 import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
-import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
+import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
+import { stripEntryQueryData, stripEntryMarkup } from '@/lib/projection/project';
+import type { AugmentedToolDetails } from '@/lib/projection/messages';
+import { queryPresentation, shouldDropRows } from '@/lib/chart/query-presentation';
+import { takeFilesMarkup, takeAugmentedMarkup, markupTextBlocks } from '@/lib/api/markup-blocks';
 import { captureFileViewBlob } from '@/lib/screenshot/capture';
 import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
@@ -165,7 +169,9 @@ async function renderFileChartImageBlocks(
   const entries = files.flatMap(f => {
     const vizType = (f.fileState.content as any)?.vizSettings?.type;
     const qr = f.queryResults?.[0];
-    if (!qr || !RENDERABLE_CHART_TYPES.has(vizType)) return [];
+    // Need actual rows to render — an empty/errored result yields no chart (the renderer returns
+    // null), so skip it here rather than emit a blank image block.
+    if (!qr || !qr.rows?.length || !RENDERABLE_CHART_TYPES.has(vizType)) return [];
     return [{ queryResult: qr, vizSettings: (f.fileState.content as any).vizSettings, titleOverride: f.fileState.name }];
   });
   if (entries.length === 0) return [];
@@ -460,7 +466,7 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
  * model always sees a single flat content layer (no layer reasoning needed).
  */
 registerFrontendTool('ReadFiles', async (args, _context) => {
-  const { fileIds, maxChars: rawMaxChars, runQueries = true } = args;
+  const { fileIds, maxChars: rawMaxChars, runQueries = true, rawData = false } = args;
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   const result = await readFiles(fileIds, { runQueries });
@@ -471,9 +477,34 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   );
   const textContent: ReadFilesResult = { success: true, files: noMarkup };
   const imageBlocks = await renderFileChartImageBlocks(result);
+  // Only present-as-image (drop rows) when an image was ACTUALLY rendered. If the chart couldn't
+  // render (no rows, render failure, server-side path with no DOM), keep the rows so the agent is
+  // never left with neither an image nor data. `result[i]` and `__augmented[i]` are 1:1.
+  const imageByFileId = new Set(
+    imageBlocks.length > 0
+      ? result.filter(f => f.queryResults?.[0]?.rows?.length && RENDERABLE_CHART_TYPES.has((f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type as string)).map(f => f.fileState.id)
+      : [],
+  );
+  // Rich payload for the projection pass (cross-turn diffing): the same files in the projector's
+  // shape. The `content` above is kept verbatim for the chat UI; projectMessages rebuilds the
+  // LLM-facing content from `__augmented` (diffed against the conversation) at send time.
+  // Presentation: a question with a renderable chart viz returns the rendered IMAGE (above) + summary
+  // instead of rows (unless rawData). Drop the row data facet for those files; keep it otherwise.
+  const augmented: AugmentedToolDetails = {
+    __augmented: result.map(f => {
+      const aug = compressedToAugmentedFiles(compressAugmentedFile(f, maxChars));
+      const vizType = (f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
+      if (shouldDropRows({ imagePresentation: queryPresentation(vizType, rawData) === 'image', imageRendered: imageByFileId.has(f.fileState.id) })) {
+        aug.file = stripEntryQueryData(aug.file);
+      }
+      return aug;
+    }),
+    __jsonTag: 'Files',
+    __status: { success: true },
+  };
   return {
     content: [{ type: 'text', text: JSON.stringify(textContent) }, ...markupTextBlocks(blocks), ...imageBlocks],
-    details: { success: true },
+    details: { success: true, ...augmented },
   };
 });
 
@@ -578,7 +609,7 @@ function vizWarningForQuestion(fileId: number): string | null {
 }
 
 registerFrontendTool('EditFile', async (args, _context) => {
-  const { fileId, changes } = args;
+  const { fileId, changes, rawData = false } = args;
 
   // Snapshot state before edit to compute delta
   const stateBefore = getStore().getState();
@@ -597,7 +628,6 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const prevQueryResultIds = new Set<string>(
     (augmentedBefore?.queryResults ?? []).map((qr: any) => qr.id).filter(Boolean)
   );
-  const prevRefIds = new Set<number>(fileState?.references ?? []);
 
   // Validate all changes in memory first (atomic: no Redux writes until all pass)
   const built = buildCurrentFileStr(stateBefore, fileId);
@@ -773,68 +803,62 @@ registerFrontendTool('EditFile', async (args, _context) => {
       )
     : [];
 
-  // Build delta response
+  // Re-read the edited file (auto-executed above) for its updated query result + metadata. The
+  // projection pass diffs it against the conversation; we don't compute manual deltas here.
   const [augmented] = await readFiles([fileId], {});
   const compressed = compressAugmentedFile(augmented);
-
-  // References delta: stub for pre-existing refs (their content didn't change during this edit)
-  const deltaReferences = compressed.references.map(ref =>
-    prevRefIds.has(ref.id) ? { id: ref.id, unchanged: true } : ref
-  );
-
-  // QueryResults delta: stub for results with the same hash as before the edit.
-  // A different hash means the query/params changed → new result → include full data.
-  const deltaQueryResults = compressed.queryResults.map((qr: any) => {
-    const qrId: string | undefined = qr.id;
-    if (qrId && prevQueryResultIds.has(qrId)) {
-      return { queryResultId: qrId, unchanged: true };
-    }
-    return qr;
-  });
 
   // Check viz constraint violations (incl. type-dependent ones) to feed back to the LLM
   const vizWarning = fileState?.type === 'question' ? vizWarningForQuestion(fileId) : null;
 
   const diff = diffs.join('\n');
-  // Pull the JSX `markup` out of the JSON (primary fileState + any FULL changed reference;
-  // unchanged-stub refs have none) → a separate raw <file_markup> block. The agent reads real
-  // JSX, and its next EditFile oldMatch matches that exact text rather than escaped JSON.
-  const { fileState: fsNoMarkup, block: primaryBlock } = takeFileStateMarkup(compressed.fileState);
-  const markupBlocks: MarkupBlock[] = primaryBlock ? [primaryBlock] : [];
-  const refsNoMarkup = deltaReferences.map(ref => {
-    if (ref && typeof (ref as CompressedFileState).markup === 'string') {
-      const t = takeFileStateMarkup(ref as CompressedFileState);
-      if (t.block) markupBlocks.push(t.block);
-      return t.fileState;
-    }
-    return ref;
-  });
-  const content: Record<string, any> = {
-    success: true,
-    fileState: fsNoMarkup,
-    references: refsNoMarkup,
-    queryResults: deltaQueryResults,
-    ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
-    ...(vizWarning ? { vizWarning } : {}),
-    // Non-blocking validation feedback (content schema + story <Param> lint). The edit was
-    // applied regardless; the agent sees this and can fix.
-    ...(result.validation?.length ? { validation: result.validation } : {}),
-  };
-  // Image delta: only render chart when query result or vizSettings changed.
-  const queryResultChanged = compressed.queryResults.some((qr: any) => {
-    const qrId: string | undefined = qr.id;
+
+  // EditFile echoes the new query RESULT (data the agent can't derive) + a summary + diff/status, but
+  // NOT the markup — the agent already knows its edit from the prior app state + the change args.
+  // Result presentation matches ReadFiles/ExecuteQuery: renderable chart → image + summary (unless
+  // rawData); table/number/no-viz → rows + summary. Markup facet is always stripped.
+  const vizType = (augmented.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
+  const showImage = queryPresentation(vizType, rawData) === 'image';
+
+  // Render the chart image only for the image presentation AND when the result/viz actually changed.
+  const queryResultChanged = compressed.queryResults.some((qr: { id?: string }) => {
+    const qrId = qr.id;
     return !qrId || !prevQueryResultIds.has(qrId);
   });
-  const prevVizSettings = (augmentedBefore?.fileState.content as any)?.vizSettings;
-  const currVizSettings = (augmented.fileState.content as any)?.vizSettings;
+  const prevVizSettings = (augmentedBefore?.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
+  const currVizSettings = (augmented.fileState.content as { vizSettings?: unknown } | undefined)?.vizSettings;
   const vizSettingsChanged = JSON.stringify(prevVizSettings) !== JSON.stringify(currVizSettings);
-
-  const imageBlocks = (queryResultChanged || vizSettingsChanged)
+  const imageBlocks = showImage && (queryResultChanged || vizSettingsChanged)
     ? await renderFileChartImageBlocks([augmented])
     : [];
+
+  // Drop the rows ONLY when an image actually conveys the result: either a fresh image was rendered,
+  // or it's an image-presented question whose result is unchanged (so the chart image was already
+  // sent in app state / a prior turn — the projection dedups rows either way). If no image exists
+  // (render failed / no rows), keep the rows so the agent is never left with neither image nor data.
+  let entry = stripEntryMarkup(compressedToAugmentedFiles(compressed).file);
+  if (shouldDropRows({ imagePresentation: showImage, imageRendered: imageBlocks.length > 0, resultUnchanged: !queryResultChanged && !vizSettingsChanged })) {
+    entry = stripEntryQueryData(entry); // keep summary, drop rows
+  }
+
+  // projectMessages rebuilds the LLM-facing content from __status + __augmented (diffed query result,
+  // no markup) and preserves the image block above. `content` here is kept for the chat UI.
+  const status = {
+    success: true,
+    isDirty: true,
+    ...(diff ? { diff } : {}),
+    ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
+    ...(vizWarning ? { vizWarning } : {}),
+    ...(result.validation?.length ? { validation: result.validation } : {}),
+  };
+  const augmentedDetails: AugmentedToolDetails = {
+    __augmented: [{ file: entry, references: [] }],
+    __jsonTag: 'Files',
+    __status: status,
+  };
   return {
-    content: [{ type: 'text', text: JSON.stringify(content) }, ...markupTextBlocks(markupBlocks), ...imageBlocks],
-    details: { success: true, diff } as EditFileDetails,
+    content: [{ type: 'text', text: JSON.stringify(status) }, ...imageBlocks],
+    details: { success: true, diff, ...augmentedDetails } as EditFileDetails,
   };
 });
 
@@ -1024,9 +1048,19 @@ registerFrontendTool('CreateFile', async (args, context) => {
   if (vizWarning) result.vizWarning = vizWarning;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
   const imageBlocks = await renderFileChartImageBlocks([augmented]);
+  // Rich payload for the projection pass (see ReadFiles/EditFile); content kept for the chat UI.
+  const augmentedDetails: AugmentedToolDetails = {
+    __augmented: [compressedToAugmentedFiles(compressAugmentedFile(augmented))],
+    __jsonTag: 'Files',
+    __status: {
+      success: true,
+      ...(vizWarning ? { vizWarning } : {}),
+      ...(createValidation.length ? { validation: createValidation } : {}),
+    },
+  };
   return {
     content: [{ type: 'text', text: JSON.stringify(result) }, ...markupTextBlocks(createBlocks), ...imageBlocks],
-    details: { success: true },
+    details: { success: true, ...augmentedDetails },
   };
 });
 

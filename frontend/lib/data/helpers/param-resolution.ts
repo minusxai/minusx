@@ -12,7 +12,7 @@ import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { extractInlineQuestions } from '@/lib/data/story-question';
 import { extractInlineNumbers } from '@/lib/data/story-number';
-import { bindReferencedParams } from '@/lib/sql/sql-params';
+import { bindReferencedParams, buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 
 /**
@@ -39,25 +39,23 @@ export function getRootParams(state: RootState, fileState: FileState): Record<st
 }
 
 /**
- * Resolves effective parameter values for a question.
- * Merges the question's own parameterValues with inherited params (inherited wins).
- * Returns a dict filtered to only params the question defines.
+ * Resolves effective parameter values for a question — THE canonical key for a question's query
+ * (execution, cache store/lookup, and queryResultId all key on this exact dict).
  *
- * Only params the question itself defines are included; unrelated inherited
- * params are dropped (prevents sibling-question param pollution in the hash).
+ * Merges the question's own parameterValues with inherited params (inherited wins), filtered to
+ * only params the question defines (unrelated inherited params are dropped — no sibling pollution),
+ * and applies the type-aware None coercion: an unset / empty-string NUMBER param → null. This is
+ * the same normalization a question's query is EXECUTED with (`buildQueryParamValues`), so the
+ * cache key the augmentation looks up under == the key the result is stored under == queryResultId.
+ * (Keying on the raw `''` here was the param-keying bug: the executor stored under null, so the
+ * lookup never found the result and queryResults came back empty.)
  */
 export function resolveEffectiveParams(
   parameters: QuestionParameter[],
   ownParamValues: Record<string, any>,
   inheritedParams: Record<string, any>
 ): Record<string, any> {
-  const dict: Record<string, any> = {};
-  for (const p of parameters) {
-    dict[p.name] = Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
-      ? inheritedParams[p.name]
-      : (ownParamValues[p.name] ?? '');
-  }
-  return dict;
+  return buildQueryParamValues(parameters, ownParamValues, inheritedParams);
 }
 
 /**

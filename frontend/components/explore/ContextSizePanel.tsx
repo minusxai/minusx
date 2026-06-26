@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton, Spinner, Grid, GridItem } from '@chakra-ui/react';
 import { LuX } from 'react-icons/lu';
 import type { ContextSizeEstimate, ContextSizeSection } from '@/lib/chat/context-size-estimate';
+import { cachedTokensPerSection } from '@/lib/chat/context-size-estimate';
 
 const CONTEXT_SIZE_LIMIT_TOKENS = 100_000;
 const CONTEXT_SIZE_SQUARES = 100;
@@ -45,7 +46,10 @@ function squareColorForIndex(
 
 export type ContextSizePanelState =
   | { status: 'loading' }
-  | { status: 'ready'; estimate: ContextSizeEstimate }
+  // `cachedTokens` = tokens the provider served from cache on the LAST turn (usage.cacheRead).
+  // Shown as black-bordered squares over the prefix so we can see how much of the context is
+  // actually being cached (cache effectiveness) vs re-billed each turn.
+  | { status: 'ready'; estimate: ContextSizeEstimate; cachedTokens?: number }
   | { status: 'error'; error: string };
 
 export function ContextSizePanel({
@@ -60,12 +64,19 @@ export function ContextSizePanel({
   colStart: ComponentProps<typeof GridItem>['colStart'];
 }) {
   const estimate = state.status === 'ready' ? state.estimate : null;
+  const cachedTokens = state.status === 'ready' ? (state.cachedTokens ?? 0) : 0;
   const totalTokens = estimate?.totalTokens ?? 0;
   const percent = estimate ? Math.min(999, Math.round((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * 100)) : 0;
   const filledSquares = estimate
     ? Math.min(CONTEXT_SIZE_SQUARES, Math.ceil((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * CONTEXT_SIZE_SQUARES))
     : 0;
+  // Cached prefix (last turn) — the leading N squares get a black border.
+  const cachedSquares = estimate && cachedTokens > 0
+    ? Math.min(CONTEXT_SIZE_SQUARES, Math.round((cachedTokens / CONTEXT_SIZE_LIMIT_TOKENS) * CONTEXT_SIZE_SQUARES))
+    : 0;
   const displaySections = estimate ? estimate.sections : [];
+  // How many tokens of EACH section the provider served from cache last turn (prefix overlap).
+  const cachedPerSection = cachedTokensPerSection(displaySections, cachedTokens);
 
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
@@ -118,6 +129,8 @@ export function ContextSizePanel({
                       const color = index < filledSquares
                         ? squareColorForIndex(index, estimate.sections, CONTEXT_SIZE_LIMIT_TOKENS)
                         : null;
+                      // Cached prefix (last turn) → black border so cache coverage is visible.
+                      const isCached = index < cachedSquares;
                       return (
                         <Box
                           key={index}
@@ -125,23 +138,43 @@ export function ContextSizePanel({
                           h="10px"
                           borderRadius="2px"
                           bg={color ?? 'bg.canvas'}
-                          border="1px solid"
-                          borderColor={color ? color : 'border.muted'}
+                          border={isCached ? '1.5px solid' : '1px solid'}
+                          borderColor={isCached ? 'black' : (color ? color : 'border.muted')}
                         />
                       );
                     })}
                   </Box>
 
                   <VStack align="stretch" gap={1}>
-                    {displaySections.map((section) => (
-                      <HStack key={section.key} gap={2} justify="space-between" fontSize="2xs" color="fg.muted">
-                        <HStack gap={1.5} minW={0}>
-                          <Box w="8px" h="8px" bg={sectionColor(section.key)} borderRadius="1px" flexShrink={0} />
-                          <Text truncate>{section.label}</Text>
+                    {/* Column header: each row shows how many of its tokens were cached last turn
+                        (served from the provider prefix cache) vs the section's total. */}
+                    <HStack gap={2} justify="space-between" fontSize="2xs" color="fg.subtle" aria-label="section token columns">
+                      <Text truncate minW={0}>Section</Text>
+                      <HStack gap={3} flexShrink={0}>
+                        <HStack gap={1} flexShrink={0}>
+                          <Box w="7px" h="7px" border="1.5px solid" borderColor="black" borderRadius="1px" flexShrink={0} />
+                          <Text>cached</Text>
                         </HStack>
-                        <Text flexShrink={0}>{section.tokens.toLocaleString()} tok</Text>
+                        <Text w="14ch" textAlign="right">cached / total</Text>
                       </HStack>
-                    ))}
+                    </HStack>
+                    {displaySections.map((section, i) => {
+                      const cached = cachedPerSection[i] ?? 0;
+                      return (
+                        <HStack key={section.key} gap={2} justify="space-between" fontSize="2xs" color="fg.muted"
+                          aria-label={`section ${section.key} tokens`}>
+                          <HStack gap={1.5} minW={0}>
+                            <Box w="8px" h="8px" bg={sectionColor(section.key)} borderRadius="1px" flexShrink={0} />
+                            <Text truncate>{section.label}</Text>
+                          </HStack>
+                          <Text flexShrink={0} w="14ch" textAlign="right">
+                            <Text as="span" color={cached > 0 ? 'fg.default' : 'fg.subtle'}>{cached.toLocaleString()}</Text>
+                            {' / '}
+                            {section.tokens.toLocaleString()} tok
+                          </Text>
+                        </HStack>
+                      );
+                    })}
                   </VStack>
                 </>
               )}

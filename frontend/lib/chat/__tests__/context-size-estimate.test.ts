@@ -1,7 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { estimateContextSize } from '@/lib/chat/context-size-estimate';
+import { estimateContextSize, cachedTokensPerSection } from '@/lib/chat/context-size-estimate';
+import type { ContextSizeSection } from '@/lib/chat/context-size-estimate';
 import type { Api, Context } from '@/orchestrator/llm';
 import type { TSchema } from 'typebox';
+
+describe('cachedTokensPerSection', () => {
+  // The provider's prompt cache covers a contiguous PREFIX of the WIRE serialization: system prompt,
+  // tool defs, then PRIOR-turn messages (conversation/tool-call history). The CURRENT turn's new
+  // content (app state, file markup, attachments, the next user message) is fresh — NOT in that
+  // prefix — so it must never show as cached, however large `cachedTokens` (usage.cacheRead) is.
+  // The cached prefix is distributed across the cacheable sections in wire order.
+  const sections = (): ContextSizeSection[] => [
+    { key: 'system_prompt', label: 'System prompt', tokens: 7000, chars: 0 },
+    { key: 'tool_definitions', label: 'Tool definitions', tokens: 3000, chars: 0 },
+    { key: 'conversation_history', label: 'Conv history', tokens: 800, chars: 0 },
+    { key: 'app_state', label: 'App state', tokens: 500, chars: 0 },          // fresh (current turn)
+    { key: 'file_markup', label: 'File markup', tokens: 400, chars: 0 },      // fresh (current turn)
+    { key: 'next_user_message', label: 'Next user msg', tokens: 100, chars: 0 }, // fresh (not on wire yet)
+  ];
+
+  it('returns 0 for every section when nothing is cached', () => {
+    expect(cachedTokensPerSection(sections(), 0)).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  it('fills the cacheable wire prefix (system → tools → history) in order', () => {
+    // 10,800 = system(7000)+tools(3000)+conv(800); fresh sections stay 0.
+    expect(cachedTokensPerSection(sections(), 10_800)).toEqual([7000, 3000, 800, 0, 0, 0]);
+  });
+
+  it('splits at a boundary inside a cacheable section', () => {
+    // 8,000 cached → all system (7000) + 1000 of tools; conv + fresh = 0.
+    expect(cachedTokensPerSection(sections(), 8_000)).toEqual([7000, 1000, 0, 0, 0, 0]);
+  });
+
+  it('NEVER attributes cache to fresh current-turn sections, even when the prefix is huge', () => {
+    // The bug: next_user_message / app_state / file_markup showing as cached. They are fresh.
+    expect(cachedTokensPerSection(sections(), 1_000_000)).toEqual([7000, 3000, 800, 0, 0, 0]);
+  });
+
+  it('treats missing/zero cachedTokens as all-uncached', () => {
+    expect(cachedTokensPerSection(sections(), undefined)).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+});
 
 describe('estimateContextSize', () => {
   it('splits the next user message into app state, attachments, wrapper, and goal sections', () => {

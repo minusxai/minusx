@@ -71,24 +71,32 @@ describe('AnalystAgent skills rendering', () => {
   });
 });
 
-describe('AnalystAgent buildUserContent', () => {
-  it('emits <AppState>/<CurrentDate> context block then the RAW goal', () => {
+// App state moved OUT of buildUserContent into the single projection pass (buildMessages →
+// projectMessages). The current date moved INTO the system prompt (NOT per-message), so a turn's
+// bytes don't change when it scrolls from current to prior (which broke the message-history cache).
+// buildUserContent now emits only attachments + images + the raw goal — NO <CurrentDate>, NO <AppState>.
+describe('AnalystAgent buildUserContent (no app state / no per-message date)', () => {
+  it('emits just the RAW goal — no <AppState>, no <CurrentDate>', () => {
     const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
     const content = agent.buildUserContent();
-    expect(content).toHaveLength(2);
+    expect(content).toHaveLength(1);
     expect(content[0].type).toBe('text');
-    expect(content[0].text).toContain('<AppState>{"page":"explore","fileId":42}</AppState>');
-    expect(content[0].text).toMatch(/<CurrentDate>\d{4}-\d{2}-\d{2}<\/CurrentDate>/);
+    expect(content[0].text).not.toContain('<AppState>');
+    expect(content[0].text).not.toContain('<CurrentDate>');
     // The goal is a raw text block — no <Question> wrapper.
-    expect(content[1].text).toBe('how many users?');
+    expect(content[0].text).toBe('how many users?');
   });
 
-  it('emits null for AppState when context.appState is unset', () => {
-    const content = newAgent().buildUserContent();
-    expect(content[0].text).toContain('<AppState>null</AppState>');
+  it('no concrete date/time is baked into the system prompt (it is a per-turn <CurrentTime>)', () => {
+    const sp: string = newAgent().getSystemPrompt();
+    // The system prompt only DESCRIBES CurrentTime; it must not embed a concrete date/time (which
+    // would change daily/hourly and bust the system-prompt cache). The value rides in the user turn.
+    expect(sp).toContain('CurrentTime');
+    expect(sp).not.toMatch(/Current date: \d{4}-\d{2}-\d{2}/);
+    expect(sp).not.toMatch(/<CurrentTime>\d/);
   });
 
-  it('threads ImageContent items between the context block and the raw goal', () => {
+  it('threads ImageContent items before the raw goal', () => {
     const orch = new Orchestrator([AnalystAgent]);
     const userMessage = [
       { type: 'text' as const, text: 'see chart' },
@@ -97,10 +105,9 @@ describe('AnalystAgent buildUserContent', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agent: any = new AnalystAgent(orch, { userMessage } as any, ctx);
     const content = agent.buildUserContent();
-    expect(content).toHaveLength(3);
-    expect(content[0].text).toContain('<AppState>');
-    expect(content[1].type).toBe('image');
-    expect(content[2].text).toBe('see chart');
+    expect(content).toHaveLength(2);
+    expect(content[0].type).toBe('image');
+    expect(content[1].text).toBe('see chart');
   });
 
   it('injects image attachments (base64) and text attachments from context', () => {
@@ -120,5 +127,38 @@ describe('AnalystAgent buildUserContent', () => {
     expect(image.mimeType).toBe('image/jpeg');
     // goal is still the last block, raw
     expect(content[content.length - 1].text).toBe('how many users?');
+  });
+});
+
+// App state is rendered + diffed by the projection pass at buildMessages time.
+describe('AnalystAgent buildMessages (app state via projection)', () => {
+  it('renders the <AppState> block (from context) before the current user content', () => {
+    const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
+    const msgs = agent.buildMessages();
+    const user = msgs[msgs.length - 1];
+    expect(user.role).toBe('user');
+    expect(user.content[0].text).toContain('<AppState>{"page":"explore","fileId":42}</AppState>');
+    // the non-wire marker is stripped by the pass
+    expect(user._appState).toBeUndefined();
+  });
+
+  it('omits the AppState block when context.appState is unset', () => {
+    const msgs = newAgent().buildMessages();
+    const user = msgs[msgs.length - 1];
+    const joined = user.content.map((c: { text?: string }) => c.text ?? '').join('\n');
+    expect(joined).not.toContain('<AppState>');
+  });
+
+  it('renders the frozen <CurrentTime> right AFTER the AppState block', () => {
+    const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
+    // orchestrator.run() normally freezes this onto the context; set it directly for the unit test.
+    (agent.context as { currentTime?: string }).currentTime = '2026-06-26 14:00 UTC';
+    const msgs = agent.buildMessages();
+    const texts = (msgs[msgs.length - 1].content as Array<{ type: string; text?: string }>)
+      .filter((c) => c.type === 'text').map((c) => c.text ?? '');
+    const appStateIdx = texts.findIndex((t) => t.includes('<AppState>'));
+    const timeIdx = texts.findIndex((t) => t.includes('<CurrentTime>2026-06-26 14:00 UTC</CurrentTime>'));
+    expect(appStateIdx).toBeGreaterThanOrEqual(0);
+    expect(timeIdx).toBe(appStateIdx + 1); // immediately after app state
   });
 });

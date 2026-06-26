@@ -112,6 +112,7 @@ describe('Client-Server File State Parity', () => {
   let dashboardId: number;      // dashboard referencing questionId
   let paramQuestionId: number;  // question with :limit param (own default: limit=5)
   let paramDashboardId: number; // dashboard overriding limit=10
+  let unsetNumParamQuestionId: number; // question with a :min_mrr number param and NO value set
 
   // ---------------------------------------------------------------------------
   // Route client HTTP calls to real Next.js route handlers so both the client
@@ -219,6 +220,20 @@ describe('Client-Server File State Parity', () => {
     paramDashboardId = await DocumentDB.create('Param Sales Dashboard', '/org/param-sales-dashboard', 'dashboard', paramDashboardContent, [paramQuestionId]);
     await DocumentDB.update(paramDashboardId, 'Param Sales Dashboard', '/org/param-sales-dashboard', paramDashboardContent, [paramQuestionId], 'init-param-dashboard');
 
+    // Question with a :min_mrr NUMBER param and NO value set — the param-keying bug case.
+    // An unset numeric param must canonicalize to None (null) EVERYWHERE (queryResultId, the
+    // augmentation lookup, and the executed result's id) so the result attaches to the file.
+    const unsetParamQuestionContent = {
+      description: 'Sales above a min MRR',
+      query: 'SELECT month, total FROM sales WHERE (:min_mrr IS NULL OR total >= :min_mrr)',
+      connection_name: 'test_db',
+      parameters: [{ name: 'min_mrr', type: 'number' }],
+      parameterValues: {},   // <-- unset
+      vizSettings: { type: 'table', xCols: [], yCols: [] },
+    } as unknown as QuestionContent;
+    unsetNumParamQuestionId = await DocumentDB.create('Min MRR Query', '/org/min-mrr-query', 'question', unsetParamQuestionContent, []);
+    await DocumentDB.update(unsetNumParamQuestionId, 'Min MRR Query', '/org/min-mrr-query', unsetParamQuestionContent, [], 'init-unset-param-question');
+
     store = configureStore({
       reducer: {
         files: filesReducer,
@@ -317,6 +332,47 @@ describe('Client-Server File State Parity', () => {
     expect(client.references[0].queryResultId).toEqual(inheritedHash);
     expect(server[0].references[0].queryResultId).toEqual(inheritedHash);
     expect(client.references[0].queryResultId).not.toEqual(standaloneHash);
+  });
+
+  // ============================================================================
+  // Param-keying bug: an UNSET numeric param must canonicalize to None (null)
+  // everywhere, so the file's queryResultId == the executed result's id and the
+  // result actually attaches (no empty queryResults).
+  // ============================================================================
+
+  it('unset numeric param: queryResultId, lookup, and executed id all key on {min_mrr: null}', async () => {
+    const canonicalHash = getQueryHash(
+      'SELECT month, total FROM sales WHERE (:min_mrr IS NULL OR total >= :min_mrr)',
+      { min_mrr: null },
+      'test_db',
+    );
+    // The buggy keys this must NOT use: omitted ({}) or empty-string ({min_mrr: ''}).
+    const omittedHash = getQueryHash('SELECT month, total FROM sales WHERE (:min_mrr IS NULL OR total >= :min_mrr)', {}, 'test_db');
+    const emptyHash = getQueryHash('SELECT month, total FROM sales WHERE (:min_mrr IS NULL OR total >= :min_mrr)', { min_mrr: '' }, 'test_db');
+    expect(canonicalHash).not.toEqual(omittedHash);
+    expect(canonicalHash).not.toEqual(emptyHash);
+
+    const client = await getClientCompressed(unsetNumParamQuestionId);
+    const server = await readFilesServer([unsetNumParamQuestionId], testUser);
+
+    // queryResultId is canonical on BOTH paths
+    expect(client.fileState.queryResultId).toEqual(canonicalHash);
+    expect(server[0].fileState.queryResultId).toEqual(canonicalHash);
+    expect(server[0]).toEqual(client); // parity
+
+    // And executing the query keys the result under the SAME canonical id, so it attaches.
+    mockRunQuery.mockClear();
+    const withQueries = await readFilesServer([unsetNumParamQuestionId], testUser, { executeQueries: true });
+    expect(withQueries[0].queryResults).toHaveLength(1);
+    expect(withQueries[0].queryResults[0].id).toEqual(canonicalHash);
+    expect(withQueries[0].queryResults[0].id).toEqual(withQueries[0].fileState.queryResultId);
+    // The None param must be resolved BEFORE the connector runs — the SQL handed to runQuery must
+    // not still contain an unbound `:min_mrr` (which would be a SQL error), and the bound params
+    // must not include min_mrr. (applyNoneParams removed the filter / substituted NULL.)
+    expect(mockRunQuery).toHaveBeenCalledTimes(1);
+    const [, executedSql, boundParams] = mockRunQuery.mock.calls[0];
+    expect(executedSql).not.toMatch(/:min_mrr\b/);
+    expect(boundParams).not.toHaveProperty('min_mrr');
   });
 
   // ============================================================================

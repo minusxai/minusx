@@ -7,6 +7,7 @@
  * No Redux. No server-only APIs. Pure functions only.
  */
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
@@ -54,7 +55,9 @@ export function computeQueryResultId(file: DbFile): string | undefined {
   if (file.type !== 'question' || !file.content) return undefined;
   const content = file.content as QuestionContent;
   if (!content.query || !content.connection_name) return undefined;
-  return getQueryHash(content.query, content.parameterValues || {}, content.connection_name);
+  // Key on the CANONICAL params (effective + None-coerced) — same as execution/lookup — so the
+  // queryResultId matches the id the executed result is stored under (see resolveEffectiveParams).
+  return getQueryHash(content.query, buildQueryParamValues(content.parameters ?? [], content.parameterValues ?? {}, {}), content.connection_name);
 }
 
 /**
@@ -122,7 +125,8 @@ function compressFileState(fs: FileState): CompressedFileState {
   if (fs.type === 'question') {
     const qc = mergedContent as QuestionContent;
     if (qc?.query && qc?.connection_name) {
-      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.connection_name);
+      // Canonical params (effective + None-coerced) — matches execution/lookup keying.
+      queryResultId = getQueryHash(qc.query, buildQueryParamValues(qc.parameters ?? [], qc.parameterValues ?? {}, {}), qc.connection_name);
     }
   }
   // Notebooks: drop system-managed cached cell results from the model's view.

@@ -35,7 +35,6 @@ vi.mock('@/lib/hooks/useConfigs', () => ({ useConfigs: () => ({ config: { brandi
 vi.mock('@/lib/hooks/useContext', () => ({
   useContext: () => ({ contextId: 1, databases: [], documentation: '', availableSkills: [], contextLoading: false }),
 }));
-vi.mock('@/lib/chart/chart-attachments', () => ({ buildChartAttachments: vi.fn().mockResolvedValue([]) }));
 vi.mock('@/components/Markdown', () => ({
   __esModule: true,
   default: ({ children }: { children?: React.ReactNode }) => React.createElement('span', null, children),

@@ -25,7 +25,7 @@ import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { GET as filesListGetHandler } from '@/app/api/files/route';
 import { readFilesByCriteria } from '@/lib/api/file-state';
-import { selectContextFromPath } from '@/store/filesSlice';
+import { selectContextFromPath, selectMergedContent } from '@/store/filesSlice';
 import { NextRequest } from 'next/server';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -1543,18 +1543,18 @@ describe('Phase 1: Unified File System API E2E', () => {
         store.getState() as any
       );
 
-      // Result content should be a CompressedAugmentedFile JSON
+      // EditFile returns STATUS only (success + isDirty + diff) — it does NOT echo the file content/
+      // markup (the agent knows its edit from the prior app state + the change args).
       const content = parseToolJson(result.content);
+      expect(content.success).toBe(true);
+      expect(content.isDirty).toBe(true);
+      expect(content.fileState).toBeUndefined();
 
-      // Should have fileState with isDirty and updated content
-      expect(content.fileState).toBeDefined();
-      expect(content.fileState.isDirty).toBe(true);
-      expect((content.fileState.content as any).description).toBe('Response structure test');
-
-      // Should have queryResults (from auto-execute)
-      expect(content.queryResults).toBeDefined();
-      expect(Array.isArray(content.queryResults)).toBe(true);
-      expect(content.queryResults.length).toBeGreaterThan(0);
+      // The updated query RESULT (from auto-execute) IS carried, in details.__augmented — what the
+      // projection renders to the LLM — and the markup facet is stripped.
+      const aug = (result.details as any).__augmented[0].file;
+      expect(aug.content).toBeUndefined();                 // markup NOT echoed
+      expect(aug.queryResults?.length).toBeGreaterThan(0); // result present
 
     });
 
@@ -1600,10 +1600,13 @@ describe('Phase 1: Unified File System API E2E', () => {
         store.getState() as any
       );
 
-      // Edit must have succeeded (staged in Redux)
+      // Edit must have succeeded (staged) even though auto-execute failed — status reports it.
       const parsed = parseToolJson(result.content);
-      expect(parsed.fileState.isDirty).toBe(true);
-      expect((parsed.fileState.content as any).description).toBe('Step 1: parameters updated next');
+      expect(parsed.success).toBe(true);
+      expect(parsed.isDirty).toBe(true);
+      // And the edit really applied (verify via Redux merged content, not the response).
+      const merged = selectMergedContent(store.getState() as any, brokenQuestionId) as any;
+      expect(merged.description).toBe('Step 1: parameters updated next');
 
     });
   });

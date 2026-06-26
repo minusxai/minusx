@@ -168,6 +168,14 @@ export class Orchestrator {
     this.controller = new AbortController();
     root.threadHistory = this.projectRootThreadHistory();
 
+    // Freeze this turn's wall-clock hour onto the root context BEFORE it's stored in the log, so the
+    // turn renders the SAME <CurrentTime> whether it's the current turn or a prior one (cache stays
+    // valid — re-stamping it each projection is exactly the bug we avoid). Hour granularity.
+    const rootCtx = root.context as { currentTime?: string };
+    if (rootCtx.currentTime === undefined) {
+      rootCtx.currentTime = `${new Date().toISOString().slice(0, 13).replace('T', ' ')}:00 UTC`;
+    }
+
     const rootCtor = root.constructor as unknown as RegistrableClass & { name: string };
     this.log.push({
       type: 'toolCall',
@@ -551,11 +559,20 @@ export class Orchestrator {
     let currentRootId: string | null = null;
     for (const e of this.log) {
       if (this.isAgentInvocation(e) && e.parent_id === null) {
+        // Tag each prior user turn with the page context it was sent with (`_appState`, read off
+        // the invocation's stored context). The projection pass (`projectMessages`) renders + diffs
+        // it against the whole conversation so unchanged app state collapses across turns. Carried
+        // as a non-wire field; the orchestrator stays decoupled from the projection/rendering code.
+        const priorCtx = e.context as { appState?: unknown; currentTime?: string } | undefined;
         out.push({
           role: 'user',
           content: ((e.arguments as { userMessage?: string }).userMessage ?? '') as string,
           timestamp: Date.now(),
-        });
+          // Both carried as non-wire fields read off the stored invocation context, so the prior turn
+          // re-renders IDENTICALLY (frozen <CurrentTime>, diffed app state) → prompt cache stays valid.
+          ...(priorCtx?.appState !== undefined ? { _appState: priorCtx.appState } : {}),
+          ...(priorCtx?.currentTime !== undefined ? { _currentTime: priorCtx.currentTime } : {}),
+        } as Message);
         currentRootId = e.id;
       } else if (
         'role' in e &&

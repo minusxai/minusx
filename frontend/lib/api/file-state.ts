@@ -40,7 +40,8 @@ import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
 import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
 import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story-question';
-import { noneifyEmptyNumericParams, paramTypeMap } from '@/lib/sql/sql-params';
+import { paramTypeMap, buildQueryParamValues } from '@/lib/sql/sql-params';
+import { getRootParams } from '@/lib/data/helpers/param-resolution';
 import type { AugmentedFile, FileState, QueryResult, FileType, DbFile, QuestionContent } from '@/lib/types';
 import type { DryRunSaveResult } from '@/lib/data/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -205,29 +206,38 @@ export async function readFiles(
   await loadFiles(fileIds, ttl, skip);
 
   if (runQueries) {
-    // Collect all question files (root + references) that need a fresh query result
-    const preAugmented = selectAugmentedFiles(getStore().getState(), fileIds);
-    const questionFiles = preAugmented.flatMap(a => [a.fileState, ...a.references])
-      .filter(f => f.type === 'question');
-
-    await Promise.allSettled(
-      questionFiles.flatMap(f => {
-        const content = f.content as any;
-        if (!content?.query || !content?.connection_name) return [];
-        const types = paramTypeMap(content.parameters);
-        return [getQueryResult({
+    const state = getStore().getState();
+    const preAugmented = selectAugmentedFiles(state, fileIds);
+    // Execute under the CANONICAL params the augmentation selector looks up with
+    // (buildQueryParamValues = effective + None-coerced) so the stored cache key === the lookup key
+    // === the file's queryResultId. References from selectAugmentedFiles are already
+    // buildEffectiveReference'd (inherited params baked into their content), so they pass inherited
+    // {}; the root inherits from itself (a dashboard/story passes its params to its questions).
+    const runs: Promise<unknown>[] = [];
+    for (const a of preAugmented) {
+      const rootInherited = getRootParams(state, a.fileState);
+      const entries: Array<{ f: FileState; inherited: Record<string, unknown> }> = [
+        { f: a.fileState, inherited: rootInherited },
+        ...a.references.map(f => ({ f, inherited: {} as Record<string, unknown> })),
+      ];
+      for (const { f, inherited } of entries) {
+        if (f.type !== 'question') continue;
+        const content = f.content as QuestionContent | undefined;
+        if (!content?.query || !content?.connection_name) continue;
+        const params = content.parameters ?? [];
+        const types = paramTypeMap(params);
+        runs.push(getQueryResult({
           query: content.query,
-          // Coerce here (not inside getQueryResult) so the stored cache key matches the
-          // coerced key useQueryResult reads with — see noneifyEmptyNumericParams.
-          params: noneifyEmptyNumericParams(content.parameterValues ?? {}, types),
+          params: buildQueryParamValues(params, content.parameterValues ?? {}, inherited),
           parameterTypes: types,
           database: content.connection_name,
           filePath: f.path,
           fileId: f.id,
           fileVersion: f.version,
-        })];
-      })
-    );
+        }));
+      }
+    }
+    await Promise.allSettled(runs);
   }
 
   return selectAugmentedFiles(getStore().getState(), fileIds);
@@ -470,7 +480,8 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
     const finalContent = selectMergedContent(updatedState, fileId) as any;
     if (finalContent?.query && finalContent?.connection_name) {
       const types = paramTypeMap(finalContent.parameters);
-      const params = noneifyEmptyNumericParams(finalContent.parameterValues || {}, types);
+      // Canonical params (effective + None-coerced) so the stored key matches the augmentation lookup.
+      const params = buildQueryParamValues(finalContent.parameters ?? [], finalContent.parameterValues ?? {}, {});
       try {
         await getQueryResult({ query: finalContent.query, params, parameterTypes: types, database: finalContent.connection_name, filePath: fileState.path, fileId, fileVersion: fileState.version });
         getStore().dispatch(setEphemeral({

@@ -834,7 +834,10 @@ async function persistAndBuildLegacyResponse(
       };
     });
 
-  const debug: DebugMessage[] = extractDebugMessages(legacyFullLog);
+  // Debug is APPENDED to the conversation by the client each turn, so it must be THIS turn's
+  // entries only — building it from the full log re-sent every prior turn's debug and the client
+  // appended them again, showing duplicate "Debug Info" blocks. Use the per-turn diff.
+  const debug: DebugMessage[] = extractDebugMessages(piLogToLegacy(piDiff));
 
   // Pending tool calls: orchestrator's pending list (frontend tools that
   // need bridging) — translate per-call to legacy ToolCall shape.

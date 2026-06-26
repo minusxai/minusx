@@ -7,6 +7,7 @@
 // `orchestrator/prompts/prompts.yaml`), and (d) disable web search
 // (no web search).
 import 'server-only';
+import { todayISO } from '@/lib/utils/today';
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool, TextContent, ImageContent } from '@/orchestrator/llm';
@@ -50,7 +51,7 @@ function onboardingUserContent(
   const appState = ctx.appState !== undefined ? JSON.stringify(appStateForLlm(ctx.appState as AppState)) : 'null';
   const text = renderPrompt(promptId, {
     app_state: appState,
-    current_date: new Date().toISOString().slice(0, 10),
+    current_date: todayISO(),
     goal: goalFrom(raw),
   });
   return [{ type: 'text', text }];

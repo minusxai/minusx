@@ -28,7 +28,6 @@ vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
 vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } } }),
 }));
-vi.mock('@/lib/chart/chart-attachments', () => ({ buildChartAttachments: vi.fn().mockResolvedValue([]) }));
 vi.mock('@/lib/hooks/useContext', () => ({
   useContext: () => ({ contextId: 1, databases: [], documentation: '', availableSkills: [], contextLoading: false }),
 }));

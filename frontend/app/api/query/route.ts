@@ -7,49 +7,13 @@ import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQuery } from '@/lib/connections/run-query';
-import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
-import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
-import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
+import { applyNoneParams } from '@/lib/sql/none-params';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
 import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolver.server';
 import { getModules } from '@/lib/modules/registry';
 import { QUERY_CACHE_TTL_MS } from '@/lib/config';
-
-/**
- * Transform a query+params pair so that None (null) parameter values are handled:
- * 1. Try to remove filter conditions (WHERE/HAVING) for None params via IR round-trip.
- * 2. Substitute any remaining :param_name occurrences with NULL.
- * 3. Strip None params from the returned params dict.
- */
-async function applyNoneParams(
-  query: string,
-  params: Record<string, string | number | null>,
-  dialect: string
-): Promise<{ sql: string; params: Record<string, string | number> }> {
-  const noneSet = new Set(Object.keys(params).filter((k) => params[k] === null));
-  const effectiveParams = Object.fromEntries(
-    Object.entries(params).filter(([, v]) => v !== null)
-  ) as Record<string, string | number>;
-
-  if (noneSet.size === 0) return { sql: query, params: effectiveParams };
-
-  // Try IR-based filter removal locally via WASM (only for simple queries, not UNION)
-  try {
-    const ir = await parseSqlToIrLocal(query, dialect);
-    if (ir.type !== 'compound') {
-      const transformed = removeNoneParamConditions(ir as import('@/lib/sql/ir-types').QueryIR, noneSet);
-      query = irToSqlLocal(transformed, dialect);
-    }
-  } catch { /* fall through to NULL substitution */ }
-
-  // Substitute any remaining :param_name references with NULL (non-filter uses, fallback)
-  for (const p of noneSet) {
-    query = query.replace(new RegExp(`:${p}\\b`, 'g'), 'NULL');
-  }
-  return { sql: query, params: effectiveParams };
-}
 
 function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: string; table: string; columns: string[] }> {
   return whitelist.flatMap(w => w.tables.map(t => ({ schema: w.schema, table: t.table, columns: [] })));

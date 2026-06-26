@@ -6,8 +6,9 @@
 
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
-import type { Tool } from '@/orchestrator/llm';
+import type { Tool, ImageContent } from '@/orchestrator/llm';
 import { MXTool, type ToolResponse } from '@/orchestrator/types';
+import { queryPresentation } from '@/lib/chart/query-presentation';
 import { type BenchmarkAnalystContext, type ConnectionInfo, publicConnectionMetadata } from './types';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
@@ -201,7 +202,10 @@ const EXECUTE_QUERY_BASE_FIELDS = {
     description: 'Query parameters as key-value pairs, substituted for `:name` placeholders in the SQL.',
   })),
   vizSettings: Type.Optional(Type.Unknown({
-    description: 'Optional chart settings to visualize the result (same shape as a question\'s vizSettings). Rendered in the UI; full-fidelity (never truncated).',
+    description: 'Optional chart settings to visualize the result (same shape as a question\'s vizSettings). When set to a renderable chart, you get an IMAGE of the chart (plus a summary) instead of the row data — unless rawData is true.',
+  })),
+  rawData: Type.Optional(Type.Boolean({
+    description: 'Default false. When vizSettings is a renderable chart, the result is returned as an IMAGE + summary; set rawData true to get the row data instead. Without vizSettings (or a non-renderable viz) rows are always returned.',
   })),
   maxChars: Type.Optional(Type.Number({
     description: 'Max characters of the markdown table returned to the LLM (default 10,000, max 100,000). Increase only if you need to see more rows in text form. Use OFFSET in SQL to page through large results instead.',
@@ -360,13 +364,30 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
       maxChars,
     );
 
+    // Presentation: with a renderable chart viz (and rawData off), return an IMAGE of the chart +
+    // a summary instead of the row markdown — see queryPresentation. Falls back to rows when the
+    // image can't be rendered (e.g. headless base with no renderer).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const vizSettings = this.parameters.vizSettings as any;
+    const vizType: string | undefined = vizSettings?.type;
+    const wantImage = queryPresentation(vizType, this.parameters.rawData) === 'image';
+    let imageContent: ImageContent | null = null;
+    if (wantImage && vizSettings) {
+      const jpeg = await this._renderVizJpeg({ columns, types, rows: result.rows, finalQuery: result.finalQuery }, vizSettings);
+      if (jpeg) imageContent = { type: 'image', data: jpeg.toString('base64'), mimeType: 'image/jpeg' };
+    }
+
+    const summaryText = JSON.stringify(
+      imageContent
+        // Image carries the result → send shape + a pointer, not the rows.
+        ? { success: true, columns, types, totalRows: compressed.totalRows, finalQuery: result.finalQuery, note: 'Chart image returned in lieu of rows. Call again with rawData: true for the table.' }
+        : { success: true, ...compressed, finalQuery: result.finalQuery },
+    );
+
     return {
-      // LLM sees: { columns, types, data: markdown, totalRows, shownRows,
-      // truncated, finalQuery }.
-      content: [{
-        type: 'text',
-        text: JSON.stringify({ success: true, ...compressed, finalQuery: result.finalQuery }),
-      }],
+      content: imageContent
+        ? [{ type: 'text', text: summaryText }, imageContent]
+        : [{ type: 'text', text: summaryText }],
       isError: false,
       // UI display reads `details.queryResult.{columns,types,rows}` — full
       // untruncated rows, separate from what the LLM sees.
@@ -377,6 +398,18 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
         executionMs,
       },
     };
+  }
+
+  /**
+   * Render the result's viz to a JPEG buffer. Base returns null (no native renderer in the shared/
+   * benchmark build) so it falls back to row data; the server subclass overrides with the real
+   * ECharts-SSR → JPEG renderer.
+   */
+  protected async _renderVizJpeg(
+    _queryResult: QueryResult,
+    _vizSettings: unknown,
+  ): Promise<Buffer | null> {
+    return null;
   }
 }
 

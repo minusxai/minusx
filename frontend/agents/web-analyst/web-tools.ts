@@ -21,6 +21,7 @@ const EditFileParams = Type.Object({
     newMatch: Type.String({ description: 'Replacement text.' }),
     replaceAll: Type.Optional(Type.Boolean({ description: 'Replace every occurrence (default true).' })),
   })),
+  rawData: Type.Optional(Type.Boolean({ description: "Default false. The response echoes the updated query RESULT (not the markup — you already know your edit): a chart viz returns an IMAGE + summary, a table/number viz returns the rows + summary. Set true to get rows even for a chart viz." })),
 });
 
 // The agent edits the file's MARKUP (the raw `<file_markup>` block in AppState / ReadFiles), not JSON.
