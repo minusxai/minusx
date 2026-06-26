@@ -513,29 +513,11 @@ export function isV2ConversationFile(file: {
   return meta?.version === 2;
 }
 
-/**
- * Translate a v=2 conversation file's `content.log` (orchestrator log shape) into
- * legacy `ConversationLogEntry[]` so the frontend never sees orchestrator log shape.
- * Mutates a shallow copy of `file` (preserves all other fields). v=1 files
- * (or non-conversation files) pass through unchanged.
- */
-export function translateConversationForFrontend<T extends {
-  type?: string | null;
-  meta?: unknown;
-  content?: unknown;
-}>(file: T): T {
-  if (!isV2ConversationFile(file)) return file;
-  const content = file.content as { log?: unknown; metadata?: unknown } | null | undefined;
-  if (!content || !Array.isArray(content.log)) return file;
-  const translated = piLogToLegacy(content.log as ConversationLog);
-  return {
-    ...file,
-    content: {
-      ...content,
-      log: translated,
-    },
-  };
-}
+// NOTE: the read-path down-translation (`translateConversationForFrontend`) has been retired.
+// v=2 conversation files now serve the orchestrator pi `ConversationLog` as-is; the frontend
+// parses it pi-natively via `parsePiConversation` (which reuses `piLogToLegacy` internally for the
+// render structs while additionally carrying each turn's appState/currentTime). `piLogToLegacy`
+// is kept and exported because that internal reuse — and the benchmark page — still depend on it.
 
 // ─── legacyToolResultToPi: reverse for resume ────────────────────────
 

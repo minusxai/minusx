@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation } from '@/store/chatSlice';
-import { parseLogToMessages } from '@/lib/conversations-utils';
+import { parseLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
 import { FilesAPI } from '@/lib/data/files';
 import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
+import type { ConversationLog } from '@/orchestrator/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 
@@ -57,13 +58,19 @@ export function useConversation(conversationId?: number) {
         // Drives the "legacy chat can't be continued" UI (isLegacyChatInV2).
         const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
 
-        // Parse log into messages
-        const messages = parseLogToMessages(content.log);
-
-        // Extract agent and agent_args from first task in log
-        const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
-        const agent = firstTask?.agent || 'DefaultAgent';
-        const agent_args = firstTask?.args || {};
+        // v2 conversations are served as the orchestrator pi ConversationLog (no read-path
+        // down-translation); parse them pi-natively. v1 stays on the legacy task-log parse.
+        let messages: any[];
+        let agent: string;
+        let agent_args: Record<string, any>;
+        if (version >= 2) {
+          ({ messages, agent, agent_args } = parsePiConversation(content.log as unknown as ConversationLog));
+        } else {
+          messages = parseLogToMessages(content.log);
+          const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
+          agent = firstTask?.agent || 'DefaultAgent';
+          agent_args = (firstTask?.args as Record<string, any>) || {};
+        }
 
         // Dispatch to Redux for caching
         dispatch(loadConversation({

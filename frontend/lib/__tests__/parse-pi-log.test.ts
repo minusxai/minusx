@@ -3,7 +3,7 @@
 // structs (so renderers are untouched) AND carries each turn's appState + currentTime onto its user
 // message (read off the pi root invocation's `context`, which the append-only log persists per turn).
 import { describe, it, expect } from 'vitest';
-import { parsePiLogToMessages } from '@/lib/conversations-utils';
+import { parsePiLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { UserMessage } from '@/store/chatSlice';
 
@@ -59,6 +59,25 @@ describe('parsePiLogToMessages', () => {
     expect(users[1].content).toBe('q2');
     expect((users[1].appState as { state: { fileState: { id: number } } }).state.fileState.id).toBe(2);
     expect(users[1].currentTime).toBe('t2');
+  });
+
+  it('parsePiConversation derives agent + agent_args off the first task (for continuation)', () => {
+    const piLog = [
+      { type: 'toolCall', id: 'root1', name: 'WebAnalystAgent', parent_id: null,
+        arguments: { userMessage: 'hi', connection_id: 'static', schema: [{ s: 1 }] },
+        context: { appState: { type: 'file', state: { fileState: { id: 7 } } }, currentTime: 't' } },
+      { role: 'assistant', parent_id: 'root1', content: [{ type: 'text', text: 'ok' }], stopReason: 'stop', usage: USAGE, model: 'm', timestamp: 1 },
+    ] as unknown as ConversationLog;
+
+    const { messages, agent, agent_args } = parsePiConversation(piLog);
+    // agent derivation matches the legacy loader (piLogToLegacy hardcodes the root task agent)
+    expect(agent).toBe('AnalystAgent');
+    // agent_args = the root task args (user_message + the rest of the invocation arguments)
+    expect(agent_args.user_message).toBe('hi');
+    expect(agent_args.connection_id).toBe('static');
+    // messages still carry appState
+    const user = messages.find((m) => m.role === 'user') as UserMessage;
+    expect((user.appState as { state: { fileState: { id: number } } }).state.fileState.id).toBe(7);
   });
 
   it('produces the same non-user messages as the legacy two-hop (tool calls + debug)', () => {

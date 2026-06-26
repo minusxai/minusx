@@ -1,7 +1,7 @@
-// /api/files/[id] — verifies that v=2 conversation files have their orchestrator
-// `content.log` translated to legacy task-log shape on read, so the
-// frontend's `useConversation` + `parseLogToMessages` work unchanged. v=1
-// and non-conversation files pass through untranslated.
+// /api/files/[id] — verifies that conversation files are served WITHOUT read-path
+// down-translation: v=2 files serve the orchestrator pi `ConversationLog` as-is (the
+// frontend parses it pi-natively via `parsePiConversation`), and v=1 files serve their
+// legacy task-log as-is. No shape conversion happens at the route anymore.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -30,7 +30,7 @@ interface FileGetResponse {
   };
 }
 
-describe('GET /api/files/[id] — v=2 conversation translation', () => {
+describe('GET /api/files/[id] — conversation log served untranslated', () => {
   let v1FileId: number;
   let v2FileId: number;
 
@@ -101,20 +101,22 @@ describe('GET /api/files/[id] — v=2 conversation translation', () => {
     expect(body.data.content.log[0].args?.user_message).toBe('legacy hello');
   });
 
-  it('v=2 file is translated: orchestrator entries → legacy task entries', async () => {
+  it('v=2 file serves the orchestrator pi log as-is (no down-translation)', async () => {
     const res = await GET(makeGetRequest(v2FileId), {
       params: Promise.resolve({ id: String(v2FileId) }),
     } as never);
     expect(res.status).toBe(200);
     const body = (await res.json()) as FileGetResponse;
-    // The first entry, after translation, is a legacy task with
-    // agent=AnalystAgent and args.user_message=<userMessage from orchestrator
-    // arguments>.
-    const log = body.data.content.log;
-    expect(log[0]._type).toBe('task');
-    expect(log[0].agent).toBe('AnalystAgent');
-    expect(log[0].args?.user_message).toBe('v2 hello');
-    // No raw orchestrator log shape leaks to the frontend.
-    expect(log[0].type).toBeUndefined();
+    // The pi root invocation is served verbatim — the frontend parses it pi-natively.
+    const log = body.data.content.log as Array<{
+      type?: string; id?: string; name?: string; parent_id?: unknown;
+      arguments?: { userMessage?: string };
+    }>;
+    expect(log[0].type).toBe('toolCall');
+    expect(log[0].parent_id).toBeNull();
+    expect(log[0].name).toBe('WebAnalystAgent');
+    expect(log[0].arguments?.userMessage).toBe('v2 hello');
+    // No legacy down-translation happens at the route.
+    expect((log[0] as { _type?: string })._type).toBeUndefined();
   });
 });
