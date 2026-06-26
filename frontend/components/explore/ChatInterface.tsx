@@ -716,7 +716,13 @@ export default function ChatInterface({
       if (!res.ok || data.error) {
         throw new Error(data.error?.message || data.error || 'Failed to estimate context size');
       }
-      setContextSizePanel({ status: 'ready', estimate: data as ContextSizeEstimate });
+      // Cached tokens from the LAST turn (usage.cacheRead) — surfaced so the panel can show how
+      // much of the prefix the provider actually served from cache. Read off the most recent debug
+      // message's last LLM call.
+      const lastDebug = [...(conversation?.messages ?? [])].reverse().find(m => m.role === 'debug') as DebugMessage | undefined;
+      const lastCall = lastDebug?.llmDebug?.[lastDebug.llmDebug.length - 1];
+      const cachedTokens = lastCall?.cache_read_tokens ?? 0;
+      setContextSizePanel({ status: 'ready', estimate: data as ContextSizeEstimate, cachedTokens });
     } catch (err) {
       if (controller.signal.aborted) return;
       setContextSizePanel({
@@ -728,7 +734,7 @@ export default function ChatInterface({
         contextSizeAbortRef.current = null;
       }
     }
-  }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container]);
+  }, [buildAgentArgsForMessage, chatAttachments, connectionsLoading, contextsLoading, conversationID, container, conversation]);
 
   const { availableCommands, handleCommandExecute } = useSlashCommands({ appState, container, onContextSize: handleContextSize });
 

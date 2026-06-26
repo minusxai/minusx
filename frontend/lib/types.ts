@@ -1130,6 +1130,9 @@ export interface LLMDebugInfo {
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
+  /** Tokens served from / written to the provider prompt cache (from usage.cacheRead/cacheWrite). */
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
   cost: number;
   completion_tokens_details?: any;
   prompt_tokens_details?: any;

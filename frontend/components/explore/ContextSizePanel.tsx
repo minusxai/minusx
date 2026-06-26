@@ -45,7 +45,10 @@ function squareColorForIndex(
 
 export type ContextSizePanelState =
   | { status: 'loading' }
-  | { status: 'ready'; estimate: ContextSizeEstimate }
+  // `cachedTokens` = tokens the provider served from cache on the LAST turn (usage.cacheRead).
+  // Shown as black-bordered squares over the prefix so we can see how much of the context is
+  // actually being cached (cache effectiveness) vs re-billed each turn.
+  | { status: 'ready'; estimate: ContextSizeEstimate; cachedTokens?: number }
   | { status: 'error'; error: string };
 
 export function ContextSizePanel({
@@ -60,10 +63,15 @@ export function ContextSizePanel({
   colStart: ComponentProps<typeof GridItem>['colStart'];
 }) {
   const estimate = state.status === 'ready' ? state.estimate : null;
+  const cachedTokens = state.status === 'ready' ? (state.cachedTokens ?? 0) : 0;
   const totalTokens = estimate?.totalTokens ?? 0;
   const percent = estimate ? Math.min(999, Math.round((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * 100)) : 0;
   const filledSquares = estimate
     ? Math.min(CONTEXT_SIZE_SQUARES, Math.ceil((totalTokens / CONTEXT_SIZE_LIMIT_TOKENS) * CONTEXT_SIZE_SQUARES))
+    : 0;
+  // Cached prefix (last turn) — the leading N squares get a black border.
+  const cachedSquares = estimate && cachedTokens > 0
+    ? Math.min(CONTEXT_SIZE_SQUARES, Math.round((cachedTokens / CONTEXT_SIZE_LIMIT_TOKENS) * CONTEXT_SIZE_SQUARES))
     : 0;
   const displaySections = estimate ? estimate.sections : [];
 
@@ -118,6 +126,8 @@ export function ContextSizePanel({
                       const color = index < filledSquares
                         ? squareColorForIndex(index, estimate.sections, CONTEXT_SIZE_LIMIT_TOKENS)
                         : null;
+                      // Cached prefix (last turn) → black border so cache coverage is visible.
+                      const isCached = index < cachedSquares;
                       return (
                         <Box
                           key={index}
@@ -125,14 +135,23 @@ export function ContextSizePanel({
                           h="10px"
                           borderRadius="2px"
                           bg={color ?? 'bg.canvas'}
-                          border="1px solid"
-                          borderColor={color ? color : 'border.muted'}
+                          border={isCached ? '1.5px solid' : '1px solid'}
+                          borderColor={isCached ? 'black' : (color ? color : 'border.muted')}
                         />
                       );
                     })}
                   </Box>
 
                   <VStack align="stretch" gap={1}>
+                    {cachedTokens > 0 && (
+                      <HStack gap={2} justify="space-between" fontSize="2xs" color="fg.muted" aria-label="cached tokens last turn">
+                        <HStack gap={1.5} minW={0}>
+                          <Box w="8px" h="8px" border="1.5px solid" borderColor="black" borderRadius="1px" flexShrink={0} />
+                          <Text truncate>Cached last turn</Text>
+                        </HStack>
+                        <Text flexShrink={0}>{cachedTokens.toLocaleString()} tok</Text>
+                      </HStack>
+                    )}
                     {displaySections.map((section) => (
                       <HStack key={section.key} gap={2} justify="space-between" fontSize="2xs" color="fg.muted">
                         <HStack gap={1.5} minW={0}>
