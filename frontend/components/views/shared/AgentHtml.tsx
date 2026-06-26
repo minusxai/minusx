@@ -101,11 +101,24 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
 
     // Fresh document each build. <style data-mx-app-styles> sits FIRST (in <head>) so the story's own
     // <style> blocks (in <body>, later in document order) win ties.
+    // Defense-in-depth CSP for the agent-authored document. The nested React root runs in the TOP
+    // realm (it only renders DOM into this iframe) and chart data is fetched there too, so NOTHING
+    // executes or fetches in the iframe realm — `default-src 'none'` (which also covers script-src and
+    // connect-src) blocks any script/exfiltration the sanitizer might miss, while presentation
+    // resources the story needs (styles, web fonts, images) are explicitly allowed. Primary defense
+    // remains sanitizeAgentHtml; this is a backstop. (Same-origin iframe, so not full isolation.)
+    const CSP = [
+      "default-src 'none'",
+      "style-src 'unsafe-inline' https://fonts.googleapis.com",  // story + emotion inline styles; @import css
+      "font-src https://fonts.gstatic.com data:",                // web-font files
+      "img-src 'self' https: data: blob:",                       // story + chart images
+      "media-src 'self' https: data: blob:",
+    ].join('; ');
     // `<base target="_top">`: links inside an iframe navigate the IFRAME by default, which would load
     // the whole app inside it (e.g. clicking an embedded chart's title → /f/<id>). Targeting _top sends
     // every link navigation (chart titles, author links) to the top window instead.
     doc.open();
-    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top"><style data-mx-app-styles></style></head><body></body></html>');
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_top"><style data-mx-app-styles></style></head><body></body></html>`);
     doc.close();
     docRef.current = doc;
     const root = doc.documentElement;
