@@ -373,7 +373,9 @@ describe('chat v2 route', () => {
         app_state: { type: 'file', state: { fileState: { id: 7, type: 'dashboard' } } },
       });
       const contextBlock = blocks[0];
-      expect(contextBlock.text).toContain('<AppState>{"type":"file"');
+      // Projected shape: the focused file's lean metadata under `file`, references alongside.
+      expect(contextBlock.text).toContain('<AppState>{"file":{"id":7');
+      expect(contextBlock.text).toContain('"type":"dashboard"');
       expect(contextBlock.text).not.toContain('<AppState>null</AppState>');
     });
 

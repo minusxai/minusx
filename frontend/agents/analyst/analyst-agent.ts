@@ -1,6 +1,6 @@
 import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
-import type { ImageContent, TextContent, Tool } from '@/orchestrator/llm';
+import type { ImageContent, Message, TextContent, Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt, PROMPTS } from '@/orchestrator/prompts';
 import {
@@ -17,8 +17,8 @@ import {
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
-import { appStateForLlm, takeAppStateMarkup, type AppState } from '@/lib/appState';
-import { renderMarkupBlocks } from '@/lib/api/markup-blocks';
+import type { AppState } from '@/lib/appState';
+import { projectMessages, type WithAppState } from '@/lib/projection/messages';
 
 // Re-exports kept for backward compatibility with downstream test/agent imports.
 export { ReadFiles, SearchFiles } from './file-tools';
@@ -110,10 +110,12 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
   }
 
   /**
-   * Wraps the user message in the `<AppState>` / `<CurrentDate>` / `<Question>`
-   * blocks the production prompts.yaml `default.user` template expects. This is
-   * an analyst/MinusX convention — the orchestrator base just emits a single
-   * text block by default.
+   * Builds the NON-app-state part of the user turn: `<CurrentDate>`, text `<Attachment>` blocks,
+   * message + attachment images, and the bare goal text. The `<AppState>` block (with its
+   * `<file_markup>` and image facets) is NOT rendered here — it is attached as rich state in
+   * {@link buildMessages} and rendered, diffed against the whole conversation, by the single
+   * `projectMessages` pass. (Previously app state was stripped + markup-pulled inline here; that
+   * scattered boundary logic now lives in `lib/projection`.)
    */
   protected buildUserContent(): (TextContent | ImageContent)[] {
     const raw = this.userMessage;
@@ -140,27 +142,32 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       })
       .join('\n');
 
-    // The file's JSX `markup` is pulled OUT of the AppState JSON and printed as a raw
-    // <file_markup> block right after it — real JSX, never an escaped JSON string value.
-    let appStateJson = 'null';
-    let markupText = '';
-    if (this.context.appState !== undefined) {
-      const { value, blocks } = takeAppStateMarkup(appStateForLlm(this.context.appState as AppState));
-      appStateJson = JSON.stringify(value);
-      if (blocks.length) markupText = `\n${renderMarkupBlocks(blocks)}`;
-    }
     const date = new Date().toISOString().slice(0, 10);
-    const contextText =
-      `<AppState>${appStateJson}</AppState>${markupText}\n<CurrentDate>${date}</CurrentDate>` +
-      (textAttachments ? `\n${textAttachments}` : '');
+    const contextText = `<CurrentDate>${date}</CurrentDate>` + (textAttachments ? `\n${textAttachments}` : '');
 
-    // Goal is a raw text block (no <Question> wrapper) — the bare goal text.
     return [
       { type: 'text', text: contextText },
       ...msgImages,
       ...attachmentImages,
       { type: 'text', text: goal },
     ];
+  }
+
+  /**
+   * Assemble the LLM messages, then run the single projection pass. The current user turn is
+   * tagged with its page context (`_appState`); prior turns are tagged by the orchestrator
+   * (`projectRootThreadHistory`) and tool results carry `details.__augmented`. `projectMessages`
+   * walks the whole array through one FacetMemo, so app state (re-sent every turn) and repeated
+   * file/query state collapse to `{unchanged:true}` while only changes are re-emitted in full.
+   */
+  buildMessages(): Message[] {
+    const msgs = super.buildMessages();
+    const idx = this.threadHistory.length; // the current user message
+    const cur = msgs[idx];
+    if (cur?.role === 'user' && this.context.appState !== undefined) {
+      msgs[idx] = { ...cur, _appState: this.context.appState as AppState } as Message & WithAppState;
+    }
+    return projectMessages(msgs);
   }
 }
 

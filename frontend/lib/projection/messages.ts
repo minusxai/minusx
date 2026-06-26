@@ -26,10 +26,15 @@ export interface WithAppState {
   _appState?: AppState;
 }
 
-/** Shape file tool handlers stash in `ToolResultMessage.details` so the pass can project it. */
+/**
+ * Shape file tool handlers stash in `ToolResultMessage.details` so the pass can project it.
+ * `__status` is the small non-file result (e.g. EditFile's `{success, diff, validation}`) rendered
+ * as a JSON block BEFORE the projected file blocks; `__augmented` is the file payload(s).
+ */
 export interface AugmentedToolDetails {
   __augmented: AugmentedFiles[];
   __jsonTag?: string;
+  __status?: unknown;
 }
 
 function hasAugmented(details: unknown): details is AugmentedToolDetails {
@@ -64,11 +69,13 @@ export function projectMessages(messages: Message[]): Message[] {
       return { ...clean, content: [...blocks, ...rest] } as Message;
     }
     if (m.role === 'toolResult' && hasAugmented(m.details)) {
-      const { __augmented, __jsonTag } = m.details;
-      const blocks = __augmented.flatMap((f) =>
+      const { __augmented, __jsonTag, __status } = m.details;
+      const statusBlocks: TextContent[] =
+        __status !== undefined ? [{ type: 'text', text: JSON.stringify(__status) }] : [];
+      const fileBlocks = __augmented.flatMap((f) =>
         renderProjectedFiles(projectFiles(memo, f), { jsonTag: __jsonTag ?? 'Files' }),
       );
-      return { ...m, content: blocks };
+      return { ...m, content: [...statusBlocks, ...fileBlocks] };
     }
     return m;
   });

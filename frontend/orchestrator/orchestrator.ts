@@ -551,11 +551,17 @@ export class Orchestrator {
     let currentRootId: string | null = null;
     for (const e of this.log) {
       if (this.isAgentInvocation(e) && e.parent_id === null) {
+        // Tag each prior user turn with the page context it was sent with (`_appState`, read off
+        // the invocation's stored context). The projection pass (`projectMessages`) renders + diffs
+        // it against the whole conversation so unchanged app state collapses across turns. Carried
+        // as a non-wire field; the orchestrator stays decoupled from the projection/rendering code.
+        const appState = (e.context as { appState?: unknown } | undefined)?.appState;
         out.push({
           role: 'user',
           content: ((e.arguments as { userMessage?: string }).userMessage ?? '') as string,
           timestamp: Date.now(),
-        });
+          ...(appState !== undefined ? { _appState: appState } : {}),
+        } as Message);
         currentRootId = e.id;
       } else if (
         'role' in e &&

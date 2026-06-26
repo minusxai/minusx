@@ -71,21 +71,18 @@ describe('AnalystAgent skills rendering', () => {
   });
 });
 
-describe('AnalystAgent buildUserContent', () => {
-  it('emits <AppState>/<CurrentDate> context block then the RAW goal', () => {
+// App state moved OUT of buildUserContent into the single projection pass (buildMessages →
+// projectMessages). buildUserContent now emits only <CurrentDate> + attachments + goal.
+describe('AnalystAgent buildUserContent (no app state here anymore)', () => {
+  it('emits the <CurrentDate> context block then the RAW goal — no <AppState>', () => {
     const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
     const content = agent.buildUserContent();
     expect(content).toHaveLength(2);
     expect(content[0].type).toBe('text');
-    expect(content[0].text).toContain('<AppState>{"page":"explore","fileId":42}</AppState>');
+    expect(content[0].text).not.toContain('<AppState>');
     expect(content[0].text).toMatch(/<CurrentDate>\d{4}-\d{2}-\d{2}<\/CurrentDate>/);
     // The goal is a raw text block — no <Question> wrapper.
     expect(content[1].text).toBe('how many users?');
-  });
-
-  it('emits null for AppState when context.appState is unset', () => {
-    const content = newAgent().buildUserContent();
-    expect(content[0].text).toContain('<AppState>null</AppState>');
   });
 
   it('threads ImageContent items between the context block and the raw goal', () => {
@@ -98,7 +95,7 @@ describe('AnalystAgent buildUserContent', () => {
     const agent: any = new AnalystAgent(orch, { userMessage } as any, ctx);
     const content = agent.buildUserContent();
     expect(content).toHaveLength(3);
-    expect(content[0].text).toContain('<AppState>');
+    expect(content[0].text).toContain('<CurrentDate>');
     expect(content[1].type).toBe('image');
     expect(content[2].text).toBe('see chart');
   });
@@ -120,5 +117,25 @@ describe('AnalystAgent buildUserContent', () => {
     expect(image.mimeType).toBe('image/jpeg');
     // goal is still the last block, raw
     expect(content[content.length - 1].text).toBe('how many users?');
+  });
+});
+
+// App state is rendered + diffed by the projection pass at buildMessages time.
+describe('AnalystAgent buildMessages (app state via projection)', () => {
+  it('renders the <AppState> block (from context) before the current user content', () => {
+    const agent = newAgent({ appState: { page: 'explore', fileId: 42 } });
+    const msgs = agent.buildMessages();
+    const user = msgs[msgs.length - 1];
+    expect(user.role).toBe('user');
+    expect(user.content[0].text).toContain('<AppState>{"page":"explore","fileId":42}</AppState>');
+    // the non-wire marker is stripped by the pass
+    expect(user._appState).toBeUndefined();
+  });
+
+  it('omits the AppState block when context.appState is unset', () => {
+    const msgs = newAgent().buildMessages();
+    const user = msgs[msgs.length - 1];
+    const joined = user.content.map((c: { text?: string }) => c.text ?? '').join('\n');
+    expect(joined).not.toContain('<AppState>');
   });
 });
