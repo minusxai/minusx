@@ -1,4 +1,5 @@
 import { Type } from 'typebox';
+import { todayISO } from '@/lib/utils/today';
 import type { TSchema } from 'typebox';
 import type { ImageContent, Message, TextContent, Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
@@ -42,9 +43,9 @@ const RemoteAnalystAgentParams = Type.Object({
 
 /**
  * Production analyst agent. Extends BenchmarkAnalystAgent (DB tools) with file
- * tools (ReadFiles, SearchFiles), the production system-prompt rendering with
- * connectionId/home_folder, and the `<AppState>` / `<CurrentDate>` /
- * `<Question>` user-content wrap that the production prompts.yaml expects.
+ * tools (ReadFiles, SearchFiles) and the production system-prompt rendering
+ * (connectionId/home_folder/current_date). App state + markup are rendered by the
+ * single projection pass in buildMessages (see lib/projection), not inline here.
  */
 export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystContext> {
   static readonly schema: Tool<typeof RemoteAnalystAgentParams> = {
@@ -103,7 +104,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // Current date lives in the system prompt (changes at most once a day), NOT in each user
       // message — a per-turn <CurrentDate> block changed a message's bytes when it scrolled from
       // current to prior, breaking the message-history prompt cache every turn.
-      current_date: new Date().toISOString().slice(0, 10),
+      current_date: todayISO(),
       // Full content of page-relevant + selected skills, injected upfront.
       preloaded_skills: buildPreloadedSkillsContent({
         tree: PROMPTS,

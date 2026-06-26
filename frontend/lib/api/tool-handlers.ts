@@ -22,6 +22,7 @@ import { markupToContent } from '@/lib/data/file-markup';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS, stripAugmentedContentForLlm } from '@/lib/api/compress-augmented';
 import { compressedToAugmentedFiles } from '@/lib/projection/from-compressed';
+import { stripEntryQueryData } from '@/lib/projection/project';
 import type { AugmentedToolDetails } from '@/lib/projection/messages';
 import { queryPresentation } from '@/lib/chart/query-presentation';
 import { takeFilesMarkup, takeAugmentedMarkup, takeFileStateMarkup, markupTextBlocks, type MarkupBlock } from '@/lib/api/markup-blocks';
@@ -483,8 +484,8 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
     __augmented: result.map(f => {
       const aug = compressedToAugmentedFiles(compressAugmentedFile(f, maxChars));
       const vizType = (f.fileState.content as { vizSettings?: { type?: string } } | undefined)?.vizSettings?.type;
-      if (queryPresentation(vizType, rawData) === 'image' && aug.file.queryResults?.length) {
-        aug.file = { ...aug.file, queryResults: aug.file.queryResults.map(({ data: _d, ...qr }) => qr) };
+      if (queryPresentation(vizType, rawData) === 'image') {
+        aug.file = stripEntryQueryData(aug.file);
       }
       return aug;
     }),

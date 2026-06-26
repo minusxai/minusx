@@ -35,6 +35,16 @@ import type { ImageContent } from '@/orchestrator/llm';
 const PRESENT: BlockFacetSignal = { state: 'present' };
 const UNCHANGED: BlockFacetSignal = { state: 'unchanged' };
 
+/**
+ * Drop the row `data` facet from a file entry's query results, keeping the `summary`. Shared by the
+ * app-state projection (summary-only by default) and ReadFiles (image-presented questions). Returns
+ * a shallow copy; the source is untouched.
+ */
+export function stripEntryQueryData(entry: AugmentedFileEntry): AugmentedFileEntry {
+  if (!entry.queryResults?.length) return entry;
+  return { ...entry, queryResults: entry.queryResults.map(({ data: _drop, ...qr }) => qr) };
+}
+
 interface EntryProjection {
   json: ProjectedFileJson;
   textBlocks: ProjectionTextBlock[];

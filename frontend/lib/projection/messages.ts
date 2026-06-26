@@ -17,7 +17,7 @@ import type { Message, TextContent, ImageContent } from '@/orchestrator/llm';
 import { appStateForLlm, type AppState } from '@/lib/appState';
 import { FacetMemo } from './facets';
 import { compressedToAugmentedFiles } from './from-compressed';
-import { projectFiles } from './project';
+import { projectFiles, stripEntryQueryData } from './project';
 import { renderProjectedFiles } from './render';
 import type { AugmentedFiles } from './types';
 
@@ -52,11 +52,7 @@ function hasAugmented(details: unknown): details is AugmentedToolDetails {
  * read the values it explicitly asked for.) Returns a shallow copy; the source is untouched.
  */
 function stripQueryData(files: AugmentedFiles): AugmentedFiles {
-  const stripEntry = (e: AugmentedFiles['file']) =>
-    e.queryResults?.length
-      ? { ...e, queryResults: e.queryResults.map(({ data: _drop, ...qr }) => qr) }
-      : e;
-  return { file: stripEntry(files.file), references: files.references.map(stripEntry) };
+  return { file: stripEntryQueryData(files.file), references: files.references.map(stripEntryQueryData) };
 }
 
 /** Render the app-state blocks for one user turn, advancing the memo. File pages go through the

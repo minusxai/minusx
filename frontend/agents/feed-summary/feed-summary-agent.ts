@@ -5,6 +5,7 @@
 // / `feed_summary.user` prompts (in `orchestrator/prompts/prompts.yaml`). Runs
 // headless via `runFeedSummaryV2`.
 import 'server-only';
+import { todayISO } from '@/lib/utils/today';
 import { Type } from 'typebox';
 import type { Tool, TextContent, ImageContent } from '@/orchestrator/llm';
 import { renderPrompt } from '@/orchestrator/prompts';
@@ -45,7 +46,7 @@ export class FeedSummaryAgent extends RemoteAnalystAgent {
       this.context.appState !== undefined ? JSON.stringify(appStateForLlm(this.context.appState as AppState), null, 2) : 'null';
     const text = renderPrompt('feed_summary.user', {
       app_state: appStateJson,
-      current_date: new Date().toISOString().slice(0, 10),
+      current_date: todayISO(),
     });
     return [{ type: 'text', text }];
   }
