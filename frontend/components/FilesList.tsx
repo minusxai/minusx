@@ -579,7 +579,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                             >
                               {/* Checkbox in selection mode */}
                               {selectionMode && (
-                                <Box flexShrink={0} onClick={(e) => e.stopPropagation()}>
+                                <Box flexShrink={0} display="flex" alignItems="center" alignSelf="center" onClick={(e) => e.stopPropagation()}>
                                   <Checkbox
                                     size="sm"
                                     checked={selectedFileIds.has(file.id)}
