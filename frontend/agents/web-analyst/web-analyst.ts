@@ -14,6 +14,7 @@ import {
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
+  LoadContext,
 } from './web-tools';
 
 export {
@@ -25,6 +26,7 @@ export {
   ClarifyFrontend,
   PublishAll,
   LoadSkill,
+  LoadContext,
 } from './web-tools';
 
 export const fauxRegistration = registerFauxProvider({
@@ -59,6 +61,7 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
     ClarifyFrontend.schema,
     PublishAll.schema,
     LoadSkill.schema,
+    LoadContext.schema,
   ];
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
   // Call-time stream options (spread blindly into `streamSimple`). Default

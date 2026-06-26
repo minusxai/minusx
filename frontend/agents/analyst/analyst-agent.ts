@@ -16,6 +16,7 @@ import {
   SearchDBSchema,
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
+import { LoadContext } from '@/agents/web-analyst/web-tools';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
 import type { AppState } from '@/lib/appState';
 import { projectMessages, type WithAppState } from '@/lib/projection/messages';
@@ -58,6 +59,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     ExecuteQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
+    LoadContext.schema,
   ];
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
   // Hard cap on the agentic loop, enforced by MXAgent.run(); the prompt hint
@@ -89,7 +91,13 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       schema: this.context.schema ? JSON.stringify(this.context.schema) : '',
       // Markdown context docs from the chat's bound `type: 'context'` file
       // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
+      // Only alwaysInclude docs + Schema Notes are inlined here; the rest are
+      // advertised via the catalog below and fetched on demand with LoadContext.
       context: this.context.contextDocs ?? '',
+      // Catalog of lazy-loadable context docs (title + description only). Mirror
+      // the buildSkillsCatalog "none" fallback so pyFormat always has a value.
+      context_docs_catalog:
+        this.context.contextDocsCatalog || 'No additional context documents are available.',
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded).
       skills_catalog: buildSkillsCatalog({

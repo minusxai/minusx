@@ -95,6 +95,8 @@ interface ContextDocsEditorProps {
   showHelperText?: boolean;
   showAddButton?: boolean;
   showDraftToggle?: boolean;
+  /** Show the per-entry "Always include" (pin) toggle. */
+  showAlwaysIncludeToggle?: boolean;
   showChildPaths?: boolean;
   showImageUpload?: boolean;
   /** Show the optional per-entry title + description inputs. */
@@ -123,6 +125,7 @@ export default function ContextDocsEditor({
   showHelperText = true,
   showAddButton = true,
   showDraftToggle = true,
+  showAlwaysIncludeToggle = true,
   showChildPaths = true,
   showImageUpload = true,
   showTitleDescription = true,
@@ -197,6 +200,15 @@ export default function ContextDocsEditor({
     onDocsChange(newDocs);
   };
 
+  // "Always include" pins a doc inline in the agent's prompt every turn. When off
+  // (default), the doc is loaded on demand via LoadContext — so it needs a title
+  // to be addressable (see the per-entry title warning below).
+  const handleToggleAlwaysInclude = (index: number) => {
+    const newDocs = [...(docs || [])];
+    newDocs[index] = { ...newDocs[index], alwaysInclude: !newDocs[index].alwaysInclude };
+    onDocsChange(newDocs);
+  };
+
   const handleChildPathsChange = (index: number, childPaths: string[] | undefined) => {
     const newDocs = [...(docs || [])];
     newDocs[index] = { ...newDocs[index], childPaths };
@@ -265,6 +277,21 @@ export default function ContextDocsEditor({
       <VStack gap={4} align="stretch">
         {(docs || []).map((docEntry, index) => {
           const isDocExpanded = expandedDocs.has(index);
+          // Active docs need a title + description (the agent loads them by title);
+          // also flag duplicate titles so they stay distinguishable. Drafts are
+          // exempt (excluded from the agent until activated).
+          const trimmedTitle = docEntry.title?.trim() ?? '';
+          const trimmedDesc = docEntry.description?.trim() ?? '';
+          const needsMeta = !docEntry.draft;
+          const duplicateTitle = trimmedTitle !== '' && (docs || []).some(
+            (d, i) => i !== index && (d.title?.trim() ?? '') === trimmedTitle,
+          );
+          const docTitleWarning = !needsMeta ? null
+            : (!trimmedTitle && !trimmedDesc) ? 'Add a title and description — both are required to save an active doc.'
+            : !trimmedTitle ? 'Add a title — required to save an active doc.'
+            : !trimmedDesc ? 'Add a description — required to save an active doc.'
+            : duplicateTitle ? 'Another doc has this title — the agent may not be able to tell them apart. Use a unique title.'
+            : null;
           const savedContent = originalDocs?.[index]?.content;
           const hasDiff = savedContent != null && savedContent !== docEntry.content;
           const isDiffOpen = !!diffOpen[index] && hasDiff;
@@ -348,6 +375,25 @@ export default function ContextDocsEditor({
                         )}
                       </HStack>
                       <HStack gap={3} onClick={(e) => e.stopPropagation()}>
+                        {showAlwaysIncludeToggle && (
+                          <HStack gap={1.5} title="When on, this doc is always included in the agent's prompt. When off, the agent loads it on demand by title.">
+                            <Badge size="sm" colorPalette={docEntry.alwaysInclude ? 'blue' : 'gray'} variant="subtle">
+                              {docEntry.alwaysInclude ? 'Always on' : 'On demand'}
+                            </Badge>
+                            <Switch.Root
+                              size="sm"
+                              aria-label={`${entryLabel} ${index + 1} always include`}
+                              checked={!!docEntry.alwaysInclude}
+                              onCheckedChange={() => handleToggleAlwaysInclude(index)}
+                              colorPalette="blue"
+                            >
+                              <Switch.HiddenInput />
+                              <Switch.Control>
+                                <Switch.Thumb />
+                              </Switch.Control>
+                            </Switch.Root>
+                          </HStack>
+                        )}
                         {showDraftToggle && (
                           <HStack gap={1.5}>
                             <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
@@ -380,6 +426,13 @@ export default function ContextDocsEditor({
                   </Box>
                 </Collapsible.Trigger>
                 <Collapsible.Content>
+                  {/* Title addressability warning for on-demand (lazy) docs. */}
+                  {editMode && showAlwaysIncludeToggle && docTitleWarning && (
+                    <HStack px={3} py={2} gap={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" color="fg.muted">
+                      <Icon as={LuCircleAlert} boxSize={3.5} color="orange.fg" flexShrink={0} />
+                      <Text fontSize="xs">{docTitleWarning}</Text>
+                    </HStack>
+                  )}
                   {/* childPaths selector — only when there are child folders to assign. */}
                   {showChildPaths && availableChildPaths.length > 0 && (
                     <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">

@@ -19,7 +19,7 @@ import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader'
 import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
-import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolvedWhitelist } from '@/lib/context/context-utils';
+import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolvedWhitelist, findDocsMissingMeta } from '@/lib/context/context-utils';
 import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -460,6 +460,8 @@ export default function ContextEditorV2({
 
   // Save handler - delegate to container
   const handleSave = async () => {
+    let docsForSave: (DocEntry | string)[] = content.docs || [];
+
     // If on code tab, validate and parse YAML/JSON first
     if (activeTab === 'yaml') {
       try {
@@ -474,11 +476,21 @@ export default function ContextEditorV2({
       try {
         const parsedDocs = JSON.parse(docsJsonText);
         onChange({ docs: parsedDocs });
+        docsForSave = parsedDocs;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Invalid docs JSON');
         console.error('Cannot save - docs JSON parse error:', err);
         return;
       }
+    }
+
+    // Every active (non-draft) doc must carry a title + description — the agent
+    // loads docs on demand by title, so both are required for new/edited docs.
+    const missingMeta = findDocsMissingMeta(docsForSave);
+    if (missingMeta.length > 0) {
+      const labels = missingMeta.map((i) => `#${i + 1}`).join(', ');
+      setError(`Every active doc needs a title and description before saving (missing on doc ${labels}). Mark a doc as draft to save it incomplete.`);
+      return;
     }
 
     try {

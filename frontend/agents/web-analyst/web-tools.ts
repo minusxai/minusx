@@ -3,6 +3,11 @@ import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { loadSkill } from '@/agents/skill-content';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
+
+// LoadContext soft over-fetch nudge: if the agent requests at least this many docs
+// in a single call, return them but warn it to be more selective. Absolute (not a
+// fraction of the library) since contexts often start with only 1-2 docs.
+const LOAD_CONTEXT_OVERFETCH_THRESHOLD = 5;
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
 // throw UserInputException so the orchestrator pauses; the bridge (Redux
@@ -261,6 +266,79 @@ export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystConte
     }
     return {
       content: [{ type: 'text', text: JSON.stringify({ success: true, skill: name, content }) }],
+      isError: false,
+    };
+  }
+}
+
+// ─── LoadContext ────────────────────────────────────────────────────────────────
+// Lazily load full context-doc content. The system prompt advertises a "Context
+// Library" catalog of doc keys + descriptions (via resolveContextDocs); each key
+// is the stable identifier the agent passes here. This tool resolves the requested
+// keys' full content from the server-resolved library on the agent context. Pure
+// server tool — never throws UserInputException.
+const LoadContextParams = Type.Object({
+  keys: Type.Array(Type.String(), {
+    description: 'Document keys from the Context Library (the quoted identifier shown for each doc) to load full content for. Request only the docs relevant to the current question.',
+  }),
+});
+
+export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof LoadContextParams> = {
+    name: 'LoadContext',
+    description:
+      'Load the full content of one or more context documents by their key, as listed in the Context Library. ' +
+      'Request only the specific docs relevant to the user\'s question — avoid loading everything at once.',
+    parameters: LoadContextParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    const library = this.context.contextDocsLibrary ?? [];
+    const keys = this.parameters.keys ?? [];
+
+    if (keys.length === 0) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LoadContext requires at least one document key' }) }],
+        isError: true,
+      };
+    }
+    if (library.length === 0) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'No context documents are available to load' }) }],
+        isError: true,
+      };
+    }
+
+    const byKey = new Map(library.map((d) => [d.key, d]));
+    // Fallback: also resolve by (case-insensitive) title, in case the agent passes
+    // the human title instead of the key.
+    const byTitle = new Map(library.map((d) => [d.title.trim().toLowerCase(), d]));
+    const docs: { key: string; title: string; content: string }[] = [];
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    for (const key of keys) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const entry = byKey.get(key) ?? byTitle.get(key.trim().toLowerCase());
+      if (entry) docs.push({ key: entry.key, title: entry.title, content: entry.content });
+      else missing.push(key);
+    }
+
+    // Soft over-fetch nudge: discourage pulling all/most docs in a single call.
+    const payload: {
+      success: boolean;
+      docs: { key: string; title: string; content: string }[];
+      missing?: string[];
+      warning?: string;
+    } = { success: true, docs };
+    if (missing.length > 0) payload.missing = missing;
+    if (docs.length >= LOAD_CONTEXT_OVERFETCH_THRESHOLD) {
+      payload.warning =
+        `You loaded ${docs.length} documents at once. In future, load only the docs relevant to the user's question.`;
+    }
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify(payload) }],
       isError: false,
     };
   }

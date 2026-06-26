@@ -1,5 +1,6 @@
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
+import type { ContextDocCatalogEntry } from '@/lib/sql/schema-filter';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 
 // Re-export so existing imports keep working.
@@ -43,6 +44,16 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   attachments?: AgentAttachment[];
   /** Approximate user city — biases web-search results. */
   city?: string;
+  /**
+   * Catalog of lazy-loadable context docs (title + description only), injected
+   * into the system prompt. The agent loads full content on demand via LoadContext.
+   */
+  contextDocsCatalog?: string;
+  /**
+   * Lazy context docs with full content, resolved server-side. Source of truth
+   * for the LoadContext tool; never injected into the prompt wholesale.
+   */
+  contextDocsLibrary?: ContextDocCatalogEntry[];
 }
 
 /**
