@@ -15,6 +15,7 @@ import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
+import { inlineContextDocsText } from '@/lib/sql/schema-filter';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
@@ -66,7 +67,8 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
 
   // Load context (schema + docs) from the saved context file
   const contextInfo = useContext(`${modeRoot}/context`);
-  const { databases, documentation: contextDocs } = contextInfo;
+  const { databases } = contextInfo;
+  const contextDocs = contextInfo.contextDocs ? inlineContextDocsText(contextInfo.contextDocs) : '';
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);

@@ -15,6 +15,7 @@ import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useContext } from '@/lib/hooks/useContext';
+import { inlineContextDocsText } from '@/lib/sql/schema-filter';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { RecentFile } from '@/lib/analytics/file-analytics.types';
 import Markdown from '@/components/Markdown';
@@ -373,7 +374,8 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
   const homePageConfig = useAppSelector(selectHomePage);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
-  const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
+  const { contextDocs: resolvedContextDocs } = useContext(`${modeRoot}/context`);
+  const contextDocs = resolvedContextDocs ? inlineContextDocsText(resolvedContextDocs) : '';
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -667,7 +669,8 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
   const homePageConfig = useAppSelector(selectHomePage);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
-  const { documentation: contextDocs } = useContext(`${modeRoot}/context`);
+  const { contextDocs: resolvedContextDocs } = useContext(`${modeRoot}/context`);
+  const contextDocs = resolvedContextDocs ? inlineContextDocsText(resolvedContextDocs) : '';
   const [data, setData] = useState<HomeAnalyticsData | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);

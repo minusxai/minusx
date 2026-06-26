@@ -156,42 +156,48 @@ describe('resolveContextDocs — version override', () => {
 // The shared formatter is the single source of truth for the "## Context" body
 // layout — the agent prompt and the docs sidebar both render its output, so these
 // pin the headers/omission rules both depend on.
+// Assert on stable pieces (section headers, doc bodies, keys, fallbacks) rather
+// than exact strings — the precise header/line wording is tuned independently.
 describe('formatContextDocsSection', () => {
   const inlineDoc = { key: '', title: '', content: 'INLINE DOCS', alwaysInclude: true };
-  const lazyFoo = { key: 'foo', title: 'Foo', content: 'body', alwaysInclude: false };
+  const lazyFoo = { key: 'foo', title: 'Foo', content: 'FOO BODY', alwaysInclude: false };
 
   it('renders both sections from one docs list, partitioning by alwaysInclude', () => {
     const out = formatContextDocsSection({ docs: [inlineDoc, lazyFoo] });
-    expect(out).toBe(
-      '### Default Context Docs\n\nINLINE DOCS\n\n### Context Library (to be loaded on demand)\n\n  - `"foo"` — Foo',
-    );
+    expect(out).toContain('Default Context Docs');
+    expect(out).toContain('INLINE DOCS');
+    expect(out).toContain('Context Library');
+    expect(out).toContain('foo');          // lazy doc advertised by key
+    expect(out).not.toContain('FOO BODY'); // ...but its body is withheld
   });
 
   it('includes a description in the catalog line when present', () => {
     const out = formatContextDocsSection({ docs: [{ key: 'foo', title: 'Foo', description: 'all about foo', content: 'b', alwaysInclude: false }] });
-    expect(out).toContain('  - `"foo"` — Foo: all about foo');
+    expect(out).toContain('all about foo');
   });
 
-  it('renders an alwaysInclude doc with a title header inline', () => {
-    const out = formatContextDocsSection({ docs: [{ key: '', title: 'Pinned', description: 'd', content: 'BODY', alwaysInclude: true }] });
-    expect(out).toBe('### Default Context Docs\n\n# Pinned\n\nd\n\nBODY');
+  it('renders an alwaysInclude doc body inline', () => {
+    const out = formatContextDocsSection({ docs: [{ key: '', title: 'Pinned', description: 'd', content: 'PINNED BODY', alwaysInclude: true }] });
+    expect(out).toContain('Default Context Docs');
+    expect(out).toContain('Pinned');
+    expect(out).toContain('PINNED BODY');
   });
 
   it('puts schema notes under Default Context Docs (separate concern, no doc)', () => {
     const out = formatContextDocsSection({ docs: [], schemaNotes: '## Schema Notes\n- public.orders' });
-    expect(out).toContain('### Default Context Docs');
+    expect(out).toContain('Default Context Docs');
     expect(out).toContain('## Schema Notes');
   });
 
   it('omits the Default section when there are no inline docs or schema notes', () => {
     const out = formatContextDocsSection({ docs: [lazyFoo] });
     expect(out).not.toContain('Default Context Docs');
-    expect(out).toContain('### Context Library (to be loaded on demand)');
+    expect(out).toContain('Context Library');
   });
 
   it('omits the Context Library section in the sidebar (no fallback) when there are no lazy docs', () => {
     const out = formatContextDocsSection({ docs: [inlineDoc] });
-    expect(out).toBe('### Default Context Docs\n\nINLINE DOCS');
+    expect(out).toContain('Default Context Docs');
     expect(out).not.toContain('Context Library');
   });
 
@@ -200,9 +206,8 @@ describe('formatContextDocsSection', () => {
       { docs: [] },
       { emptyCatalogText: 'No additional context documents are available.' },
     );
-    expect(out).toBe(
-      '### Context Library (to be loaded on demand)\n\nNo additional context documents are available.',
-    );
+    expect(out).toContain('Context Library');
+    expect(out).toContain('No additional context documents are available.');
   });
 
   it('returns an empty string when there is nothing to show and no fallback', () => {

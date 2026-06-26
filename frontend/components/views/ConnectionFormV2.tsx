@@ -42,6 +42,7 @@ import { getPublishedVersion } from '@/lib/context/context-utils';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import StaticTablesBrowser from '../StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
+import { inlineContextDocsText } from '@/lib/sql/schema-filter';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
@@ -115,7 +116,8 @@ export default function ConnectionFormV2({
   const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
   const homeFolder = useAppSelector((state) => state.auth.user?.home_folder) || '';
   const homePath = resolvePath(userMode, homeFolder || '/');
-  const { databases: contextDatabases, documentation: contextDocs, hasContext, contextId } = useContextHook(homePath, undefined, true);
+  const { databases: contextDatabases, contextDocs: resolvedContextDocs, hasContext, contextId } = useContextHook(homePath, undefined, true);
+  const contextDocs = resolvedContextDocs ? inlineContextDocsText(resolvedContextDocs) : '';
   // Check whitelist status for this specific connection: 'full' | 'partial' | 'none'
   const whitelistedDb = hasContext ? contextDatabases.find(db => db.databaseName === fileName) : undefined;
   const whitelistStatus: 'full' | 'partial' | 'none' = (() => {

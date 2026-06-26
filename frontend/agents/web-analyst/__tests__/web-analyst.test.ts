@@ -121,13 +121,15 @@ describe('LoadContext tool', () => {
   const libCtx: RemoteAnalystContext = {
     userId: 'u',
     mode: 'org',
-    contextDocsLibrary: [
-      { key: 'glossary', title: 'Glossary', description: 'terms', content: 'GLOSSARY BODY' },
-      { key: 'cohorts', title: 'Cohorts', description: 'cohort logic', content: 'COHORTS BODY' },
-      { key: 'billing', title: 'Billing', description: 'billing rules', content: 'BILLING BODY' },
-      { key: 'pricing', title: 'Pricing', description: 'price book', content: 'PRICING BODY' },
-      { key: 'refunds', title: 'Refunds', description: 'refund policy', content: 'REFUNDS BODY' },
-    ],
+    resolvedContextDocs: {
+      docs: [
+        { key: 'glossary', title: 'Glossary', description: 'terms', content: 'GLOSSARY BODY', alwaysInclude: false },
+        { key: 'cohorts', title: 'Cohorts', description: 'cohort logic', content: 'COHORTS BODY', alwaysInclude: false },
+        { key: 'billing', title: 'Billing', description: 'billing rules', content: 'BILLING BODY', alwaysInclude: false },
+        { key: 'pricing', title: 'Pricing', description: 'price book', content: 'PRICING BODY', alwaysInclude: false },
+        { key: 'refunds', title: 'Refunds', description: 'refund policy', content: 'REFUNDS BODY', alwaysInclude: false },
+      ],
+    },
   };
 
   it('returns the full content of the requested docs by key', async () => {
