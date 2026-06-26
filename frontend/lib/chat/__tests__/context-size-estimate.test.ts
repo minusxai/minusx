@@ -1,7 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { estimateContextSize } from '@/lib/chat/context-size-estimate';
+import { estimateContextSize, cachedTokensPerSection } from '@/lib/chat/context-size-estimate';
+import type { ContextSizeSection } from '@/lib/chat/context-size-estimate';
 import type { Api, Context } from '@/orchestrator/llm';
 import type { TSchema } from 'typebox';
+
+describe('cachedTokensPerSection', () => {
+  // The provider caches a contiguous PREFIX of the context. `cachedTokens` is the length of that
+  // prefix (usage.cacheRead). Each section, in prefix order, gets the portion of itself that falls
+  // within the first `cachedTokens` tokens.
+  const sections = (): ContextSizeSection[] => [
+    { key: 'a', label: 'A', tokens: 100, chars: 0 },
+    { key: 'b', label: 'B', tokens: 200, chars: 0 },
+    { key: 'c', label: 'C', tokens: 300, chars: 0 },
+  ];
+
+  it('returns 0 for every section when nothing is cached', () => {
+    expect(cachedTokensPerSection(sections(), 0)).toEqual([0, 0, 0]);
+  });
+
+  it('splits a partial prefix across sections (boundary inside the second section)', () => {
+    // 150 cached: all of A (100) + 50 of B + 0 of C
+    expect(cachedTokensPerSection(sections(), 150)).toEqual([100, 50, 0]);
+  });
+
+  it('fills earlier sections fully before later ones', () => {
+    expect(cachedTokensPerSection(sections(), 300)).toEqual([100, 200, 0]);
+    expect(cachedTokensPerSection(sections(), 350)).toEqual([100, 200, 50]);
+  });
+
+  it('caps each section at its own size when the cached prefix exceeds the total', () => {
+    expect(cachedTokensPerSection(sections(), 100000)).toEqual([100, 200, 300]);
+  });
+
+  it('treats missing/zero cachedTokens as all-uncached', () => {
+    expect(cachedTokensPerSection(sections(), undefined)).toEqual([0, 0, 0]);
+  });
+});
 
 describe('estimateContextSize', () => {
   it('splits the next user message into app state, attachments, wrapper, and goal sections', () => {

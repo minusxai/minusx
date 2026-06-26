@@ -1,5 +1,5 @@
-// ContextSizePanel — verifies the cached-tokens overlay (#2): tokens the provider served from the
-// prompt cache last turn render as a "Cached last turn" legend row + black-bordered prefix squares.
+// ContextSizePanel — verifies the per-section cached column: each section row shows how many of its
+// tokens the provider served from the prompt cache last turn (prefix overlap) vs the section total.
 // All queries by aria-label per repo convention.
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
@@ -22,21 +22,31 @@ function render(state: ContextSizePanelState) {
   );
 }
 
-describe('ContextSizePanel — cached tokens', () => {
-  it('shows the "Cached last turn" legend with the token count when cachedTokens > 0', () => {
+describe('ContextSizePanel — per-section cached column', () => {
+  it('shows each section as "cached / total", splitting the cached prefix across sections', () => {
+    // 15,000 cached over [system_prompt 12k, app_state 8k] → all 12k of system_prompt, then 3k of app_state.
     render({ status: 'ready', estimate, cachedTokens: 15_000 });
-    const legend = screen.getByLabelText('cached tokens last turn');
-    expect(legend.textContent).toContain('Cached last turn');
-    expect(legend.textContent).toContain('15,000');
+
+    const sys = screen.getByLabelText('section system_prompt tokens');
+    expect(sys.textContent).toContain('12,000 / 12,000');
+
+    const app = screen.getByLabelText('section app_state tokens');
+    expect(app.textContent).toContain('3,000 / 8,000');
   });
 
-  it('omits the cached legend when there were no cached tokens', () => {
+  it('shows 0 cached for every section when nothing was cached', () => {
     render({ status: 'ready', estimate, cachedTokens: 0 });
-    expect(screen.queryByLabelText('cached tokens last turn')).toBeNull();
+    expect(screen.getByLabelText('section system_prompt tokens').textContent).toContain('0 / 12,000');
+    expect(screen.getByLabelText('section app_state tokens').textContent).toContain('0 / 8,000');
   });
 
-  it('omits the cached legend when cachedTokens is absent', () => {
+  it('treats absent cachedTokens as all-uncached', () => {
     render({ status: 'ready', estimate });
+    expect(screen.getByLabelText('section system_prompt tokens').textContent).toContain('0 / 12,000');
+  });
+
+  it('no longer renders the old single "Cached last turn" summary line', () => {
+    render({ status: 'ready', estimate, cachedTokens: 15_000 });
     expect(screen.queryByLabelText('cached tokens last turn')).toBeNull();
   });
 });

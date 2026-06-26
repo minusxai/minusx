@@ -15,6 +15,27 @@ export interface ContextSizeEstimate {
   sections: ContextSizeSection[];
 }
 
+/**
+ * How many tokens of EACH section were served from the provider's prompt cache last turn.
+ *
+ * The provider caches a contiguous PREFIX of the context; `cachedTokens` (usage.cacheRead) is the
+ * length of that prefix. `sections` are in prefix order, so each section's cached portion is the
+ * overlap of its `[start, end)` token range with `[0, cachedTokens)`. Returns a number per section,
+ * positionally aligned to `sections`.
+ */
+export function cachedTokensPerSection(
+  sections: ContextSizeSection[],
+  cachedTokens: number | undefined,
+): number[] {
+  const cached = Math.max(0, cachedTokens ?? 0);
+  let start = 0;
+  return sections.map((section) => {
+    const inPrefix = Math.min(section.tokens, Math.max(0, cached - start));
+    start += section.tokens;
+    return inPrefix;
+  });
+}
+
 const APPROX_CHARS_PER_TOKEN = 4;
 const IMAGE_TOKEN_ESTIMATE = 1_000;
 // The next user message hasn't been typed yet — reserve a flat approximation for it.
