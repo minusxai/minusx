@@ -82,10 +82,9 @@ export async function getWhitelistForPath(
     const contextContent = chainFiles.find((f) => f.id === nearest.id)?.content as ContextContent | undefined;
     if (!contextContent) return null;
 
-    // Use the file's parent directory as the scope path for childPaths filtering.
-    const contextDir = nearest.path.substring(0, nearest.path.lastIndexOf('/')) || '/';
-    const scopePath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
-    const databases = getWhitelistedSchemaForUser(contextContent, user.userId, scopePath, contextDir);
+    // childPaths filtering already happened at load time inside the context loader,
+    // so this resolves the published whitelist directly.
+    const databases = getWhitelistedSchemaForUser(contextContent, user.userId);
     const dbEntry = databases.find(d => d.databaseName === connectionName);
     if (!dbEntry || !dbEntry.schemas.length) return null;
 

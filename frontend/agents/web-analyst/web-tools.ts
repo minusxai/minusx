@@ -293,7 +293,8 @@ export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystC
   };
 
   async run(): Promise<ToolResponse> {
-    const library = this.context.contextDocsLibrary ?? [];
+    // The lazy (non-alwaysInclude) docs are the loadable library.
+    const library = (this.context.resolvedContextDocs?.docs ?? []).filter((d) => !d.alwaysInclude);
     const keys = this.parameters.keys ?? [];
 
     if (keys.length === 0) {

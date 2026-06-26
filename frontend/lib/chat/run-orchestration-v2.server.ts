@@ -91,12 +91,10 @@ async function buildAnalystContext(
   const appState = agent_args.app_state;
   const connectionId =
     typeof agent_args.connection_id === 'string' ? agent_args.connection_id : undefined;
-  const contextDocs = typeof agent_args.context === 'string' ? agent_args.context : undefined;
-  const contextDocsCatalog =
-    typeof agent_args.context_docs_catalog === 'string' ? agent_args.context_docs_catalog : undefined;
-  const contextDocsLibrary = Array.isArray(agent_args.context_docs_library)
-    ? (agent_args.context_docs_library as RemoteAnalystContext['contextDocsLibrary'])
-    : undefined;
+  const resolvedContextDocs =
+    agent_args.context_docs && typeof agent_args.context_docs === 'object'
+      ? (agent_args.context_docs as RemoteAnalystContext['resolvedContextDocs'])
+      : undefined;
 
   return {
     userId: String(user.userId ?? user.email),
@@ -105,9 +103,7 @@ async function buildAnalystContext(
     connections,
     connectionId,
     whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
-    contextDocs: contextDocs || undefined,
-    contextDocsCatalog,
-    contextDocsLibrary,
+    resolvedContextDocs,
     schema,
     homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
     role: user.role,

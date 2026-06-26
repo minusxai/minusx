@@ -13,6 +13,7 @@ import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { buildServerAgentArgs, type BuildServerAgentArgsOptions } from '@/lib/chat/agent-args.server';
+import { inlineContextDocsText } from '@/lib/sql/schema-filter';
 import { runEvalV2 } from '@/lib/chat/run-eval-v2.server';
 import { getAppStateServer } from '@/lib/api/file-state.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -145,7 +146,7 @@ async function executeLLMTest(
     goal: subject.prompt,
     assertionType: answerTypeToAssertion(test.answerType),
     schema: baseArgs.schema,
-    contextDocs: baseArgs.context,
+    contextDocs: inlineContextDocsText(baseArgs.context_docs),
     connectionId: subject.connection_id || defaultConnectionId || baseArgs.connection_id,
     appState: app_state,
     user,

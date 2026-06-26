@@ -2,8 +2,8 @@
  * Shared schema filtering logic
  * Used by both client-side (useContext hook) and server-side (ContextHelpers)
  */
-import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode, DocEntry, MetricDef, TableAnnotation } from '../types';
-import { getPublishedVersionForUser } from '../context/context-utils';
+import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode, DocEntry, MetricDef, TableAnnotation, type ResolvedContextDoc, type ResolvedContextDocs } from '../types';
+import { getPublishedVersionForUser, getPublishedVersion } from '../context/context-utils';
 
 /**
  * Build an agent-facing "Schema Notes" markdown section from context-authored
@@ -227,29 +227,33 @@ export function filterSchemaByWhitelist(
  * already computes fullSchema as the final exposed schema (parent offering ×
  * own whitelist). So this function simply returns fullSchema.
  *
- * The currentPath / contextDir parameters are kept for backward compatibility
- * but are no longer used for filtering — childPaths filtering now happens
- * at load time inside the context loader.
+ * `fullSchema` is computed by the loader with the PUBLISHED version's whitelist
+ * already applied, so the published case returns it directly. When `version`
+ * names a different (e.g. draft, admin-tested) version, that version's whitelist
+ * is re-applied on top — it can only narrow further, never re-add tables the
+ * published whitelist already dropped.
  *
  * @param contextContent - The context content with fullSchema computed by loader
  * @param userId - The user ID (unused — single published version for all users)
- * @param currentPath - Unused (kept for API compatibility)
- * @param contextDir  - Unused (kept for API compatibility)
+ * @param version - Resolve this specific version's whitelist instead of published
  * @returns Array of databases with whitelisted schemas/tables only
  */
 export function getWhitelistedSchemaForUser(
   contextContent: ContextContent,
   _userId: number,
-  _currentPath?: string,
-  _contextDir?: string
+  version?: number,
 ): DatabaseWithSchema[] {
-  // The loader already applied the whitelist when computing fullSchema.
-  // Return it directly.
-  if (contextContent.fullSchema) {
-    return contextContent.fullSchema;
+  const fullSchema = contextContent.fullSchema ?? [];
+
+  // Published (or unspecified) version: the loader already applied its whitelist.
+  if (version == null || version === getPublishedVersion(contextContent)) {
+    return fullSchema;
   }
 
-  return [];
+  // Version override: apply the requested version's whitelist on top of fullSchema.
+  const versionContent = contextContent.versions?.find(v => v.version === version);
+  if (!versionContent) return fullSchema;
+  return applyWhitelistToConnections(fullSchema, versionContent.whitelist);
 }
 
 /**
@@ -271,7 +275,11 @@ function docEntryToString(doc: DocEntry | string): string {
  * full serializer (getDocumentationForUser) and the lazy resolver
  * (resolveContextDocs).
  */
-function collectContextDocs(contextContent: ContextContent, userId: number): {
+function collectContextDocs(
+  contextContent: ContextContent,
+  userId: number,
+  version?: number,
+): {
   docs: (DocEntry | string)[];
   schemaNotes: string | undefined;
 } {
@@ -279,16 +287,21 @@ function collectContextDocs(contextContent: ContextContent, userId: number): {
   const inheritedDocs = (contextContent.fullDocs || [])
     .filter(doc => typeof doc === 'string' || doc.draft !== true);
 
-  const publishedVersion = contextContent.versions && contextContent.versions.length > 0
-    ? contextContent.versions.find(v => v.version === getPublishedVersionForUser(contextContent, userId))
+  // Resolve the requested version (admin testing a specific version) or the
+  // user's published version. Fall back to published when the requested version
+  // doesn't exist.
+  const targetVersion = version ?? getPublishedVersionForUser(contextContent, userId);
+  const selectedVersion = contextContent.versions && contextContent.versions.length > 0
+    ? (contextContent.versions.find(v => v.version === targetVersion)
+        ?? contextContent.versions.find(v => v.version === getPublishedVersionForUser(contextContent, userId)))
     : undefined;
 
-  const ownDocs = (publishedVersion?.docs || [])
+  const ownDocs = (selectedVersion?.docs || [])
     .filter(doc => typeof doc === 'string' || doc.draft !== true);
 
   // Schema Notes: context-authored descriptions + metrics (own + inherited).
-  const annotations = [...(contextContent.fullAnnotations || []), ...(publishedVersion?.annotations || [])];
-  const metrics = [...(contextContent.fullMetrics || []), ...(publishedVersion?.metrics || [])];
+  const annotations = [...(contextContent.fullAnnotations || []), ...(selectedVersion?.annotations || [])];
+  const metrics = [...(contextContent.fullMetrics || []), ...(selectedVersion?.metrics || [])];
   const schemaNotes = buildSchemaNotes(annotations, metrics);
 
   return { docs: [...inheritedDocs, ...ownDocs], schemaNotes };
@@ -312,17 +325,9 @@ export function getDocumentationForUser(
   return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
 }
 
-/**
- * A lazy-loadable context doc. `title`/`description` are the human-facing fields
- * shown to the agent so it can judge relevance; `key` is the stable slug the agent
- * passes to LoadContext to fetch the full `content`.
- */
-export interface ContextDocCatalogEntry {
-  key: string;
-  title: string;
-  description?: string;
-  content: string;
-}
+// Resolved-doc types live in `@/lib/types`; re-exported here for import sites that
+// reach for them via schema-filter.
+export type { ResolvedContextDoc, ResolvedContextDocs } from '../types';
 
 /**
  * Slugify a doc title into a stable, easy-to-pass key: lowercased, non-alphanumeric
@@ -350,40 +355,40 @@ export function deriveDocMeta(content: string): { title: string; description: st
   return { title, description };
 }
 
-/** Split of a context's docs into what's always sent vs. lazily loadable. */
-export interface ResolvedContextDocs {
-  /** Always-inline string: string docs + alwaysInclude docs + Schema Notes. */
-  inline: string;
-  /** Catalog of lazy docs (`- "key" — description` lines); '' when there are none. */
-  catalog: string;
-  /** Lazy docs with full content, resolved on demand by the LoadContext tool. */
-  library: ContextDocCatalogEntry[];
-}
-
 /**
- * Resolve a context's docs for the interactive chat path: inline only the docs
- * that must always be present (alwaysInclude docs) plus Schema Notes; every other
- * doc becomes a title+description catalog entry whose full content is fetched on
- * demand via the LoadContext tool. Docs without an explicit title/description fall
+ * Resolve a context's docs into STRUCTURE (one list, each tagged alwaysInclude)
+ * plus the generated schema notes. No presentation — turn it into text only in
+ * `formatContextDocsSection`. Lazy docs without an explicit title/description fall
  * back to one derived from their body (see deriveDocMeta) so legacy data stays
- * loadable.
+ * loadable. Pass `version` to resolve a specific (e.g. admin-tested) version's
+ * docs instead of the user's published version.
  */
 export function resolveContextDocs(
   contextContent: ContextContent,
-  userId: number
+  userId: number,
+  version?: number,
 ): ResolvedContextDocs {
-  const { docs, schemaNotes } = collectContextDocs(contextContent, userId);
+  const { docs, schemaNotes } = collectContextDocs(contextContent, userId, version);
 
-  const inlineStrings: string[] = [];
-  const library: ContextDocCatalogEntry[] = [];
+  const resolved: ResolvedContextDoc[] = [];
   const usedKeys = new Set<string>();
   let fallbackCount = 0;
 
   for (const doc of docs) {
     // alwaysInclude docs (and bare string docs, which are pinned by definition)
-    // stay inline every turn.
-    if (typeof doc === 'string' || doc.alwaysInclude === true) {
-      inlineStrings.push(docEntryToString(doc));
+    // are inlined verbatim every turn — no key, explicit title/description only.
+    if (typeof doc === 'string') {
+      resolved.push({ key: '', title: '', content: doc, alwaysInclude: true });
+      continue;
+    }
+    if (doc.alwaysInclude === true) {
+      resolved.push({
+        key: '',
+        title: doc.title?.trim() ?? '',
+        description: doc.description?.trim() || undefined,
+        content: doc.content,
+        alwaysInclude: true,
+      });
       continue;
     }
 
@@ -405,14 +410,71 @@ export function resolveContextDocs(
     let key = baseKey;
     for (let n = 2; usedKeys.has(key); n++) key = `${baseKey}_${n}`;
     usedKeys.add(key);
-    library.push({ key, title, description: description || undefined, content });
+    resolved.push({ key, title, description: description || undefined, content, alwaysInclude: false });
   }
 
-  const inline = [...inlineStrings, schemaNotes].filter(Boolean).join('\n\n---\n\n');
-  // Each catalog line: the key to pass, then the human title + description.
-  const catalog = library
-    .map((d) => `  - \`"${d.key}"\` — ${d.title}${d.description ? `: ${d.description}` : ''}`)
-    .join('\n');
+  return { docs: resolved, schemaNotes: schemaNotes || undefined };
+}
 
-  return { inline, catalog, library };
+/** Render an always-include doc's inline body (optional title/description header + content). */
+function renderResolvedDocInline(doc: ResolvedContextDoc): string {
+  const header = [`key: "${doc.key}"`, doc.title ? `### ${doc.title}` : null, doc.description || null].filter(Boolean).join('\n\n');
+  return header ? `${header}\n\n${doc.content}` : doc.content;
+}
+
+/**
+ * The always-inline documentation as a plain string (alwaysInclude doc bodies +
+ * schema notes), with NO section header. For the benchmark/eval/report paths that
+ * carry docs as a single string and have no LoadContext tool — they only see the
+ * always-include docs, same as before this was structured.
+ */
+export function inlineContextDocsText(resolved: ResolvedContextDocs): string {
+  const parts = resolved.docs.filter((d) => d.alwaysInclude).map(renderResolvedDocInline);
+  if (resolved.schemaNotes) parts.push(resolved.schemaNotes);
+  return parts.filter(Boolean).join('\n\n---\n\n');
+}
+
+/**
+ * Render the Context Library catalog lines from the lazy docs. Each line gives the
+ * key the agent passes to LoadContext, then the human title (+ description). This
+ * is the ONLY place catalog text is produced.
+ */
+function formatContextLibraryCatalog(lazyDocs: ResolvedContextDoc[]): string {
+  return lazyDocs
+    .map((d) => `  - **key**: \`${d.key}\` \n**title**: ${d.title}${d.description ? `\n**description**: ${d.description}` : ''}`)
+    .join('\n');
+}
+
+/**
+ * Format a context's resolved docs into the exact "## Context" body shown both to
+ * the agent (system prompt) and to the user (docs sidebar): always-inline docs
+ * under "Default Context Docs", lazy docs under "Context Library (to be loaded on
+ * demand)". This is the SINGLE source of truth for that layout — the prompt
+ * render and the sidebar both call it so the two can never drift.
+ *
+ * Takes the STRUCTURE (`resolveContextDocs`'s output) and produces text here, in
+ * one pass: alwaysInclude docs (+ schema notes) under "Default Context Docs", lazy
+ * docs as catalog lines under "Context Library". An empty section is omitted,
+ * except the catalog can fall back to `emptyCatalogText` (the prompt uses this so
+ * the agent always sees an explicit "nothing to load" line; the sidebar omits it).
+ */
+export function formatContextDocsSection(
+  resolved: { docs?: ResolvedContextDoc[]; schemaNotes?: string },
+  opts?: { emptyCatalogText?: string },
+): string {
+  const docs = resolved.docs ?? [];
+  const parts: string[] = [];
+
+  // Default Context Docs: alwaysInclude doc bodies, then the schema notes.
+  const inlineParts = docs.filter((d) => d.alwaysInclude).map(renderResolvedDocInline);
+  if (resolved.schemaNotes) inlineParts.push(resolved.schemaNotes);
+  const inline = inlineParts.filter(Boolean).join('\n\n---\n\n');
+  if (inline.trim()) parts.push(`## Default Context Docs\n\n${inline}`);
+
+  // Context Library: the lazy docs, advertised by key + title (+ description).
+  const catalog = formatContextLibraryCatalog(docs.filter((d) => !d.alwaysInclude));
+  const catalogBody = catalog.trim() ? catalog : (opts?.emptyCatalogText ?? '');
+  if (catalogBody.trim()) parts.push(`---\n## Context Library \n\nNote: These can be loaded on demand via the \`key\`.\n\n${catalogBody}`);
+
+  return parts.join('\n\n');
 }

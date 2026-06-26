@@ -364,11 +364,37 @@ export interface User {
  * Context information for a file path
  * Always returns consistent shape whether context exists or not
  */
+/**
+ * A single resolved context doc. `alwaysInclude` decides how it's rendered: an
+ * always-include doc is inlined (full `content`) under "Default Context Docs"; a
+ * lazy one is advertised by `key` + `title` (+ `description`) under "Context
+ * Library" and its `content` fetched on demand via LoadContext. `key` is a stable
+ * slug, meaningful only for lazy docs (empty for pinned/string docs).
+ */
+export interface ResolvedContextDoc {
+  key: string;
+  title: string;
+  description?: string;
+  content: string;
+  alwaysInclude: boolean;
+}
+
+/**
+ * A context's docs resolved into STRUCTURE — one list of docs (default-vs-lazy is
+ * the `alwaysInclude` flag, so there's no separate "library") plus the generated
+ * schema descriptions, carried separately so they can later move onto the schema
+ * itself. Turned into prompt/UI text only in `formatContextDocsSection`.
+ */
+export interface ResolvedContextDocs {
+  docs: ResolvedContextDoc[];
+  /** Generated schema/metric descriptions ("Schema Notes"). Separate concern. */
+  schemaNotes?: string;
+}
+
 export interface ContextInfo {
   contextId: number | undefined;          // ID of context file (undefined if no context)
   databases: DatabaseWithSchema[];        // Whitelisted schemas (or all if no context)
-  documentation: string | undefined;      // Always-inline context docs (undefined if no context)
-  documentationCatalog?: string;          // Catalog of lazy-loadable docs (title + description only)
+  contextDocs?: ResolvedContextDocs;      // Resolved docs (structure); undefined if no context
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
   availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for # mentions
   hasContext: boolean;                    // True if context file found
