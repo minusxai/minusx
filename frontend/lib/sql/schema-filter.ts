@@ -253,7 +253,51 @@ export function getWhitelistedSchemaForUser(
 }
 
 /**
- * Get documentation for a user's published version
+ * Serialize a doc entry to its agent-facing string, prepending the optional
+ * title/description when present (both default to absent and are skipped).
+ */
+function docEntryToString(doc: DocEntry | string): string {
+  if (typeof doc === 'string') return doc;
+  const header = [
+    doc.title ? `# ${doc.title}` : null,
+    doc.description ? doc.description : null,
+  ].filter(Boolean).join('\n\n');
+  return header ? `${header}\n\n${doc.content}` : doc.content;
+}
+
+/**
+ * Resolve the user's published version + the merged non-draft doc list (inherited
+ * docs first, then own docs) and the inline Schema Notes section. Shared by the
+ * full serializer (getDocumentationForUser) and the lazy resolver
+ * (resolveContextDocs).
+ */
+function collectContextDocs(contextContent: ContextContent, userId: number): {
+  docs: (DocEntry | string)[];
+  schemaNotes: string | undefined;
+} {
+  // Inherited docs (fullDocs) — already filtered by childPaths at load time.
+  const inheritedDocs = (contextContent.fullDocs || [])
+    .filter(doc => typeof doc === 'string' || doc.draft !== true);
+
+  const publishedVersion = contextContent.versions && contextContent.versions.length > 0
+    ? contextContent.versions.find(v => v.version === getPublishedVersionForUser(contextContent, userId))
+    : undefined;
+
+  const ownDocs = (publishedVersion?.docs || [])
+    .filter(doc => typeof doc === 'string' || doc.draft !== true);
+
+  // Schema Notes: context-authored descriptions + metrics (own + inherited).
+  const annotations = [...(contextContent.fullAnnotations || []), ...(publishedVersion?.annotations || [])];
+  const metrics = [...(contextContent.fullMetrics || []), ...(publishedVersion?.metrics || [])];
+  const schemaNotes = buildSchemaNotes(annotations, metrics);
+
+  return { docs: [...inheritedDocs, ...ownDocs], schemaNotes };
+}
+
+/**
+ * Get documentation for a user's published version — FULL serialization of every
+ * (non-draft) doc inline. Used by benchmark/headless prompt builders that don't
+ * advertise the LoadContext tool. Interactive chat uses resolveContextDocs instead.
  *
  * @param contextContent - The context content with versions
  * @param userId - The user ID to get the published version for
@@ -263,36 +307,112 @@ export function getDocumentationForUser(
   contextContent: ContextContent,
   userId: number
 ): string | undefined {
-  // Serialize a doc entry to its agent-facing string, prepending the optional
-  // title/description when present (both default to absent and are skipped).
-  const docToString = (doc: DocEntry | string): string => {
-    if (typeof doc === 'string') return doc;
-    const header = [
-      doc.title ? `# ${doc.title}` : null,
-      doc.description ? doc.description : null,
-    ].filter(Boolean).join('\n\n');
-    return header ? `${header}\n\n${doc.content}` : doc.content;
-  };
-
-  // Collect inherited docs (fullDocs) filtered by childPaths (already filtered by loader)
-  const inheritedDocStrings = (contextContent.fullDocs || [])
-    .filter(doc => typeof doc === 'string' || doc.draft !== true)
-    .map(docToString);
-
-  // Resolve the user's published version (for own docs + annotations + metrics).
-  const publishedVersion = contextContent.versions && contextContent.versions.length > 0
-    ? contextContent.versions.find(v => v.version === getPublishedVersionForUser(contextContent, userId))
-    : undefined;
-
-  const ownDocStrings = (publishedVersion?.docs || [])
-    .filter(doc => typeof doc === 'string' || doc.draft !== true)
-    .map(docToString);
-
-  // Schema Notes: context-authored descriptions + metrics (own + inherited).
-  const annotations = [...(contextContent.fullAnnotations || []), ...(publishedVersion?.annotations || [])];
-  const metrics = [...(contextContent.fullMetrics || []), ...(publishedVersion?.metrics || [])];
-  const schemaNotes = buildSchemaNotes(annotations, metrics);
-
-  const allDocStrings = [...inheritedDocStrings, ...ownDocStrings, schemaNotes].filter(Boolean);
+  const { docs, schemaNotes } = collectContextDocs(contextContent, userId);
+  const allDocStrings = [...docs.map(docEntryToString), schemaNotes].filter(Boolean);
   return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
+}
+
+/**
+ * A lazy-loadable context doc. `title`/`description` are the human-facing fields
+ * shown to the agent so it can judge relevance; `key` is the stable slug the agent
+ * passes to LoadContext to fetch the full `content`.
+ */
+export interface ContextDocCatalogEntry {
+  key: string;
+  title: string;
+  description?: string;
+  content: string;
+}
+
+/**
+ * Slugify a doc title into a stable, easy-to-pass key: lowercased, non-alphanumeric
+ * runs collapsed to underscores, trimmed. Returns '' for an empty/punctuation-only
+ * title (caller assigns a fallback).
+ */
+function slugifyDocKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Derive a title + description from a doc's body, for legacy docs saved before
+ * title/description were required: first non-empty line → title (markdown heading
+ * markers stripped), next two non-empty lines → description. New docs are required
+ * to carry an explicit title + description (enforced in the context editor), so
+ * this only fires for older data.
+ */
+export function deriveDocMeta(content: string): { title: string; description: string } {
+  const lines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const title = lines[0] ? lines[0].replace(/^#+\s*/, '').trim() : '';
+  const description = lines.slice(1, 3).join(' ');
+  return { title, description };
+}
+
+/** Split of a context's docs into what's always sent vs. lazily loadable. */
+export interface ResolvedContextDocs {
+  /** Always-inline string: string docs + alwaysInclude docs + Schema Notes. */
+  inline: string;
+  /** Catalog of lazy docs (`- "key" — description` lines); '' when there are none. */
+  catalog: string;
+  /** Lazy docs with full content, resolved on demand by the LoadContext tool. */
+  library: ContextDocCatalogEntry[];
+}
+
+/**
+ * Resolve a context's docs for the interactive chat path: inline only the docs
+ * that must always be present (alwaysInclude docs) plus Schema Notes; every other
+ * doc becomes a title+description catalog entry whose full content is fetched on
+ * demand via the LoadContext tool. Docs without an explicit title/description fall
+ * back to one derived from their body (see deriveDocMeta) so legacy data stays
+ * loadable.
+ */
+export function resolveContextDocs(
+  contextContent: ContextContent,
+  userId: number
+): ResolvedContextDocs {
+  const { docs, schemaNotes } = collectContextDocs(contextContent, userId);
+
+  const inlineStrings: string[] = [];
+  const library: ContextDocCatalogEntry[] = [];
+  const usedKeys = new Set<string>();
+  let fallbackCount = 0;
+
+  for (const doc of docs) {
+    // alwaysInclude docs (and bare string docs, which are pinned by definition)
+    // stay inline every turn.
+    if (typeof doc === 'string' || doc.alwaysInclude === true) {
+      inlineStrings.push(docEntryToString(doc));
+      continue;
+    }
+
+    // Lazy doc — prefer the explicit title/description, deriving from the body
+    // only when one is missing (legacy docs).
+    const content = doc.content;
+    let title = doc.title?.trim() ?? '';
+    let description = doc.description?.trim() ?? '';
+    if (!title || !description) {
+      const derived = deriveDocMeta(content);
+      if (!title) title = derived.title;
+      if (!description) description = derived.description;
+    }
+    if (!title) title = `Document ${++fallbackCount}`;
+
+    // The key is a stable slug derived from the title; the agent sees the title
+    // (+ description) for relevance and passes the key to LoadContext.
+    const baseKey = slugifyDocKey(title) || `document_${++fallbackCount}`;
+    let key = baseKey;
+    for (let n = 2; usedKeys.has(key); n++) key = `${baseKey}_${n}`;
+    usedKeys.add(key);
+    library.push({ key, title, description: description || undefined, content });
+  }
+
+  const inline = [...inlineStrings, schemaNotes].filter(Boolean).join('\n\n---\n\n');
+  // Each catalog line: the key to pass, then the human title + description.
+  const catalog = library
+    .map((d) => `  - \`"${d.key}"\` — ${d.title}${d.description ? `: ${d.description}` : ''}`)
+    .join('\n');
+
+  return { inline, catalog, library };
 }

@@ -21,6 +21,7 @@ const EXPECTED_TOOLS = [
   'SearchFiles',
   'CreateFile',
   'LoadSkill',
+  'LoadContext',
   'FuzzyMatch',
   'Screenshot',
 ].sort();

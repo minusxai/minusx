@@ -2,7 +2,7 @@
  * Shared server-side agent_args builder.
  *
  * Loads connection, schema, and context documentation from the DB using the
- * same pure functions (getWhitelistedSchemaForUser, getDocumentationForUser)
+ * same pure functions (getWhitelistedSchemaForUser, resolveContextDocs)
  * that the client-side AnalystAgent uses on the explore page and file page.
  *
  * Used by all server-initiated agent conversations (Slack, reports, evals,
@@ -15,7 +15,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { listAllConnections } from '@/lib/data/connections.server';
 import { findNearestContextPath } from '@/lib/context/context-utils';
 import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
-import { getDocumentationForUser, getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
+import { resolveContextDocs, getWhitelistedSchemaForUser, type ContextDocCatalogEntry } from '@/lib/sql/schema-filter';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import type { ContextContent, DatabaseWithSchema } from '@/lib/types';
@@ -24,7 +24,12 @@ export interface ServerAgentArgs {
   connection_id?: string;
   selected_database_info?: { name: string; dialect: string };
   schema: Array<{ schema: string; tables: string[] }>;
+  /** Always-inline context docs (alwaysInclude docs + Schema Notes). */
   context: string;
+  /** Catalog of lazy-loadable context docs (title + description only). */
+  context_docs_catalog: string;
+  /** Lazy docs with full content, resolved server-side by the LoadContext tool. */
+  context_docs_library: ContextDocCatalogEntry[];
 }
 
 function flattenSchemaForPrompt(
@@ -73,6 +78,8 @@ export async function buildServerAgentArgs(
   // the context's whitelisted databases, not on all connections).
   let databases: DatabaseWithSchema[] | undefined;
   let documentation: string | undefined;
+  let docsCatalog = '';
+  let docsLibrary: ContextDocCatalogEntry[] = [];
 
   try {
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
@@ -107,7 +114,10 @@ export async function buildServerAgentArgs(
 
     if (contextContent) {
       databases = getWhitelistedSchemaForUser(contextContent, user.userId, effectiveHomeFolder, nearestContextDir);
-      documentation = getDocumentationForUser(contextContent, user.userId);
+      const resolved = resolveContextDocs(contextContent, user.userId);
+      documentation = resolved.inline;
+      docsCatalog = resolved.catalog;
+      docsLibrary = resolved.library;
     }
   } catch {
     // Proceed without context — agent can still use SearchDBSchema tool
@@ -131,5 +141,7 @@ export async function buildServerAgentArgs(
       : undefined,
     schema: flattenSchemaForPrompt(databases, selectedDatabaseName),
     context: documentation ?? '',
+    context_docs_catalog: docsCatalog,
+    context_docs_library: docsLibrary,
   };
 }

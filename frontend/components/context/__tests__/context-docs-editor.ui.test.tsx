@@ -147,6 +147,29 @@ describe('ContextDocsEditor', () => {
     expect(titleInput.value).toBe('Seeded');
   });
 
+  it('toggles alwaysInclude on a doc entry via onDocsChange', async () => {
+    const onChange = vi.fn();
+    renderWithProviders(<Harness initial={[{ content: 'Alpha', title: 'Glossary' }]} onChange={onChange} />);
+
+    await userEvent.click(await screen.findByLabelText('Documentation Entry 1 always include'));
+
+    expect(onChange).toHaveBeenCalledWith([{ content: 'Alpha', title: 'Glossary', alwaysInclude: true }]);
+  });
+
+  it('hides the always-include toggle when showAlwaysIncludeToggle is false', async () => {
+    renderWithProviders(
+      <ContextDocsEditor
+        docs={[{ content: 'Alpha' }]}
+        onDocsChange={() => {}}
+        showChildPaths={false}
+        showDraftToggle={false}
+        showAlwaysIncludeToggle={false}
+      />,
+    );
+    expect(await screen.findByLabelText('Remove Documentation Entry 1')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Documentation Entry 1 always include')).not.toBeInTheDocument();
+  });
+
   it('hides the title/description inputs when showTitleDescription is false', async () => {
     renderWithProviders(
       <ContextDocsEditor
