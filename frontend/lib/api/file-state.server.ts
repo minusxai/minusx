@@ -7,7 +7,10 @@
  */
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQuery } from '@/lib/connections/run-query';
+import { applyNoneParams } from '@/lib/sql/none-params';
+import { connectionTypeToDialect } from '@/lib/types';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import {
   compressAugmentedFile,
@@ -173,18 +176,33 @@ async function executeQueriesForFile(
 ): Promise<QueryResult[]> {
   const results: QueryResult[] = [];
 
-  // Execute one query with ALREADY-RESOLVED params and push its result, keyed by the same query
-  // hash the client cache uses so ids line up. Errors (incl. SQL parser errors) are pushed as a
-  // result-with-error so the agent SEES them, never thrown.
+  // Resolve (and cache) a connection's SQL dialect — needed for the None-param IR transform.
+  const dialectCache = new Map<string, string>();
+  const getDialect = async (connectionName: string): Promise<string> => {
+    const cached = dialectCache.get(connectionName);
+    if (cached !== undefined) return cached;
+    const raw = await ConnectionsAPI.getRawByName(connectionName, user.mode).catch(() => null);
+    const dialect = connectionTypeToDialect(raw?.type ?? '');
+    dialectCache.set(connectionName, dialect);
+    return dialect;
+  };
+
+  // Execute one query with ALREADY-RESOLVED (canonical) params and push its result, keyed by the
+  // same query hash the client cache uses so ids line up. None (null) params are handled exactly as
+  // the /api/query route does (applyNoneParams: IR filter removal + NULL substitution) so an unset
+  // numeric param means "no filter" rather than binding `:p` to nothing (SQL error). Errors (incl.
+  // SQL parser errors) are pushed as a result-with-error so the agent SEES them, never thrown.
   const runResolved = async (query: string, connectionName: string, params: Record<string, unknown>): Promise<void> => {
-    const paramRecord: Record<string, string | number> = {};
-    for (const [k, v] of Object.entries(params)) {
-      if (typeof v === 'string' || typeof v === 'number') paramRecord[k] = v;
-      else if (v != null) paramRecord[k] = String(v);
-    }
+    // The cache id keys on the CANONICAL params (incl. nulls) — matches the file's queryResultId.
     const id = getQueryHash(query, params, connectionName);
+    const paramsForNone: Record<string, string | number | null> = {};
+    for (const [k, v] of Object.entries(params)) {
+      if (v === null || typeof v === 'string' || typeof v === 'number') paramsForNone[k] = v;
+      else if (v !== undefined) paramsForNone[k] = String(v);
+    }
     try {
-      const result = await runQuery(connectionName, query, paramRecord, user);
+      const { sql, params: execParams } = await applyNoneParams(query, paramsForNone, await getDialect(connectionName));
+      const result = await runQuery(connectionName, sql, execParams, user);
       results.push({ ...result, id });
     } catch (err) {
       results.push({

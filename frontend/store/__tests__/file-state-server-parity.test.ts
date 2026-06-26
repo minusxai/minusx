@@ -361,10 +361,18 @@ describe('Client-Server File State Parity', () => {
     expect(server[0]).toEqual(client); // parity
 
     // And executing the query keys the result under the SAME canonical id, so it attaches.
+    mockRunQuery.mockClear();
     const withQueries = await readFilesServer([unsetNumParamQuestionId], testUser, { executeQueries: true });
     expect(withQueries[0].queryResults).toHaveLength(1);
     expect(withQueries[0].queryResults[0].id).toEqual(canonicalHash);
     expect(withQueries[0].queryResults[0].id).toEqual(withQueries[0].fileState.queryResultId);
+    // The None param must be resolved BEFORE the connector runs — the SQL handed to runQuery must
+    // not still contain an unbound `:min_mrr` (which would be a SQL error), and the bound params
+    // must not include min_mrr. (applyNoneParams removed the filter / substituted NULL.)
+    expect(mockRunQuery).toHaveBeenCalledTimes(1);
+    const [, executedSql, boundParams] = mockRunQuery.mock.calls[0];
+    expect(executedSql).not.toMatch(/:min_mrr\b/);
+    expect(boundParams).not.toHaveProperty('min_mrr');
   });
 
   // ============================================================================
