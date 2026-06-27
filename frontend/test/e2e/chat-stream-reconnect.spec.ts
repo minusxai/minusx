@@ -1,12 +1,12 @@
 /**
  * Chat stream reconnect e2e — real browser, real prod-style server.
  *
- * Reproduces the prod incident: the /api/chat/stream connection is severed
- * MID-TURN (CDP network kill — what an app restart or corporate middlebox does
- * to the user), while the faux LLM holds the reply via `delayMs` so the turn is
- * provably still in flight. Asserts the chatListener reconnects with
- * `resume.afterSeq`, replays the missed frames, and the reply lands with no
- * user-visible error.
+ * Reproduces the prod incident: the chat stream connection (v3:
+ * GET /api/conversations/:id/stream) is severed MID-TURN (CDP network kill — what an app restart or
+ * corporate middlebox does to the user), while the faux LLM holds the reply via `delayMs` so the
+ * turn is provably still in flight. The turn keeps running server-side (started via /turns); the
+ * client reconnects with `?since=<cursor>`, the server replays the gap from the durable log, and the
+ * reply lands with no user-visible error.
  */
 import { test, expect, asClient } from './fixtures';
 import { setFauxLLM } from '@/test/flows/e2e-faux';
@@ -31,7 +31,10 @@ test('mid-turn connection drop: client resumes the stream and the reply arrives 
   // inside the client's resume backoff window.
   let severed = false;
   page.on('request', (req) => {
-    if (severed || !req.url().includes('/api/chat/stream')) return;
+    // v3 streams over GET /api/conversations/:id/stream (the turn keeps running server-side via
+    // /turns, so severing the read stream and reconnecting with ?since= replays the gap).
+    const u = req.url();
+    if (severed || !(u.includes('/api/conversations/') && u.includes('/stream'))) return;
     severed = true;
     setTimeout(async () => {
       await cdp.send('Network.emulateNetworkConditions', OFFLINE).catch(() => {});
