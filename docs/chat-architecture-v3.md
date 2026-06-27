@@ -1,7 +1,23 @@
 # Chat Architecture v3 — Conversations as a First-Class Resource
 
-> Status: **Design / plan.** Not yet implemented.
-> Supersedes the file-backed conversation model (v2) for **new** conversations. Old conversations keep working unchanged and are migrated later.
+> Status: **IMPLEMENTED** (PR #513). All chat runs on v3 (dedicated tables + LISTEN/NOTIFY streaming);
+> existing conversations are ported by the backfill migration. v2 server code remains in the tree for
+> now (dormant — the app no longer uses it).
+
+---
+
+## Manual browser test checklist
+
+Drive the dev server; use the side-chat **Debug Info** (collapsed messages) to inspect the exact
+LLM request/response per turn.
+
+- [x] **New conversation** — open `/explore`, send a message → streams, replies, Debug Info shows the LLM call. (verified: conv 1531, "2+2 equals 4")
+- [x] **Tool-using turn** — a data question runs Search/ReadFiles/ExecuteQuery and answers with file refs. (verified on 1514)
+- [x] **Continue a migrated conversation** — open an old chat (now v3), send a follow-up → continues, no "legacy" banner. (verified: 1514, 8→12 rows)
+- [x] **Persistence** — `GET /api/conversations/:id` shows contiguous `seq`, `runStatus:idle`, lease released after a turn. (verified)
+- [x] **Backfill migration** — `POST /api/admin/migrate-conversations-v3?dry=1` then live. (verified: 502 migrated, 0 failed, ids preserved)
+- [ ] **Stop** mid-turn → run halts (POST `/api/conversations/:id/interrupt`). (covered by QA `chat-flow.spec` interrupt test)
+- [ ] **Reconnect** — drop the network mid-turn → the reply still lands (turn runs server-side; client resumes via `?since=`). (covered by e2e `chat-stream-reconnect.spec`)
 
 ---
 
