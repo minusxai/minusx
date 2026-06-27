@@ -1,4 +1,4 @@
-import { LuBookOpen, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
+import { LuScrollText, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuArrowRightLeft } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -43,10 +43,10 @@ export const FILE_TYPE_METADATA = {
   },
   story: {
     label: 'Data Story',
-    icon: LuBookOpen,
-    color: 'accent.cyan',         // Turquoise cyan (#1abc9c)
+    icon: LuScrollText,
+    color: 'accent.sun',         // Turquoise cyan (#1abc9c)
     category: 'analytics',
-    supported: false,
+    supported: true,
     h: 'none',
   },
   notebook: {
