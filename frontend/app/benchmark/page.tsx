@@ -763,7 +763,8 @@ export default function BenchmarkPage() {
         label: continueLabel,
         connections: connectionsConfig,
       });
-      window.location.href = `/explore/${fileId}?v=2`;
+      // v3: the import created a dedicated conversation; open it by id (no ?v= toggle).
+      window.location.href = `/explore/${fileId}`;
     } catch (err) {
       console.error('Failed to import benchmark conversation:', err);
       setIsContinuing(false);

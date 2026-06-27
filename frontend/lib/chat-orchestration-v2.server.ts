@@ -591,7 +591,10 @@ export async function estimateNextChatContextV2(
   // v3 conversations live in dedicated tables (not a file) — feed the log from rows.
   const v3 = await getV3Conversation(conversationId);
   const savedLog = v3 ? await loadV3Log(conversationId) : undefined;
-  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, { preview: true, ...(savedLog ? { savedLog } : {}) });
+  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, {
+    preview: true,
+    ...(savedLog ? { savedLog, fileMeta: v3?.meta ?? null } : {}),
+  });
   if (setup.fatalError) {
     throw new Error(setup.fatalError);
   }

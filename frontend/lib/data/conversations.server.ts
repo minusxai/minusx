@@ -134,6 +134,18 @@ export async function getConversation(id: number): Promise<Conversation | null> 
   return res.rows[0] ? mapConversation(res.rows[0]) : null;
 }
 
+/**
+ * Find a conversation id by a top-level `meta` string field (e.g. the Slack thread key). Used for
+ * idempotent get-or-create of headless conversations that don't have a stable surrogate key.
+ */
+export async function findConversationIdByMeta(metaKey: string, value: string): Promise<number | null> {
+  const res = await db().exec<{ id: number }>(
+    `SELECT id FROM conversations WHERE meta->>$1 = $2 ORDER BY id LIMIT 1`,
+    [metaKey, value],
+  );
+  return res.rows[0]?.id ?? null;
+}
+
 export async function listConversations(
   ownerUserId: number,
   mode: string,

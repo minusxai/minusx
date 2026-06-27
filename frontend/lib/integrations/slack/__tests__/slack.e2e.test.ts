@@ -48,6 +48,21 @@ const TEST_ADMIN_EMAIL = 'slack-admin@example.com';
 const TEST_CONNECTION_NAME = 'test_warehouse';
 const TEST_QUESTION_NAME = 'Weekly Revenue Report';
 
+/**
+ * v3: the Slack thread conversation log lives in the `messages` table (one row per pi entry),
+ * not a conversation file. Returns the most-recently-created Slack conversation's full log as JSON.
+ */
+async function latestSlackLogJson(): Promise<string> {
+  const { getModules } = await import('@/lib/modules/registry');
+  const { rows } = await getModules().db.exec<{ content: unknown }>(
+    `SELECT m.content FROM messages m
+       WHERE m.conversation_id = (SELECT MAX(id) FROM conversations WHERE agent = 'SlackAgent')
+       ORDER BY m.seq ASC`,
+    [],
+  );
+  return JSON.stringify(rows.map((r) => r.content));
+}
+
 // ============================================================================
 // DB fixture setup
 // ============================================================================
@@ -421,31 +436,29 @@ describe('Slack Bot Integration', () => {
       // the follow-up message, not the thread root.
       expect(postedMessages[0].text).toBe('Last week they were up 8%.');
 
-      // Only ONE conversation file should exist at the Slack path
+      // Only ONE v3 conversation should exist for this Slack thread (idempotent by meta.slackThreadKey)
       const { getModules } = await import('@/lib/modules/registry');
       const db = getModules().db;
+      const threadKey = `slack:${TEST_TEAM_ID}:${TEST_CHANNEL}:${threadTs}`;
       const { rows } = await db.exec<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
-        [],
+        `SELECT COUNT(*) AS cnt FROM conversations WHERE meta->>'slackThreadKey' = $1`,
+        [threadKey],
       );
       expect(rows[0].cnt).toBe(1);
 
       // The conversation log must contain entries from BOTH messages — proves history
-      // was appended rather than the file being reset on the follow-up.
-      const { rows: [fileRow] } = await db.exec<{ content: string }>(
-        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%' LIMIT 1`,
-        [],
-      );
-      const content = fileRow.content as unknown as {
-        log: unknown[];
-        metadata: { source?: { type: string; teamId: string; channelId: string; threadTs: string } };
-      };
-      // First message produces at least 2 log entries (task + task_result);
+      // was appended rather than the conversation being reset on the follow-up.
+      const { findConversationIdByMeta, getConversation, loadLog } = await import('@/lib/data/conversations.server');
+      const convId = await findConversationIdByMeta('slackThreadKey', threadKey);
+      expect(convId).not.toBeNull();
+      const savedLog = await loadLog(convId!);
+      // First message produces at least 2 log entries (root + result);
       // second message appends at least 2 more — so minimum 4 total.
-      expect(content.log.length).toBeGreaterThanOrEqual(4);
+      expect(savedLog.length).toBeGreaterThanOrEqual(4);
 
-      // ConversationSource metadata must be stored so the file is identifiable as a Slack thread.
-      expect(content.metadata.source).toEqual({
+      // ConversationSource metadata must be stored so the conversation is identifiable as a Slack thread.
+      const conv = await getConversation(convId!);
+      expect((conv!.meta as { source?: unknown }).source).toEqual({
         type: 'slack',
         teamId: TEST_TEAM_ID,
         channelId: TEST_CHANNEL,
@@ -453,7 +466,7 @@ describe('Slack Bot Integration', () => {
       });
     }, 120000);
 
-    it('direct message: agent replies and conversation file is stored at user path', async () => {
+    it('direct message: agent replies and a v3 Slack conversation is stored', async () => {
       slackFaux.setResponses([
         fauxAssistantMessage('Hello! How can I help you today?', { stopReason: 'stop' }),
       ]);
@@ -466,10 +479,10 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages[0].text).toBeTruthy();
       expect(postedMessages[0].thread_ts).toBe(ts);
 
-      // File should be stored under the user's conversation folder, not a separate slack folder
+      // A v3 Slack conversation should exist for this thread.
       const { getModules } = await import('@/lib/modules/registry');
       const { rows } = await getModules().db.exec<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
+        `SELECT COUNT(*) AS cnt FROM conversations WHERE agent = 'SlackAgent' AND meta->>'slackThreadKey' LIKE '%${ts}'`,
         [],
       );
       expect(rows[0].cnt).toBeGreaterThanOrEqual(1);
@@ -559,13 +572,7 @@ describe('Slack Bot Integration', () => {
       );
 
       // Pull the persisted conversation log and inspect the two tool results.
-      const { getModules } = await import('@/lib/modules/registry');
-      const { rows } = await getModules().db.exec<{ content: any }>(
-        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/3/slack-%' LIMIT 1`,
-        [],
-      );
-      expect(rows).toHaveLength(1);
-      const logJson = JSON.stringify((rows[0].content as { log: unknown[] }).log);
+      const logJson = await latestSlackLogJson();
 
       // Bug #1 — ListDBConnections returned "[]" because ctx.connections was never
       // populated in the headless runner. The seeded connection must appear.
@@ -654,11 +661,7 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages[0].text).not.toContain('pull up that file');
 
       // And the persisted ReadFiles result must not be the "interrupted" dangler.
-      const { rows } = await getModules().db.exec<{ content: any }>(
-        `SELECT content FROM files WHERE type = 'conversation' AND path LIKE '%/logs/conversations/3/slack-%' LIMIT 1`,
-        [],
-      );
-      const logJson = JSON.stringify((rows[0].content as { log: unknown[] }).log);
+      const logJson = await latestSlackLogJson();
       expect(logJson).not.toContain('"result":"interrupted"');
     }, 60000);
 

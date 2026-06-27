@@ -17,18 +17,14 @@ import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { ConversationLog, RegistrableClass } from '@/orchestrator/types';
 import { V2_HEADLESS_REGISTRABLES } from '@/lib/chat-orchestration-v2.server';
 import { piLogToLegacy } from '@/lib/chat-translator';
-import { appendLogToConversation } from '@/lib/conversations';
+import { loadLog, appendMessages } from '@/lib/data/conversations.server';
 import { getPageType } from '@/agents/analyst/skills';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import type { ConnectionInfo } from '@/agents/benchmark-analyst/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type {
-  ConversationLogEntry as LegacyLogEntry,
-  ConversationFileContent,
-} from '@/lib/types';
+import type { ConversationLogEntry as LegacyLogEntry } from '@/lib/types';
 
 /**
  * Constructor shape for a RemoteAnalystAgent-family agent (SlackAgent, …).
@@ -129,9 +125,8 @@ export async function runChatOrchestrationV2({
   userMessage,
   conversationId,
 }: RunOrchestrationV2Params): Promise<RunOrchestrationV2Result> {
-  const file = await FilesAPI.loadFile(conversationId, user);
-  const content = file.data.content as unknown as ConversationFileContent | undefined;
-  const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
+  // v3: the conversation log lives in the `messages` table (the caller pre-creates the conversation).
+  const savedLog: ConversationLog = await loadLog(conversationId);
   const expectedLogIndex = savedLog.length;
 
   const ctx = await buildAnalystContext(agent_args, user);
@@ -152,21 +147,14 @@ export async function runChatOrchestrationV2({
   await stream.result();
 
   const fullPiLog = orch.log;
-  const piDiff = fullPiLog.slice(expectedLogIndex);
+  const piDiff = fullPiLog.slice(expectedLogIndex) as ConversationLog;
 
-  let finalConversationId = conversationId;
   if (piDiff.length > 0) {
-    const appendResult = await appendLogToConversation(
-      conversationId,
-      piDiff as unknown as LegacyLogEntry[],
-      expectedLogIndex,
-      user,
-    );
-    finalConversationId = appendResult.conversationID;
+    await appendMessages(conversationId, piDiff, expectedLogIndex);
   }
 
   return {
-    conversationId: finalConversationId,
+    conversationId,
     log: piLogToLegacy(fullPiLog),
     logDiff: piLogToLegacy(piDiff),
   };

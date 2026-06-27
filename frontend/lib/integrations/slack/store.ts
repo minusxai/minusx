@@ -1,10 +1,9 @@
 import 'server-only';
-import { FilesAPI } from '@/lib/data/files.server';
 import { getConfigsForMode, getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
-import { resolvePath } from '@/lib/mode/path-resolver';
+import { createConversation, findConversationIdByMeta } from '@/lib/data/conversations.server';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ConfigBot, ConfigContent, ConversationFileContent, ConversationSource, SlackBotConfig } from '@/lib/types';
+import type { ConfigBot, ConfigContent, ConversationSource, SlackBotConfig } from '@/lib/types';
 
 // ============================================================================
 // Bot config CRUD — lives in /org/configs/config (org config file)
@@ -77,22 +76,15 @@ export async function findSlackInstallationByTeam(
 }
 
 // ============================================================================
-// Thread conversation — one conversation file per Slack thread
+// Thread conversation — one v3 conversation per Slack thread.
 //
-// Path: /logs/slack/{teamId}/{channelId}-{sanitizedThreadTs}
-// Type: 'conversation'
-//
-// On first message the file is pre-created (empty log, meta.version=2), so
-// runChatOrchestrationV2 always receives a real conversationId and appends to
-// the same file on follow-ups.
+// Idempotent lookup by `meta.slackThreadKey` (Slack threads have no surrogate id of their own).
+// On first message a v3 conversation is created; follow-ups resolve to the same id, and the headless
+// orchestrator (runChatOrchestrationV2) appends to its `messages` rows.
 // ============================================================================
 
-function sanitizeTs(ts: string): string {
-  return ts.replace(/\./g, '-');
-}
-
-function threadFilePath(mode: Mode, userId: string, teamId: string, channelId: string, threadTs: string): string {
-  return resolvePath(mode, `/logs/conversations/${userId}/slack-${teamId}-${channelId}-${sanitizeTs(threadTs)}`);
+function slackThreadKey(teamId: string, channelId: string, threadTs: string): string {
+  return `slack:${teamId}:${channelId}:${threadTs}`;
 }
 
 export async function getOrCreateSlackConversationId(
@@ -102,41 +94,22 @@ export async function getOrCreateSlackConversationId(
   threadTs: string,
   userMessage?: string,
 ): Promise<number> {
-  const userId = user.userId?.toString() || user.email;
-  const path = threadFilePath(user.mode, userId, teamId, channelId, threadTs);
-  try {
-    const result = await FilesAPI.loadFileByPath(path, user);
-    return result.data.id;
-  } catch {
-    // First message in this thread — create the conversation file
-    const now = new Date().toISOString();
-    const name = userMessage
-      ? userMessage.trim().replace(/\s+/g, ' ').substring(0, 50)
-      : `slack-${channelId}-${now.slice(0, 10)}`;
-    const source: ConversationSource = { type: 'slack', teamId, channelId, threadTs };
-    const initialContent: ConversationFileContent = {
-      metadata: { userId, name, createdAt: now, updatedAt: now, logLength: 0, source },
-      log: [],
-    };
-    // Store the full first message in file-level `meta` so the conversations
-    // listing can display it without loading content (mirrors createNewConversation).
-    // `version: 2` marks this as a v=2 conversation so the headless orchestrator
-    // (runChatOrchestrationV2) and the `/explore/{id}` link both resolve to v2.
-    const meta: Record<string, unknown> = { version: 2 };
-    if (userMessage) meta.firstMessage = userMessage.trim();
-    const result = await FilesAPI.createFile(
-      {
-        name,
-        path,
-        type: 'conversation',
-        content: initialContent as any,
-        ...(meta ? { meta } : {}),
-        options: { createPath: true },
-      },
-      user,
-    );
-    return result.data.id;
-  }
+  const threadKey = slackThreadKey(teamId, channelId, threadTs);
+  const existing = await findConversationIdByMeta('slackThreadKey', threadKey);
+  if (existing != null) return existing;
+
+  const name = userMessage
+    ? userMessage.trim().replace(/\s+/g, ' ').substring(0, 50)
+    : `slack-${channelId}-${new Date().toISOString().slice(0, 10)}`;
+  const source: ConversationSource = { type: 'slack', teamId, channelId, threadTs };
+  const conv = await createConversation({
+    ownerUserId: user.userId,
+    mode: user.mode,
+    agent: 'SlackAgent',
+    title: name,
+    meta: { slackThreadKey: threadKey, source, ...(userMessage ? { firstMessage: userMessage.trim() } : {}) },
+  });
+  return conv.id;
 }
 
 // ============================================================================

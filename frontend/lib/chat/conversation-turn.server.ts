@@ -18,7 +18,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
   loadLog, appendMessages, updateConversationTitle, appendError, ConcurrentAppendError,
-  acquireRunLease, heartbeatRunLease, releaseRunLease,
+  acquireRunLease, heartbeatRunLease, releaseRunLease, getConversation,
 } from '@/lib/data/conversations.server';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
@@ -98,7 +98,10 @@ export async function runConversationTurn(
   const savedLog = await loadLog(conversationId);
   const startSeq = savedLog.length;
 
-  const setup = await setupOrchestration(body, user, conversationId, { savedLog });
+  // Benchmark conversations carry their per-conversation connection configs in meta.benchmark_connections;
+  // hand it to setupOrchestration so continuation can wire NodeConnector-backed executors.
+  const conv = await getConversation(conversationId);
+  const setup = await setupOrchestration(body, user, conversationId, { savedLog, fileMeta: conv?.meta ?? null });
   if (setup.fatalError) {
     await appendError(conversationId, { source: 'session', message: setup.fatalError });
     await releaseRunLease(conversationId, 'error');
