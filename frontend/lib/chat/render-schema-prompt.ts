@@ -13,6 +13,7 @@
  * full schema array is still available upstream for tool filtering
  * (`whitelistedTables`) — only the prompt text is capped.
  */
+import { CONTEXT_BUDGETS } from '@/lib/context/context-budgets';
 
 export type SchemaEntry = { schema: string; tables: string[] };
 
@@ -25,8 +26,9 @@ export interface RenderSchemaPromptOptions {
   emptyText?: string;
 }
 
-/** Default character budget for the schema table-of-contents in the prompt. */
-export const DEFAULT_SCHEMA_PROMPT_BUDGET_CHARS = 6000;
+/** Default character budget for the schema table-of-contents in the prompt.
+ *  Sourced from the central context-budget dashboard. */
+export const DEFAULT_SCHEMA_PROMPT_BUDGET_CHARS = CONTEXT_BUDGETS.schemaTocChars;
 
 export function renderSchemaForPrompt(
   schema: SchemaEntry[] | null | undefined,
