@@ -414,7 +414,11 @@ export const POSTGRES_SCHEMA = `
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id)
   );
-  CREATE INDEX IF NOT EXISTS idx_conversations_owner ON conversations(owner_user_id, mode, updated_at DESC);
+  -- Keyset-pagination index: owner+mode partition ordered by (updated_at DESC, id DESC) so the
+  -- conversation list + its cursor ("load more") is a pure index range scan including the id tiebreak.
+  -- Supersedes the old 3-column index (dropped once -- DROP IF EXISTS is a no-op on later boots).
+  DROP INDEX IF EXISTS idx_conversations_owner;
+  CREATE INDEX IF NOT EXISTS idx_conversations_owner_keyset ON conversations(owner_user_id, mode, updated_at DESC, id DESC);
 
   CREATE OR REPLACE FUNCTION update_conversations_updated_at()
   RETURNS TRIGGER AS $$

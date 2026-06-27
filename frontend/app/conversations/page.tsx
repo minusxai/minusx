@@ -3,11 +3,11 @@
 import { Box, Flex, Heading, VStack, Text, Spinner, HStack, Input, Button } from '@chakra-ui/react';
 // Param-preserving router so chat navigation keeps ?v=2 (and as_user/mode).
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { LuSearch, LuPlus } from 'react-icons/lu';
-import { ConversationSummary } from '@/app/api/conversations/route';
-import { useFetch } from '@/lib/api/useFetch';
-import { API } from '@/lib/api/declarations';
+import type { ConversationSummary } from '@/app/api/conversations/route';
+import { useConversationsList } from '@/lib/hooks/useConversationsList';
+import { InfiniteScrollSentinel } from '@/components/InfiniteScrollSentinel';
 import Breadcrumb from '@/components/Breadcrumb';
 
 function getRelativeTime(timestamp: string) {
@@ -53,14 +53,8 @@ function ConversationRow({ conversation, onClick }: { conversation: Conversation
 export default function HistoryPage() {
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const { data, loading, error } = useFetch(API.conversations.list);
-  const allConversations: ConversationSummary[] = (data as any)?.conversations || [];
-
-  const conversations = useMemo(() => {
-    if (!search.trim()) return allConversations;
-    const q = search.toLowerCase();
-    return allConversations.filter(c => c.name.toLowerCase().includes(q));
-  }, [allConversations, search]);
+  // Keyset-paginated + SERVER-side search (so search spans all conversations, not just a loaded page).
+  const { conversations, loading, error, hasMore, loadMore } = useConversationsList({ search, pageSize: 20 });
 
   const handleSelect = useCallback((id: number) => {
     router.push(`/explore/${id}`);
@@ -123,28 +117,31 @@ export default function HistoryPage() {
           />
         </Box>
 
-        {loading && (
+        {/* Initial load (first page / new search) */}
+        {loading && conversations.length === 0 && (
           <Box textAlign="center" py={8}>
             <Spinner size="md" />
             <Text fontSize="sm" color="fg.muted" mt={3}>Loading conversations...</Text>
           </Box>
         )}
 
-        {error && !loading && (
+        {error && (
           <Box p={4} bg="bg.error" borderRadius="md">
             <Text fontSize="sm" color="fg.error">
-              {error.message || 'Failed to load conversations'}
+              {error || 'Failed to load conversations'}
             </Text>
           </Box>
         )}
 
         {!loading && !error && conversations.length === 0 && (
           <Box py={8} textAlign="center">
-            <Text fontSize="sm" color="fg.muted">No conversations yet</Text>
+            <Text fontSize="sm" color="fg.muted">
+              {search.trim() ? 'No conversations match your search' : 'No conversations yet'}
+            </Text>
           </Box>
         )}
 
-        {!loading && !error && conversations.length > 0 && (
+        {conversations.length > 0 && (
           <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
             <VStack align="stretch" gap={0}>
               {conversations.map((conv) => (
@@ -155,6 +152,14 @@ export default function HistoryPage() {
                 />
               ))}
             </VStack>
+          </Box>
+        )}
+
+        {/* Infinite scroll: load the next page as the sentinel nears the viewport. */}
+        <InfiniteScrollSentinel onVisible={loadMore} disabled={!hasMore || loading} />
+        {loading && conversations.length > 0 && (
+          <Box textAlign="center" py={4} aria-label="Loading more conversations">
+            <Spinner size="sm" />
           </Box>
         )}
         </Box>

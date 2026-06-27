@@ -21,11 +21,13 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''),
 }));
 
-vi.mock('@/lib/api/useFetch', () => ({
-  useFetch: () => ({
-    data: { conversations: [{ id: 42, name: 'Test chat', updatedAt: new Date().toISOString() }] },
+vi.mock('@/lib/hooks/useConversationsList', () => ({
+  useConversationsList: () => ({
+    conversations: [{ id: 42, name: 'Test chat', updatedAt: new Date().toISOString() }],
     loading: false,
     error: null,
+    hasMore: false,
+    loadMore: vi.fn(),
   }),
 }));
 

@@ -147,25 +147,60 @@ export async function findConversationIdByMeta(metaKey: string, value: string): 
   return res.rows[0]?.id ?? null;
 }
 
+/** Keyset cursor for conversation-list pagination — the (updated_at, id) of the last row seen. */
+export interface ConversationCursor {
+  updatedAt: string;
+  id: number;
+}
+
 /**
- * List a user's conversations, newest-first. Excludes EMPTY conversations — ones pre-created on
- * explore-page mount (so a send has a ready id) that never received a message. A conversation
- * "exists" for listing once it has at least one pi-log row (the eagerly-committed user message);
- * this mirrors the old behavior where draft conversation files didn't appear in history.
+ * List a user's conversations, newest-first, with keyset (cursor) pagination.
+ *
+ * Excludes EMPTY conversations — ones pre-created on explore-page mount (so a send has a ready id)
+ * that never received a message. A conversation "exists" for listing once it has at least one pi-log
+ * row (the eagerly-committed user message); mirrors the old "draft files don't show" behavior.
+ *
+ * Ordering is (updated_at DESC, id DESC) — matched by idx_conversations_owner_keyset, so both the
+ * first page and each "load more" are index range scans. Pass `before` (the last row's cursor) to
+ * fetch the next page; keyset avoids the skip/duplicate skew that OFFSET hits as rows re-sort.
  */
 export async function listConversations(
   ownerUserId: number,
   mode: string,
-  opts: { limit?: number; offset?: number } = {},
+  opts: { limit?: number; before?: ConversationCursor; search?: string } = {},
 ): Promise<Conversation[]> {
-  const limit = Math.min(opts.limit ?? 100, 500);
-  const offset = opts.offset ?? 0;
+  const limit = Math.min(opts.limit ?? 15, 50);
+  const params: unknown[] = [ownerUserId, mode];
+  const add = (v: unknown): string => { params.push(v); return `$${params.length}`; };
+  const where: string[] = [
+    'c.owner_user_id = $1',
+    'c.mode = $2',
+    "EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.seq IS NOT NULL)",
+  ];
+
+  // Server-side search over the display name (title + first message) — so search spans ALL pages,
+  // not just the loaded ones.
+  const search = opts.search?.trim();
+  if (search) {
+    const like = add(`%${search}%`);
+    where.push(`(c.title ILIKE ${like} OR c.meta->>'firstMessage' ILIKE ${like})`);
+  }
+
+  // Keyset cursor: rows strictly older than `before` in (updated_at DESC, id DESC) order. Cast to
+  // timestamptz so the equality tiebreak compares instants, not text formatting.
+  if (opts.before) {
+    const ts = add(opts.before.updatedAt);
+    const id = add(opts.before.id);
+    where.push(`(c.updated_at < ${ts}::timestamptz OR (c.updated_at = ${ts}::timestamptz AND c.id < ${id}))`);
+  }
+
+  const limitP = add(limit);
   const res = await db().exec<ConversationRow>(
     `SELECT c.* FROM conversations c
-     WHERE c.owner_user_id = $1 AND c.mode = $2
-       AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.seq IS NOT NULL)
-     ORDER BY c.updated_at DESC LIMIT $3 OFFSET $4`,
-    [ownerUserId, mode, limit, offset],
+     WHERE ${where.join(' AND ')}
+     ORDER BY c.updated_at DESC, c.id DESC
+     LIMIT ${limitP}`,
+    params,
   );
   return res.rows.map(mapConversation);
 }
