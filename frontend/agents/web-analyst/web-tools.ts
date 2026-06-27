@@ -2,12 +2,8 @@ import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { loadSkill } from '@/agents/skill-content';
+import { loadContextDocsByKeys } from '@/lib/sql/schema-filter';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-
-// LoadContext soft over-fetch nudge: if the agent requests at least this many docs
-// in a single call, return them but warn it to be more selective. Absolute (not a
-// fraction of the library) since contexts often start with only 1-2 docs.
-const LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING = 5;
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
 // throw UserInputException so the orchestrator pauses; the bridge (Redux
@@ -293,65 +289,10 @@ export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystC
   };
 
   async run(): Promise<ToolResponse> {
-    // The lazy (non-alwaysInclude) docs are the loadable library.
-    const library = (this.context.resolvedContextDocs?.docs ?? []).filter((d) => !d.alwaysInclude);
-    const keys = this.parameters.keys ?? [];
-
-    if (keys.length === 0) {
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'LoadContext requires at least one document key' }) }],
-        isError: true,
-      };
-    }
-    if (library.length === 0) {
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'No context documents are available to load' }) }],
-        isError: true,
-      };
-    }
-
-    const byKey = new Map(library.map((d) => [d.key, d]));
-    // Fallback: also resolve by (case-insensitive) title, in case the agent passes
-    // the human title instead of the key. Keys are always unique, but titles need
-    // not be — so only resolve titles that uniquely identify one doc.
-    const titleCounts = new Map<string, number>();
-    for (const d of library) {
-      const t = d.title.trim().toLowerCase();
-      titleCounts.set(t, (titleCounts.get(t) ?? 0) + 1);
-    }
-    const byTitle = new Map(
-      library
-        .filter((d) => titleCounts.get(d.title.trim().toLowerCase()) === 1)
-        .map((d) => [d.title.trim().toLowerCase(), d]),
-    );
-    const docs: { key: string; title: string; content: string }[] = [];
-    const missing: string[] = [];
-    const seen = new Set<string>();
-    for (const key of keys) {
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const entry = byKey.get(key) ?? byTitle.get(key.trim().toLowerCase());
-      if (entry) docs.push({ key: entry.key, title: entry.title, content: entry.content });
-      else missing.push(key);
-    }
-
-    // Soft over-fetch nudge: discourage pulling all/most docs in a single call.
-    const payload: {
-      success: boolean;
-      docs: { key: string; title: string; content: string }[];
-      missing?: string[];
-      warning?: string;
-    } = { success: true, docs };
-    if (missing.length > 0) payload.missing = missing;
-    if (docs.length >= LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING) {
-      payload.warning =
-        `You loaded ${docs.length} documents at once. In future, load only the docs relevant to the user's question.`;
-    }
-
-    return {
-      content: [{ type: 'text', text: JSON.stringify(payload) }],
-      isError: false,
-    };
+    // Shared resolver — same key/title resolution + over-fetch nudge the MCP
+    // LoadContext tool uses (see lib/mcp/server.ts).
+    const { payload, isError } = loadContextDocsByKeys(this.context.resolvedContextDocs, this.parameters.keys ?? []);
+    return { content: [{ type: 'text', text: JSON.stringify(payload) }], isError };
   }
 }
 

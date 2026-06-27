@@ -447,6 +447,83 @@ export function inlineContextDocsText(resolved: ResolvedContextDocs): string {
 }
 
 /**
+ * Soft over-fetch nudge: if a single LoadContext call requests at least this many
+ * docs, return them but warn the agent to be more selective. Absolute (not a
+ * fraction of the library) since contexts often start with only 1-2 docs.
+ */
+export const LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING = 5;
+
+export interface LoadContextResult {
+  /** JSON payload returned to the caller verbatim (tool result / MCP text). */
+  payload: {
+    success: boolean;
+    docs?: { key: string; title: string; content: string }[];
+    missing?: string[];
+    warning?: string;
+    error?: string;
+  };
+  /** True only for the empty-keys / empty-library error cases. */
+  isError: boolean;
+}
+
+/**
+ * Resolve Context Library keys to their full doc content. The single source of the
+ * LoadContext behaviour — shared by the LoadContext MXTool (web/slack agents) and
+ * the MCP LoadContext tool, so key/title resolution and the over-fetch nudge never
+ * drift between the two surfaces.
+ *
+ * Only lazy (non-alwaysInclude) docs are loadable — alwaysInclude docs are already
+ * inline in the prompt/instructions. Falls back to a UNIQUE human title when the
+ * caller passes the title instead of the key. Unknown keys go to `missing` (not an
+ * error); empty keys / no library are the only hard errors.
+ */
+export function loadContextDocsByKeys(
+  resolved: ResolvedContextDocs | undefined,
+  keys: string[],
+): LoadContextResult {
+  const library = (resolved?.docs ?? []).filter((d) => !d.alwaysInclude);
+
+  if (keys.length === 0) {
+    return { payload: { success: false, error: 'LoadContext requires at least one document key' }, isError: true };
+  }
+  if (library.length === 0) {
+    return { payload: { success: false, error: 'No context documents are available to load' }, isError: true };
+  }
+
+  const byKey = new Map(library.map((d) => [d.key, d]));
+  // Title fallback: only resolve titles that uniquely identify one doc (keys are
+  // always unique; titles need not be).
+  const titleCounts = new Map<string, number>();
+  for (const d of library) {
+    const t = d.title.trim().toLowerCase();
+    titleCounts.set(t, (titleCounts.get(t) ?? 0) + 1);
+  }
+  const byTitle = new Map(
+    library
+      .filter((d) => titleCounts.get(d.title.trim().toLowerCase()) === 1)
+      .map((d) => [d.title.trim().toLowerCase(), d]),
+  );
+
+  const docs: { key: string; title: string; content: string }[] = [];
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const key of keys) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entry = byKey.get(key) ?? byTitle.get(key.trim().toLowerCase());
+    if (entry) docs.push({ key: entry.key, title: entry.title, content: entry.content });
+    else missing.push(key);
+  }
+
+  const payload: LoadContextResult['payload'] = { success: true, docs };
+  if (missing.length > 0) payload.missing = missing;
+  if (docs.length >= LOAD_CONTEXT_MAX_KEYS_BEFORE_WARNING) {
+    payload.warning = `You loaded ${docs.length} documents at once. In future, load only the docs relevant to the user's question.`;
+  }
+  return { payload, isError: false };
+}
+
+/**
  * Render the Context Library catalog lines from the lazy docs. Each line gives the
  * key the agent passes to LoadContext, then the human title (+ description). This
  * is the ONLY place catalog text is produced.

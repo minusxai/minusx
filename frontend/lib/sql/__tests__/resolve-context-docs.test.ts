@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { resolveContextDocs, formatContextDocsSection } from '../schema-filter';
-import type { ContextContent, ContextVersion, DocEntry } from '@/lib/types';
+import { resolveContextDocs, formatContextDocsSection, loadContextDocsByKeys, INLINE_ALL_DOCS_THRESHOLD } from '../schema-filter';
+import type { ContextContent, ContextVersion, DocEntry, ResolvedContextDocs } from '@/lib/types';
 
 /** Minimal context with one published version carrying the given docs. */
 function makeContext(docs: (DocEntry | string)[], overrides: Partial<ContextVersion> = {}): ContextContent {
@@ -214,13 +214,21 @@ describe('formatContextDocsSection', () => {
     expect(out).toContain('Context Library');
   });
 
-  it('inlines every doc and shows the "nothing to load" catalog when below the threshold', () => {
-    // 3 would-be-lazy docs (< 5) → all inlined; the catalog falls back to the fixed line.
-    const out = formatContextDocsSection({ docs: lazyDocs(3) });
-    expect(out).toContain('Default Context Docs');
-    expect(out).toContain('FOO BODY 0');   // body inlined, not just advertised
-    expect(out).toContain('Context Library');
-    expect(out).toContain('No additional context documents are available.');
+  it('inlines lazy docs only below INLINE_ALL_DOCS_THRESHOLD; at/above it they stay in the catalog', () => {
+    // Below the threshold (if there is a positive count below it): docs are inlined
+    // and the catalog shows the fixed "nothing to load" line.
+    const below = INLINE_ALL_DOCS_THRESHOLD - 1;
+    if (below >= 1) {
+      const out = formatContextDocsSection({ docs: lazyDocs(below) });
+      expect(out).toContain('Default Context Docs');
+      expect(out).toContain('FOO BODY 0'); // body inlined, not just advertised
+      expect(out).toContain('No additional context documents are available.');
+    }
+    // At the threshold the lazy docs are advertised by key, not inlined.
+    const at = formatContextDocsSection({ docs: lazyDocs(INLINE_ALL_DOCS_THRESHOLD) });
+    expect(at).toContain('Context Library');
+    expect(at).toContain('foo_0');
+    expect(at).not.toContain('FOO BODY 0');
   });
 
   it('always shows a Context Library line (fixed fallback) when there are no lazy docs', () => {
@@ -237,5 +245,83 @@ describe('formatContextDocsSection', () => {
     expect(out).not.toContain('Default Context Docs');
     expect(out).toContain('Context Library');
     expect(out).toContain('No additional context documents are available.');
+  });
+});
+
+// Shared resolver behind the LoadContext tool (web/slack agents) AND the MCP
+// LoadContext tool — one place for key/title resolution + the over-fetch nudge.
+describe('loadContextDocsByKeys', () => {
+  const library: ResolvedContextDocs = {
+    docs: [
+      { key: 'glossary', title: 'Glossary', description: 'terms', content: 'GLOSSARY BODY', alwaysInclude: false },
+      { key: 'cohorts', title: 'Cohorts', description: 'cohort logic', content: 'COHORTS BODY', alwaysInclude: false },
+      { key: 'billing', title: 'Billing', description: 'billing rules', content: 'BILLING BODY', alwaysInclude: false },
+      { key: 'pricing', title: 'Pricing', description: 'price book', content: 'PRICING BODY', alwaysInclude: false },
+      { key: 'refunds', title: 'Refunds', description: 'refund policy', content: 'REFUNDS BODY', alwaysInclude: false },
+      // alwaysInclude docs are NOT loadable — they are already inline.
+      { key: '', title: 'Pinned', content: 'PINNED BODY', alwaysInclude: true },
+    ],
+  };
+
+  it('resolves requested docs by key', () => {
+    const { payload, isError } = loadContextDocsByKeys(library, ['glossary']);
+    expect(isError).toBe(false);
+    expect(payload.success).toBe(true);
+    expect(payload.docs).toEqual([{ key: 'glossary', title: 'Glossary', content: 'GLOSSARY BODY' }]);
+    expect(payload.missing).toBeUndefined();
+    expect(payload.warning).toBeUndefined();
+  });
+
+  it('falls back to a unique human title when the key is actually the title', () => {
+    const { payload } = loadContextDocsByKeys(library, ['Glossary']);
+    expect(payload.docs).toEqual([{ key: 'glossary', title: 'Glossary', content: 'GLOSSARY BODY' }]);
+  });
+
+  it('never loads alwaysInclude (already-inline) docs', () => {
+    const { payload } = loadContextDocsByKeys(library, ['Pinned']);
+    expect(payload.docs).toEqual([]);
+    expect(payload.missing).toEqual(['Pinned']);
+  });
+
+  it('reports unknown keys in `missing` without failing', () => {
+    const { payload, isError } = loadContextDocsByKeys(library, ['glossary', 'Nope']);
+    expect(isError).toBe(false);
+    expect(payload.success).toBe(true);
+    expect(payload.missing).toEqual(['Nope']);
+  });
+
+  it('errors (without resolving) when keys is empty', () => {
+    const { payload, isError } = loadContextDocsByKeys(library, []);
+    expect(isError).toBe(true);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toBeTruthy();
+  });
+
+  it('errors when there is no loadable library', () => {
+    const { payload, isError } = loadContextDocsByKeys({ docs: [{ key: '', title: 'x', content: 'inline', alwaysInclude: true }] }, ['glossary']);
+    expect(isError).toBe(true);
+    expect(payload.success).toBe(false);
+  });
+
+  it('errors when the context is undefined', () => {
+    const { isError } = loadContextDocsByKeys(undefined, ['glossary']);
+    expect(isError).toBe(true);
+  });
+
+  it('warns at the absolute over-fetch threshold (5)', () => {
+    const { payload } = loadContextDocsByKeys(library, ['glossary', 'cohorts', 'billing', 'pricing', 'refunds']);
+    expect(payload.docs).toHaveLength(5);
+    expect(typeof payload.warning).toBe('string');
+  });
+
+  it('does not warn below the threshold', () => {
+    const { payload } = loadContextDocsByKeys(library, ['glossary', 'cohorts', 'billing']);
+    expect(payload.docs).toHaveLength(3);
+    expect(payload.warning).toBeUndefined();
+  });
+
+  it('de-dupes repeated keys', () => {
+    const { payload } = loadContextDocsByKeys(library, ['glossary', 'glossary']);
+    expect(payload.docs).toHaveLength(1);
   });
 });
