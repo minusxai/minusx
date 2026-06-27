@@ -37,14 +37,14 @@ export function useUseChatV2(): boolean {
  * The v2 (JS) engine can't continue a v1 conversation — the forked agent gets no
  * context — so the chat surface shows the read-only history plus a "New Chat" CTA
  * instead of an input. Fires only when: v2 mode is on, a conversation is open, and
- * its file version is KNOWN and not 2 (v1 files load with version 1; v2 with 2;
- * unknown/undefined — e.g. an in-session-created chat not yet reloaded — is treated
- * as continuable, never legacy). See useConversation (sets version from meta).
+ * its file version is KNOWN and v1 (version 1). v2 (orchestrator files) and v3 (dedicated tables)
+ * are both continuable; unknown/undefined (e.g. an in-session-created chat not yet reloaded) is
+ * treated as continuable, never legacy. See useConversation (sets version from meta / v3 load).
  */
 export function isLegacyChatInV2(
   useChatV2: boolean,
   conversationId: number | null | undefined,
   conversationVersion: number | null | undefined,
 ): boolean {
-  return useChatV2 && conversationId != null && conversationVersion != null && conversationVersion !== 2;
+  return useChatV2 && conversationId != null && conversationVersion != null && conversationVersion < 2;
 }

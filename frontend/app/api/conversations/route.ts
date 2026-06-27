@@ -77,7 +77,14 @@ export async function GET(request: Request) {
 
     const conversations: ConversationSummary[] = [];
 
+    // v3 conversations (dedicated tables) join the default (v2) surface. After the backfill the
+    // source file still exists with the SAME id, so v3 takes precedence: skip any file whose id has
+    // a v3 row.
+    const v3Conversations = isV2Request ? await listConversations(user.userId, user.mode) : [];
+    const v3Ids = new Set(v3Conversations.map((c) => c.id));
+
     for (const fileInfo of filesResult.data) {
+      if (v3Ids.has(fileInfo.id)) continue; // migrated → served from v3 below
       const fileIsV2 = isV2ConversationFile(fileInfo);
       // v1 (legacy) surface shows only v1 files; v2 surface shows everything
       // (v1 tagged legacy).
@@ -94,19 +101,14 @@ export async function GET(request: Request) {
       });
     }
 
-    // v3 conversations (dedicated tables) join the default (v2) surface. The id-spaces are
-    // disjoint (shared global allocator), so there's no overlap with the file-conversations above.
-    if (isV2Request) {
-      const v3 = await listConversations(user.userId, user.mode);
-      for (const c of v3) {
-        conversations.push({
-          id: c.id,
-          name: (c.meta.firstMessage as string) || c.title,
-          createdAt: c.createdAt,
-          updatedAt: c.updatedAt,
-          version: 3,
-        });
-      }
+    for (const c of v3Conversations) {
+      conversations.push({
+        id: c.id,
+        name: (c.meta.firstMessage as string) || c.title,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        version: 3,
+      });
     }
 
     // Sort by updatedAt DESC (most recent first)
