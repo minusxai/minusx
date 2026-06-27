@@ -315,7 +315,7 @@ export default function ChatInterface({
       : loadedConversation;
   }, [providedConversationId, loadedConversation, forkChainTail]);
 
-  // Case 2: new conversation — find the active conversation (real positive ID from /api/chat/init)
+  // Case 2: new conversation — find the active conversation (real positive ID from /api/conversations)
   const activeConversationId = useAppSelector(selectActiveConversation);
   const activeConversation = useAppSelector(state =>
     activeConversationId ? state.chat.conversations[activeConversationId] : undefined
@@ -336,15 +336,17 @@ export default function ChatInterface({
     if (!isNewConversation) return;
     if (activeConversationId) return; // already have one
     let cancelled = false;
-    fetch('/api/chat/init', {
+    // Chat v3: conversations are dedicated rows (not files). Create via /api/conversations and tag
+    // the Redux conversation version:3 so the listener uses the v3 turns+stream engine.
+    fetch('/api/conversations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
       .then(res => res.json())
       .then(data => {
-        if (cancelled || !data.conversationID) return;
-        dispatch(createConversation({ conversationID: data.conversationID, agent: 'AnalystAgent' }));
+        if (cancelled || !data.id) return;
+        dispatch(createConversation({ conversationID: data.id, agent: 'AnalystAgent', version: 3 }));
       })
       .catch(err => console.error('[ChatInterface] Failed to pre-create conversation:', err));
     return () => { cancelled = true; };
@@ -857,15 +859,15 @@ export default function ChatInterface({
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation
       // if the user sends before the pre-creation fetch completes (rare race condition).
       if (!convId) {
-        const initRes = await fetch('/api/chat/init', {
+        const initRes = await fetch('/api/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ firstMessage: userInput }),
         });
-        const { conversationID: newId } = await initRes.json();
+        const { id: newId } = await initRes.json();
         if (!newId) throw new Error('Failed to get conversation ID from server');
         convId = newId as number;
-        dispatch(createConversation({ conversationID: convId, agent: 'AnalystAgent' }));
+        dispatch(createConversation({ conversationID: convId, agent: 'AnalystAgent', version: 3 }));
       }
     } catch {
       setLocalError({ message: 'Failed to prepare message', code: 'UNKNOWN' });

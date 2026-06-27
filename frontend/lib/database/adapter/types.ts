@@ -86,6 +86,21 @@ export interface IDatabaseAdapter {
    * PGLite: no-op. PostgreSQL: no-op (auto-vacuum handles maintenance).
    */
   optimize(): Promise<void>;
+
+  /**
+   * Emit a Postgres NOTIFY on `channel` with `payload` (the low-latency wakeup for chat streaming;
+   * see docs/chat-architecture-v3.md). Payload is capped at ~8KB by Postgres — carry pointers, not
+   * data. Works on both PGLite (in-process) and Postgres.
+   */
+  notify(channel: string, payload: string): Promise<void>;
+
+  /**
+   * Subscribe to NOTIFYs on `channel`; `onNotify` fires with each payload. Returns an unsubscribe.
+   * Channel names MUST be safe identifiers (alphanumeric + underscore) — they're not parameterizable
+   * in `LISTEN`. The wakeup is best-effort; correctness comes from the caller's cursor + catch-up
+   * SELECT (a NOTIFY lost while nobody listens is harmless).
+   */
+  listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>>;
 }
 
 /**

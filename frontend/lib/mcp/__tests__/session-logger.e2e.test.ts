@@ -1,21 +1,15 @@
 /**
- * E2E Tests: MCP Session Logger
+ * E2E Tests: MCP Session Logger (v3)
  *
- * Tests the complete flow from "tool was called" to "conversation file exists in DB".
+ * Tests the complete flow from "tool was called" to "v3 conversation exists in the DB".
  *
- * What this covers:
  *   logToolCall() (receives tool data)
- *     → flush() (persists via FilesAPI → real DB)
- *     → conversation file readable at expected path with correct structure
+ *     → flush() (converts the buffered task-log to pi via legacyLogToPi,
+ *                writes a v3 conversation + messages rows)
+ *     → conversation readable with mcp source metadata + the tool calls in its log
  *
- * What this does NOT cover (MCP SDK responsibility, not ours):
- *   - MCP protocol framing / transport-level session management
- *   - OAuth token validation (tested in lib/oauth/__tests__)
+ * MCP sessions are regular v3 conversations now — no file-conversation surface.
  */
-
-// ---------------------------------------------------------------------------
-// Hoisted mocks — must come before any imports
-// ---------------------------------------------------------------------------
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -29,20 +23,12 @@ vi.mock('next/cache', () => ({
   unstable_cache: vi.fn((fn: unknown) => fn),
 }));
 
-// ---------------------------------------------------------------------------
-// Imports
-// ---------------------------------------------------------------------------
-
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { getModules } from '@/lib/modules/registry';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
+import { loadLog } from '@/lib/data/conversations.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ConversationFileContent, TaskLogEntry, TaskResultEntry } from '@/lib/types';
 import type { McpToolCallResult } from '@/lib/mcp/server';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const DB_PATH = getTestDbPath('mcp_logger');
 
@@ -55,185 +41,105 @@ const TEST_USER: EffectiveUser = {
   mode: 'org',
 };
 
-const TOOL_RESULT: McpToolCallResult = {
-  content: [{ type: 'text', text: '{"success":true}' }],
-};
+const TOOL_RESULT: McpToolCallResult = { content: [{ type: 'text', text: '{"success":true}' }] };
 
-// ---------------------------------------------------------------------------
-// Suite setup / teardown
-// ---------------------------------------------------------------------------
-
-beforeAll(async () => {
-  await initTestDatabase(DB_PATH);
-  // test@example.com admin user is created by initTestDatabase via workspace-template.json
-});
-
-afterAll(async () => {
-  await cleanupTestDatabase(DB_PATH);
-});
-
+beforeAll(async () => { await initTestDatabase(DB_PATH); });
+afterAll(async () => { await cleanupTestDatabase(DB_PATH); });
 afterEach(async () => {
-  // Wipe all files except the /org root between tests. (We used to also call
-  // resetDB() here, which destroyed the PGLite WASM instance and forced the
-  // next test to re-cold-boot it — ~9s wasted per test. The DELETE is enough:
-  // the workspace template's /org root + seeded users persist, and PGLite stays
-  // warm across the whole suite.)
   await getModules().db.exec("DELETE FROM files WHERE path != '/org'", []);
+  await getModules().db.exec('DELETE FROM conversations', []); // messages cascade
 });
 
-// ---------------------------------------------------------------------------
-// Helper: load conversation file rows directly from the DB
-// ---------------------------------------------------------------------------
-
-async function loadConversationRows(): Promise<Array<{ path: string; content: string }>> {
-  const { rows } = await getModules().db.exec<{ path: string; content: string }>(
-    "SELECT path, content FROM files WHERE type = 'conversation'",
-    [],
+/** Load the MCP v3 conversations (agent='McpSession') with their meta. */
+async function loadMcpConversations(): Promise<Array<{ id: number; meta: Record<string, unknown> }>> {
+  const { rows } = await getModules().db.exec<{ id: number; meta: unknown }>(
+    "SELECT id, meta FROM conversations WHERE agent = 'McpSession' ORDER BY id", [],
   );
-  return rows;
+  return rows.map((r) => ({ id: Number(r.id), meta: (typeof r.meta === 'string' ? JSON.parse(r.meta) : r.meta) as Record<string, unknown> }));
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('McpSessionLogger — end-to-end session logging', () => {
+describe('McpSessionLogger — end-to-end session logging (v3)', () => {
   const SESSION_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
   describe('flush() after tool calls', () => {
-    it('creates a conversation file at the correct path', async () => {
+    it('creates exactly one v3 conversation for the session', async () => {
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
       logger.logToolCall('SearchDBSchema', { connection_id: 'main', query: 'revenue' }, TOOL_RESULT);
-
       await logger.flush();
 
-      const rows = await loadConversationRows();
-      expect(rows).toHaveLength(1);
-      expect(rows[0].path).toBe(`/org/logs/conversations/1/mcp-${SESSION_ID}`);
+      const convs = await loadMcpConversations();
+      expect(convs).toHaveLength(1);
     });
 
-    it('stores correct source metadata — type mcp with the session ID', async () => {
+    it('stores mcp source metadata with the session ID + owner', async () => {
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
       logger.logToolCall('SearchDBSchema', { connection_id: 'main' }, TOOL_RESULT);
-
       await logger.flush();
 
-      const rows = await loadConversationRows();
-      const content = rows[0].content as unknown as ConversationFileContent;
-      expect(content.metadata.source).toEqual({ type: 'mcp', sessionId: SESSION_ID });
-      expect(content.metadata.userId).toBe('1');
+      const [conv] = await loadMcpConversations();
+      expect(conv.meta.source).toEqual({ type: 'mcp', sessionId: SESSION_ID });
+      const { rows } = await getModules().db.exec<{ owner_user_id: number }>(
+        'SELECT owner_user_id FROM conversations WHERE id = $1', [conv.id]);
+      expect(rows[0].owner_user_id).toBe(1);
     });
 
-    it('records the tool name and arguments in the TaskLogEntry', async () => {
+    it('records the tool name + arguments in the conversation log', async () => {
       const args = { connection_id: 'analytics', query: 'SELECT revenue FROM sales' };
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
       logger.logToolCall('ExecuteQuery', args, TOOL_RESULT);
-
       await logger.flush();
 
-      const rows = await loadConversationRows();
-      const content = rows[0].content as unknown as ConversationFileContent;
-      const taskEntry = content.log.find((e) => e._type === 'task') as TaskLogEntry;
-      expect(taskEntry.agent).toBe('ExecuteQuery');
-      expect(taskEntry.args).toEqual(args);
+      const [conv] = await loadMcpConversations();
+      const logJson = JSON.stringify(await loadLog(conv.id));
+      expect(logJson).toContain('ExecuteQuery');
+      expect(logJson).toContain('SELECT revenue FROM sales');
     });
 
-    it('records the tool result in the TaskResultEntry', async () => {
-      const result: McpToolCallResult = {
-        content: [{ type: 'text', text: '{"rows":[{"count":42}]}' }],
-      };
+    it('records the tool result in the conversation log', async () => {
+      const result: McpToolCallResult = { content: [{ type: 'text', text: '{"rows":[{"count":42}]}' }] };
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
       logger.logToolCall('ExecuteQuery', { connection_id: 'main', query: 'SELECT COUNT(*) FROM orders' }, result);
-
       await logger.flush();
 
-      const rows = await loadConversationRows();
-      const content = rows[0].content as unknown as ConversationFileContent;
-      const resultEntry = content.log.find((e) => e._type === 'task_result') as TaskResultEntry;
-      expect(resultEntry.result).toEqual(result);
-    });
-
-    it('links each TaskResultEntry to its TaskLogEntry via unique_id', async () => {
-      const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
-      logger.logToolCall('SearchDBSchema', { connection_id: 'main' }, TOOL_RESULT);
-
-      await logger.flush();
-
-      const rows = await loadConversationRows();
-      const content = rows[0].content as unknown as ConversationFileContent;
-      const taskEntry = content.log.find((e) => e._type === 'task') as TaskLogEntry;
-      const resultEntry = content.log.find((e) => e._type === 'task_result') as TaskResultEntry;
-
-      expect(taskEntry.unique_id).toBeTruthy();
-      expect(resultEntry._task_unique_id).toBe(taskEntry.unique_id);
+      const [conv] = await loadMcpConversations();
+      const logJson = JSON.stringify(await loadLog(conv.id));
+      // The tool result rides in a toolResult entry (its text is JSON-escaped inside content).
+      expect(logJson).toContain('rows');
+      expect(logJson).toContain('42');
     });
   });
 
   describe('flush() with no tool calls', () => {
-    it('does not create a conversation file', async () => {
+    it('does not create a conversation', async () => {
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
-
       await logger.flush();
-
-      const rows = await loadConversationRows();
-      expect(rows).toHaveLength(0);
+      expect(await loadMcpConversations()).toHaveLength(0);
     });
   });
 
   describe('multiple tool calls in a single session', () => {
-    it('logs all tool calls in order with correct ID linkage', async () => {
+    it('logs all tool calls in one conversation, in order', async () => {
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
-
       logger.logToolCall('SearchDBSchema', { connection_id: 'main', query: 'customers' }, TOOL_RESULT);
       logger.logToolCall('ExecuteQuery', { connection_id: 'main', query: 'SELECT * FROM customers LIMIT 10' }, TOOL_RESULT);
-
       await logger.flush();
 
-      const rows = await loadConversationRows();
-      expect(rows).toHaveLength(1); // still one file per session
-      const content = rows[0].content as unknown as ConversationFileContent;
-
-      // 2 tool calls → 2 task entries + 2 result entries = 4 log entries
-      expect(content.log).toHaveLength(4);
-      expect(content.metadata.logLength).toBe(4);
-
-      // Entries are interleaved: [task1, result1, task2, result2]
-      const taskEntries = content.log.filter((e) => e._type === 'task') as TaskLogEntry[];
-      const resultEntries = content.log.filter((e) => e._type === 'task_result') as TaskResultEntry[];
-
-      expect(taskEntries[0].agent).toBe('SearchDBSchema');
-      expect(taskEntries[1].agent).toBe('ExecuteQuery');
-
-      // Each result references its own task, not the other one
-      expect(resultEntries[0]._task_unique_id).toBe(taskEntries[0].unique_id);
-      expect(resultEntries[1]._task_unique_id).toBe(taskEntries[1].unique_id);
-    });
-
-    it('each tool call gets a distinct unique_id', async () => {
-      const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
-
-      logger.logToolCall('SearchDBSchema', { connection_id: 'main' }, TOOL_RESULT);
-      logger.logToolCall('ExecuteQuery', { connection_id: 'main', query: 'SELECT 1' }, TOOL_RESULT);
-
-      await logger.flush();
-
-      const rows = await loadConversationRows();
-      const content = rows[0].content as unknown as ConversationFileContent;
-      const taskEntries = content.log.filter((e) => e._type === 'task') as TaskLogEntry[];
-
-      expect(taskEntries[0].unique_id).not.toBe(taskEntries[1].unique_id);
+      const convs = await loadMcpConversations();
+      expect(convs).toHaveLength(1); // one conversation per session
+      const log = await loadLog(convs[0].id);
+      const json = JSON.stringify(log);
+      expect(json).toContain('SearchDBSchema');
+      expect(json).toContain('ExecuteQuery');
+      // SearchDBSchema appears before ExecuteQuery (order preserved).
+      expect(json.indexOf('SearchDBSchema')).toBeLessThan(json.indexOf('ExecuteQuery'));
     });
   });
 
   describe('error resilience', () => {
-    it('flush() silently no-ops if the file cannot be created (path conflict)', async () => {
+    it('flush() never throws (logging must not affect MCP responses)', async () => {
       const logger = new McpSessionLogger(SESSION_ID, TEST_USER);
       logger.logToolCall('SearchDBSchema', { connection_id: 'main' }, TOOL_RESULT);
-
-      // First flush succeeds
-      await logger.flush();
-
-      // Second flush: same path — FilesAPI will throw; flush must swallow it
+      await expect(logger.flush()).resolves.toBeUndefined();
       await expect(logger.flush()).resolves.toBeUndefined();
     });
   });

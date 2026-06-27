@@ -45,7 +45,7 @@ export function reportClientErrorToChat(
 
 /**
  * Used by code paths that fail BEFORE a new conversation exists (e.g.
- * /api/chat/init failure in the wizard). Routes the error to the user's
+ * /api/conversations create failure in the wizard). Routes the error to the user's
  * currently-active conversation if there is one — so the failure still appears
  * in their history. No-op if no active conv (true cold-start init failure).
  */

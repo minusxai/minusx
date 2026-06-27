@@ -10,7 +10,7 @@ import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { handleApiError } from '@/lib/api/api-responses';
-import { appendErrorToConversation } from '@/lib/conversations';
+import { appendError } from '@/lib/data/conversations.server';
 import type { ErrorLogEntry } from '@/lib/types';
 
 const VALID_SOURCES: ReadonlyArray<ErrorLogEntry['source']> = [
@@ -47,7 +47,13 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Always stamp server-side timestamp if the client didn't.
       timestamp: typeof body.error.timestamp === 'number' ? body.error.timestamp : Date.now(),
     };
-    await appendErrorToConversation(body.conversationID, entry, user);
+    // v3: client-side errors land in the conversation error stream (kind='error' rows in messages).
+    await appendError(body.conversationID, {
+      source: entry.source,
+      message: entry.message,
+      ...(entry.parent_id ? { parentPiId: entry.parent_id } : {}),
+      ...(entry.details ? { details: entry.details as Record<string, unknown> } : {}),
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleApiError(error);

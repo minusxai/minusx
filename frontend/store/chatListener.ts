@@ -26,13 +26,13 @@ import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
-import { FilesAPI } from '@/lib/data/files';
-import { parseLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
-import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
+import { parsePiConversation } from '@/lib/conversations-utils';
 import type { ConversationLog } from '@/orchestrator/types';
-import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
-import { getCurrentMode } from '@/lib/mode/mode-utils';
 import type { AgentSkillSelection } from '@/lib/types';
+import { API_BASE_URL, patchApiUrl } from './api-url';
+import { runV3Turn, type V3TurnInput } from './conversation-stream-client';
+import { ConversationsAPI } from '@/lib/data/conversations';
+import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 
 // ---------------------------------------------------------------------------
 // Synthetic skill-load events
@@ -97,266 +97,8 @@ function emitSyntheticSkillLoads(
 const abortControllers = new Map<string, AbortController>();
 
 // API base URL - defaults to relative path in browser, absolute in Node/tests
-const API_BASE_URL = typeof window === 'undefined'
-  ? 'http://localhost:3000'  // Node.js test environment
-  : '';  // Browser - use relative URLs
-
 export const chatListenerMiddleware = createListenerMiddleware();
 
-// ---------------------------------------------------------------------------
-// URL helpers
-// ---------------------------------------------------------------------------
-
-/** Mirror the fetch-patch: append as_user, mode, and v params to /api/ URLs.
- *
- * The XHR-based SSE driver bypasses `window.fetch`, so it doesn't pick up
- * the global fetch-patch automatically. We replicate the same param-
- * forwarding here. `v` carries the chat-surface selection (`?v=1` = legacy
- * Conversations surface) through the streamed request.
- */
-function patchApiUrl(path: string): string {
-  if (typeof window === 'undefined') return path;
-  const asUser = getCurrentAsUser();
-  const mode = getCurrentMode();
-  const v = getCurrentV();
-  if (!asUser && mode === 'org' && !v) return path;
-  const url = new URL(path, window.location.origin);
-  if (asUser) url.searchParams.set('as_user', asUser);
-  if (mode !== 'org') url.searchParams.set('mode', mode);
-  if (v) url.searchParams.set('v', v);
-  return url.pathname + url.search;
-}
-
-// ---------------------------------------------------------------------------
-// SSE parsing
-// ---------------------------------------------------------------------------
-
-function parseSSEChunk(chunk: string): { event: string; data: any } | null {
-  const lines = chunk.trim().split('\n');
-  let event = '';
-  let data = '';
-
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      event = line.substring(6).trim();
-    } else if (line.startsWith('data:')) {
-      data = line.substring(5).trim();
-    }
-  }
-
-  if (event && data) {
-    try {
-      return { event, data: JSON.parse(data) };
-    } catch (e) {
-      console.error('Failed to parse SSE data:', e);
-      return null;
-    }
-  }
-
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Shared streaming helpers
-// ---------------------------------------------------------------------------
-
-interface SSEStreamResult {
-  doneData: any;
-  errorData: any;
-}
-
-/**
- * XHR-based SSE streaming for /api/chat/stream.
- *
- * Uses XMLHttpRequest instead of fetch() because Next.js/React patches the
- * global fetch() to buffer entire responses before resolving, which breaks
- * SSE — the browser receives all bytes at once only after the stream closes.
- * XHR's onprogress fires incrementally as each chunk arrives.
- *
- * Streaming events are serialised through processingChain so React renders
- * each chunk in order (the setTimeout(0) yield in handleStreamingEvent needs
- * to complete before the next dispatch).
- */
-function streamChatSSE(
-  logLabel: string,
-  body: object,
-  signal: AbortSignal,
-  onStreamingEvent: (data: any) => Promise<void>,
-  onUserInputRequest: (data: any) => void,
-  onSeq?: (seq: number) => void,
-): Promise<SSEStreamResult> {
-  return new Promise((resolve, reject) => {
-    const t0 = Date.now();
-    console.log(`[chat/stream ${logLabel}] → request start`);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', patchApiUrl(`${API_BASE_URL}/api/chat/stream`));
-    xhr.setRequestHeader('Content-Type', 'application/json');
-
-    let offset = 0;
-    let buffer = '';
-    let doneData: any = null;
-    let errorData: any = null;
-    let processingChain = Promise.resolve();
-
-    const onAbort = () => xhr.abort();
-    signal.addEventListener('abort', onAbort, { once: true });
-
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === 2) {
-        console.log(`[chat/stream ${logLabel}] ← headers received (${Date.now() - t0}ms)`, { status: xhr.status });
-      }
-    };
-
-    xhr.onprogress = () => {
-      const newText = xhr.responseText.slice(offset);
-      offset = xhr.responseText.length;
-
-      buffer += newText;
-      const chunks = buffer.split('\n\n');
-      buffer = chunks.pop() || '';
-
-      for (const chunk of chunks) {
-        if (!chunk.trim()) continue;
-        const parsed = parseSSEChunk(chunk);
-        if (!parsed) continue;
-
-        const { event, data } = parsed;
-        if (typeof data?.seq === 'number') onSeq?.(data.seq);
-
-        if (event === 'streaming_event') {
-          const captured = data;
-          processingChain = processingChain.then(() => onStreamingEvent(captured));
-        } else if (event === 'done') {
-          doneData = data;
-        } else if (event === 'error') {
-          errorData = data;
-        } else if (event === 'user_input_request') {
-          onUserInputRequest(data);
-        }
-      }
-    };
-
-    xhr.onload = () => {
-      signal.removeEventListener('abort', onAbort);
-      // Wait for all queued async streaming-event handlers before resolving
-      processingChain.then(() => resolve({ doneData, errorData }));
-    };
-
-    xhr.onerror = () => {
-      signal.removeEventListener('abort', onAbort);
-      // If the done frame already arrived, the turn's result is complete — a
-      // socket dying during teardown is not an error worth surfacing/retrying.
-      if (doneData) {
-        processingChain.then(() => resolve({ doneData, errorData }));
-        return;
-      }
-      reject(new Error('Network error'));
-    };
-
-    xhr.onabort = () => {
-      signal.removeEventListener('abort', onAbort);
-      const err = new Error('The operation was aborted.');
-      err.name = 'AbortError';
-      reject(err);
-    };
-
-    xhr.send(JSON.stringify(body));
-  });
-}
-
-// Bounded reconnect+resume for transport drops mid-stream. The server keeps the
-// turn running and buffers sequence-numbered frames (lib/chat/run-registry.server),
-// so after a drop we reconnect with `resume.afterSeq` and replay what we missed —
-// the user never sees an error for a turn that is still completing.
-const RESUME_BACKOFF_MS = [1000, 2000, 4000];
-
-async function streamChatSSEWithResume(
-  logLabel: string,
-  body: object,
-  conversationID: number | null | undefined,
-  signal: AbortSignal,
-  onStreamingEvent: (data: any) => Promise<void>,
-  onUserInputRequest: (data: any) => void,
-): Promise<SSEStreamResult> {
-  let lastSeq = 0;
-  const onSeq = (seq: number) => { lastSeq = Math.max(lastSeq, seq); };
-  let requestBody: object = body;
-  let originalError: Error | null = null;
-
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const result = await streamChatSSE(logLabel, requestBody, signal, onStreamingEvent, onUserInputRequest, onSeq);
-      // resume_miss: nothing to attach to (server restarted / run evicted) —
-      // surface the ORIGINAL transport error; the turn's fate is unknown.
-      if ((result.doneData as { resume_miss?: boolean } | null)?.resume_miss) {
-        throw originalError ?? new Error('Network error');
-      }
-      return result;
-    } catch (error: any) {
-      const isTransport = error instanceof Error && error.message === 'Network error';
-      const canResume = typeof conversationID === 'number' && conversationID > 0;
-      if (!isTransport || !canResume || attempt >= RESUME_BACKOFF_MS.length) throw error;
-      originalError = originalError ?? error;
-
-      const delay = RESUME_BACKOFF_MS[attempt];
-      console.warn(`[chat/stream ${logLabel}] transport drop — resuming after seq ${lastSeq} in ${delay}ms (attempt ${attempt + 1}/${RESUME_BACKOFF_MS.length})`);
-      await new Promise((r) => setTimeout(r, delay));
-      if (signal.aborted) {
-        const err = new Error('The operation was aborted.');
-        err.name = 'AbortError';
-        throw err;
-      }
-      requestBody = { conversationID, resume: { afterSeq: lastSeq } };
-    }
-  }
-}
-
-/**
- * Dispatch a streaming event and yield to the macrotask queue for
- * StreamedContent/StreamedThinking so React 18 renders each chunk
- * progressively instead of batching everything at once.
- */
-async function handleStreamingEvent(data: any, dispatch: AppDispatch, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return;
-  dispatch(addStreamingMessage(data));
-  if (data.type === 'StreamedContent' || data.type === 'StreamedThinking') {
-    await new Promise<void>(resolve => setTimeout(resolve, 0));
-  }
-}
-
-/** Apply the done event: clear streaming state and update conversation. */
-export function applyDoneEvent(
-  doneData: any,
-  conversationID: number,
-  stableId: string,
-  dispatch: AppDispatch,
-): void {
-  // The server embeds orchestrator/LLM errors (rate limits, proxy down, mid-stream
-  // drops) inside the `done` frame's `error` field rather than a separate `error`
-  // frame. Surface it as a thrown error so the caller's handleStreamError shows the
-  // error banner + "Try again" instead of rendering a blank (empty-content) success.
-  if (doneData.error) {
-    throw new Error(doneData.error);
-  }
-  const realConversationID = doneData.conversationID || conversationID;
-  dispatch(clearStreamingContent({ conversationID: realConversationID }));
-  dispatch(updateConversation({
-    conversationID,
-    newConversationID: doneData.conversationID,
-    log_index: doneData.log_index,
-    completed_tool_calls: doneData.completed_tool_calls,
-    pending_tool_calls: doneData.pending_tool_calls,
-    debug: doneData.debug,
-    request_id: doneData.request_id,
-  }));
-  abortControllers.delete(stableId);
-}
-
-/**
- * Handle a stream error in a catch block.
- * Returns true if the error was an abort (caller should return early).
- */
 /**
  * Fire-and-forget post of a transport-level error to /api/chat/log-error so it
  * lands on the conversation document's `errors[]` and survives page reload.
@@ -393,72 +135,12 @@ function classifyError(error: { name?: string; httpStatus?: number }): { source:
   return { source: 'transport', httpStatus: error?.httpStatus };
 }
 
-/**
- * Last-resort recovery for transport failures: the turn may have completed and
- * been PERSISTED server-side even though every live reconnect failed (e.g. the
- * server restarted after finishing the turn — resume_miss). Reload the
- * conversation file; if its log advanced past where it was before this send,
- * the turn landed — render it instead of surfacing a false error.
- */
-async function tryRecoverConversationFromFile(
-  conversationID: number,
-  stableId: string,
-  preSendLogIndex: number,
-  dispatch: AppDispatch,
-): Promise<boolean> {
-  try {
-    const result = await FilesAPI.loadFile(conversationID);
-    const content = result.data?.content as ConversationFileContent | undefined;
-    if (!content?.log || content.log.length <= preSendLogIndex) return false;
-
-    const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
-
-    // v2 conversations are served as the orchestrator pi ConversationLog; parse them pi-natively.
-    // v1 stays on the legacy task-log parse + first-task agent derivation.
-    let messages: any[];
-    let agent: string;
-    let agent_args: Record<string, any>;
-    if (version >= 2) {
-      ({ messages, agent, agent_args } = parsePiConversation(content.log as unknown as ConversationLog));
-    } else {
-      messages = parseLogToMessages(content.log);
-      const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
-      agent = firstTask?.agent || 'DefaultAgent';
-      agent_args = (firstTask?.args as Record<string, any>) || {};
-    }
-
-    dispatch(loadConversation({
-      conversation: {
-        _id: stableId,
-        conversationID,
-        log_index: content.log.length,
-        messages,
-        executionState: 'FINISHED',
-        pending_tool_calls: [],
-        streamedCompletedToolCalls: [],
-        streamedThinking: '',
-        agent,
-        agent_args,
-        version,
-      },
-      setAsActive: false,
-    }));
-    dispatch(clearStreamingContent({ conversationID }));
-    abortControllers.delete(stableId);
-    console.warn(`[chat/stream] transport failed but the turn persisted server-side — recovered conversation ${conversationID} from its file`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function handleStreamError(
   error: any,
   captureLabel: string,
   conversationID: number,
   stableId: string,
   dispatch: AppDispatch,
-  preSendLogIndex?: number,
 ): Promise<boolean> {
   if (!error || typeof error !== 'object') {
     void captureError(captureLabel, new Error(String(error)), { conversationID: String(conversationID) });
@@ -470,17 +152,8 @@ async function handleStreamError(
   }
   if (error.name === 'AbortError') return true;
   const { source, httpStatus } = classifyError(error);
-  // Transport failure: before declaring an error, check whether the turn
-  // actually completed and persisted (see tryRecoverConversationFromFile).
-  if (
-    source === 'transport'
-    && error.message === 'Network error'
-    && typeof preSendLogIndex === 'number'
-    && conversationID > 0
-    && await tryRecoverConversationFromFile(conversationID, stableId, preSendLogIndex, dispatch)
-  ) {
-    return true;
-  }
+  // v3: the durable rows are the source of truth and reconnect is handled in conversation-stream-client;
+  // by the time an error reaches here the turn genuinely failed, so surface it.
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
   dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
   dispatch(clearStreamingContent({ conversationID }));
@@ -489,78 +162,115 @@ async function handleStreamError(
   return false;
 }
 
-/** Non-streaming path used in test environments (fetch to /api/chat). */
-/**
- * Bounded retry around `fetchChatNonStreaming` for transient transport failures
- * (network drops / 5xx). Does NOT retry on AbortError or SessionExpiredError —
- * those are terminal. The server's log append is fork-aware on length mismatch,
- * so client retries are idempotent. Up to 2 retries with exponential backoff.
- */
-async function fetchChatWithRetry(
-  body: object,
-  conversationID: number,
-  signal: AbortSignal,
-  dispatch: AppDispatch,
-  maxRetries = 2,
-): Promise<void> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      await fetchChatNonStreaming(body, conversationID, signal, dispatch);
-      return;
-    } catch (err) {
-      lastErr = err;
-      const e = err as { name?: string };
-      if (e?.name === 'AbortError' || e?.name === 'SessionExpiredError') throw err;
-      if (attempt < maxRetries) {
-        const backoffMs = 500 * Math.pow(2, attempt); // 500ms, 1s
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-      }
-    }
-  }
-  throw lastErr;
+// ---------------------------------------------------------------------------
+// v3 chat path (dedicated conversations/messages tables + LISTEN/NOTIFY streaming)
+// ---------------------------------------------------------------------------
+
+/** Map stream-derived pending tool calls to the ToolCall shape the pending machinery expects. */
+function v3PendingToToolCalls(pending: { id: string; name: string; arguments: Record<string, unknown> }[]) {
+  return pending.map((p) => ({ id: p.id, type: 'function' as const, function: { name: p.name, arguments: p.arguments } }));
 }
 
-async function fetchChatNonStreaming(
-  body: object,
+/**
+ * Run one v3 turn (new message or resume) from the listener: stream live deltas, then reload the
+ * durable log and finalize. On a frontend-tool pause, set pending_tool_calls (triggering the
+ * auto-exec machinery → completeToolCall → v3 resume). Throws on error so handleStreamError shows it.
+ */
+async function runV3TurnInListener(
   conversationID: number,
-  signal: AbortSignal,
+  conversation: ReturnType<typeof selectConversation>,
+  turn: V3TurnInput,
   dispatch: AppDispatch,
+  signal: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (response.status === 401) {
-    const err = new Error('Session expired — please sign in again') as Error & { name: string; httpStatus: number };
-    err.name = 'SessionExpiredError';
-    err.httpStatus = 401;
-    throw err;
+  if (!conversation) return;
+
+  let status: 'idle' | 'paused' | 'error' = 'idle';
+  let runError: string | undefined;
+  if (IS_TEST) {
+    // jsdom has no usable XHR/SSE for the stream — POST the turn, then poll until it settles.
+    const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/turns`), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(turn.userMessage != null ? { userMessage: turn.userMessage } : {}),
+        ...(turn.completedToolCalls ? { completedToolCalls: turn.completedToolCalls } : {}),
+        ...(turn.agent ? { agent: turn.agent } : {}),
+        agentArgs: turn.agentArgs ?? {},
+      }),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        const err = new Error('Session expired — please sign in again') as Error & { name: string; httpStatus: number };
+        err.name = 'SessionExpiredError';
+        err.httpStatus = 401;
+        throw err;
+      }
+      throw new Error(`turn failed: HTTP ${res.status}`);
+    }
+    for (let i = 0; i < 600; i++) {
+      const d = await ConversationsAPI.get(conversationID);
+      if (d.conversation.runStatus !== 'running') { status = d.conversation.runStatus as typeof status; break; }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  } else {
+    const result = await runV3Turn(conversationID, conversation.log_index ?? 0, turn, signal, {
+      onDelta: (text) => dispatch(addStreamingMessage({ conversationID, type: 'StreamedContent', payload: { chunk: text } } as never)),
+      onPending: () => { /* pending is derived from the reloaded log below */ },
+    });
+    status = result.status === 'running' ? 'idle' : result.status;
+    runError = result.error;
   }
-  const data = await response.json();
-  if (data.error) {
-    dispatch(setError({ conversationID, error: data.error }));
-    return;
-  }
-  dispatch(updateConversation({
-    conversationID,
-    newConversationID: data.conversationID,
-    log_index: data.log_index,
-    completed_tool_calls: data.completed_tool_calls,
-    pending_tool_calls: data.pending_tool_calls,
-    debug: data.debug,
-    request_id: data.request_id,
+  if (status === 'error') throw new Error(runError || 'chat error');
+
+  // Reload the durable log for the final render (one source of truth).
+  const detail = await ConversationsAPI.get(conversationID);
+  const piLog = detail.messages.map((m) => m.content) as unknown as ConversationLog;
+  const errors = detail.errors.map((e) => ({
+    source: e.source, message: e.message,
+    timestamp: Date.parse(e.createdAt) || Date.now(),
+    ...(e.details ? { details: e.details } : {}),
+    ...(e.parentPiId ? { parent_id: e.parentPiId } : {}),
   }));
+  const { messages } = parsePiConversation(piLog, errors as never);
+
+  dispatch(clearStreamingContent({ conversationID }));
+  dispatch(loadConversation({
+    conversation: {
+      ...conversation,
+      conversationID,
+      messages,
+      log_index: piLog.length,
+      pending_tool_calls: [],
+      streamedCompletedToolCalls: [],
+      streamedThinking: '',
+      executionState: status === 'paused' ? 'EXECUTING' : 'FINISHED',
+      version: 3,
+    },
+    setAsActive: false,
+  }));
+
+  // Paused on frontend tools → set pending (triggers the auto-exec listener → completeToolCall → resume).
+  if (status === 'paused') {
+    const pending = derivePendingToolCalls(piLog);
+    if (pending.length > 0) {
+      dispatch(updateConversation({
+        conversationID,
+        log_index: piLog.length,
+        completed_tool_calls: [],
+        pending_tool_calls: v3PendingToToolCalls(pending) as never,
+        debug: [],
+      }));
+    }
+  }
 }
+
 
 // ---------------------------------------------------------------------------
 // Listeners
 // ---------------------------------------------------------------------------
 
 /**
- * createConversation → /api/chat/stream
+ * createConversation → v3 turn (runV3TurnInListener)
  * Used for new conversations with the initial message.
  */
 chatListenerMiddleware.startListening({
@@ -580,34 +290,17 @@ chatListenerMiddleware.startListening({
     emitSyntheticSkillLoads(conversationID, conversation, dispatch);
 
     try {
-      if (IS_TEST) {
-        const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatWithRetry(
-          { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
-          conversationID, abortController.signal, dispatch,
-        );
-        return;
-      }
-
-      const { doneData, errorData } = await streamChatSSEWithResume(
-        '#1 createConversation',
-        { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
-        conversationID,
-        abortController.signal,
-        (data) => handleStreamingEvent(data, dispatch, abortController.signal),
-        (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
-      );
-      if (!doneData) throw new Error('Stream ended without done event');
-      if (errorData) throw new Error(errorData.error);
-      applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
+      await runV3TurnInListener(conversationID, conversation,
+        { userMessage: message, agent: conversation.agent, agentArgs: conversation.agent_args },
+        dispatch, abortController.signal);
     } catch (error: any) {
-      if (await handleStreamError(error, 'chatListener:createConversation', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      if (await handleStreamError(error, 'chatListener:createConversation', conversationID, conversation._id, dispatch)) return;
     }
   }
 });
 
 /**
- * sendMessage → /api/chat/stream
+ * sendMessage → v3 turn (runV3TurnInListener)
  * Used for adding messages to existing conversations.
  */
 chatListenerMiddleware.startListening({
@@ -625,35 +318,17 @@ chatListenerMiddleware.startListening({
     emitSyntheticSkillLoads(conversationID, conversation, dispatch);
 
     try {
-      if (IS_TEST) {
-        const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatWithRetry(
-          { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
-          conversationID, abortController.signal, dispatch,
-        );
-        return;
-      }
-
-      const { doneData, errorData } = await streamChatSSEWithResume(
-        '#2 sendMessage',
-        { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
-        conversationID,
-        abortController.signal,
-        (data) => handleStreamingEvent(data, dispatch, abortController.signal),
-        (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
-      );
-      if (!doneData) throw new Error('Stream ended without done event');
-      if (errorData) throw new Error(errorData.error);
-      applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
+      await runV3TurnInListener(conversationID, conversation,
+        { userMessage: message, agent: conversation.agent, agentArgs: conversation.agent_args },
+        dispatch, abortController.signal);
     } catch (error: any) {
-      if (await handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      if (await handleStreamError(error, 'chatListener:sendMessage', conversationID, conversation._id, dispatch)) return;
     }
   }
 });
 
 /**
- * editAndForkMessage → /api/chat/stream
- * Calls /api/chat with log_index set to the fork point.
+ * editAndForkMessage → fork the v3 conversation, then run the edited message on the fork.
  * The editAndForkMessage action already set conversation.log_index = logIndex before this runs.
  */
 chatListenerMiddleware.startListening({
@@ -671,34 +346,28 @@ chatListenerMiddleware.startListening({
     emitSyntheticSkillLoads(conversationID, conversation, dispatch);
 
     try {
-      if (IS_TEST) {
-        const testConversationID = conversationID < 0 ? null : conversationID;
-        await fetchChatWithRetry(
-          { conversationID: testConversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
-          conversationID, abortController.signal, dispatch,
-        );
-        return;
-      }
-
-      const { doneData, errorData } = await streamChatSSEWithResume(
-        '#3 editAndFork',
-        { conversationID, log_index: conversation.log_index, user_message: message, agent: conversation.agent, agent_args: conversation.agent_args },
-        conversationID,
-        abortController.signal,
-        (data) => handleStreamingEvent(data, dispatch, abortController.signal),
-        (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
-      );
-      if (!doneData) throw new Error('Stream ended without done event');
-      if (errorData) throw new Error(errorData.error);
-      applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
+      // Fork the conversation at the edit point (copies messages [0, log_index)), then run the
+      // edited message on the new conversation. updateConversation moves Redux to the fork
+      // (carrying the reducer-truncated messages) + flags the source forked → triggers nav.
+      const forkRes = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/fork`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atSeq: conversation.log_index }),
+      });
+      if (!forkRes.ok) throw new Error(`fork failed: HTTP ${forkRes.status}`);
+      const { id: newId } = await forkRes.json();
+      dispatch(updateConversation({ conversationID, newConversationID: newId, log_index: conversation.log_index, completed_tool_calls: [], pending_tool_calls: [], debug: [] }));
+      const forked = selectConversation(listenerApi.getState() as RootState, newId);
+      await runV3TurnInListener(newId, forked,
+        { userMessage: message, agent: conversation.agent, agentArgs: conversation.agent_args },
+        dispatch, abortController.signal);
     } catch (error: any) {
-      if (await handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      if (await handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch)) return;
     }
   }
 });
 
 /**
- * completeToolCall → /api/chat/stream
+ * completeToolCall → v3 resume (runV3TurnInListener)
  * Fires when all pending frontend tools are done; resumes the conversation.
  */
 chatListenerMiddleware.startListening({
@@ -731,27 +400,12 @@ chatListenerMiddleware.startListening({
         dispatch(flushQueuedMessages({ conversationID }));
       }
 
-      if (IS_TEST) {
-        await fetchChatWithRetry(
-          { conversationID, log_index: conversation.log_index, user_message: userMessage, completed_tool_calls, agent: conversation.agent, agent_args: conversation.agent_args },
-          conversationID, abortController.signal, dispatch,
-        );
-        return;
-      }
-
-      const { doneData, errorData } = await streamChatSSEWithResume(
-        '#4 toolResults',
-        { conversationID, log_index: conversation.log_index, user_message: userMessage, completed_tool_calls, agent: conversation.agent, agent_args: conversation.agent_args },
-        conversationID,
-        abortController.signal,
-        (data) => handleStreamingEvent(data, dispatch, abortController!.signal),
-        (data) => dispatch(addUserInputRequest({ conversationID, tool_call_id: data.tool_call_id, userInput: data.user_input })),
-      );
-      if (!doneData) throw new Error('Stream ended without done event');
-      if (errorData) throw new Error(errorData.error);
-      applyDoneEvent(doneData, conversationID, conversation._id, dispatch);
+      // Resume the v3 turn with the executed frontend-tool results (+ any mid-turn queued message).
+      await runV3TurnInListener(conversationID, conversation,
+        { completedToolCalls: completed_tool_calls, ...(userMessage ? { userMessage } : {}), agent: conversation.agent, agentArgs: conversation.agent_args },
+        dispatch, abortController.signal);
     } catch (error: any) {
-      if (await handleStreamError(error, 'chatListener:completeToolCall', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      if (await handleStreamError(error, 'chatListener:completeToolCall', conversationID, conversation._id, dispatch)) return;
     }
   }
 });
@@ -899,17 +553,15 @@ chatListenerMiddleware.startListening({
       console.warn(`[interruptChat] No AbortController found for conversation ${conversationID}`);
     }
 
-    // Also cancel the run server-side. The run registry decouples turns from
-    // connections (so transport drops can resume) — which means aborting the
-    // local stream alone would leave the engine running (and billing tokens)
-    // to completion in the background. Best-effort: if the server misses it,
-    // the turn just completes as before.
+    // Also cancel the run server-side. Turns are decoupled from connections (so transport drops can
+    // resume) — aborting the local stream alone would leave the engine running (billing tokens) to
+    // completion. v3 conversations interrupt via their own endpoint (NOTIFY → orchestrator.cancel).
+    // Best-effort.
     if (conversationID > 0) {
       try {
-        await fetch(patchApiUrl(`${API_BASE_URL}/api/chat/interrupt`), {
+        await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/interrupt`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversationID }),
         });
       } catch (err) {
         console.warn('[interruptChat] server-side interrupt failed (best-effort):', err);

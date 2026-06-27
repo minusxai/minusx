@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { estimateNextChatContextV2, validateV2Mode } from '@/lib/chat-orchestration-v2.server';
+import { estimateNextChatContextV2 } from '@/lib/chat-orchestration-v2.server';
+import { getConversation } from '@/lib/data/conversations.server';
 import type { ChatRequest } from '@/lib/chat-orchestration';
 import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
 import { handleApiError } from '@/lib/api/api-responses';
@@ -28,9 +29,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const check = await validateV2Mode(body.conversationID, user, true);
-    if (!check.ok) {
-      return NextResponse.json({ error: check.error }, { status: 400 });
+    // v3 conversations are dedicated rows — confirm the conversation exists.
+    const conversation = await getConversation(body.conversationID);
+    if (!conversation) {
+      return NextResponse.json(
+        { error: `Conversation ${body.conversationID} not found` },
+        { status: 400 },
+      );
     }
 
     const estimate = await estimateNextChatContextV2(body, user, body.conversationID);

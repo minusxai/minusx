@@ -389,4 +389,76 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_app_events_type ON app_events(event_type, created_at);
   CREATE INDEX IF NOT EXISTS idx_app_events_ts   ON app_events(created_at);
 
+  -- ===========================================================================
+  -- Chat Architecture v3: conversations + messages as first-class tables.
+  -- Conversations were previously files of type conversation -- v3 normalizes
+  -- them into dedicated rows. IDs share the global files id-space (see the
+  -- allocator in lib/data/conversations.server.ts) so they never collide and can
+  -- be preserved when old file-conversations are backfilled.
+  -- (Keep these comments semicolon-free -- splitSQLStatements is comment-unaware.)
+  -- ===========================================================================
+
+  CREATE TABLE IF NOT EXISTS conversations (
+    id               INTEGER     NOT NULL,
+    owner_user_id    INTEGER     NOT NULL,
+    mode             TEXT        NOT NULL DEFAULT 'org',
+    title            TEXT        NOT NULL DEFAULT 'New Conversation',
+    agent            TEXT        NOT NULL DEFAULT 'WebAnalystAgent',
+    run_status       TEXT        NOT NULL DEFAULT 'idle',
+    run_lease_owner  TEXT,
+    run_heartbeat_at TIMESTAMPTZ,
+    run_started_seq  INTEGER,
+    meta             JSONB       NOT NULL DEFAULT '{}',
+    forked_from      INTEGER,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_conversations_owner ON conversations(owner_user_id, mode, updated_at DESC);
+
+  CREATE OR REPLACE FUNCTION update_conversations_updated_at()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS update_conversations_updated_at_trigger ON conversations;
+  CREATE TRIGGER update_conversations_updated_at_trigger
+  BEFORE UPDATE ON conversations
+  FOR EACH ROW
+  EXECUTE FUNCTION update_conversations_updated_at();
+
+  -- One row per conversation event. Two kinds of rows share this table:
+  --   pi log entries  -- kind in (toolCall, assistant, toolResult), content = the pi
+  --                      entry verbatim, seq = the 0-based contiguous log index AND
+  --                      stream cursor (the orchestrator log projection)
+  --   errors          -- kind = 'error', seq = NULL (so it never consumes a pi-log
+  --                      index), content = { source, message, details } (the parallel
+  --                      error stream the chat UI renders, mirrors the old errors[])
+  -- NULLs are distinct under UNIQUE, so UNIQUE(conversation_id, seq) still guards the
+  -- pi log while permitting many seq=NULL error rows. MAX(seq) and seq-ordered reads
+  -- ignore NULLs, so error rows never leak into the reconstructed pi log.
+  CREATE TABLE IF NOT EXISTS messages (
+    id              BIGSERIAL   PRIMARY KEY,
+    conversation_id INTEGER     NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    seq             INTEGER,
+    kind            TEXT        NOT NULL,
+    pi_id           TEXT,
+    parent_pi_id    TEXT,
+    content         JSONB       NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (conversation_id, seq)
+  );
+  CREATE INDEX IF NOT EXISTS idx_messages_conv_seq ON messages(conversation_id, seq);
+  -- Error reads (kind='error', ordered by arrival) — partial index keeps it cheap.
+  CREATE INDEX IF NOT EXISTS idx_messages_errors ON messages(conversation_id, created_at) WHERE kind = 'error';
+
+  -- Self-heal databases created before errors moved into messages -- idempotent, runs every boot.
+  -- (1) messages.seq used to be NOT NULL -- error rows need seq=NULL, so drop the constraint.
+  -- (2) the dedicated conversation_errors table is gone -- drop it if a prior boot created it.
+  ALTER TABLE messages ALTER COLUMN seq DROP NOT NULL;
+  DROP TABLE IF EXISTS conversation_errors;
+
 `;

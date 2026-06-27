@@ -108,4 +108,17 @@ export class PgliteAdapter implements IDatabaseAdapter {
   async optimize(): Promise<void> {
     // No-op — PGLite is in-process, no WAL checkpoint needed
   }
+
+  // ── LISTEN/NOTIFY (chat v3 streaming wakeup) ──────────────────────────────
+  // PGLite delivers notifications through its single embedded connection. Serialize the LISTEN/
+  // pg_notify statements with every other op (the queued callback fires later, off-queue).
+
+  async notify(channel: string, payload: string): Promise<void> {
+    await this.serialize(() => this.db.query('SELECT pg_notify($1, $2)', [channel, payload]));
+  }
+
+  async listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>> {
+    const unsubscribe = await this.serialize(() => this.db.listen(channel, (p) => onNotify(p ?? '')));
+    return async () => { await this.serialize(() => unsubscribe()); };
+  }
 }

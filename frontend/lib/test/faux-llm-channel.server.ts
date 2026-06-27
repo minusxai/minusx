@@ -104,7 +104,11 @@ export function configureFaux(matches: FauxMatch[]): void {
       lastTool: lastToolName(ctx) ?? null,
       messageCount: ctx.messages?.length ?? 0,
     });
-    const delay = delayByUserMessage.get(userMessage);
+    // Match the delay the same way fauxMatcher matches the response — by substring — because the
+    // LLM-context user text is wrapped (e.g. a leading <CurrentTime> block), so an exact-key lookup
+    // would silently miss and the configured delay would never apply.
+    const delay = delayByUserMessage.get(userMessage)
+      ?? [...delayByUserMessage.entries()].find(([k]) => userMessage.includes(k))?.[1];
     if (delay) await new Promise((r) => setTimeout(r, delay));
     return match(ctx);
   }) as unknown as FauxResponseStep;

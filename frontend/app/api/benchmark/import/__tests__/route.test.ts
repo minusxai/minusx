@@ -1,7 +1,6 @@
 // POST /api/benchmark/import — verifies that an imported orchestrator
-// conversation log is persisted as a v=2 conversation file in the
-// documents DB so it can be opened at /explore/<fileId>?v=2 and continued
-// in the chat UI.
+// conversation log is persisted as a v3 conversation (dedicated tables) in the
+// documents DB so it can be opened at /explore/<id> and continued in the chat UI.
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -19,7 +18,7 @@ import { POST } from '@/app/api/benchmark/import/route';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
-import { FilesAPI } from '@/lib/data/files.server';
+import { getConversation, loadLog } from '@/lib/data/conversations.server';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -49,7 +48,7 @@ describe('POST /api/benchmark/import', () => {
     (getEffectiveUser as unknown as { mockResolvedValue: (v: EffectiveUser) => void }).mockResolvedValue(ADMIN);
   });
 
-  it('creates a v=2 conversation file from an imported orchestrator log', async () => {
+  it('creates a v3 conversation from an imported orchestrator log', async () => {
     const log: ConversationLog = [
       {
         type: 'toolCall',
@@ -67,14 +66,13 @@ describe('POST /api/benchmark/import', () => {
     expect(typeof body.fileId).toBe('number');
     expect(body.fileId).toBeGreaterThan(0);
 
-    // Verify the file is persisted as a v=2 conversation with the log intact.
-    const file = await FilesAPI.loadFile(body.fileId, ADMIN);
-    expect(file.data.type).toBe('conversation');
-    expect((file.data.meta as { version?: number } | null | undefined)?.version).toBe(2);
-    const content = file.data.content as { log?: unknown[] } | null | undefined;
-    expect(Array.isArray(content?.log)).toBe(true);
-    expect(content?.log).toHaveLength(1);
-    const root = content!.log![0] as { type?: string; name?: string };
+    // Verify the v3 conversation is persisted with the log intact (one message row per pi entry).
+    const conv = await getConversation(body.fileId);
+    expect(conv).not.toBeNull();
+    expect(conv!.agent).toBe('BenchmarkAnalystAgent');
+    const savedLog = await loadLog(body.fileId);
+    expect(savedLog).toHaveLength(1);
+    const root = savedLog[0] as { type?: string; name?: string };
     expect(root.type).toBe('toolCall');
     expect(root.name).toBe('BenchmarkAnalystAgent');
   });
@@ -91,8 +89,8 @@ describe('POST /api/benchmark/import', () => {
   });
 
   it('persists the dataset connections on meta.benchmark_connections', async () => {
-    // The conversation file's meta carries the connection configs so that
-    // v=2 chat continuation can wire NodeConnector-backed executors per
+    // The conversation's meta carries the connection configs so that
+    // v3 chat continuation can wire NodeConnector-backed executors per
     // conversation. Without this, ExecuteSQL can't talk to the benchmark's
     // databases ("connector 'X' not loaded").
     const log = [
@@ -113,9 +111,8 @@ describe('POST /api/benchmark/import', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { fileId: number };
 
-    const file = await FilesAPI.loadFile(body.fileId, ADMIN);
-    const meta = file.data.meta as { version?: number; benchmark_connections?: unknown } | null | undefined;
-    expect(meta?.version).toBe(2);
+    const conv = await getConversation(body.fileId);
+    const meta = conv!.meta as { benchmark_connections?: unknown } | null | undefined;
     expect(meta?.benchmark_connections).toEqual(connections);
   });
 

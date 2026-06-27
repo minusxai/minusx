@@ -60,8 +60,10 @@ import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { fauxAssistantMessage, fauxToolCall } from '@/orchestrator/llm/testing';
 import { fauxRegistration as onboardingFaux } from '@/agents/onboarding/onboarding-agents';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
-import { POST as chatPostHandler } from '@/app/api/chat/route';
-import { POST as chatInitHandler } from '@/app/api/chat/init/route';
+import { NextRequest } from 'next/server';
+import { POST as conversationsPostHandler, GET as conversationsListHandler } from '@/app/api/conversations/route';
+import { GET as conversationGetHandler } from '@/app/api/conversations/[id]/route';
+import { POST as conversationTurnsHandler } from '@/app/api/conversations/[id]/turns/route';
 import { POST as filesBatchHandler } from '@/app/api/files/batch/route';
 import { GET as connectionsGetHandler } from '@/app/api/connections/route';
 
@@ -70,24 +72,56 @@ const DOC_MARKDOWN = '# Sales Overview\\n\\nThis warehouse tracks revenue.';
 describe('Onboarding wizard e2e — full wizard, agent runs to completion, writes docs', () => {
   setupTestDb(getTestDbPath('onboarding_wizard_e2e'));
 
-  // Capture the app_state the agent actually receives on the first /api/chat call,
-  // then delegate to the real orchestrator. This makes the e2e ALSO a bug guard:
-  // the captured app_state must contain the empty doc entry EditFile targets.
+  // Capture the app_state the agent actually receives on the v3 turn POST, then delegate to
+  // the real orchestrator. This makes the e2e ALSO a bug guard: the captured app_state must
+  // contain the empty doc entry EditFile targets.
   let capturedAgentAppState: any = null;
-  async function capturingChatHandler(req: any) {
-    try {
-      const body = await req.clone().json();
-      if (capturedAgentAppState === null && body?.agent_args?.app_state) {
-        capturedAgentAppState = body.agent_args.app_state;
-      }
-    } catch { /* ignore */ }
-    return chatPostHandler(req);
+
+  // v3 conversations live in dedicated tables — the listener's IS_TEST path POSTs the turn then
+  // polls GET /:id (no XHR/SSE in jsdom). A catch-all interceptor routes those param-bearing URLs
+  // to the real in-process route handlers (the `interceptors` form rewrites the path to the
+  // pattern, dropping the id, so it can't carry params).
+  async function catchAllApiInterceptor(urlStr: string, init?: RequestInit): Promise<Response | null> {
+    const BASE = 'http://localhost:3000';
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const fullUrl = urlStr.startsWith('http') ? urlStr : `${BASE}${urlStr}`;
+    const wrap = (res: Response, data: unknown) =>
+      ({ ok: res.status < 400, status: res.status, json: async () => data } as Response);
+
+    if (method === 'POST' && /\/api\/conversations\/\d+\/turns/.test(urlStr)) {
+      const id = urlStr.match(/\/api\/conversations\/(\d+)\/turns/)![1];
+      try {
+        const body = init?.body ? JSON.parse(init.body as string) : null;
+        if (capturedAgentAppState === null && body?.agentArgs?.app_state) {
+          capturedAgentAppState = body.agentArgs.app_state;
+        }
+      } catch { /* ignore */ }
+      const req = new NextRequest(fullUrl, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
+      const res = await conversationTurnsHandler(req, { params: Promise.resolve({ id }) } as never);
+      return wrap(res, await res.json());
+    }
+    if (method === 'GET' && /\/api\/conversations\/\d+(\?|$)/.test(urlStr)) {
+      const id = urlStr.match(/\/api\/conversations\/(\d+)/)![1];
+      const req = new NextRequest(fullUrl, { method: 'GET', headers: init?.headers as HeadersInit });
+      const res = await conversationGetHandler(req, { params: Promise.resolve({ id }) } as never);
+      return wrap(res, await res.json());
+    }
+    if (method === 'POST' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+      const req = new NextRequest(fullUrl, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
+      const res = await conversationsPostHandler(req);
+      return wrap(res, await res.json());
+    }
+    if (method === 'GET' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+      const req = new NextRequest(fullUrl, { method: 'GET', headers: init?.headers as HeadersInit });
+      const res = await conversationsListHandler(req);
+      return wrap(res, await res.json());
+    }
+    return null;
   }
 
   const mockFetch = setupMockFetch({
+    additionalInterceptors: [catchAllApiInterceptor],
     interceptors: [
-      { includesUrl: ['localhost:3000/api/chat/init'], startsWithUrl: ['/api/chat/init'], handler: chatInitHandler },
-      { includesUrl: ['localhost:3000/api/chat'], startsWithUrl: ['/api/chat'], handler: capturingChatHandler },
       { includesUrl: ['localhost:3000/api/files/batch'], startsWithUrl: ['/api/files/batch'], handler: filesBatchHandler },
       { includesUrl: ['localhost:3000/api/connections'], startsWithUrl: ['/api/connections'], handler: connectionsGetHandler },
     ],
@@ -157,7 +191,7 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     // Step: context (tables → docs). Advancing auto-triggers the onboarding agent.
     await userEvent.click(await screen.findByLabelText('Continue to documentation'));
 
-    // The wizard creates a real conversation via /api/chat/init, then runs it.
+    // The wizard creates a real v3 conversation via /api/conversations, then runs it.
     const convId = await waitFor(() => {
       const id = selectActiveConversation(testStore.getState() as RootState);
       expect(id).toBeTruthy();
@@ -293,9 +327,9 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     }, { timeout: 5000 });
     const realConvId = await waitForConversationFinished(() => testStore.getState() as RootState, convId);
 
-    const { DocumentDB } = await import('@/lib/database/documents-db');
-    const convDoc = await DocumentDB.getById(realConvId);
-    const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
+    // v3: errors live in the conversation error stream (kind='error' rows in messages, mirrored from frontend-tool results).
+    const { loadErrors } = await import('@/lib/data/conversations.server');
+    const convErrors = await loadErrors(realConvId);
 
     // The guard rejection is logged as a frontend-tool error.
     const guardErrors = convErrors.filter((e) =>

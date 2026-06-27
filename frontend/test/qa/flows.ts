@@ -489,6 +489,13 @@ export async function assertUserMessagePersisted(
   await expect
     .poll(
       async () => {
+        // v3 conversations are dedicated rows (not files) — read the pi log from /api/conversations.
+        const v3 = await request.get(`/api/conversations/${conversationId}?mode=${QA_MODE}`);
+        if (v3.ok()) {
+          const msgs: Array<{ content?: unknown }> = (await v3.json())?.data?.messages ?? [];
+          return msgs.some((m) => userMessageOf(m?.content)?.includes(needle) ?? false);
+        }
+        // v1/v2 file-conversations: the pi/legacy log lives on the file.
         const res = await request.get(`/api/files/${conversationId}?mode=${QA_MODE}`);
         if (!res.ok()) return false;
         const log: unknown[] = (await res.json())?.data?.content?.log ?? [];

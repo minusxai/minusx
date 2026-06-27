@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import {
-  appendLogToConversation,
-  createNewConversation,
-} from '@/lib/conversations';
+import { createConversation, appendMessages } from '@/lib/data/conversations.server';
+import { truncateMessageForName } from '@/lib/conversations-utils';
 import { handleApiError } from '@/lib/api/api-responses';
 import type { ConversationLog } from '@/orchestrator/types';
-import type { ConversationLogEntry } from '@/lib/types';
 import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connection-source';
 
 /**
  * POST /api/benchmark/import
  *
- * Persist a benchmark run's orchestrator conversation log as a v=2 conversation
- * file in the documents DB so it can be opened at `/explore/<fileId>?v=2`
- * and continued in the chat UI.
+ * Persist a benchmark run's orchestrator conversation log as a v3 conversation
+ * (dedicated `conversations` + `messages` tables) so it can be opened at
+ * `/explore/<id>` and continued in the chat UI.
  *
  * Body shape:
  *   {
@@ -24,18 +21,18 @@ import type { BenchmarkConnectionEntry } from '@/agents/benchmark-analyst/connec
  *   }
  *
  * The optional `connections` array (the same JSON the runner reads from
- * `<dataset>_connections.json`) is persisted on the conversation file's
- * `meta.benchmark_connections` so v=2 chat continuation can wire per-
+ * `<dataset>_connections.json`) is persisted on the conversation's
+ * `meta.benchmark_connections` so v3 chat continuation can wire per-
  * conversation NodeConnector-backed executors. Without it, SQL queries
  * fail with "connector 'X' not loaded".
  *
  * Security note: connection configs may contain credentials. The conversation
- * file lives in the same documents DB as connection documents (which already
+ * lives in the same documents DB as connection documents (which already
  * hold credentials), so storing here doesn't widen the access surface; it
- * does mean the credentials travel inside the file's `meta` field over
+ * does mean the credentials travel inside the `meta` field over
  * authenticated API responses, same as connection docs.
  *
- * Returns `{ fileId, name }`.
+ * Returns `{ fileId, name }` (`fileId` is the v3 conversation id).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -69,28 +66,27 @@ export async function POST(request: NextRequest) {
           ? root.arguments.userMessage
           : undefined;
 
-    const extraMeta: Record<string, unknown> = {};
+    const meta: Record<string, unknown> = {};
+    if (firstMessage) meta.firstMessage = firstMessage;
     if (Array.isArray(connections)) {
-      extraMeta.benchmark_connections = connections as BenchmarkConnectionEntry[];
+      meta.benchmark_connections = connections as BenchmarkConnectionEntry[];
     }
 
-    const { fileId, name } = await createNewConversation(user, firstMessage, {
-      version: 2,
-      ...(Object.keys(extraMeta).length > 0 ? { extraMeta } : {}),
+    // v3: a dedicated conversation + its pi log as message rows. The benchmark root agent + the
+    // per-conversation connections are recovered at continuation time from the log + meta.
+    const conv = await createConversation({
+      ownerUserId: user.userId,
+      mode: user.mode,
+      agent: 'BenchmarkAnalystAgent',
+      title: firstMessage ? truncateMessageForName(firstMessage) : undefined,
+      meta,
     });
 
     if (log.length > 0) {
-      // appendLogToConversation accepts any JSON-array log; the v=2 path
-      // already uses it for orchestrator entries (chat-orchestration-v2.server.ts).
-      await appendLogToConversation(
-        fileId,
-        log as unknown as ConversationLogEntry[],
-        0,
-        user,
-      );
+      await appendMessages(conv.id, log as ConversationLog, 0);
     }
 
-    return NextResponse.json({ fileId, name });
+    return NextResponse.json({ fileId: conv.id, name: conv.title });
   } catch (error) {
     return handleApiError(error);
   }

@@ -1,8 +1,8 @@
-// Phase 3 — the E2E faux LLM channel driving the REAL /api/chat route in-process
+// The E2E faux LLM channel driving the REAL v3 turn runner in-process
 // (Tests/QA/Evals Arch V2). Proves: DTO → matcher install, the matcher drives the
 // real orchestrator's reply, requests are recorded, and reset clears them.
 // (The HTTP routes are thin E2E-gated wrappers over these channel functions;
-// they're exercised for real by Playwright in Phase 4.)
+// they're exercised for real by Playwright.)
 
 vi.mock('@/lib/database/db-config', () => ({
   PGLITE_DATA_DIR: undefined,
@@ -12,7 +12,8 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
-import { POST as chatPostHandler } from '@/app/api/chat/route';
+import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
+import { createConversation, loadLog } from '@/lib/data/conversations.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import {
@@ -21,28 +22,43 @@ import {
   resetFaux,
   setFauxTargets,
 } from '@/lib/test/faux-llm-channel.server';
-import { NextRequest } from 'next/server';
+import type { ChatRequest } from '@/lib/chat-orchestration';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const TEST_DB_PATH = getTestDbPath('faux_channel');
+const USER = { userId: 1, email: 'test@example.com', name: 'Test', role: 'admin', home_folder: '/org', mode: 'org' } as EffectiveUser;
 
-interface ChatResponse {
-  completed_tool_calls: Array<{ content: string; function: { name: string } }>;
-  error?: string;
+const turnBody = (userMessage: string): ChatRequest =>
+  ({ user_message: userMessage, agent: 'WebAnalystAgent', agent_args: {} } as unknown as ChatRequest);
+
+async function runTurn(userMessage: string) {
+  const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+  const result = await runConversationTurn(conv.id, USER, turnBody(userMessage));
+  const log = await loadLog(conv.id);
+  return { result, log };
 }
 
-function chatRequest(userMessage: string): NextRequest {
-  return new NextRequest('http://localhost/api/chat?v=2', {
-    method: 'POST',
-    body: JSON.stringify({ user_message: userMessage }),
-    headers: { 'Content-Type': 'application/json' },
-  });
+/** Extract all assistant text from a pi log. */
+function assistantText(log: unknown[]): string {
+  const parts: string[] = [];
+  for (const raw of log) {
+    const e = raw as { role?: string; content?: unknown };
+    if (e.role !== 'assistant') continue;
+    if (typeof e.content === 'string') parts.push(e.content);
+    else if (Array.isArray(e.content)) {
+      for (const b of e.content as Array<{ type?: string; text?: string }>) {
+        if (b?.type === 'text' && typeof b.text === 'string') parts.push(b.text);
+      }
+    }
+  }
+  return parts.join('\n');
 }
 
-describe('E2E faux LLM channel → real /api/chat route', () => {
+describe('E2E faux LLM channel → real v3 turn runner', () => {
   setupTestDb(TEST_DB_PATH);
 
   beforeEach(() => {
-    setFauxTargets([webAnalystFaux]); // isolate to the chat route's agent
+    setFauxTargets([webAnalystFaux]); // isolate to the chat agent
     resetFaux();
   });
 
@@ -50,17 +66,11 @@ describe('E2E faux LLM channel → real /api/chat route', () => {
     const userMessage = 'What is the latest revenue';
     configureFauxFromDTO([{ userMessage, response: { kind: 'text', text: 'Faux says hi.' } }]);
 
-    const res = await chatPostHandler(chatRequest(userMessage));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as ChatResponse;
-    expect(body.error).toBeUndefined();
+    const { result, log } = await runTurn(userMessage);
+    expect(result.error).toBeUndefined();
 
     // The matcher (not a sequential queue) produced the reply.
-    const ttu = body.completed_tool_calls.find((c) => c.function.name === 'TalkToUser');
-    expect(ttu).toBeDefined();
-    expect(JSON.parse(String(ttu!.content))).toMatchObject({
-      content_blocks: [{ type: 'text', text: 'Faux says hi.' }],
-    });
+    expect(assistantText(log)).toContain('Faux says hi.');
 
     // The request the model was sent was recorded (assert-what-it-received).
     const received = getReceived();
@@ -75,12 +85,10 @@ describe('E2E faux LLM channel → real /api/chat route', () => {
   it('fails loud when the chat sends an unregistered message (matcher throws → orchestrator errors)', async () => {
     configureFauxFromDTO([{ userMessage: 'a totally different prompt', response: { kind: 'text', text: 'x' } }]);
 
-    const res = await chatPostHandler(chatRequest('this prompt was never registered'));
-    const body = (await res.json()) as ChatResponse;
+    const { result, log } = await runTurn('this prompt was never registered');
 
     // No matching faux response → the run surfaces an error rather than a reply.
-    const repliedNormally = body.completed_tool_calls?.some((c) => c.function.name === 'TalkToUser');
-    expect(body.error !== undefined || !repliedNormally).toBe(true);
+    expect(result.runStatus === 'error' || assistantText(log).length === 0).toBe(true);
 
     // The unexpected call was still recorded.
     expect(getReceived().some((r) => r.userMessage.includes('never registered'))).toBe(true);

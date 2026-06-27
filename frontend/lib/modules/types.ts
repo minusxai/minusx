@@ -30,6 +30,10 @@ export interface IFileSystemDBModule {
   close?(): Promise<void>;
   /** Close and nullify the adapter singleton so the next exec() gets a fresh instance. Test isolation only. */
   reset?(): Promise<void>;
+  /** Emit a Postgres NOTIFY (chat v3 streaming wakeup). Payload is ~8KB-capped — carry pointers. */
+  notify?(channel: string, payload: string): Promise<void>;
+  /** Subscribe to NOTIFYs on a channel; returns an unsubscribe. Channel must be a safe identifier. */
+  listen?(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>>;
 }
 
 export interface RegisterInput {

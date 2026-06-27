@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation } from '@/store/chatSlice';
-import { parseLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
-import { FilesAPI } from '@/lib/data/files';
-import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
+import { parsePiConversation } from '@/lib/conversations-utils';
+import { ConversationsAPI } from '@/lib/data/conversations';
+import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -45,49 +45,43 @@ export function useConversation(conversationId?: number) {
       setAttempted(conversationId);
 
       try {
-        // Fetch file from database via FilesAPI
-        const result = await FilesAPI.loadFile(conversationId);
-
-        if (!result.data || !result.data.content) {
-          throw new Error('Conversation content is missing');
+        // Conversations are v3-only (dedicated rows). A 404 means it doesn't exist (or is an
+        // un-migrated legacy file — run the backfill to surface it); we show a clean not-found,
+        // never fall back to file-conversations.
+        let v3detail = null;
+        try { v3detail = await ConversationsAPI.get(conversationId); } catch { /* not found */ }
+        if (!v3detail) {
+          throw new Error(`Conversation ${conversationId} not found`);
         }
 
-        const content = result.data.content as ConversationFileContent;
-
-        // File version from meta: 2 = v2 (JS engine), absent = legacy v1 (→ 1).
-        // Drives the "legacy chat can't be continued" UI (isLegacyChatInV2).
-        const version = (result.data.meta as { version?: number } | null | undefined)?.version ?? 1;
-
-        // v2 conversations are served as the orchestrator pi ConversationLog (no read-path
-        // down-translation); parse them pi-natively. v1 stays on the legacy task-log parse.
-        let messages: any[];
-        let agent: string;
-        let agent_args: Record<string, any>;
-        if (version >= 2) {
-          ({ messages, agent, agent_args } = parsePiConversation(content.log as unknown as ConversationLog));
-        } else {
-          messages = parseLogToMessages(content.log);
-          const firstTask = content.log.find((entry): entry is TaskLogEntry => entry._type === 'task');
-          agent = firstTask?.agent || 'DefaultAgent';
-          agent_args = (firstTask?.args as Record<string, any>) || {};
-        }
-
-        // Dispatch to Redux for caching
+        const piLog = v3detail.messages.map((m) => m.content) as unknown as ConversationLog;
+        const errors = v3detail.errors.map((e) => ({
+          source: e.source, message: e.message,
+          timestamp: Date.parse(e.createdAt) || Date.now(),
+          ...(e.details ? { details: e.details } : {}),
+          ...(e.parentPiId ? { parent_id: e.parentPiId } : {}),
+        }));
+        const { messages, agent, agent_args } = parsePiConversation(piLog, errors as never);
+        const paused = v3detail.conversation.runStatus === 'paused';
+        const pending = paused ? derivePendingToolCalls(piLog) : [];
         dispatch(loadConversation({
           conversation: {
-            _id: crypto.randomUUID(),  // Generate stable internal ID
+            _id: crypto.randomUUID(),
             conversationID: conversationId,
-            log_index: content.log.length,
+            log_index: piLog.length,
             messages,
-            executionState: 'FINISHED',
-            pending_tool_calls: [],
+            executionState: paused ? 'EXECUTING' : 'FINISHED',
+            pending_tool_calls: pending.map((p) => ({
+              toolCall: { id: p.id, type: 'function' as const, function: { name: p.name, arguments: p.arguments } },
+              result: undefined,
+            })),
             streamedCompletedToolCalls: [],
             streamedThinking: '',
             agent,
             agent_args,
-            version,
+            version: 3,
           },
-          setAsActive: false  // Don't activate when loading from URL
+          setAsActive: false,
         }));
       } catch (err: any) {
         console.error('Failed to load conversation:', err);

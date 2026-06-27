@@ -33,13 +33,8 @@ export async function register() {
     // Best-effort: the handler swallows its own errors.
     // eslint-disable-next-line no-restricted-syntax
     const { logTaggedRejection } = await import('./lib/api/unhandled-rejection-logger');
-    const systemUser = {
-      userId: -1, email: 'system@minusx', name: 'System',
-      role: 'admin', home_folder: '/org', mode: 'org',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
     process.on('unhandledRejection', (reason) => {
-      void logTaggedRejection(reason, systemUser);
+      void logTaggedRejection(reason);
     });
 
     // Boot-warm the heavy chat runtime so the FIRST chat request doesn't pay the

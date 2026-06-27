@@ -23,9 +23,22 @@ export function serializePgParams(params: unknown[]): unknown[] {
  *
  * IMPORTANT: This is the ONLY file that should import pg
  */
+/** Channel names go straight into `LISTEN` (not parameterizable) — allow only safe identifiers. */
+function assertSafeChannel(channel: string): void {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(channel)) {
+    throw new Error(`unsafe NOTIFY channel name: ${channel}`);
+  }
+}
+
 export class PostgresAdapter implements IDatabaseAdapter {
   private pool: Pool | null = null;
   private connectionString: string;
+
+  // A single dedicated client holds every LISTEN for this process and fans NOTIFYs out in-memory to
+  // per-channel callback sets. One connection (not one per subscriber) keeps the pool free.
+  private listenClient: PoolClient | null = null;
+  private listenSetup: Promise<PoolClient> | null = null;
+  private readonly channelHandlers = new Map<string, Set<(payload: string) => void>>();
 
   constructor(connectionString?: string) {
     this.connectionString =
@@ -163,5 +176,57 @@ export class PostgresAdapter implements IDatabaseAdapter {
   async optimize(): Promise<void> {
     // PostgreSQL auto-vacuum handles maintenance
     // Future: Could run VACUUM ANALYZE for manual optimization
+  }
+
+  // ── LISTEN/NOTIFY (chat v3 streaming wakeup) ──────────────────────────────
+
+  async notify(channel: string, payload: string): Promise<void> {
+    assertSafeChannel(channel);
+    // pg_notify takes the channel as a value (safe) — no identifier interpolation needed.
+    await this.getPool().query('SELECT pg_notify($1, $2)', [channel, payload]);
+  }
+
+  /** Lazily acquire the shared listener client and wire its notification dispatch. */
+  private async getListenClient(): Promise<PoolClient> {
+    if (this.listenClient) return this.listenClient;
+    if (this.listenSetup) return this.listenSetup;
+    this.listenSetup = (async () => {
+      const client = await this.getPool().connect();
+      client.on('notification', (msg) => {
+        const handlers = this.channelHandlers.get(msg.channel);
+        if (handlers) for (const h of handlers) h(msg.payload ?? '');
+      });
+      // On connection loss, drop it so the next listen() rebuilds + re-LISTENs every channel.
+      const reset = () => {
+        if (this.listenClient === client) { this.listenClient = null; this.listenSetup = null; }
+      };
+      client.on('error', reset);
+      client.on('end', reset);
+      this.listenClient = client;
+      return client;
+    })();
+    return this.listenSetup;
+  }
+
+  async listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>> {
+    assertSafeChannel(channel);
+    const client = await this.getListenClient();
+    let handlers = this.channelHandlers.get(channel);
+    if (!handlers) {
+      handlers = new Set();
+      this.channelHandlers.set(channel, handlers);
+      await client.query(`LISTEN "${channel}"`);
+    }
+    handlers.add(onNotify);
+
+    return async () => {
+      const set = this.channelHandlers.get(channel);
+      if (!set) return;
+      set.delete(onNotify);
+      if (set.size === 0) {
+        this.channelHandlers.delete(channel);
+        try { await this.listenClient?.query(`UNLISTEN "${channel}"`); } catch { /* connection gone */ }
+      }
+    };
   }
 }

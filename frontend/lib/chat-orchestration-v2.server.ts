@@ -1,20 +1,17 @@
-// V=2 chat orchestration — server-side bridge between the legacy /api/chat
-// + /api/chat/stream routes and the orchestrator. Translates inputs
-// (legacy ChatRequest → orchestrator message/resume) and outputs (orchestrator log +
-// stream events → legacy ChatResponse + streaming_event SSE frames) so the
-// frontend stays unchanged.
-//
-// The data-shape boundary lives entirely in this file plus
-// `lib/chat-translator/index.ts`. No frontend code knows about the orchestrator log shape.
+// Shared chat orchestration core — builds the orchestrator from a saved pi log
+// (`setupOrchestration`), records LLM calls (`recordLlmCalls`), estimates next-turn
+// context size (`estimateNextChatContextV2`), and exposes the tool/agent registries
+// (`V2_REGISTRABLES` / `V2_HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
+// (`lib/chat/conversation-turn.server.ts`) and the headless runner
+// (`lib/chat/run-orchestration-v2.server.ts`). Translates a legacy ChatRequest into an
+// orchestrator message/resume via `lib/chat-translator`.
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
-  PendingToolCall as PiPendingToolCall,
   RegistrableClass,
-  StreamEvent,
 } from '@/orchestrator/types';
 import {
   WebAnalystAgent,
@@ -53,34 +50,25 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { getPageType } from '@/agents/analyst/skills';
 import { normalizeAttachments } from '@/lib/chat/attachments.server';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
-import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import {
-  piLogToLegacy,
-  piStreamEventToLegacy,
   legacyToolResultToPi,
 } from '@/lib/chat-translator';
-import { extractDebugMessages } from '@/lib/conversations-utils';
-import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
+import { getConversation as getV3Conversation, loadLog as loadV3Log } from '@/lib/data/conversations.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
 import type { AssistantMessage } from '@/orchestrator/llm';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
-import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { isV2ConversationFile, legacyLogToPi } from '@/lib/chat-translator';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type {
   ChatRequest,
   CompletedToolCallResult,
 } from '@/lib/chat-orchestration';
 import { estimateContextSize, type ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
-import type {
-  ToolCall as LegacyToolCall,
-  ConversationLogEntry as LegacyLogEntry,
-  ConversationFileContent,
-} from '@/lib/types';
-import type { DebugMessage } from '@/store/chatSlice';
+
+
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
 import type { MXAgent } from '@/orchestrator/types';
 
@@ -227,72 +215,13 @@ export const V2_HEADLESS_REGISTRABLES: RegistrableClass[] = withSwaps(
 );
 
 /** Subset of legacy ChatResponse the v=2 path produces. */
-export interface V2LegacyChatResponse {
-  conversationID: number;
-  log_index: number;
-  pending_tool_calls: LegacyToolCall[];
-  completed_tool_calls: CompletedToolCallResult[];
-  debug: DebugMessage[];
-  error?: string;
-}
-
-/** Streaming SSE wire shape (mirrors what /api/chat/stream emits today). */
-export type V2LegacyStreamingEvent =
-  | { wire: 'streaming_event'; data: ReturnType<typeof piStreamEventToLegacy> }
-  | { wire: 'done'; data: V2LegacyChatResponse & { type: 'done'; timestamp: string } }
-  | { wire: 'error'; data: { type: 'error'; error: string; timestamp: string } };
-
-interface OrchestrationSetup {
+export interface OrchestrationSetup {
   conversationId: number;
   expectedLogIndex: number;
   orchestrator: Orchestrator;
   rawStream: ReturnType<Orchestrator['run']> | null;
   rootAgent?: MXAgent;
   fatalError?: string;
-}
-
-/**
- * Validates v=2 strict-mode invariant: URL `?v=2` must match the
- * conversation file's `meta.version`. Returns null if valid; an error
- * message string if mismatched. Caller responds 400 with the message.
- */
-export async function validateV2Mode(
-  fileId: number,
-  user: EffectiveUser,
-  urlIsV2: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const file = await FilesAPI.loadFile(fileId, user);
-  const fileIsV2 = isV2ConversationFile(file.data);
-  if (urlIsV2 === fileIsV2) return { ok: true };
-  return {
-    ok: false,
-    error: urlIsV2
-      ? 'cannot continue v=1 conversation in v=2 mode'
-      : 'cannot continue v=2 conversation in v=1 mode',
-  };
-}
-
-/**
- * Fork a v1 (legacy) conversation into a fresh v2 conversation so it can be
- * continued in v2 mode. The original v1 file is left untouched (zero data
- * loss); the new file's `content.log` is seeded from the v1 log via
- * `legacyLogToPi` and tagged `meta.version: 2` + `meta.forkedFrom`. Returns the
- * new conversation's file id. The continue turn then runs against it normally
- * (setupOrchestration appends after the seeded log).
- */
-export async function forkV1ConversationToV2(v1FileId: number, user: EffectiveUser): Promise<number> {
-  const file = await FilesAPI.loadFile(v1FileId, user);
-  const content = file.data.content as { metadata?: { name?: string }; log?: unknown } | null;
-  const legacyLog = (Array.isArray(content?.log) ? content!.log : []) as LegacyLogEntry[];
-  const seededLog = legacyLogToPi(legacyLog);
-  const firstMessage =
-    (file.data.meta as { firstMessage?: string } | null)?.firstMessage ?? content?.metadata?.name ?? undefined;
-  const created = await createNewConversation(user, firstMessage, {
-    version: 2,
-    extraMeta: { forkedFrom: v1FileId },
-    initialLog: seededLog as unknown[],
-  });
-  return created.fileId;
 }
 
 /**
@@ -361,16 +290,16 @@ const ROOT_AGENT_BY_NAME = immutableMap<string, RootAgentCtor>([
   ['OnboardingDashboardAgent', OnboardingDashboardAgent],
 ]);
 
-async function setupOrchestration(
+export async function setupOrchestration(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,
-  options?: { preview?: boolean },
+  options: { preview?: boolean; savedLog: ConversationLog; fileMeta?: Record<string, unknown> | null },
 ): Promise<OrchestrationSetup> {
-  const file = await FilesAPI.loadFile(conversationId, user);
-  const content = file.data.content as unknown as ConversationFileContent | undefined;
-  // Orchestrator log lives at content.log (we persist orchestrator log shape on disk).
-  const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
+  // Conversations are v3-only: callers inject the saved pi log from the `messages` rows via
+  // options.savedLog so this whole agent/context build is reused without any conversation FILE.
+  const savedLog: ConversationLog = options.savedLog;
+  const fileMeta: Record<string, unknown> | null = options.fileMeta ?? null;
   const expectedLogIndex = savedLog.length;
 
   const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
@@ -501,7 +430,6 @@ async function setupOrchestration(
       // populated here (with full config, not just metadata).
       const baseBenchCtx = buildBenchmarkContextFromSavedLog(savedLog);
       const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
-      const fileMeta = (file.data as { meta?: Record<string, unknown> | null }).meta ?? null;
       const persistedConnections = fileMeta?.benchmark_connections;
       const entries: BenchmarkConnectionEntry[] = Array.isArray(persistedConnections)
         ? (persistedConnections as BenchmarkConnectionEntry[])
@@ -578,7 +506,15 @@ export async function estimateNextChatContextV2(
     completed_tool_calls: undefined,
     resume: undefined,
   };
-  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, { preview: true });
+  // Conversations live in dedicated tables (v3-only) — feed the log from rows.
+  const v3 = await getV3Conversation(conversationId);
+  if (!v3) throw new Error(`Conversation ${conversationId} not found`);
+  const savedLog = await loadV3Log(conversationId);
+  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, {
+    preview: true,
+    savedLog,
+    fileMeta: v3.meta ?? null,
+  });
   if (setup.fatalError) {
     throw new Error(setup.fatalError);
   }
@@ -590,21 +526,6 @@ export async function estimateNextChatContextV2(
 }
 
 /**
- * Pull the first user message from a orchestrator log diff. Used to rename a
- * fresh v=2 conversation file from "New Conversation" → first message
- * preview. Returns null if no root invocation present.
- */
-function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
-  for (const entry of piDiff) {
-    const e = entry as { type?: string; parent_id?: string | null; arguments?: { userMessage?: unknown } };
-    if (e.type === 'toolCall' && e.parent_id === null && typeof e.arguments?.userMessage === 'string') {
-      return e.arguments.userMessage;
-    }
-  }
-  return null;
-}
-
-/**
  * Record this turn's LLM calls out-of-band, from the turn's new log entries:
  * write per-call stats to `llm_call_events` and fill the response into the
  * `llm_logs` row whose request was already written when the call was made
@@ -612,7 +533,7 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
  * best-effort central stats forward. The call id + duration are the ones the
  * engine already stamps onto each message. Best-effort.
  */
-async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
+export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};
@@ -686,344 +607,5 @@ async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user
     });
   } catch (e) {
     console.error('[v2/chat] failed to record LLM calls:', e);
-  }
-}
-
-/** Persist the new entries and build the legacy ChatResponse. */
-async function persistAndBuildLegacyResponse(
-  conversationId: number,
-  expectedLogIndex: number,
-  orch: Orchestrator,
-  user: EffectiveUser,
-  runError: string | undefined,
-): Promise<V2LegacyChatResponse> {
-  const fullPiLog = orch.log;
-  const piDiff: PiLogEntry[] = fullPiLog.slice(expectedLogIndex);
-
-  // Persist orchestrator entries via the legacy append (it works for any JSON-array
-  // log; the orchestrator entries are valid JSON). Forks if the log length doesn't
-  // match expected, mirroring legacy semantics — and `meta.version` is
-  // preserved across the fork (see `appendLogToConversation`).
-  let finalConversationId = conversationId;
-  if (piDiff.length > 0) {
-    const appendResult = await appendLogToConversation(
-      conversationId,
-      piDiff as unknown as LegacyLogEntry[],
-      expectedLogIndex,
-      user,
-    );
-    finalConversationId = appendResult.conversationID;
-
-    // V=2-specific rename on the first turn — the legacy rename inside
-    // `appendLogToConversation` looks for `_type:'task'` entries and won't
-    // find any in orchestrator diffs. Pull the user message off the root
-    // `AgentInvocation` and update name + path explicitly.
-    if (expectedLogIndex === 0) {
-      const firstMsg = firstUserMessageFromPiDiff(piDiff);
-      if (firstMsg) {
-        const displayName = truncateMessageForName(firstMsg);
-        const userId = user.userId?.toString() || user.email;
-        const newPath = resolvePath(
-          user.mode,
-          `/logs/conversations/${userId}/${Date.now()}-${slugify(firstMsg)}.chat.json`,
-        );
-        await FilesAPI.updateNamePath(finalConversationId, displayName, newPath, user);
-      }
-    }
-  }
-
-  // Persist structured error entries alongside the pi-ai log so failures survive
-  // page reload and render as distinct ErrorMessage rows in the UI.
-  // Best-effort: a failure here must NOT crash the response.
-  //   (a) `runError` — hard run failure (LLM call threw, agent.run() threw, etc.).
-  //   (b) `toolResult` entries with `isError:true` — server-side tool errors
-  //       (unknown tool / bad params / server-tool throw). The toolResult stays
-  //       in the pi-ai log so the LLM can recover; the mirrored entry is for
-  //       UI visibility only and pi-ai never sees `errors[]`.
-  try {
-    if (runError) {
-      await appendErrorToConversation(
-        finalConversationId,
-        { _type: 'error', source: 'llm', message: runError, timestamp: Date.now() },
-        user,
-      );
-    }
-    for (const rawEntry of piDiff) {
-      const entry = rawEntry as unknown as Record<string, unknown>;
-      if (entry?.role !== 'toolResult') continue;
-
-      const content = entry.content;
-      const text = Array.isArray(content)
-        ? (content as Array<{ type?: string; text?: string }>)
-            .filter((c) => c?.type === 'text' && typeof c.text === 'string')
-            .map((c) => c.text)
-            .join('\n')
-        : String(content ?? '');
-
-      // Classify (check `{success:false}` content FIRST — `legacyToolResultToPi`
-      // sets `isError:true` whenever `details.success===false`, so frontend-tool
-      // errors arrive with BOTH flags. Order matters here; flipping it would
-      // misclassify every frontend-tool error as 'server-tool'.):
-      //   - `content.success===false` → frontend-tool error (the bridge sends back
-      //                              `{success:false, error}` from a failed
-      //                              frontend-tool handler — see chatListener.runOne).
-      //   - `isError:true` only       → server-tool error (unknown tool / bad params
-      //                              / server-tool throw — set by the orchestrator).
-      let source: 'server-tool' | 'frontend-tool' | null = null;
-      let message = text;
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === 'object' && (parsed as { success?: unknown }).success === false) {
-          source = 'frontend-tool';
-          const err = (parsed as { error?: unknown }).error;
-          if (typeof err === 'string') message = err;
-        }
-      } catch { /* not JSON-shaped — fine, treat as not-a-frontend-tool-error */ }
-      if (!source && entry.isError === true) {
-        source = 'server-tool';
-      }
-      if (!source) continue;
-
-      await appendErrorToConversation(
-        finalConversationId,
-        {
-          _type: 'error',
-          source,
-          message,
-          timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : Date.now(),
-          parent_id: typeof entry.parent_id === 'string' ? entry.parent_id : undefined,
-          details: {
-            tool_name: typeof entry.toolName === 'string' ? entry.toolName : undefined,
-            tool_call_id: typeof entry.toolCallId === 'string' ? entry.toolCallId : undefined,
-          },
-        },
-        user,
-      );
-    }
-  } catch (e) {
-    console.error('[v2/chat] failed to append error log entry:', e);
-  }
-
-  // Record LLM usage (stats → llm_call_events) and raw pi-format request/
-  // response blobs (llm_logs, local only); awaited so the rows persist before
-  // the handler returns. Also forwards stats centrally (best-effort).
-  await recordLlmCalls(piDiff, finalConversationId, user);
-
-  // Translate the FULL log to legacy shape so completed_tool_calls / debug
-  // / log_index reflect the legacy view, then slice to the new diff for
-  // the response.
-  const legacyFullLog = piLogToLegacy(fullPiLog);
-  const completedToolCalls: CompletedToolCallResult[] = legacyFullLog
-    .filter((e) => e._type === 'task_result')
-    .map((e) => {
-      const r = e as Extract<LegacyLogEntry, { _type: 'task_result' }>;
-      const matchingTask = legacyFullLog.find(
-        (t) => t._type === 'task' && (t as { unique_id?: string }).unique_id === r._task_unique_id,
-      ) as Extract<LegacyLogEntry, { _type: 'task' }> | undefined;
-      return {
-        role: 'tool' as const,
-        tool_call_id: r._task_unique_id,
-        content: r.result,
-        run_id: matchingTask?._run_id ?? 'run',
-        function: {
-          name: matchingTask?.agent ?? 'Unknown',
-          arguments: (matchingTask?.args ?? {}) as Record<string, unknown>,
-        },
-        created_at: r.created_at,
-        ...(r.details ? { details: r.details } : {}),
-      };
-    });
-
-  // Debug is APPENDED to the conversation by the client each turn, so it must be THIS turn's
-  // entries only — building it from the full log re-sent every prior turn's debug and the client
-  // appended them again, showing duplicate "Debug Info" blocks. Use the per-turn diff.
-  const debug: DebugMessage[] = extractDebugMessages(piLogToLegacy(piDiff));
-
-  // Pending tool calls: orchestrator's pending list (frontend tools that
-  // need bridging) — translate per-call to legacy ToolCall shape.
-  const orchPending: PiPendingToolCall[] = orch.getPendingToolCalls();
-  const pending_tool_calls: LegacyToolCall[] = orchPending.map((p) => ({
-    id: p.id,
-    type: 'function' as const,
-    function: {
-      name: p.name,
-      arguments: p.parameters as Record<string, unknown>,
-    },
-  }));
-
-  return {
-    conversationID: finalConversationId,
-    log_index: legacyFullLog.length,
-    pending_tool_calls,
-    completed_tool_calls: completedToolCalls,
-    debug,
-    ...(runError ? { error: runError } : {}),
-  };
-}
-
-/**
- * Drain-and-snapshot variant — used by `POST /api/chat` (non-streaming).
- */
-export async function runChatTurnV2(
-  body: ChatRequest,
-  user: EffectiveUser,
-  conversationId: number,
-): Promise<V2LegacyChatResponse> {
-  const setup = await setupOrchestration(body, user, conversationId);
-  if (setup.fatalError) {
-    return {
-      conversationID: conversationId,
-      log_index: setup.expectedLogIndex,
-      pending_tool_calls: [],
-      completed_tool_calls: [],
-      debug: [],
-      error: setup.fatalError,
-    };
-  }
-  let runError: string | undefined;
-  try {
-    if (setup.rawStream) {
-      for await (const ev of setup.rawStream) {
-        const evType = (ev as { type?: string }).type;
-        if (evType === 'error') {
-          const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
-          if (errMsg && !runError) {
-            runError = errMsg;
-            console.error('[v2/chat] orchestrator error event:', errMsg);
-          }
-        }
-      }
-      await setup.rawStream.result();
-    }
-  } catch (err) {
-    console.error('[v2/chat] orchestrator run threw:', err);
-    runError = err instanceof Error ? err.message : String(err);
-  }
-  return persistAndBuildLegacyResponse(
-    setup.conversationId,
-    setup.expectedLogIndex,
-    setup.orchestrator,
-    user,
-    runError,
-  );
-}
-
-/**
- * Streaming variant — yields legacy SSE wire frames. Used by
- * `POST /api/chat/stream`.
- *
- * Frame types emitted:
- *   - `streaming_event` for each orchestrator stream event that maps to a legacy
- *     event type (text_delta → StreamedContent, etc.).
- *   - `done` once at the end with the same payload `runChatTurnV2` returns.
- *   - `error` if orchestration throws.
- */
-export async function* runChatTurnStreamV2(
-  body: ChatRequest,
-  user: EffectiveUser,
-  conversationId: number,
-  onCancel?: (cancel: () => void) => void,
-): AsyncGenerator<V2LegacyStreamingEvent, void, unknown> {
-  const setup = await setupOrchestration(body, user, conversationId);
-  // Expose the run's cancel hook (used by POST /api/chat/interrupt via the run
-  // registry) so "Stop" actually halts the engine server-side instead of just
-  // closing the client's connection.
-  onCancel?.(() => setup.orchestrator.cancel());
-  if (setup.fatalError) {
-    const response = await persistAndBuildLegacyResponse(
-      setup.conversationId,
-      setup.expectedLogIndex,
-      setup.orchestrator,
-      user,
-      setup.fatalError,
-    );
-    yield {
-      wire: 'done',
-      data: { ...response, type: 'done', timestamp: new Date().toISOString() },
-    };
-    return;
-  }
-  let runError: string | undefined;
-  // Persist exactly once. The user message is in orch.log from run() (synchronous),
-  // so calling this in the `finally` guarantees it survives a client abort; the
-  // normal path also calls it to build the `done` response.
-  let persisted = false;
-  const persistOnce = async (): Promise<V2LegacyChatResponse | undefined> => {
-    if (persisted) return undefined;
-    persisted = true;
-    return persistAndBuildLegacyResponse(
-      setup.conversationId,
-      setup.expectedLogIndex,
-      setup.orchestrator,
-      user,
-      runError,
-    );
-  };
-
-  try {
-    try {
-      if (setup.rawStream) {
-        for await (const ev of setup.rawStream) {
-          // Capture orchestrator error events (e.g. LLM auth failures, network
-          // errors). EventStream.result() never throws — errors surface only as
-          // stream events — so we must intercept them here or they are silently
-          // dropped by piStreamEventToLegacy returning null.
-          const evType = (ev as { type?: string }).type;
-          if (evType === 'error') {
-            const errMsg = (ev as unknown as { error?: { errorMessage?: string } }).error?.errorMessage;
-            if (errMsg && !runError) {
-              runError = errMsg;
-              console.error('[v2/stream] orchestrator error event:', errMsg);
-            }
-            continue;
-          }
-          const translated = piStreamEventToLegacy(ev as StreamEvent, setup.conversationId);
-          if (translated) {
-            yield { wire: 'streaming_event', data: translated };
-          }
-        }
-        await setup.rawStream.result();
-      }
-    } catch (err) {
-      console.error('[v2/stream] orchestrator run threw:', err);
-      runError = err instanceof Error ? err.message : String(err);
-      // Tag the error so any escape paths (e.g. dangling microtasks that reject
-      // after the route returns) route to the right conversation via the
-      // unhandledRejection handler in instrumentation.ts (Cycle 8 wire).
-      if (err && typeof err === 'object') {
-        (err as { conversationId?: number }).conversationId = setup.conversationId;
-      }
-    }
-
-    let response: V2LegacyChatResponse;
-    try {
-      response = (await persistOnce())!;
-    } catch (persistErr) {
-      console.error('[v2/stream] persist threw:', persistErr);
-      const persistError = persistErr instanceof Error ? persistErr.message : String(persistErr);
-      response = {
-        conversationID: setup.conversationId,
-        log_index: setup.expectedLogIndex,
-        pending_tool_calls: [],
-        completed_tool_calls: [],
-        debug: [],
-        error: runError ?? persistError,
-      };
-    }
-    yield {
-      wire: 'done',
-      data: { ...response, type: 'done', timestamp: new Date().toISOString() },
-    };
-  } finally {
-    // If the client aborted mid-stream the generator is abandoned before the
-    // persist above runs (its `yield`s never resume) — persist here so the user's
-    // message and partial turn survive the interrupt instead of being lost.
-    if (!persisted) {
-      try {
-        await persistOnce();
-      } catch (e) {
-        console.error('[v2/stream] abort-persist failed:', e);
-      }
-    }
   }
 }
