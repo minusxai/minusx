@@ -467,6 +467,7 @@ export async function setupOrchestration(
       // pointers (see buildServerAgentArgs above) — never taken from the client
       // payload. The agent renders the whole Context section from this one object.
       resolvedContextDocs: serverArgs.context_docs,
+      annotations: serverArgs.annotations,
       allowedVizTypes: clientAllowedVizTypes,
       schema: serverArgs.schema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),

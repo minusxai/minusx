@@ -39,6 +39,7 @@ export const reportJobHandler: JobHandler = {
       connectionId: baseArgs.connection_id,
       whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
       resolvedContextDocs: baseArgs.context_docs,
+      annotations: baseArgs.annotations,
       schema: baseArgs.schema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
       role: user.role,

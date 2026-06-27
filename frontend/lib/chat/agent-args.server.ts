@@ -18,7 +18,7 @@ import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
 import { resolveContextDocs, getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 import { selectDatabase } from '@/lib/utils/database-selector';
-import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation } from '@/lib/types';
 
 export interface ServerAgentArgs {
   connection_id?: string;
@@ -31,6 +31,13 @@ export interface ServerAgentArgs {
    * the old separate inline-string + catalog representations.
    */
   context_docs: ResolvedContextDocs;
+  /**
+   * Context-authored table/column annotations (the editorial layer, from the
+   * context's `fullAnnotations`). Carried to the agent context so SearchDBSchema
+   * can merge them into its catalog's `annotation` columns — the prompt's Schema
+   * Notes section is char-budgeted, so this is how the agent recovers the rest.
+   */
+  annotations?: TableAnnotation[];
 }
 
 function flattenSchemaForPrompt(
@@ -92,6 +99,7 @@ export async function buildServerAgentArgs(
   // the context's whitelisted databases, not on all connections).
   let databases: DatabaseWithSchema[] | undefined;
   let resolvedDocs: ResolvedContextDocs = { docs: [] };
+  let annotations: TableAnnotation[] | undefined;
 
   try {
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
@@ -121,6 +129,7 @@ export async function buildServerAgentArgs(
     if (contextContent) {
       databases = getWhitelistedSchemaForUser(contextContent, user.userId, options?.contextVersion);
       resolvedDocs = resolveContextDocs(contextContent, user.userId, options?.contextVersion);
+      annotations = contextContent.fullAnnotations;
     }
   } catch {
     // Proceed without context — agent can still use SearchDBSchema tool
@@ -161,5 +170,6 @@ export async function buildServerAgentArgs(
       : undefined,
     schema,
     context_docs: resolvedDocs,
+    annotations,
   };
 }

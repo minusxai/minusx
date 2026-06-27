@@ -6,6 +6,51 @@ import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whit
 import { getPublishedVersionForUser, getPublishedVersion } from '../context/context-utils';
 
 /**
+ * Default character budget for the context-authored "Tables & Columns"
+ * description block in Schema Notes. A rogue/large context can annotate
+ * thousands of tables/columns and blow the prompt; we include whole-table blocks
+ * greedily up to this budget, then note how many more exist.
+ */
+export const DEFAULT_SCHEMA_NOTES_BUDGET_CHARS = 20000;
+
+/**
+ * Greedily renders context-authored table/column descriptions into markdown
+ * bullet lines, capped at `budgetChars`. Each annotated table (its head line +
+ * any annotated column sub-lines) is an indivisible block: included whole or
+ * dropped whole. Tables with neither a description nor any annotated columns
+ * produce nothing and are never counted as dropped. Returns the kept lines plus
+ * how many annotated tables/columns were omitted, for a truncation note.
+ */
+export function budgetAnnotationNotes(
+  annotations: TableAnnotation[],
+  budgetChars: number = DEFAULT_SCHEMA_NOTES_BUDGET_CHARS,
+): { lines: string[]; droppedTables: number; droppedColumns: number } {
+  const lines: string[] = [];
+  let used = 0;
+  let truncated = false;
+  let droppedTables = 0;
+  let droppedColumns = 0;
+
+  for (const a of annotations) {
+    const cols = (a.columns || []).filter((c) => c.description);
+    if (!a.description && cols.length === 0) continue; // nothing to say — not a drop
+    const head = `- ${a.schema}.${a.table}${a.description ? ` — ${a.description}` : ''}`;
+    const block = [head, ...cols.map((c) => `  - ${c.name}: ${c.description}`)];
+    const cost = block.reduce((n, l) => n + l.length + 1, 0); // +1 ≈ newline per line
+    if (!truncated && used + cost <= budgetChars) {
+      lines.push(...block);
+      used += cost;
+    } else {
+      truncated = true;
+      droppedTables++;
+      droppedColumns += cols.length;
+    }
+  }
+
+  return { lines, droppedTables, droppedColumns };
+}
+
+/**
  * Build an agent-facing "Schema Notes" markdown section from context-authored
  * table/column descriptions and metrics. Returns undefined when there's nothing
  * to say. (Profiled column descriptions/stats reach the agent separately via the
@@ -14,13 +59,16 @@ import { getPublishedVersionForUser, getPublishedVersion } from '../context/cont
 function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[]): string | undefined {
   const lines: string[] = [];
 
-  const annLines = annotations.flatMap((a) => {
-    const cols = (a.columns || []).filter((c) => c.description);
-    if (!a.description && cols.length === 0) return [];
-    const head = `- ${a.schema}.${a.table}${a.description ? ` — ${a.description}` : ''}`;
-    return [head, ...cols.map((c) => `  - ${c.name}: ${c.description}`)];
-  });
-  if (annLines.length > 0) lines.push('### Tables & Columns', 'Note: These descriptions were specially noted by the context authors.', ...annLines);
+  const { lines: annLines, droppedTables, droppedColumns } = budgetAnnotationNotes(annotations);
+  if (annLines.length > 0 || droppedTables > 0) {
+    lines.push('### Tables & Columns', 'Note: These descriptions were specially noted by the context authors.', ...annLines);
+    if (droppedTables > 0) {
+      let note = `- …and ${droppedTables} more annotated table(s)`;
+      if (droppedColumns > 0) note += ` (${droppedColumns} more column note(s))`;
+      note += ' omitted to fit the context budget — inspect specific tables with the SearchDBSchema tool.';
+      lines.push(note);
+    }
+  }
 
   const metricLines = metrics.map((m) => {
     const loc = m.schema && m.table ? ` [${m.schema}.${m.table}]` : '';

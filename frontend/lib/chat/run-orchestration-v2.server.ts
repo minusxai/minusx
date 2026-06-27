@@ -95,6 +95,9 @@ async function buildAnalystContext(
     agent_args.context_docs && typeof agent_args.context_docs === 'object'
       ? (agent_args.context_docs as RemoteAnalystContext['resolvedContextDocs'])
       : undefined;
+  const annotations = Array.isArray(agent_args.annotations)
+    ? (agent_args.annotations as RemoteAnalystContext['annotations'])
+    : undefined;
 
   return {
     userId: String(user.userId ?? user.email),
@@ -104,6 +107,7 @@ async function buildAnalystContext(
     connectionId,
     whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
     resolvedContextDocs,
+    annotations,
     schema,
     homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
     role: user.role,
