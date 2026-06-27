@@ -43,13 +43,14 @@ export interface Conversation {
   updatedAt: string;
 }
 
-export type MessageKind = 'toolCall' | 'assistant' | 'toolResult';
+// pi-log kinds carry a contiguous `seq`; 'error' rows are the parallel error stream (seq = null).
+export type MessageKind = 'toolCall' | 'assistant' | 'toolResult' | 'error';
 
-/** A message row, mapped to camelCase. `content` is the verbatim pi log entry. */
+/** A message row, mapped to camelCase. `content` is the verbatim pi log entry (or, for kind='error', { source, message, details }). */
 export interface MessageRow {
   id: number;
   conversationId: number;
-  seq: number;
+  seq: number | null;
   kind: MessageKind;
   piId: string | null;
   parentPiId: string | null;

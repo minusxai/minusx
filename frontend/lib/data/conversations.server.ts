@@ -1,9 +1,10 @@
 /**
  * Chat Architecture v3 — server-side conversation/message store (the data layer).
  *
- * The source of truth for chat. Conversations and their pi log live in dedicated tables
- * (`conversations`, `messages`, `conversation_errors`); `messages.content` is each pi entry
- * verbatim and `messages.seq` is the 0-based log index + stream cursor. This module owns:
+ * The source of truth for chat. Conversations and their pi log live in two tables
+ * (`conversations`, `messages`); `messages.content` is each pi entry verbatim and `messages.seq`
+ * is the 0-based log index + stream cursor. Errors share `messages` as `kind='error'` rows with
+ * seq=NULL (the parallel error stream, kept out of the pi log). This module owns:
  *   - shared-id allocation (conversation ids share the global files id-space, see allocateId)
  *   - create / get / list / delete conversations
  *   - append (OCC via UNIQUE(conversation_id, seq)) + load of the pi log
@@ -70,7 +71,7 @@ function mapConversation(r: ConversationRow): Conversation {
 }
 
 interface MessageDbRow {
-  id: number; conversation_id: number; seq: number; kind: string;
+  id: number; conversation_id: number; seq: number | null; kind: string;
   pi_id: string | null; parent_pi_id: string | null; content: unknown; created_at: string;
 }
 
@@ -205,7 +206,7 @@ export function isRunLeaseStale(conv: { runStatus: RunStatus; runHeartbeatAt: st
 }
 
 export async function deleteConversation(id: number): Promise<void> {
-  // messages + conversation_errors cascade via FK ON DELETE CASCADE.
+  // messages (pi-log + error rows) cascade via FK ON DELETE CASCADE.
   await db().exec('DELETE FROM conversations WHERE id = $1', [id]);
 }
 
@@ -225,7 +226,8 @@ export async function forkConversation(sourceId: number, atSeq: number): Promise
     meta: { ...src.meta, version: 3, forkedFrom: sourceId },
   });
   const rows = await loadMessages(sourceId);
-  const slice = rows.filter((r) => r.seq < atSeq).map((r) => r.content) as ConversationLog;
+  // loadMessages already excludes error rows (seq IS NULL), but guard for the nullable type.
+  const slice = rows.filter((r) => r.seq != null && r.seq < atSeq).map((r) => r.content) as ConversationLog;
   if (slice.length > 0) await appendMessages(created.id, slice, 0);
   return created;
 }
@@ -289,40 +291,51 @@ export async function loadMessages(conversationId: number, sinceSeq = -1): Promi
   return res.rows.map(mapMessage);
 }
 
-/** Rebuild the pi ConversationLog the orchestrator consumes. */
+/**
+ * Rebuild the pi ConversationLog the orchestrator consumes. Only seq-bearing rows are pi-log
+ * entries — `kind='error'` rows have seq=NULL and are excluded (they're the parallel error stream).
+ */
 export async function loadLog(conversationId: number): Promise<ConversationLog> {
   const res = await db().exec<{ content: unknown }>(
-    'SELECT content FROM messages WHERE conversation_id = $1 ORDER BY seq',
+    'SELECT content FROM messages WHERE conversation_id = $1 AND seq IS NOT NULL ORDER BY seq',
     [conversationId],
   );
   return rowsToLog(res.rows.map((r) => ({ content: asJson<ConversationLogEntry>(r.content) })));
 }
 
-// ── parallel error stream ───────────────────────────────────────────────────
+// ── parallel error stream (kind='error' rows in messages; seq=NULL so they stay out of the pi log) ──
 
 export async function appendError(
   conversationId: number,
   err: { source: string; message: string; parentPiId?: string | null; details?: Record<string, unknown> | null },
 ): Promise<void> {
+  // seq=NULL keeps the error out of the contiguous pi-log index; the payload lives in content.
+  const content = { source: err.source, message: err.message, details: err.details ?? null };
   await db().exec(
-    `INSERT INTO conversation_errors (conversation_id, source, message, parent_pi_id, details)
-     VALUES ($1, $2, $3, $4, $5::jsonb)`,
-    [conversationId, err.source, err.message, err.parentPiId ?? null, err.details ? JSON.stringify(err.details) : null],
+    `INSERT INTO messages (conversation_id, seq, kind, pi_id, parent_pi_id, content)
+     VALUES ($1, NULL, 'error', NULL, $2, $3::jsonb)`,
+    [conversationId, err.parentPiId ?? null, JSON.stringify(content)],
   );
 }
 
 export async function loadErrors(conversationId: number): Promise<ConversationErrorRow[]> {
   const res = await db().exec<{
-    id: number; conversation_id: number; source: string; message: string;
-    parent_pi_id: string | null; details: unknown; created_at: string;
-  }>('SELECT * FROM conversation_errors WHERE conversation_id = $1 ORDER BY created_at', [conversationId]);
-  return res.rows.map((r) => ({
-    id: Number(r.id),
-    conversationId: r.conversation_id,
-    source: r.source,
-    message: r.message,
-    parentPiId: r.parent_pi_id,
-    details: r.details == null ? null : asJson<Record<string, unknown>>(r.details),
-    createdAt: r.created_at,
-  }));
+    id: number; conversation_id: number; parent_pi_id: string | null; content: unknown; created_at: string;
+  }>(
+    `SELECT id, conversation_id, parent_pi_id, content, created_at
+       FROM messages WHERE conversation_id = $1 AND kind = 'error' ORDER BY created_at, id`,
+    [conversationId],
+  );
+  return res.rows.map((r) => {
+    const c = asJson<{ source?: string; message?: string; details?: Record<string, unknown> | null }>(r.content) ?? {};
+    return {
+      id: Number(r.id),
+      conversationId: r.conversation_id,
+      source: c.source ?? 'unhandled',
+      message: c.message ?? '',
+      parentPiId: r.parent_pi_id,
+      details: c.details ?? null,
+      createdAt: r.created_at,
+    };
+  });
 }

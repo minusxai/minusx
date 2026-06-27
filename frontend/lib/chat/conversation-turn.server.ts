@@ -6,7 +6,7 @@
  *   - loads the pi log from `messages` rows, builds the orchestrator via the (reused) setupOrchestration
  *   - streams token deltas live via NOTIFY (batched, ephemeral)
  *   - on segment end, appends the new pi entries as durable rows + NOTIFYs the cursor
- *   - mirrors tool/run errors to conversation_errors, records LLM usage, sets run_status
+ *   - mirrors tool/run errors to the error stream (kind='error' rows), records LLM usage, sets run_status
  *
  * The client never receives output from here — it reads the resumable GET …/stream. This fn just
  * produces durable rows + wakeups. See docs/chat-architecture-v3.md §7.

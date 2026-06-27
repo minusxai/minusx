@@ -327,7 +327,7 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     }, { timeout: 5000 });
     const realConvId = await waitForConversationFinished(() => testStore.getState() as RootState, convId);
 
-    // v3: errors live in the conversation_errors table (mirrored from frontend-tool results).
+    // v3: errors live in the conversation error stream (kind='error' rows in messages, mirrored from frontend-tool results).
     const { loadErrors } = await import('@/lib/data/conversations.server');
     const convErrors = await loadErrors(realConvId);
 

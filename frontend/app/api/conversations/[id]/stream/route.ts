@@ -62,6 +62,7 @@ export async function GET(
   const flushCatchup = async () => {
     const rows = await loadMessages(conversationId, cursor);
     for (const r of rows) {
+      if (r.seq == null) continue; // error rows (seq NULL) aren't part of the pi-log cursor stream
       send({ type: 'message', seq: r.seq, message: r.content });
       cursor = r.seq;
     }

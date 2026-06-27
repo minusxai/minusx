@@ -101,4 +101,27 @@ describe('v3 conversation store', () => {
     await setRunStatus(c.id, 'running');
     expect((await getConversation(c.id))?.runStatus).toBe('running');
   });
+
+  it('error rows live in messages but never leak into the pi log or disturb seq', async () => {
+    const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await appendMessages(c.id, LOG('t1'), 0);                 // seq 0,1
+    await appendError(c.id, { source: 'frontend-tool', message: 'edit failed', parentPiId: 'root1', details: { tool_name: 'EditFile' } });
+    await appendMessages(c.id, LOG('t2'), 2);                 // seq 2,3 — NOT pushed by the error row
+
+    // The pi log is exactly the 4 seq-bearing entries; the error is excluded.
+    const log = await loadLog(c.id);
+    expect(log).toHaveLength(4);
+    expect(await getMaxSeq(c.id)).toBe(3);
+    expect(JSON.stringify(log)).not.toContain('edit failed');
+
+    // The error is readable via the error stream, with its payload + parent tie intact.
+    const errs = await loadErrors(c.id);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toMatchObject({ source: 'frontend-tool', message: 'edit failed', parentPiId: 'root1' });
+    expect(errs[0].details).toEqual({ tool_name: 'EditFile' });
+
+    // loadMessages (the API/stream view) returns only the seq-bearing rows, not the error.
+    const msgs = await loadMessages(c.id);
+    expect(msgs.map((m) => m.seq)).toEqual([0, 1, 2, 3]);
+  });
 });

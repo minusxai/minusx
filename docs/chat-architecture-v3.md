@@ -110,9 +110,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_owner ON conversations(owner_user_i
 CREATE TABLE IF NOT EXISTS messages (
   id              BIGSERIAL   PRIMARY KEY,        -- own id space; stable FK target (feedback etc.)
   conversation_id INTEGER     NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  seq             INTEGER     NOT NULL,           -- 0-based, contiguous = the pi "log index" + cursor
+  seq             INTEGER,                         -- 0-based, contiguous = the pi "log index" + cursor; NULL for kind='error' rows (see §4.3)
 
-  kind            TEXT        NOT NULL,           -- 'toolCall' | 'assistant' | 'toolResult' (denormalized for queries)
+  kind            TEXT        NOT NULL,           -- 'toolCall' | 'assistant' | 'toolResult' | 'error' (denormalized for queries)
   pi_id           TEXT,                            -- the pi entry's own id (for parent threading)
   parent_pi_id    TEXT,                            -- pi parent_id; NULL for the root invocation
 
@@ -126,22 +126,22 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv_seq ON messages(conversation_id, se
 
 Key point: `content` stores the pi entry **unchanged**, so orchestrator reconstruction is `SELECT content … ORDER BY seq` → the exact `ConversationLog` array it already consumes. No new message schema is invented; `seq` doubles as the log index and the stream cursor.
 
-### 4.3 `conversation_errors` — parallel, non-pi error stream
+### 4.3 Error stream — `kind='error'` rows in `messages`
 
-Mirrors today's `errors[]` array. Kept separate so `messages.seq` stays contiguous for the pi log and the orchestrator's context builder never sees these.
+Mirrors today's `errors[]` array, but lives **in `messages`** rather than a separate table. An error is a row with `kind='error'` and **`seq = NULL`**, so it never consumes a pi-log index. The payload (`source`, `message`, `details`) lives in `content`; `parent_pi_id` ties it to a log entry.
+
+Why this is safe: NULLs are distinct under a UNIQUE constraint, so `UNIQUE(conversation_id, seq)` still guards the pi log while permitting many `seq=NULL` error rows; `MAX(seq)` and all seq-ordered reads (`loadLog`, the stream cursor `seq > since`) ignore NULLs, so errors never leak into the reconstructed `ConversationLog` or the orchestrator's context. Reads:
+- `loadLog` → `WHERE seq IS NOT NULL ORDER BY seq` (the pi log)
+- `loadErrors` → `WHERE kind='error' ORDER BY created_at, id` (the error stream)
 
 ```sql
-CREATE TABLE IF NOT EXISTS conversation_errors (
-  id              BIGSERIAL   PRIMARY KEY,
-  conversation_id INTEGER     NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  source          TEXT        NOT NULL,           -- llm | server-tool | frontend-tool | persist | session | unhandled
-  message         TEXT        NOT NULL,
-  parent_pi_id    TEXT,
-  details         JSONB,
-  created_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_conv_errors_conv ON conversation_errors(conversation_id, created_at);
+-- in the messages table (see §4.2): seq is nullable; an error row is
+--   kind='error', seq=NULL, content={ source, message, details }, parent_pi_id=<tie>
+CREATE INDEX IF NOT EXISTS idx_messages_errors
+  ON messages(conversation_id, created_at) WHERE kind = 'error';
 ```
+
+> Earlier drafts used a dedicated `conversation_errors` table; it was folded into `messages` to keep conversation data in one place. The schema self-heals existing DBs via `ALTER TABLE messages ALTER COLUMN seq DROP NOT NULL` + `DROP TABLE IF EXISTS conversation_errors`.
 
 > **Token deltas are NOT a table.** Live "typing" deltas are ephemeral (§7.2) — streamed via NOTIFY, never persisted. Durability is at message granularity.
 
@@ -225,7 +225,7 @@ As the orchestrator finalizes each pi entry:
 2. `NOTIFY conv_<id>, '{"seq": <N>}'` — pointer only (NOTIFY payload ≤ ~8 KB; never send content).
 3. Every few seconds while running: bump `conversations.run_heartbeat_at`.
 
-On pause (frontend tool): `run_status='paused'`. On finish: `run_status='idle'`. On failure: `run_status='error'` + a `conversation_errors` row.
+On pause (frontend tool): `run_status='paused'`. On finish: `run_status='idle'`. On failure: `run_status='error'` + a `kind='error'` row in `messages`.
 
 ### 7.2 Live token deltas
 
@@ -311,7 +311,7 @@ Retained, intentionally: a **small, ephemeral** per-instance set of "currently o
 
 - **New conversations** → `conversations`/`messages` (`meta.version = 3`).
 - **Old conversations** → keep rendering via the legacy file read path. The list endpoint UNIONs both stores; a fetch by id tries `conversations` first, falls back to the conversation file (unambiguous because IDs are globally unique, §6).
-- **Backfill migration (later):** for each `type:'conversation'` file, insert a `conversations` row **with its existing id**, explode `content.log` into `messages` rows (`seq = index`, `content = entry`), and `errors[]` into `conversation_errors`. Then flip reads to DB-first and eventually drop the file path. Use the existing migration framework (`MIGRATIONS` + `LATEST_DATA_VERSION`); schema itself is self-healing via `CREATE TABLE IF NOT EXISTS`.
+- **Backfill migration:** for each `type:'conversation'` file, insert a `conversations` row **with its existing id**, explode `content.log` into `messages` rows (`seq = index`, `content = entry`), and `errors[]` into `kind='error'` rows. Implemented as a standalone idempotent backfill (`npm run migrate-conversations-to-v3` / `POST /api/admin/migrate-conversations-v3`) — not a `MIGRATIONS` entry, since it does live cross-table writes the InitData-based framework can't express. Source files are left intact (re-runnable). Schema is self-healing via `CREATE TABLE IF NOT EXISTS` + the ALTER/DROP guards in §4.3.
 
 Conversation-id couplings that keep working because IDs are preserved: `llm_call_events.conversation_id`, `feedback_events.conversation_id` (+ `user_message_log_index`, which a `message_id` FK can later replace), `app_events`, and `/explore/:id` URLs.
 

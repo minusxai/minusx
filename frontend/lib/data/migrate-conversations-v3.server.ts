@@ -3,7 +3,7 @@
  *
  * Ports conversation FILES (type='conversation') into the v3 tables, preserving each id. v=2 files
  * already hold the pi log; v=1 (legacy task-log) files are converted via legacyLogToPi. errors[] →
- * conversation_errors. Idempotent: an id already present in `conversations` is skipped, and source
+ * the error stream (kind='error' rows in messages). Idempotent: an id already present in `conversations` is skipped, and source
  * files are left intact (safe to re-run). See docs/chat-architecture-v3.md §11.
  */
 import { getModules } from '@/lib/modules/registry';

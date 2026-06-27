@@ -1,6 +1,6 @@
 /**
  * Logs orchestrator-tagged unhandled rejections to their conversation's
- * dedicated `conversation_errors` (v3). Wire from `instrumentation.ts`'s
+ * error stream (kind='error' rows in `messages`, v3). Wire from `instrumentation.ts`'s
  * `process.on('unhandledRejection')` handler — and tag rejections in the
  * orchestrator with `conversationId` so this function can route them to the
  * right conversation.

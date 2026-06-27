@@ -1,6 +1,6 @@
 /**
- * Verifies that orchestration failures get mirrored to the conversation's dedicated
- * `conversation_errors` table (v3) as structured records — so failures survive page
+ * Verifies that orchestration failures get mirrored to the conversation's error stream
+ * (kind='error' rows in `messages`, v3) as structured records — so failures survive page
  * reload and render as distinct ErrorMessage rows in the UI.
  *
  * One `it()` per error source:
@@ -61,7 +61,7 @@ function makeRequest(url: string, body: Record<string, unknown>): NextRequest {
   });
 }
 
-describe('v3 turn — errors mirrored to conversation_errors', () => {
+describe('v3 turn — errors mirrored to the conversation error stream', () => {
   setupTestDb(TEST_DB_PATH);
   beforeEach(() => onboardingFaux.setResponses([]));
 

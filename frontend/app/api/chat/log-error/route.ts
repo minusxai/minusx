@@ -47,7 +47,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Always stamp server-side timestamp if the client didn't.
       timestamp: typeof body.error.timestamp === 'number' ? body.error.timestamp : Date.now(),
     };
-    // v3: client-side errors land in the dedicated conversation_errors table.
+    // v3: client-side errors land in the conversation error stream (kind='error' rows in messages).
     await appendError(body.conversationID, {
       source: entry.source,
       message: entry.message,
