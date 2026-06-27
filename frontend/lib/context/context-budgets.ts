@@ -17,6 +17,22 @@
  */
 export const CONTEXT_BUDGETS = {
   /**
+   * Rough characters-per-token ratio used to convert token budgets to the char
+   * budgets the renderers actually measure in. ~4 is the usual English/code
+   * approximation for the Anthropic tokenizer. Use `tokensToChars()` rather than
+   * multiplying inline.
+   */
+  charsPerToken: 4,
+
+  /**
+   * Per-document cap, in TOKENS, for an inlined context doc's body. Docs longer
+   * than this are truncated with a "load the full doc via LoadContext" pointer.
+   * Keeps one verbose doc from dominating the prompt. Applied by
+   * `renderResolvedDocInline` (converted to chars via `tokensToChars`).
+   */
+  perDocTokens: 1000,
+
+  /**
    * Max characters of the schema table-of-contents (schema → table names, no
    * columns) injected into the prompt before truncating with a "use
    * SearchDBSchema" pointer. Caps a rogue/large DB from filling the context.
@@ -38,3 +54,20 @@ export const CONTEXT_BUDGETS = {
    */
   inlineAllDocsThreshold: 1,
 } as const;
+
+/** Convert a token budget to its approximate character budget (rounded). */
+export const tokensToChars = (tokens: number): number =>
+  Math.round(tokens * CONTEXT_BUDGETS.charsPerToken);
+
+/**
+ * Per-document content cap in CHARACTERS (derived from `perDocTokens`). Single
+ * source for BOTH the editor (which shows the count + blocks save over it) and
+ * the prompt renderer (which truncates over it as a safety net). Tweak
+ * `perDocTokens` above to move both.
+ */
+export const PER_DOC_CONTENT_CHARS = tokensToChars(CONTEXT_BUDGETS.perDocTokens);
+
+/** True when a single doc's content exceeds the per-doc character cap. The editor
+ *  shows the count + blocks save on this; the renderer truncates on it. */
+export const isDocContentOverLimit = (content: string): boolean =>
+  content.length > PER_DOC_CONTENT_CHARS;

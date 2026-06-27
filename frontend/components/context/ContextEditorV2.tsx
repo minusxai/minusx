@@ -22,6 +22,7 @@ import type { JobRun } from '@/lib/types';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolvedWhitelist, findDocsMissingMeta } from '@/lib/context/context-utils';
 import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
+import { isDocContentOverLimit } from '@/lib/context/context-budgets';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 import DocumentHeader from '../DocumentHeader';
@@ -403,6 +404,14 @@ export default function ContextEditorV2({
     setDocsJsonText(JSON.stringify(content.docs || [], null, 2));
   }, [content.docs]);
 
+  // Block save when any doc exceeds the per-doc size cap (string docs are legacy
+  // raw bodies; DocEntry docs carry `.content`). Mirrors the per-doc char count
+  // shown in ContextDocsEditor — both read the same budget.
+  const docsOverLimit = useMemo(
+    () => (content.docs || []).some((d) => isDocContentOverLimit(typeof d === 'string' ? d : (d.content ?? ''))),
+    [content.docs],
+  );
+
   // Handle tab change - parse YAML/JSON when switching from code to picker
   const handleTabChange = (tab: string) => {
     if (activeTab === 'yaml' && tab === 'picker') {
@@ -613,6 +622,8 @@ export default function ContextEditorV2({
           editMode={editMode}
           isDirty={isDirty}
           isSaving={isSaving}
+          saveDisabled={docsOverLimit}
+          saveDisabledReason="A document exceeds the size limit — shorten it to save."
           saveError={saveError}
           readOnlyName={true}
           hideDescription={true}

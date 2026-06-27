@@ -1,6 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { resolveContextDocs, formatContextDocsSection, loadContextDocsByKeys, INLINE_ALL_DOCS_THRESHOLD } from '../schema-filter';
+import { resolveContextDocs, formatContextDocsSection, loadContextDocsByKeys, INLINE_ALL_DOCS_THRESHOLD, clampDocContent } from '../schema-filter';
+import { PER_DOC_CONTENT_CHARS } from '@/lib/context/context-budgets';
 import type { ContextContent, ContextVersion, DocEntry, ResolvedContextDocs } from '@/lib/types';
+
+describe('clampDocContent (per-doc render safety net)', () => {
+  it('passes short content through unchanged', () => {
+    expect(clampDocContent('short body', 'mykey')).toBe('short body');
+  });
+
+  it('truncates over-budget content and points at LoadContext with the key', () => {
+    const long = 'x'.repeat(PER_DOC_CONTENT_CHARS + 500);
+    const out = clampDocContent(long, 'mykey');
+    expect(out.length).toBeLessThan(long.length);
+    expect(out).toMatch(/truncat/i);
+    expect(out).toContain('LoadContext');
+    expect(out).toContain('mykey');
+  });
+
+  it('inlined docs in formatContextDocsSection are capped per doc', () => {
+    const huge = 'y'.repeat(PER_DOC_CONTENT_CHARS * 3);
+    const text = formatContextDocsSection({ docs: [{ key: 'big', title: 'Big', content: huge, alwaysInclude: true }] });
+    expect(text).toContain('truncated');
+    expect(text.length).toBeLessThan(huge.length);
+  });
+});
 
 /** Minimal context with one published version carrying the given docs. */
 function makeContext(docs: (DocEntry | string)[], overrides: Partial<ContextVersion> = {}): ContextContent {

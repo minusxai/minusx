@@ -23,6 +23,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { LuTrash2, LuPlus, LuChevronDown, LuChevronRight, LuCircleAlert } from 'react-icons/lu';
 import { DiffEditor } from '@monaco-editor/react';
 import type { DocEntry } from '@/lib/types';
+import { PER_DOC_CONTENT_CHARS, isDocContentOverLimit } from '@/lib/context/context-budgets';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
@@ -547,6 +548,23 @@ export default function ContextDocsEditor({
                       />
                     </Box>
                   )}
+                  {(() => {
+                    const len = docEntry.content?.length ?? 0;
+                    const over = isDocContentOverLimit(docEntry.content ?? '');
+                    return (
+                      <HStack justify="flex-end" px={2} pt={1}>
+                        <Text
+                          fontSize="2xs"
+                          color={over ? 'accent.danger' : 'fg.subtle'}
+                          fontWeight={over ? '600' : '400'}
+                          aria-label={`${entryLabel} ${index + 1} character count`}
+                        >
+                          {len.toLocaleString()} / {PER_DOC_CONTENT_CHARS.toLocaleString()} chars
+                          {over ? ' — too long to save' : ''}
+                        </Text>
+                      </HStack>
+                    );
+                  })()}
                 </Collapsible.Content>
               </Collapsible.Root>
             </Box>

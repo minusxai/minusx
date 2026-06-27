@@ -4,7 +4,7 @@
  */
 import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode, DocEntry, MetricDef, TableAnnotation, type ResolvedContextDoc, type ResolvedContextDocs } from '../types';
 import { getPublishedVersionForUser, getPublishedVersion } from '../context/context-utils';
-import { CONTEXT_BUDGETS } from '../context/context-budgets';
+import { CONTEXT_BUDGETS, PER_DOC_CONTENT_CHARS } from '../context/context-budgets';
 
 /**
  * Default character budget for the context-authored "Tables & Columns"
@@ -509,10 +509,23 @@ export function resolveContextDocs(
   return { docs: resolved, schemaNotes: schemaNotes || undefined };
 }
 
+/**
+ * Per-doc render safety net: cap an inlined doc's body at PER_DOC_CONTENT_CHARS
+ * (derived from CONTEXT_BUDGETS.perDocTokens). The editor blocks saving docs over
+ * this, but legacy/oversized docs can still exist — truncate them with a pointer
+ * to fetch the full text via LoadContext rather than blow the prompt.
+ */
+export function clampDocContent(content: string, key: string, maxChars: number = PER_DOC_CONTENT_CHARS): string {
+  if (content.length <= maxChars) return content;
+  const kept = content.slice(0, maxChars).trimEnd();
+  return `${kept}\n\n…[doc truncated to ~${CONTEXT_BUDGETS.perDocTokens} tokens — load the full text via LoadContext (key: "${key}")]`;
+}
+
 /** Render an always-include doc's inline body (optional title/description header + content). */
 function renderResolvedDocInline(doc: ResolvedContextDoc): string {
   const header = [`**key**: "${doc.key}"`, doc.title ? `**title**: ${doc.title}` : null, doc.description ? `**description**: ${doc.description}` : null].filter(Boolean).join('\n\n');
-  return header ? `${header}\n\n${doc.content}` : doc.content;
+  const content = clampDocContent(doc.content, doc.key);
+  return header ? `${header}\n\n${content}` : content;
 }
 
 /**
