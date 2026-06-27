@@ -385,17 +385,6 @@ export default function StepContext({
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
 
-    // Build simplified schema from connections — filter to static schemas if applicable
-    const conn = connections[connectionName];
-    const allSchemas = conn?.schema?.schemas ?? [];
-    const relevantSchemas = staticSchemas?.length
-      ? allSchemas.filter(s => staticSchemas.includes(s.schema))
-      : allSchemas;
-    const simplifiedSchema = relevantSchemas.map(s => ({
-      schema: s.schema,
-      tables: s.tables.map(t => t.table)
-    }));
-
     // Build agent message — include connection + schema context + questionnaire answers
     const agentMessage = [
       AGENT_DESCRIBE_MESSAGE,
@@ -463,17 +452,17 @@ export default function StepContext({
       agent: 'OnboardingContextAgent',
       version: 3,
       agent_args: {
+        // Pointer-only: the server resolves the schema for this connection_id.
         connection_id: connectionName,
         context_path: contextPath,
         context_version: null,
-        schema: simplifiedSchema,
         context: docContent || '',
         app_state: appState,
       },
       message: agentMessage,
     }));
     setShowAgentFeed(true);
-  }, [realFileId, dispatch, onRequestChat, connectionName, connections, docContent, contextPath, staticSchemas, questionnaireAnswers]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, docContent, contextPath, staticSchemas, questionnaireAnswers]);
 
   // Auto-trigger context agent when entering docs sub-step with questionnaire answers
   const hasAutoTriggeredAgent = useRef(false);

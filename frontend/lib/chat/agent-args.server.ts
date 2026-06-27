@@ -12,7 +12,7 @@
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { listAllConnections } from '@/lib/data/connections.server';
+import { listAllConnections, getPersistedConnectionSchema } from '@/lib/data/connections.server';
 import { findNearestContextPath } from '@/lib/context/context-utils';
 import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
 import { resolveContextDocs, getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
@@ -135,6 +135,22 @@ export async function buildServerAgentArgs(
 
   const selectedDatabaseName = selectedConnection?.name || '';
 
+  // Prompt schema: prefer the context's whitelisted schema for the selected DB.
+  // When the context whitelists nothing yet (e.g. onboarding, before a context
+  // is built), fall back to the selected connection's own persisted schema —
+  // the same persisted schema the client used to read and send as
+  // agent_args.schema, now resolved server-side.
+  let schema = flattenSchemaForPrompt(databases, selectedDatabaseName);
+  if (schema.length === 0 && selectedConnection?.name) {
+    const persisted = await getPersistedConnectionSchema(selectedConnection.name, user);
+    if (persisted) {
+      schema = persisted.schemas.map((s) => ({
+        schema: s.schema,
+        tables: s.tables.map((t) => t.table),
+      }));
+    }
+  }
+
   return {
     connection_id: selectedConnection?.name,
     selected_database_info: selectedDatabaseName
@@ -143,7 +159,7 @@ export async function buildServerAgentArgs(
           dialect: connectionTypeToDialect(selectedConnection?.type || 'postgresql'),
         }
       : undefined,
-    schema: flattenSchemaForPrompt(databases, selectedDatabaseName),
+    schema,
     context_docs: resolvedDocs,
   };
 }
