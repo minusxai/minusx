@@ -362,7 +362,7 @@ export function deriveDocMeta(content: string): { title: string; description: st
  * rest go to the on-demand catalog. This is a presentation decision, so it lives
  * in `formatContextDocsSection`, not in the structure produced here.
  */
-export const INLINE_ALL_DOCS_THRESHOLD = 5;
+export const INLINE_ALL_DOCS_THRESHOLD = 1;
 
 /** Shown under "Context Library" when there are no lazy docs to load on demand. */
 const EMPTY_CONTEXT_LIBRARY_TEXT = 'No additional context documents are available.';
