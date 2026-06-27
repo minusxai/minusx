@@ -49,6 +49,9 @@ export interface DocumentHeaderProps {
   editMode: boolean;
   isDirty: boolean;
   isSaving: boolean;
+  /** When set, Save is blocked even if dirty (e.g. a context doc exceeds its size cap). */
+  saveDisabled?: boolean;
+  saveDisabledReason?: string;
   saveError?: string | null;
 
   // Handlers
@@ -92,6 +95,8 @@ export default function DocumentHeader({
   editMode,
   isDirty,
   isSaving,
+  saveDisabled = false,
+  saveDisabledReason,
   saveError,
   onNameChange,
   onDescriptionChange,
@@ -134,9 +139,10 @@ export default function DocumentHeader({
 
   // Validate and save
   const handleSave = useCallback(() => {
+    if (saveDisabled) return;
     if (!skipNameValidation && !validateName()) return;
     onSave();
-  }, [validateName, onSave]);
+  }, [saveDisabled, skipNameValidation, validateName, onSave]);
 
   // Combined error (validation takes precedence)
   const displayError = validationError || saveError;
@@ -294,8 +300,9 @@ export default function DocumentHeader({
               <IconButton
                 onClick={handleSave}
                 aria-label={'Save'}
+                title={saveDisabled ? saveDisabledReason : undefined}
                 loading={isSaving}
-                disabled={!isDirty}
+                disabled={!isDirty || saveDisabled}
                 size="xs"
                 colorPalette="teal"
                 px={2}

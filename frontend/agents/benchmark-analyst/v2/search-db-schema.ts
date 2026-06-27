@@ -44,14 +44,17 @@ export class SearchDBSchemaV2 extends V2DataTool<typeof SearchDBSchemaParams, Se
 CATALOG TABLES:
 - connections: connection_name
 - schemas: connection_name, schema_name
-- tables: connection_name, schema_name, table_name, row_count
-- columns: connection_name, schema_name, table_name, column_name, data_type
+- tables: connection_name, schema_name, table_name, row_count, annotation
+- columns: connection_name, schema_name, table_name, column_name, data_type, description, annotation
 - indexes: connection_name, schema_name, table_name, index_name, columns, is_unique
 - column_stats: connection_name, schema_name, table_name, column_name, category, n_distinct, null_count, min_value, max_value, avg_value, min_date, max_date, top_values
+
+DESCRIPTIONS: \`columns.description\` is the database's own comment for a column (from the DB metadata); \`columns.annotation\` / \`tables.annotation\` are notes written by the context authors. Either may be NULL. Prefer these when present — they explain what the data means. (The prompt's Schema Notes may be truncated for large schemas; query here to recover the rest.)
 
 EXAMPLES:
 - List all tables: SELECT * FROM tables
 - Find columns with 'user' in name: SELECT * FROM columns WHERE column_name LIKE '%user%'
+- Read author/DB notes: SELECT table_name, column_name, description, annotation FROM columns WHERE annotation IS NOT NULL OR description IS NOT NULL
 - Find categorical columns: SELECT * FROM column_stats WHERE category = 'categorical'
 - Find tables with indexes: SELECT DISTINCT table_name FROM indexes
 
@@ -72,6 +75,7 @@ Each query returns {preview, handle, stats}. If prompt is provided, an LLM proce
       this.catalogKey(),
       this.buildSampleConfig(),
       this.context.datasetKey,
+      this.context.annotations,
     );
 
     // Execute queries

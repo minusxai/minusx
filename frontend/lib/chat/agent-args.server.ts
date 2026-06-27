@@ -2,7 +2,7 @@
  * Shared server-side agent_args builder.
  *
  * Loads connection, schema, and context documentation from the DB using the
- * same pure functions (getWhitelistedSchemaForUser, getDocumentationForUser)
+ * same pure functions (getWhitelistedSchemaForUser, resolveContextDocs)
  * that the client-side AnalystAgent uses on the explore page and file page.
  *
  * Used by all server-initiated agent conversations (Slack, reports, evals,
@@ -12,19 +12,32 @@
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { listAllConnections } from '@/lib/data/connections.server';
+import { listAllConnections, getPersistedConnectionSchema } from '@/lib/data/connections.server';
 import { findNearestContextPath } from '@/lib/context/context-utils';
 import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
-import { getDocumentationForUser, getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
+import { resolveContextDocs, getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 import { selectDatabase } from '@/lib/utils/database-selector';
-import type { ContextContent, DatabaseWithSchema } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation } from '@/lib/types';
 
 export interface ServerAgentArgs {
   connection_id?: string;
   selected_database_info?: { name: string; dialect: string };
   schema: Array<{ schema: string; tables: string[] }>;
-  context: string;
+  /**
+   * Resolved context docs (STRUCTURE) — one list tagged alwaysInclude, plus schema
+   * notes. Carried as-is to the agent, which renders the prompt's Context section
+   * and feeds the LoadContext tool from it (via formatContextDocsSection). Replaces
+   * the old separate inline-string + catalog representations.
+   */
+  context_docs: ResolvedContextDocs;
+  /**
+   * Context-authored table/column annotations (the editorial layer, from the
+   * context's `fullAnnotations`). Carried to the agent context so SearchDBSchema
+   * can merge them into its catalog's `annotation` columns — the prompt's Schema
+   * Notes section is char-budgeted, so this is how the agent recovers the rest.
+   */
+  annotations?: TableAnnotation[];
 }
 
 function flattenSchemaForPrompt(
@@ -49,6 +62,19 @@ export interface BuildServerAgentArgsOptions {
    * context happens to be nearest to the cron user's home folder.
    */
   contextFileId?: number;
+  /**
+   * Resolve this specific context version's docs + whitelist instead of the
+   * user's published version. The interactive chat path forwards the client's
+   * `context_version` (admin version-testing) so the server resolves exactly the
+   * context the user is looking at in the UI.
+   */
+  contextVersion?: number;
+  /**
+   * The connection the user selected in the UI. The server computes the schema
+   * for this database (and reports it as the active connection) instead of
+   * picking the context's first whitelisted database.
+   */
+  connectionId?: string;
 }
 
 /**
@@ -72,21 +98,17 @@ export async function buildServerAgentArgs(
   // this mirrors exactly what the client's AnalystAgent does (selectDatabase on
   // the context's whitelisted databases, not on all connections).
   let databases: DatabaseWithSchema[] | undefined;
-  let documentation: string | undefined;
+  let resolvedDocs: ResolvedContextDocs = { docs: [] };
+  let annotations: TableAnnotation[] | undefined;
 
   try {
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
     let contextContent: ContextContent | undefined;
-    let nearestContextDir: string | undefined;
 
     if (options?.contextFileId != null) {
       // Context eval path: use the specific context file being evaluated.
       const contextResult = await FilesAPI.loadFile(options.contextFileId, user);
       contextContent = contextResult.data?.content as ContextContent | undefined;
-      const contextPath = contextResult.data?.path;
-      if (contextPath) {
-        nearestContextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
-      }
     } else {
       // General path: find the context file nearest to the user's home folder.
       const modePath = resolvePath(user.mode, '/');
@@ -101,25 +123,42 @@ export async function buildServerAgentArgs(
       if (nearestContextPath) {
         const contextResult = await FilesAPI.loadFileByPath(nearestContextPath, user);
         contextContent = contextResult.data.content as ContextContent;
-        nearestContextDir = nearestContextPath.substring(0, nearestContextPath.lastIndexOf('/')) || '/';
       }
     }
 
     if (contextContent) {
-      databases = getWhitelistedSchemaForUser(contextContent, user.userId, effectiveHomeFolder, nearestContextDir);
-      documentation = getDocumentationForUser(contextContent, user.userId);
+      databases = getWhitelistedSchemaForUser(contextContent, user.userId, options?.contextVersion);
+      resolvedDocs = resolveContextDocs(contextContent, user.userId, options?.contextVersion);
+      annotations = contextContent.fullAnnotations;
     }
   } catch {
     // Proceed without context — agent can still use SearchDBSchema tool
   }
 
-  // Prefer the first database whitelisted by the context (mirrors client selectDatabase
-  // behavior). Fall back to the first available connection if no context is present.
-  const contextPreferred = databases?.[0]?.databaseName ?? null;
+  // Prefer the connection the user selected in the UI; otherwise the first
+  // database whitelisted by the context (mirrors client selectDatabase behavior).
+  // Fall back to the first available connection if no context is present.
+  const contextPreferred = options?.connectionId ?? databases?.[0]?.databaseName ?? null;
   const selectedConnectionName = selectDatabase(connections, contextPreferred);
   const selectedConnection = connections.find((c) => c.name === selectedConnectionName) ?? connections[0];
 
   const selectedDatabaseName = selectedConnection?.name || '';
+
+  // Prompt schema: prefer the context's whitelisted schema for the selected DB.
+  // When the context whitelists nothing yet (e.g. onboarding, before a context
+  // is built), fall back to the selected connection's own persisted schema —
+  // the same persisted schema the client used to read and send as
+  // agent_args.schema, now resolved server-side.
+  let schema = flattenSchemaForPrompt(databases, selectedDatabaseName);
+  if (schema.length === 0 && selectedConnection?.name) {
+    const persisted = await getPersistedConnectionSchema(selectedConnection.name, user);
+    if (persisted) {
+      schema = persisted.schemas.map((s) => ({
+        schema: s.schema,
+        tables: s.tables.map((t) => t.table),
+      }));
+    }
+  }
 
   return {
     connection_id: selectedConnection?.name,
@@ -129,7 +168,8 @@ export async function buildServerAgentArgs(
           dialect: connectionTypeToDialect(selectedConnection?.type || 'postgresql'),
         }
       : undefined,
-    schema: flattenSchemaForPrompt(databases, selectedDatabaseName),
-    context: documentation ?? '',
+    schema,
+    context_docs: resolvedDocs,
+    annotations,
   };
 }

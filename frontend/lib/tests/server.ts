@@ -145,7 +145,7 @@ async function executeLLMTest(
     goal: subject.prompt,
     assertionType: answerTypeToAssertion(test.answerType),
     schema: baseArgs.schema,
-    contextDocs: baseArgs.context,
+    resolvedContextDocs: baseArgs.context_docs,
     connectionId: subject.connection_id || defaultConnectionId || baseArgs.connection_id,
     appState: app_state,
     user,

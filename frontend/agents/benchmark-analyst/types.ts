@@ -1,4 +1,5 @@
 import type { AgentContext } from '@/orchestrator/types';
+import type { TableAnnotation } from '@/lib/types';
 
 /**
  * Connection metadata as carried in `BenchmarkAnalystContext.connections`.
@@ -46,6 +47,15 @@ export interface BenchmarkAnalystContext extends AgentContext {
    * invocation log entry serialises cleanly across orch.resume turns.
    */
   whitelistedTables?: readonly string[];
+  /**
+   * Context-authored table/column annotations (the editorial layer). Merged
+   * into the SearchDBSchema catalog's `tables.annotation` / `columns.annotation`
+   * columns so the agent can recover author notes there — important because the
+   * prompt's Schema Notes section is now char-budgeted and may omit some. Kept
+   * separate from profiled DB comments (`columns.description`). Resolved
+   * server-side from the context's `fullAnnotations`.
+   */
+  annotations?: TableAnnotation[];
   /**
    * Markdown context documentation injected into the agent's system prompt
    * so the LLM knows what the data means without re-deriving it.

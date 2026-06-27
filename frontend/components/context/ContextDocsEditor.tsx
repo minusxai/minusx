@@ -23,6 +23,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { LuTrash2, LuPlus, LuChevronDown, LuChevronRight, LuCircleAlert } from 'react-icons/lu';
 import { DiffEditor } from '@monaco-editor/react';
 import type { DocEntry } from '@/lib/types';
+import { PER_DOC_CONTENT_CHARS, isDocContentOverLimit } from '@/lib/context/context-budgets';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
@@ -95,6 +96,8 @@ interface ContextDocsEditorProps {
   showHelperText?: boolean;
   showAddButton?: boolean;
   showDraftToggle?: boolean;
+  /** Show the per-entry "Always include" (pin) toggle. */
+  showAlwaysIncludeToggle?: boolean;
   showChildPaths?: boolean;
   showImageUpload?: boolean;
   /** Show the optional per-entry title + description inputs. */
@@ -123,6 +126,7 @@ export default function ContextDocsEditor({
   showHelperText = true,
   showAddButton = true,
   showDraftToggle = true,
+  showAlwaysIncludeToggle = true,
   showChildPaths = true,
   showImageUpload = true,
   showTitleDescription = true,
@@ -139,6 +143,8 @@ export default function ContextDocsEditor({
   const expandedDocs = isExpandedControlled ? new Set(expandedIndices) : internalExpanded;
   // Which entries currently show the read-only Monaco diff (vs the WYSIWYG editor).
   const [diffOpen, setDiffOpen] = useState<Record<number, boolean>>({});
+  // Inherited docs are collapsed by default (empty set); expand on click.
+  const [expandedInherited, setExpandedInherited] = useState<Set<number>>(() => new Set());
 
   // The editor owns its buffer while typing, so we read the latest docs via ref
   // when an entry's markdown changes and write the whole array back.
@@ -161,6 +167,14 @@ export default function ContextDocsEditor({
 
   const toggleDiff = (index: number) => {
     setDiffOpen(prev => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const toggleInherited = (index: number) => {
+    setExpandedInherited(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) { next.delete(index); } else { next.add(index); }
+      return next;
+    });
   };
 
   const handleMarkdownChange = useCallback((index: number, newMarkdown: string) => {
@@ -194,6 +208,15 @@ export default function ContextDocsEditor({
   const handleToggleDraft = (index: number) => {
     const newDocs = [...(docs || [])];
     newDocs[index] = { ...newDocs[index], draft: !newDocs[index].draft };
+    onDocsChange(newDocs);
+  };
+
+  // "Always include" pins a doc inline in the agent's prompt every turn. When off
+  // (default), the doc is loaded on demand via LoadContext — so it needs a title
+  // to be addressable (see the per-entry title warning below).
+  const handleToggleAlwaysInclude = (index: number) => {
+    const newDocs = [...(docs || [])];
+    newDocs[index] = { ...newDocs[index], alwaysInclude: !newDocs[index].alwaysInclude };
     onDocsChange(newDocs);
   };
 
@@ -238,26 +261,63 @@ export default function ContextDocsEditor({
             Inherited Documentation (from parent contexts)
           </Text>
           <VStack gap={2} align="stretch">
-            {inheritedDocs.map((docEntry, idx) => (
-              <Box
-                key={`inherited-${idx}`}
-                p={3}
-                border="1px solid"
-                borderColor="border.default"
-                borderRadius="md"
-                bg="bg.muted"
-                opacity={0.7}
-              >
-                {docEntry.title?.trim() && (
-                  <Text fontSize="sm" fontWeight="600" mb={1}>{docEntry.title}</Text>
-                )}
-                {docEntry.description?.trim() && (
-                  <Text fontSize="xs" color="fg.muted" mb={2}>{docEntry.description}</Text>
-                )}
-                <LexicalTextViewer key={docEntry.content} markdown={docEntry.content} padding="0" />
-              </Box>
-            ))}
+            {inheritedDocs.map((docEntry, idx) => {
+              const isString = typeof docEntry === 'string';
+              const title = (!isString && docEntry.title?.trim()) || '';
+              const description = (!isString && docEntry.description?.trim()) || '';
+              const content = isString ? docEntry : docEntry.content;
+              const isOpen = expandedInherited.has(idx);
+              return (
+                <Box
+                  key={`inherited-${idx}`}
+                  border="1px solid"
+                  borderColor="border.default"
+                  borderRadius="md"
+                  bg="bg.muted"
+                  opacity={0.7}
+                  overflow="hidden"
+                >
+                  <Collapsible.Root open={isOpen} onOpenChange={() => toggleInherited(idx)}>
+                    <Collapsible.Trigger asChild>
+                      <Box
+                        aria-label={`Toggle inherited documentation ${idx + 1}`}
+                        px={3}
+                        py={2}
+                        cursor="pointer"
+                        _hover={{ bg: 'bg.emphasized' }}
+                        {...(isOpen ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
+                      >
+                        <HStack gap={2} align="center" flex={1} minW={0}>
+                          <Icon as={isOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
+                          <Text fontSize="sm" fontWeight="600" flexShrink={0}>{title || `Inherited Documentation ${idx + 1}`}</Text>
+                          {description && (
+                            <>
+                              <Text fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
+                              <Text fontSize="xs" color="fg.muted" truncate>{description}</Text>
+                            </>
+                          )}
+                        </HStack>
+                      </Box>
+                    </Collapsible.Trigger>
+                    <Collapsible.Content>
+                      <Box px={3} py={3}>
+                        <LexicalTextViewer key={content} markdown={content} padding="0" />
+                      </Box>
+                    </Collapsible.Content>
+                  </Collapsible.Root>
+                </Box>
+              );
+            })}
           </VStack>
+        </Box>
+      )}
+
+      {/* Separator + heading distinguishing this context's own docs from inherited ones */}
+      {showInheritedDocs && inheritedDocs && inheritedDocs.length > 0 && (
+        <Box borderTop="1px solid" borderColor="border.default" mb={4} pt={4}>
+          <Text fontSize="sm" fontWeight="600" color="fg.muted">
+            This context&apos;s documentation
+          </Text>
         </Box>
       )}
 
@@ -265,6 +325,21 @@ export default function ContextDocsEditor({
       <VStack gap={4} align="stretch">
         {(docs || []).map((docEntry, index) => {
           const isDocExpanded = expandedDocs.has(index);
+          // Active docs need a title + description (the agent loads them by title);
+          // also flag duplicate titles so they stay distinguishable. Drafts are
+          // exempt (excluded from the agent until activated).
+          const trimmedTitle = docEntry.title?.trim() ?? '';
+          const trimmedDesc = docEntry.description?.trim() ?? '';
+          const needsMeta = !docEntry.draft;
+          const duplicateTitle = trimmedTitle !== '' && (docs || []).some(
+            (d, i) => i !== index && (d.title?.trim() ?? '') === trimmedTitle,
+          );
+          const docTitleWarning = !needsMeta ? null
+            : (!trimmedTitle && !trimmedDesc) ? 'Add a title and description — both are required to save an active doc.'
+            : !trimmedTitle ? 'Add a title — required to save an active doc.'
+            : !trimmedDesc ? 'Add a description — required to save an active doc.'
+            : duplicateTitle ? 'Another doc has this title — the agent may not be able to tell them apart. Use a unique title.'
+            : null;
           const savedContent = originalDocs?.[index]?.content;
           const hasDiff = savedContent != null && savedContent !== docEntry.content;
           const isDiffOpen = !!diffOpen[index] && hasDiff;
@@ -348,6 +423,25 @@ export default function ContextDocsEditor({
                         )}
                       </HStack>
                       <HStack gap={3} onClick={(e) => e.stopPropagation()}>
+                        {showAlwaysIncludeToggle && (
+                          <HStack gap={1.5} title="When on, this doc is always included in the agent's prompt. When off, the agent loads it on demand by title.">
+                            <Badge size="sm" colorPalette={docEntry.alwaysInclude ? 'blue' : 'gray'} variant="subtle">
+                              {docEntry.alwaysInclude ? 'Always on' : 'On demand'}
+                            </Badge>
+                            <Switch.Root
+                              size="sm"
+                              aria-label={`${entryLabel} ${index + 1} always include`}
+                              checked={!!docEntry.alwaysInclude}
+                              onCheckedChange={() => handleToggleAlwaysInclude(index)}
+                              colorPalette="blue"
+                            >
+                              <Switch.HiddenInput />
+                              <Switch.Control>
+                                <Switch.Thumb />
+                              </Switch.Control>
+                            </Switch.Root>
+                          </HStack>
+                        )}
                         {showDraftToggle && (
                           <HStack gap={1.5}>
                             <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
@@ -380,6 +474,13 @@ export default function ContextDocsEditor({
                   </Box>
                 </Collapsible.Trigger>
                 <Collapsible.Content>
+                  {/* Title addressability warning for on-demand (lazy) docs. */}
+                  {editMode && showAlwaysIncludeToggle && docTitleWarning && (
+                    <HStack px={3} py={2} gap={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" color="fg.muted">
+                      <Icon as={LuCircleAlert} boxSize={3.5} color="orange.fg" flexShrink={0} />
+                      <Text fontSize="xs">{docTitleWarning}</Text>
+                    </HStack>
+                  )}
                   {/* childPaths selector — only when there are child folders to assign. */}
                   {showChildPaths && availableChildPaths.length > 0 && (
                     <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
@@ -447,6 +548,23 @@ export default function ContextDocsEditor({
                       />
                     </Box>
                   )}
+                  {(() => {
+                    const len = docEntry.content?.length ?? 0;
+                    const over = isDocContentOverLimit(docEntry.content ?? '');
+                    return (
+                      <HStack justify="flex-end" px={2} pt={1}>
+                        <Text
+                          fontSize="2xs"
+                          color={over ? 'accent.danger' : 'fg.subtle'}
+                          fontWeight={over ? '600' : '400'}
+                          aria-label={`${entryLabel} ${index + 1} character count`}
+                        >
+                          {len.toLocaleString()} / {PER_DOC_CONTENT_CHARS.toLocaleString()} chars
+                          {over ? ' — too long to save' : ''}
+                        </Text>
+                      </HStack>
+                    );
+                  })()}
                 </Collapsible.Content>
               </Collapsible.Root>
             </Box>

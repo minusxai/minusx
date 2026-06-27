@@ -79,6 +79,7 @@ function buildVars(pageType: string | null) {
       role: 'editor',
       schema: '«SCHEMA»',
       context: '«CONTEXT»',
+      context_docs_catalog: 'No additional context documents are available.',
       skills_catalog: buildSkillsCatalog({ tree: PROMPTS, preloaded: new Set(preloadedNames), selected: [], userCatalog: [] }),
       connection_id: 'connection_1',
       home_folder: '/org',

@@ -9,8 +9,6 @@ import { executeToolCall } from '@/lib/api/tool-handlers';
 import type { ToolCall } from '@/lib/types';
 import type { RootState } from '@/store/store';
 
-const MOCK_DB = { schemas: [] } as never;
-
 function stateWithSkill(skill: Record<string, unknown>): RootState {
   return {
     files: {
@@ -37,7 +35,7 @@ function parse(content: unknown): Record<string, unknown> {
 describe("executeToolCall('LoadSkill') — frontend user-skill resolution", () => {
   it('resolves an enabled user skill from the active Knowledge Base context', async () => {
     const state = stateWithSkill({ name: 'my_kb', content: 'KB BODY', description: 'd', enabled: true });
-    const msg = await executeToolCall(loadSkillCall('my_kb'), MOCK_DB, undefined, undefined, state);
+    const msg = await executeToolCall(loadSkillCall('my_kb'), undefined, undefined, state);
     const payload = parse(msg.content);
     expect(payload.success).toBe(true);
     expect(payload.skill).toBe('my_kb');
@@ -46,13 +44,13 @@ describe("executeToolCall('LoadSkill') — frontend user-skill resolution", () =
 
   it('returns an error for a disabled user skill', async () => {
     const state = stateWithSkill({ name: 'off_kb', content: 'X', enabled: false });
-    const msg = await executeToolCall(loadSkillCall('off_kb'), MOCK_DB, undefined, undefined, state);
+    const msg = await executeToolCall(loadSkillCall('off_kb'), undefined, undefined, state);
     expect(parse(msg.content).success).toBe(false);
   });
 
   it('returns an error when the skill name is missing', async () => {
     const state = stateWithSkill({ name: 'my_kb', content: 'KB BODY', enabled: true });
-    const msg = await executeToolCall(loadSkillCall(''), MOCK_DB, undefined, undefined, state);
+    const msg = await executeToolCall(loadSkillCall(''), undefined, undefined, state);
     expect(parse(msg.content).success).toBe(false);
   });
 });

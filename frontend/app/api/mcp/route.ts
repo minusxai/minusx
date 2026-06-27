@@ -112,7 +112,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   // after onsessioninitialized sets it (the SDK assigns session IDs asynchronously).
   const sessionRef: { logger: McpSessionLogger | null } = { logger: null };
 
-  const server = createMcpServer(user, (tool, args, result) => {
+  const server = await createMcpServer(user, (tool, args, result) => {
     sessionRef.logger?.logToolCall(tool, args, result);
   });
 

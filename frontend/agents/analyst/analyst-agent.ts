@@ -16,6 +16,9 @@ import {
   SearchDBSchema,
   ExecuteQuery,
 } from '@/agents/benchmark-analyst/db-tools.server';
+import { LoadContext } from '@/agents/web-analyst/web-tools';
+import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
 import type { AppState } from '@/lib/appState';
 import { projectMessages, type WithAppState } from '@/lib/projection/messages';
@@ -58,6 +61,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     ExecuteQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
+    LoadContext.schema,
   ];
   static model = getAgentModelOrTestFallback(FAUX_MODEL);
   // Hard cap on the agentic loop, enforced by MXAgent.run(); the prompt hint
@@ -85,11 +89,15 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
         ? this.context.allowedVizTypes.join(', ')
         : 'all',
       role: this.context.role ?? '',
-      // Whitelisted table list (client-resolved).
-      schema: this.context.schema ? JSON.stringify(this.context.schema) : '',
-      // Markdown context docs from the chat's bound `type: 'context'` file
-      // (resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration).
-      context: this.context.contextDocs ?? '',
+      // Whitelisted table list (client-resolved), capped to a char budget so a
+      // huge/rogue DB can't blow the context — overflow points at SearchDBSchema.
+      schema: renderSchemaForPrompt(this.context.schema),
+      // Fully-formatted "## Context" body: alwaysInclude docs + Schema Notes under
+      // "Default Context Docs", then the lazy-loadable catalog (title + description,
+      // fetched on demand via LoadContext) under "Context Library". Built by the
+      // shared formatter so the prompt and the docs sidebar render identically.
+      // (Resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration.)
+      context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded).
       skills_catalog: buildSkillsCatalog({

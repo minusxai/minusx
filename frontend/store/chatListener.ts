@@ -444,16 +444,10 @@ chatListenerMiddleware.startListening({
         // eslint-disable-next-line no-restricted-syntax
         const { executeToolCall } = await import('@/lib/api/tool-handlers');
 
-        const database = {
-          databaseName: conversation.agent_args.connection_id,
-          schemas: conversation.agent_args.schema || []
-        };
-
         const state = listenerApi.getState() as RootState;
 
         const result = await executeToolCall(
           pendingTool.toolCall,
-          database,
           listenerApi.dispatch as AppDispatch,
           undefined,
           state,

@@ -2,6 +2,7 @@ import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/types';
 import { loadSkill } from '@/agents/skill-content';
+import { loadContextDocsByKeys } from '@/lib/sql/schema-filter';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // All tools below execute in the browser via the existing
 // `executeToolCall` registry (lib/api/tool-handlers.ts). Server-side they
@@ -263,6 +264,35 @@ export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystConte
       content: [{ type: 'text', text: JSON.stringify({ success: true, skill: name, content }) }],
       isError: false,
     };
+  }
+}
+
+// ─── LoadContext ────────────────────────────────────────────────────────────────
+// Lazily load full context-doc content. The system prompt advertises a "Context
+// Library" catalog of doc keys + descriptions (via resolveContextDocs); each key
+// is the stable identifier the agent passes here. This tool resolves the requested
+// keys' full content from the server-resolved library on the agent context. Pure
+// server tool — never throws UserInputException.
+const LoadContextParams = Type.Object({
+  keys: Type.Array(Type.String(), {
+    description: 'Document keys from the Context Library (the quoted identifier shown for each doc) to load full content for. Request only the docs relevant to the current question.',
+  }),
+});
+
+export class LoadContext extends MXTool<typeof LoadContextParams, RemoteAnalystContext> {
+  static readonly schema: Tool<typeof LoadContextParams> = {
+    name: 'LoadContext',
+    description:
+      'Load the full content of one or more context documents by their key, as listed in the Context Library. ' +
+      'Request only the specific docs relevant to the user\'s question or app state — avoid loading everything at once.',
+    parameters: LoadContextParams,
+  };
+
+  async run(): Promise<ToolResponse> {
+    // Shared resolver — same key/title resolution + over-fetch nudge the MCP
+    // LoadContext tool uses (see lib/mcp/server.ts).
+    const { payload, isError } = loadContextDocsByKeys(this.context.resolvedContextDocs, this.parameters.keys ?? []);
+    return { content: [{ type: 'text', text: JSON.stringify(payload) }], isError };
   }
 }
 

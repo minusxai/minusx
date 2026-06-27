@@ -9,7 +9,7 @@ import { IS_DEV } from '@/lib/constants';
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
 import QuestionSchemaSection from './QuestionSchemaSection';
-import { FileType, DatabaseWithSchema } from '@/lib/types';
+import { FileType, DatabaseWithSchema, type ResolvedContextDocs } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
@@ -19,6 +19,7 @@ import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-reso
 import type { Mode } from '@/lib/mode/mode-types';
 import { Tooltip } from './ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
+import { formatContextDocsSection } from '@/lib/sql/schema-filter';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';
@@ -74,7 +75,7 @@ const makeSelectContextFileCount = () =>
 interface SectionContentSharedProps {
   contextsLoading: boolean;
   databases: ReturnType<typeof useContext>['databases'];
-  documentation: string | undefined;
+  contextDocs?: ResolvedContextDocs;
   onContextChange?: (path: string | null, version?: number) => void;
   selectedContextPath?: string | null;
   contextVersion?: number;
@@ -92,7 +93,7 @@ function SectionContent({
   section,
   contextsLoading,
   databases,
-  documentation,
+  contextDocs,
   onContextChange,
   selectedContextPath,
   contextVersion,
@@ -140,8 +141,12 @@ function SectionContent({
         <Box p={4}>
           {contextsLoading ? (
             <Text fontSize="sm" color="fg.muted" fontFamily="mono">Loading documentation...</Text>
-          ) : documentation ? (
-            <Markdown context="sidebar">{documentation}</Markdown>
+          ) : (contextDocs?.docs.length || contextDocs?.schemaNotes) ? (
+            // Same "Default Context Docs / Context Library" layout the agent sees in
+            // its prompt — both render the shared formatContextDocsSection output.
+            <Markdown context="sidebar">
+              {formatContextDocsSection(contextDocs)}
+            </Markdown>
           ) : (
             <Text fontSize="sm" color="fg.muted" fontFamily="mono">No documentation available</Text>
           )}
@@ -403,7 +408,7 @@ export default function RightSidebar({
   const isFolderScope = !fileType || fileType === 'folder';
   const contextInfo = useContext(contextPath, contextVersion, isFolderScope);
   const databases = contextInfo.databases?.filter(db => db.schemas.length > 0);
-  const documentation = contextInfo.documentation;
+  const contextDocs = contextInfo.contextDocs;
   const contextsLoading = contextInfo.contextLoading;
 
   const [isDragging, setIsDragging] = useState(false);
@@ -504,7 +509,7 @@ export default function RightSidebar({
   const sectionContentProps: SectionContentSharedProps = {
     contextsLoading,
     databases,
-    documentation,
+    contextDocs,
     onContextChange,
     selectedContextPath,
     contextVersion,

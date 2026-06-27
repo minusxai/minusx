@@ -20,6 +20,7 @@ import {
   SearchFiles,
 } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
+import { LoadContext } from '@/agents/web-analyst/web-tools';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { SubmitBinary, SubmitNumber, SubmitString, CannotAnswer, SUBMIT_TOOL_NAMES } from './submit-tools';
 
@@ -54,6 +55,7 @@ export class EvalAnalystAgent extends RemoteAnalystAgent {
     ExecuteQuery.schema,
     ReadFiles.schema,
     SearchFiles.schema,
+    LoadContext.schema,
     SubmitBinary.schema,
     SubmitNumber.schema,
     SubmitString.schema,

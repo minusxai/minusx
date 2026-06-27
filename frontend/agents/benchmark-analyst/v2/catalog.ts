@@ -7,6 +7,7 @@
 import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import type { SchemaEntry, NodeConnector, ColumnMeta } from '@/lib/connections/base';
+import type { TableAnnotation } from '@/lib/types';
 import { profileDatabase } from '@/lib/connections/statistics-engine';
 import { getOrCreateBenchmarkConnector } from '../shared-duckdb';
 import type { ConnectionInfo } from '../types';
@@ -79,10 +80,62 @@ export interface CatalogConnector {
  * using that connection's real dialect (so e.g. Mongo connections pass through
  * rather than having DuckDB-style profiling SQL run against them).
  */
+// ── Annotation index ─────────────────────────────────────────────────────────
+// Context-authored table/column descriptions (the editorial layer) are matched
+// onto catalog rows by (connection, schema, table[, column]). An annotation with
+// no `connection` applies to any connection (wildcard).
+
+const ANN_WILDCARD = '*';
+const annKey = (conn: string, schema: string, table: string, col?: string): string =>
+  JSON.stringify([conn, schema, table, col ?? '']);
+
+interface AnnotationIndex {
+  tables: Map<string, string>;
+  columns: Map<string, string>;
+}
+
+function indexAnnotations(annotations: TableAnnotation[] | undefined): AnnotationIndex {
+  const tables = new Map<string, string>();
+  const columns = new Map<string, string>();
+  for (const a of annotations ?? []) {
+    const conn = a.connection ?? ANN_WILDCARD;
+    if (a.description) tables.set(annKey(conn, a.schema, a.table), a.description);
+    for (const c of a.columns ?? []) {
+      if (c.description) columns.set(annKey(conn, a.schema, a.table, c.name), c.description);
+    }
+  }
+  return { tables, columns };
+}
+
+const lookupTableAnn = (idx: AnnotationIndex, conn: string, schema: string, table: string): string | undefined =>
+  idx.tables.get(annKey(conn, schema, table)) ?? idx.tables.get(annKey(ANN_WILDCARD, schema, table));
+
+const lookupColAnn = (idx: AnnotationIndex, conn: string, schema: string, table: string, col: string): string | undefined =>
+  idx.columns.get(annKey(conn, schema, table, col)) ?? idx.columns.get(annKey(ANN_WILDCARD, schema, table, col));
+
+/**
+ * Stable, order-sensitive fingerprint of the annotation set, folded into the
+ * catalog cache key so two contexts that share connections but annotate them
+ * differently don't read each other's notes out of a shared cached catalog.
+ * Returns '' when there are no annotations (key unchanged — back-compat).
+ */
+export function annotationsFingerprint(annotations: TableAnnotation[] | undefined): string {
+  if (!annotations || annotations.length === 0) return '';
+  const json = JSON.stringify(annotations);
+  let h = 2166136261; // FNV-1a (32-bit)
+  for (let i = 0; i < json.length; i++) {
+    h ^= json.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
 export async function buildCatalog(
   connectors: Map<string, CatalogConnector>,
   sampleConfig?: SampleConfig,
+  annotations?: TableAnnotation[],
 ): Promise<CatalogTables> {
+  const annIdx = indexAnnotations(annotations);
   const connectionsRows: Record<string, unknown>[] = [];
   const schemasRows: Record<string, unknown>[] = [];
   const tablesRows: Record<string, unknown>[] = [];
@@ -139,6 +192,8 @@ export async function buildCatalog(
           schema_name: schemaEntry.schema,
           table_name: table.table,
           row_count: null, // Not available from SchemaTable
+          // Editorial table note (no profiled table-level description exists).
+          annotation: lookupTableAnn(annIdx, connName, schemaEntry.schema, table.table) ?? null,
         });
 
         for (const col of table.columns) {
@@ -148,6 +203,10 @@ export async function buildCatalog(
             table_name: table.table,
             column_name: col.name,
             data_type: col.type,
+            // Two distinct sources, kept separate: `description` = profiled DB
+            // comment (meta.description); `annotation` = context-author note.
+            description: col.meta?.description ?? null,
+            annotation: lookupColAnn(annIdx, connName, schemaEntry.schema, table.table, col.name) ?? null,
           });
 
           // Column stats from meta
@@ -204,13 +263,13 @@ export async function buildCatalog(
       rows: schemasRows,
     },
     tables: {
-      columns: ['connection_name', 'schema_name', 'table_name', 'row_count'],
-      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'BIGINT'],
+      columns: ['connection_name', 'schema_name', 'table_name', 'row_count', 'annotation'],
+      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'BIGINT', 'VARCHAR'],
       rows: tablesRows,
     },
     columns: {
-      columns: ['connection_name', 'schema_name', 'table_name', 'column_name', 'data_type'],
-      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+      columns: ['connection_name', 'schema_name', 'table_name', 'column_name', 'data_type', 'description', 'annotation'],
+      types: ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
       rows: columnsRows,
     },
     indexes: {
@@ -351,11 +410,16 @@ export async function getCatalogStore(
   cacheKey: string = 'default',
   sampleConfig?: SampleConfig,
   datasetKey?: string,
+  annotations?: TableAnnotation[],
 ): Promise<{ catalog: CatalogTables; conn: DuckDBConnection }> {
   // Compose the cache key with the dataset namespace so two parallel
   // benchmark datasets each get their own per-slot catalog instance
-  // (matches the shared-duckdb ATTACH namespacing).
-  const composedKey = datasetKey ? `${datasetKey}::${cacheKey}` : cacheKey;
+  // (matches the shared-duckdb ATTACH namespacing). The annotation fingerprint
+  // keeps contexts that share connections but annotate them differently from
+  // sharing a cached catalog (which would leak each other's notes).
+  const annFp = annotationsFingerprint(annotations);
+  const composedKey =
+    (datasetKey ? `${datasetKey}::${cacheKey}` : cacheKey) + (annFp ? `::ann_${annFp}` : '');
   const existing = catalogStores.get(composedKey);
   if (existing) return existing;
 
@@ -370,7 +434,7 @@ export async function getCatalogStore(
       connectors.set(entry.name, { connector: c, dialect: entry.dialect });
     }
 
-    const catalog = await buildCatalog(connectors, sampleConfig);
+    const catalog = await buildCatalog(connectors, sampleConfig, annotations);
     const db = await DuckDBInstance.create(':memory:');
     const conn = await db.connect();
 

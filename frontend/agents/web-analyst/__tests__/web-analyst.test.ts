@@ -12,6 +12,7 @@ import {
   EditFile,
   CreateFile,
   LoadSkill,
+  LoadContext,
   fauxRegistration,
 } from '../web-analyst';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
@@ -113,5 +114,119 @@ describe('LoadSkill tool', () => {
     const names = WebAnalystAgent.tools.map((t) => t.name);
     expect(names).toContain('LoadSkill');
     expect(names).not.toContain('LoadSkillFrontend');
+  });
+});
+
+describe('LoadContext tool', () => {
+  const libCtx: RemoteAnalystContext = {
+    userId: 'u',
+    mode: 'org',
+    resolvedContextDocs: {
+      docs: [
+        { key: 'glossary', title: 'Glossary', description: 'terms', content: 'GLOSSARY BODY', alwaysInclude: false },
+        { key: 'cohorts', title: 'Cohorts', description: 'cohort logic', content: 'COHORTS BODY', alwaysInclude: false },
+        { key: 'billing', title: 'Billing', description: 'billing rules', content: 'BILLING BODY', alwaysInclude: false },
+        { key: 'pricing', title: 'Pricing', description: 'price book', content: 'PRICING BODY', alwaysInclude: false },
+        { key: 'refunds', title: 'Refunds', description: 'refund policy', content: 'REFUNDS BODY', alwaysInclude: false },
+      ],
+    },
+  };
+
+  it('returns the full content of the requested docs by key', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: ['glossary'] }, libCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.docs).toEqual([{ key: 'glossary', title: 'Glossary', content: 'GLOSSARY BODY' }]);
+    expect(payload.missing).toBeUndefined();
+    expect(payload.warning).toBeUndefined();
+  });
+
+  it('falls back to resolving by (unique) human title when the agent passes that instead of the key', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: ['Glossary'] }, libCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.docs).toEqual([{ key: 'glossary', title: 'Glossary', content: 'GLOSSARY BODY' }]);
+  });
+
+  it('reports unknown keys in `missing` without failing', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: ['glossary', 'Nope'] }, libCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.missing).toEqual(['Nope']);
+    expect((res as { isError: boolean }).isError).toBe(false);
+  });
+
+  it('errors (without resolving) when keys is empty', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: [] }, libCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(false);
+    expect((res as { isError: boolean }).isError).toBe(true);
+  });
+
+  it('errors when no context library is available', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: ['glossary'] }, ctx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(false);
+  });
+
+  it('adds an over-fetch warning at the absolute key threshold (5)', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: ['glossary', 'cohorts', 'billing', 'pricing', 'refunds'] }, libCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.docs).toHaveLength(5);
+    expect(typeof payload.warning).toBe('string');
+  });
+
+  it('does not warn below the threshold', async () => {
+    const orch = new Orchestrator([], []);
+    const tool = new LoadContext(orch, { keys: ['glossary', 'cohorts', 'billing'] }, libCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.docs).toHaveLength(3);
+    expect(payload.warning).toBeUndefined();
+  });
+
+  it('is advertised to the LLM in the WebAnalystAgent toolset', () => {
+    const names = WebAnalystAgent.tools.map((t) => t.name);
+    expect(names).toContain('LoadContext');
+  });
+
+  it('auto-executes server-side in a full run — the resolved content lands in the log', async () => {
+    fauxRegistration.setResponses([
+      fauxAssistantMessage(
+        [fauxToolCall('LoadContext', { keys: ['glossary'] }, { id: 'call_lc_1' })],
+        { stopReason: 'toolUse' },
+      ),
+      fauxAssistantMessage('Loaded the glossary.', { stopReason: 'stop' }),
+    ]);
+
+    const orch = new Orchestrator([LoadContext, WebAnalystAgent]);
+    const agent = new WebAnalystAgent(orch, { userMessage: 'what does revenue mean?' }, libCtx);
+    const stream = orch.run(agent);
+    for await (const _ of stream) { /* drain */ }
+    const finalMsg = await stream.result();
+
+    // LoadContext is a pure server tool → no pause; it ran and its result is logged.
+    expect(orch.getPendingToolCalls()).toHaveLength(0);
+    const toolResult = orch.log.find(
+      (m) => (m as { role?: string }).role === 'toolResult' && (m as { toolName?: string }).toolName === 'LoadContext',
+    ) as ToolResultMessage | undefined;
+    expect(toolResult).toBeDefined();
+    const payload = payloadOf(toolResult!.content as { type: string }[]);
+    expect(payload.success).toBe(true);
+    expect((payload.docs as { content: string }[])[0].content).toBe('GLOSSARY BODY');
+    expect(finalMsg!.stopReason).toBe('stop');
   });
 });

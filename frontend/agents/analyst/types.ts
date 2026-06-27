@@ -1,5 +1,6 @@
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
+import type { ResolvedContextDocs } from '@/lib/types';
 import type { BenchmarkAnalystContext, ConnectionInfo } from '@/agents/benchmark-analyst/types';
 
 // Re-export so existing imports keep working.
@@ -43,6 +44,14 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   attachments?: AgentAttachment[];
   /** Approximate user city — biases web-search results. */
   city?: string;
+  /**
+   * Resolved context docs (STRUCTURE), server-resolved from the request's context
+   * pointer. One list tagged with alwaysInclude — the source of truth for the
+   * system prompt's Context section AND the LoadContext tool. (The inherited
+   * `contextDocs: string` is the benchmark/onboarding representation and is unused
+   * on the interactive path.)
+   */
+  resolvedContextDocs?: ResolvedContextDocs;
 }
 
 /**

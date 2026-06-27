@@ -21,10 +21,9 @@ export interface ChatRequest {
       name: string;
       dialect: string;
     };
-    schema?: Array<{
-      schema: string;
-      tables: string[];
-    }>;
+    // NOTE: schema is NOT sent from the client — the server resolves it from the
+    // connection_id pointer (context whitelist, or the connection's persisted
+    // schema as a fallback) in buildServerAgentArgs. See chat-orchestration-v2.server.ts.
     context?: string;
     app_state?: any;
     page_type?: string;

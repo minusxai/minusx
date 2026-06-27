@@ -15,6 +15,7 @@ const SYSTEM_VARS = {
   role: '',
   schema: '',
   context: '',
+  context_docs_catalog: '',
   skills_catalog: '',
   connection_id: '',
   home_folder: '',

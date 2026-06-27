@@ -10,6 +10,7 @@ import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import AppStateViewer from './AppStateViewer';
 import { useContext } from '@/lib/hooks/useContext';
+import { formatContextDocsSection } from '@/lib/sql/schema-filter';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation } from '@/store/chatSlice';
@@ -46,7 +47,7 @@ export default function MobileRightSidebar({
   const contextPath = selectedContextPath || filePath;
   const contextInfo = useContext(contextPath, contextVersion);
   const databases = contextInfo.databases?.filter(db => db.schemas.length > 0);
-  const documentation = contextInfo.documentation;
+  const contextDocs = contextInfo.contextDocs;
   const contextsLoading = contextInfo.contextLoading;
 
   // Get active conversation ID (persists across all pages)
@@ -78,7 +79,7 @@ export default function MobileRightSidebar({
   }
 
   // Show documentation section during loading or when data is available
-  if (documentation !== undefined || contextsLoading) {
+  if (contextDocs?.docs.length || contextDocs?.schemaNotes || contextsLoading) {
     sections.push(getSidebarSection('documentation'));
   }
 
@@ -279,8 +280,12 @@ export default function MobileRightSidebar({
                     <Text fontSize="sm" color="fg.muted" fontFamily="mono">
                       Loading documentation...
                     </Text>
-                  ) : documentation ? (
-                    <Markdown context="sidebar">{documentation}</Markdown>
+                  ) : (contextDocs?.docs.length || contextDocs?.schemaNotes) ? (
+                    // Same "Default Context Docs / Context Library" layout the agent
+                    // sees — both render the shared formatContextDocsSection output.
+                    <Markdown context="sidebar">
+                      {formatContextDocsSection(contextDocs)}
+                    </Markdown>
                   ) : (
                     <Text fontSize="sm" color="fg.muted" fontFamily="mono">
                       No documentation available

@@ -4,8 +4,8 @@ import { selectContextFromPath } from '@/store/filesSlice';
 import { useFile } from './file-state-hooks';
 import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo, SkillMention } from '@/lib/types';
-import { getWhitelistedSchemaForUser, getDocumentationForUser, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
-import { getPublishedVersion, mergeSkillsByName } from '@/lib/context/context-utils';
+import { getWhitelistedSchemaForUser, resolveContextDocs } from '@/lib/sql/schema-filter';
+import { mergeSkillsByName } from '@/lib/context/context-utils';
 
 let cachedSystemSkills: SkillMention[] | null = null;
 let systemSkillsRequest: Promise<SkillMention[]> | null = null;
@@ -52,15 +52,15 @@ function loadSystemSkills(): Promise<SkillMention[]> {
  *
  * @param path - File path to find context for (e.g., '/org/sales')
  * @param version - Optional version number to use (defaults to published version)
- * @returns ContextInfo with databases, documentation, loading states
+ * @returns ContextInfo with databases, resolved context docs, loading states
  *
  * Example:
  * ```tsx
  * function MyComponent({ filePath }: { filePath: string }) {
- *   const { databases, documentation, loading, hasContext } = useContext(filePath);
+ *   const { databases, contextDocs, loading, hasContext } = useContext(filePath);
  *
  *   if (loading) return <Spinner />;
- *   return <SchemaView databases={databases} docs={documentation} />;
+ *   return <SchemaView databases={databases} docs={contextDocs} />;
  * }
  *
  * // Override with specific version (admin testing)
@@ -113,68 +113,19 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       ...systemSkills,
     ];
 
-    // If context exists and is loaded, filter by version
+    // If context exists and is loaded, resolve via the SHARED resolvers — the same
+    // resolveContextDocs / getWhitelistedSchemaForUser the server uses to build the
+    // agent prompt — so the docs sidebar and the agent always agree. `version`
+    // selects an admin-tested version; undefined uses the user's published version.
     if (contextContent && loadedContext && currentUser) {
-      // Determine which version to use (default to published version)
-      const targetVersion = version !== undefined
-        ? version
-        : getPublishedVersion(contextContent);
-
-      // If version override is provided, extract schema/docs from that version directly
-      if (version !== undefined && contextContent.versions) {
-        const versionContent = contextContent.versions.find(v => v.version === version);
-
-        // If version not found, fall back to published
-        const effectiveVersionContent = versionContent ||
-          contextContent.versions.find(v => v.version === contextContent.published.all);
-
-        if (effectiveVersionContent) {
-          // Apply this version's whitelist to fullSchema
-          // Note: fullSchema contains the published version's schema; version override
-          // applies the requested version's whitelist on top of that.
-          const databases = applyWhitelistToConnections(
-            contextContent.fullSchema || [],
-            effectiveVersionContent.whitelist
-          );
-
-          // Combine inherited docs (fullDocs) + own docs from this version, excluding drafts
-          const inheritedDocStrings = (contextContent.fullDocs || [])
-            .filter(doc => typeof doc === 'string' || doc.draft !== true)
-            .map(doc => typeof doc === 'string' ? doc : doc.content);
-          const ownDocStrings = (effectiveVersionContent.docs || [])
-            .filter(doc => typeof doc === 'string' || doc.draft !== true)
-            .map(doc => typeof doc === 'string' ? doc : doc.content);
-          const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
-          const documentation = allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
-          const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
-
-          return {
-            contextId: loadedContext.id,
-            databases,
-            documentation,
-            skills,
-            availableSkills: toAvailableSkills(skills),
-            hasContext: true,
-            contextLoading: contextLoading
-          };
-        }
-      }
-
-      // Default behavior: use published version (via existing helpers)
-      // Both files and folders apply childPaths scoping.
-      // Files use their parent directory as the scope path.
-      const contextDir = contextFile?.path.substring(0, contextFile.path.lastIndexOf('/')) || '/';
-      const scopePath = isFolderScope
-        ? path
-        : path.substring(0, path.lastIndexOf('/')) || '/';
-      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, scopePath, contextDir);
-      const documentation = getDocumentationForUser(contextContent, currentUser.id);
+      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, version);
+      const resolvedDocs = resolveContextDocs(contextContent, currentUser.id, version);
       const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
 
       return {
         contextId: loadedContext.id,
         databases,
-        documentation,
+        contextDocs: resolvedDocs,
         skills,
         availableSkills: toAvailableSkills(skills),
         hasContext: true,
@@ -194,7 +145,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
     return {
       contextId: undefined,
       databases,
-      documentation: undefined,
+      contextDocs: undefined,
       skills: [],
       availableSkills: systemSkills,
       hasContext: false,

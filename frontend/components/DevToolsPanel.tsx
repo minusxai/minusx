@@ -10,7 +10,7 @@ import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import type { ToolCall, DatabaseWithSchema, FileType } from '@/lib/types';
+import type { ToolCall, FileType } from '@/lib/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
@@ -96,7 +96,6 @@ function ToolTester() {
     try {
       const parsedArgs = JSON.parse(argsJson);
       const state = getStore().getState();
-      const database: DatabaseWithSchema = { databaseName: '', schemas: [] };
 
       const toolCall: ToolCall = {
         id: `dev-${Date.now()}`,
@@ -104,7 +103,7 @@ function ToolTester() {
         function: { name: selectedTool, arguments: parsedArgs },
       };
 
-      const toolResult = await executeToolCall(toolCall, database, dispatch, undefined, state, userInputs);
+      const toolResult = await executeToolCall(toolCall, dispatch, undefined, state, userInputs);
       setResult(JSON.stringify(JSON.parse(toolResult.content), null, 2));
     } catch (err: any) {
       if (err instanceof UserInputException) {

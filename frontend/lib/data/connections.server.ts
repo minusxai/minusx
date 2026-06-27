@@ -249,6 +249,21 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     await DocumentDB.update(id, name, path, updatedContent, references, hashContent({ id, schema }));
   }
 
+  /**
+   * Read a connection's PERSISTED schema (the cached schema stored in the
+   * connection file) by name — without hitting the live connector. Used as a
+   * fallback when no context whitelists a schema yet (e.g. onboarding, before a
+   * context is built): it's the same persisted schema the client used to read
+   * and forward as agent_args.schema, now resolved server-side.
+   */
+  async getPersistedSchemaByName(name: string, user: EffectiveUser): Promise<DatabaseSchema | null> {
+    const connectionPath = resolvePath(user.mode, `/database/${name}`);
+    const conn = await DocumentDB.getByPath(connectionPath);
+    if (!conn) return null;
+    const content = conn.content as ConnectionContent;
+    return content.schema ?? null;
+  }
+
   async test(name: string, user: EffectiveUser): Promise<{ success: boolean; message: string }> {
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
     const conn = await DocumentDB.getByPath(connectionPath);
@@ -273,6 +288,7 @@ export const ConnectionsAPI = new ConnectionsDataLayerServer();
 
 // Functional API exports
 export const listAllConnections = ConnectionsAPI.listAll.bind(ConnectionsAPI);
+export const getPersistedConnectionSchema = ConnectionsAPI.getPersistedSchemaByName.bind(ConnectionsAPI);
 export const getConnection = ConnectionsAPI.getByName.bind(ConnectionsAPI);
 export const createConnection = ConnectionsAPI.create.bind(ConnectionsAPI);
 export const updateConnection = ConnectionsAPI.update.bind(ConnectionsAPI);

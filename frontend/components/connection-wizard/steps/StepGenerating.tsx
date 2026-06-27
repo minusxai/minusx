@@ -64,9 +64,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
 
-  // Load context (schema + docs) from the saved context file
-  const contextInfo = useContext(`${modeRoot}/context`);
-  const { databases, documentation: contextDocs } = contextInfo;
+  // Load the schema from the saved context file (docs are resolved server-side
+  // from the context_file_id pointer when the dashboard agent runs).
+  const { databases } = useContext(`${modeRoot}/context`);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -157,17 +157,6 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
 
-    // Build simplified schema — filter to relevant schemas for static connections
-    const selectedDb = databases.find(d => d.databaseName === connectionName) || databases[0];
-    const allSchemas = selectedDb?.schemas ?? [];
-    const relevantSchemas = staticSchemas?.length
-      ? allSchemas.filter(s => staticSchemas.includes(s.schema))
-      : allSchemas;
-    const simplifiedSchema = relevantSchemas.map(s => ({
-      schema: s.schema,
-      tables: s.tables.map(t => t.table)
-    }));
-
     const message = [
       DASHBOARD_PROMPT,
       `Connection: ${connectionName}${staticSchemas?.length ? ` (schemas: ${staticSchemas.join(', ')})` : ''}.`,
@@ -194,15 +183,14 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       version: 3,
       agent_args: {
         connection_id: connectionName,
-        context_path: `${modeRoot}/context`,
+        // Pointer-only: the server resolves the context docs/schema for this file.
+        context_file_id: contextFileId,
         context_version: null,
-        schema: simplifiedSchema,
-        context: contextDocs || '',
         app_state: appState,
       },
       message,
     }));
-  }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs, userPreference, staticSchemas, modeRoot]);
+  }, [dispatch, connectionName, contextFileId, virtualDashboardId, reduxState, hasStarted, userPreference, staticSchemas, modeRoot]);
 
   // Auto-start generation if initialPreference was provided (from questionnaire)
   // Wait for databases to load so the agent has schema context

@@ -1469,7 +1469,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       await executeToolCall(
         toolCall,
-        { databaseName: 'test_db', schemas: [] } as any,
         store.dispatch as any,
         undefined,
         store.getState() as any
@@ -1506,7 +1505,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       await executeToolCall(
         toolCall,
-        { databaseName: 'test_db', schemas: [] } as any,
         store.dispatch as any,
         undefined,
         store.getState() as any
@@ -1537,7 +1535,6 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       const result = await executeToolCall(
         toolCall,
-        { databaseName: 'test_db', schemas: [] } as any,
         store.dispatch as any,
         undefined,
         store.getState() as any
@@ -1594,7 +1591,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Should NOT throw even though auto-execute will fail (no value for :limit)
       const result = await executeToolCall(
         toolCall,
-        { databaseName: 'test_db', schemas: [] } as any,
         store.dispatch as any,
         undefined,
         store.getState() as any

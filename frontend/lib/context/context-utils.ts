@@ -1,5 +1,20 @@
 import yaml from 'js-yaml';
-import { ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode, WhitelistItem, DatabaseWithSchema } from '../types';
+import { ContextContent, DatabaseContext, ContextVersion, SkillEntry, Whitelist, WhitelistNode, WhitelistItem, DatabaseWithSchema, DocEntry } from '../types';
+
+/**
+ * Indices of active (non-draft) docs missing a title or description. The agent
+ * loads docs on demand by title, so both are required to save an active doc;
+ * drafts are exempt (excluded from the agent until activated). Bare string docs
+ * carry no metadata fields and are always-inline, so they're never flagged.
+ */
+export function findDocsMissingMeta(docs: (DocEntry | string)[]): number[] {
+  const bad: number[] = [];
+  docs.forEach((doc, i) => {
+    if (typeof doc === 'string' || doc.draft) return;
+    if (!doc.title?.trim() || !doc.description?.trim()) bad.push(i);
+  });
+  return bad;
+}
 
 /**
  * Count whitelist items (schemas/tables) that still exist in the loader-resolved

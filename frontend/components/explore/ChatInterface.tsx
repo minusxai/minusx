@@ -187,7 +187,7 @@ export default function ChatInterface({
 
   // Load context using useContext hook (reuse existing hook)
   const contextInfo = useContext(contextPath, contextVersion, true);
-  const { databases, documentation: markdown, contextLoading } = contextInfo;
+  const { databases, contextLoading } = contextInfo;
   const { navigate } = useNavigationGuard();
 
   // Get config for location
@@ -613,11 +613,6 @@ export default function ChatInterface({
   }, []);
 
   const buildAgentArgsForMessage = useCallback((userInput: string, allAttachments: Attachment[] = []) => {
-    const simplifiedSchema = database?.schemas?.map(s => ({
-      schema: s.schema,
-      tables: s.tables.map(t => t.table)
-    })) ?? null;
-
     const selectedSkillMentions = getSkillsFromMessage(userInput);
     const uniqueSelectedSkills = uniqueSkills(selectedSkillMentions);
     const selectedUserNames = new Set(
@@ -651,13 +646,15 @@ export default function ChatInterface({
         description: skill.description || '',
       }));
 
+    // POINTERS ONLY — the server resolves the actual context docs, catalog,
+    // library, and schema from these (see buildServerAgentArgs). Shipping the
+    // resolved content here would be redundant (the server recomputes it anyway)
+    // and untrustworthy (the browser could tamper with it).
     return {
       connection_id: database?.databaseName || selectedDatabase || null,
       context_path: contextPath || null,
       context_version: contextVersion ?? null,
       context_file_id: contextInfo.contextId ?? null,
-      schema: simplifiedSchema,
-      context: markdown || '',
       app_state: appState,
       city: config.city,
       agent_name: config.branding.agentName || 'MinusX',
@@ -680,7 +677,6 @@ export default function ChatInterface({
     contextVersion,
     database,
     getSkillsFromMessage,
-    markdown,
     selectedDatabase,
     store,
     uniqueSkills,

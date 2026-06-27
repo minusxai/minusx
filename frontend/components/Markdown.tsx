@@ -491,6 +491,10 @@ export default function Markdown({
       textAlign={textAlign}
       color={textColor}
       onCopy={handleCopy}
+      // Constrain to the parent so wide tables scroll (overflowX on the table
+      // wrapper) instead of the whole block growing past a flex container.
+      minW={0}
+      maxW="100%"
       css={{
         WebkitFontSmoothing: 'antialiased',
         MozOsxFontSmoothing: 'grayscale',

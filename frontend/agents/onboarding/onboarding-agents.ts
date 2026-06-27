@@ -15,8 +15,11 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import { loadSkill } from '@/agents/skill-content';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
+import { LoadContext } from '@/agents/web-analyst/web-tools';
+import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
+import { formatContextDocsSection } from '@/lib/sql/schema-filter';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { appStateForLlm, type AppState } from '@/lib/appState';
 
@@ -32,7 +35,7 @@ const OnboardingAgentParams = Type.Object({
 });
 
 function schemaString(ctx: RemoteAnalystContext): string {
-  return ctx.schema ? JSON.stringify(ctx.schema, null, 2) : 'No schema provided.';
+  return renderSchemaForPrompt(ctx.schema, { pretty: true, emptyText: 'No schema provided.' });
 }
 
 function goalFrom(raw: string | (TextContent | ImageContent)[]): string {
@@ -112,6 +115,7 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
     ExecuteQuery.schema,
     CreateFile.schema,
     EditFile.schema,
+    LoadContext.schema,
   ];
   static override readonly maxSteps = 25;
   static override model = getAgentModelOrTestFallback(FAUX_MODEL);
@@ -127,7 +131,9 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
     return renderPrompt('onboarding_dashboard.system', {
       agent_name: this.context.agentName ?? 'MinusX',
       schema: schemaString(this.context),
-      context: this.context.contextDocs ?? '',
+      // Same shared formatter as the production analyst: Default Context Docs
+      // inline + the on-demand Context Library (fetched via LoadContext).
+      context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       connection_id: this.context.connectionId ?? '',
       max_steps: String(ctor.maxSteps),
       // Verbatim var insertion — see the note in OnboardingContextAgent.

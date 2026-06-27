@@ -13,7 +13,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
-import { ConnectionContent } from '@/lib/types';
+import { ConnectionContent, type ResolvedContextDocs } from '@/lib/types';
 import type { FileType } from '@/lib/ui/file-metadata';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
@@ -24,6 +24,8 @@ import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/api/file-state.server';
 import { getWhitelistForUser } from '@/lib/sql/whitelist-resolver.server';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
+import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { formatContextDocsSection, loadContextDocsByKeys } from '@/lib/sql/schema-filter';
 
 export type McpToolCallResult = { content: Array<{ type: 'text'; text: string }> };
 export type OnToolCall = (tool: string, args: Record<string, unknown>, result: McpToolCallResult) => void;
@@ -33,29 +35,52 @@ export type OnToolCall = (tool: string, args: Record<string, unknown>, result: M
  * Each MCP session gets its own server so tool handlers have access
  * to the user's connections, contexts, and permissions.
  *
+ * Resolves the user's context (same path as Slack/reports via buildServerAgentArgs)
+ * so the connecting client impersonates that user: the Default Context Docs +
+ * Schema Notes are baked into the server `instructions`, and the on-demand Context
+ * Library is exposed through the LoadContext tool (mirroring the in-app agent).
+ *
  * @param onToolCall - Optional callback invoked after each tool completes (used for session logging).
  */
-export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): McpServer {
+export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): Promise<McpServer> {
+  // Resolve the user's nearest context (docs + schema notes). Best-effort — MCP
+  // still works without context (the data tools don't depend on it).
+  let contextDocs: ResolvedContextDocs = { docs: [] };
+  try {
+    ({ context_docs: contextDocs } = await buildServerAgentArgs(user));
+  } catch {
+    // Proceed without context — the read/search tools still function.
+  }
+  const hasLoadableDocs = contextDocs.docs.some((d) => !d.alwaysInclude);
+
+  const baseInstructions = [
+    'MinusX is a an agentic BI tool with questions (SQL queries + visualizations) and dashboards (collections of questions).',
+    '',
+    'URL patterns:',
+    '- Files (questions, dashboards, etc.): /f/{id}  (e.g. /f/189)',
+    '- Folders: /folder/{path}  (e.g. /folder/org/revenue)',
+    '- Explore (ad-hoc SQL): /explore',
+    '',
+    'Files are identified by integer IDs. The `path` field (e.g. /org/elo-by-organization) is for display only.',
+    'Use SearchFiles to find files by name/content, then ReadFiles to get full details.',
+    'Use ListAllConnections to discover available databases, then SearchDBSchema and ExecuteQuery to work with data.',
+    'As of now, you cannot create / modify files in the BI tool via MCP, only read/search existing ones. Future versions may add write capabilities.',
+  ].join('\n');
+
+  // Append the user's context: Default Context Docs + Schema Notes inline, plus the
+  // Context Library catalog advertising keys to fetch via LoadContext. Same shared
+  // formatter the web prompt and docs sidebar use, so all three stay identical.
+  const contextSection = formatContextDocsSection(contextDocs);
+  const instructions = contextSection
+    ? `${baseInstructions}\n\n## Context\n\n${contextSection}`
+    : baseInstructions;
+
   const server = new McpServer(
     {
       name: 'minusx',
       version: '1.0.0',
     },
-    {
-      instructions: [
-        'MinusX is a an agentic BI tool with questions (SQL queries + visualizations) and dashboards (collections of questions).',
-        '',
-        'URL patterns:',
-        '- Files (questions, dashboards, etc.): /f/{id}  (e.g. /f/189)',
-        '- Folders: /folder/{path}  (e.g. /folder/org/revenue)',
-        '- Explore (ad-hoc SQL): /explore',
-        '',
-        'Files are identified by integer IDs. The `path` field (e.g. /org/elo-by-organization) is for display only.',
-        'Use SearchFiles to find files by name/content, then ReadFiles to get full details.',
-        'Use ListAllConnections to discover available databases, then SearchDBSchema and ExecuteQuery to work with data.',
-        'As of now, you cannot create / modify files in the BI tool via MCP, only read/search existing ones. Future versions may add write capabilities.',
-      ].join('\n'),
-    }
+    { instructions }
   );
 
   // -----------------------------------------------------------------------
@@ -248,6 +273,33 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
       return result;
     }
   );
+
+  // -----------------------------------------------------------------------
+  // LoadContext — only when the user's context has on-demand (library) docs.
+  // Pinned (alwaysInclude) docs are already inline in `instructions`, so a
+  // context with nothing loadable doesn't get the tool at all.
+  // -----------------------------------------------------------------------
+  if (hasLoadableDocs) {
+    server.registerTool(
+      'LoadContext',
+      {
+        description:
+          'Load the full content of one or more context documents by their key, as listed in the Context Library section of the instructions. ' +
+          "Request only the specific docs relevant to the user's question — avoid loading everything at once.",
+        inputSchema: {
+          keys: z.array(z.string()).describe('Document keys from the Context Library to load full content for.'),
+        },
+      },
+      async ({ keys }: { keys: string[] }) => {
+        const { payload } = loadContextDocsByKeys(contextDocs, keys);
+        const result: McpToolCallResult = {
+          content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+        };
+        onToolCall?.('LoadContext', { keys }, result);
+        return result;
+      }
+    );
+  }
 
   return server;
 }

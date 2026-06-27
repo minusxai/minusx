@@ -198,14 +198,18 @@ export const LEXICAL_CONTENT_CSS = {
     margin: '0.5em 0',
   },
 
-  // Table — matches Markdown.tsx table styles
+  // Table — matches Markdown.tsx table styles. `display: block` + `overflowX: auto`
+  // makes a wide table scroll horizontally instead of being clipped (a plain
+  // `<table>` doesn't form a reliable scroll container); `width: max-content` keeps
+  // short tables compact, `maxWidth: 100%` caps wide ones to the container so they scroll.
   '& .lexical-table': {
+    display: 'block',
     width: 'max-content',
-    minWidth: '100%',
+    maxWidth: '100%',
+    overflowX: 'auto',
     borderCollapse: 'collapse',
     border: '1px solid var(--chakra-colors-border-default)',
     borderRadius: '6px',
-    overflow: 'hidden',
     margin: '0.5em 0',
     fontSize: 'inherit',
   },

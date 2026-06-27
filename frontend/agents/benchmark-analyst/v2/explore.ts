@@ -99,6 +99,7 @@ Examples:
       this.catalogKey(),
       this.buildSampleConfig(),
       this.context.datasetKey,
+      this.context.annotations,
     );
     const targets = await this.findSearchTargets(filter, catalogConn);
 
