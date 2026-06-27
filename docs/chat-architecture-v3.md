@@ -254,17 +254,23 @@ Sub-message token streaming is **ephemeral**: the producer batches chunks (~ever
 
 `LISTEN/NOTIFY` is transport, not liveness. The **lease + heartbeat** is how we know the server died:
 
-- Starting a turn acquires the lease: `run_status='running'`, `run_lease_owner=<instance>`, `run_heartbeat_at=now`, `run_started_seq=<len>`.
-- If a stream attaches (or a new turn request arrives) and finds `run_status='running'` with a **stale** heartbeat, the lease is expired → safe to **re-drive**: rebuild the orchestrator from `messages` and resume the incomplete step.
-- **Idempotency:** appends are OCC'd by `UNIQUE(conversation_id, seq)`. A re-driven step can only commit the *next* seq once; a duplicate loses the race and forks (existing behavior). The only cost of re-drive is repeating the in-flight LLM call (acceptable; nothing double-commits).
-- `POST …/turns` carries a client `turn_key` (idempotency key) so a retried POST after a blip doesn't start two turns.
+- Starting a turn acquires the lease: `run_status='running'`, `run_lease_owner=<instance>`, `run_heartbeat_at=now`, `run_started_seq=<len>`. Heartbeat bumps every 30s; lease TTL is 90s.
+- A stale lease (`run_status='running'` + heartbeat older than the TTL, or none) = the owner died. It's detected both at **stream setup** and by a **periodic re-check while tailing** (every 15s) — so a client that reconnects *inside* the TTL window onto an already-dead turn doesn't tail forever waiting for a NOTIFY that will never come.
+- On detection the stream **fails the turn cleanly**: release the lease → `run_status='error'`, append a `kind='error'` row ("Turn interrupted (server restarted)"), and send `status:{error, retryable:true}`. The committed rows (incl. the eagerly-committed user message) are preserved.
+
+**Silent auto-retry (bounded, server-enforced).** On a `retryable` error the client silently re-runs the turn (`POST …/turns {autoRetry:true}`, no message) up to `MAX_CLIENT_AUTO_RETRIES`. Server-side `runConversationTurn`:
+- rolls back the dead turn's partial pi rows (`truncateMessagesFrom(run_started_seq)` — error rows kept) and **replays from the preserved user message** (no duplicate root);
+- counts attempts on `conversations.meta.autoRetries`, **refuses past `MAX_AUTO_RETRIES` (2)** with a "gave up" error, and **resets the counter on any successful settle**. The cap is on the conversation row (not client memory), so a reload or second tab can't bypass it and re-crash the box that died.
+- Scope: **user-message turns only**. A crash mid frontend-tool *resume* isn't auto-retried (truncating a half-applied resume is unsafe) — it surfaces a normal error for manual retry.
+
+**Idempotency:** appends are OCC'd by `UNIQUE(conversation_id, seq)`; a fresh user turn / auto-retry won't start while one is already `running`.
 
 ### 7.5 Why this is resilient (the property you want)
 
 Because correctness lives in `messages` + cursor and not in process memory:
 
 - **Client blip** → reconnect with last cursor → catch-up SELECT replays the gap → rejoin live. No loss.
-- **Server restart mid-turn** → committed messages are durable; the new process serves the stream from the DB; the lease shows stale → re-drive finishes the turn. The frontend just reconnects and continues. **No dead UX, no OOM, no lost conversation.**
+- **Server restart mid-turn** → committed messages are durable; the new process serves the stream from the DB; the stale lease is detected (at setup or the periodic re-check) → the turn fails cleanly and the client **silently auto-retries** (rollback + replay), bounded to 2 server-enforced attempts. The user usually sees the turn just complete. **No dead UX, no OOM, no lost conversation, no crash-loop.**
 
 ---
 
