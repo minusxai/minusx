@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { budgetAnnotationNotes } from '@/lib/sql/schema-filter';
+import { budgetAnnotationNotes, backfillAnnotationConnections } from '@/lib/sql/schema-filter';
 import { resolveContextDocs } from '@/lib/sql/schema-filter';
-import type { ContextContent, TableAnnotation } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, TableAnnotation } from '@/lib/types';
 
 function annTables(n: number, colsPer: number): TableAnnotation[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -66,6 +66,48 @@ describe('budgetAnnotationNotes', () => {
     expect(heads.length).toBeGreaterThan(0);
     // columns count must be a multiple-ish of kept heads (3 cols per kept table)
     expect(cols.length).toBe(heads.length * 3);
+  });
+});
+
+describe('backfillAnnotationConnections', () => {
+  const schema: DatabaseWithSchema[] = [
+    { databaseName: 'main_db', schemas: [{ schema: 'public', tables: [{ table: 'orders' }, { table: 'users' }] }] },
+    { databaseName: 'warehouse', schemas: [{ schema: 'public', tables: [{ table: 'orders' }, { table: 'events' }] }] },
+  ] as unknown as DatabaseWithSchema[];
+
+  it('fills connection when exactly one connection owns the schema.table', () => {
+    const anns: TableAnnotation[] = [{ schema: 'public', table: 'users', description: 'App users' }];
+    const out = backfillAnnotationConnections(anns, schema);
+    expect(out[0].connection).toBe('main_db'); // only main_db has public.users
+  });
+
+  it('leaves connection undefined when the schema.table is ambiguous across connections', () => {
+    const anns: TableAnnotation[] = [{ schema: 'public', table: 'orders', description: 'Orders' }];
+    const out = backfillAnnotationConnections(anns, schema);
+    expect(out[0].connection).toBeUndefined(); // both main_db and warehouse have public.orders
+  });
+
+  it('never overrides an already-set connection', () => {
+    const anns: TableAnnotation[] = [{ connection: 'explicit', schema: 'public', table: 'users' }];
+    const out = backfillAnnotationConnections(anns, schema);
+    expect(out[0].connection).toBe('explicit');
+  });
+
+  it('is a no-op without schema', () => {
+    const anns: TableAnnotation[] = [{ schema: 'public', table: 'users' }];
+    expect(backfillAnnotationConnections(anns, undefined)[0].connection).toBeUndefined();
+  });
+});
+
+describe('resolveContextDocs backfills legacy annotation connections', () => {
+  it('shows [conn] for a connection-less annotation when the match is unambiguous', () => {
+    const ctx = {
+      fullAnnotations: [{ schema: 'public', table: 'orders', description: 'Customer orders' }],
+      fullMetrics: [],
+      fullSchema: [{ databaseName: 'main_db', schemas: [{ schema: 'public', tables: [{ table: 'orders' }] }] }],
+    } as unknown as ContextContent;
+    const { schemaNotes } = resolveContextDocs(ctx, 1);
+    expect(schemaNotes).toContain('- [main_db] public.orders — Customer orders');
   });
 });
 
