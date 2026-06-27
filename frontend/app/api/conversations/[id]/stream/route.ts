@@ -50,12 +50,24 @@ export async function GET(
     writer.write(encoder.encode(': ping\n\n')).catch(() => { /* client gone */ });
   }, 15000);
 
+  let staleCheck: ReturnType<typeof setInterval> | undefined;
   const close = async () => {
     if (closed) return;
     closed = true;
     clearInterval(keepalive);
+    if (staleCheck) clearInterval(staleCheck);
     if (unsub) await unsub().catch(() => {});
     await writer.close().catch(() => {});
+  };
+
+  /** Fail an orphaned turn cleanly (lease released → error + retryable message) and end the stream. */
+  const failStale = async () => {
+    await releaseRunLease(conversationId, 'error');
+    await appendError(conversationId, { source: 'session', message: 'Turn interrupted (server restarted). Please retry.' });
+    await flushCatchup();
+    send({ type: 'status', runStatus: 'error' });
+    send({ type: 'done', seq: cursor });
+    await close();
   };
 
   /** Emit every committed message past the cursor, advancing it. */
@@ -86,9 +98,8 @@ export async function GET(
     // Fail it cleanly so the client shows a retryable error instead of hanging forever. The durable
     // rows (incl. the user message, committed eagerly) are preserved, so a retry is idempotent.
     if (fresh && isRunLeaseStale(fresh)) {
-      await releaseRunLease(conversationId, 'error');
-      await appendError(conversationId, { source: 'session', message: 'Turn interrupted (server restarted). Please retry.' });
-      status = 'error';
+      await failStale();
+      return;
     }
 
     if (status === 'idle' || status === 'error') {
@@ -124,6 +135,18 @@ export async function GET(
         }
       }).catch(() => {});
     });
+
+    // Periodic stale re-check: a NOTIFY only fires while the owner is alive, so if the owner died
+    // AFTER we subscribed (or we reconnected inside the 90s lease window onto an already-dead turn),
+    // no wakeup would ever come and we'd tail forever. Poll the lease so an orphaned turn is failed
+    // cleanly even with no NOTIFY traffic. (The DB is source of truth; this only governs liveness.)
+    staleCheck = setInterval(() => {
+      void (async () => {
+        if (closed) return;
+        const cur = await getConversation(conversationId);
+        if (cur && isRunLeaseStale(cur)) await failStale();
+      })().catch(() => {});
+    }, 15000);
 
     // Race guard: the turn may have settled between catch-up and subscribe.
     const recheck = (await getConversation(conversationId))?.runStatus ?? 'running';
