@@ -178,17 +178,20 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       userPreference.trim() ? `What the user wants to see in the dashboard: ${userPreference.trim()}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const initRes = await fetch('/api/chat/init', {
+    // v3: conversations are dedicated rows — create via /api/conversations and tag version:3
+    // so the chat listener drives this turn through the v3 turns + stream engine.
+    const initRes = await fetch('/api/conversations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ firstMessage: message }),
     });
-    const { conversationID: newConvId } = await initRes.json();
+    const { id: newConvId } = await initRes.json();
     setOwnConvId(newConvId);
 
     dispatch(createConversation({
       conversationID: newConvId,
       agent: 'OnboardingDashboardAgent',
+      version: 3,
       agent_args: {
         connection_id: connectionName,
         context_path: `${modeRoot}/context`,

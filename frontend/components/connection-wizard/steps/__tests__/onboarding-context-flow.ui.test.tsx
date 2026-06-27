@@ -45,8 +45,8 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import StepContext from '@/components/connection-wizard/steps/StepContext';
 import type { DbFile, ContextContent } from '@/lib/types';
 
-// In IS_TEST mode the chat listener posts the message (with agent_args.app_state)
-// to /api/chat via fetch (not the XHR stream path) — capture that body.
+// v3: in IS_TEST mode the chat listener POSTs the turn (with agentArgs.app_state) to
+// /api/conversations/:id/turns via fetch (not the XHR stream path) — capture that body.
 let capturedChatBody: any = null;
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────────
@@ -104,15 +104,21 @@ describe('Onboarding wizard — context agent app_state', () => {
 
     global.fetch = vi.fn(async (url: any, init?: any) => {
       const u = String(url);
-      if (u.includes('/api/chat/init')) {
-        return { ok: true, status: 200, json: async () => ({ conversationID: 5000 }) } as Response;
-      }
-      if (/\/api\/chat(\?|$)/.test(u)) {
+      // v3: turn POST carries agentArgs.app_state — capture it.
+      if (/\/api\/conversations\/\d+\/turns/.test(u)) {
         capturedChatBody = init?.body ? JSON.parse(init.body) : null;
+        return { ok: true, status: 200, json: async () => ({ runStatus: 'idle', pendingToolCalls: [], finalSeq: 1 }) } as Response;
+      }
+      // v3: poll GET /:id — return a settled conversation so the listener's poll loop exits.
+      if (/\/api\/conversations\/\d+(\?|$)/.test(u)) {
         return {
           ok: true, status: 200,
-          json: async () => ({ conversationID: 5000, log_index: 1, completed_tool_calls: [], pending_tool_calls: [], debug: [] }),
+          json: async () => ({ conversation: { id: 5000, runStatus: 'idle', version: 3 }, messages: [], errors: [] }),
         } as Response;
+      }
+      // v3: create conversation.
+      if (/\/api\/conversations(\?|$)/.test(u)) {
+        return { ok: true, status: 200, json: async () => ({ id: 5000 }) } as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     }) as any;
@@ -140,7 +146,7 @@ describe('Onboarding wizard — context agent app_state', () => {
 
     await waitFor(() => expect(capturedChatBody).not.toBeNull(), { timeout: 5000 });
 
-    const sentContent = capturedChatBody.agent_args.app_state.state.fileState.content;
+    const sentContent = capturedChatBody.agentArgs.app_state.state.fileState.content;
     const sentDocs = sentContent.versions[sentContent.versions.length - 1].docs;
 
     // The agent sees the file's current docs (empty array — no pre-appended slot).

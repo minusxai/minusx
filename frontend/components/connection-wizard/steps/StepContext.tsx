@@ -411,19 +411,19 @@ export default function StepContext({
         : '',
     ].filter(Boolean).join('\n\n');
 
-    // Wrap /api/chat/init in try/catch + non-2xx handling. On failure, route the
-    // error to the active prior conversation's errors[] (so it shows in history)
-    // and surface in the wizard UI. If there's no prior conv, logInitFailure no-ops
-    // — true cold-start init failures go to Sentry / UI only.
+    // v3: create the conversation via /api/conversations (dedicated rows). Wrap in try/catch +
+    // non-2xx handling. On failure, route the error to the active prior conversation's errors[]
+    // (so it shows in history) and surface in the wizard UI. If there's no prior conv,
+    // logInitFailure no-ops — true cold-start init failures go to Sentry / UI only.
     let newConvId: number;
     try {
-      const initRes = await fetch('/api/chat/init', {
+      const initRes = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstMessage: agentMessage }),
       });
       if (!initRes.ok) {
-        let msg = `/api/chat/init returned HTTP ${initRes.status}`;
+        let msg = `/api/conversations returned HTTP ${initRes.status}`;
         // The API error envelope is `{ error: { code, message, type } }` —
         // grab `.message`. Previously we did `String(b.error)`, which on the
         // envelope shape produced literal "[object Object]". Fall back through
@@ -443,9 +443,9 @@ export default function StepContext({
         return;
       }
       const initData = await initRes.json();
-      newConvId = initData.conversationID;
+      newConvId = initData.id;
       if (typeof newConvId !== 'number') {
-        const msg = '/api/chat/init returned no conversationID';
+        const msg = '/api/conversations returned no conversation id';
         logInitFailure(msg);
         setError(msg);
         return;
@@ -461,6 +461,7 @@ export default function StepContext({
     dispatch(createConversation({
       conversationID: newConvId,
       agent: 'OnboardingContextAgent',
+      version: 3,
       agent_args: {
         connection_id: connectionName,
         context_path: contextPath,
