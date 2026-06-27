@@ -70,7 +70,7 @@ describe('v3 crash-resume (lease + heartbeat)', () => {
     const rows = await loadMessages(conv.id);
     expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows[0].kind).toBe('toolCall');
-    expect((rows[0].content as { arguments: { userMessage: string } }).arguments.userMessage).toBe('which month has max mrr?');
+    expect((rows[0].content as unknown as { arguments: { userMessage: string } }).arguments.userMessage).toBe('which month has max mrr?');
     // Title set from the preserved user message.
     expect((await getConversation(conv.id))?.title).toBe('which month has max mrr?');
   });
