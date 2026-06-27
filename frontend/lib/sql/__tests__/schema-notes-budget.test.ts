@@ -43,6 +43,21 @@ describe('budgetAnnotationNotes', () => {
     expect(lines.join('\n').length).toBeLessThan(1200);
   });
 
+  it('qualifies the head with [connection] when the annotation specifies one', () => {
+    const anns: TableAnnotation[] = [
+      { connection: 'main_db', schema: 'public', table: 'orders', description: 'Customer orders', columns: [{ name: 'amount', description: 'cents' }] },
+      { schema: 'public', table: 'users', description: 'App users' }, // no connection
+    ];
+    const { lines } = budgetAnnotationNotes(anns, 100_000);
+    const text = lines.join('\n');
+    expect(text).toContain('- [main_db] public.orders — Customer orders');
+    // Column line is NOT connection-qualified — indentation conveys hierarchy.
+    expect(text).toContain('  - amount: cents');
+    // No connection → no prefix (unchanged format).
+    expect(text).toContain('- public.users — App users');
+    expect(text).not.toContain('[undefined]');
+  });
+
   it('keeps each table block atomic — never a head without its columns', () => {
     const { lines } = budgetAnnotationNotes(annTables(50, 3), 400);
     // Every column sub-line must be preceded somewhere by at least one head line.

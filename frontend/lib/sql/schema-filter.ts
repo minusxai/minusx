@@ -34,7 +34,8 @@ export function budgetAnnotationNotes(
   for (const a of annotations) {
     const cols = (a.columns || []).filter((c) => c.description);
     if (!a.description && cols.length === 0) continue; // nothing to say — not a drop
-    const head = `- ${a.schema}.${a.table}${a.description ? ` — ${a.description}` : ''}`;
+    const conn = a.connection ? `[${a.connection}] ` : '';
+    const head = `- ${conn}${a.schema}.${a.table}${a.description ? ` — ${a.description}` : ''}`;
     const block = [head, ...cols.map((c) => `  - ${c.name}: ${c.description}`)];
     const cost = block.reduce((n, l) => n + l.length + 1, 0); // +1 ≈ newline per line
     if (!truncated && used + cost <= budgetChars) {
