@@ -12,6 +12,7 @@ import {
   createConversation, getConversation, listConversations, deleteConversation,
   appendMessages, loadLog, loadMessages, getMaxSeq, appendError, loadErrors,
   ConcurrentAppendError, setRunStatus,
+  truncateMessagesFrom, bumpAutoRetries, resetAutoRetries,
 } from '@/lib/data/conversations.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -123,5 +124,28 @@ describe('v3 conversation store', () => {
     // loadMessages (the API/stream view) returns only the seq-bearing rows, not the error.
     const msgs = await loadMessages(c.id);
     expect(msgs.map((m) => m.seq)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('truncateMessagesFrom rolls back pi rows at/after a seq but keeps error rows', async () => {
+    const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await appendMessages(c.id, LOG('t1'), 0);   // seq 0,1
+    await appendMessages(c.id, LOG('t2'), 2);   // seq 2,3
+    await appendError(c.id, { source: 'llm', message: 'boom' });
+
+    const deleted = await truncateMessagesFrom(c.id, 2);  // drop the 2nd turn (seq 2,3)
+    expect(deleted).toBe(2);
+    expect((await loadLog(c.id)).length).toBe(2);          // only the first turn remains
+    expect(await getMaxSeq(c.id)).toBe(1);                 // a replay re-appends from seq 2
+    expect(await loadErrors(c.id)).toHaveLength(1);        // the error row survived
+  });
+
+  it('auto-retry counter: bump increments, reset zeroes (server-enforced cap state)', async () => {
+    const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    expect((await getConversation(c.id))?.meta?.autoRetries ?? 0).toBe(0);
+    expect(await bumpAutoRetries(c.id)).toBe(1);
+    expect(await bumpAutoRetries(c.id)).toBe(2);
+    expect((await getConversation(c.id))?.meta?.autoRetries).toBe(2);
+    await resetAutoRetries(c.id);
+    expect((await getConversation(c.id))?.meta?.autoRetries).toBe(0);
   });
 });

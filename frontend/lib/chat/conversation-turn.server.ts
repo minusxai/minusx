@@ -16,9 +16,11 @@ import type { ChatRequest } from '@/lib/chat-orchestration';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
-  loadLog, appendMessages, updateConversationTitle, appendError, ConcurrentAppendError,
+  loadLog, loadMessages, appendMessages, updateConversationTitle, appendError, ConcurrentAppendError,
   acquireRunLease, heartbeatRunLease, releaseRunLease, getConversation,
+  bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, MAX_AUTO_RETRIES,
 } from '@/lib/data/conversations.server';
+import type { Conversation } from '@/lib/data/conversations.types';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 
@@ -85,21 +87,73 @@ export interface TurnResult {
 }
 
 /**
+ * Prepare a silent auto-retry of a server-restart-interrupted turn. The dead turn began at
+ * `run_started_seq` (preserved across the failed run); its root invocation there carries the user
+ * message. We roll back the dead turn's partial rows and hand back the user message to replay — but
+ * only if (a) we're under the server-enforced cap and (b) it's a user-message turn (resume-turn
+ * crashes aren't auto-retried — truncating a half-applied frontend-tool resume is unsafe).
+ */
+async function prepareAutoRetry(
+  conversationId: number,
+  conv: Conversation | null,
+): Promise<{ ok: true; userMessage: string; startSeq: number } | { ok: false; reason: string; seq: number }> {
+  const startedSeq = conv?.runStartedSeq ?? null;
+  const retries = Number(conv?.meta?.autoRetries ?? 0);
+  if (startedSeq == null) return { ok: false, reason: 'no run_started_seq to retry from', seq: 0 };
+
+  if (retries >= MAX_AUTO_RETRIES) {
+    await appendError(conversationId, { source: 'session', message: `Gave up after ${MAX_AUTO_RETRIES} automatic retries — please try again.` });
+    return { ok: false, reason: 'auto-retry limit reached', seq: startedSeq };
+  }
+
+  const rows = await loadMessages(conversationId, startedSeq - 1);
+  const root = rows.find((r) => r.seq === startedSeq);
+  const userMessage = root && root.parentPiId == null
+    ? (root.content as unknown as { arguments?: { userMessage?: unknown } })?.arguments?.userMessage
+    : undefined;
+  if (typeof userMessage !== 'string') {
+    await appendError(conversationId, { source: 'session', message: 'Interrupted turn is not auto-retriable — please try again.' });
+    return { ok: false, reason: 'not a retriable user-message turn', seq: startedSeq };
+  }
+
+  await bumpAutoRetries(conversationId);
+  await truncateMessagesFrom(conversationId, startedSeq); // roll back the dead turn's partial rows
+  return { ok: true, userMessage, startSeq: startedSeq };
+}
+
+/**
  * Run one turn segment to completion (or to a frontend-tool pause), persisting rows + notifying.
  * Awaitable; the route fires it detached (the long-running Node process keeps it alive) and the
- * client receives output via the stream.
+ * client receives output via the stream. `opts.autoRetry` replays a crash-interrupted turn (rolls
+ * back its partial rows and re-runs from the preserved user message, bounded by MAX_AUTO_RETRIES).
  */
 export async function runConversationTurn(
   conversationId: number,
   user: EffectiveUser,
   body: ChatRequest,
+  opts: { autoRetry?: boolean } = {},
 ): Promise<TurnResult> {
-  const savedLog = await loadLog(conversationId);
-  const startSeq = savedLog.length;
-
   // Benchmark conversations carry their per-conversation connection configs in meta.benchmark_connections;
   // hand it to setupOrchestration so continuation can wire NodeConnector-backed executors.
   const conv = await getConversation(conversationId);
+
+  if (opts.autoRetry) {
+    const prep = await prepareAutoRetry(conversationId, conv);
+    if (!prep.ok) {
+      await releaseRunLease(conversationId, 'error');
+      await notifyStatus(conversationId, 'error', prep.seq);
+      return { conversationId, runStatus: 'error', pendingToolCalls: [], finalSeq: prep.seq, error: prep.reason };
+    }
+    // Replay as a fresh user-message turn from the rolled-back point.
+    body = { ...body, user_message: prep.userMessage, completed_tool_calls: undefined, resume: undefined } as ChatRequest;
+  } else {
+    // A new user intent (or manual retry) clears the consecutive auto-retry budget.
+    await resetAutoRetries(conversationId);
+  }
+
+  const savedLog = await loadLog(conversationId);
+  const startSeq = savedLog.length;
+
   const setup = await setupOrchestration(body, user, conversationId, { savedLog, fileMeta: conv?.meta ?? null });
   if (setup.fatalError) {
     await appendError(conversationId, { source: 'session', message: setup.fatalError });
@@ -187,6 +241,9 @@ export async function runConversationTurn(
   const pendingToolCalls = setup.orchestrator.getPendingToolCalls();
   const runStatus: TurnResult['runStatus'] = runError ? 'error' : pendingToolCalls.length > 0 ? 'paused' : 'idle';
   await releaseRunLease(conversationId, runStatus);
+  // A turn that actually progressed (idle/paused) clears the auto-retry budget so the next
+  // interruption gets a fresh MAX_AUTO_RETRIES. Only consecutive failures count toward the cap.
+  if (runStatus !== 'error') await resetAutoRetries(conversationId);
   await notifyStatus(conversationId, runStatus, finalSeq);
 
   return { conversationId, runStatus, pendingToolCalls, finalSeq, error: runError };

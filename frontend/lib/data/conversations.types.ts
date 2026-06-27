@@ -23,6 +23,8 @@ export interface ConversationMeta {
   firstMessage?: string;
   /** Parent conversation id when this row was created by an OCC fork. */
   forkedFrom?: number;
+  /** Consecutive silent auto-retries of the current turn after server-restart interruptions (cap: MAX_AUTO_RETRIES). */
+  autoRetries?: number;
   [key: string]: unknown;
 }
 
@@ -76,7 +78,7 @@ export type ConversationStreamEvent =
   | { type: 'message'; seq: number; message: ConversationLogEntry } // a durable, committed entry
   | { type: 'delta'; seq: number; text: string }                   // ephemeral token chunk (in-flight msg)
   | { type: 'pending'; seq: number; toolCalls: StreamPendingToolCall[] } // turn paused on a frontend tool
-  | { type: 'status'; runStatus: RunStatus }                       // run lifecycle transition
+  | { type: 'status'; runStatus: RunStatus; retryable?: boolean }   // run lifecycle transition; retryable=true on a crash-interrupted error the client may silently re-run
   | { type: 'done'; seq: number }                                  // turn finished; cursor is final
   | { type: 'error'; error: string };
 

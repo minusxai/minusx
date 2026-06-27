@@ -60,12 +60,15 @@ export async function GET(
     await writer.close().catch(() => {});
   };
 
-  /** Fail an orphaned turn cleanly (lease released → error + retryable message) and end the stream. */
+  /**
+   * Fail an orphaned turn cleanly (lease released → error) and end the stream. `retryable: true`
+   * signals the client it may silently re-run the interrupted turn (server enforces MAX_AUTO_RETRIES).
+   */
   const failStale = async () => {
     await releaseRunLease(conversationId, 'error');
     await appendError(conversationId, { source: 'session', message: 'Turn interrupted (server restarted). Please retry.' });
     await flushCatchup();
-    send({ type: 'status', runStatus: 'error' });
+    send({ type: 'status', runStatus: 'error', retryable: true });
     send({ type: 'done', seq: cursor });
     await close();
   };

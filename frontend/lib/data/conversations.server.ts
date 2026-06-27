@@ -205,6 +205,47 @@ export function isRunLeaseStale(conv: { runStatus: RunStatus; runHeartbeatAt: st
   return now - (Date.parse(conv.runHeartbeatAt) || 0) > RUN_LEASE_TTL_MS;
 }
 
+/**
+ * Max times a single turn is silently auto-retried after a server-restart interruption. Enforced
+ * server-side via `meta.autoRetries` (NOT just client memory) so a reload / second tab can't bypass
+ * the cap and re-crash the box that died — a turn that crashed the server gets at most this many
+ * automatic re-runs, fleet-wide, before it stops and asks the user.
+ */
+export const MAX_AUTO_RETRIES = 2;
+
+/** Increment the consecutive auto-retry counter (meta.autoRetries); returns the new value. */
+export async function bumpAutoRetries(id: number): Promise<number> {
+  const res = await db().exec<{ n: number }>(
+    `UPDATE conversations
+       SET meta = jsonb_set(COALESCE(meta, '{}'::jsonb), '{autoRetries}',
+                            to_jsonb(COALESCE((meta->>'autoRetries')::int, 0) + 1))
+     WHERE id = $1
+     RETURNING (meta->>'autoRetries')::int AS n`,
+    [id],
+  );
+  return Number(res.rows[0]?.n ?? 0);
+}
+
+/** Reset the consecutive auto-retry counter — called on a new user turn and on any successful settle. */
+export async function resetAutoRetries(id: number): Promise<void> {
+  await db().exec(
+    `UPDATE conversations SET meta = jsonb_set(COALESCE(meta, '{}'::jsonb), '{autoRetries}', '0'::jsonb) WHERE id = $1`,
+    [id],
+  );
+}
+
+/**
+ * Delete pi-log rows at or past `fromSeq` (used to roll back a crashed turn before an auto-retry
+ * replays it). Error rows (seq = NULL) are kept — they record what happened. Returns rows deleted.
+ */
+export async function truncateMessagesFrom(id: number, fromSeq: number): Promise<number> {
+  const res = await db().exec(
+    'DELETE FROM messages WHERE conversation_id = $1 AND seq IS NOT NULL AND seq >= $2',
+    [id, fromSeq],
+  );
+  return res.rowCount ?? 0;
+}
+
 export async function deleteConversation(id: number): Promise<void> {
   // messages (pi-log + error rows) cascade via FK ON DELETE CASCADE.
   await db().exec('DELETE FROM conversations WHERE id = $1', [id]);

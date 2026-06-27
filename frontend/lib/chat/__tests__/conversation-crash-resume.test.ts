@@ -10,7 +10,8 @@ vi.mock('@/lib/database/db-config', () => ({
 
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import {
-  createConversation, getConversation, loadMessages, isRunLeaseStale, acquireRunLease,
+  createConversation, getConversation, loadMessages, loadLog, loadErrors, isRunLeaseStale,
+  acquireRunLease, bumpAutoRetries,
 } from '@/lib/data/conversations.server';
 import { getModules } from '@/lib/modules/registry';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
@@ -73,5 +74,44 @@ describe('v3 crash-resume (lease + heartbeat)', () => {
     expect((rows[0].content as unknown as { arguments: { userMessage: string } }).arguments.userMessage).toBe('which month has max mrr?');
     // Title set from the preserved user message.
     expect((await getConversation(conv.id))?.title).toBe('which month has max mrr?');
+  });
+
+  it('auto-retry replays a crash-interrupted user turn without duplicating the message', async () => {
+    // 1) A turn crashes mid-flight: faux empty → orchestrator errors after the root invocation is
+    //    committed. Leaves log=[root], run_status=error, run_started_seq=0.
+    webAnalystFaux.setResponses([]);
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await runConversationTurn(conv.id, ADMIN, turnBody('which month has max mrr?'));
+    expect((await loadLog(conv.id)).length).toBe(1);               // just the dangling root
+    expect((await getConversation(conv.id))?.runStartedSeq).toBe(0);
+
+    // 2) Auto-retry: the runner rolls back the dead turn and replays from the preserved user message.
+    webAnalystFaux.setResponses([fauxAssistantMessage('June 2024.', { stopReason: 'stop' })]);
+    const r = await runConversationTurn(conv.id, ADMIN, turnBody(''), { autoRetry: true });
+
+    expect(r.runStatus).toBe('idle');
+    const log = await loadLog(conv.id);
+    // Exactly one root invocation (no duplicate) + the assistant reply.
+    const roots = log.filter((e) => (e as { parent_id?: unknown }).parent_id === null);
+    expect(roots).toHaveLength(1);
+    expect((roots[0] as unknown as { arguments: { userMessage: string } }).arguments.userMessage).toBe('which month has max mrr?');
+    expect(JSON.stringify(log)).toContain('June 2024.');
+    // Success clears the auto-retry budget.
+    expect((await getConversation(conv.id))?.meta?.autoRetries).toBe(0);
+  });
+
+  it('auto-retry is refused (and gives up) once MAX_AUTO_RETRIES is reached', async () => {
+    webAnalystFaux.setResponses([]);
+    const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+    await runConversationTurn(conv.id, ADMIN, turnBody('hello')); // dangling root at seq 0, run_started_seq 0
+    await bumpAutoRetries(conv.id);
+    await bumpAutoRetries(conv.id); // autoRetries = 2 = MAX
+
+    const r = await runConversationTurn(conv.id, ADMIN, turnBody(''), { autoRetry: true });
+    expect(r.runStatus).toBe('error');
+    // The dangling root is preserved (not truncated) and a "gave up" error is recorded.
+    expect((await loadLog(conv.id)).length).toBe(1);
+    const errs = await loadErrors(conv.id);
+    expect(errs.some((e) => /gave up after \d+ automatic retries/i.test(e.message))).toBe(true);
   });
 });

@@ -28,11 +28,15 @@ export interface V3StreamCallbacks {
 export interface V3TurnResult {
   status: RunStatus;     // terminal status observed (idle | paused | error)
   error?: string;
+  retryable?: boolean;   // the error was a crash-interruption the client may silently re-run
   pendingToolCalls: StreamPendingToolCall[];
   finalSeq: number;
 }
 
 const RESUME_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+/** Client-side cap on silent auto-retries of a crash-interrupted turn. The server's meta.autoRetries
+ *  is the authoritative cap (survives reload / multiple tabs); this just bounds one client's loop. */
+const MAX_CLIENT_AUTO_RETRIES = 2;
 
 function parseSseEvents(buffer: string): { events: ConversationStreamEvent[]; rest: string } {
   const parts = buffer.split('\n\n');
@@ -84,6 +88,7 @@ function readStreamOnce(
           break;
         case 'status':
           state.result.status = e.runStatus;
+          if (e.retryable) state.result.retryable = true;
           break;
         case 'done':
           state.result.finalSeq = e.seq;
@@ -132,21 +137,27 @@ function readStreamOnce(
   });
 }
 
-/** Start (or resume) a v3 turn and stream it to completion, reconnecting across transport drops. */
-export async function runV3Turn(
+/**
+ * Start (or resume / auto-retry) a v3 turn once and stream it to completion, reconnecting across
+ * transport drops. `autoRetry` re-runs a crash-interrupted turn server-side (no userMessage — the
+ * server replays it from the preserved log).
+ */
+async function startAndStream(
   conversationId: number,
   sinceLogIndex: number,
   turn: V3TurnInput,
+  autoRetry: boolean,
   signal: AbortSignal,
   cb: V3StreamCallbacks,
 ): Promise<V3TurnResult> {
-  // 1. Start/resume the turn. The route flips run_status -> running before returning, so the stream
-  //    we open next always sees an active turn.
+  // 1. Start the turn. The route flips run_status -> running before returning, so the stream we open
+  //    next always sees an active turn.
   const startRes = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationId}/turns`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
     body: JSON.stringify({
+      ...(autoRetry ? { autoRetry: true } : {}),
       ...(turn.userMessage != null ? { userMessage: turn.userMessage } : {}),
       ...(turn.completedToolCalls ? { completedToolCalls: turn.completedToolCalls } : {}),
       ...(turn.agent ? { agent: turn.agent } : {}),
@@ -185,4 +196,26 @@ export async function runV3Turn(
       // reconnect: GET stream?since=cursor replays the gap from the durable log.
     }
   }
+}
+
+/**
+ * Run a v3 turn to completion. On a crash-interruption (the stream reports a `retryable` error —
+ * server restarted mid-turn), silently re-run the turn from the durable log, up to the cap. The
+ * server independently enforces MAX_AUTO_RETRIES on the conversation, so a reload or second tab
+ * can't exceed the bound and re-crash the box.
+ */
+export async function runV3Turn(
+  conversationId: number,
+  sinceLogIndex: number,
+  turn: V3TurnInput,
+  signal: AbortSignal,
+  cb: V3StreamCallbacks,
+): Promise<V3TurnResult> {
+  let result = await startAndStream(conversationId, sinceLogIndex, turn, false, signal, cb);
+  for (let retry = 0; result.status === 'error' && result.retryable && retry < MAX_CLIENT_AUTO_RETRIES; retry++) {
+    if (signal.aborted) break;
+    // Replay server-side from the preserved log (no userMessage). Re-stream from the same point.
+    result = await startAndStream(conversationId, sinceLogIndex, { agent: turn.agent, agentArgs: turn.agentArgs }, true, signal, cb);
+  }
+  return result;
 }
