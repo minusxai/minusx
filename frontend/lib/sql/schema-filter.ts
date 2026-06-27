@@ -356,6 +356,18 @@ export function deriveDocMeta(content: string): { title: string; description: st
 }
 
 /**
+ * Below this many total (active) docs, lazy-loading buys nothing — they're all
+ * inlined (Default Context Docs) so the agent never has to spend a LoadContext
+ * call. At/above it, only the explicitly-pinned (alwaysInclude) docs inline; the
+ * rest go to the on-demand catalog. This is a presentation decision, so it lives
+ * in `formatContextDocsSection`, not in the structure produced here.
+ */
+export const INLINE_ALL_DOCS_THRESHOLD = 5;
+
+/** Shown under "Context Library" when there are no lazy docs to load on demand. */
+const EMPTY_CONTEXT_LIBRARY_TEXT = 'No additional context documents are available.';
+
+/**
  * Resolve a context's docs into STRUCTURE (one list, each tagged alwaysInclude)
  * plus the generated schema notes. No presentation — turn it into text only in
  * `formatContextDocsSection`. Lazy docs without an explicit title/description fall
@@ -418,7 +430,7 @@ export function resolveContextDocs(
 
 /** Render an always-include doc's inline body (optional title/description header + content). */
 function renderResolvedDocInline(doc: ResolvedContextDoc): string {
-  const header = [`key: "${doc.key}"`, doc.title ? `### ${doc.title}` : null, doc.description || null].filter(Boolean).join('\n\n');
+  const header = [`**key**: "${doc.key}"`, doc.title ? `**title**: ${doc.title}` : null, doc.description ? `**description**: ${doc.description}` : null].filter(Boolean).join('\n\n');
   return header ? `${header}\n\n${doc.content}` : doc.content;
 }
 
@@ -453,28 +465,34 @@ function formatContextLibraryCatalog(lazyDocs: ResolvedContextDoc[]): string {
  * render and the sidebar both call it so the two can never drift.
  *
  * Takes the STRUCTURE (`resolveContextDocs`'s output) and produces text here, in
- * one pass: alwaysInclude docs (+ schema notes) under "Default Context Docs", lazy
- * docs as catalog lines under "Context Library". An empty section is omitted,
- * except the catalog can fall back to `emptyCatalogText` (the prompt uses this so
- * the agent always sees an explicit "nothing to load" line; the sidebar omits it).
+ * one pass: inlined docs (+ schema notes) under "Default Context Docs", lazy docs
+ * as catalog lines under "Context Library". The catalog falls back to a fixed
+ * "nothing to load" line, so the agent always sees an explicit Context Library
+ * section even when there are no docs (the sidebar gates on having docs before
+ * calling this, so it never renders a bare fallback).
  */
 export function formatContextDocsSection(
   resolved: { docs?: ResolvedContextDoc[]; schemaNotes?: string },
-  opts?: { emptyCatalogText?: string },
 ): string {
   const docs = resolved.docs ?? [];
   const parts: string[] = [];
 
-  // Default Context Docs: alwaysInclude doc bodies, then the schema notes.
-  const inlineParts = docs.filter((d) => d.alwaysInclude).map(renderResolvedDocInline);
+  // Small context: lazy-loading buys nothing, so inline every doc rather than
+  // advertise a catalog the agent would have to spend a LoadContext call to read.
+  const inlineAll = docs.length < INLINE_ALL_DOCS_THRESHOLD;
+  const isInline = (d: ResolvedContextDoc) => inlineAll || d.alwaysInclude;
+
+  // Default Context Docs: inlined doc bodies, then the schema notes.
+  const inlineParts = docs.filter(isInline).map(renderResolvedDocInline);
   if (resolved.schemaNotes) inlineParts.push(resolved.schemaNotes);
   const inline = inlineParts.filter(Boolean).join('\n\n---\n\n');
-  if (inline.trim()) parts.push(`## Default Context Docs\n\n${inline}`);
+  if (inline.trim()) parts.push(`### Default Context Docs\n\n${inline}`);
 
-  // Context Library: the lazy docs, advertised by key + title (+ description).
-  const catalog = formatContextLibraryCatalog(docs.filter((d) => !d.alwaysInclude));
-  const catalogBody = catalog.trim() ? catalog : (opts?.emptyCatalogText ?? '');
-  if (catalogBody.trim()) parts.push(`---\n## Context Library \n\nNote: These can be loaded on demand via the \`key\`.\n\n${catalogBody}`);
+  // Context Library: the lazy docs, advertised by key + title (+ description), or
+  // a fixed "nothing to load" line when everything is inlined.
+  const catalog = formatContextLibraryCatalog(docs.filter((d) => !isInline(d)));
+  const catalogBody = catalog.trim() ? catalog : EMPTY_CONTEXT_LIBRARY_TEXT;
+  parts.push(`---\n### Context Library \n\nNote: These can be loaded on demand via the \`key\`.\n\n${catalogBody}`);
 
   return parts.join('\n\n');
 }

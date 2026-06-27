@@ -199,7 +199,7 @@ templates:
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
     ### Context management tools
-    - **LoadContext(keys: string[])**: Load the full text of org-specific documentation, metrics definitions, and conventions by key. Use this when you need more context for a question or dashboard. Only load the documents relevant to the user's question; do not load all of them at once.
+    - **LoadContext(keys: string[])**: Load the full text of org-specific documentation, metrics definitions, and conventions by key, from the Context Library. Use this when you need more context for a question or dashboard. Only load the documents relevant to the user's question; do not load all of them at once.
 
     ### Skills (Dynamic Context)
     - **LoadSkill(name: string)**: Load detailed instructions for a system or user-defined skill by name. Use this before working with file types or features you need more context on. Available skills:
@@ -947,6 +947,7 @@ templates:
 
     2. **Search** (for new data questions — mandatory, non-negotiable):
        Follow this checklist in order before writing any new SQL:
+       0. LoadContext if not already present, and looks like any context from the Context Library seems relevant. Do this first — it may save you from inferring the wrong metric definitions or definitions from plain SearchFiles or SearchDBSchema. Context is curated by the team and is authoritative for metric definitions, table/column meanings, and business rules.
        1. SearchFiles for existing questions related to the request
        2. Exact match? → Use it directly. Close match? → Adapt its SQL. Composable? → Use @alias references.
        3. No results? → Check Context docs for metric definitions, then write SQL

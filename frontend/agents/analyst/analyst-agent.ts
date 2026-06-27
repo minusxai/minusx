@@ -95,10 +95,7 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // fetched on demand via LoadContext) under "Context Library". Built by the
       // shared formatter so the prompt and the docs sidebar render identically.
       // (Resolved server-side in /api/chat/v2 → shared.ts → setupOrchestration.)
-      context: formatContextDocsSection(
-        this.context.resolvedContextDocs ?? { docs: [] },
-        { emptyCatalogText: 'No additional context documents are available.' },
-      ),
+      context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       // LoadSkill catalog: skills available to fetch on demand (system + user,
       // minus already-preloaded).
       skills_catalog: buildSkillsCatalog({

@@ -110,6 +110,14 @@ describe('resolveContextDocs', () => {
     const ctx = makeContext([{ content: 'just inline', alwaysInclude: true, title: 'x' }]);
     expect(lazy(resolveContextDocs(ctx, 1))).toHaveLength(0);
   });
+
+  it('leaves the inline/lazy decision to the formatter — never promotes here', () => {
+    // resolveContextDocs is pure structure: a single plain doc stays lazy; the
+    // "inline everything when small" rule lives in formatContextDocsSection.
+    const r = resolveContextDocs(makeContext([{ title: 'Doc A', description: 'a', content: 'BODY A' }]), 1);
+    expect(r.docs).toHaveLength(1);
+    expect(r.docs[0].alwaysInclude).toBe(false);
+  });
 });
 
 describe('resolveContextDocs — version override', () => {
@@ -160,20 +168,30 @@ describe('resolveContextDocs — version override', () => {
 // than exact strings — the precise header/line wording is tuned independently.
 describe('formatContextDocsSection', () => {
   const inlineDoc = { key: '', title: '', content: 'INLINE DOCS', alwaysInclude: true };
-  const lazyFoo = { key: 'foo', title: 'Foo', content: 'FOO BODY', alwaysInclude: false };
+  // N would-be-lazy docs — enough of them (>= threshold) keeps them lazy so the
+  // catalog actually renders. Below the threshold the formatter inlines them all.
+  const lazyDocs = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      key: `foo_${i}`,
+      title: `Foo ${i}`,
+      description: `about foo ${i}`,
+      content: `FOO BODY ${i}`,
+      alwaysInclude: false,
+    }));
 
-  it('renders both sections from one docs list, partitioning by alwaysInclude', () => {
-    const out = formatContextDocsSection({ docs: [inlineDoc, lazyFoo] });
+  it('renders both sections, inlining pinned docs and advertising lazy docs by key', () => {
+    // 1 pinned + 5 lazy = 6 total (>= threshold) so the lazy docs stay in the catalog.
+    const out = formatContextDocsSection({ docs: [inlineDoc, ...lazyDocs(5)] });
     expect(out).toContain('Default Context Docs');
     expect(out).toContain('INLINE DOCS');
     expect(out).toContain('Context Library');
-    expect(out).toContain('foo');          // lazy doc advertised by key
-    expect(out).not.toContain('FOO BODY'); // ...but its body is withheld
+    expect(out).toContain('foo_0');          // lazy doc advertised by key
+    expect(out).not.toContain('FOO BODY 0'); // ...but its body is withheld
   });
 
   it('includes a description in the catalog line when present', () => {
-    const out = formatContextDocsSection({ docs: [{ key: 'foo', title: 'Foo', description: 'all about foo', content: 'b', alwaysInclude: false }] });
-    expect(out).toContain('all about foo');
+    const out = formatContextDocsSection({ docs: lazyDocs(5) });
+    expect(out).toContain('about foo 0');
   });
 
   it('renders an alwaysInclude doc body inline', () => {
@@ -190,27 +208,34 @@ describe('formatContextDocsSection', () => {
   });
 
   it('omits the Default section when there are no inline docs or schema notes', () => {
-    const out = formatContextDocsSection({ docs: [lazyFoo] });
+    // All lazy and above the threshold → nothing inlined.
+    const out = formatContextDocsSection({ docs: lazyDocs(5) });
     expect(out).not.toContain('Default Context Docs');
     expect(out).toContain('Context Library');
   });
 
-  it('omits the Context Library section in the sidebar (no fallback) when there are no lazy docs', () => {
-    const out = formatContextDocsSection({ docs: [inlineDoc] });
+  it('inlines every doc and shows the "nothing to load" catalog when below the threshold', () => {
+    // 3 would-be-lazy docs (< 5) → all inlined; the catalog falls back to the fixed line.
+    const out = formatContextDocsSection({ docs: lazyDocs(3) });
     expect(out).toContain('Default Context Docs');
-    expect(out).not.toContain('Context Library');
-  });
-
-  it('falls back to emptyCatalogText for the prompt so the agent always sees a Context Library line', () => {
-    const out = formatContextDocsSection(
-      { docs: [] },
-      { emptyCatalogText: 'No additional context documents are available.' },
-    );
+    expect(out).toContain('FOO BODY 0');   // body inlined, not just advertised
     expect(out).toContain('Context Library');
     expect(out).toContain('No additional context documents are available.');
   });
 
-  it('returns an empty string when there is nothing to show and no fallback', () => {
-    expect(formatContextDocsSection({})).toBe('');
+  it('always shows a Context Library line (fixed fallback) when there are no lazy docs', () => {
+    const out = formatContextDocsSection({ docs: [inlineDoc] });
+    expect(out).toContain('Default Context Docs');
+    expect(out).toContain('Context Library');
+    expect(out).toContain('No additional context documents are available.');
+  });
+
+  it('renders just the fixed "nothing to load" Context Library line when there are no docs', () => {
+    // No Default section (no inline docs / schema notes), but the agent still gets
+    // an explicit Context Library line so it knows there is nothing to load.
+    const out = formatContextDocsSection({});
+    expect(out).not.toContain('Default Context Docs');
+    expect(out).toContain('Context Library');
+    expect(out).toContain('No additional context documents are available.');
   });
 });

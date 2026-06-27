@@ -33,12 +33,9 @@ export class SlackAgent extends RemoteAnalystAgent {
       allowed_viz_types: '',
       role: '',
       schema: '',
-      // Slack keeps the system prompt minimal: no inline docs, and an explicit
-      // "nothing to load" Context Library line (via the shared formatter).
-      context: formatContextDocsSection(
-        { docs: [] },
-        { emptyCatalogText: 'No additional context documents are available.' },
-      ),
+      // Slack keeps the system prompt minimal: no docs, so the shared formatter
+      // renders just the "nothing to load" Context Library line.
+      context: formatContextDocsSection({ docs: [] }),
       skills_catalog: '',
       connection_id: this.context.connectionId ?? '',
       home_folder: '',
