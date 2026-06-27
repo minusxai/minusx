@@ -25,4 +25,14 @@ export class AdapterBackedDBModule implements IFileSystemDBModule {
     const adapter = await getAdapter();
     await adapter.close();
   }
+
+  async notify(channel: string, payload: string): Promise<void> {
+    const adapter = await getAdapter();
+    await adapter.notify(channel, payload);
+  }
+
+  async listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>> {
+    const adapter = await getAdapter();
+    return adapter.listen(channel, onNotify);
+  }
 }

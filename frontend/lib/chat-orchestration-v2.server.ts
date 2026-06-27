@@ -242,7 +242,7 @@ export type V2LegacyStreamingEvent =
   | { wire: 'done'; data: V2LegacyChatResponse & { type: 'done'; timestamp: string } }
   | { wire: 'error'; data: { type: 'error'; error: string; timestamp: string } };
 
-interface OrchestrationSetup {
+export interface OrchestrationSetup {
   conversationId: number;
   expectedLogIndex: number;
   orchestrator: Orchestrator;
@@ -361,16 +361,26 @@ const ROOT_AGENT_BY_NAME = immutableMap<string, RootAgentCtor>([
   ['OnboardingDashboardAgent', OnboardingDashboardAgent],
 ]);
 
-async function setupOrchestration(
+export async function setupOrchestration(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,
-  options?: { preview?: boolean },
+  options?: { preview?: boolean; savedLog?: ConversationLog; fileMeta?: Record<string, unknown> | null },
 ): Promise<OrchestrationSetup> {
-  const file = await FilesAPI.loadFile(conversationId, user);
-  const content = file.data.content as unknown as ConversationFileContent | undefined;
-  // Orchestrator log lives at content.log (we persist orchestrator log shape on disk).
-  const savedLog: ConversationLog = ((content?.log ?? []) as unknown) as ConversationLog;
+  // v3 (dedicated tables) injects the saved log from the `messages` rows via options.savedLog so this
+  // whole agent/context build is reused without a conversation FILE. v1/v2 load it from the file.
+  let savedLog: ConversationLog;
+  let fileMeta: Record<string, unknown> | null;
+  if (options?.savedLog) {
+    savedLog = options.savedLog;
+    fileMeta = options.fileMeta ?? null;
+  } else {
+    const file = await FilesAPI.loadFile(conversationId, user);
+    const content = file.data.content as unknown as ConversationFileContent | undefined;
+    // Orchestrator log lives at content.log (we persist orchestrator log shape on disk).
+    savedLog = ((content?.log ?? []) as unknown) as ConversationLog;
+    fileMeta = ((file.data as { meta?: Record<string, unknown> | null }).meta) ?? null;
+  }
   const expectedLogIndex = savedLog.length;
 
   const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
@@ -501,7 +511,6 @@ async function setupOrchestration(
       // populated here (with full config, not just metadata).
       const baseBenchCtx = buildBenchmarkContextFromSavedLog(savedLog);
       const allowedNames = new Set((baseBenchCtx.connections ?? []).map((c) => c.name));
-      const fileMeta = (file.data as { meta?: Record<string, unknown> | null }).meta ?? null;
       const persistedConnections = fileMeta?.benchmark_connections;
       const entries: BenchmarkConnectionEntry[] = Array.isArray(persistedConnections)
         ? (persistedConnections as BenchmarkConnectionEntry[])
@@ -612,7 +621,7 @@ function firstUserMessageFromPiDiff(piDiff: PiLogEntry[]): string | null {
  * best-effort central stats forward. The call id + duration are the ones the
  * engine already stamps onto each message. Best-effort.
  */
-async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
+export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser): Promise<void> {
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};

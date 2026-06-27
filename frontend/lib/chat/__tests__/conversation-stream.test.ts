@@ -1,0 +1,64 @@
+// The LISTEN/NOTIFY wakeup bus, end-to-end on a real PGLite DB: a publish reaches a subscriber,
+// delta payloads ride inline, and unsubscribing stops delivery. This proves PGLite LISTEN/NOTIFY
+// works through the adapter (the v3 streaming transport).
+vi.mock('@/lib/database/db-config', () => ({
+  PGLITE_DATA_DIR: undefined,
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
+
+import { subscribe, notifyMessage, notifyDelta } from '@/lib/chat/conversation-stream.server';
+import type { ConversationNotify } from '@/lib/data/conversations.types';
+import { getTestDbPath } from '@/store/__tests__/test-utils';
+import { setupTestDb } from '@/test/harness/test-db';
+
+const TEST_DB_PATH = getTestDbPath('conversation_stream');
+
+/** Wait until `received` has at least `n` items, or throw after a timeout. */
+async function waitFor(received: unknown[], n: number, ms = 2000): Promise<void> {
+  const start = Date.now();
+  while (received.length < n) {
+    if (Date.now() - start > ms) throw new Error(`timed out waiting for ${n} notifies (got ${received.length})`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+describe('conversation stream bus (LISTEN/NOTIFY)', () => {
+  setupTestDb(TEST_DB_PATH);
+
+  it('delivers message + delta wakeups to a subscriber, then stops after unsubscribe', async () => {
+    const received: ConversationNotify[] = [];
+    const unsubscribe = await subscribe(4242, (n) => received.push(n));
+
+    await notifyMessage(4242, 0);
+    await notifyDelta(4242, 1, 'hello');
+    await waitFor(received, 2);
+
+    expect(received[0]).toEqual({ kind: 'message', seq: 0 });
+    expect(received[1]).toEqual({ kind: 'delta', seq: 1, text: 'hello' });
+
+    await unsubscribe();
+    await notifyMessage(4242, 2);
+    // Give any stray delivery a chance, then assert nothing new arrived.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(received).toHaveLength(2);
+  });
+
+  it('isolates channels by conversation id', async () => {
+    const a: ConversationNotify[] = [];
+    const b: ConversationNotify[] = [];
+    const unsubA = await subscribe(101, (n) => a.push(n));
+    const unsubB = await subscribe(202, (n) => b.push(n));
+
+    await notifyMessage(101, 5);
+    await waitFor(a, 1);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(a).toEqual([{ kind: 'message', seq: 5 }]);
+    expect(b).toHaveLength(0); // conversation 202 heard nothing
+
+    await unsubA();
+    await unsubB();
+  });
+});
