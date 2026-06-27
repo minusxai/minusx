@@ -926,6 +926,10 @@ export default function ContextEditorV2({
 
         {/* Tables Tab */}
         <Tabs.Content value="databases">
+          {/* Only mount the heavy schema tree when this tab is active — Chakra keeps
+              all panels mounted, so without this gate SchemaTreeView re-renders on
+              every keystroke while editing docs (visible typing lag). */}
+          {topTab === 'databases' && (<>
           {activeTab === 'picker' ? (
             <VStack gap={6} align="stretch">
               {/* Database Sections */}
@@ -1205,6 +1209,7 @@ export default function ContextEditorV2({
               </HStack>
             </Box>
           )}
+          </>)}
         </Tabs.Content>
 
         {/* Docs Tab */}
