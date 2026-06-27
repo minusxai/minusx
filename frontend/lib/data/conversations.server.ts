@@ -213,6 +213,9 @@ export function isRunLeaseStale(conv: { runStatus: RunStatus; runHeartbeatAt: st
  */
 export const MAX_AUTO_RETRIES = 2;
 
+/** The single user-facing error shown when a crash-interrupted turn can't be auto-recovered. */
+export const AUTO_RETRY_EXHAUSTED_MESSAGE = "We couldn't complete that after several automatic retries. Please try again.";
+
 /** Increment the consecutive auto-retry counter (meta.autoRetries); returns the new value. */
 export async function bumpAutoRetries(id: number): Promise<number> {
   const res = await db().exec<{ n: number }>(

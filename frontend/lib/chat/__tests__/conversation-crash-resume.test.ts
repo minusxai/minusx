@@ -112,6 +112,6 @@ describe('v3 crash-resume (lease + heartbeat)', () => {
     // The dangling root is preserved (not truncated) and a "gave up" error is recorded.
     expect((await loadLog(conv.id)).length).toBe(1);
     const errs = await loadErrors(conv.id);
-    expect(errs.some((e) => /gave up after \d+ automatic retries/i.test(e.message))).toBe(true);
+    expect(errs.some((e) => /couldn't complete that after several automatic retries/i.test(e.message))).toBe(true);
   });
 });

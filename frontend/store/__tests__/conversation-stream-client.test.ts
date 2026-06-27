@@ -64,16 +64,30 @@ describe('runV3Turn — silent auto-retry on crash interruption', () => {
     expect(lastPostBodies[1].userMessage).toBeUndefined(); // server replays from the log
   });
 
-  it('stops after MAX_CLIENT_AUTO_RETRIES when the error stays retryable', async () => {
-    // Every attempt reports a retryable crash → client caps the loop.
-    streamScript = Array.from({ length: 6 }, () => (
+  it('stops when the server signals exhaustion (retryable:false) — the normal terminal path', async () => {
+    // Server lets it retry twice, then flips to a non-retryable error (budget exhausted).
+    streamScript = [
+      [{ type: 'status', runStatus: 'error', retryable: true }, { type: 'done', seq: 0 }],
+      [{ type: 'status', runStatus: 'error', retryable: true }, { type: 'done', seq: 0 }],
+      [{ type: 'status', runStatus: 'error', retryable: false }, { type: 'done', seq: 0 }], // exhausted
+    ];
+
+    const res = await runV3Turn(7, 0, { userMessage: 'hi', agent: 'WebAnalystAgent', agentArgs: {} }, new AbortController().signal, cb);
+
+    expect(res.status).toBe('error');
+    expect(res.retryable).toBe(false);
+    expect(streamOpens).toBe(3);  // initial + 2 retries, then the server said stop
+  });
+
+  it('caps at the client safety bound if the server never stops sending retryable', async () => {
+    streamScript = Array.from({ length: 12 }, () => (
       [{ type: 'status', runStatus: 'error', retryable: true }, { type: 'done', seq: 0 }] as ConversationStreamEvent[]
     ));
 
     const res = await runV3Turn(7, 0, { userMessage: 'hi', agent: 'WebAnalystAgent', agentArgs: {} }, new AbortController().signal, cb);
 
     expect(res.status).toBe('error');
-    expect(streamOpens).toBe(3);  // initial + 2 retries (MAX_CLIENT_AUTO_RETRIES), then give up
+    expect(streamOpens).toBe(6);  // initial + 5 (MAX_CLIENT_AUTO_RETRIES safety bound)
   });
 
   it('does NOT retry a non-retryable error (e.g. an LLM failure)', async () => {

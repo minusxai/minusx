@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError } from '@/lib/data/conversations.server';
+import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE } from '@/lib/data/conversations.server';
 import { subscribe } from '@/lib/chat/conversation-stream.server';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 import type { ConversationStreamEvent } from '@/lib/data/conversations.types';
@@ -61,14 +61,22 @@ export async function GET(
   };
 
   /**
-   * Fail an orphaned turn cleanly (lease released → error) and end the stream. `retryable: true`
-   * signals the client it may silently re-run the interrupted turn (server enforces MAX_AUTO_RETRIES).
+   * Fail an orphaned turn cleanly (lease released → error) and end the stream.
+   *
+   * The interruption itself is transient noise — the client silently auto-retries — so we do NOT
+   * persist a user-facing error while retries remain (`retryable: true`, no error row). Only once the
+   * auto-retry budget is exhausted do we surface ONE durable, user-facing error and stop retrying
+   * (`retryable: false`). So a turn that recovers shows no error at all.
    */
   const failStale = async () => {
+    const fresh = await getConversation(conversationId);
+    const exhausted = Number(fresh?.meta?.autoRetries ?? 0) >= MAX_AUTO_RETRIES;
     await releaseRunLease(conversationId, 'error');
-    await appendError(conversationId, { source: 'session', message: 'Turn interrupted (server restarted). Please retry.' });
+    if (exhausted) {
+      await appendError(conversationId, { source: 'session', message: AUTO_RETRY_EXHAUSTED_MESSAGE });
+    }
     await flushCatchup();
-    send({ type: 'status', runStatus: 'error', retryable: true });
+    send({ type: 'status', runStatus: 'error', retryable: !exhausted });
     send({ type: 'done', seq: cursor });
     await close();
   };
