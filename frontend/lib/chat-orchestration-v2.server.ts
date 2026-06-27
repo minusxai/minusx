@@ -63,6 +63,7 @@ import {
 } from '@/lib/chat-translator';
 import { extractDebugMessages } from '@/lib/conversations-utils';
 import { appendLogToConversation, appendErrorToConversation, truncateMessageForName, slugify, createNewConversation } from '@/lib/conversations';
+import { getConversation as getV3Conversation, loadLog as loadV3Log } from '@/lib/data/conversations.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
@@ -587,7 +588,10 @@ export async function estimateNextChatContextV2(
     completed_tool_calls: undefined,
     resume: undefined,
   };
-  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, { preview: true });
+  // v3 conversations live in dedicated tables (not a file) — feed the log from rows.
+  const v3 = await getV3Conversation(conversationId);
+  const savedLog = v3 ? await loadV3Log(conversationId) : undefined;
+  const setup = await setupOrchestration(bodyWithProbe, user, conversationId, { preview: true, ...(savedLog ? { savedLog } : {}) });
   if (setup.fatalError) {
     throw new Error(setup.fatalError);
   }
