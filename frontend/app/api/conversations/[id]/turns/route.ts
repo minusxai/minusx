@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { getConversation, setRunStatus, appendError } from '@/lib/data/conversations.server';
+import { getConversation, setRunStatus, appendError, getMaxSeq } from '@/lib/data/conversations.server';
 import { notifyStatus } from '@/lib/chat/conversation-stream.server';
 import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
 import { getModules } from '@/lib/modules/registry';
@@ -51,6 +51,13 @@ export const POST = withAuth(async (
       agent_args: (body.agentArgs ?? {}) as Record<string, unknown>,
     } as unknown as ChatRequest;
 
+    // Flip to 'running' + NOTIFY synchronously BEFORE returning, so a client that opens the stream
+    // right after this POST sees an active turn (never a premature idle/done). The detached runner
+    // re-asserts 'running' (idempotent).
+    const startSeq = (await getMaxSeq(conversationId)) + 1;
+    await setRunStatus(conversationId, 'running');
+    await notifyStatus(conversationId, 'running', startSeq);
+
     // Preserve request-scoped context (auth/mode) for the detached run; no-op in the base build.
     const runInContext = (await getModules().auth.getContextRunner?.()) ?? ((fn: () => Promise<unknown>) => fn());
 
@@ -61,7 +68,7 @@ export const POST = withAuth(async (
         try {
           await appendError(conversationId, { source: 'unhandled', message });
           await setRunStatus(conversationId, 'error');
-          await notifyStatus(conversationId, 'error', conversation.runStatus === 'paused' ? 0 : 0);
+          await notifyStatus(conversationId, 'error', startSeq);
         } catch { /* best-effort */ }
       });
 

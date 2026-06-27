@@ -138,8 +138,9 @@ const chatSlice = createSlice({
       agent_args?: any;
       message?: string;  // Optional initial user message
       attachments?: import('@/lib/types').Attachment[];
+      version?: number;  // 3 = v3 engine (dedicated tables + LISTEN/NOTIFY streaming)
     }>) {
-      const { conversationID, agent, agent_args, message, attachments } = action.payload;
+      const { conversationID, agent, agent_args, message, attachments, version } = action.payload;
 
       // Deactivate all existing conversations
       Object.values(state.conversations).forEach(c => {
@@ -170,6 +171,7 @@ const chatSlice = createSlice({
         pending_tool_calls: [],
         agent,
         agent_args: agent_args || {},
+        ...(version !== undefined ? { version } : {}),
         streamedCompletedToolCalls: [],
         streamedThinking: '',
         queuedMessages: [],

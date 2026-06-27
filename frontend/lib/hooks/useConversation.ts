@@ -5,6 +5,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation } from '@/store/chatSlice';
 import { parseLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
 import { FilesAPI } from '@/lib/data/files';
+import { ConversationsAPI } from '@/lib/data/conversations';
+import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
 import type { ConversationLog } from '@/orchestrator/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -45,6 +47,44 @@ export function useConversation(conversationId?: number) {
       setAttempted(conversationId);
 
       try {
+        // Chat v3: conversations are dedicated rows. Try the v3 endpoint first; a 404 means this is
+        // an old v1/v2 file-conversation, so fall back to FilesAPI below.
+        let v3detail = null;
+        try { v3detail = await ConversationsAPI.get(conversationId); } catch { /* not a v3 conversation */ }
+        if (v3detail) {
+          const piLog = v3detail.messages.map((m) => m.content) as unknown as ConversationLog;
+          const errors = v3detail.errors.map((e) => ({
+            source: e.source, message: e.message,
+            timestamp: Date.parse(e.createdAt) || Date.now(),
+            ...(e.details ? { details: e.details } : {}),
+            ...(e.parentPiId ? { parent_id: e.parentPiId } : {}),
+          }));
+          const { messages, agent, agent_args } = parsePiConversation(piLog, errors as never);
+          const paused = v3detail.conversation.runStatus === 'paused';
+          const pending = paused ? derivePendingToolCalls(piLog) : [];
+          dispatch(loadConversation({
+            conversation: {
+              _id: crypto.randomUUID(),
+              conversationID: conversationId,
+              log_index: piLog.length,
+              messages,
+              executionState: paused ? 'EXECUTING' : 'FINISHED',
+              pending_tool_calls: pending.map((p) => ({
+                toolCall: { id: p.id, type: 'function' as const, function: { name: p.name, arguments: p.arguments } },
+                result: undefined,
+              })),
+              streamedCompletedToolCalls: [],
+              streamedThinking: '',
+              agent,
+              agent_args,
+              version: 3,
+            },
+            setAsActive: false,
+          }));
+          setIsLoading(false);
+          return;
+        }
+
         // Fetch file from database via FilesAPI
         const result = await FilesAPI.loadFile(conversationId);
 

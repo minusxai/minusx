@@ -30,9 +30,11 @@ import { FilesAPI } from '@/lib/data/files';
 import { parseLogToMessages, parsePiConversation } from '@/lib/conversations-utils';
 import type { ConversationFileContent, TaskLogEntry } from '@/lib/types';
 import type { ConversationLog } from '@/orchestrator/types';
-import { getCurrentAsUser, getCurrentV } from '@/lib/navigation/url-utils';
-import { getCurrentMode } from '@/lib/mode/mode-utils';
 import type { AgentSkillSelection } from '@/lib/types';
+import { API_BASE_URL, patchApiUrl } from './api-url';
+import { runV3Turn, type V3TurnInput } from './conversation-stream-client';
+import { ConversationsAPI } from '@/lib/data/conversations';
+import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 
 // ---------------------------------------------------------------------------
 // Synthetic skill-load events
@@ -97,35 +99,7 @@ function emitSyntheticSkillLoads(
 const abortControllers = new Map<string, AbortController>();
 
 // API base URL - defaults to relative path in browser, absolute in Node/tests
-const API_BASE_URL = typeof window === 'undefined'
-  ? 'http://localhost:3000'  // Node.js test environment
-  : '';  // Browser - use relative URLs
-
 export const chatListenerMiddleware = createListenerMiddleware();
-
-// ---------------------------------------------------------------------------
-// URL helpers
-// ---------------------------------------------------------------------------
-
-/** Mirror the fetch-patch: append as_user, mode, and v params to /api/ URLs.
- *
- * The XHR-based SSE driver bypasses `window.fetch`, so it doesn't pick up
- * the global fetch-patch automatically. We replicate the same param-
- * forwarding here. `v` carries the chat-surface selection (`?v=1` = legacy
- * Conversations surface) through the streamed request.
- */
-function patchApiUrl(path: string): string {
-  if (typeof window === 'undefined') return path;
-  const asUser = getCurrentAsUser();
-  const mode = getCurrentMode();
-  const v = getCurrentV();
-  if (!asUser && mode === 'org' && !v) return path;
-  const url = new URL(path, window.location.origin);
-  if (asUser) url.searchParams.set('as_user', asUser);
-  if (mode !== 'org') url.searchParams.set('mode', mode);
-  if (v) url.searchParams.set('v', v);
-  return url.pathname + url.search;
-}
 
 // ---------------------------------------------------------------------------
 // SSE parsing
@@ -556,6 +530,105 @@ async function fetchChatNonStreaming(
 }
 
 // ---------------------------------------------------------------------------
+// v3 chat path (dedicated conversations/messages tables + LISTEN/NOTIFY streaming)
+// ---------------------------------------------------------------------------
+
+/** Map stream-derived pending tool calls to the ToolCall shape the pending machinery expects. */
+function v3PendingToToolCalls(pending: { id: string; name: string; arguments: Record<string, unknown> }[]) {
+  return pending.map((p) => ({ id: p.id, type: 'function' as const, function: { name: p.name, arguments: p.arguments } }));
+}
+
+/**
+ * Run one v3 turn (new message or resume) from the listener: stream live deltas, then reload the
+ * durable log and finalize. On a frontend-tool pause, set pending_tool_calls (triggering the
+ * auto-exec machinery → completeToolCall → v3 resume). Throws on error so handleStreamError shows it.
+ */
+async function runV3TurnInListener(
+  conversationID: number,
+  conversation: ReturnType<typeof selectConversation>,
+  turn: V3TurnInput,
+  dispatch: AppDispatch,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!conversation) return;
+
+  let status: 'idle' | 'paused' | 'error' = 'idle';
+  let runError: string | undefined;
+  if (IS_TEST) {
+    // jsdom has no usable XHR/SSE for the stream — POST the turn, then poll until it settles.
+    const res = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/turns`), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(turn.userMessage != null ? { userMessage: turn.userMessage } : {}),
+        ...(turn.completedToolCalls ? { completedToolCalls: turn.completedToolCalls } : {}),
+        ...(turn.agent ? { agent: turn.agent } : {}),
+        agentArgs: turn.agentArgs ?? {},
+      }),
+    });
+    if (!res.ok) throw new Error(`turn failed: HTTP ${res.status}`);
+    for (let i = 0; i < 600; i++) {
+      const d = await ConversationsAPI.get(conversationID);
+      if (d.conversation.runStatus !== 'running') { status = d.conversation.runStatus as typeof status; break; }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  } else {
+    const result = await runV3Turn(conversationID, conversation.log_index ?? 0, turn, signal, {
+      onDelta: (text) => dispatch(addStreamingMessage({ conversationID, type: 'StreamedContent', payload: { chunk: text } } as never)),
+      onPending: () => { /* pending is derived from the reloaded log below */ },
+    });
+    status = result.status === 'running' ? 'idle' : result.status;
+    runError = result.error;
+  }
+  if (status === 'error') throw new Error(runError || 'chat error');
+
+  // Reload the durable log for the final render (one source of truth).
+  const detail = await ConversationsAPI.get(conversationID);
+  const piLog = detail.messages.map((m) => m.content) as unknown as ConversationLog;
+  const errors = detail.errors.map((e) => ({
+    source: e.source, message: e.message,
+    timestamp: Date.parse(e.createdAt) || Date.now(),
+    ...(e.details ? { details: e.details } : {}),
+    ...(e.parentPiId ? { parent_id: e.parentPiId } : {}),
+  }));
+  const { messages } = parsePiConversation(piLog, errors as never);
+
+  dispatch(clearStreamingContent({ conversationID }));
+  dispatch(loadConversation({
+    conversation: {
+      ...conversation,
+      conversationID,
+      messages,
+      log_index: piLog.length,
+      pending_tool_calls: [],
+      streamedCompletedToolCalls: [],
+      streamedThinking: '',
+      executionState: status === 'paused' ? 'EXECUTING' : 'FINISHED',
+      version: 3,
+    },
+    setAsActive: false,
+  }));
+
+  // Paused on frontend tools → set pending (triggers the auto-exec listener → completeToolCall → resume).
+  if (status === 'paused') {
+    const pending = derivePendingToolCalls(piLog);
+    if (pending.length > 0) {
+      dispatch(updateConversation({
+        conversationID,
+        log_index: piLog.length,
+        completed_tool_calls: [],
+        pending_tool_calls: v3PendingToToolCalls(pending) as never,
+        debug: [],
+      }));
+    }
+  }
+}
+
+/** Whether the conversation rides the v3 engine (dedicated tables + LISTEN/NOTIFY streaming). */
+function isV3(conversation: ReturnType<typeof selectConversation>): boolean {
+  return conversation?.version === 3;
+}
+
+// ---------------------------------------------------------------------------
 // Listeners
 // ---------------------------------------------------------------------------
 
@@ -578,6 +651,17 @@ chatListenerMiddleware.startListening({
     abortControllers.set(conversation._id, abortController);
 
     emitSyntheticSkillLoads(conversationID, conversation, dispatch);
+
+    if (isV3(conversation)) {
+      try {
+        await runV3TurnInListener(conversationID, conversation,
+          { userMessage: message, agent: conversation.agent, agentArgs: conversation.agent_args },
+          dispatch, abortController.signal);
+      } catch (error: any) {
+        if (await handleStreamError(error, 'chatListener:createConversation:v3', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      }
+      return;
+    }
 
     try {
       if (IS_TEST) {
@@ -623,6 +707,17 @@ chatListenerMiddleware.startListening({
     abortControllers.set(conversation._id, abortController);
 
     emitSyntheticSkillLoads(conversationID, conversation, dispatch);
+
+    if (isV3(conversation)) {
+      try {
+        await runV3TurnInListener(conversationID, conversation,
+          { userMessage: message, agent: conversation.agent, agentArgs: conversation.agent_args },
+          dispatch, abortController.signal);
+      } catch (error: any) {
+        if (await handleStreamError(error, 'chatListener:sendMessage:v3', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      }
+      return;
+    }
 
     try {
       if (IS_TEST) {
@@ -729,6 +824,14 @@ chatListenerMiddleware.startListening({
       const userMessage = shouldFlushMidTurn ? queuedMessages.map(qm => qm.message).join('\n\n') : null;
       if (shouldFlushMidTurn) {
         dispatch(flushQueuedMessages({ conversationID }));
+      }
+
+      if (isV3(conversation)) {
+        // Resume the v3 turn with the executed frontend-tool results (+ any mid-turn queued message).
+        await runV3TurnInListener(conversationID, conversation,
+          { completedToolCalls: completed_tool_calls, ...(userMessage ? { userMessage } : {}), agent: conversation.agent, agentArgs: conversation.agent_args },
+          dispatch, abortController.signal);
+        return;
       }
 
       if (IS_TEST) {
@@ -899,17 +1002,19 @@ chatListenerMiddleware.startListening({
       console.warn(`[interruptChat] No AbortController found for conversation ${conversationID}`);
     }
 
-    // Also cancel the run server-side. The run registry decouples turns from
-    // connections (so transport drops can resume) — which means aborting the
-    // local stream alone would leave the engine running (and billing tokens)
-    // to completion in the background. Best-effort: if the server misses it,
-    // the turn just completes as before.
+    // Also cancel the run server-side. Turns are decoupled from connections (so transport drops can
+    // resume) — aborting the local stream alone would leave the engine running (billing tokens) to
+    // completion. v3 conversations use their own interrupt endpoint (NOTIFY → orchestrator.cancel);
+    // v2 uses the run-registry endpoint. Best-effort either way.
     if (conversationID > 0) {
+      const url = isV3(conversation)
+        ? `${API_BASE_URL}/api/conversations/${conversationID}/interrupt`
+        : `${API_BASE_URL}/api/chat/interrupt`;
       try {
-        await fetch(patchApiUrl(`${API_BASE_URL}/api/chat/interrupt`), {
+        await fetch(patchApiUrl(url), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversationID }),
+          ...(isV3(conversation) ? {} : { body: JSON.stringify({ conversationID }) }),
         });
       } catch (err) {
         console.warn('[interruptChat] server-side interrupt failed (best-effort):', err);

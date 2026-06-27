@@ -97,6 +97,9 @@ import { POST as batchFilesHandler } from '@/app/api/files/batch/route';
 import { POST as templateHandler } from '@/app/api/files/template/route';
 import { GET as connectionsGetHandler } from '@/app/api/connections/route';
 import { GET as configsGetHandler } from '@/app/api/configs/route';
+import { POST as conversationsPostHandler, GET as conversationsListHandler } from '@/app/api/conversations/route';
+import { GET as conversationGetHandler } from '@/app/api/conversations/[id]/route';
+import { POST as conversationTurnsHandler } from '@/app/api/conversations/[id]/turns/route';
 
 // Capture real fetch before any test can override it
 const realFetch = global.fetch;
@@ -369,6 +372,35 @@ async function catchAllApiInterceptor(
   if (method === 'GET' && urlStr.includes('/api/files') && !urlStr.match(/\/api\/files\/\d+/)) {
     const req = new NextRequest(fullUrl, { method: 'GET', headers: init?.headers as HeadersInit });
     const res = await filesGetHandler(req);
+    const data = await res.json();
+    return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
+  }
+
+  // Chat v3 routes (dedicated conversations tables). The listener's IS_TEST path POSTs the turn then
+  // polls GET /:id — no XHR/SSE needed in jsdom.
+  if (method === 'POST' && /\/api\/conversations\/\d+\/turns/.test(urlStr)) {
+    const id = urlStr.match(/\/api\/conversations\/(\d+)\/turns/)![1];
+    const req = new NextRequest(fullUrl, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
+    const res = await conversationTurnsHandler(req, { params: Promise.resolve({ id }) } as never);
+    const data = await res.json();
+    return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
+  }
+  if (method === 'GET' && /\/api\/conversations\/\d+(\?|$)/.test(urlStr)) {
+    const id = urlStr.match(/\/api\/conversations\/(\d+)/)![1];
+    const req = new NextRequest(fullUrl, { method: 'GET', headers: init?.headers as HeadersInit });
+    const res = await conversationGetHandler(req, { params: Promise.resolve({ id }) } as never);
+    const data = await res.json();
+    return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
+  }
+  if (method === 'POST' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+    const req = new NextRequest(fullUrl, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
+    const res = await conversationsPostHandler(req);
+    const data = await res.json();
+    return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
+  }
+  if (method === 'GET' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+    const req = new NextRequest(fullUrl, { method: 'GET', headers: init?.headers as HeadersInit });
+    const res = await conversationsListHandler(req);
     const data = await res.json();
     return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
   }
