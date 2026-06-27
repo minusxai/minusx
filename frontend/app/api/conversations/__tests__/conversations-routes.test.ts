@@ -41,12 +41,20 @@ describe('v3 conversations REST', () => {
 
   it('GET lists the user\'s conversations tagged version:3', async () => {
     const created = await (await POST(post({ firstMessage: 'list me' }))).json();
+    await appendMessages(created.id, LOG, 0); // a conversation lists once it has a message (empty ones are hidden)
     const res = await listConversationsRoute(new NextRequest('http://localhost/api/conversations'));
     const body = await res.json();
     const found = body.conversations.find((c: { id: number }) => c.id === created.id);
     expect(found).toBeDefined();
     expect(found.version).toBe(3);
     expect(found.name).toBe('list me');
+  });
+
+  it('GET excludes empty (pre-created, never-messaged) conversations', async () => {
+    const created = await (await POST(post({ firstMessage: 'empty draft' }))).json();
+    const res = await listConversationsRoute(new NextRequest('http://localhost/api/conversations'));
+    const body = await res.json();
+    expect(body.conversations.find((c: { id: number }) => c.id === created.id)).toBeUndefined();
   });
 
   it('GET :id returns the conversation + its message log', async () => {

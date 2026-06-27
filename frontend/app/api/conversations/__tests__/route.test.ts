@@ -17,10 +17,11 @@ vi.mock('@/lib/database/db-config', () => ({
 }));
 
 import { GET } from '@/app/api/conversations/route';
-import { createConversation } from '@/lib/data/conversations.server';
+import { createConversation, appendMessages } from '@/lib/data/conversations.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import type { ConversationSummary } from '@/app/api/conversations/route';
+import type { ConversationLog } from '@/orchestrator/types';
 
 const TEST_DB_PATH = getTestDbPath('conversations_route');
 
@@ -29,11 +30,19 @@ const TEST_DB_PATH = getTestDbPath('conversations_route');
 const FULL_FIRST_MESSAGE =
   'What is the full revenue breakdown by region for last quarter, including refunds?';
 
+// A minimal pi log so a seeded conversation is non-empty (empty ones are excluded from the list).
+const LOG = (m: string): ConversationLog => ([
+  { type: 'toolCall', id: 'r', name: 'WebAnalystAgent', parent_id: null, arguments: { userMessage: m }, context: {} },
+] as unknown as ConversationLog);
+
 async function seedConversations(_dbPath: string): Promise<void> {
-  // v3 conversations (the only surface).
-  await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent', title: 'My first question', meta: { firstMessage: 'What is revenue?' } });
-  await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent', title: 'fallback-to-title' });
-  await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent', title: 'revenue', meta: { firstMessage: FULL_FIRST_MESSAGE } });
+  // v3 conversations (the only surface) — each gets a message so it lists.
+  const a = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent', title: 'My first question', meta: { firstMessage: 'What is revenue?' } });
+  await appendMessages(a.id, LOG('What is revenue?'), 0);
+  const b = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent', title: 'fallback-to-title' });
+  await appendMessages(b.id, LOG('hello'), 0);
+  const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent', title: 'revenue', meta: { firstMessage: FULL_FIRST_MESSAGE } });
+  await appendMessages(c.id, LOG(FULL_FIRST_MESSAGE), 0);
 
   // A legacy conversation FILE — must NOT be surfaced by the v3-only listing.
   const { getModules } = await import('@/lib/modules/registry');
