@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { getConversation, loadMessages, loadLog } from '@/lib/data/conversations.server';
+import { getConversation, loadMessages, loadLog, isRunLeaseStale, releaseRunLease, appendError } from '@/lib/data/conversations.server';
 import { subscribe } from '@/lib/chat/conversation-stream.server';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
 import type { ConversationStreamEvent } from '@/lib/data/conversations.types';
@@ -78,7 +78,17 @@ export async function GET(
   // Drive setup off-thread so we can return the streaming Response immediately.
   (async () => {
     await flushCatchup();
-    const status = (await getConversation(conversationId))?.runStatus ?? 'idle';
+    const fresh = await getConversation(conversationId);
+    let status = fresh?.runStatus ?? 'idle';
+
+    // Orphaned turn: claims 'running' but its lease heartbeat is stale → the owner process died.
+    // Fail it cleanly so the client shows a retryable error instead of hanging forever. The durable
+    // rows (incl. the user message, committed eagerly) are preserved, so a retry is idempotent.
+    if (fresh && isRunLeaseStale(fresh)) {
+      await releaseRunLease(conversationId, 'error');
+      await appendError(conversationId, { source: 'session', message: 'Turn interrupted (server restarted). Please retry.' });
+      status = 'error';
+    }
 
     if (status === 'idle' || status === 'error') {
       send({ type: 'status', runStatus: status });

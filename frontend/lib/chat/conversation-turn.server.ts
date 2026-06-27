@@ -17,12 +17,16 @@ import type { ChatRequest } from '@/lib/chat-orchestration';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
-  loadLog, appendMessages, setRunStatus, updateConversationTitle, appendError, ConcurrentAppendError,
+  loadLog, appendMessages, updateConversationTitle, appendError, ConcurrentAppendError,
+  acquireRunLease, heartbeatRunLease, releaseRunLease,
 } from '@/lib/data/conversations.server';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 
 const DELTA_FLUSH_MS = 50;
+const HEARTBEAT_MS = 30_000;
+/** Identifies this process as the lease owner (so a stale lease = this owner died/restarted). */
+export const INSTANCE_ID = `pid-${typeof process !== 'undefined' ? process.pid : 0}`;
 
 /** First user message = the userMessage on the root invocation (parent_id null) in this diff. */
 function firstUserMessage(entries: ConversationLog): string | null {
@@ -97,13 +101,15 @@ export async function runConversationTurn(
   const setup = await setupOrchestration(body, user, conversationId, { savedLog });
   if (setup.fatalError) {
     await appendError(conversationId, { source: 'session', message: setup.fatalError });
-    await setRunStatus(conversationId, 'error');
+    await releaseRunLease(conversationId, 'error');
     await notifyStatus(conversationId, 'error', startSeq);
     return { conversationId, runStatus: 'error', pendingToolCalls: [], finalSeq: startSeq, error: setup.fatalError };
   }
 
-  await setRunStatus(conversationId, 'running');
+  // Claim the lease + heartbeat so a reconnect can tell a live turn from an orphaned one (crash).
+  await acquireRunLease(conversationId, INSTANCE_ID, startSeq);
   await notifyStatus(conversationId, 'running', startSeq);
+  const heartbeat = setInterval(() => { void heartbeatRunLease(conversationId, INSTANCE_ID); }, HEARTBEAT_MS);
 
   // Honor a "Stop" (interrupt NOTIFY) by cancelling this orchestrator, wherever Stop was clicked.
   const unsubInterrupt = await subscribe(conversationId, (n) => {
@@ -111,6 +117,26 @@ export async function runConversationTurn(
   });
 
   let runError: string | undefined;
+  let committedSeq = startSeq; // highest seq already persisted
+
+  /**
+   * Commit any pi entries the orchestrator has appended beyond `committedSeq` as durable rows +
+   * NOTIFY. Called eagerly (root invocation lands first → the user message survives a crash) and as
+   * the turn progresses, so reconnect/replay sees committed work even mid-turn.
+   */
+  const commitNew = async (): Promise<void> => {
+    const diff = setup.orchestrator.log.slice(committedSeq) as ConversationLog;
+    if (diff.length === 0) return;
+    const base = committedSeq;
+    const rows = await appendMessages(conversationId, diff, base);
+    committedSeq += rows.length;
+    if (base === 0) {
+      const fm = firstUserMessage(diff);
+      if (fm) await updateConversationTitle(conversationId, truncateMessageForName(fm));
+    }
+    await notifyMessage(conversationId, committedSeq - 1);
+  };
+
   let buf = '';
   let lastFlush = Date.now();
   const flush = async () => {
@@ -118,10 +144,12 @@ export async function runConversationTurn(
     const text = buf;
     buf = '';
     lastFlush = Date.now();
-    await notifyDelta(conversationId, startSeq, text); // seq = turn base (in-flight grouping)
+    await notifyDelta(conversationId, committedSeq, text);
   };
 
   try {
+    // Commit the root invocation (user message) immediately — it's already in the log from run().
+    await commitNew();
     if (setup.rawStream) {
       for await (const ev of setup.rawStream) {
         const t = (ev as { type?: string }).type;
@@ -132,44 +160,31 @@ export async function runConversationTurn(
           buf += (ev as { delta?: string }).delta ?? '';
           if (Date.now() - lastFlush >= DELTA_FLUSH_MS) await flush();
         }
+        await commitNew(); // persist any entries finalized this step
       }
       await setup.rawStream.result();
       await flush();
+      await commitNew();
     }
-  } catch (err) {
-    runError = err instanceof Error ? err.message : String(err);
+  } catch (e) {
+    if (e instanceof ConcurrentAppendError) {
+      runError = runError ?? 'concurrent turn — the conversation advanced underneath this run';
+    } else {
+      runError = e instanceof Error ? e.message : String(e);
+    }
   } finally {
+    clearInterval(heartbeat);
     await unsubInterrupt();
   }
 
-  // Commit the new pi entries as durable rows.
   const piDiff = setup.orchestrator.log.slice(startSeq) as ConversationLog;
-  let finalSeq = startSeq;
-  if (piDiff.length > 0) {
-    try {
-      const rows = await appendMessages(conversationId, piDiff, startSeq);
-      finalSeq = startSeq + rows.length;
-      if (startSeq === 0) {
-        const fm = firstUserMessage(piDiff);
-        if (fm) await updateConversationTitle(conversationId, truncateMessageForName(fm));
-      }
-      // One wakeup with the latest cursor — listeners SELECT everything past their own cursor.
-      await notifyMessage(conversationId, finalSeq - 1);
-    } catch (e) {
-      if (e instanceof ConcurrentAppendError) {
-        runError = runError ?? 'concurrent turn — the conversation advanced underneath this run';
-      } else {
-        throw e;
-      }
-    }
-  }
-
+  const finalSeq = committedSeq;
   await mirrorErrors(conversationId, piDiff, runError);
   await recordLlmCalls(piDiff, conversationId, user);
 
   const pendingToolCalls = setup.orchestrator.getPendingToolCalls();
   const runStatus: TurnResult['runStatus'] = runError ? 'error' : pendingToolCalls.length > 0 ? 'paused' : 'idle';
-  await setRunStatus(conversationId, runStatus);
+  await releaseRunLease(conversationId, runStatus);
   await notifyStatus(conversationId, runStatus, finalSeq);
 
   return { conversationId, runStatus, pendingToolCalls, finalSeq, error: runError };

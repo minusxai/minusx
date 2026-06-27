@@ -157,6 +157,41 @@ export async function setRunStatus(id: number, status: RunStatus): Promise<void>
   await db().exec('UPDATE conversations SET run_status = $2 WHERE id = $1', [id, status]);
 }
 
+/** Lease TTL: a 'running' conversation whose heartbeat is older than this is considered orphaned
+ *  (the server that owned the turn died). */
+export const RUN_LEASE_TTL_MS = 90_000;
+
+/** Claim the active turn: status running + owner + heartbeat now + the seq it started at. */
+export async function acquireRunLease(id: number, owner: string, startedSeq: number): Promise<void> {
+  await db().exec(
+    `UPDATE conversations SET run_status = 'running', run_lease_owner = $2, run_heartbeat_at = NOW(), run_started_seq = $3 WHERE id = $1`,
+    [id, owner, startedSeq],
+  );
+}
+
+/** Bump the heartbeat while the turn runs (only if we still hold the lease). */
+export async function heartbeatRunLease(id: number, owner: string): Promise<void> {
+  await db().exec(
+    `UPDATE conversations SET run_heartbeat_at = NOW() WHERE id = $1 AND run_lease_owner = $2`,
+    [id, owner],
+  );
+}
+
+/** Release the lease and set the terminal status. */
+export async function releaseRunLease(id: number, status: RunStatus): Promise<void> {
+  await db().exec(
+    `UPDATE conversations SET run_status = $2, run_lease_owner = NULL, run_heartbeat_at = NULL WHERE id = $1`,
+    [id, status],
+  );
+}
+
+/** True when a conversation claims to be running but its heartbeat has gone stale (owner died). */
+export function isRunLeaseStale(conv: { runStatus: RunStatus; runHeartbeatAt: string | null }, now = Date.now()): boolean {
+  if (conv.runStatus !== 'running') return false;
+  if (!conv.runHeartbeatAt) return true; // running with no heartbeat → orphaned
+  return now - (Date.parse(conv.runHeartbeatAt) || 0) > RUN_LEASE_TTL_MS;
+}
+
 export async function deleteConversation(id: number): Promise<void> {
   // messages + conversation_errors cascade via FK ON DELETE CASCADE.
   await db().exec('DELETE FROM conversations WHERE id = $1', [id]);

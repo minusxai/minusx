@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { getConversation, setRunStatus, appendError, getMaxSeq } from '@/lib/data/conversations.server';
+import { getConversation, releaseRunLease, acquireRunLease, appendError, getMaxSeq } from '@/lib/data/conversations.server';
 import { notifyStatus } from '@/lib/chat/conversation-stream.server';
-import { runConversationTurn } from '@/lib/chat/conversation-turn.server';
+import { runConversationTurn, INSTANCE_ID } from '@/lib/chat/conversation-turn.server';
 import { getModules } from '@/lib/modules/registry';
 import type { ChatRequest } from '@/lib/chat-orchestration';
 
@@ -51,11 +51,12 @@ export const POST = withAuth(async (
       agent_args: (body.agentArgs ?? {}) as Record<string, unknown>,
     } as unknown as ChatRequest;
 
-    // Flip to 'running' + NOTIFY synchronously BEFORE returning, so a client that opens the stream
-    // right after this POST sees an active turn (never a premature idle/done). The detached runner
-    // re-asserts 'running' (idempotent).
+    // Claim the lease (status running + fresh heartbeat) + NOTIFY synchronously BEFORE returning, so
+    // a client opening the stream right after this POST sees an active, non-stale turn (never a
+    // premature idle/done, and never a heartbeat-less "running" that looks orphaned). The detached
+    // runner re-acquires the lease (idempotent).
     const startSeq = (await getMaxSeq(conversationId)) + 1;
-    await setRunStatus(conversationId, 'running');
+    await acquireRunLease(conversationId, INSTANCE_ID, startSeq);
     await notifyStatus(conversationId, 'running', startSeq);
 
     // Preserve request-scoped context (auth/mode) for the detached run; no-op in the base build.
@@ -67,7 +68,7 @@ export const POST = withAuth(async (
         console.error('[chat-v3] detached turn failed:', message);
         try {
           await appendError(conversationId, { source: 'unhandled', message });
-          await setRunStatus(conversationId, 'error');
+          await releaseRunLease(conversationId, 'error');
           await notifyStatus(conversationId, 'error', startSeq);
         } catch { /* best-effort */ }
       });
