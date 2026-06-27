@@ -315,7 +315,7 @@ export default function ChatInterface({
       : loadedConversation;
   }, [providedConversationId, loadedConversation, forkChainTail]);
 
-  // Case 2: new conversation — find the active conversation (real positive ID from /api/chat/init)
+  // Case 2: new conversation — find the active conversation (real positive ID from /api/conversations)
   const activeConversationId = useAppSelector(selectActiveConversation);
   const activeConversation = useAppSelector(state =>
     activeConversationId ? state.chat.conversations[activeConversationId] : undefined

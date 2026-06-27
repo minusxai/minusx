@@ -198,7 +198,15 @@ async function runV3TurnInListener(
         agentArgs: turn.agentArgs ?? {},
       }),
     });
-    if (!res.ok) throw new Error(`turn failed: HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401) {
+        const err = new Error('Session expired — please sign in again') as Error & { name: string; httpStatus: number };
+        err.name = 'SessionExpiredError';
+        err.httpStatus = 401;
+        throw err;
+      }
+      throw new Error(`turn failed: HTTP ${res.status}`);
+    }
     for (let i = 0; i < 600; i++) {
       const d = await ConversationsAPI.get(conversationID);
       if (d.conversation.runStatus !== 'running') { status = d.conversation.runStatus as typeof status; break; }
@@ -262,7 +270,7 @@ async function runV3TurnInListener(
 // ---------------------------------------------------------------------------
 
 /**
- * createConversation → /api/chat/stream
+ * createConversation → v3 turn (runV3TurnInListener)
  * Used for new conversations with the initial message.
  */
 chatListenerMiddleware.startListening({

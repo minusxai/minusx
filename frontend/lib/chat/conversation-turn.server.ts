@@ -2,8 +2,7 @@
  * Chat Architecture v3 — the turn runner.
  *
  * Drives one orchestrator segment (a fresh user turn OR a resume with completed frontend-tool
- * results) and persists to the dedicated tables instead of a conversation file + the in-memory
- * run-registry:
+ * results) and persists to the dedicated tables:
  *   - loads the pi log from `messages` rows, builds the orchestrator via the (reused) setupOrchestration
  *   - streams token deltas live via NOTIFY (batched, ephemeral)
  *   - on segment end, appends the new pi entries as durable rows + NOTIFYs the cursor

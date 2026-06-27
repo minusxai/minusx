@@ -1,11 +1,10 @@
-// V=2 chat orchestration — server-side bridge between the legacy /api/chat
-// + /api/chat/stream routes and the orchestrator. Translates inputs
-// (legacy ChatRequest → orchestrator message/resume) and outputs (orchestrator log +
-// stream events → legacy ChatResponse + streaming_event SSE frames) so the
-// frontend stays unchanged.
-//
-// The data-shape boundary lives entirely in this file plus
-// `lib/chat-translator/index.ts`. No frontend code knows about the orchestrator log shape.
+// Shared chat orchestration core — builds the orchestrator from a saved pi log
+// (`setupOrchestration`), records LLM calls (`recordLlmCalls`), estimates next-turn
+// context size (`estimateNextChatContextV2`), and exposes the tool/agent registries
+// (`V2_REGISTRABLES` / `V2_HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
+// (`lib/chat/conversation-turn.server.ts`) and the headless runner
+// (`lib/chat/run-orchestration-v2.server.ts`). Translates a legacy ChatRequest into an
+// orchestrator message/resume via `lib/chat-translator`.
 
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';

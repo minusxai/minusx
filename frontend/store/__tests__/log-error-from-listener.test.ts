@@ -1,7 +1,7 @@
 /**
- * Cycle 5: when chatListener encounters a transport failure (network error from
- * /api/chat), it fire-and-forget posts a structured error entry to
- * /api/chat/log-error so it lands on the conversation document and survives reload.
+ * v3: when the chatListener encounters a transport / session failure while running a turn
+ * (POST /api/conversations/:id/turns), it fire-and-forget posts a structured error entry to
+ * /api/chat/log-error so it lands on the conversation's errors and survives reload.
  *
  * Verified by intercepting the log-error POST and asserting the payload shape.
  */
@@ -32,7 +32,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
         capturedLogErrorBody = init?.body ? JSON.parse(init.body) : null;
         return { ok: true, status: 200, json: async () => ({ success: true }) } as Response;
       }
-      if (u.includes('/api/chat')) {
+      if (/\/api\/conversations\/\d+\/turns/.test(u)) {
         // Simulate a real transport failure (the canonical "fetch failed" from prod).
         throw new TypeError('fetch failed (ECONNREFUSED)');
       }
@@ -52,7 +52,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
         capturedLogErrorBody = init?.body ? JSON.parse(init.body) : null;
         return { ok: true, status: 200, json: async () => ({ success: true }) } as Response;
       }
-      if (u.includes('/api/chat')) {
+      if (/\/api\/conversations\/\d+\/turns/.test(u)) {
         // NextAuth 401 with a JSON body (the production shape from withAuth).
         return { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) } as Response;
       }
@@ -62,6 +62,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
     store.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'WebAnalystAgent',
+      version: 3,
       agent_args: { goal: 'do stuff' } as any,
       message: 'hello',
     }));
@@ -76,6 +77,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
     store.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'WebAnalystAgent',
+      version: 3,
       agent_args: { goal: 'do stuff' } as any,
       message: 'hello',
     }));
@@ -94,37 +96,7 @@ describe('client-side error reporters → POST /api/chat/log-error', () => {
     expect(typeof capturedLogErrorBody!.error.timestamp).toBe('number');
   });
 
-  it('Cycle 11: bounded retry — transient transport failures are retried 2x before logging', async () => {
-    let chatCallCount = 0;
-    global.fetch = vi.fn(async (url: any, init?: any) => {
-      const u = String(url);
-      if (u.includes('/api/chat/log-error')) {
-        capturedLogErrorBody = init?.body ? JSON.parse(init.body) : null;
-        return { ok: true, status: 200, json: async () => ({ success: true }) } as Response;
-      }
-      if (u.includes('/api/chat')) {
-        chatCallCount++;
-        throw new TypeError('fetch failed (ECONNREFUSED)');
-      }
-      return { ok: true, status: 200, json: async () => ({}) } as Response;
-    }) as any;
-
-    const CONV_ID = 88888;
-    store.dispatch(createConversation({
-      conversationID: CONV_ID,
-      agent: 'WebAnalystAgent',
-      agent_args: {} as any,
-      message: 'hi',
-    }));
-
-    // Retry backoff is 500ms + 1s; account for some scheduling slack.
-    await vi.waitFor(() => expect(capturedLogErrorBody).not.toBeNull(), { timeout: 10000, interval: 50 });
-
-    // Initial attempt + 2 retries = 3 calls to /api/chat before giving up.
-    expect(chatCallCount).toBeGreaterThanOrEqual(3);
-  });
-
-  it('Cycle 9: logInitFailure posts to the active conversation when /api/chat/init has nowhere else to attach', async () => {
+  it('Cycle 9: logInitFailure posts to the active conversation when /api/conversations create has nowhere else to attach', async () => {
     const { logInitFailure } = await import('@/lib/api/report-client-error');
 
     // Seed an "active" conversation in the store (some prior chat the user has open).

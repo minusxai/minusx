@@ -154,6 +154,12 @@ export async function runV3Turn(
     }),
   });
   if (!startRes.ok) {
+    if (startRes.status === 401) {
+      const err = new Error('Session expired — please sign in again') as Error & { name: string; httpStatus: number };
+      err.name = 'SessionExpiredError';
+      err.httpStatus = 401;
+      throw err;
+    }
     const body = await startRes.json().catch(() => ({}));
     throw new Error((body as { error?: { message?: string } })?.error?.message || `turn failed: HTTP ${startRes.status}`);
   }
