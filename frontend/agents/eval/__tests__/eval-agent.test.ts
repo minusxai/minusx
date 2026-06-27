@@ -69,4 +69,46 @@ describe('runEvalV2 / EvalAnalystAgent', () => {
     const sub = await runEvalV2({ goal: 'hi', assertionType: 'binary', user: USER });
     expect(sub).toBeNull();
   });
+
+  it('renders resolvedContextDocs in the system prompt and advertises LoadContext (production parity)', async () => {
+    let prompt = '';
+    evalFaux.setResponses([
+      (context) => {
+        prompt = (context as { systemPrompt?: string }).systemPrompt ?? '';
+        return fauxAssistantMessage([fauxToolCall('SubmitBinary', { answer: true }, { id: 's1' })], { stopReason: 'toolUse' });
+      },
+    ]);
+    await runEvalV2({
+      goal: 'q', assertionType: 'binary', user: USER,
+      resolvedContextDocs: {
+        docs: [
+          { key: '', title: 'Pinned', content: 'PINNED EVAL BODY', alwaysInclude: true },
+          { key: 'revenue', title: 'Revenue', description: 'how revenue maps', content: 'REVENUE LAZY BODY', alwaysInclude: false },
+        ],
+      },
+    });
+    expect(prompt).toContain('PINNED EVAL BODY'); // alwaysInclude doc inline
+    expect(prompt).toContain('revenue');          // lazy doc advertised by key
+    expect(prompt).not.toContain('REVENUE LAZY BODY'); // ...body withheld until LoadContext
+    expect(prompt).toContain('LoadContext');      // tool available for on-demand load
+  });
+
+  it('can call LoadContext mid-eval (the tool is registered) then submit', async () => {
+    let loadResult: string | undefined;
+    evalFaux.setResponses([
+      fauxAssistantMessage([fauxToolCall('LoadContext', { keys: ['revenue'] }, { id: 'lc1' })], { stopReason: 'toolUse' }),
+      (context) => {
+        const msgs = (context as { messages?: Array<{ role: string; content: Array<{ type: string; text?: string }> }> }).messages ?? [];
+        loadResult = msgs.flatMap((m) => m.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('\n');
+        return fauxAssistantMessage([fauxToolCall('SubmitBinary', { answer: true }, { id: 's1' })], { stopReason: 'toolUse' });
+      },
+    ]);
+    const sub = await runEvalV2({
+      goal: 'q', assertionType: 'binary', user: USER,
+      resolvedContextDocs: { docs: [{ key: 'revenue', title: 'Revenue', description: 'd', content: 'REVENUE LAZY BODY', alwaysInclude: false }] },
+    });
+    expect(sub?.toolName).toBe('SubmitBinary');
+    // The LoadContext tool resolved the lazy doc body into the conversation.
+    expect(loadResult).toContain('REVENUE LAZY BODY');
+  });
 });

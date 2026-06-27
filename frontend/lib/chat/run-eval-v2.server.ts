@@ -21,9 +21,11 @@ import {
   ReadFiles,
   SearchFiles,
 } from '@/agents/analyst/analyst-agent';
+import { LoadContext } from '@/agents/web-analyst/web-tools';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { getPageType } from '@/agents/analyst/skills';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { ResolvedContextDocs } from '@/lib/types';
 
 const EVAL_REGISTRABLES: RegistrableClass[] = [
   EvalAnalystAgent,
@@ -32,6 +34,7 @@ const EVAL_REGISTRABLES: RegistrableClass[] = [
   ExecuteQuery,
   ReadFiles,
   SearchFiles,
+  LoadContext,
   SubmitBinary,
   SubmitNumber,
   SubmitString,
@@ -50,7 +53,8 @@ export interface RunEvalV2Params {
   goal: string;
   assertionType: EvalAssertionType;
   schema?: { schema: string; tables: string[] }[];
-  contextDocs?: string;
+  /** Resolved context docs (structure) — rendered the same way the production analyst does. */
+  resolvedContextDocs?: ResolvedContextDocs;
   connectionId?: string;
   appState?: unknown;
   user: EffectiveUser;
@@ -72,7 +76,7 @@ export async function runEvalV2(params: RunEvalV2Params): Promise<EvalSubmission
     effectiveUser: params.user,
     connectionId: params.connectionId,
     whitelistedTables: whitelistedTables.length > 0 ? whitelistedTables : undefined,
-    contextDocs: params.contextDocs || undefined,
+    resolvedContextDocs: params.resolvedContextDocs,
     schema: params.schema,
     homeFolder: resolveHomeFolderSync(params.user.mode, params.user.home_folder || ''),
     role: params.user.role,
