@@ -130,6 +130,7 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
       px={3}
       py={2}
       cursor="pointer"
+      aria-label={`Open conversation: ${conversation.name}`}
       bg={isActive ? 'bg.muted' : 'transparent'}
       borderBottomWidth="1px"
       borderBottomColor="border.muted"
