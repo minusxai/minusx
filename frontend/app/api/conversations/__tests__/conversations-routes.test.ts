@@ -57,6 +57,33 @@ describe('v3 conversations REST', () => {
     expect(body.conversations.find((c: { id: number }) => c.id === created.id)).toBeUndefined();
   });
 
+  it('GET paginates via nextCursor (?limit + ?before&beforeId) with no overlap', async () => {
+    for (let i = 0; i < 3; i++) {
+      const c = await (await POST(post({ firstMessage: `page-${i}` }))).json();
+      await appendMessages(c.id, LOG, 0);
+    }
+    const r1 = await (await listConversationsRoute(new NextRequest('http://localhost/api/conversations?limit=2'))).json();
+    expect(r1.conversations).toHaveLength(2);
+    expect(r1.nextCursor).toBeTruthy();
+    const cur = r1.nextCursor;
+    const url = `http://localhost/api/conversations?limit=2&before=${encodeURIComponent(cur.updatedAt)}&beforeId=${cur.id}`;
+    const r2 = await (await listConversationsRoute(new NextRequest(url))).json();
+    const ids1: number[] = r1.conversations.map((c: { id: number }) => c.id);
+    const ids2: number[] = r2.conversations.map((c: { id: number }) => c.id);
+    expect(ids1.some((id) => ids2.includes(id))).toBe(false); // pages don't overlap
+  });
+
+  it('GET ?q= filters server-side (matches across all pages, not just one)', async () => {
+    const hit = await (await POST(post({ firstMessage: 'quarterly revenue report' }))).json();
+    await appendMessages(hit.id, LOG, 0);
+    const miss = await (await POST(post({ firstMessage: 'tomorrow weather forecast' }))).json();
+    await appendMessages(miss.id, LOG, 0);
+    const res = await listConversationsRoute(new NextRequest('http://localhost/api/conversations?q=revenue'));
+    const ids: number[] = (await res.json()).conversations.map((c: { id: number }) => c.id);
+    expect(ids).toContain(hit.id);
+    expect(ids).not.toContain(miss.id);
+  });
+
   it('GET :id returns the conversation + its message log', async () => {
     const created = await (await POST(post({ firstMessage: 'go' }))).json();
     await appendMessages(created.id, LOG, 0);

@@ -3,9 +3,10 @@
 import React, { useCallback } from 'react';
 import { Box, VStack, HStack, Text, Spinner } from '@chakra-ui/react';
 import { ConversationSummary } from '@/app/api/conversations/route';
-import { useFetch } from '@/lib/api/useFetch';
-import { API } from '@/lib/api/declarations';
+import { useConversationsList } from '@/lib/hooks/useConversationsList';
 import { useStableCallback, shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
+
+const NEAR_BOTTOM_PX = 200;
 
 interface ConversationListProps {
   onSelectConversation: (id?: number) => void;
@@ -16,10 +17,16 @@ export function ConversationList({
   onSelectConversation,
   currentConversationId
 }: ConversationListProps) {
-  // Use centralized fetch with automatic caching and deduplication
-  const { data, loading: isLoading, error } = useFetch(API.conversations.list);
+  // Keyset-paginated: first page on mount, more as you scroll the list (metadata-only, light).
+  const { conversations, loading: isLoading, error, hasMore, loadMore } = useConversationsList({ pageSize: 15 });
 
-  const conversations: ConversationSummary[] = (data as any)?.conversations || [];
+  // Load the next page as the user nears the bottom of this scroll box.
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX) loadMore();
+  }, [loadMore]);
+
+  const showInitialLoading = isLoading && conversations.length === 0;
 
   return (
     <VStack
@@ -29,8 +36,8 @@ export function ConversationList({
       overflow="hidden"
     >
 
-      {/* Loading State */}
-      {isLoading && (
+      {/* Initial loading state */}
+      {showInitialLoading && (
         <Box textAlign="center" py={4}>
           <Spinner size="sm" />
           <Text fontSize="sm" color="accent.muted" mt={2}>
@@ -41,14 +48,14 @@ export function ConversationList({
 
       {/* Error State */}
       {error && !isLoading && (
-        <Box p={3} bg="accent.danger" borderRadius="md">
+        <Box p={3} borderRadius="md">
           <Text fontSize="sm" color="accent.danger">
-            {error.message || 'Failed to load conversations'}
+            {error || 'Failed to load conversations'}
           </Text>
         </Box>
       )}
 
-      {/* Conversations List */}
+      {/* Empty state */}
       {!isLoading && !error && conversations.length === 0 && (
         <Box p={3} textAlign="center">
           <Text fontSize="sm" color="accent.muted">
@@ -57,24 +64,33 @@ export function ConversationList({
         </Box>
       )}
 
-      {/* Scrollable Conversation Items */}
-      <VStack
-        align="stretch"
-        overflow="auto"
-        flex="1"
-        maxH="400px"
-        m={0}
-        gap={0}
-      >
-        {conversations.map((conv) => (
-          <ConversationItem
-            key={conv.id}
-            conversation={conv}
-            isActive={conv.id === currentConversationId}
-            onSelect={onSelectConversation}
-          />
-        ))}
-      </VStack>
+      {/* Scrollable Conversation Items (paginated) */}
+      {conversations.length > 0 && (
+        <VStack
+          align="stretch"
+          overflow="auto"
+          flex="1"
+          maxH="400px"
+          m={0}
+          gap={0}
+          onScroll={handleScroll}
+        >
+          {conversations.map((conv) => (
+            <ConversationItem
+              key={conv.id}
+              conversation={conv}
+              isActive={conv.id === currentConversationId}
+              onSelect={onSelectConversation}
+            />
+          ))}
+          {/* Footer: loading-more spinner while paginating */}
+          {hasMore && isLoading && (
+            <Box textAlign="center" py={3} aria-label="Loading more conversations">
+              <Spinner size="xs" />
+            </Box>
+          )}
+        </VStack>
+      )}
     </VStack>
   );
 }
@@ -114,6 +130,7 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
       px={3}
       py={2}
       cursor="pointer"
+      aria-label={`Open conversation: ${conversation.name}`}
       bg={isActive ? 'bg.muted' : 'transparent'}
       borderBottomWidth="1px"
       borderBottomColor="border.muted"

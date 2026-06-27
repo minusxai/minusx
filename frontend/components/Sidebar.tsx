@@ -350,7 +350,9 @@ export default function Sidebar() {
               />
             </HStack>
             {historyExpanded && (
-              <Box maxH="300px" overflowY="auto" css={{ scrollbarWidth: 'thin' }}>
+              // ConversationList owns its own scroll container (so its infinite-scroll onScroll
+              // fires) — don't nest another scroll box here.
+              <Box>
                 <ConversationList
                   onSelectConversation={(id) => {
                     if (id) {

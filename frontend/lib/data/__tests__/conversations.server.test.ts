@@ -93,6 +93,38 @@ describe('v3 conversation store', () => {
     expect(await getConversation(c1.id)).toBeNull();
   });
 
+  it('keyset-paginates newest-first with no gaps or overlaps (id tiebreak on equal timestamps)', async () => {
+    const ids: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const c = await createConversation({ ownerUserId: 55, mode: 'org', agent: 'WebAnalystAgent', title: `c${i}` });
+      await appendMessages(c.id, LOG(`m${i}`), 0);
+      ids.push(c.id);
+    }
+
+    const page1 = await listConversations(55, 'org', { limit: 2 });
+    expect(page1).toHaveLength(2);
+    const page2 = await listConversations(55, 'org', { limit: 2, before: { updatedAt: page1[1].updatedAt, id: page1[1].id } });
+    expect(page2).toHaveLength(2);
+    const page3 = await listConversations(55, 'org', { limit: 2, before: { updatedAt: page2[1].updatedAt, id: page2[1].id } });
+    expect(page3).toHaveLength(1);
+
+    const seen = [...page1, ...page2, ...page3].map((c) => c.id);
+    expect(new Set(seen).size).toBe(5);                 // no duplicates across pages
+    expect([...seen].sort((a, b) => a - b)).toEqual([...ids].sort((a, b) => a - b)); // covers all
+  });
+
+  it('server-side search matches title OR first message (spans all pages)', async () => {
+    const a = await createConversation({ ownerUserId: 56, mode: 'org', agent: 'WebAnalystAgent', title: 'Revenue dashboard' });
+    await appendMessages(a.id, LOG('x'), 0);
+    const b = await createConversation({ ownerUserId: 56, mode: 'org', agent: 'WebAnalystAgent', title: 'unrelated', meta: { firstMessage: 'show me REVENUE please' } });
+    await appendMessages(b.id, LOG('y'), 0);
+    const weather = await createConversation({ ownerUserId: 56, mode: 'org', agent: 'WebAnalystAgent', title: 'weather' });
+    await appendMessages(weather.id, LOG('z'), 0);
+
+    const res = await listConversations(56, 'org', { search: 'revenue' }); // case-insensitive (ILIKE)
+    expect(res.map((r) => r.id).sort((x, y) => x - y)).toEqual([a.id, b.id].sort((x, y) => x - y));
+  });
+
   it('excludes EMPTY conversations (pre-created, never sent a message) from the list', async () => {
     const empty = await createConversation({ ownerUserId: 99, mode: 'org', agent: 'WebAnalystAgent', title: 'New Conversation' });
     const used = await createConversation({ ownerUserId: 99, mode: 'org', agent: 'WebAnalystAgent', title: 'real one' });

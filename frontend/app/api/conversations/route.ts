@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
-import { createConversation, listConversations } from '@/lib/data/conversations.server';
+import { createConversation, listConversations, type ConversationCursor } from '@/lib/data/conversations.server';
 
 /**
  * Conversation summary for listing. Metadata-only — no per-conversation content load.
@@ -15,25 +15,36 @@ export interface ConversationSummary {
   version: number;   // always 3 (conversations are v3-only)
 }
 
+const DEFAULT_PAGE_SIZE = 15;
+
 /**
- * Response for GET /api/conversations
+ * Response for GET /api/conversations. `nextCursor` is the keyset for the next page (null when the
+ * last page was returned) — the client passes it back as `?before=<updatedAt>&beforeId=<id>`.
  */
 interface ConversationsResponse {
   conversations: ConversationSummary[];
+  nextCursor?: ConversationCursor | null;
   error?: string;
 }
 
 /**
- * GET /api/conversations
- * List the current user's conversations. v3-only: a single metadata query on the `conversations`
- * table. Legacy conversation *files* are never surfaced — the one-time backfill ports them into v3
- * rows (until then they simply don't appear; all chat still works).
+ * GET /api/conversations?limit=&before=&beforeId=
+ * List the current user's conversations, keyset-paginated (newest-first). v3-only: a single
+ * metadata query on the `conversations` table — no message content loaded. Legacy conversation
+ * *files* are never surfaced (the one-time backfill ports them into v3 rows).
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get('limit');
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : DEFAULT_PAGE_SIZE, 1), 50);
+    const beforeUpdatedAt = searchParams.get('before');
+    const beforeIdParam = searchParams.get('beforeId');
+    const before: ConversationCursor | undefined =
+      beforeUpdatedAt && beforeIdParam && Number.isFinite(Number(beforeIdParam))
+        ? { updatedAt: beforeUpdatedAt, id: Number(beforeIdParam) }
+        : undefined;
+    const search = searchParams.get('q') ?? undefined;
 
     const user = await getEffectiveUser();
     if (!user) {
@@ -43,7 +54,9 @@ export async function GET(request: Request) {
       );
     }
 
-    const rows = await listConversations(user.userId, user.mode);
+    // Already ordered (updated_at DESC, id DESC) by the keyset query — do NOT re-sort (that would
+    // drop the id tiebreak and desync the cursor).
+    const rows = await listConversations(user.userId, user.mode, { limit, before, search });
     const conversations: ConversationSummary[] = rows.map((c) => ({
       id: c.id,
       name: (c.meta.firstMessage as string) || c.title,
@@ -52,11 +65,11 @@ export async function GET(request: Request) {
       version: 3,
     }));
 
-    // Sort by updatedAt DESC (most recent first)
-    conversations.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    // A full page implies there may be more — hand back the last row as the next cursor.
+    const last = rows[rows.length - 1];
+    const nextCursor = rows.length === limit && last ? { updatedAt: last.updatedAt, id: last.id } : null;
 
-    const result = limit && limit > 0 ? conversations.slice(0, limit) : conversations;
-    return NextResponse.json({ conversations: result } as ConversationsResponse);
+    return NextResponse.json({ conversations, nextCursor } as ConversationsResponse);
   } catch (error: any) {
     console.error('Conversations API error:', error);
     return handleApiError(error);
