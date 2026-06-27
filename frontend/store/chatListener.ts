@@ -765,6 +765,28 @@ chatListenerMiddleware.startListening({
 
     emitSyntheticSkillLoads(conversationID, conversation, dispatch);
 
+    if (isV3(conversation)) {
+      try {
+        // Fork the conversation at the edit point (copies messages [0, log_index)), then run the
+        // edited message on the new conversation. updateConversation moves Redux to the fork
+        // (carrying the reducer-truncated messages) + flags the source forked → triggers nav.
+        const forkRes = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/fork`), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ atSeq: conversation.log_index }),
+        });
+        if (!forkRes.ok) throw new Error(`fork failed: HTTP ${forkRes.status}`);
+        const { id: newId } = await forkRes.json();
+        dispatch(updateConversation({ conversationID, newConversationID: newId, log_index: conversation.log_index, completed_tool_calls: [], pending_tool_calls: [], debug: [] }));
+        const forked = selectConversation(listenerApi.getState() as RootState, newId);
+        await runV3TurnInListener(newId, forked,
+          { userMessage: message, agent: conversation.agent, agentArgs: conversation.agent_args },
+          dispatch, abortController.signal);
+      } catch (error: any) {
+        if (await handleStreamError(error, 'chatListener:editAndFork:v3', conversationID, conversation._id, dispatch, conversation.log_index)) return;
+      }
+      return;
+    }
+
     try {
       if (IS_TEST) {
         const testConversationID = conversationID < 0 ? null : conversationID;

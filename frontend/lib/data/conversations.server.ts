@@ -197,6 +197,27 @@ export async function deleteConversation(id: number): Promise<void> {
   await db().exec('DELETE FROM conversations WHERE id = $1', [id]);
 }
 
+/**
+ * Fork a conversation at `atSeq`: create a NEW conversation (own id) copying messages [0, atSeq) from
+ * the source, with `meta.forkedFrom` set. Powers edit-and-fork — the caller then runs the edited
+ * turn on the fork. The source is untouched.
+ */
+export async function forkConversation(sourceId: number, atSeq: number): Promise<Conversation> {
+  const src = await getConversation(sourceId);
+  if (!src) throw new Error(`fork source conversation ${sourceId} not found`);
+  const created = await createConversation({
+    ownerUserId: src.ownerUserId,
+    mode: src.mode,
+    agent: src.agent,
+    title: src.title,
+    meta: { ...src.meta, version: 3, forkedFrom: sourceId },
+  });
+  const rows = await loadMessages(sourceId);
+  const slice = rows.filter((r) => r.seq < atSeq).map((r) => r.content) as ConversationLog;
+  if (slice.length > 0) await appendMessages(created.id, slice, 0);
+  return created;
+}
+
 // ── messages ──────────────────────────────────────────────────────────────────
 
 /** Highest committed seq for a conversation, or -1 when empty (so the next append is seq 0). */
