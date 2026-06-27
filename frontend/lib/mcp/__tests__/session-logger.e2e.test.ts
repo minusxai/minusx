@@ -47,7 +47,8 @@ beforeAll(async () => { await initTestDatabase(DB_PATH); });
 afterAll(async () => { await cleanupTestDatabase(DB_PATH); });
 afterEach(async () => {
   await getModules().db.exec("DELETE FROM files WHERE path != '/org'", []);
-  await getModules().db.exec('DELETE FROM conversations', []); // messages cascade
+  await getModules().db.exec('DELETE FROM messages', []);
+  await getModules().db.exec('DELETE FROM conversations', []);
 });
 
 /** Load the MCP v3 conversations (agent='McpSession') with their meta. */

@@ -442,7 +442,7 @@ export const POSTGRES_SCHEMA = `
   -- ignore NULLs, so error rows never leak into the reconstructed pi log.
   CREATE TABLE IF NOT EXISTS messages (
     id              BIGSERIAL   PRIMARY KEY,
-    conversation_id INTEGER     NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    conversation_id INTEGER     NOT NULL,
     seq             INTEGER,
     kind            TEXT        NOT NULL,
     pi_id           TEXT,
@@ -458,7 +458,10 @@ export const POSTGRES_SCHEMA = `
   -- Self-heal databases created before errors moved into messages -- idempotent, runs every boot.
   -- (1) messages.seq used to be NOT NULL -- error rows need seq=NULL, so drop the constraint.
   -- (2) the dedicated conversation_errors table is gone -- drop it if a prior boot created it.
+  -- (3) messages no longer FK-references conversations (append-hot table, cleanup done in code) --
+  --     drop the constraint if an earlier boot created it.
   ALTER TABLE messages ALTER COLUMN seq DROP NOT NULL;
+  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_conversation_id_fkey;
   DROP TABLE IF EXISTS conversation_errors;
 
 `;
