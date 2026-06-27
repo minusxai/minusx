@@ -15,7 +15,6 @@ import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
-import { inlineContextDocsText } from '@/lib/sql/schema-filter';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
@@ -65,10 +64,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
 
-  // Load context (schema + docs) from the saved context file
-  const contextInfo = useContext(`${modeRoot}/context`);
-  const { databases } = contextInfo;
-  const contextDocs = contextInfo.contextDocs ? inlineContextDocsText(contextInfo.contextDocs) : '';
+  // Load the schema from the saved context file (docs are resolved server-side
+  // from the context_file_id pointer when the dashboard agent runs).
+  const { databases } = useContext(`${modeRoot}/context`);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -196,15 +194,15 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       version: 3,
       agent_args: {
         connection_id: connectionName,
-        context_path: `${modeRoot}/context`,
+        // Pointer-only: the server resolves the context docs/schema for this file.
+        context_file_id: contextFileId,
         context_version: null,
         schema: simplifiedSchema,
-        context: contextDocs || '',
         app_state: appState,
       },
       message,
     }));
-  }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs, userPreference, staticSchemas, modeRoot]);
+  }, [dispatch, connectionName, contextFileId, virtualDashboardId, reduxState, hasStarted, databases, userPreference, staticSchemas, modeRoot]);
 
   // Auto-start generation if initialPreference was provided (from questionnaire)
   // Wait for databases to load so the agent has schema context
