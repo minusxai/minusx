@@ -5,6 +5,7 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 
 export const fauxRegistration = registerFauxProvider({
   api: 'faux-slack-api',
@@ -36,7 +37,7 @@ export class SlackAgent extends RemoteAnalystAgent {
       max_steps: '40',
       allowed_viz_types: ctx.allowedVizTypes?.length ? ctx.allowedVizTypes.join(', ') : 'all',
       role: ctx.role ?? '',
-      schema: ctx.schema ? JSON.stringify(ctx.schema) : '',
+      schema: renderSchemaForPrompt(ctx.schema),
       // Same shared formatter as the web prompt + docs sidebar, so Slack sees the
       // user's Default Context Docs + on-demand Context Library identically.
       context: formatContextDocsSection(ctx.resolvedContextDocs ?? { docs: [] }),

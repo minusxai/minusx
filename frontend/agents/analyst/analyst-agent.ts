@@ -18,6 +18,7 @@ import {
 } from '@/agents/benchmark-analyst/db-tools.server';
 import { LoadContext } from '@/agents/web-analyst/web-tools';
 import { formatContextDocsSection } from '@/lib/sql/schema-filter';
+import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import type { RemoteAnalystContext, AgentAttachment } from './types';
 import type { AppState } from '@/lib/appState';
 import { projectMessages, type WithAppState } from '@/lib/projection/messages';
@@ -88,8 +89,9 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
         ? this.context.allowedVizTypes.join(', ')
         : 'all',
       role: this.context.role ?? '',
-      // Whitelisted table list (client-resolved).
-      schema: this.context.schema ? JSON.stringify(this.context.schema) : '',
+      // Whitelisted table list (client-resolved), capped to a char budget so a
+      // huge/rogue DB can't blow the context — overflow points at SearchDBSchema.
+      schema: renderSchemaForPrompt(this.context.schema),
       // Fully-formatted "## Context" body: alwaysInclude docs + Schema Notes under
       // "Default Context Docs", then the lazy-loadable catalog (title + description,
       // fetched on demand via LoadContext) under "Context Library". Built by the

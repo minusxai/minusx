@@ -16,6 +16,7 @@ import { loadSkill } from '@/agents/skill-content';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { WebAnalystAgent, EditFile, CreateFile } from '@/agents/web-analyst/web-analyst';
 import { LoadContext } from '@/agents/web-analyst/web-tools';
+import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import { SearchDBSchema, ExecuteQuery } from '@/agents/benchmark-analyst/db-tools.server';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import { formatContextDocsSection } from '@/lib/sql/schema-filter';
@@ -34,7 +35,7 @@ const OnboardingAgentParams = Type.Object({
 });
 
 function schemaString(ctx: RemoteAnalystContext): string {
-  return ctx.schema ? JSON.stringify(ctx.schema, null, 2) : 'No schema provided.';
+  return renderSchemaForPrompt(ctx.schema, { pretty: true, emptyText: 'No schema provided.' });
 }
 
 function goalFrom(raw: string | (TextContent | ImageContent)[]): string {
