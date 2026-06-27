@@ -34,9 +34,11 @@ export interface V3TurnResult {
 }
 
 const RESUME_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
-/** Client-side cap on silent auto-retries of a crash-interrupted turn. The server's meta.autoRetries
- *  is the authoritative cap (survives reload / multiple tabs); this just bounds one client's loop. */
-const MAX_CLIENT_AUTO_RETRIES = 2;
+/** Safety bound on silent auto-retries of a crash-interrupted turn. The SERVER is authoritative:
+ *  it stops sending `retryable` once meta.autoRetries hits MAX_AUTO_RETRIES (and surfaces one durable
+ *  error). This is just a backstop so a misbehaving server can't loop the client forever — keep it
+ *  comfortably above the server cap. */
+const MAX_CLIENT_AUTO_RETRIES = 5;
 
 function parseSseEvents(buffer: string): { events: ConversationStreamEvent[]; rest: string } {
   const parts = buffer.split('\n\n');
@@ -88,7 +90,7 @@ function readStreamOnce(
           break;
         case 'status':
           state.result.status = e.runStatus;
-          if (e.retryable) state.result.retryable = true;
+          state.result.retryable = !!e.retryable; // reflect the latest status (a non-retryable error clears it)
           break;
         case 'done':
           state.result.finalSeq = e.seq;

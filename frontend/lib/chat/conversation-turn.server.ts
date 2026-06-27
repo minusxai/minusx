@@ -18,7 +18,7 @@ import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
   loadLog, loadMessages, appendMessages, updateConversationTitle, appendError, ConcurrentAppendError,
   acquireRunLease, heartbeatRunLease, releaseRunLease, getConversation,
-  bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, MAX_AUTO_RETRIES,
+  bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
@@ -102,7 +102,7 @@ async function prepareAutoRetry(
   if (startedSeq == null) return { ok: false, reason: 'no run_started_seq to retry from', seq: 0 };
 
   if (retries >= MAX_AUTO_RETRIES) {
-    await appendError(conversationId, { source: 'session', message: `Gave up after ${MAX_AUTO_RETRIES} automatic retries — please try again.` });
+    await appendError(conversationId, { source: 'session', message: AUTO_RETRY_EXHAUSTED_MESSAGE });
     return { ok: false, reason: 'auto-retry limit reached', seq: startedSeq };
   }
 
