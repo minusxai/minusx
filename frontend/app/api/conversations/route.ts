@@ -6,6 +6,7 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { isV2 } from '@/lib/chat-v2/chat-version';
 import { isV2ConversationFile } from '@/lib/chat-translator';
 import { displayNameFromFileName } from '@/lib/conversations';
+import { createConversation, listConversations } from '@/lib/data/conversations.server';
 
 /**
  * Conversation summary for listing.
@@ -16,11 +17,12 @@ import { displayNameFromFileName } from '@/lib/conversations';
  * created before firstMessage was tracked.
  */
 export interface ConversationSummary {
-  id: number;        // File ID
+  id: number;        // Conversation id (v3 row id) or file id (v1/v2)
   name: string;      // Display name — meta.firstMessage ?? file name
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
   legacy?: boolean;  // v1 conversation shown in v2 mode — forked to v2 on continue
+  version?: number;  // 3 = dedicated tables (v3), 2 = v2 file, 1 = legacy file
 }
 
 /**
@@ -87,8 +89,24 @@ export async function GET(request: Request) {
         name: meta.firstMessage || displayNameFromFileName(fileInfo.name),
         createdAt: fileInfo.created_at,
         updatedAt: fileInfo.updated_at,
+        version: fileIsV2 ? 2 : 1,
         ...(isV2Request && !fileIsV2 ? { legacy: true } : {}),
       });
+    }
+
+    // v3 conversations (dedicated tables) join the default (v2) surface. The id-spaces are
+    // disjoint (shared global allocator), so there's no overlap with the file-conversations above.
+    if (isV2Request) {
+      const v3 = await listConversations(user.userId, user.mode);
+      for (const c of v3) {
+        conversations.push({
+          id: c.id,
+          name: (c.meta.firstMessage as string) || c.title,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          version: 3,
+        });
+      }
     }
 
     // Sort by updatedAt DESC (most recent first)
@@ -104,6 +122,35 @@ export async function GET(request: Request) {
 
   } catch (error: any) {
     console.error('Conversations API error:', error);
+    return handleApiError(error);
+  }
+}
+
+/**
+ * POST /api/conversations
+ * Create a v3 conversation (dedicated tables). Returns its id (shared global id-space).
+ * Body (all optional): { agent?, title?, firstMessage? }.
+ */
+export async function POST(request: Request) {
+  try {
+    const user = await getEffectiveUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const body = await request.json().catch(() => ({} as Record<string, unknown>));
+    const firstMessage = typeof body.firstMessage === 'string' ? body.firstMessage : undefined;
+
+    const conversation = await createConversation({
+      ownerUserId: user.userId,
+      mode: user.mode,
+      agent: typeof body.agent === 'string' ? body.agent : 'WebAnalystAgent',
+      title: typeof body.title === 'string' ? body.title : undefined,
+      meta: firstMessage ? { firstMessage } : undefined,
+    });
+
+    return NextResponse.json({ id: conversation.id, conversation });
+  } catch (error: any) {
+    console.error('Conversations API POST error:', error);
     return handleApiError(error);
   }
 }
