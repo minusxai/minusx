@@ -77,10 +77,12 @@ describe('v3 conversation store', () => {
     await expect(appendMessages(c.id, LOG('stale'), 0)).rejects.toBeInstanceOf(ConcurrentAppendError);
   });
 
-  it('lists by owner+mode (newest first) and deletes (cascading messages)', async () => {
+  it('lists non-empty conversations by owner+mode (newest first) and deletes', async () => {
     const c1 = await createConversation({ ownerUserId: 42, mode: 'org', agent: 'WebAnalystAgent', title: 'first' });
+    await appendMessages(c1.id, LOG('m1'), 0);
     const c2 = await createConversation({ ownerUserId: 42, mode: 'org', agent: 'WebAnalystAgent', title: 'second' });
-    await createConversation({ ownerUserId: 42, mode: 'tutorial', agent: 'WebAnalystAgent', title: 'other-mode' });
+    const t = await createConversation({ ownerUserId: 42, mode: 'tutorial', agent: 'WebAnalystAgent', title: 'other-mode' });
+    await appendMessages(t.id, LOG('mt'), 0);
     await appendMessages(c2.id, LOG('bump c2'), 0); // c2 becomes most recent
 
     const org = await listConversations(42, 'org');
@@ -89,6 +91,17 @@ describe('v3 conversation store', () => {
 
     await deleteConversation(c1.id);
     expect(await getConversation(c1.id)).toBeNull();
+  });
+
+  it('excludes EMPTY conversations (pre-created, never sent a message) from the list', async () => {
+    const empty = await createConversation({ ownerUserId: 99, mode: 'org', agent: 'WebAnalystAgent', title: 'New Conversation' });
+    const used = await createConversation({ ownerUserId: 99, mode: 'org', agent: 'WebAnalystAgent', title: 'real one' });
+    await appendMessages(used.id, LOG('hi'), 0);
+
+    const list = await listConversations(99, 'org');
+    expect(list.map((c) => c.id)).toEqual([used.id]); // the empty pre-created row is hidden
+    // It still exists + is loadable directly (e.g. the active draft you're composing).
+    expect(await getConversation(empty.id)).not.toBeNull();
   });
 
   it('deleting a conversation removes its messages and errors', async () => {

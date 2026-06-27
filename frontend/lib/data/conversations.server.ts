@@ -147,6 +147,12 @@ export async function findConversationIdByMeta(metaKey: string, value: string): 
   return res.rows[0]?.id ?? null;
 }
 
+/**
+ * List a user's conversations, newest-first. Excludes EMPTY conversations — ones pre-created on
+ * explore-page mount (so a send has a ready id) that never received a message. A conversation
+ * "exists" for listing once it has at least one pi-log row (the eagerly-committed user message);
+ * this mirrors the old behavior where draft conversation files didn't appear in history.
+ */
 export async function listConversations(
   ownerUserId: number,
   mode: string,
@@ -155,8 +161,10 @@ export async function listConversations(
   const limit = Math.min(opts.limit ?? 100, 500);
   const offset = opts.offset ?? 0;
   const res = await db().exec<ConversationRow>(
-    `SELECT * FROM conversations WHERE owner_user_id = $1 AND mode = $2
-     ORDER BY updated_at DESC LIMIT $3 OFFSET $4`,
+    `SELECT c.* FROM conversations c
+     WHERE c.owner_user_id = $1 AND c.mode = $2
+       AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.seq IS NOT NULL)
+     ORDER BY c.updated_at DESC LIMIT $3 OFFSET $4`,
     [ownerUserId, mode, limit, offset],
   );
   return res.rows.map(mapConversation);
