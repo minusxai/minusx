@@ -91,6 +91,19 @@ describe('v3 conversation store', () => {
     expect(await getConversation(c1.id)).toBeNull();
   });
 
+  it('deleting a conversation removes its messages and errors', async () => {
+    const c = await createConversation({ ownerUserId: 7, mode: 'org', agent: 'WebAnalystAgent' });
+    await appendMessages(c.id, LOG('hello'), 0);
+    await appendError(c.id, { source: 'llm', message: 'boom' });
+    expect(await loadMessages(c.id)).not.toHaveLength(0);
+
+    await deleteConversation(c.id);
+
+    expect(await getConversation(c.id)).toBeNull();
+    expect(await loadMessages(c.id)).toHaveLength(0);
+    expect(await loadErrors(c.id)).toHaveLength(0);
+  });
+
   it('records the parallel error stream and sets run status', async () => {
     const c = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
     await appendError(c.id, { source: 'llm', message: 'boom', details: { http_status: 500 } });

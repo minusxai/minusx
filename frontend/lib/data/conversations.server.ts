@@ -250,7 +250,9 @@ export async function truncateMessagesFrom(id: number, fromSeq: number): Promise
 }
 
 export async function deleteConversation(id: number): Promise<void> {
-  // messages (pi-log + error rows) cascade via FK ON DELETE CASCADE.
+  // Remove the conversation's messages (pi-log + error rows) explicitly, then the row.
+  // messages no longer FK-references conversations, so there is no ON DELETE CASCADE.
+  await db().exec('DELETE FROM messages WHERE conversation_id = $1', [id]);
   await db().exec('DELETE FROM conversations WHERE id = $1', [id]);
 }
 
