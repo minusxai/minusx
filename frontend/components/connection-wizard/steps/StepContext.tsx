@@ -417,13 +417,13 @@ export default function StepContext({
     // — true cold-start init failures go to Sentry / UI only.
     let newConvId: number;
     try {
-      const initRes = await fetch('/api/chat/init', {
+      const initRes = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstMessage: agentMessage }),
       });
       if (!initRes.ok) {
-        let msg = `/api/chat/init returned HTTP ${initRes.status}`;
+        let msg = `/api/conversations returned HTTP ${initRes.status}`;
         // The API error envelope is `{ error: { code, message, type } }` —
         // grab `.message`. Previously we did `String(b.error)`, which on the
         // envelope shape produced literal "[object Object]". Fall back through
@@ -443,9 +443,9 @@ export default function StepContext({
         return;
       }
       const initData = await initRes.json();
-      newConvId = initData.conversationID;
+      newConvId = initData.id;
       if (typeof newConvId !== 'number') {
-        const msg = '/api/chat/init returned no conversationID';
+        const msg = '/api/conversations returned no id';
         logInitFailure(msg);
         setError(msg);
         return;
@@ -460,6 +460,7 @@ export default function StepContext({
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
       conversationID: newConvId,
+      version: 3,
       agent: 'OnboardingContextAgent',
       agent_args: {
         connection_id: connectionName,
