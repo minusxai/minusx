@@ -162,3 +162,36 @@ describe('AnalystAgent buildMessages (app state via projection)', () => {
     expect(timeIdx).toBe(appStateIdx + 1); // immediately after app state
   });
 });
+
+describe('AnalystAgent context docs rendering', () => {
+  it('inlines alwaysInclude docs and advertises lazy docs via the catalog only — from one docs list', () => {
+    // Above the inline-all threshold (5 lazy docs total) so the lazy docs stay in
+    // the catalog rather than being inlined for being a small context.
+    const filler = Array.from({ length: 4 }, (_, i) => ({
+      key: `filler_${i}`, title: `Filler ${i}`, description: 'noise', content: `FILLER BODY ${i}`, alwaysInclude: false,
+    }));
+    const sp: string = newAgent({
+      resolvedContextDocs: {
+        docs: [
+          { key: '', title: 'Pinned Rules', content: 'INLINE PINNED BODY', alwaysInclude: true },
+          { key: 'revenue_glossary', title: 'Revenue Glossary', description: 'how revenue maps to columns', content: 'GLOSSARY BODY', alwaysInclude: false },
+          ...filler,
+        ],
+      },
+    }).getSystemPrompt();
+
+    // Pinned (alwaysInclude) doc body is present inline.
+    expect(sp).toContain('INLINE PINNED BODY');
+    // Lazy doc is advertised by key + title + description (catalog rendered from the
+    // same list), but its body is NOT injected; the LoadContext tool is described.
+    expect(sp).toContain('revenue_glossary');
+    expect(sp).toContain('Revenue Glossary');
+    expect(sp).not.toContain('GLOSSARY BODY');
+    expect(sp).toContain('LoadContext');
+  });
+
+  it('renders the "none" fallback when there are no lazy docs', () => {
+    const sp: string = newAgent().getSystemPrompt();
+    expect(sp).toContain('No additional context documents are available.');
+  });
+});
