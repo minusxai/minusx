@@ -104,8 +104,6 @@ function parseContent(result: { content: any }): Record<string, any> {
   return typeof raw === 'string' ? JSON.parse(raw) : raw;
 }
 
-const MOCK_DB: any = { schemas: [] };
-
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
@@ -146,7 +144,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
 
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org/Getting Started', name: 'My Question' }),
-      MOCK_DB,
     );
 
     const content = parseContent(result);
@@ -165,7 +162,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
 
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org/some-file', name: 'Another' }),
-      MOCK_DB,
     );
 
     const content = parseContent(result);
@@ -183,14 +179,12 @@ describe('CreateFile tool — draft file path conflict validation', () => {
     // createDraftFile with name='My Folder' creates the folder at path /org/my-folder in DB.
     const folderResult = await executeToolCall(
       createFileTool({ file_type: 'folder', path: '/org', name: 'My Folder' }),
-      MOCK_DB,
     );
     expect(parseContent(folderResult).success).toBe(true);
 
     // Now create a question inside the draft folder at its slug path — should succeed
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org/my-folder', name: 'Inside Question' }),
-      MOCK_DB,
     );
 
     // Should succeed (draft folder is OK as a parent, not a conflict)
@@ -214,7 +208,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
     // Create another question with the same name → same slug → duplicate path
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org', name: 'ROI by Campaign' }),
-      MOCK_DB,
     );
 
     const content = parseContent(result);
@@ -241,7 +234,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
     // which is the parent prefix of the existing question
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org', name: 'My Folder' }),
-      MOCK_DB,
     );
 
     const content = parseContent(result);
@@ -257,7 +249,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   it('succeeds when there are no virtual file path conflicts', async () => {
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org', name: 'Totally New Question' }),
-      MOCK_DB,
     );
 
     expect(parseContent(result).success).toBe(true);
@@ -278,7 +269,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
 
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org', name: 'Stringified Question', content }),
-      MOCK_DB,
     );
 
     const parsed = parseContent(result);
@@ -293,7 +283,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   it('rejects a non-JSON string `content` with a tool-level error', async () => {
     const result = await executeToolCall(
       createFileTool({ file_type: 'question', path: '/org', name: 'Bad Content', content: 'not json {{' }),
-      MOCK_DB,
     );
     const parsed = parseContent(result);
     expect(parsed.success).toBe(false);
@@ -314,7 +303,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
           vizSettings: { type: 'bar', xCols: [{ name: 'month' }], yCols: [{ name: 'net_new_arr', label: 'Net New ARR' }] },
         },
       }),
-      MOCK_DB,
     );
 
     // Permissive: the file IS created and the schema issue comes back as non-blocking
@@ -336,7 +324,6 @@ describe('CreateFile tool — draft file path conflict validation', () => {
           vizSettings: { type: 'bar', xCols: ['month'], yCols: ['net_new_arr'] },
         },
       }),
-      MOCK_DB,
     );
 
     expect(parseContent(result).success).toBe(true);

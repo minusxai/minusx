@@ -720,7 +720,6 @@ describe('editFile - Story auto-executes inline questions (agent sees the new re
     // Edit via the EditFile TOOL (where auto-execute lives), changing the inline SQL in the markup.
     await executeToolCall(
       { id: 'c1', type: 'function', function: { name: 'EditFile', arguments: { fileId: storyId, changes: [{ oldMatch: 'SELECT 1 AS v', newMatch: 'SELECT 2 AS v' }] } } } as any,
-      {} as any,
     );
 
     // The NEW query was auto-executed and cached under its own hash ({} params, 'test' conn).
@@ -785,7 +784,6 @@ describe('editFile - Story inline <Number> is visible to the agent (EditFile res
   async function editHead(id: number) {
     return executeToolCall(
       { id: 'c1', type: 'function', function: { name: 'EditFile', arguments: { fileId: id, changes: [{ oldMatch: 'HEAD', newMatch: 'HEADLINE' }] } } } as any,
-      {} as any,
     );
   }
 
@@ -896,7 +894,6 @@ describe('CreateFile tool - auto-execute query results', () => {
           connection_name: 'mxfood',
         },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -974,7 +971,6 @@ describe('CreateFile tool - content validation', () => {
   it('creates a question with no content override and returns success', async () => {
     const result = await executeToolCall(
       makeToolCall({ file_type: 'question' }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -989,7 +985,6 @@ describe('CreateFile tool - content validation', () => {
         name: 'My Query',
         content: { query: 'SELECT * FROM users', connection_name: 'prod' },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1002,7 +997,6 @@ describe('CreateFile tool - content validation', () => {
         file_type: 'question',
         content: { vizSettings: { type: 'invalid_chart_type' } },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1015,7 +1009,6 @@ describe('CreateFile tool - content validation', () => {
         file_type: 'question',
         content: { vizSettings: { type: 'pivot' } },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1037,7 +1030,6 @@ describe('CreateFile tool - content validation', () => {
           },
         },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1050,7 +1042,6 @@ describe('CreateFile tool - content validation', () => {
         name: 'My Dashboard',
         content: { description: 'Revenue overview' },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(false);
@@ -1066,7 +1057,6 @@ describe('CreateFile tool - content validation', () => {
           vizSettings: { type: 'line', xCols: [], yCols: ['revenue'] },
         },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1083,7 +1073,6 @@ describe('CreateFile tool - content validation', () => {
           vizSettings: { type: 'single_value', yCols: ['a', 'b'] },
         },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1099,7 +1088,6 @@ describe('CreateFile tool - content validation', () => {
           vizSettings: { type: 'bar', xCols: ['category'], yCols: ['revenue'] },
         },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1115,7 +1103,6 @@ describe('CreateFile tool - content validation', () => {
           vizSettings: { type: 'table' },
         },
       }),
-      {} as any
     );
     const parsed = parseToolJson(result.content);
     expect(parsed.success).toBe(true);
@@ -1212,7 +1199,6 @@ describe('EditFile - Context post-edit guard', () => {
         fileId: contextId,
         changes: [dropDerivedArrays, { oldMatch: '# Original doc', newMatch: '# Updated doc with new info' }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(true);
   });
@@ -1229,7 +1215,6 @@ describe('EditFile - Context post-edit guard', () => {
           newMatch: '<content># Original doc</content>\n        <draft type="boolean">false</draft>\n      </item>\n      <item>\n        <content># New doc</content>\n        <draft type="boolean">true</draft>\n      </item>',
         }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(true);
   });
@@ -1245,7 +1230,6 @@ describe('EditFile - Context post-edit guard', () => {
           newMatch: '<docs/>',
         }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(true);
   });
@@ -1260,7 +1244,6 @@ describe('EditFile - Context post-edit guard', () => {
           newMatch: '<draft type="boolean">true</draft>',
         }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(true);
   });
@@ -1275,7 +1258,6 @@ describe('EditFile - Context post-edit guard', () => {
           newMatch: '<databaseName>hacked_db</databaseName>',
         }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(false);
     expect(result.details?.error).toMatch(/can only modify docs/);
@@ -1291,7 +1273,6 @@ describe('EditFile - Context post-edit guard', () => {
           newMatch: '<published>\n  <all type="number">99</all>\n</published>',
         }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(false);
     expect(result.details?.error).toMatch(/can only modify docs/);
@@ -1371,7 +1352,6 @@ describe('EditFile - notebook cell auto-execute', () => {
         fileId: notebookId,
         changes: [{ oldMatch: 'SELECT 1', newMatch: 'SELECT 2' }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(true);
 
@@ -1398,7 +1378,6 @@ describe('EditFile - notebook cell auto-execute', () => {
         fileId: notebookId,
         changes: [{ oldMatch: '<cells>', newMatch: '<description>updated</description>\n<cells>' }],
       }),
-      {} as any,
     );
     expect(result.details?.success).toBe(true);
     const executed = selectNotebookCellExecuted(testStore.getState(), notebookId);

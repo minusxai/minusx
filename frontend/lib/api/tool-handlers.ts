@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type ScreenshotDetails } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type ScreenshotDetails } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
@@ -48,7 +48,6 @@ import type { VizSettings } from '@/lib/types';
  * Context object bundling all frontend tool dependencies
  */
 export interface FrontendToolContext {
-  database: DatabaseWithSchema;
   dispatch?: AppDispatch;
   signal?: AbortSignal;
   state?: RootState;
@@ -112,7 +111,6 @@ export function isFrontendTool(name: string): boolean {
  */
 export async function executeToolCall(
   toolCall: ToolCall,
-  database: DatabaseWithSchema,
   dispatch?: AppDispatch,
   signal?: AbortSignal,
   state?: RootState,  // Redux state from middleware
@@ -126,7 +124,6 @@ export async function executeToolCall(
   }
 
   const context: FrontendToolContext = {
-    database,
     dispatch,
     signal,
     state,

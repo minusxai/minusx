@@ -444,19 +444,10 @@ chatListenerMiddleware.startListening({
         // eslint-disable-next-line no-restricted-syntax
         const { executeToolCall } = await import('@/lib/api/tool-handlers');
 
-        // Schema is no longer carried on agent_args (the server resolves it from
-        // connection_id). Client tool handlers only use database.databaseName;
-        // schemas is left empty here.
-        const database = {
-          databaseName: conversation.agent_args.connection_id,
-          schemas: []
-        };
-
         const state = listenerApi.getState() as RootState;
 
         const result = await executeToolCall(
           pendingTool.toolCall,
-          database,
           listenerApi.dispatch as AppDispatch,
           undefined,
           state,

@@ -18,7 +18,7 @@ import { executeToolCall } from '../tool-handlers';
 const call = (args: Record<string, unknown>) =>
   ({ id: 'c1', type: 'function', function: { name: 'Screenshot', arguments: args } }) as never;
 const exec = (args: Record<string, unknown>, colorMode: 'light' | 'dark') =>
-  executeToolCall(call(args), {} as never, undefined, undefined, { ui: { colorMode } } as never, undefined);
+  executeToolCall(call(args), undefined, undefined, { ui: { colorMode } } as never, undefined);
 
 describe('Screenshot tool (frontend bridge)', () => {
   beforeEach(() => vi.clearAllMocks());

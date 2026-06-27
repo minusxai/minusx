@@ -18,7 +18,6 @@ import Editor from '@monaco-editor/react';
 import type { ToolCall, ToolMessage } from '@/lib/types';
 import { isFrontendTool, executeToolCall } from '@/lib/api/tool-handlers';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import type { DatabaseWithSchema } from '@/lib/types';
 
 interface ToolInspectModalProps {
   toolCall: ToolCall;
@@ -145,7 +144,6 @@ export default function ToolInspectModal({
       if (isFrontendTool(syntheticCall.function.name)) {
         const result = await executeToolCall(
           syntheticCall,
-          {} as DatabaseWithSchema,  // most frontend tools don't use database
           dispatch,
           controller.signal,
           reduxState,
