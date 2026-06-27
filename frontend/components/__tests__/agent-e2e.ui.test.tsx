@@ -88,8 +88,6 @@ import { fauxRegistration as webFaux } from '@/agents/web-analyst/web-analyst';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
-import { POST as chatPostHandler } from '@/app/api/chat/route';
-import { POST as chatInitHandler } from '@/app/api/chat/init/route';
 import { GET as filesGetHandler, POST as filesPostHandler } from '@/app/api/files/route';
 import { PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
@@ -145,6 +143,21 @@ function setFaux(entries: MockLLMEntry | MockLLMEntry[]): void {
       return fauxAssistantMessage(r.content ?? '', { stopReason: 'stop' });
     }),
   );
+}
+
+// Chat v3: conversations are dedicated DB rows. Agent-driven tests dispatch
+// createConversation/sendMessage directly (instead of going through ChatInterface),
+// so they must first create a real conversation row via POST /api/conversations to
+// get a positive id — the v3 turns route 404s on a non-existent (e.g. negative draft) id.
+async function createRealConversation(): Promise<number> {
+  const res = await fetch('http://localhost:3000/api/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json();
+  if (!data?.id) throw new Error(`createRealConversation failed: ${JSON.stringify(data)}`);
+  return data.id as number;
 }
 
 // ─── Agent creates files via chat ─────────────────────────────────────────────
@@ -203,14 +216,9 @@ describe('Agent creates files via chat', () => {
   setupTestDb(getTestDbPath('agent_creates_files_ui'));
 
   const mockFetch = setupMockFetch({
-    interceptors: [
-      {
-        includesUrl: ['localhost:3000/api/chat'],
-        startsWithUrl: ['/api/chat'],
-        handler: chatPostHandler,
-      },
-    ],
-    additionalInterceptors: [templateInterceptor, filesCreateInterceptor],
+    // Describe-specific file interceptors win first; chat goes through the shared
+    // v3 catch-all (/api/conversations*).
+    additionalInterceptors: [templateInterceptor, filesCreateInterceptor, catchAllApiInterceptor],
   });
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
@@ -261,11 +269,12 @@ describe('Agent creates files via chat', () => {
 
     renderWithProviders(<AgentFileResult />, { store: testStore });
 
-    const CONV_ID = -200;
+    const CONV_ID = await createRealConversation();
     testStore.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'AnalystAgent',
       agent_args: { goal: 'Create a question called Total Revenue' },
+      version: 3,
     }));
     testStore.dispatch(sendMessage({
       conversationID: CONV_ID,
@@ -321,11 +330,12 @@ describe('Agent creates files via chat', () => {
 
     expect(screen.queryByLabelText('Monthly Users')).toBeNull();
 
-    const CONV_ID = -300;
+    const CONV_ID = await createRealConversation();
     testStore.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'AnalystAgent',
       agent_args: { goal: 'Create a monthly users question' },
+      version: 3,
     }));
     testStore.dispatch(sendMessage({
       conversationID: CONV_ID,
@@ -344,14 +354,6 @@ async function catchAllApiInterceptor(
 ): Promise<Response | null> {
   const BASE = 'http://localhost:3000';
   const method = (init?.method ?? 'GET').toUpperCase();
-
-  if (urlStr.includes('/api/chat/init')) {
-    // Pre-create the conversation via /api/chat/init.
-    const req = new NextRequest(`${BASE}/api/chat/init`, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
-    const res = await chatInitHandler(req);
-    const data = await res.json();
-    return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
-  }
 
   const fullUrl = urlStr.startsWith('http') ? urlStr : `${BASE}${urlStr}`;
 
@@ -378,15 +380,15 @@ async function catchAllApiInterceptor(
 
   // Chat v3 routes (dedicated conversations tables). The listener's IS_TEST path POSTs the turn then
   // polls GET /:id — no XHR/SSE needed in jsdom.
-  if (method === 'POST' && /\/api\/conversations\/\d+\/turns/.test(urlStr)) {
-    const id = urlStr.match(/\/api\/conversations\/(\d+)\/turns/)![1];
+  if (method === 'POST' && /\/api\/conversations\/-?\d+\/turns/.test(urlStr)) {
+    const id = urlStr.match(/\/api\/conversations\/(-?\d+)\/turns/)![1];
     const req = new NextRequest(fullUrl, { method: 'POST', body: init?.body as BodyInit, headers: init?.headers as HeadersInit });
     const res = await conversationTurnsHandler(req, { params: Promise.resolve({ id }) } as never);
     const data = await res.json();
     return { ok: res.status < 400, status: res.status, json: async () => data } as Response;
   }
-  if (method === 'GET' && /\/api\/conversations\/\d+(\?|$)/.test(urlStr)) {
-    const id = urlStr.match(/\/api\/conversations\/(\d+)/)![1];
+  if (method === 'GET' && /\/api\/conversations\/-?\d+(\?|$)/.test(urlStr)) {
+    const id = urlStr.match(/\/api\/conversations\/(-?\d+)/)![1];
     const req = new NextRequest(fullUrl, { method: 'GET', headers: init?.headers as HeadersInit });
     const res = await conversationGetHandler(req, { params: Promise.resolve({ id }) } as never);
     const data = await res.json();
@@ -406,8 +408,7 @@ async function catchAllApiInterceptor(
   }
 
   const isApi = urlStr.startsWith('/api/') || urlStr.includes('localhost:3000/api/');
-  const isChat = urlStr.includes('/api/chat');
-  if (isApi && !isChat) {
+  if (isApi) {
     throw new Error(`[Explore UI] Unmocked fetch: ${method} ${urlStr}`);
   }
 
@@ -425,13 +426,6 @@ describe('Explore page: submit question → agent responds → see answer → to
   global.fetch = realFetch;
 
   const exploreMockFetch = setupMockFetch({
-    interceptors: [
-      {
-        includesUrl: ['localhost:3000/api/chat'],
-        startsWithUrl: ['/api/chat'],
-        handler: chatPostHandler,
-      },
-    ],
     additionalInterceptors: [catchAllApiInterceptor],
   });
 
@@ -480,7 +474,7 @@ describe('Explore page: submit question → agent responds → see answer → to
         { store: testStore }
       );
 
-      // Wait for ChatInterface to pre-create the conversation via /api/chat/init
+      // Wait for ChatInterface to pre-create the conversation via POST /api/conversations
       await waitFor(() => {
         const activeId = selectActiveConversation(testStore.getState() as RootState);
         expect(activeId).toBeTruthy();
@@ -723,9 +717,23 @@ function makeRealApiFetch() {
   return vi.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = url.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
+    const fullUrl = urlStr.startsWith('http') ? urlStr : `${BASE}${urlStr}`;
 
-    if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      return call(chatPostHandler, `${BASE}/api/chat`, init);
+    // Chat v3 routes (dedicated conversations tables). The listener's IS_TEST path
+    // POSTs the turn then polls GET /:id — no XHR/SSE needed in jsdom.
+    if (method === 'POST' && /\/api\/conversations\/-?\d+\/turns/.test(urlStr)) {
+      const id = urlStr.match(/\/api\/conversations\/(-?\d+)\/turns/)![1];
+      return call(conversationTurnsHandler, fullUrl, init, { params: Promise.resolve({ id }) });
+    }
+    if (method === 'GET' && /\/api\/conversations\/-?\d+(\?|$)/.test(urlStr)) {
+      const id = urlStr.match(/\/api\/conversations\/(-?\d+)/)![1];
+      return call(conversationGetHandler, fullUrl, init, { params: Promise.resolve({ id }) });
+    }
+    if (method === 'POST' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+      return call(conversationsPostHandler, `${BASE}/api/conversations`, init);
+    }
+    if (method === 'GET' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+      return call(conversationsListHandler, `${BASE}/api/conversations`, init);
     }
     if (method === 'POST' && urlStr.includes('/api/files/batch-save')) {
       return call(batchSaveHandler, `${BASE}/api/files/batch-save`, init);
@@ -959,11 +967,12 @@ describe('Dashboard agentic scenarios', () => {
 
     renderWithProviders(<AutoPublishUserInput />, { store: testStore });
 
-    const CONV_ID = -400;
+    const CONV_ID = await createRealConversation();
     testStore.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'AnalystAgent',
       agent_args: { goal: `Add ${QUESTION_NAME} to the dashboard and publish` },
+      version: 3,
     }));
     testStore.dispatch(sendMessage({
       conversationID: CONV_ID,
@@ -1568,9 +1577,22 @@ function makeViewerApiFetch() {
   return vi.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = url.toString();
     const method = (init?.method ?? 'GET').toUpperCase();
+    const fullUrl = urlStr.startsWith('http') ? urlStr : `${BASE}${urlStr}`;
 
-    if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-      return call(chatPostHandler, `${BASE}/api/chat`, init);
+    // Chat v3 routes (dedicated conversations tables).
+    if (method === 'POST' && /\/api\/conversations\/-?\d+\/turns/.test(urlStr)) {
+      const id = urlStr.match(/\/api\/conversations\/(-?\d+)\/turns/)![1];
+      return call(conversationTurnsHandler, fullUrl, init, { params: Promise.resolve({ id }) });
+    }
+    if (method === 'GET' && /\/api\/conversations\/-?\d+(\?|$)/.test(urlStr)) {
+      const id = urlStr.match(/\/api\/conversations\/(-?\d+)/)![1];
+      return call(conversationGetHandler, fullUrl, init, { params: Promise.resolve({ id }) });
+    }
+    if (method === 'POST' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+      return call(conversationsPostHandler, `${BASE}/api/conversations`, init);
+    }
+    if (method === 'GET' && /\/api\/conversations(\?|$)/.test(urlStr)) {
+      return call(conversationsListHandler, `${BASE}/api/conversations`, init);
     }
     if (method === 'POST' && urlStr.includes('/api/files/template')) {
       return call(templateHandler, `${BASE}/api/files/template`, init);
@@ -1713,11 +1735,12 @@ describe('Viewer role: agent CreateFile is rejected', () => {
 
     const fileCountBefore = Object.keys(testStore.getState().files.files).length;
 
-    const CONV_ID = -800;
+    const CONV_ID = await createRealConversation();
     testStore.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'AnalystAgent',
       agent_args: { goal: 'Create a new question' },
+      version: 3,
     }));
     testStore.dispatch(sendMessage({
       conversationID: CONV_ID,
@@ -1808,11 +1831,12 @@ describe('Viewer role: agent EditFile on dashboard is rejected', () => {
       },
     ]);
 
-    const CONV_ID = -700;
+    const CONV_ID = await createRealConversation();
     testStore.dispatch(createConversation({
       conversationID: CONV_ID,
       agent: 'AnalystAgent',
       agent_args: { goal: 'Add question to dashboard' },
+      version: 3,
     }));
     testStore.dispatch(sendMessage({
       conversationID: CONV_ID,
