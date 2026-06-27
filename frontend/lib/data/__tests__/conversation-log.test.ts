@@ -3,7 +3,7 @@
 // the orchestrator persistence boundary and the backfill migration depend on them.
 import { describe, it, expect } from 'vitest';
 import {
-  entryKind, entryPiId, entryParentPiId, entriesToInserts, rowsToLog,
+  entryKind, entryPiId, entryParentPiId, entriesToInserts, rowsToLog, derivePendingToolCalls,
 } from '../conversation-log';
 import type { ConversationLog } from '@/orchestrator/types';
 
@@ -47,5 +47,30 @@ describe('rowsToLog', () => {
   it('round-trips: entriesToInserts -> rows -> rowsToLog === original log', () => {
     const rows = entriesToInserts(LOG, 0).map((r) => ({ content: r.content }));
     expect(rowsToLog(rows)).toEqual(LOG);
+  });
+});
+
+describe('derivePendingToolCalls', () => {
+  it('returns assistant toolCalls with no matching toolResult (the pending frontend tools)', () => {
+    const log = [
+      { type: 'toolCall', id: 'root', name: 'WebAnalystAgent', parent_id: null, arguments: { userMessage: 'go' }, context: {} },
+      { role: 'assistant', parent_id: 'root', content: [
+        { type: 'text', text: 'working' },
+        { type: 'toolCall', id: 'srv1', name: 'ReadFiles', arguments: { fileIds: [1] } },
+        { type: 'toolCall', id: 'fe1', name: 'Navigate', arguments: { fileId: 9 } },
+      ] },
+      { role: 'toolResult', parent_id: 'root', toolCallId: 'srv1', toolName: 'ReadFiles', content: [], isError: false },
+    ] as unknown as ConversationLog;
+
+    const pending = derivePendingToolCalls(log);
+    expect(pending).toEqual([{ id: 'fe1', name: 'Navigate', arguments: { fileId: 9 } }]);
+  });
+
+  it('returns nothing when every toolCall is answered', () => {
+    const log = [
+      { role: 'assistant', parent_id: 'root', content: [{ type: 'toolCall', id: 'a', name: 'ReadFiles', arguments: {} }] },
+      { role: 'toolResult', parent_id: 'root', toolCallId: 'a', toolName: 'ReadFiles', content: [], isError: false },
+    ] as unknown as ConversationLog;
+    expect(derivePendingToolCalls(log)).toEqual([]);
   });
 });

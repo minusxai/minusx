@@ -19,7 +19,7 @@ import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
   loadLog, appendMessages, setRunStatus, updateConversationTitle, appendError, ConcurrentAppendError,
 } from '@/lib/data/conversations.server';
-import { notifyMessage, notifyDelta, notifyStatus } from './conversation-stream.server';
+import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 
 const DELTA_FLUSH_MS = 50;
@@ -105,6 +105,11 @@ export async function runConversationTurn(
   await setRunStatus(conversationId, 'running');
   await notifyStatus(conversationId, 'running', startSeq);
 
+  // Honor a "Stop" (interrupt NOTIFY) by cancelling this orchestrator, wherever Stop was clicked.
+  const unsubInterrupt = await subscribe(conversationId, (n) => {
+    if (n.kind === 'interrupt') setup.orchestrator.cancel();
+  });
+
   let runError: string | undefined;
   let buf = '';
   let lastFlush = Date.now();
@@ -133,6 +138,8 @@ export async function runConversationTurn(
     }
   } catch (err) {
     runError = err instanceof Error ? err.message : String(err);
+  } finally {
+    await unsubInterrupt();
   }
 
   // Commit the new pi entries as durable rows.

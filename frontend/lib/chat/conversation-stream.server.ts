@@ -54,6 +54,10 @@ export const notifyDelta = (conversationId: number, seq: number, text: string): 
 export const notifyStatus = (conversationId: number, runStatus: RunStatus, seq: number): Promise<void> =>
   publish(conversationId, { kind: 'status', seq, runStatus });
 
+/** Ask the active turn (wherever it runs) to cancel — the "Stop" button. */
+export const notifyInterrupt = (conversationId: number): Promise<void> =>
+  publish(conversationId, { kind: 'interrupt', seq: -1 });
+
 /**
  * Subscribe to a conversation's wakeups. The first subscriber opens the DB LISTEN; the last to
  * unsubscribe closes it. Returns an async unsubscribe.

@@ -55,3 +55,37 @@ export function entriesToInserts(entries: ConversationLog, startSeq: number): Me
 export function rowsToLog(rows: ReadonlyArray<{ content: ConversationLogEntry }>): ConversationLog {
   return rows.map((r) => r.content);
 }
+
+/** A tool call the client must execute (frontend-bridged) — derived from the log, no live state. */
+export interface DerivedPendingToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/**
+ * Derive the pending tool calls from the committed log: any `toolCall` block inside an assistant
+ * message that has no matching `toolResult` is awaiting execution. The orchestrator answers every
+ * SERVER tool before it pauses, so what's left unanswered is exactly the frontend-bridged calls the
+ * client must run (then POST back as completedToolCalls to resume). Pure — works off rows alone, so
+ * the stream can deliver "pending" on reconnect without any live orchestrator state.
+ */
+export function derivePendingToolCalls(log: ConversationLog): DerivedPendingToolCall[] {
+  const answered = new Set<string>();
+  for (const entry of log) {
+    const tid = (entry as { toolCallId?: unknown }).toolCallId;
+    if ((entry as { role?: string }).role === 'toolResult' && typeof tid === 'string') answered.add(tid);
+  }
+  const pending: DerivedPendingToolCall[] = [];
+  for (const entry of log) {
+    if ((entry as { role?: string }).role !== 'assistant') continue;
+    const content = (entry as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content as Array<{ type?: string; id?: string; name?: string; arguments?: unknown }>) {
+      if (block?.type === 'toolCall' && typeof block.id === 'string' && !answered.has(block.id)) {
+        pending.push({ id: block.id, name: block.name ?? '', arguments: (block.arguments as Record<string, unknown>) ?? {} });
+      }
+    }
+  }
+  return pending;
+}

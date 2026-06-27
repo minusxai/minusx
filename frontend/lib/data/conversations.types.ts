@@ -5,7 +5,14 @@
  * ConversationLogEntry; `content` is the entry verbatim (source of truth) and `seq` is both the
  * 0-based pi log index and the stream cursor. See docs/chat-architecture-v3.md.
  */
-import type { ConversationLogEntry, PendingToolCall } from '@/orchestrator/types';
+import type { ConversationLogEntry } from '@/orchestrator/types';
+
+/** A frontend-bridged tool call the client must execute (derived from the committed log). */
+export interface StreamPendingToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
 
 export type RunStatus = 'idle' | 'running' | 'paused' | 'error';
 
@@ -67,7 +74,7 @@ export interface ConversationErrorRow {
 export type ConversationStreamEvent =
   | { type: 'message'; seq: number; message: ConversationLogEntry } // a durable, committed entry
   | { type: 'delta'; seq: number; text: string }                   // ephemeral token chunk (in-flight msg)
-  | { type: 'pending'; seq: number; toolCalls: PendingToolCall[] } // turn paused on a frontend tool
+  | { type: 'pending'; seq: number; toolCalls: StreamPendingToolCall[] } // turn paused on a frontend tool
   | { type: 'status'; runStatus: RunStatus }                       // run lifecycle transition
   | { type: 'done'; seq: number }                                  // turn finished; cursor is final
   | { type: 'error'; error: string };
@@ -76,8 +83,9 @@ export type ConversationStreamEvent =
 export interface ConversationNotify {
   /** Highest committed message seq, or the in-flight seq for a delta. */
   seq: number;
-  /** 'message' = new committed row(s) to SELECT; 'delta' = ephemeral text chunk; 'status' = run change. */
-  kind: 'message' | 'delta' | 'status';
+  /** 'message' = new committed row(s) to SELECT; 'delta' = ephemeral text chunk; 'status' = run change;
+   *  'interrupt' = a Stop request the active turn should honor (cancel the orchestrator). */
+  kind: 'message' | 'delta' | 'status' | 'interrupt';
   /** For delta notifies, the (small) text chunk rides inline. */
   text?: string;
   runStatus?: RunStatus;
