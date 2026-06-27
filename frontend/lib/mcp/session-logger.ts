@@ -1,26 +1,28 @@
 /**
  * MCP Session Logger
  *
- * Records tool calls made during an MCP session and writes them to a
- * conversation file when the session closes. This makes MCP activity
- * visible in the standard conversation view for debugging.
+ * Records tool calls made during an MCP session and writes them to a v3
+ * conversation when the session closes. This makes MCP activity visible in the
+ * standard conversation view for debugging.
  *
  * Design:
  * - Entries are buffered in memory during the session (MCP sessions are short-lived)
- * - The conversation file is written once, on session close
- * - No file is created if no tools were called (e.g., auth-only probes)
- * - Uses the same TaskLogEntry/TaskResultEntry format as the chat orchestrator,
- *   so the existing conversation viewer renders them without modification
+ * - A v3 conversation is written once, on session close
+ * - Nothing is created if no tools were called (e.g., auth-only probes)
+ * - Tool calls are buffered as legacy TaskLogEntry/TaskResultEntry, then converted to the
+ *   pi log shape via `legacyLogToPi` (same converter the backfill uses) and stored as
+ *   `messages` rows — so MCP sessions are real v3 conversations, no file-conversation surface.
  */
 
 import 'server-only';
 import { randomUUID } from 'crypto';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { FilesAPI } from '@/lib/data/files.server';
-import { resolvePath } from '@/lib/mode/path-resolver';
+import { legacyLogToPi } from '@/lib/chat-translator';
+import { createConversation, appendMessages } from '@/lib/data/conversations.server';
+import type { ConversationLog } from '@/orchestrator/types';
 import type {
-  ConversationFileContent,
+  ConversationLogEntry,
   ConversationSource,
   TaskLogEntry,
   TaskResultEntry,
@@ -78,7 +80,7 @@ export class McpSessionLogger {
   }
 
   /**
-   * Write the buffered session log to a conversation file.
+   * Write the buffered session log as a v3 conversation.
    * Called on session close — fire-and-forget from the route handler.
    * Silently no-ops if no tools were called.
    */
@@ -86,31 +88,19 @@ export class McpSessionLogger {
     if (this.entries.length === 0) return;
 
     try {
-      const userId = this.user.userId?.toString() ?? this.user.email;
-      const path = resolvePath(
-        this.user.mode,
-        `/logs/conversations/${userId}/mcp-${this.sessionId}`,
-      );
       const name = `mcp-${this.sessionId.slice(0, 8)}`;
       const source: ConversationSource = { type: 'mcp', sessionId: this.sessionId };
-      const now = new Date().toISOString();
+      // Convert the buffered legacy task-log to the pi shape v3 messages store.
+      const piLog = legacyLogToPi(this.entries as unknown as ConversationLogEntry[]) as unknown as ConversationLog;
 
-      const content: ConversationFileContent = {
-        metadata: {
-          userId,
-          name,
-          createdAt: this.startedAt,
-          updatedAt: now,
-          logLength: this.entries.length,
-          source,
-        },
-        log: this.entries,
-      };
-
-      await FilesAPI.createFile(
-        { name, path, type: 'conversation', content: content as any, options: { createPath: true } },
-        this.user,
-      );
+      const conv = await createConversation({
+        ownerUserId: this.user.userId,
+        mode: this.user.mode,
+        agent: 'McpSession',
+        title: name,
+        meta: { source, startedAt: this.startedAt },
+      });
+      if (piLog.length > 0) await appendMessages(conv.id, piLog, 0);
     } catch {
       // Logging must never affect MCP tool responses
     }

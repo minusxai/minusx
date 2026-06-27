@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Box, VStack, HStack, Text, Spinner, Badge } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Spinner } from '@chakra-ui/react';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
@@ -135,12 +135,6 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
           <Text fontFamily="mono" fontSize="2xs" color="fg.muted">
             {getRelativeTime(conversation.updatedAt)}
           </Text>
-          {/* v1 conversation surfaced in v2 mode — continuing it forks to v2. */}
-          {conversation.legacy && (
-            <Badge size="xs" colorPalette="gray" variant="subtle" aria-label="Legacy conversation">
-              legacy
-            </Badge>
-          )}
         </HStack>
       </VStack>
     </Box>

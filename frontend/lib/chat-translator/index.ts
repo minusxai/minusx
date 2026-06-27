@@ -497,22 +497,6 @@ export function piStreamEventToLegacy(
   return null;
 }
 
-// ─── file-level convenience: translate a v=2 conversation file ─────
-
-/**
- * Returns true if the given file is a v=2 conversation — i.e. type
- * 'conversation' with `meta.version === 2`. Centralized so the routes
- * agree on the predicate.
- */
-export function isV2ConversationFile(file: {
-  type?: string | null;
-  meta?: unknown;
-}): boolean {
-  if (file.type !== 'conversation') return false;
-  const meta = file.meta as { version?: number } | null | undefined;
-  return meta?.version === 2;
-}
-
 // NOTE: the read-path down-translation (`translateConversationForFrontend`) has been retired.
 // v=2 conversation files now serve the orchestrator pi `ConversationLog` as-is; the frontend
 // parses it pi-natively via `parsePiConversation` (which reuses `piLogToLegacy` internally for the

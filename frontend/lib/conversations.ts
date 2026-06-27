@@ -32,26 +32,6 @@ export function truncateMessageForName(message: string): string {
 }
 
 /**
- * Derive a readable display name from a conversation's raw file name.
- *
- * Legacy conversation files are named `${timestamp}-${slug}.chat.json`. This
- * strips the timestamp prefix + `.chat.json` suffix and un-slugifies the
- * remainder (hyphens → spaces, capitalize first letter). Names that don't match
- * that pattern (Slack/MCP threads, already-clean names) are returned unchanged.
- *
- * Note: the slug was lowercased, punctuation-stripped, and capped at 50 chars
- * at creation time, so this restores legibility but not the original casing,
- * punctuation, or full length.
- */
-export function displayNameFromFileName(fileName: string): string {
-  const match = fileName.match(/^\d+-(.+)\.chat\.json$/);
-  if (!match) return fileName;
-  const text = match[1].replace(/-+/g, ' ').trim();
-  if (!text) return fileName;
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/**
  * Parse a legacy (v1) conversation log into displayable messages.
  * Extracts user messages and tool calls from task-shaped log entries.
  *

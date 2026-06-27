@@ -50,7 +50,6 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { getPageType } from '@/agents/analyst/skills';
 import { normalizeAttachments } from '@/lib/chat/attachments.server';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
-import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import {
@@ -68,9 +67,8 @@ import type {
   CompletedToolCallResult,
 } from '@/lib/chat-orchestration';
 import { estimateContextSize, type ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
-import type {
-  ConversationFileContent,
-} from '@/lib/types';
+
+
 import { immutableSet, immutableMap } from '@/lib/utils/immutable-collections';
 import type { MXAgent } from '@/orchestrator/types';
 
@@ -296,22 +294,12 @@ export async function setupOrchestration(
   body: ChatRequest,
   user: EffectiveUser,
   conversationId: number,
-  options?: { preview?: boolean; savedLog?: ConversationLog; fileMeta?: Record<string, unknown> | null },
+  options: { preview?: boolean; savedLog: ConversationLog; fileMeta?: Record<string, unknown> | null },
 ): Promise<OrchestrationSetup> {
-  // v3 (dedicated tables) injects the saved log from the `messages` rows via options.savedLog so this
-  // whole agent/context build is reused without a conversation FILE. v1/v2 load it from the file.
-  let savedLog: ConversationLog;
-  let fileMeta: Record<string, unknown> | null;
-  if (options?.savedLog) {
-    savedLog = options.savedLog;
-    fileMeta = options.fileMeta ?? null;
-  } else {
-    const file = await FilesAPI.loadFile(conversationId, user);
-    const content = file.data.content as unknown as ConversationFileContent | undefined;
-    // Orchestrator log lives at content.log (we persist orchestrator log shape on disk).
-    savedLog = ((content?.log ?? []) as unknown) as ConversationLog;
-    fileMeta = ((file.data as { meta?: Record<string, unknown> | null }).meta) ?? null;
-  }
+  // Conversations are v3-only: callers inject the saved pi log from the `messages` rows via
+  // options.savedLog so this whole agent/context build is reused without any conversation FILE.
+  const savedLog: ConversationLog = options.savedLog;
+  const fileMeta: Record<string, unknown> | null = options.fileMeta ?? null;
   const expectedLogIndex = savedLog.length;
 
   const narrowedMode: 'org' | 'tutorial' = user.mode === 'tutorial' ? 'tutorial' : 'org';
@@ -518,12 +506,14 @@ export async function estimateNextChatContextV2(
     completed_tool_calls: undefined,
     resume: undefined,
   };
-  // v3 conversations live in dedicated tables (not a file) — feed the log from rows.
+  // Conversations live in dedicated tables (v3-only) — feed the log from rows.
   const v3 = await getV3Conversation(conversationId);
-  const savedLog = v3 ? await loadV3Log(conversationId) : undefined;
+  if (!v3) throw new Error(`Conversation ${conversationId} not found`);
+  const savedLog = await loadV3Log(conversationId);
   const setup = await setupOrchestration(bodyWithProbe, user, conversationId, {
     preview: true,
-    ...(savedLog ? { savedLog, fileMeta: v3?.meta ?? null } : {}),
+    savedLog,
+    fileMeta: v3.meta ?? null,
   });
   if (setup.fatalError) {
     throw new Error(setup.fatalError);
