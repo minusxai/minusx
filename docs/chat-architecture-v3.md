@@ -1,8 +1,22 @@
 # Chat Architecture v3 — Conversations as a First-Class Resource
 
-> Status: **IMPLEMENTED** (PR #513). All chat runs on v3 (dedicated tables + LISTEN/NOTIFY streaming);
-> existing conversations are ported by the backfill migration. v2 server code remains in the tree for
-> now (dormant — the app no longer uses it).
+> Status: **IMPLEMENTED** (PR #513). All **browser-initiated** chat runs on v3 (dedicated tables +
+> LISTEN/NOTIFY streaming): Explore, side-chat, edit-and-fork, and the /view-context-size estimate.
+> The 502 existing conversations were ported by the backfill migration (run locally).
+>
+> **v2 is intentionally retained** (not deleted) because it still backs HEADLESS conversation
+> creation that the browser then views/continues:
+> - **Slack** threads (`app/api/integrations/slack/events` → `runChatOrchestrationV2`, writes v2 files)
+> - **Benchmark import** (`app/api/benchmark/import`)
+> - the **connection wizard** onboarding agents (kept on v2 — flipping them gained nothing since the
+>   above already block full deletion, and added risk to the onboarding flow)
+>
+> Deleting v2 (`/api/chat/*` routes, run-registry, `runChatTurnV2`/`runChatTurnStreamV2`, the v2
+> chat-listener branches) is a clean follow-up that first requires migrating those headless flows to
+> write the v3 store. The shared orchestration core (`setupOrchestration`, `recordLlmCalls`,
+> `estimateNextChatContextV2`) stays — v3 depends on it. The browser read path is already v3-first
+> (`useConversation` tries `/api/conversations/:id`, falls back to the v2 file), so a v2-file Slack
+> thread still loads + continues correctly today.
 
 ---
 
