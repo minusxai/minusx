@@ -32,7 +32,7 @@ export interface V3TurnResult {
   finalSeq: number;
 }
 
-const RESUME_BACKOFF_MS = [1000, 2000, 4000];
+const RESUME_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 
 function parseSseEvents(buffer: string): { events: ConversationStreamEvent[]; rest: string } {
   const parts = buffer.split('\n\n');
@@ -110,7 +110,12 @@ function readStreamOnce(
       // Drain any trailing buffered event.
       const { events } = parseSseEvents(buffer + '\n\n');
       for (const e of events) handle(e);
-      resolve();
+      // Only a terminal event (done/error) is a clean finish. A stream that ends WITHOUT one — a
+      // mid-turn sever (CDP offline can fire onload with status 0, not onerror), a proxy cut, etc. —
+      // is a transport drop: reject so the caller reconnects with ?since=<cursor> and the durable log
+      // replays the gap. Otherwise we'd finalize on a partial log and lose the in-flight reply.
+      if (settled) { resolve(); return; }
+      reject(new Error('Network error'));
     };
     xhr.onerror = () => {
       signal.removeEventListener('abort', onAbort);
