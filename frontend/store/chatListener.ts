@@ -33,6 +33,7 @@ import { API_BASE_URL, patchApiUrl } from './api-url';
 import { runV3Turn, type V3TurnInput } from './conversation-stream-client';
 import { ConversationsAPI } from '@/lib/data/conversations';
 import { derivePendingToolCalls } from '@/lib/data/conversation-log';
+import { collectToolCallMeta, piToolResultToStreamedCall, type ToolCallMeta } from '@/lib/chat/streamed-tool-calls';
 
 // ---------------------------------------------------------------------------
 // Synthetic skill-load events
@@ -213,9 +214,20 @@ async function runV3TurnInListener(
       await new Promise((r) => setTimeout(r, 10));
     }
   } else {
+    // Track tool-call args from committed assistant messages so a committed tool RESULT can be
+    // rendered live (the result entry alone lacks the args the display needs). This makes server
+    // tool calls (ExecuteQuery / SearchDBSchema / SearchFiles) appear AS THEY RUN instead of only
+    // after the turn settles. The streamed rows are ephemeral — finalize clears + reloads them.
+    const toolMeta = new Map<string, ToolCallMeta>();
     const result = await runV3Turn(conversationID, conversation.log_index ?? 0, turn, signal, {
       onDelta: (text) => dispatch(addStreamingMessage({ conversationID, type: 'StreamedContent', payload: { chunk: text } } as never)),
       onPending: () => { /* pending is derived from the reloaded log below */ },
+      onMessage: (content) => {
+        for (const [id, meta] of collectToolCallMeta(content)) toolMeta.set(id, meta);
+        const toolCallId = (content as { toolCallId?: string } | null)?.toolCallId;
+        const streamed = piToolResultToStreamedCall(content, toolCallId ? toolMeta.get(toolCallId) : undefined);
+        if (streamed) dispatch(addStreamingMessage({ conversationID, type: 'ToolCompleted', payload: streamed } as never));
+      },
     });
     status = result.status === 'running' ? 'idle' : result.status;
     runError = result.error;

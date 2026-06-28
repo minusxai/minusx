@@ -11,7 +11,7 @@ export const EXECUTE_SQL_MAX_COLS = 12;
 const EXECUTE_SQL_COLLAPSED_COLS = 12; // Narrower when collapsed
 const EXECUTE_SQL_COLLAPSED_COLS_COMPACT = 12; // Compact: 4 tools per row
 
-export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCompact, showThinking }: DisplayProps) {
+export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCompact }: DisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
   const [isThinkingSQL, setIsThinkingSQL] = useState(true); // Collapsed by default
   const [toolCall, toolMessage] = toolCallTuple;
@@ -130,9 +130,13 @@ export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCom
 
 
 
+  // The ExecuteQuery row ALWAYS renders — it's a server tool call the user should see, exactly like
+  // SearchDBSchema / SearchFiles. Previously a table-viz result (the default, e.g. an aggregate)
+  // left `isThinkingSQL` true and the row was hidden behind "Show Thinking", so the one tool that
+  // actually ran the SQL never appeared. `isThinkingSQL` now only governs styling + auto-expand.
   return (
-    (!isThinkingSQL || showThinking) && 
     <GridItem
+        aria-label="Execute SQL tool call"
         colSpan={isExpanded ? 12 : isCompact ? EXECUTE_SQL_COLLAPSED_COLS_COMPACT : EXECUTE_SQL_COLLAPSED_COLS}
         bg={isThinkingSQL ? "bg.elevated" : ""}
         borderRadius={isThinkingSQL ? "md" : ""}
