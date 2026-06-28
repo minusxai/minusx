@@ -24,7 +24,7 @@ import { selectEffectiveName } from '@/store/filesSlice';
 import { useFile, useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { selectViewStackDepth, selectFileEditMode } from '@/store/uiSlice';
-import { getEditModeBanner } from '@/lib/ui/edit-banner';
+import { getEditModeBanner } from '@/lib/ui/file-utils';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import ViewStackOverlay from './ViewStack';

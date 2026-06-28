@@ -7,7 +7,10 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 vi.mock('@/lib/api/micro-task', () => ({
   runMicroTaskClient: vi.fn(async () => 'Quarterly Revenue By Region'),
   buildFileMicroInput: vi.fn(() => '{"fileType":"question"}'),
-  // Content gating is unit-tested separately; here the draft has content.
+}));
+// Content gating is unit-tested separately; here the draft has content.
+vi.mock('@/lib/ui/file-utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ui/file-utils')>()),
   hasGeneratableContent: () => true,
 }));
 // Folder list isn't relevant to the suggest behavior.

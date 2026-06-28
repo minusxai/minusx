@@ -21,10 +21,10 @@ import {
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
 import { editFile } from '@/lib/api/file-state';
-import { runMicroTaskClient, buildFileMicroInput, hasGeneratableContent } from '@/lib/api/micro-task';
+import { runMicroTaskClient, buildFileMicroInput } from '@/lib/api/micro-task';
 import { toaster } from './ui/toaster';
 import { isUserFacingError } from '@/lib/errors';
-import { redirectAfterSave } from '@/lib/ui/file-utils';
+import { redirectAfterSave, hasGeneratableContent } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { DocumentContent, FileType } from '@/lib/types';
 import { selectFile } from '@/store/filesSlice';
