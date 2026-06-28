@@ -46,7 +46,7 @@ vi.mock('@/components/chat/LexicalMentionEditor', () => {
   return {
     __esModule: true,
     LexicalMentionEditor: React.forwardRef(function MockLexicalMentionEditor(props: any, ref: any) {
-      const { placeholder, disabled, onSubmit, onChange, onArrowKey } = props;
+      const { placeholder, disabled, onSubmit, onChange, onArrowKey, onLargePaste } = props;
       const [value, setValue] = React.useState('');
       React.useImperativeHandle(ref, () => ({
         clear: vi.fn(),
@@ -58,6 +58,16 @@ vi.mock('@/components/chat/LexicalMentionEditor', () => {
         placeholder,
         disabled,
         value,
+        // Mirror the real PastePlugin: hand the pasted text to onLargePaste and,
+        // if it claims the paste (returns true), suppress the inline insert.
+        onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+          const text = e.clipboardData?.getData('text/plain') ?? '';
+          if (onLargePaste?.(text)) {
+            e.preventDefault();
+            return;
+          }
+          setValue((v: string) => v + text);
+        },
         onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
           setValue(e.target.value);
           onChange?.(e.target.value);
@@ -208,6 +218,59 @@ describe('ChatInput: image attachment upload', () => {
       const attachments = selectChatAttachments(store.getState());
       expect(attachments).toHaveLength(0);
     });
+  });
+});
+
+// ─── ChatInput: large paste → text attachment ─────────────────────────────────
+
+import { PASTED_TEXT_ATTACHMENT_CHARS } from '@/lib/context/context-budgets';
+
+describe('ChatInput: large paste becomes a text attachment', () => {
+  beforeEach(() => { window.HTMLElement.prototype.scrollTo = vi.fn(); });
+  afterEach(() => vi.clearAllMocks());
+
+  function pasteInto(editor: HTMLElement, text: string) {
+    fireEvent.paste(editor, { clipboardData: { getData: () => text } });
+  }
+
+  it('stages a large paste as a text attachment instead of inserting inline', async () => {
+    const store = storeModule.makeStore();
+    renderChatInputImage(store);
+
+    const big = 'x'.repeat(PASTED_TEXT_ATTACHMENT_CHARS + 1);
+    pasteInto(screen.getByLabelText('Chat editor'), big);
+
+    await waitFor(() => {
+      const attachments = selectChatAttachments(store.getState());
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0].type).toBe('text');
+      expect(attachments[0].content).toBe(big);
+    });
+    // The editor must stay empty — the blob did NOT go inline.
+    expect((screen.getByLabelText('Chat editor') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('shows an attachment chip for the pasted blob', async () => {
+    const store = storeModule.makeStore();
+    renderChatInputImage(store);
+
+    pasteInto(screen.getByLabelText('Chat editor'), 'y'.repeat(PASTED_TEXT_ATTACHMENT_CHARS + 1));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/^Attachment: Pasted text/)).toBeTruthy();
+    });
+  });
+
+  it('leaves small pastes inline (no attachment)', async () => {
+    const store = storeModule.makeStore();
+    renderChatInputImage(store);
+
+    pasteInto(screen.getByLabelText('Chat editor'), 'a short paste');
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Chat editor') as HTMLTextAreaElement).value).toBe('a short paste');
+    });
+    expect(selectChatAttachments(store.getState())).toHaveLength(0);
   });
 });
 

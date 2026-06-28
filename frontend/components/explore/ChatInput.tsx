@@ -16,6 +16,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
+import { handlePastedText } from '@/lib/chat/paste-attachment';
 import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -187,6 +188,13 @@ function ChatInputInner({
     draftBeforeHistoryRef.current = value;
   });
 
+  // Large pastes (1000s of lines) bog down the Lexical editor — stage them as a
+  // text-attachment chip instead of inserting inline. Returns true to claim the
+  // paste so the editor suppresses the inline insert.
+  const handleLargePaste = useStableCallback((text: string): boolean =>
+    handlePastedText(dispatch, text)
+  );
+
   const setEditorTextFromHistory = useStableCallback((value: string) => {
     skipNextHistoryResetRef.current = true;
     setInput(value);
@@ -345,6 +353,7 @@ function ChatInputInner({
                         singleLine={isCollapsed}
                         onSubmit={handleSend}
                         onChange={handleInputChange}
+                        onLargePaste={handleLargePaste}
                         onArrowKey={handleHistoryArrow}
                         onFocus={() => setIsFocused(true)}
                         onBlur={() => {
