@@ -32,9 +32,6 @@ function task(key: string): MicroTaskConfig {
 export const MICRO_TASKS: Record<string, MicroTaskConfig> = {
   title: task('title'),
   description: task('description'),
-  summary: task('summary'),
-  // Home-feed briefing. Callers pass {agent_name, current_date, app_state}
-  // (app_state = serialized page state), not the generic {input}.
   feed_summary: task('feed_summary'),
 };
 

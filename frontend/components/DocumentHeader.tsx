@@ -7,17 +7,48 @@ import {
   Text,
   Input,
   IconButton,
+  Button,
   HStack,
   VStack,
   Icon,
 } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
+import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize, LuSparkles } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
 import ExplainButton from '@/components/ExplainButton';
 import { useAppSelector } from '@/store/hooks';
+
+/** Small "generate with AI" affordance shown next to an empty title/description. */
+function GenerateButton({ label, loading, onClick }: { label: string; loading: boolean; onClick: () => void }) {
+  return (
+    <Tooltip content={label} positioning={{ placement: 'top' }}>
+      <Button
+        aria-label={label}
+        onClick={onClick}
+        loading={loading}
+        size="2xs"
+        variant="ghost"
+        gap={1}
+        px={1.5}
+        h="18px"
+        flexShrink={0}
+        fontFamily="mono"
+        fontWeight="700"
+        fontSize="2xs"
+        color="accent.secondary"
+        bg="accent.secondary/8"
+        borderWidth="1px"
+        borderColor="accent.secondary/15"
+        _hover={{ bg: 'accent.secondary/15' }}
+      >
+        <LuSparkles />
+        Auto
+      </Button>
+    </Tooltip>
+  );
+}
 
 const pulseAnimation = `
   @keyframes borderPulse {
@@ -60,6 +91,13 @@ export interface DocumentHeaderProps {
   onDescriptionChange: (description: string) => void;
   onEditModeToggle: () => void;
   onSave: () => void;
+
+  // Optional "generate with AI" affordances, shown next to an EMPTY title /
+  // description field in edit mode. When omitted, no button is rendered.
+  onGenerateName?: () => void;
+  onGenerateDescription?: () => void;
+  isGeneratingName?: boolean;
+  isGeneratingDescription?: boolean;
 
   // Optional customization
   additionalBadges?: ReactNode;  // Additional badges to show next to type badge
@@ -108,6 +146,10 @@ export default function DocumentHeader({
   onDescriptionChange,
   onEditModeToggle,
   onSave,
+  onGenerateName,
+  onGenerateDescription,
+  isGeneratingName = false,
+  isGeneratingDescription = false,
   additionalBadges,
   headerActions,
   readOnlyName = false,
@@ -183,25 +225,38 @@ export default function DocumentHeader({
           <VStack align="start" gap={0.5} flex="1" minW={0}>
             {/* Title */}
             {editMode && !readOnlyName ? (
-              <Input
-                value={name}
-                onChange={(e) => onNameChange(e.target.value)}
-                fontSize={{ base: 'xl', md: '2xl' }}
-                fontWeight="900"
-                letterSpacing="-0.02em"
-                color={titleColor}
-                fontFamily="mono"
-                variant="flushed"
-                placeholder={`Add a ${metadata.label} name`}
-                borderBottom="0px"
-                // borderColor="border.muted"
-                bg="transparent"
-                _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
-                px={0}
-                py={0}
-                h="auto"
-                minH="0"
-              />
+              <HStack width="100%" gap={2} align="center">
+                <Input
+                  value={name}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  fontSize={{ base: 'xl', md: '2xl' }}
+                  fontWeight="900"
+                  letterSpacing="-0.02em"
+                  color={titleColor}
+                  fontFamily="mono"
+                  variant="flushed"
+                  placeholder={`Add a ${metadata.label} name`}
+                  borderBottom="0px"
+                  // borderColor="border.muted"
+                  bg="transparent"
+                  _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
+                  px={0}
+                  py={0}
+                  h="auto"
+                  minH="0"
+                  // When empty (generate button visible) the input shrinks to its
+                  // placeholder so the "Auto" chip sits right next to the prompt text.
+                  flex={onGenerateName && !name.trim() ? '0 1 auto' : '1'}
+                  width={onGenerateName && !name.trim() ? 'auto' : undefined}
+                />
+                {onGenerateName && !name.trim() && (
+                  <GenerateButton
+                    label={`Generate ${metadata.label} name`}
+                    loading={isGeneratingName}
+                    onClick={onGenerateName}
+                  />
+                )}
+              </HStack>
             ) : (
               <Heading
                 fontSize={{ base: 'xl', md: '2xl' }}
@@ -224,28 +279,38 @@ export default function DocumentHeader({
                 to two rows. */}
             <Box width="100%">
               {!hideDescription && editMode ? (
-                <Input
-                  value={description || ''}
-                  onChange={(e) => onDescriptionChange(e.target.value)}
-                  placeholder="Add a description"
-                  color={subtitleColor}
-                  fontSize="sm"
-                  fontWeight="600"
-                  lineHeight="1.5"
-                  variant="flushed"
-                  borderBottom="0px"
-                //   borderColor="border.muted"
-                  borderRadius="0"
-                  bg="transparent"
-                  _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
-                  _placeholder={{ color: 'fg.subtle' }}
-                  px={0}
-                  py={0}
-                  h="auto"
-                  minH="0"
-                  flex="1"
-                  
-                />
+                <HStack width="100%" gap={2} align="center">
+                  <Input
+                    value={description || ''}
+                    onChange={(e) => onDescriptionChange(e.target.value)}
+                    placeholder="Add a description"
+                    color={subtitleColor}
+                    fontSize="sm"
+                    fontWeight="600"
+                    lineHeight="1.5"
+                    variant="flushed"
+                    borderBottom="0px"
+                  //   borderColor="border.muted"
+                    borderRadius="0"
+                    bg="transparent"
+                    _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
+                    _placeholder={{ color: 'fg.subtle' }}
+                    px={0}
+                    py={0}
+                    h="auto"
+                    minH="0"
+                    // Shrink to the placeholder while empty so the "Auto" chip sits beside it.
+                    flex={onGenerateDescription && !(description || '').trim() ? '0 1 auto' : '1'}
+                    width={onGenerateDescription && !(description || '').trim() ? 'auto' : undefined}
+                  />
+                  {onGenerateDescription && !(description || '').trim() && (
+                    <GenerateButton
+                      label="Generate description"
+                      loading={isGeneratingDescription}
+                      onClick={onGenerateDescription}
+                    />
+                  )}
+                </HStack>
               ) : (
                 !hideDescription && description && (
                   <Text

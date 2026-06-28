@@ -21,7 +21,9 @@ import {
   selectFileEditMode, setFileEditMode,
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
-import { editFile } from '@/lib/api/file-state';
+import { editFile, readFiles } from '@/lib/api/file-state';
+import { runMicroTaskClient } from '@/lib/api/micro-task';
+import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -132,6 +134,49 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     if (descDebounceRef.current) clearTimeout(descDebounceRef.current);
     descDebounceRef.current = setTimeout(() => editFile({ fileId, changes: { content: { description: desc } } }), 300);
   }, [fileId]);
+
+  // AI generation of an empty title/description from the file's current content.
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
+  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+
+  // Text representation of the file for the LLM. We send the SAME augmented app
+  // state the agent sees when answering questions: the file with its references
+  // RESOLVED (e.g. a dashboard's referenced questions — their names, SQL) and
+  // query results executed — not just the raw asset ids. `readFiles` guarantees
+  // those are loaded even if the user clicks before the page finished hydrating.
+  const buildGenInput = useCallback(async (): Promise<string> => {
+    try {
+      const [augmented] = await readFiles([fileId], { runQueries: true });
+      if (augmented) return JSON.stringify(compressAugmentedFile(augmented), null, 2);
+    } catch (err) {
+      console.error('[FileHeader] failed to load file for generation, falling back:', err);
+    }
+    return JSON.stringify({ fileType, name: effectiveName || undefined, content: mergedContent }, null, 2);
+  }, [fileId, fileType, effectiveName, mergedContent]);
+
+  const handleGenerateName = useCallback(async () => {
+    setIsGeneratingName(true);
+    try {
+      const title = await runMicroTaskClient('title', { input: await buildGenInput() });
+      handleNameChange(title);
+    } catch (err) {
+      console.error('[FileHeader] failed to generate title:', err);
+    } finally {
+      setIsGeneratingName(false);
+    }
+  }, [buildGenInput, handleNameChange]);
+
+  const handleGenerateDescription = useCallback(async () => {
+    setIsGeneratingDesc(true);
+    try {
+      const desc = await runMicroTaskClient('description', { input: await buildGenInput() });
+      handleDescChange(desc);
+    } catch (err) {
+      console.error('[FileHeader] failed to generate description:', err);
+    } finally {
+      setIsGeneratingDesc(false);
+    }
+  }, [buildGenInput, handleDescChange]);
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 
@@ -269,6 +314,10 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         saveError={saveError}
         onNameChange={handleNameChange}
         onDescriptionChange={handleDescChange}
+        onGenerateName={canEdit ? handleGenerateName : undefined}
+        onGenerateDescription={canEdit ? handleGenerateDescription : undefined}
+        isGeneratingName={isGeneratingName}
+        isGeneratingDescription={isGeneratingDesc}
         onEditModeToggle={() => {
           if (editMode) {
             handleCancel();
