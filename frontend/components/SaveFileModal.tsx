@@ -14,8 +14,11 @@ import { LuFolder, LuFolderOpen, LuChevronRight, LuChevronDown } from 'react-ico
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { useAppSelector } from '@/store/hooks';
-import { selectEffectiveName } from '@/store/filesSlice';
+import { selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { GenerateButton } from './ui/GenerateButton';
+import { runMicroTaskClient, buildFileMicroInput, hasGeneratableContent } from '@/lib/api/micro-task';
+import { toaster } from './ui/toaster';
 
 // ---------------------------------------------------------------------------
 // Tree data structure
@@ -190,10 +193,13 @@ interface SaveFileModalProps {
 export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSave, defaultPath }: SaveFileModalProps) {
   const mode = useAppSelector(state => state.auth.user?.mode ?? 'org');
   const currentName = useAppSelector(state => selectEffectiveName(state, fileId)) ?? '';
+  const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
+  const canGenerate = hasGeneratableContent(fileType, mergedContent);
   const metadata = getFileTypeMetadata(fileType as any);
   const rootPath = `/${mode}`;
 
   const [fileName, setFileName] = useState(currentName);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState(defaultPath ?? rootPath);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     // Auto-expand the path to the default folder
@@ -256,6 +262,24 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
     });
   }, []);
 
+  const handleSuggestName = useCallback(async () => {
+    setIsSuggesting(true);
+    try {
+      // Generate from the file being saved — its current (unsaved) content.
+      const name = await runMicroTaskClient('title', {
+        input: buildFileMicroInput(fileId),
+        subject: `a ${fileType}`,
+        instructions: '',
+      });
+      setFileName(name);
+    } catch (err) {
+      console.error('[SaveFileModal] failed to suggest a name:', err);
+      toaster.create({ title: "Couldn't suggest a name", description: 'Please try again.', type: 'error' });
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, [fileId, fileType]);
+
   const handleSave = () => {
     const trimmed = fileName.trim();
     if (!trimmed) return;
@@ -293,16 +317,22 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
               {/* Name input */}
               <Box>
                 <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={2}>Name</Text>
-                <Input
-                  aria-label="File name"
-                  value={fileName}
-                  onChange={(e) => setFileName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
-                  placeholder={`Enter ${metadata.label.toLowerCase()} name`}
-                  size="md"
-                  fontFamily="mono"
-                  autoFocus
-                />
+                <HStack gap={2} align="center">
+                  <Input
+                    aria-label="File name"
+                    value={fileName}
+                    onChange={(e) => setFileName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+                    placeholder={`Enter ${metadata.label.toLowerCase()} name`}
+                    size="md"
+                    fontFamily="mono"
+                    flex="1"
+                    autoFocus
+                  />
+                  {!fileName.trim() && canGenerate && (
+                    <GenerateButton label="Suggest a name" loading={isSuggesting} onClick={handleSuggestName} />
+                  )}
+                </HStack>
               </Box>
 
               {/* Folder tree */}

@@ -11,7 +11,7 @@
  * System files (connection, config, styles, context) keep their own headers.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { HStack, Text, Icon, Button, IconButton } from '@chakra-ui/react';
 import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -22,6 +22,8 @@ import {
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
 import { editFile } from '@/lib/api/file-state';
+import { runMicroTaskClient, buildFileMicroInput, hasGeneratableContent } from '@/lib/api/micro-task';
+import { toaster } from './ui/toaster';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -57,6 +59,9 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const parentFolder = effectivePath.substring(0, effectivePath.lastIndexOf('/')) || '/';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
   const description = (mergedContent as any)?.description as string | undefined;
+  // Only offer "✨ Auto" once the file has something to summarize (e.g. a query,
+  // assets, or cells) — a blank new file has nothing to generate a title from.
+  const canGenerate = useMemo(() => hasGeneratableContent(fileType, mergedContent), [fileType, mergedContent]);
 
   const isDashboard = fileType === 'dashboard';
   const editMode = useAppSelector(state =>
@@ -132,6 +137,36 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     if (descDebounceRef.current) clearTimeout(descDebounceRef.current);
     descDebounceRef.current = setTimeout(() => editFile({ fileId, changes: { content: { description: desc } } }), 300);
   }, [fileId]);
+
+  // AI generation of an empty title/description from the file's current content.
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
+  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+
+  const handleGenerateName = useCallback(async () => {
+    setIsGeneratingName(true);
+    try {
+      const title = await runMicroTaskClient('title', { input: buildFileMicroInput(fileId), subject: `a ${fileType}`, instructions: '' });
+      handleNameChange(title);
+    } catch (err) {
+      console.error('[FileHeader] failed to generate title:', err);
+      toaster.create({ title: "Couldn't generate a title", description: 'Please try again.', type: 'error' });
+    } finally {
+      setIsGeneratingName(false);
+    }
+  }, [fileId, handleNameChange, fileType]);
+
+  const handleGenerateDescription = useCallback(async () => {
+    setIsGeneratingDesc(true);
+    try {
+      const desc = await runMicroTaskClient('description', { input: buildFileMicroInput(fileId), subject: `a ${fileType}`, instructions: '' });
+      handleDescChange(desc);
+    } catch (err) {
+      console.error('[FileHeader] failed to generate description:', err);
+      toaster.create({ title: "Couldn't generate a description", description: 'Please try again.', type: 'error' });
+    } finally {
+      setIsGeneratingDesc(false);
+    }
+  }, [fileId, handleDescChange, fileType]);
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 
@@ -269,6 +304,10 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         saveError={saveError}
         onNameChange={handleNameChange}
         onDescriptionChange={handleDescChange}
+        onGenerateName={canEdit && canGenerate ? handleGenerateName : undefined}
+        onGenerateDescription={canEdit && canGenerate ? handleGenerateDescription : undefined}
+        isGeneratingName={isGeneratingName}
+        isGeneratingDescription={isGeneratingDesc}
         onEditModeToggle={() => {
           if (editMode) {
             handleCancel();

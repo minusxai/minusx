@@ -12,11 +12,12 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
+import { LuSave, LuPencil, LuTriangleAlert, LuCircleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
 import ExplainButton from '@/components/ExplainButton';
+import { GenerateButton } from './ui/GenerateButton';
 import { useAppSelector } from '@/store/hooks';
 
 const pulseAnimation = `
@@ -27,6 +28,14 @@ const pulseAnimation = `
   @keyframes iconBlink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.2; }
+  }
+`;
+
+// Gentle entrance for the save/validation banner.
+const alertInKeyframes = `
+  @keyframes documentHeaderAlertIn {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 `;
 
@@ -50,9 +59,6 @@ export interface DocumentHeaderProps {
   editMode: boolean;
   isDirty: boolean;
   isSaving: boolean;
-  /** When set, Save is blocked even if dirty (e.g. a context doc exceeds its size cap). */
-  saveDisabled?: boolean;
-  saveDisabledReason?: string;
   saveError?: string | null;
 
   // Handlers
@@ -60,6 +66,20 @@ export interface DocumentHeaderProps {
   onDescriptionChange: (description: string) => void;
   onEditModeToggle: () => void;
   onSave: () => void;
+  /**
+   * Optional extra validation run when Save is clicked. Return a message to BLOCK
+   * the save and surface it to the user (Save stays enabled); return null to
+   * proceed. Use for conditions the user can fix in-place (e.g. a doc missing a
+   * title/description) rather than hard-disabling Save with no explanation.
+   */
+  validateBeforeSave?: () => string | null;
+
+  // Optional "generate with AI" affordances, shown next to an EMPTY title /
+  // description field in edit mode. When omitted, no button is rendered.
+  onGenerateName?: () => void;
+  onGenerateDescription?: () => void;
+  isGeneratingName?: boolean;
+  isGeneratingDescription?: boolean;
 
   // Optional customization
   additionalBadges?: ReactNode;  // Additional badges to show next to type badge
@@ -101,13 +121,16 @@ export default function DocumentHeader({
   editMode,
   isDirty,
   isSaving,
-  saveDisabled = false,
-  saveDisabledReason,
   saveError,
   onNameChange,
   onDescriptionChange,
   onEditModeToggle,
   onSave,
+  validateBeforeSave,
+  onGenerateName,
+  onGenerateDescription,
+  isGeneratingName = false,
+  isGeneratingDescription = false,
   additionalBadges,
   headerActions,
   readOnlyName = false,
@@ -147,13 +170,23 @@ export default function DocumentHeader({
 
   // Validate and save
   const handleSave = useCallback(() => {
-    if (saveDisabled) return;
     if (!skipNameValidation && !validateName()) return;
+    // Caller-provided validation (e.g. context docs need title + description).
+    // Surface the reason instead of silently no-op'ing, and keep Save enabled.
+    const blockReason = validateBeforeSave?.();
+    if (blockReason) {
+      setValidationError(blockReason);
+      return;
+    }
     onSave();
-  }, [saveDisabled, skipNameValidation, validateName, onSave]);
+  }, [skipNameValidation, validateName, validateBeforeSave, onSave]);
 
-  // Combined error (validation takes precedence)
+  // Combined error (validation takes precedence). Validation = "you need to fix
+  // something" → amber/attention; a real save failure → red/danger.
   const displayError = validationError || saveError;
+  const alertTone = validationError
+    ? { fg: 'accent.warning', bg: 'accent.warning/10', border: 'accent.warning/30', icon: LuCircleAlert, label: 'Cannot save yet' }
+    : { fg: 'accent.danger', bg: 'bg.error', border: 'accent.danger/25', icon: LuTriangleAlert, label: 'Save failed' };
 
   return (
     <Box
@@ -183,25 +216,38 @@ export default function DocumentHeader({
           <VStack align="start" gap={0.5} flex="1" minW={0}>
             {/* Title */}
             {editMode && !readOnlyName ? (
-              <Input
-                value={name}
-                onChange={(e) => onNameChange(e.target.value)}
-                fontSize={{ base: 'xl', md: '2xl' }}
-                fontWeight="900"
-                letterSpacing="-0.02em"
-                color={titleColor}
-                fontFamily="mono"
-                variant="flushed"
-                placeholder={`Add a ${metadata.label} name`}
-                borderBottom="0px"
-                // borderColor="border.muted"
-                bg="transparent"
-                _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
-                px={0}
-                py={0}
-                h="auto"
-                minH="0"
-              />
+              <HStack width="100%" gap={2} align="center">
+                <Input
+                  value={name}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  fontSize={{ base: 'xl', md: '2xl' }}
+                  fontWeight="900"
+                  letterSpacing="-0.02em"
+                  color={titleColor}
+                  fontFamily="mono"
+                  variant="flushed"
+                  placeholder={`Add a ${metadata.label} name`}
+                  borderBottom="0px"
+                  // borderColor="border.muted"
+                  bg="transparent"
+                  _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
+                  px={0}
+                  py={0}
+                  h="auto"
+                  minH="0"
+                  // When empty (generate button visible) the input shrinks to its
+                  // placeholder so the "Auto" chip sits right next to the prompt text.
+                  flex={onGenerateName && !name.trim() ? '0 1 auto' : '1'}
+                  width={onGenerateName && !name.trim() ? 'auto' : undefined}
+                />
+                {onGenerateName && !name.trim() && (
+                  <GenerateButton
+                    label={`Generate ${metadata.label} name`}
+                    loading={isGeneratingName}
+                    onClick={onGenerateName}
+                  />
+                )}
+              </HStack>
             ) : (
               <Heading
                 fontSize={{ base: 'xl', md: '2xl' }}
@@ -224,28 +270,38 @@ export default function DocumentHeader({
                 to two rows. */}
             <Box width="100%">
               {!hideDescription && editMode ? (
-                <Input
-                  value={description || ''}
-                  onChange={(e) => onDescriptionChange(e.target.value)}
-                  placeholder="Add a description"
-                  color={subtitleColor}
-                  fontSize="sm"
-                  fontWeight="600"
-                  lineHeight="1.5"
-                  variant="flushed"
-                  borderBottom="0px"
-                //   borderColor="border.muted"
-                  borderRadius="0"
-                  bg="transparent"
-                  _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
-                  _placeholder={{ color: 'fg.subtle' }}
-                  px={0}
-                  py={0}
-                  h="auto"
-                  minH="0"
-                  flex="1"
-                  
-                />
+                <HStack width="100%" gap={2} align="center">
+                  <Input
+                    value={description || ''}
+                    onChange={(e) => onDescriptionChange(e.target.value)}
+                    placeholder="Add a description"
+                    color={subtitleColor}
+                    fontSize="sm"
+                    fontWeight="600"
+                    lineHeight="1.5"
+                    variant="flushed"
+                    borderBottom="0px"
+                  //   borderColor="border.muted"
+                    borderRadius="0"
+                    bg="transparent"
+                    _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
+                    _placeholder={{ color: 'fg.subtle' }}
+                    px={0}
+                    py={0}
+                    h="auto"
+                    minH="0"
+                    // Shrink to the placeholder while empty so the "Auto" chip sits beside it.
+                    flex={onGenerateDescription && !(description || '').trim() ? '0 1 auto' : '1'}
+                    width={onGenerateDescription && !(description || '').trim() ? 'auto' : undefined}
+                  />
+                  {onGenerateDescription && !(description || '').trim() && (
+                    <GenerateButton
+                      label="Generate description"
+                      loading={isGeneratingDescription}
+                      onClick={onGenerateDescription}
+                    />
+                  )}
+                </HStack>
               ) : (
                 !hideDescription && description && (
                   <Text
@@ -320,21 +376,19 @@ export default function DocumentHeader({
 
             {/* Save button — always visible in edit mode, disabled when clean */}
             {!isPresenting && editMode && (
-              <Tooltip content={saveDisabledReason} disabled={!saveDisabled}>
                 <IconButton
-                  onClick={handleSave}
-                  aria-label={'Save'}
-                  loading={isSaving}
-                  disabled={!isDirty || saveDisabled}
-                  size="xs"
-                  colorPalette="teal"
-                  px={2}
-                  h="26px"
+                    onClick={handleSave}
+                    aria-label={'Save'}
+                    loading={isSaving}
+                    disabled={!isDirty}
+                    size="xs"
+                    colorPalette="teal"
+                    px={2}
+                    h="26px"
                 >
-                  <LuSave />
-                  {'Save'}
+                    <LuSave />
+                    {'Save'}
                 </IconButton>
-              </Tooltip>
             )}
 
             {/* Present (fullscreen) — generic across file types; view mode only */}
@@ -362,7 +416,7 @@ export default function DocumentHeader({
             {/* Edit/Cancel Button — matches the header toolbar pill aesthetic */}
             {!isPresenting && !hideEditToggle && (
             <IconButton
-              onClick={onEditModeToggle}
+              onClick={() => { setValidationError(null); onEditModeToggle(); }}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
               variant="ghost"
               size="xs"
@@ -395,29 +449,44 @@ export default function DocumentHeader({
         </HStack>
       </VStack>
 
-      {/* Save Error Banner */}
+      {/* Save / validation banner */}
       {displayError && (
-        <Box
-          bg="bg.error"
-          borderLeft="4px solid"
-          borderColor="accent.danger"
-          px={4}
-          py={3}
-          mb={4}
-          borderRadius="md"
-        >
-          <HStack gap={2} align="start">
-            <LuTriangleAlert size={20} color="var(--chakra-colors-accent-danger)" />
-            <VStack align="start" gap={1} flex={1}>
-              <Text fontSize="sm" fontWeight="600" color="accent.danger">
-                Failed to save
+        <>
+          <style>{alertInKeyframes}</style>
+          <Box
+            role="alert"
+            aria-label={displayError}
+            display="flex"
+            alignItems="flex-start"
+            gap={2.5}
+            bg={alertTone.bg}
+            borderWidth="1px"
+            borderColor={alertTone.border}
+            px={3.5}
+            py={2.5}
+            mb={4}
+            borderRadius="md"
+            css={{ animation: 'documentHeaderAlertIn 0.18s ease-out' }}
+          >
+            {/* mt nudges the icon onto the cap-height of the uppercase label */}
+            <Icon as={alertTone.icon} boxSize={4} color={alertTone.fg} flexShrink={0} mt="2px" />
+            <VStack align="start" gap={0.5} flex={1} minW={0}>
+              <Text
+                fontSize="2xs"
+                fontWeight="700"
+                fontFamily="mono"
+                letterSpacing="0.04em"
+                textTransform="uppercase"
+                color={alertTone.fg}
+              >
+                {alertTone.label}
               </Text>
-              <Text fontSize="sm" color="fg.muted">
+              <Text fontSize="sm" color="fg.default" lineHeight="1.5">
                 {displayError}
               </Text>
             </VStack>
-          </HStack>
-        </Box>
+          </Box>
+        </>
       )}
     </Box>
   );

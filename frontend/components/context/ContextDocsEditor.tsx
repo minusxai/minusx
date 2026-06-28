@@ -29,6 +29,8 @@ import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 import ChildPathSelector from '../ChildPathSelector';
+import { GenerateButton } from '@/components/ui/GenerateButton';
+import { runMicroTaskClient } from '@/lib/api/micro-task';
 
 /**
  * Inline-edit styling: the field reads as plain text (transparent border/bg),
@@ -239,6 +241,38 @@ export default function ContextDocsEditor({
     onDocsChange(newDocs);
   };
 
+  // Per-entry "Auto" generation: summarize THIS doc's body into a title /
+  // description via the micro-task agent. Keyed by index; writes through the refs
+  // so a concurrent edit elsewhere isn't clobbered (same pattern as markdown).
+  const [genBusy, setGenBusy] = useState<Record<string, boolean>>({});
+  const generateField = useCallback(
+    async (index: number, field: 'title' | 'description') => {
+      const content = (docsRef.current?.[index]?.content ?? '').trim();
+      if (!content) return;
+      const busyKey = `${index}:${field}`;
+      setGenBusy((b) => ({ ...b, [busyKey]: true }));
+      try {
+        // The analytics agent only sees each doc's title + description (not the
+      // body); it decides whether to LoadContext the full doc from those. So bias
+      // generation toward "is this doc relevant to my task?" signal.
+      const instructions =
+        field === 'description'
+          ? 'IMPORTANT: Only this title and description are shown to the analytics agent — it uses them to decide whether to load the full document. Write the description so the agent can tell exactly when this document is relevant: name the topics, tables, metrics, or questions it covers.'
+          : 'IMPORTANT: The analytics agent loads documents on demand from their title and description alone. Make the title clearly signal the topic so the agent knows when to load this document.';
+      const value = await runMicroTaskClient(field, { input: content, subject: 'a knowledge base document', instructions });
+        const newDocs = [...(docsRef.current || [])];
+        newDocs[index] = { ...newDocs[index], [field]: value };
+        onChangeRef.current(newDocs);
+      } catch (err) {
+        console.error(`[ContextDocsEditor] failed to generate ${field}:`, err);
+        toaster.create({ title: `Couldn't generate ${field}`, description: 'Please try again.', type: 'error' });
+      } finally {
+        setGenBusy((b) => ({ ...b, [busyKey]: false }));
+      }
+    },
+    [],
+  );
+
   return (
     <Box>
       {showEmptyWarning && (!docs || docs.length === 0) && (
@@ -379,20 +413,40 @@ export default function ContextDocsEditor({
                           // Inline-editable title + description. stopPropagation so
                           // clicking/typing here doesn't toggle the collapsible.
                           <VStack gap={0} align="stretch" flex={1} minW={0} onClick={(e) => e.stopPropagation()}>
-                            <DocTextField
-                              {...INLINE_TITLE_STYLE}
-                              aria-label={`${entryLabel} ${index + 1} title`}
-                              placeholder="Add title"
-                              value={docEntry.title ?? ''}
-                              onCommit={(v) => handleTitleChange(index, v)}
-                            />
-                            <DocTextField
-                              {...INLINE_DESC_STYLE}
-                              aria-label={`${entryLabel} ${index + 1} description`}
-                              placeholder="Add a description"
-                              value={docEntry.description ?? ''}
-                              onCommit={(v) => handleDescriptionChange(index, v)}
-                            />
+                            <HStack gap={1} align="center">
+                              <DocTextField
+                                {...INLINE_TITLE_STYLE}
+                                flex="1"
+                                aria-label={`${entryLabel} ${index + 1} title`}
+                                placeholder="Add title"
+                                value={docEntry.title ?? ''}
+                                onCommit={(v) => handleTitleChange(index, v)}
+                              />
+                              {!docEntry.title?.trim() && docEntry.content?.trim() && (
+                                <GenerateButton
+                                  label={`Generate title for entry ${index + 1}`}
+                                  loading={!!genBusy[`${index}:title`]}
+                                  onClick={() => generateField(index, 'title')}
+                                />
+                              )}
+                            </HStack>
+                            <HStack gap={1} align="center">
+                              <DocTextField
+                                {...INLINE_DESC_STYLE}
+                                flex="1"
+                                aria-label={`${entryLabel} ${index + 1} description`}
+                                placeholder="Add a description"
+                                value={docEntry.description ?? ''}
+                                onCommit={(v) => handleDescriptionChange(index, v)}
+                              />
+                              {!docEntry.description?.trim() && docEntry.content?.trim() && (
+                                <GenerateButton
+                                  label={`Generate description for entry ${index + 1}`}
+                                  loading={!!genBusy[`${index}:description`]}
+                                  onClick={() => generateField(index, 'description')}
+                                />
+                              )}
+                            </HStack>
                           </VStack>
                         ) : showTitleDescription ? (
                           // Read-only: title and description on one line — "Title - description".
