@@ -150,7 +150,7 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
           (breadcrumb, right sidebar/chat) is excluded for a focused presentation. */}
       <PresentationProvider fileType={file.type}>
         {showFileHeader && (
-          <Box px={3} pt={3} pb={0} borderBottomWidth="1px" borderColor="border.muted">
+          <Box data-file-header="" px={3} pt={3} pb={0} borderBottomWidth="1px" borderColor="border.muted">
             <FileHeader fileId={fileId as number} fileType={file.type} mode={mode} />
           </Box>
         )}
