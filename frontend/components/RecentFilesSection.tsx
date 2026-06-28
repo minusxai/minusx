@@ -13,6 +13,8 @@ import { selectRightSidebarUIState, selectDevMode, selectHomePage, setSidebarPen
 import { useClearChat } from './explore/slash-commands';
 import { readFiles } from '@/lib/api/file-state';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { appStateForLlm, type AppState } from '@/lib/appState';
+import { todayISO } from '@/lib/utils/today';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useContext } from '@/lib/hooks/useContext';
 import { inlineContextDocsText } from '@/lib/sql/schema-filter';
@@ -23,6 +25,31 @@ import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import type { ConversationSummary } from '@/app/api/conversations/route';
+
+/**
+ * Request a home-feed summary via the generic micro-task route. Feed-summary is
+ * the `feed_summary` micro task: the app state is serialized into the `app_state`
+ * prompt var here, then the task runs server-side.
+ */
+async function requestFeedSummary(
+  fullAppState: { files: unknown[]; context: string },
+  skipCache: boolean,
+): Promise<string | undefined> {
+  const json = await fetchWithCache<{ success: boolean; result?: string }>('/api/micro-task', {
+    method: 'POST',
+    body: JSON.stringify({
+      task: 'feed_summary',
+      vars: {
+        agent_name: 'MinusX',
+        current_date: todayISO(),
+        app_state: JSON.stringify(appStateForLlm(fullAppState as unknown as AppState), null, 2),
+      },
+    }),
+    cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
+    skipCache,
+  });
+  return json.success ? json.result : undefined;
+}
 
 interface HomeAnalyticsData {
   recent: RecentFile[];
@@ -413,19 +440,14 @@ function FeedDataProvider({ children }: { children: React.ReactNode }) {
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
       const fullAppState = { files: appState, context: contextDocs || '' };
 
-      const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
-        method: 'POST',
-        body: JSON.stringify({ appState: fullAppState, prompt: homePageConfig.feedSummaryPrompt || undefined }),
-        cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
-        skipCache,
-      });
-      if (json.success && json.summary) setSummary(json.summary);
+      const summary = await requestFeedSummary(fullAppState, skipCache);
+      if (summary) setSummary(summary);
     } catch (err) {
       console.error('[FeedSummary] Error:', err);
     } finally {
       setSummaryLoading(false);
     }
-  }, [contextDocs, homePageConfig.feedSummaryPrompt, homePageConfig.feedSummaryQuestionIds]);
+  }, [contextDocs, homePageConfig.feedSummaryQuestionIds]);
 
   useEffect(() => {
     if (!data) return;
@@ -709,19 +731,14 @@ export function FeedContent({ wrapper }: { wrapper?: boolean } = {}) {
       const appState = augmented.map(aug => compressAugmentedFile(aug, Infinity));
       const fullAppState = { files: appState, context: contextDocs || '' };
 
-      const json = await fetchWithCache<{ success: boolean; summary?: string }>('/api/feed-summary', {
-        method: 'POST',
-        body: JSON.stringify({ appState: fullAppState, prompt: homePageConfig.feedSummaryPrompt || undefined }),
-        cacheStrategy: { ttl: 10 * 60 * 1000, deduplicate: true },
-        skipCache,
-      });
-      if (json.success && json.summary) setSummary(json.summary);
+      const summary = await requestFeedSummary(fullAppState, skipCache);
+      if (summary) setSummary(summary);
     } catch (err) {
       console.error('[FeedSummary] Error:', err);
     } finally {
       setSummaryLoading(false);
     }
-  }, [contextDocs, homePageConfig.feedSummaryPrompt, homePageConfig.feedSummaryQuestionIds]);
+  }, [contextDocs, homePageConfig.feedSummaryQuestionIds]);
 
   useEffect(() => {
     if (!data) return;
