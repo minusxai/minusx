@@ -5,6 +5,20 @@ import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { OrgBranding } from '@/lib/branding/whitelabel'
 
+/**
+ * Where ECharts mounts the tooltip DOM. We previously used `appendToBody: true`
+ * so tooltips escape overflow-clipping ancestors, but the native Fullscreen API
+ * only renders the fullscreen element's subtree — a tooltip mounted on
+ * `document.body` is outside that subtree and stays invisible in Present mode.
+ * Mounting into the active fullscreen element (when present) fixes that while
+ * keeping the body fallback for the normal, non-fullscreen case.
+ *
+ * Passed as a function so ECharts re-evaluates it on each tooltip show, picking
+ * up fullscreen enter/exit without rebuilding the chart option.
+ */
+export const tooltipAppendTo = (): HTMLElement =>
+  (typeof document !== 'undefined' && (document.fullscreenElement as HTMLElement | null)) || document.body
+
 /** Chart types handled by buildChartOption / BaseChart (ECharts-based standard charts). */
 export type StandardChartType = 'line' | 'bar' | 'row' | 'area' | 'scatter' | 'combo'
 
@@ -633,7 +647,7 @@ export const buildPieChartOption = ({
     } : {}),
     tooltip: {
       trigger: 'item',
-      appendToBody: true,
+      appendTo: tooltipAppendTo,
       z: 9999,
       confine: false,
       formatter: (params: any) => {
@@ -720,7 +734,7 @@ export const buildFunnelChartOption = ({
     } : {}),
     tooltip: {
       trigger: 'item',
-      appendToBody: true,
+      appendTo: tooltipAppendTo,
       z: 9999,
       confine: false,
       formatter: (params: any) => {
@@ -844,7 +858,7 @@ export const buildWaterfallChartOption = ({
     } : {}),
     tooltip: {
       trigger: 'axis',
-      appendToBody: true,
+      appendTo: tooltipAppendTo,
       z: 9999,
       confine: false,
       axisPointer: { type: 'shadow' },
@@ -1002,7 +1016,7 @@ export const buildRadarChartOption = ({
     } : {}),
     tooltip: {
       trigger: 'item',
-      appendToBody: true,
+      appendTo: tooltipAppendTo,
       z: 9999,
       confine: false,
       formatter: (params: any) => {
@@ -1864,7 +1878,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     tooltip: chartType === 'scatter'
       ? {
           trigger: 'item',
-          appendToBody: true,
+          appendTo: tooltipAppendTo,
           z: 9999,
           confine: false,
           enterable: true,
@@ -1925,7 +1939,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         }
       : {
           trigger: 'axis',
-          appendToBody: true,
+          appendTo: tooltipAppendTo,
           z: 9999,
           confine: false,
           enterable: true,
