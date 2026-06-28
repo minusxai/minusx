@@ -5,8 +5,9 @@
  * Smart component using Core Patterns with useFile hook and filesSlice
  * Adds version management for admins
  */
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { selectFileEditMode, setFileEditMode } from '@/store/uiSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/api/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
@@ -44,6 +45,7 @@ export default function ContextContainerV2({
   defaultFolder = '/org',
 }: ContextContainerV2Props) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   // Get current user for version management
   const user = useAppSelector(state => state.auth.user);
@@ -61,18 +63,27 @@ export default function ContextContainerV2({
   // Save error state (for user-facing errors)
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Edit mode state (controlled by container)
-  const [editMode, setEditMode] = useState(mode === 'create');
+  // Edit mode lives in the shared Redux `fileEditMode` (like dashboards/stories),
+  // so the breadcrumb edit banner can read it. Keyed by the numeric fileId.
+  const numericId = typeof fileId === 'number' ? fileId : undefined;
+  const editMode = useAppSelector(state => numericId !== undefined ? selectFileEditMode(state, numericId) : false);
 
-  // Handler for edit mode changes
   const handleEditModeChange = useCallback((newMode: boolean) => {
-    setEditMode(newMode);
-  }, []);
+    if (numericId !== undefined) {
+      dispatch(setFileEditMode({ fileId: numericId, editMode: newMode }));
+    }
+  }, [dispatch, numericId]);
 
-  // Automatically enter edit mode when file becomes dirty — intentional setState in effect
+  // Create mode opens directly in edit mode.
+  useEffect(() => {
+    if (mode === 'create' && numericId !== undefined) {
+      dispatch(setFileEditMode({ fileId: numericId, editMode: true }));
+    }
+  }, [mode, numericId, dispatch]);
+
+  // Automatically enter edit mode when file becomes dirty.
   useEffect(() => {
     if (isDirty && !editMode) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleEditModeChange(true);
     }
   }, [isDirty, editMode, handleEditModeChange]);
@@ -287,7 +298,7 @@ export default function ContextContainerV2({
     try {
       if (typeof fileId === 'number') {
         const result = await publishFile({ fileId });
-        setEditMode(false);
+        handleEditModeChange(false);
         redirectAfterSave(result, fileId, router);
       }
     } catch (error) {
@@ -301,16 +312,16 @@ export default function ContextContainerV2({
       console.error('Failed to save context:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [currentContent, fileId, router]);
+  }, [currentContent, fileId, router, handleEditModeChange]);
 
   // Cancel handler - discard local changes without reloading
   const handleCancel = useCallback(() => {
     if (typeof fileId === 'number') {
       clearFileChanges({ fileId });
     }
-    setEditMode(false);
+    handleEditModeChange(false);
     setSaveError(null);
-  }, [fileId]);
+  }, [fileId, handleEditModeChange]);
 
   // Handle changes from editor (for the selected version)
   const handleChange = useCallback((updates: Partial<ContextContent>) => {

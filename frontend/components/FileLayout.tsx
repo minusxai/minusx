@@ -23,7 +23,8 @@ import { DbFile } from '@/lib/types';
 import { selectEffectiveName } from '@/store/filesSlice';
 import { useFile, useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import { selectViewStackDepth, selectDashboardEditMode } from '@/store/uiSlice';
+import { selectViewStackDepth, selectFileEditMode } from '@/store/uiSlice';
+import { getEditModeBanner } from '@/lib/ui/file-utils';
 import { selectView } from '@/store/authSlice';
 import { viewAtLeast } from '@/lib/view/view-types';
 import ViewStackOverlay from './ViewStack';
@@ -48,9 +49,12 @@ export default function FileLayout(props: FileLayoutProps) {
   const view = useAppSelector(selectView);
   const hideTopChrome = viewAtLeast(view, 'file');       // hide breadcrumb
   const hideRightSidebar = viewAtLeast(view, 'contentonly');
-  const isDashboardEditing = useAppSelector(state =>
-    fileType === 'dashboard' && fileId ? selectDashboardEditMode(state, fileId) : false
+  // Files with a distinct edit state (dashboard, story) get a colored breadcrumb
+  // banner while editing — see `getEditModeBanner` for the eligible types.
+  const isEditing = useAppSelector(state =>
+    fileId ? selectFileEditMode(state, fileId) : false
   );
+  const editBanner = getEditModeBanner(fileType, isEditing);
 
   // Load source dashboard name if navigated from a dashboard via URL param
   useFile(sourceDashboardId);
@@ -142,8 +146,8 @@ export default function FileLayout(props: FileLayoutProps) {
                     items={breadcrumbItems}
                     siblingFiles={fileId ? siblingFiles : undefined}
                     currentFileId={fileId}
-                    bannerColor={isDashboardEditing ? 'accent.primary/90' : undefined}
-                    bannerLabel={isDashboardEditing ? 'Editing Dashboard' : undefined}
+                    bannerColor={editBanner?.color}
+                    bannerLabel={editBanner?.label}
                   />
                 </Box>
               </Flex>

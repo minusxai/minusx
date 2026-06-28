@@ -65,7 +65,7 @@ import {
   setFile, setEdit, addQuestionToDashboard, selectDirtyFiles,
 } from '@/store/filesSlice';
 import * as useNavModule from '@/lib/navigation/use-navigation';
-import { setDashboardEditMode } from '@/store/uiSlice';
+import { setFileEditMode } from '@/store/uiSlice';
 import { setNavigation } from '@/store/navigationSlice';
 import { setUser } from '@/store/authSlice';
 import {
@@ -784,7 +784,7 @@ describe('Add question to existing dashboard and save', () => {
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
-    testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: true }));
+    testStore.dispatch(setFileEditMode({ fileId: DASHBOARD_ID, editMode: true }));
     global.fetch = makeRealApiFetch();
   });
 
@@ -872,7 +872,7 @@ describe('Dashboard edit/cancel mode toggle', () => {
   it('manual: enters and exits edit mode via the Edit / Cancel toggle', async () => {
     const user = userEvent.setup();
 
-    testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: false }));
+    testStore.dispatch(setFileEditMode({ fileId: DASHBOARD_ID, editMode: false }));
 
     renderWithProviders(
       <>
@@ -885,10 +885,10 @@ describe('Dashboard edit/cancel mode toggle', () => {
     expect(await screen.findByLabelText('Dashboard')).toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Edit'));
-    expect(testStore.getState().ui.dashboardEditMode?.[DASHBOARD_ID]).toBe(true);
+    expect(testStore.getState().ui.fileEditMode?.[DASHBOARD_ID]).toBe(true);
 
     await user.click(screen.getByLabelText('Cancel editing'));
-    expect(testStore.getState().ui.dashboardEditMode?.[DASHBOARD_ID]).toBe(false);
+    expect(testStore.getState().ui.fileEditMode?.[DASHBOARD_ID]).toBe(false);
   });
 });
 
@@ -963,7 +963,7 @@ describe('Dashboard agentic scenarios', () => {
 
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
-    testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: true }));
+    testStore.dispatch(setFileEditMode({ fileId: DASHBOARD_ID, editMode: true }));
 
     renderWithProviders(<AutoPublishUserInput />, { store: testStore });
 
@@ -1046,7 +1046,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
       v => v !== undefined
     );
 
-    testStore.dispatch(setDashboardEditMode({ fileId: DASH_VID, editMode: true }));
+    testStore.dispatch(setFileEditMode({ fileId: DASH_VID, editMode: true }));
     renderWithProviders(
       <DashboardContainerV2 fileId={DASH_VID} />,
       { store: testStore }
@@ -1092,7 +1092,7 @@ describe.skip('Combined flow: new dashboard with question from scratch', () => {
       v => v !== undefined
     );
 
-    testStore.dispatch(setDashboardEditMode({ fileId: DASH_VID, editMode: true }));
+    testStore.dispatch(setFileEditMode({ fileId: DASH_VID, editMode: true }));
     renderFilePage(<DashboardContainerV2 fileId={DASH_VID} />, testStore);
 
     const createBtn = await screen.findByLabelText('Create New Question');
@@ -1351,7 +1351,7 @@ describe('Multiple questions in dashboard', () => {
     }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile2(), references: [] }));
-    testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: true }));
+    testStore.dispatch(setFileEditMode({ fileId: DASHBOARD_ID, editMode: true }));
 
     renderWithProviders(
       <>
@@ -1636,7 +1636,7 @@ describe('Viewer role: dashboard header hides edit controls', () => {
     getStoreSpy = vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
     testStore.dispatch(setFile({ file: makeViewerDashboardDbFile(), references: [] }));
-    testStore.dispatch(setDashboardEditMode({ fileId: V_DASHBOARD_ID, editMode: false }));
+    testStore.dispatch(setFileEditMode({ fileId: V_DASHBOARD_ID, editMode: false }));
     global.fetch = makeViewerApiFetch();
   });
 
@@ -1672,7 +1672,7 @@ describe('Viewer role: dashboard header hides edit controls', () => {
     );
 
     expect(await screen.findByLabelText('Review 1 unsaved changes')).toBeInTheDocument();
-    expect(testStore.getState().ui.dashboardEditMode?.[V_DASHBOARD_ID]).toBeFalsy();
+    expect(testStore.getState().ui.fileEditMode?.[V_DASHBOARD_ID]).toBeFalsy();
   });
 });
 

@@ -32,7 +32,7 @@ import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
 import { publishAll, discardAll, editFile } from '@/lib/api/file-state';
-import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
+import { setFileEditMode } from '@/store/uiSlice';
 import { selectFile, selectEffectiveName } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';
 import type { AssetReference, DocumentContent, DashboardLayoutItem } from '@/lib/types';
@@ -179,12 +179,8 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     setSelectedFileId(fileId);
   }, []);
 
-  const exitEditMode = useCallback((fileId: number, fileType?: string) => {
-    if (fileType === 'dashboard') {
-      dispatch(setDashboardEditMode({ fileId, editMode: false }));
-    } else {
-      dispatch(setFileEditMode({ fileId, editMode: false }));
-    }
+  const exitEditMode = useCallback((fileId: number) => {
+    dispatch(setFileEditMode({ fileId, editMode: false }));
   }, [dispatch]);
 
   const handlePublishFile = useCallback(async (fileId: number) => {
@@ -197,7 +193,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     setPublishingSingleId(fileId);
     try {
       await publishAll([fileId]);
-      exitEditMode(fileId, file?.type);
+      exitEditMode(fileId);
     } catch (err) {
       // A failed save (network blip, deploy restart, 5xx) must surface — this
       // was an unhandled rejection in prod: spinner stopped, file stayed
@@ -209,15 +205,14 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   }, [dirtyFiles, exitEditMode]);
 
   const handleDiscardFile = useCallback((fileId: number) => {
-    const file = dirtyFiles.find(f => f.id === fileId);
     discardAll([fileId]);
-    exitEditMode(fileId, file?.type);
-  }, [dirtyFiles, exitEditMode]);
+    exitEditMode(fileId);
+  }, [exitEditMode]);
 
   const handleDiscardAll = useCallback(() => {
     const filesToDiscard = [...dirtyFiles];
     discardAll();
-    filesToDiscard.forEach(f => exitEditMode(f.id, f.type));
+    filesToDiscard.forEach(f => exitEditMode(f.id));
   }, [dirtyFiles, exitEditMode]);
 
   const handlePublishAll = useCallback(async () => {
@@ -231,7 +226,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
       try {
         const filesToPublish = [...dirtyFiles];
         await publishAll();
-        filesToPublish.forEach(f => exitEditMode(f.id, f.type));
+        filesToPublish.forEach(f => exitEditMode(f.id));
       } catch (err) {
         setPublishError(err instanceof Error ? err.message : 'Failed to publish. Please try again.');
       } finally {
@@ -246,7 +241,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
       setIsPublishing(true);
       try {
         await publishAll(nonDrafts.map(f => f.id));
-        nonDrafts.forEach(f => exitEditMode(f.id, f.type));
+        nonDrafts.forEach(f => exitEditMode(f.id));
       } catch (err) {
         setPublishError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
         setIsPublishing(false);
@@ -262,12 +257,11 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
 
   const handleSaveModalConfirm = useCallback(async (name: string, path: string) => {
     if (saveModalFileId === null) return;
-    const file = dirtyFiles.find(f => f.id === saveModalFileId);
     const slug = name.toLowerCase().replace(/\s+/g, '-');
     try {
       await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
       await publishAll([saveModalFileId]);
-      exitEditMode(saveModalFileId, file?.type);
+      exitEditMode(saveModalFileId);
       // Advance to the next queued draft, re-opening its SaveFileModal. Setting
       // the next id after the awaits beats SaveFileModal's onClose reset.
       if (pendingSaveAllIds !== null && pendingSaveAllIds.length > 0) {
@@ -285,7 +279,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
       setPendingSaveAllIds(null);
       setSaveModalFileId(null);
     }
-  }, [saveModalFileId, dirtyFiles, exitEditMode, pendingSaveAllIds]);
+  }, [saveModalFileId, exitEditMode, pendingSaveAllIds]);
 
   // Stable onOpenChange so Dialog.Root doesn't re-run its internal hooks on
   // every parent re-render (132 wasted DialogRoot renders flagged in trace).

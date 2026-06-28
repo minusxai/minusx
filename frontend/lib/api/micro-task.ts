@@ -4,25 +4,6 @@ import { selectMergedContent } from '@/store/filesSlice';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 
 /**
- * Whether a file has enough content to auto-generate a title/description from.
- * Used to hide the "✨ Auto" affordance on a blank file (e.g. a new question with
- * no SQL, an empty dashboard) where there's nothing to summarize.
- *
- * Checks the content signals that carry meaning across the user file types:
- *   - question  → a non-empty SQL `query`
- *   - dashboard / report → at least one `asset`
- *   - notebook / report  → at least one `cell`
- */
-export function hasGeneratableContent(_fileType: string, content: unknown): boolean {
-  const c = content as Record<string, unknown> | undefined | null;
-  if (!c) return false;
-  if (typeof c.query === 'string' && c.query.trim() !== '') return true;
-  if (Array.isArray(c.assets) && c.assets.length > 0) return true;
-  if (Array.isArray(c.cells) && c.cells.length > 0) return true;
-  return false;
-}
-
-/**
  * Build the LLM input for a file's micro-task (title/description) from the file's
  * CURRENT, in-memory state — the same augmented view the agent sees:
  *   - merged content (original + unsaved edits), so a draft being saved or a file
