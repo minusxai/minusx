@@ -68,6 +68,13 @@ describe('runMicroTask', () => {
     await expect(runMicroTask('does-not-exist', { input: 'x' }, USER)).rejects.toThrow(/Unknown micro-task/);
   });
 
+  it('throws (rather than returning empty) when the model yields no text', async () => {
+    microFaux.setResponses([() => fauxAssistantMessage('   ', { stopReason: 'stop' })]);
+    await expect(
+      runMicroTask('title', { input: 'x', subject: 'a question', instructions: '' }, USER),
+    ).rejects.toThrow(/no result/);
+  });
+
   // feed_summary is a registered micro task (its prompts use {agent_name,
   // current_date, app_state} rather than the generic {input}). The /api/micro-task
   // route runs it with a client-serialized `app_state`.

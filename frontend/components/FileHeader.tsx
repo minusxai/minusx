@@ -24,6 +24,7 @@ import {
 import { editFile, readFiles } from '@/lib/api/file-state';
 import { runMicroTaskClient } from '@/lib/api/micro-task';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { toaster } from './ui/toaster';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -161,6 +162,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       handleNameChange(title);
     } catch (err) {
       console.error('[FileHeader] failed to generate title:', err);
+      toaster.create({ title: "Couldn't generate a title", description: 'Please try again.', type: 'error' });
     } finally {
       setIsGeneratingName(false);
     }
@@ -173,6 +175,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       handleDescChange(desc);
     } catch (err) {
       console.error('[FileHeader] failed to generate description:', err);
+      toaster.create({ title: "Couldn't generate a description", description: 'Please try again.', type: 'error' });
     } finally {
       setIsGeneratingDesc(false);
     }

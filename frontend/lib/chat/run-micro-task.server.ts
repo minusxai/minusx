@@ -47,13 +47,21 @@ export async function runMicroTask(
       console.error('[v2/micro-task] orchestrator error event:', (ev as { error?: { errorMessage?: string } }).error?.errorMessage);
     }
   }
-  const final = (await stream.result()) as AssistantMessage;
+  // On an LLM failure the run emits an error event and `result()` resolves to
+  // null (see Orchestrator.run). Record usage either way, then fail loudly rather
+  // than returning an empty string the caller would silently write as a title.
+  const final = (await stream.result()) as AssistantMessage | null;
 
   await recordHeadlessLlmCalls(orch.log, user, taskKey);
 
-  return final.content
+  const text = (final?.content ?? [])
     .filter((c): c is TextContent => c.type === 'text')
     .map((c) => c.text)
     .join('')
     .trim();
+
+  if (!text) {
+    throw new Error(`Micro-task '${taskKey}' produced no result`);
+  }
+  return text;
 }

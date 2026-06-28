@@ -265,6 +265,7 @@ export default function ContextDocsEditor({
         onChangeRef.current(newDocs);
       } catch (err) {
         console.error(`[ContextDocsEditor] failed to generate ${field}:`, err);
+        toaster.create({ title: `Couldn't generate ${field}`, description: 'Please try again.', type: 'error' });
       } finally {
         setGenBusy((b) => ({ ...b, [busyKey]: false }));
       }
