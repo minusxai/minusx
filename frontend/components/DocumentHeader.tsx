@@ -51,9 +51,6 @@ export interface DocumentHeaderProps {
   editMode: boolean;
   isDirty: boolean;
   isSaving: boolean;
-  /** When set, Save is blocked even if dirty (e.g. a context doc exceeds its size cap). */
-  saveDisabled?: boolean;
-  saveDisabledReason?: string;
   saveError?: string | null;
 
   // Handlers
@@ -61,6 +58,13 @@ export interface DocumentHeaderProps {
   onDescriptionChange: (description: string) => void;
   onEditModeToggle: () => void;
   onSave: () => void;
+  /**
+   * Optional extra validation run when Save is clicked. Return a message to BLOCK
+   * the save and surface it to the user (Save stays enabled); return null to
+   * proceed. Use for conditions the user can fix in-place (e.g. a doc missing a
+   * title/description) rather than hard-disabling Save with no explanation.
+   */
+  validateBeforeSave?: () => string | null;
 
   // Optional "generate with AI" affordances, shown next to an EMPTY title /
   // description field in edit mode. When omitted, no button is rendered.
@@ -109,13 +113,12 @@ export default function DocumentHeader({
   editMode,
   isDirty,
   isSaving,
-  saveDisabled = false,
-  saveDisabledReason,
   saveError,
   onNameChange,
   onDescriptionChange,
   onEditModeToggle,
   onSave,
+  validateBeforeSave,
   onGenerateName,
   onGenerateDescription,
   isGeneratingName = false,
@@ -159,10 +162,16 @@ export default function DocumentHeader({
 
   // Validate and save
   const handleSave = useCallback(() => {
-    if (saveDisabled) return;
     if (!skipNameValidation && !validateName()) return;
+    // Caller-provided validation (e.g. context docs need title + description).
+    // Surface the reason instead of silently no-op'ing, and keep Save enabled.
+    const blockReason = validateBeforeSave?.();
+    if (blockReason) {
+      setValidationError(blockReason);
+      return;
+    }
     onSave();
-  }, [saveDisabled, skipNameValidation, validateName, onSave]);
+  }, [skipNameValidation, validateName, validateBeforeSave, onSave]);
 
   // Combined error (validation takes precedence)
   const displayError = validationError || saveError;
@@ -355,21 +364,19 @@ export default function DocumentHeader({
 
             {/* Save button — always visible in edit mode, disabled when clean */}
             {!isPresenting && editMode && (
-              <Tooltip content={saveDisabledReason} disabled={!saveDisabled}>
                 <IconButton
-                  onClick={handleSave}
-                  aria-label={'Save'}
-                  loading={isSaving}
-                  disabled={!isDirty || saveDisabled}
-                  size="xs"
-                  colorPalette="teal"
-                  px={2}
-                  h="26px"
+                    onClick={handleSave}
+                    aria-label={'Save'}
+                    loading={isSaving}
+                    disabled={!isDirty}
+                    size="xs"
+                    colorPalette="teal"
+                    px={2}
+                    h="26px"
                 >
-                  <LuSave />
-                  {'Save'}
+                    <LuSave />
+                    {'Save'}
                 </IconButton>
-              </Tooltip>
             )}
 
             {/* Present (fullscreen) — generic across file types; view mode only */}
@@ -433,9 +440,9 @@ export default function DocumentHeader({
       {/* Save Error Banner */}
       {displayError && (
         <Box
+          role="alert"
+          aria-label={displayError}
           bg="bg.error"
-          borderLeft="4px solid"
-          borderColor="accent.danger"
           px={4}
           py={3}
           mb={4}

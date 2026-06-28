@@ -630,12 +630,12 @@ export default function ContextEditorV2({
           editMode={editMode}
           isDirty={isDirty}
           isSaving={isSaving}
-          saveDisabled={docsOverLimit || docsMissingMeta}
-          saveDisabledReason={
-            docsOverLimit
-              ? 'A document exceeds the size limit — shorten it to save.'
-              : 'Every active document needs a title and description — fill them in (or use ✨ Auto) to save.'
-          }
+          validateBeforeSave={() => {
+            // Save stays enabled; clicking surfaces whichever doc issue blocks it.
+            if (docsOverLimit) return 'A document exceeds the size limit — shorten it before saving.';
+            if (docsMissingMeta) return 'Every active document needs a title and description — fill them in (or use ✨ Auto) before saving.';
+            return null;
+          }}
           saveError={saveError}
           readOnlyName={true}
           hideDescription={true}
