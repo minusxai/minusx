@@ -1,8 +1,21 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Box, Text } from '@chakra-ui/react';
-import { LuScrollText, LuScanSearch, LuLayoutDashboard, LuMapPinned, LuSparkles } from 'react-icons/lu';
+import { Box, HStack, Text, VStack } from '@chakra-ui/react';
+import {
+  LuBellRing,
+  LuCircleAlert,
+  LuCircleCheck,
+  LuDatabase,
+  LuFileText,
+  LuLayoutDashboard,
+  LuListChecks,
+  LuMapPinned,
+  LuNotebook,
+  LuScanSearch,
+  LuScrollText,
+  LuSparkles,
+} from 'react-icons/lu';
 
 import { useAppSelector } from '@/store/hooks';
 import { selectBranding } from '@/store/configsSlice';
@@ -51,12 +64,14 @@ interface HeroProps {
   description: ReactNode;
   /** The self-animating tile shown above the copy (compose with HeroTile). */
   illustration: ReactNode;
+  /** Optional CTA row rendered between the description and the pro-tip (e.g. action buttons). */
+  actions?: ReactNode;
   /** Optional pro-tip chip content. */
   tip?: ReactNode;
   compact?: boolean;
 }
 
-function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustration, tip, compact = false }: HeroProps) {
+function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustration, actions, tip, compact = false }: HeroProps) {
   const accentVar = `var(--chakra-colors-${accent.replace(/\./g, '-')})`;
   return (
     <Box
@@ -135,6 +150,11 @@ function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustr
       >
         {description}
       </Text>
+      {actions && (
+        <Box css={{ animation: 'mx-rise 0.5s ease-out 1s both' }} mt={compact ? 5 : 6}>
+          {actions}
+        </Box>
+      )}
       {tip && (
         <Box
           css={{ animation: 'mx-rise 0.5s ease-out 1.05s both' }}
@@ -164,13 +184,13 @@ function EmptyFileHero({ ariaLabel, accent, eyebrow, title, description, illustr
 }
 
 /** The shared tilted card: a shadow page behind, a foreground page holding `children`, and a corner badge glyph. */
-function HeroTile({ accent, badge, children, compact = false }: { accent: string; badge: ReactNode; children: ReactNode; compact?: boolean }) {
+function HeroTile({ accent, badge, children, compact = false, height }: { accent: string; badge: ReactNode; children: ReactNode; compact?: boolean; height?: string }) {
   return (
     <Box
       aria-hidden
       position="relative"
       w={compact ? '156px' : '184px'}
-      h={compact ? '190px' : '224px'}
+      h={height ?? (compact ? '190px' : '224px')}
       mb={compact ? 5 : 9}
       css={{ animation: 'mx-rise 0.5s ease-out both, mx-float 6s ease-in-out 0.5s infinite' }}
     >
@@ -578,6 +598,162 @@ export function DashboardEmptyState() {
         </>
       }
       compact
+    />
+  );
+}
+
+/* ---------------------------------- Alert ---------------------------------- */
+
+/** An alert's checklist of tests assembling itself, watched by a bell badge. Each row is a discrete
+ *  check with a pass/fail status that pops into place. Deliberately short. */
+function AlertTile() {
+  const rows = [
+    { icon: LuCircleCheck, color: 'accent.teal', width: '70%', d: '0.7s' },
+    { icon: LuCircleAlert, color: 'accent.warning', width: '82%', d: '0.82s' },
+  ];
+  return (
+    <HeroTile accent="accent.secondary" badge={<LuBellRing size={20} strokeWidth={1.75} />} compact height="108px">
+      {/* Header: a checklist glyph + the alert's title. */}
+      <HStack gap={2}>
+        <Box color="accent.secondary" display="flex"><LuListChecks size={13} strokeWidth={1.9} /></Box>
+        <Box h="6px" flex="1" maxW="60px" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.55s both' }} />
+      </HStack>
+      {/* Test rows, each a discrete check with a pass/fail status. */}
+      <VStack flex="1" gap="6px" align="stretch" justify="center">
+        {rows.map((row, index) => {
+          const Icon = row.icon;
+          return (
+            <HStack
+              key={index}
+              gap={2}
+              px="7px"
+              py="5px"
+              borderRadius="md"
+              bg="bg.canvas"
+              borderWidth="1px"
+              borderColor="border.muted"
+              css={{ animation: `mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${row.d} both` }}
+            >
+              <Box color={row.color} display="flex"><Icon size={12} strokeWidth={2} /></Box>
+              <Box h="5px" flex="1" maxW={row.width} borderRadius="full" bg="border.muted" />
+            </HStack>
+          );
+        })}
+      </VStack>
+    </HeroTile>
+  );
+}
+
+export function AlertHistoryEmptyState({ message }: { message: string }) {
+  const agentName = useAgentName();
+  return (
+    <EmptyFileHero
+      ariaLabel="No alert checks"
+      accent="accent.secondary"
+      eyebrow="Alert"
+      title={<>Let&rsquo;s catch issues early</>}
+      description={message}
+      illustration={<AlertTile />}
+      tip={
+        <>
+          <Box as="span" fontWeight={700} color="accent.secondary">Pro tip:</Box>{' '}
+          <Box as="span" fontFamily="mono">@</Box>tag a question and {agentName} sets up an alert that watches it.
+        </>
+      }
+      compact
+    />
+  );
+}
+
+/* -------------------------------- Notebook --------------------------------- */
+
+/** A notebook page assembling itself: a SQL cell (query line → drawn line-chart) stacked above a
+ *  text cell (prose lines). Two distinct cells = the essence of a notebook. */
+function NotebookTile() {
+  return (
+    <HeroTile accent="accent.warning" badge={<LuNotebook size={20} strokeWidth={1.75} />} compact>
+      {/* SQL cell — database glyph, a query line, then a mini area-chart result. */}
+      <Box
+        flex="1"
+        borderWidth="1px"
+        borderColor="border.muted"
+        borderRadius="md"
+        bg="bg.canvas"
+        p={2}
+        display="flex"
+        flexDirection="column"
+        gap={1.5}
+        css={{ animation: 'mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.62s both' }}
+      >
+        <HStack gap={1.5}>
+          <Box color="accent.warning" display="flex"><LuDatabase size={12} strokeWidth={1.9} /></Box>
+          <Box h="6px" flex="1" maxW="58px" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 0.8s both' }} />
+        </HStack>
+        <Box position="relative" flex="1" minH="30px" color="accent.warning">
+          <Box position="absolute" left={0} right={0} bottom={0} h="1.5px" bg="border.muted" />
+          <svg
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <path
+              d="M3 80 L24 58 L46 66 L68 32 L97 16 L97 100 L3 100 Z"
+              fill="currentColor"
+              fillOpacity={0.16}
+              vectorEffect="non-scaling-stroke"
+            />
+            <polyline
+              points="3,80 24,58 46,66 68,32 97,16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+        </Box>
+      </Box>
+      {/* Text cell — a prose glyph and two narrative lines. */}
+      <Box
+        borderWidth="1px"
+        borderColor="border.muted"
+        borderRadius="md"
+        bg="bg.canvas"
+        p={2}
+        display="flex"
+        flexDirection="column"
+        gap={1.5}
+        css={{ animation: 'mx-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.92s both' }}
+      >
+        <HStack gap={1.5}>
+          <Box color="fg.subtle" display="flex"><LuFileText size={12} strokeWidth={1.9} /></Box>
+          <Box h="6px" flex="1" maxW="70px" borderRadius="full" bg="border.emphasized" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 1.08s both' }} />
+        </HStack>
+        <Box h="5px" w="86%" borderRadius="full" bg="border.muted" transformOrigin="left" css={{ animation: 'mx-drawx 0.4s ease-out 1.16s both' }} />
+      </Box>
+    </HeroTile>
+  );
+}
+
+export function NotebookEmptyState({ actions }: { actions?: ReactNode }) {
+  const agentName = useAgentName();
+  return (
+    <EmptyFileHero
+      ariaLabel="Empty notebook"
+      accent="accent.warning"
+      eyebrow="Notebook"
+      title={<>Let&rsquo;s think it through, cell by cell</>}
+      description={<>Mix SQL cells and rich text into one living document, or ask {agentName} to draft the whole analysis for you.</>}
+      illustration={<NotebookTile />}
+      actions={actions}
+      tip={
+        <>
+          <Box as="span" fontWeight={700} color="accent.warning">Pro tip:</Box>{' '}
+          <Box as="span" fontFamily="mono">@</Box>tag your tables and {agentName} fills the notebook with cells.
+        </>
+      }
     />
   );
 }
