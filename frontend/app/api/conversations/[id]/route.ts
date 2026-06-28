@@ -6,6 +6,7 @@ import {
   loadMessages,
   loadErrors,
   deleteConversation,
+  setGeneratedConversationTitle,
 } from '@/lib/data/conversations.server';
 
 export const dynamic = 'force-dynamic';
@@ -63,6 +64,35 @@ export const DELETE = withAuth(async (
     if (!ownsConversation(conversation, user)) return ApiErrors.forbidden();
 
     await deleteConversation(conversationId);
+    return successResponse({ ok: true });
+  } catch (error) {
+    return handleApiError(error);
+  }
+});
+
+/**
+ * PATCH /api/conversations/:id — rename. Body: { title }. Marks the title as
+ * generated/explicit so the list + header show it (vs the raw first message).
+ */
+export const PATCH = withAuth(async (
+  request: NextRequest,
+  user,
+  { params }: { params: Promise<{ id: string }> },
+) => {
+  try {
+    const { id } = await params;
+    const conversationId = Number(id);
+    if (!Number.isInteger(conversationId)) return ApiErrors.validationError('invalid conversation id');
+
+    const conversation = await getConversation(conversationId);
+    if (!conversation) return ApiErrors.notFound('Conversation');
+    if (!ownsConversation(conversation, user)) return ApiErrors.forbidden();
+
+    const body = await request.json().catch(() => ({}));
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    if (!title) return ApiErrors.validationError('title is required');
+
+    await setGeneratedConversationTitle(conversationId, title.slice(0, 200));
     return successResponse({ ok: true });
   } catch (error) {
     return handleApiError(error);
