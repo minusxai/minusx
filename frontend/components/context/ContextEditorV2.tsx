@@ -23,6 +23,7 @@ import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolved
 import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
 import { isDocContentOverLimit } from '@/lib/context/context-budgets';
+import { anyDocMetaIncomplete } from '@/lib/context/doc-validation';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
 import DocumentHeader from '../DocumentHeader';
@@ -412,6 +413,13 @@ export default function ContextEditorV2({
     [content.docs],
   );
 
+  // Block save when any active doc is missing its title or description — those are
+  // the only signals the analytics agent uses to LoadContext, so they're required.
+  const docsMissingMeta = useMemo(
+    () => anyDocMetaIncomplete(content.docs || []),
+    [content.docs],
+  );
+
   // Handle tab change - parse YAML/JSON when switching from code to picker
   const handleTabChange = (tab: string) => {
     if (activeTab === 'yaml' && tab === 'picker') {
@@ -622,8 +630,12 @@ export default function ContextEditorV2({
           editMode={editMode}
           isDirty={isDirty}
           isSaving={isSaving}
-          saveDisabled={docsOverLimit}
-          saveDisabledReason="A document exceeds the size limit — shorten it to save."
+          saveDisabled={docsOverLimit || docsMissingMeta}
+          saveDisabledReason={
+            docsOverLimit
+              ? 'A document exceeds the size limit — shorten it to save.'
+              : 'Every active document needs a title and description — fill them in (or use ✨ Auto) to save.'
+          }
           saveError={saveError}
           readOnlyName={true}
           hideDescription={true}
