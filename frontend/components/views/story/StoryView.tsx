@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { Box, Text } from '@chakra-ui/react';
-import { LuBookOpen } from 'react-icons/lu';
+import { Box } from '@chakra-ui/react';
 
 import AgentHtml, { type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
+import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent } from '@/lib/types';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 import { useAppSelector } from '@/store/hooks';
@@ -87,13 +87,7 @@ export default function StoryView({ content, fileId, readOnly = false }: StoryVi
   }, [numericId]);
 
   if (!content.story) {
-    return (
-      <Box aria-label="No story" minH="420px" p={10} display="flex" flexDirection="column" alignItems="center" justifyContent="center">
-        <Box mb={3} opacity={0.3}><LuBookOpen size={64} strokeWidth={1.5} /></Box>
-        <Text fontSize="lg" fontWeight={700} color="fg.default">No story yet</Text>
-        <Text fontSize="sm" color="fg.muted" mt={1}>Ask the agent to write a data story.</Text>
-      </Box>
-    );
+    return <StoryEmptyState />;
   }
 
   // Render the story as a FLUID responsive document — no transform scale. Full-bleed on mobile;

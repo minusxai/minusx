@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* Present mode — the file surface (see components/file-toolbar/PresentationContext.tsx)
+   goes fullscreen via the native API; the default fullscreen backdrop is black, which
+   hides the dark header title/description. Paint the app canvas bg, keyed off the html
+   color-mode class (set by ColorModeSync) so it follows light/dark. Hex values mirror
+   bg.canvas in lib/ui/theme.ts. The `.dark` class is on <html> (an ancestor), so it
+   still matches while the surface is rendered in the fullscreen top layer. */
+[data-presentation-surface][data-presenting="true"] {
+  background-color: #F5F7FA;
+}
+/* Fullscreen pulls the surface out of FileLayout's padded VStack, so restore the page
+   insets here — the title block + content would otherwise sit edge-to-edge. Story is
+   excluded: StoryView already renders centered at a capped max-width, so adding surface
+   padding just creates redundant gutters. */
+[data-presentation-surface][data-presenting="true"]:not([data-file-type="story"]) {
+  padding: clamp(16px, 3vw, 40px) clamp(16px, 4vw, 56px);
+}
+/* Story keeps a gutter-free body (StoryView centers it at STORY_MAX_W = 1280px), but the
+   title block would otherwise sit edge-to-edge. Cap + center the header to the same 1280px
+   column so its left/right edges line up with the centered story body, and add the vertical
+   inset the surface padding would have provided. */
+[data-presentation-surface][data-presenting="true"][data-file-type="story"] [data-file-header] {
+  max-width: 1280px;
+  margin-inline: auto;
+  width: 100%;
+  margin-top: clamp(16px, 3vw, 40px);
+}
+html.dark [data-presentation-surface][data-presenting="true"] {
+  background-color: #0D1117;
+}
+
 html {
   scroll-behavior: smooth;
 }

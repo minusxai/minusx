@@ -16,12 +16,15 @@
  * read-only without a fileId, editable with one (full-content edits).
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, VStack, HStack, Button, Center, Text, Icon } from '@chakra-ui/react';
-import { LuDatabase, LuFileText, LuNotebook, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPresentation, LuX } from 'react-icons/lu';
+import { Box, VStack, HStack, Button, Center, Text } from '@chakra-ui/react';
+import { LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPlus } from 'react-icons/lu';
+import type { IconType } from 'react-icons';
 import NotebookSqlCell, { type Executed } from './notebook/NotebookSqlCell';
 import NotebookTextCell from './notebook/NotebookTextCell';
 import CellInsertZone from './notebook/CellInsertZone';
+import { NotebookEmptyState } from '@/components/views/shared/empty-states';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
+import { usePresentation } from '@/components/file-toolbar/PresentationContext';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
 import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
@@ -42,6 +45,38 @@ interface NotebookViewProps {
 }
 
 const newId = (): string => crypto.randomUUID();
+
+/**
+ * A friendly "add a cell" CTA for the empty notebook: a dashed "open slot" button with a leading
+ * plus, the cell-type glyph, and an explicit label. Hovering tints it to the cell type's accent.
+ */
+function AddCellButton({ icon: Icon, label, accent, ariaLabel, onClick }: {
+  icon: IconType; label: string; accent: string; ariaLabel: string; onClick: () => void;
+}) {
+  const accentVar = `var(--chakra-colors-${accent.replace(/\./g, '-')})`;
+  return (
+    <Button
+      aria-label={ariaLabel}
+      onClick={onClick}
+      variant="outline"
+      size="sm"
+      h="auto"
+      py={2}
+      px={3.5}
+      gap={2}
+      fontSize="xs"
+      borderColor="border.emphasized"
+      color="fg.muted"
+      fontWeight={600}
+      transition="border-color 0.15s, color 0.15s, background 0.15s"
+      _hover={{ borderColor: accent, color: 'fg.default', bg: `color-mix(in srgb, ${accentVar} 7%, transparent)` }}
+    >
+      <Box color={accent} display="flex"><LuPlus size={13} strokeWidth={2.75} /></Box>
+      <Box display="flex"><Icon size={13} strokeWidth={2} /></Box>
+      {label}
+    </Button>
+  );
+}
 
 // Stable empty map so an absent cellExecuted doesn't churn cell props each render.
 const EMPTY_EXECUTED: Record<string, Executed> = {};
@@ -125,26 +160,21 @@ export default function NotebookView({
     captureNotebookCellResult(fileId, cellId, executed, data as Parameters<typeof captureNotebookCellResult>[3]);
   }, [fileId, readOnly]);
 
-  // Present (reading) mode — view-local; the header just renders the toggle we
-  // publish below, so present isn't special-cased anywhere outside this view.
-  const [present, setPresent] = useState(false);
-  const togglePresent = useCallback(() => setPresent(p => !p), []);
+  // Present (reading) mode is the generic fullscreen flag (shared header Present
+  // button). The notebook overrides its layout for it: code/editor chrome is hidden
+  // and cells render in their read-only reading layout.
+  const present = usePresentation()?.isPresenting ?? false;
 
-  // Publish notebook actions into the document header toolbar (one list). The
-  // Present toggle is always available; editing actions hide while presenting.
+  // Publish notebook editing actions into the document header toolbar. These hide
+  // while presenting (the generic Present toggle owns entering/exiting fullscreen).
   const toolbarActions = useMemo<FileToolbarAction[]>(() => {
-    if (cells.length === 0) return [];
-    const presentAction: FileToolbarAction = present
-      ? { id: 'present', ariaLabel: 'Exit present mode', icon: <LuX />, onClick: togglePresent, active: true }
-      : { id: 'present', ariaLabel: 'Present', icon: <LuPresentation />, onClick: togglePresent };
-    if (present || readOnly) return [presentAction];
+    if (cells.length === 0 || present || readOnly) return [];
     return [
       { id: 'run-all', ariaLabel: 'Run all cells', icon: <LuPlay />, onClick: runAll },
       { id: 'collapse-all', ariaLabel: 'Collapse all cells', icon: <LuChevronsDownUp />, onClick: collapseAll },
       { id: 'expand-all', ariaLabel: 'Expand all cells', icon: <LuChevronsUpDown />, onClick: expandAll },
-      presentAction,
     ];
-  }, [present, readOnly, cells.length, runAll, collapseAll, expandAll, togglePresent]);
+  }, [present, readOnly, cells.length, runAll, collapseAll, expandAll]);
   useFileToolbarActions(toolbarActions);
 
   if (present) {
@@ -195,22 +225,26 @@ export default function NotebookView({
       <Box maxW="900px" mx="auto" {...(fileId !== undefined ? { 'data-file-id': fileId } : {})}>
       <VStack align="stretch" gap={0} pl={{ base: 0, md: '40px' }}>
         {cells.length === 0 ? (
-          <>
-            <Center aria-label="Empty notebook" flexDirection="column" gap={3} py={16} color="fg.muted">
-              <Icon as={LuNotebook} boxSize={10} opacity={0.5} />
-              <Text fontSize="sm">This notebook is empty. Add a cell to get started.</Text>
-            </Center>
-            {!readOnly && (
-              <HStack justify="center" gap={2}>
-                <Button aria-label="Add SQL cell" size="sm" variant="outline" onClick={() => insertAt(0, 'sql')}>
-                  <LuDatabase /> SQL cell
-                </Button>
-                <Button aria-label="Add text cell" size="sm" variant="outline" onClick={() => insertAt(0, 'text')}>
-                  <LuFileText /> Text cell
-                </Button>
+          <NotebookEmptyState
+            actions={!readOnly && (
+              <HStack justify="center" gap={3}>
+                <AddCellButton
+                  icon={LuDatabase}
+                  label="Add SQL cell"
+                  accent="accent.primary"
+                  ariaLabel="Add SQL cell"
+                  onClick={() => insertAt(0, 'sql')}
+                />
+                <AddCellButton
+                  icon={LuFileText}
+                  label="Add text cell"
+                  accent="accent.sun"
+                  ariaLabel="Add text cell"
+                  onClick={() => insertAt(0, 'text')}
+                />
               </HStack>
             )}
-          </>
+          />
         ) : (
           <>
             <CellInsertZone onInsert={(t) => insertAt(0, t)} readOnly={readOnly} />

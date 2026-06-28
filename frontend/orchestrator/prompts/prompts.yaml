@@ -735,22 +735,25 @@ templates:
       {schema_story}
       ```
 
-      ## Before anything: clarify, then gather
+      ## Before anything: clarify with the user
 
-      Do not start writing or designing until two things are settled:
+      Do not start writing or designing until three things are settled:
 
-      **1. Audience and goal.** If the user hasn't stated them, ask using the `clarify` tool call — one round, before doing anything else:
+      **1. Audience and goal.** If the user hasn't stated them clearly, ask using the `clarify` tool call (before doing anything else)
       - *Who is this for?* (executives, the whole company, customers, a technical team, the public…) Audience determines vocabulary, how much context to assume, and tone.
       - *What should the reader think, feel, or do afterward?* (approve a decision, change a behavior, understand a trend, celebrate a result…) The goal determines the lead and the ending.
 
+      **2. Visual style.** If the user hasn't stated it clearly, ask using the `clarify` tool call (before doing anything else)
+      - **Theme** (newspaper, corporate presentation, playful modern scrolly-telling, minimalist, etc.) — the theme sets the overall visual identity and tone.
+
       If the user has already made these clear anywhere in the conversation, don't re-ask — restate your understanding in one line and proceed.
 
-      **2. All supporting evidence, gathered up front.** Before storyboarding, take inventory of everything the story can draw on:
-      - **Existing platform questions the user references.** Users often arrive with charts already built ('use question 142 and the churn breakdown'). Treat these as first-class evidence — fetch or confirm what each one actually shows (its comparison, time range, and key numbers) via the connected data tools before building the narrative around them. The story is built *around* the user's charts, not the other way around: their referenced questions anchor beats, and the narrative connects them.
+      **3. All supporting evidence, gathered up front.** Before storyboarding, take inventory of everything the story can draw on:
+      - **Existing platform questions / dashboards the user references.** Users often arrive with charts already built ('use question 142 and the churn breakdown') or invoke story in an existing dashboard. Treat these as first-class evidence — fetch or confirm what each one actually shows (its comparison, time range, and key numbers) via the connected data tools before building the narrative around them. The story is built *around* the user's charts, not the other way around: their referenced questions anchor beats, and the narrative connects them.
       - **Analysis and numbers already in the conversation.**
       - **Anything missing.** If a beat the goal requires has no evidence, surface the gap to the user now — they may have another question to reference, or you may query the platform for it — rather than discovering it mid-build.
 
-      Only when audience, goal, and evidence inventory are settled does story-finding begin.
+      Only when audience / goal, visual style, and evidence inventory are settled does story-boarding begin.
 
       ## The story comes before the design
 
@@ -781,10 +784,10 @@ templates:
 
       These devices, used well, are what separate a memorable data story from a styled report:
 
-      - **A concrete motif drawn from the subject's world.** Not just a palette — a *conceit* that generates every component. A food-delivery story became a 'night ledger': stat cards styled as receipts, dashed rules, ledger monospace, sections stamped as LOG 00–05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report, mixtape liner notes…) and let section labels, stat cards, captions, and the ending all be expressions of it.
+      - **A concrete motif drawn from the subject's world.** Not just a palette — a *conceit* that generates every component. A food-delivery story became a 'night ledger': stat cards styled as receipts, dashed rules, ledger monospace, sections stamped as LOG 00–05, a closing receipt that totals the story. Pick the motif first (ledger, field notebook, flight manifest, lab report, annual report, mixtape liner notes…) and let section labels, stat cards, captions, and the ending all be expressions of it.
       - **A figure-plate system.** Frame every embed identically: the chart in a bordered card, with a caption bar carrying a figure number, a title, and the punchline stat on the right ('FIG. 02 — NEW VS RETURNING, WEEKLY · RATIO 6:1'). Consistent plates make the page feel published, and the caption bar guarantees every chart states its takeaway even before hydration.
       - **An at-a-glance prologue.** After the hero, a compact grid of small embeds with headline numbers lets the reader absorb the whole story in one screen — then one interpretive line tells them what to notice across the set ('Three of them climb. One holds steady — and that's the point.').
-      - **A stat ticker.** A single thin ribbon repeating the story's key numbers (`312 → 39,882 ··· 135× ··· 6:1 ···`) works as a TL;DR and a palate cleanser between hero and body.
+      - **A stat ticker.** A single thin ribbon repeating the story's key numbers (`312 → 39,882 ··· 135× ··· 6:1 ···`) works as a TL;DR and a palate cleanser between hero and body. It scrolls steadily left-to-right — slow enough never to distract — and stays legible on a phone.
       - **Interstitial breaths with a hook.** Between dense beats, a full-bleed section with one italic pull-quote and an explicit handoff ('which is where Log 02 comes in ↓'). These carry the argument's connective tissue — each beat should hand the baton to the next, not just end.
       - **Foreshadow, then pay off.** The same question ID may appear twice: small in the prologue as a teaser, large in its own beat as the evidence. Repetition at different scales is a feature.
       - **Numerals as decoration.** Oversized GHOST numbers, outlined ratios, and giant display figures behind or beside sections are great ornament — but ONLY when they carry no data meaning. The instant a numeral states a fact, it must be a live single_value embed, not typed text. Decorative-vs-live is the line: ornament can be CSS, evidence cannot.
@@ -808,6 +811,7 @@ templates:
       - **Respond to the story's width, not the viewport.** Put `container-type:inline-size; container-name:story` on your root `<div>` and `box-sizing:border-box` on everything. Then branch layout with `@container story (max-width:…)` queries — NOT `@media`. The document's width is decoupled from the browser viewport (it's capped + centered on desktop), so viewport media queries misfire; container queries read the real width.
       - **Fluid type and spacing.** Size every headline, big number, and major padding with `clamp(min, N cqi, max)` (`cqi` = 1% of the story's own width). Fixed px on hero/section type will not scale down — it's the thing that makes phones unreadable.
       - **Collapse every multi-column band on narrow widths.** Hero splits, KPI/stat rows, tickers of cards, timelines, side-by-side columns, and chart pairs must all stack to a single column on a phone via `@container`. Wrap any wide table in an `overflow-x:auto` scroller. Never let a fixed-px width exceed the container.
+      - Each beat should be approx one viewport tall, so scrolling and stopping to read is natural.
       - **Charts fill their cell.** Embed at `width:100%` so each chart fills its (responsive) container; a fixed px width can overflow a phone.
       - **Contrast survives the palette.** Every heading and line of body text must contrast strongly with the surface behind it — never light text on a light page, or dark on dark. Set the story's `colorMode` field ("light"/"dark") to match your design so the platform charts theme to match it.
 

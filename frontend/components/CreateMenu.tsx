@@ -308,6 +308,9 @@ export default function CreateMenu({
               bg="bg.surface"
               shadow="lg"
               borderRadius="lg"
+              fontFamily="mono"
+              border={"0.5px solid"}
+              borderColor="border.default"
             >
               {/* Analytics section */}
               <Box px={3} py={2}>

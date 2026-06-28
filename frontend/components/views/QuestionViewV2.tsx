@@ -17,13 +17,11 @@ import {
   Text,
   IconButton,
   HStack,
-  VStack,
   Code,
 } from '@chakra-ui/react';
 import {
   LuChevronLeft,
   LuChevronRight,
-  LuSparkles,
   LuX,
   LuGripVertical,
 } from 'react-icons/lu';
@@ -37,7 +35,7 @@ import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { QuestionVisualization } from '../question/QuestionVisualization';
-import { useConfigs } from '@/lib/hooks/useConfigs';
+import { QuestionEmptyState } from '@/components/views/shared/empty-states';
 import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
@@ -117,8 +115,6 @@ export default function QuestionViewV2({
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const isPreview = mode === 'preview';
-  const { config } = useConfigs();
-  const agentName = config.branding.agentName;
 
   // Get schema data for SQL autocomplete and GUI mode table filtering
   const { databases: schemaData, hasContext } = useSchemaContext(filePath || '/org');
@@ -958,33 +954,8 @@ export default function QuestionViewV2({
               </Box>
             ) : !content.query?.trim() && !queryData ? (
               /* Empty state when no query written yet */
-              <Box
-                flex="1"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                bg="bg.canvas"
-                borderRadius="lg"
-              >
-                <VStack gap={4}>
-                  <LuSparkles size={48} color="var(--chakra-colors-accent-teal)" opacity="0.5" />
-                  <Text
-                    color="fg.muted"
-                    fontSize="lg"
-                    fontWeight="600"
-                    letterSpacing="-0.01em"
-                  >
-                    What do you want to investigate?
-                  </Text>
-                  <Text
-                    color="fg.subtle"
-                    fontSize="sm"
-                    textAlign="center"
-                    maxW="300px"
-                  >
-                    Write a SQL query or just ask {agentName} to do it!
-                  </Text>
-                </VStack>
+              <Box flex="1" display="flex" bg="bg.canvas" borderRadius="lg" overflow="hidden">
+                <QuestionEmptyState />
               </Box>
             ) : (
               <QuestionVisualization

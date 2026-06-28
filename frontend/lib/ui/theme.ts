@@ -108,6 +108,7 @@ const customConfig = defineConfig({
             secondaryHover: { value: '#8e44ad' }, // Wisteria (darker purple)
             success: { value: '#2ecc71' },        // Emerald (green)
             warning: { value: '#f39c12' },        // Orange
+            sun: { value: '#d35400'},          // Pumpkin (darker orange)
             danger: { value: '#c0392b' },         // Pomegranate (darker red)
             teal: { value: '#16a085' },           // Green Sea (teal)
             info: { value: '#3498db' },        // Info (lighter blue)
@@ -146,6 +147,7 @@ const customConfig = defineConfig({
             secondaryHover: { value: '#8e44ad' }, // Wisteria (darker purple)
             success: { value: '#2ecc71' },        // Emerald (green)
             warning: { value: '#f39c12' },        // Orange
+            sun: { value: '#d35400'},          // Pumpkin (darker orange)
             danger: { value: '#c0392b' },         // Pomegranate (darker red)
             teal: { value: '#16a085' },           // Green Sea (teal)
             cyan: { value: '#1abc9c' },           // Turquoise (cyan)
@@ -230,6 +232,9 @@ const customConfig = defineConfig({
         },
         'accent.warning': {
           value: { _light: '{colors.light.accent.warning}', _dark: '{colors.dark.accent.warning}' },
+        },
+        'accent.sun': {
+          value: { _light: '{colors.light.accent.sun}', _dark: '{colors.dark.accent.sun}' },
         },
         'accent.danger': {
           value: { _light: '{colors.light.accent.danger}', _dark: '{colors.dark.accent.danger}' },

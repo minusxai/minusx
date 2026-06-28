@@ -3,11 +3,12 @@
 import { Box, Text, VStack, HStack } from '@chakra-ui/react';
 import { AlertContent, JobRun, Test } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuBell, LuGripVertical, LuFlaskConical } from 'react-icons/lu';
+import { LuFlaskConical, LuGripVertical } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
+import { AlertHistoryEmptyState } from '@/components/views/shared/empty-states';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
@@ -28,8 +29,6 @@ interface AlertViewProps {
   onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
-
-
 
 export default function AlertView({
   alert,
@@ -307,17 +306,15 @@ export default function AlertView({
                   </VStack>
                 )
               ) : runs.length === 0 ? (
-                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
-                  <LuBell size={48} opacity={0.3} />
-                  <Text fontSize="sm">
-                    {isDirty
+                <AlertHistoryEmptyState
+                  message={
+                    isDirty
                       ? 'Save your changes before checking'
                       : !alert.tests?.length
                         ? 'Add tests to monitor'
                         : 'No checks yet. Click "Check Now" to test your alert'
-                    }
-                  </Text>
-                </VStack>
+                  }
+                />
               ) : (
                 <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <Text fontSize="sm">Select a run to view details</Text>

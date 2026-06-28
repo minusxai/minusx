@@ -34,7 +34,12 @@ import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 import SaveFileModal from './SaveFileModal';
 import { useFileToolbar } from './file-toolbar/FileToolbarContext';
+import { usePresentation } from './file-toolbar/PresentationContext';
 import { Tooltip } from './ui/tooltip';
+
+// File types whose content reads well fullscreen — the generic Present toggle is
+// offered for these. Individual views adapt their own layout via usePresentation().
+const PRESENTABLE_TYPES = ['question', 'dashboard', 'notebook', 'story', 'report'] as const;
 
 interface FileHeaderProps {
   fileId: number;
@@ -60,8 +65,11 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       : selectFileEditMode(state, fileId)
   );
   const viewMode = useAppSelector(state => selectFileViewMode(state, fileId));
-  // View-published toolbar actions (e.g. notebook: Present, Run all, Collapse all).
+  // View-published toolbar actions (e.g. notebook: Run all, Collapse all).
   const toolbarActions = useFileToolbar();
+  // Generic fullscreen presentation (shared across all presentable file types).
+  const presentation = usePresentation();
+  const canPresent = presentation?.supported && PRESENTABLE_TYPES.includes(fileType as typeof PRESENTABLE_TYPES[number]);
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const canEdit = !effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType);
@@ -204,10 +212,13 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           size="xs"
           variant="ghost"
           fontFamily="mono"
-          px={1}
-          h="22px"
+          fontWeight="600"
+          gap={1}
+          px={2}
+          h="24px"
+          borderRadius="sm"
           color={a.active ? 'fg.default' : 'fg.muted'}
-          bg={a.active ? 'bg.emphasized' : undefined}
+          bg={a.active ? 'bg.emphasized' : 'transparent'}
           _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
           onClick={a.onClick}
         >
@@ -218,11 +229,12 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           aria-label={a.ariaLabel}
           size="xs"
           variant="ghost"
-          h="22px"
-          minW="22px"
-          px={1}
+          h="24px"
+          minW="28px"
+          px={0}
+          borderRadius="sm"
           color={a.active ? 'fg.default' : 'fg.muted'}
-          bg={a.active ? 'bg.emphasized' : undefined}
+          bg={a.active ? 'bg.emphasized' : 'transparent'}
           _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
           onClick={a.onClick}
         >
@@ -232,7 +244,15 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     </Tooltip>
   ));
   const headerActionsNode = actionButtons.length > 0 ? (
-    <HStack gap="2px" bg="bg.muted" borderRadius="md" px="3px" py="1px" borderWidth="1px" borderColor="border.muted">
+    <HStack
+      gap="1px"
+      align="center"
+      bg="bg.muted"
+      borderRadius="md"
+      p="1px"
+      borderWidth="1px"
+      borderColor="border.muted"
+    >
       {actionButtons}
     </HStack>
   ) : undefined;
@@ -263,6 +283,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         hideEditToggle={isDraft || !canEdit}
         skipNameValidation={isDraft}
         questionId={fileType === 'question' ? fileId : undefined}
+        onTogglePresent={canPresent ? presentation!.toggle : undefined}
+        isPresenting={presentation?.isPresenting ?? false}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
         headerActions={headerActionsNode}
