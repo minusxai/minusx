@@ -7,48 +7,18 @@ import {
   Text,
   Input,
   IconButton,
-  Button,
   HStack,
   VStack,
   Icon,
 } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize, LuSparkles } from 'react-icons/lu';
+import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
 import ExplainButton from '@/components/ExplainButton';
+import { GenerateButton } from './ui/GenerateButton';
 import { useAppSelector } from '@/store/hooks';
-
-/** Small "generate with AI" affordance shown next to an empty title/description. */
-function GenerateButton({ label, loading, onClick }: { label: string; loading: boolean; onClick: () => void }) {
-  return (
-    <Tooltip content={label} positioning={{ placement: 'top' }}>
-      <Button
-        aria-label={label}
-        onClick={onClick}
-        loading={loading}
-        size="2xs"
-        variant="ghost"
-        gap={1}
-        px={1.5}
-        h="18px"
-        flexShrink={0}
-        fontFamily="mono"
-        fontWeight="700"
-        fontSize="2xs"
-        color="accent.secondary"
-        bg="accent.secondary/8"
-        borderWidth="1px"
-        borderColor="accent.secondary/15"
-        _hover={{ bg: 'accent.secondary/15' }}
-      >
-        <LuSparkles />
-        Auto
-      </Button>
-    </Tooltip>
-  );
-}
 
 const pulseAnimation = `
   @keyframes borderPulse {

@@ -1217,14 +1217,16 @@ prompts:
         What's notable in this data right now?
     title:
       system: |
-        You write short, specific titles for files. Output ONLY the title — no quotes, no trailing punctuation, no preamble. Keep it under 8 words. Be concrete and actionable. An agent will use this later to search.
+        You write short, specific titles for {subject}. Output ONLY the title — no quotes, no trailing punctuation, no preamble. Keep it under 8 words. Be concrete and actionable. An agent will use this later to search.
+        {instructions}
       user: |
         Write a title for the following:
 
         {input}
     description:
       system: |
-        You write one-sentence descriptions for files. Output ONLY the description — a single plain sentence, no preamble, no quotes. Keep it under 25 words. Be concrete and informative; say what it is and why it matters, not how it is structured. An agent will use this later to search.
+        You write one-sentence descriptions for {subject}. Output ONLY the description — a single plain sentence, no preamble, no quotes. Keep it under 25 words. Be concrete and informative; say what it is and why it matters, not how it is structured. An agent will use this later to search.
+        {instructions}
       user: |
         Write a one-sentence description for the following:
 

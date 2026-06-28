@@ -157,26 +157,26 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const handleGenerateName = useCallback(async () => {
     setIsGeneratingName(true);
     try {
-      const title = await runMicroTaskClient('title', { input: await buildGenInput() });
+      const title = await runMicroTaskClient('title', { input: await buildGenInput(), subject: `a ${fileType}`, instructions: '' });
       handleNameChange(title);
     } catch (err) {
       console.error('[FileHeader] failed to generate title:', err);
     } finally {
       setIsGeneratingName(false);
     }
-  }, [buildGenInput, handleNameChange]);
+  }, [buildGenInput, handleNameChange, fileType]);
 
   const handleGenerateDescription = useCallback(async () => {
     setIsGeneratingDesc(true);
     try {
-      const desc = await runMicroTaskClient('description', { input: await buildGenInput() });
+      const desc = await runMicroTaskClient('description', { input: await buildGenInput(), subject: `a ${fileType}`, instructions: '' });
       handleDescChange(desc);
     } catch (err) {
       console.error('[FileHeader] failed to generate description:', err);
     } finally {
       setIsGeneratingDesc(false);
     }
-  }, [buildGenInput, handleDescChange]);
+  }, [buildGenInput, handleDescChange, fileType]);
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 

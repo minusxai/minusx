@@ -44,7 +44,7 @@ describe('runMicroTask', () => {
       },
     ]);
 
-    const out = await runMicroTask('title', { input: 'Quarterly revenue by region, trending up 12%' }, USER);
+    const out = await runMicroTask('title', { input: 'Quarterly revenue by region, trending up 12%', subject: 'a dashboard', instructions: '' }, USER);
     expect(out).toBe('Regional Revenue Climbs 12%');
   });
 
@@ -52,7 +52,7 @@ describe('runMicroTask', () => {
     const publish = vi.spyOn(appEventRegistry, 'publish').mockImplementation(() => {});
     microFaux.setResponses([() => fauxAssistantMessage('A short title', { stopReason: 'stop' })]);
 
-    await runMicroTask('title', { input: 'some content' }, USER);
+    await runMicroTask('title', { input: 'some content', subject: 'a question', instructions: '' }, USER);
 
     const call = publish.mock.calls.find(([evt]) => evt === AppEvents.LLM_CALL);
     expect(call).toBeDefined();
