@@ -18,8 +18,7 @@ interface UIState {
   askForConfirmation: boolean;
   showAdvanced: boolean;
   gettingStartedCollapsed: boolean;
-  dashboardEditMode: Record<number, boolean>;  // fileId -> editMode (dashboards)
-  fileEditMode: Record<number, boolean>;       // fileId -> editMode (question, report, alert)
+  fileEditMode: Record<number, boolean>;       // fileId -> editMode (dashboard, story, question, report, alert)
   fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab
   sqlEditorCollapsed: Record<number, boolean>;  // fileId -> collapsed state
   notebookActiveCell: Record<number, string>;   // notebook fileId -> active cell id (for agent context + highlight)
@@ -60,7 +59,6 @@ const initialState: UIState = {
   askForConfirmation: false,
   showAdvanced: false,
   gettingStartedCollapsed: false,
-  dashboardEditMode: {},
   fileEditMode: {},
   fileViewMode: {},
   sqlEditorCollapsed: {},
@@ -168,13 +166,6 @@ const uiSlice = createSlice({
     },
     toggleGettingStartedCollapsed: (state) => {
       state.gettingStartedCollapsed = !state.gettingStartedCollapsed;
-    },
-    setDashboardEditMode: (state, action: PayloadAction<{ fileId: number; editMode: boolean }>) => {
-      const { fileId, editMode } = action.payload;
-      state.dashboardEditMode[fileId] = editMode;
-    },
-    clearDashboardEditMode: (state, action: PayloadAction<number>) => {
-      delete state.dashboardEditMode[action.payload];
     },
     setFileEditMode: (state, action: PayloadAction<{ fileId: number; editMode: boolean }>) => {
       const { fileId, editMode } = action.payload;
@@ -321,8 +312,6 @@ export const {
   setShowAdvanced,
   setGettingStartedCollapsed,
   toggleGettingStartedCollapsed,
-  setDashboardEditMode,
-  clearDashboardEditMode,
   setFileEditMode,
   clearFileEditMode,
   setFileViewMode,
@@ -383,7 +372,6 @@ export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
 export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? true;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
 export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
-export const selectDashboardEditMode = (state: RootState, fileId: number) => state.ui.dashboardEditMode[fileId] ?? false;
 export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;
 export const selectFileViewMode = (state: RootState, fileId: number | undefined) =>
   fileId !== undefined ? (state.ui.fileViewMode[fileId] ?? 'visual') : 'visual';

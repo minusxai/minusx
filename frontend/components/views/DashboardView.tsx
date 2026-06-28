@@ -12,7 +12,7 @@ import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
-import { pushView, selectDashboardEditMode } from '@/store/uiSlice';
+import { pushView, selectFileEditMode } from '@/store/uiSlice';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
@@ -119,7 +119,7 @@ export default function DashboardView({
 
   // editMode sourced from Redux (managed by FileHeader). The JSON/XML "Code view"
   // is rendered centrally by FileView, so this view only renders the visual surface.
-  const reduxEditMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
+  const reduxEditMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const editMode = (mode === 'preview' || readOnly) ? false : reduxEditMode;
 
   // Ref to always have the latest document for callbacks that may fire with stale closures

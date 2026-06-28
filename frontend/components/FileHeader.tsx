@@ -17,7 +17,6 @@ import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveName, selectEffectivePath, selectMergedContent } from '@/store/filesSlice';
 import {
-  selectDashboardEditMode, setDashboardEditMode,
   selectFileEditMode, setFileEditMode,
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
@@ -64,11 +63,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const canGenerate = useMemo(() => hasGeneratableContent(fileType, mergedContent), [fileType, mergedContent]);
 
   const isDashboard = fileType === 'dashboard';
-  const editMode = useAppSelector(state =>
-    isDashboard
-      ? selectDashboardEditMode(state, fileId)
-      : selectFileEditMode(state, fileId)
-  );
+  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const viewMode = useAppSelector(state => selectFileViewMode(state, fileId));
   // View-published toolbar actions (e.g. notebook: Run all, Collapse all).
   const toolbarActions = useFileToolbar();
@@ -80,12 +75,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const canEdit = !effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType);
 
   const dispatchSetEditMode = useCallback((val: boolean) => {
-    if (isDashboard) {
-      dispatch(setDashboardEditMode({ fileId, editMode: val }));
-    } else {
-      dispatch(setFileEditMode({ fileId, editMode: val }));
-    }
-  }, [dispatch, fileId, isDashboard]);
+    dispatch(setFileEditMode({ fileId, editMode: val }));
+  }, [dispatch, fileId]);
 
   const [saveError, setSaveError] = useState<string | null>(null);
   const {
