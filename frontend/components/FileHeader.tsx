@@ -11,7 +11,7 @@
  * System files (connection, config, styles, context) keep their own headers.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { HStack, Text, Icon, Button, IconButton } from '@chakra-ui/react';
 import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -21,9 +21,8 @@ import {
   selectFileEditMode, setFileEditMode,
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
-import { editFile, readFiles } from '@/lib/api/file-state';
-import { runMicroTaskClient } from '@/lib/api/micro-task';
-import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { editFile } from '@/lib/api/file-state';
+import { runMicroTaskClient, buildFileMicroInput, hasGeneratableContent } from '@/lib/api/micro-task';
 import { toaster } from './ui/toaster';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
@@ -60,6 +59,9 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const parentFolder = effectivePath.substring(0, effectivePath.lastIndexOf('/')) || '/';
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
   const description = (mergedContent as any)?.description as string | undefined;
+  // Only offer "✨ Auto" once the file has something to summarize (e.g. a query,
+  // assets, or cells) — a blank new file has nothing to generate a title from.
+  const canGenerate = useMemo(() => hasGeneratableContent(fileType, mergedContent), [fileType, mergedContent]);
 
   const isDashboard = fileType === 'dashboard';
   const editMode = useAppSelector(state =>
@@ -140,25 +142,10 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const [isGeneratingName, setIsGeneratingName] = useState(false);
   const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
 
-  // Text representation of the file for the LLM. We send the SAME augmented app
-  // state the agent sees when answering questions: the file with its references
-  // RESOLVED (e.g. a dashboard's referenced questions — their names, SQL) and
-  // query results executed — not just the raw asset ids. `readFiles` guarantees
-  // those are loaded even if the user clicks before the page finished hydrating.
-  const buildGenInput = useCallback(async (): Promise<string> => {
-    try {
-      const [augmented] = await readFiles([fileId], { runQueries: true });
-      if (augmented) return JSON.stringify(compressAugmentedFile(augmented), null, 2);
-    } catch (err) {
-      console.error('[FileHeader] failed to load file for generation, falling back:', err);
-    }
-    return JSON.stringify({ fileType, name: effectiveName || undefined, content: mergedContent }, null, 2);
-  }, [fileId, fileType, effectiveName, mergedContent]);
-
   const handleGenerateName = useCallback(async () => {
     setIsGeneratingName(true);
     try {
-      const title = await runMicroTaskClient('title', { input: await buildGenInput(), subject: `a ${fileType}`, instructions: '' });
+      const title = await runMicroTaskClient('title', { input: buildFileMicroInput(fileId), subject: `a ${fileType}`, instructions: '' });
       handleNameChange(title);
     } catch (err) {
       console.error('[FileHeader] failed to generate title:', err);
@@ -166,12 +153,12 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     } finally {
       setIsGeneratingName(false);
     }
-  }, [buildGenInput, handleNameChange, fileType]);
+  }, [fileId, handleNameChange, fileType]);
 
   const handleGenerateDescription = useCallback(async () => {
     setIsGeneratingDesc(true);
     try {
-      const desc = await runMicroTaskClient('description', { input: await buildGenInput(), subject: `a ${fileType}`, instructions: '' });
+      const desc = await runMicroTaskClient('description', { input: buildFileMicroInput(fileId), subject: `a ${fileType}`, instructions: '' });
       handleDescChange(desc);
     } catch (err) {
       console.error('[FileHeader] failed to generate description:', err);
@@ -179,7 +166,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     } finally {
       setIsGeneratingDesc(false);
     }
-  }, [buildGenInput, handleDescChange, fileType]);
+  }, [fileId, handleDescChange, fileType]);
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 
@@ -317,8 +304,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         saveError={saveError}
         onNameChange={handleNameChange}
         onDescriptionChange={handleDescChange}
-        onGenerateName={canEdit ? handleGenerateName : undefined}
-        onGenerateDescription={canEdit ? handleGenerateDescription : undefined}
+        onGenerateName={canEdit && canGenerate ? handleGenerateName : undefined}
+        onGenerateDescription={canEdit && canGenerate ? handleGenerateDescription : undefined}
         isGeneratingName={isGeneratingName}
         isGeneratingDescription={isGeneratingDesc}
         onEditModeToggle={() => {
