@@ -20,6 +20,7 @@ interface QuestionBrowserPanelProps {
   excludedIds?: number[];
   title?: string;
   dashboardId?: number;
+  compact?: boolean;
 }
 
 // Local display type that includes metadata (name) + content
@@ -35,6 +36,7 @@ export const QuestionBrowserPanel = ({
   excludedIds = [],
   title,
   dashboardId,
+  compact = false,
 }: QuestionBrowserPanelProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [questionsMap, setQuestionsMap] = useState<Record<number, QuestionDisplay>>({});
@@ -227,7 +229,7 @@ export const QuestionBrowserPanel = ({
                 </Box>
             </Box>
 
-            <Box p={3} maxHeight="320px" overflowY="auto">
+            <Box p={3} maxHeight={compact ? '200px' : '320px'} overflowY="auto">
                 {availableQuestions.length > 0 ? (
                 <VStack align="stretch" gap={2}>
                     {availableQuestions.map(question => (

@@ -17,13 +17,13 @@ describe('getSupportedFileTypes', () => {
   });
 
   it('fully replaces the default set when an override is provided', () => {
-    const override: FileType[] = ['question', 'dashboard', 'story'];
+    const override: FileType[] = ['question', 'dashboard', 'notebook'];
     expect(getSupportedFileTypes(override)).toEqual(override);
   });
 
   it('can make a normally-unsupported type supported via override', () => {
-    expect(SUPPORTED_FILE_TYPES).not.toContain('story');
-    expect(getSupportedFileTypes(['question', 'story'])).toContain('story');
+    expect(SUPPORTED_FILE_TYPES).not.toContain('notebook');
+    expect(getSupportedFileTypes(['question', 'notebook'])).toContain('notebook');
   });
 
   it('can drop a normally-supported type via override (full replace)', () => {
@@ -35,11 +35,11 @@ describe('getSupportedFileTypes', () => {
 describe('isFileTypeSupported', () => {
   it('uses defaults when no override is given', () => {
     expect(isFileTypeSupported('question')).toBe(true);
-    expect(isFileTypeSupported('story')).toBe(false);
+    expect(isFileTypeSupported('notebook')).toBe(false);
   });
 
   it('honors the override when provided', () => {
-    expect(isFileTypeSupported('story', ['question', 'story'])).toBe(true);
-    expect(isFileTypeSupported('dashboard', ['question', 'story'])).toBe(false);
+    expect(isFileTypeSupported('notebook', ['question', 'notebook'])).toBe(true);
+    expect(isFileTypeSupported('dashboard', ['question', 'notebook'])).toBe(false);
   });
 });
