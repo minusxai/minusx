@@ -32,6 +32,9 @@ interface LexicalMentionEditorProps {
   availableCommands?: SlashCommand[];
   onCommandExecute?: (command: SlashCommand) => void;
   onArrowKey?: (direction: 'up' | 'down', event: KeyboardEvent) => boolean | void;
+  /** Handle a large paste: return true to claim it (the inline insert is then
+   *  suppressed — e.g. the caller stages it as a text attachment instead). */
+  onLargePaste?: (text: string) => boolean;
 }
 
 export interface LexicalMentionEditorRef {
@@ -115,7 +118,7 @@ function EditablePlugin({ disabled }: { disabled: boolean }) {
   return null;
 }
 
-function PastePlugin() {
+function PastePlugin({ onLargePaste }: { onLargePaste?: (text: string) => boolean }) {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
@@ -127,6 +130,13 @@ function PastePlugin() {
 
         const text = clipboardData.getData('text/plain');
         if (!text) return false;
+
+        // Large pastes (1000s of lines) bog down the editor — let the caller claim
+        // them (e.g. stage as a text attachment) and skip the inline insert.
+        if (onLargePaste?.(text)) {
+          event.preventDefault();
+          return true;
+        }
 
         // Check if text contains mention patterns @{...}
         const mentionRegex = /@(\{.+?\})/g;
@@ -180,7 +190,7 @@ function PastePlugin() {
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor]);
+  }, [editor, onLargePaste]);
 
   return null;
 }
@@ -272,7 +282,7 @@ const lexicalEditorPropsEqual = (prev: LexicalMentionEditorProps, next: LexicalM
   if (!isEqual(prev.availableCommands, next.availableCommands)) return false;
   return shallowEqualExcept(prev, next, [
     'whitelistedSchemas', 'availableSkills', 'availableCommands',
-    'onSubmit', 'onChange', 'onFocus', 'onBlur', 'onCommandExecute', 'onArrowKey',
+    'onSubmit', 'onChange', 'onFocus', 'onBlur', 'onCommandExecute', 'onArrowKey', 'onLargePaste',
   ]);
 };
 
@@ -293,6 +303,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
       availableCommands,
       onCommandExecute,
       onArrowKey,
+      onLargePaste,
     },
     ref
   ) {
@@ -392,7 +403,7 @@ const LexicalMentionEditorInner = forwardRef<LexicalMentionEditorRef, LexicalMen
             <OnChangePlugin onChange={handleChange} />
             <OnSubmitPlugin onSubmit={onSubmit} />
             <EditablePlugin disabled={disabled} />
-            <PastePlugin />
+            <PastePlugin onLargePaste={onLargePaste} />
             <ArrowKeyPlugin onArrowKey={onArrowKey} />
             <FocusPlugin onFocus={onFocus} onBlur={onBlur} editorRef={editorRef} />
             <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} availableSkills={availableSkills} availableCommands={availableCommands} onCommandExecute={onCommandExecute} />

@@ -71,3 +71,20 @@ export const PER_DOC_CONTENT_CHARS = tokensToChars(CONTEXT_BUDGETS.perDocTokens)
  *  shows the count + blocks save on this; the renderer truncates on it. */
 export const isDocContentOverLimit = (content: string): boolean =>
   content.length > PER_DOC_CONTENT_CHARS;
+
+/**
+ * Max characters a pasted blob may have before the chat composer converts it into a
+ * text-attachment chip instead of inserting it inline. Pasting 1000s of lines into
+ * the Lexical editor bogs the whole app down; chipping large pastes keeps the
+ * composer snappy while the content still reaches the agent as an attachment.
+ *
+ * Applied by the chat input paste handler (`lib/chat/paste-attachment.ts`, wired
+ * through `components/chat/LexicalMentionEditor.tsx` PastePlugin →
+ * `components/explore/ChatInput.tsx`). Lives here alongside the other char budgets
+ * so all the tuning knobs sit in one dashboard.
+ */
+export const PASTED_TEXT_ATTACHMENT_CHARS = 2000;
+
+/** True when a pasted text blob exceeds the inline limit and should become an attachment. */
+export const isPastedTextOverLimit = (text: string): boolean =>
+  text.length > PASTED_TEXT_ATTACHMENT_CHARS;

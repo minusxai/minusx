@@ -80,6 +80,58 @@ describe('parsePiLogToMessages', () => {
     expect((user.appState as { state: { fileState: { id: number } } }).state.fileState.id).toBe(7);
   });
 
+  it("restores each turn's user attachments from context (so they survive reload)", () => {
+    const piLog = [
+      {
+        type: 'toolCall', id: 'root1', name: 'WebAnalystAgent', parent_id: null,
+        arguments: { userMessage: 'summarize this' },
+        context: {
+          currentTime: 't',
+          attachments: [
+            { type: 'text', name: 'Pasted text (3 lines)', content: 'a\nb\nc' },
+            { type: 'image', url: 'https://cdn/img.png' },
+          ],
+        },
+      },
+      { role: 'assistant', parent_id: 'root1', content: [{ type: 'text', text: 'ok' }], stopReason: 'stop', usage: USAGE, model: 'm', timestamp: 1 },
+    ] as unknown as ConversationLog;
+
+    const user = parsePiLogToMessages(piLog).find((m) => m.role === 'user') as UserMessage;
+    expect(user.attachments).toBeDefined();
+    expect(user.attachments).toHaveLength(2);
+
+    const text = user.attachments!.find((a) => a.type === 'text')!;
+    expect(text.content).toBe('a\nb\nc');
+    expect(text.name).toBe('Pasted text (3 lines)');
+
+    const image = user.attachments!.find((a) => a.type === 'image')!;
+    expect(image.content).toBe('https://cdn/img.png');
+  });
+
+  it('restores a base64 image attachment as a data URL from context', () => {
+    const piLog = [
+      {
+        type: 'toolCall', id: 'r', name: 'WebAnalystAgent', parent_id: null,
+        arguments: { userMessage: 'look' },
+        context: { attachments: [{ type: 'image', mimeType: 'image/png', data: 'BASE64DATA' }] },
+      },
+      { role: 'assistant', parent_id: 'r', content: [{ type: 'text', text: 'ok' }], stopReason: 'stop', usage: USAGE, model: 'm', timestamp: 1 },
+    ] as unknown as ConversationLog;
+
+    const user = parsePiLogToMessages(piLog).find((m) => m.role === 'user') as UserMessage;
+    expect(user.attachments![0].content).toBe('data:image/png;base64,BASE64DATA');
+  });
+
+  it('leaves attachments undefined when the turn had none', () => {
+    const piLog = [
+      { type: 'toolCall', id: 'r', name: 'WebAnalystAgent', parent_id: null, arguments: { userMessage: 'plain' }, context: { currentTime: 't' } },
+      { role: 'assistant', parent_id: 'r', content: [{ type: 'text', text: 'ok' }], stopReason: 'stop', usage: USAGE, model: 'm', timestamp: 1 },
+    ] as unknown as ConversationLog;
+
+    const user = parsePiLogToMessages(piLog).find((m) => m.role === 'user') as UserMessage;
+    expect(user.attachments).toBeUndefined();
+  });
+
   it('produces the same non-user messages as the legacy two-hop (tool calls + debug)', () => {
     const piLog = [
       { type: 'toolCall', id: 'root1', name: 'WebAnalystAgent', parent_id: null, arguments: { userMessage: 'go' }, context: {} },

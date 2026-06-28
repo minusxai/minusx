@@ -1,8 +1,29 @@
-import { ConversationLogEntry, ErrorLogEntry } from '@/lib/types';
+import { ConversationLogEntry, ErrorLogEntry, type Attachment } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 import { piLogToLegacy } from '@/lib/chat-translator';
 import type { ConversationLog, ConversationLogEntry as PiLogEntry } from '@/orchestrator/types';
 import type { AppState } from '@/lib/appState';
+import type { AgentAttachment } from '@/agents/analyst/types';
+
+/**
+ * Convert a persisted `AgentAttachment` (what the conversation log stores in each
+ * turn's context) back into the client `Attachment` shape the transcript renders.
+ * Images may have been stored as a remote URL or base64 — reconstruct the `content`
+ * the UI expects. Returns null for an image with neither.
+ */
+function agentAttachmentToClient(a: AgentAttachment): Attachment | null {
+  if (a.type === 'text') {
+    return {
+      type: 'text',
+      name: a.name ?? 'Attachment',
+      content: a.content,
+      metadata: a.pages ? { pages: a.pages } : {},
+    };
+  }
+  const content = a.url ?? (a.data ? `data:${a.mimeType ?? 'image/png'};base64,${a.data}` : '');
+  if (!content) return null;
+  return { type: 'image', name: 'image', content, metadata: {} };
+}
 
 /**
  * Aggregate task_debug entries from a log (or logDiff) into DebugMessages.
@@ -70,13 +91,19 @@ export function parsePiConversation(
   // messages (1:1, chronological — both sequences are in turn order).
   const rootContexts = piLog
     .filter((e) => (e as { type?: string }).type === 'toolCall' && (e as { parent_id?: unknown }).parent_id === null)
-    .map((e) => (e as PiLogEntry & { context?: { appState?: AppState; currentTime?: string } }).context);
+    .map((e) => (e as PiLogEntry & { context?: { appState?: AppState; currentTime?: string; attachments?: AgentAttachment[] } }).context);
   let r = 0;
   for (const m of messages) {
     if (m.role !== 'user') continue;
     const ctx = rootContexts[r++];
     if (ctx?.appState !== undefined) m.appState = ctx.appState;
     if (ctx?.currentTime !== undefined) m.currentTime = ctx.currentTime;
+    // The legacy parse only finds attachments in task args (always empty — they
+    // live in context), so restore them here so they survive a conversation reload.
+    if (!m.attachments && ctx?.attachments?.length) {
+      const restored = ctx.attachments.map(agentAttachmentToClient).filter((a): a is Attachment => a !== null);
+      if (restored.length) m.attachments = restored;
+    }
   }
 
   const firstTask = legacy.find((e) => e._type === 'task');
