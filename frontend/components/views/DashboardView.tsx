@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text } from '@chakra-ui/react';
+import { Box } from '@chakra-ui/react';
 import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import TextBlockCard from '../TextBlockCard';
@@ -8,12 +8,11 @@ import ParameterRow from '../ParameterRow';
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
-import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { DashboardEmptyState } from '@/components/views/shared/empty-states';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty, selectDirtyFiles, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { pushView, selectDashboardEditMode } from '@/store/uiSlice';
-import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
@@ -163,10 +162,6 @@ export default function DashboardView({
   const lastExecutedParams = useAppSelector(
     state => (state.files.files[fileId]?.ephemeralChanges as any)?.lastExecuted?.params as Record<string, any> | undefined
   ) ?? EMPTY_PARAMS;
-
-  // Get agent name from config
-  const { config } = useConfigs();
-  const agentName = config.branding.agentName;
 
   const questionCount = document?.assets?.filter(a => a.type === 'question').length || 0;
 
@@ -600,7 +595,7 @@ export default function DashboardView({
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={30} minH={"100%"}>
+          <Box position="relative" maxW="100%" pb={layoutableAssets.length > 0 ? 30 : 4} minH={"100%"}>
             {gridBackground}
 
             {layoutableAssets.length > 0 ? (
@@ -623,51 +618,35 @@ export default function DashboardView({
               >
                 {gridItems}
               </ResponsiveGridLayout>
-            ) : !editMode ? (
-              <Box
-                bg="bg.surface"
-                p={16}
-                borderRadius="lg"
-                border="2px dashed"
-                borderColor="border.muted"
-                textAlign="center"
-                minHeight="400px"
-              >
-                <Box mb={4} display="inline-block">
-                  {(() => {
-                    const QuestionIcon = getFileTypeMetadata('question').icon;
-                    return <QuestionIcon size={96} strokeWidth={1.5} style={{ opacity: 0.3 }} />;
-                  })()}
-                </Box>
-                <Text fontSize="2xl" fontWeight="700" mb={3} color="fg.default">
-                  This dashboard is empty
-                </Text>
-                <Text color="fg.muted" fontSize="md" maxW="md" mx="auto">
-                  Add questions, or just ask {agentName} to do it!
-                </Text>
-              </Box>
             ) : (
-              <Box position="relative" minHeight="1500px">
-                {/* Empty state overlay for edit mode - question browser + text block */}
-                <Box
-                  position="absolute"
-                  top="5%"
-                  left="50%"
-                  transform="translateX(-50%)"
-                  maxW="500px"
-                  width="100%"
-                >
-                  <QuestionBrowserPanel
-                    folderPath={folderPath}
-                    onAddQuestion={(questionId) => {
-                      dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
-                    }}
-                    onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
-                    excludedIds={questionIds}
-                    title="Add questions / text"
-                    dashboardId={fileId}
-                  />
+              /* Empty dashboard: 50/50 split with a compact action rail. */
+              <Box
+                display="flex"
+                flexDirection={{ base: 'column', lg: 'row' }}
+                alignItems="center"
+                justifyContent="center"
+                gap={{ base: 3, lg: 6 }}
+                maxW="900px"
+                mx="auto"
+              >
+                <Box flex={{ base: '0 1 auto', lg: '1 1 0' }} width="100%" minW={0}>
+                  <DashboardEmptyState />
                 </Box>
+                {editMode && (
+                  <Box flex={{ base: '0 1 auto', lg: '1 1 0' }} width="100%" maxW={{ base: '420px', lg: 'none' }} pb={{ base: 4, lg: 0 }} position="relative" zIndex={10}>
+                    <QuestionBrowserPanel
+                      folderPath={folderPath}
+                      onAddQuestion={(questionId) => {
+                        dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
+                      }}
+                      onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
+                      excludedIds={questionIds}
+                      title="Add questions / text"
+                      dashboardId={fileId}
+                      compact
+                    />
+                  </Box>
+                )}
               </Box>
             )}
 
