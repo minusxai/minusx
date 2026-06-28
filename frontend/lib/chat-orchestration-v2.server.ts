@@ -532,6 +532,41 @@ export async function estimateNextChatContextV2(
 }
 
 /**
+ * Recover the call id + `LLMCallDetail` for one log entry, or `null` if it
+ * isn't a recordable assistant message. The engine stamps `_lllmCallId` /
+ * `_duration` onto the message (or its first tool-call block); we mirror that
+ * lookup. Shared by the conversation-bound recorder ({@link recordLlmCalls})
+ * and the headless recorder ({@link recordHeadlessLlmCalls}).
+ */
+function buildLlmCallDetail(msg: AssistantMessage): { callId: string; detail: LLMCallDetail } | null {
+  if (msg.role !== 'assistant') return null;
+  const firstTool = msg.content?.find((c) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
+  const meta = (firstTool ?? msg) as unknown as Record<string, unknown>;
+  const callId = meta['_lllmCallId'] as string | undefined;
+  if (!callId) return null;
+
+  const u = msg.usage;
+  const duration = typeof meta['_duration'] === 'number' ? (meta['_duration'] as number) : 0;
+  return {
+    callId,
+    detail: {
+      llm_call_id: callId,
+      provider: msg.provider,
+      model: msg.model,
+      duration,
+      total_tokens: u?.totalTokens ?? 0,
+      prompt_tokens: u?.input ?? 0,
+      completion_tokens: u?.output ?? 0,
+      cached_tokens: u?.cacheRead ?? 0,
+      cache_creation_tokens: u?.cacheWrite ?? 0,
+      cost: u?.cost?.total ?? 0,
+      stream: true,
+      finish_reason: msg.stopReason,
+    },
+  };
+}
+
+/**
  * Record this turn's LLM calls out-of-band, from the turn's new log entries:
  * write per-call stats to `llm_call_events` and fill the response into the
  * `llm_logs` row whose request was already written when the call was made
@@ -545,48 +580,28 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
     const llmCalls: Record<string, LLMCallDetail> = {};
     for (const entry of piDiff) {
       const msg = entry as unknown as AssistantMessage;
-      if (msg.role !== 'assistant') continue;
-      // The engine stamps `_lllmCallId` / `_duration` onto the message (or its
-      // first tool-call block); mirror that lookup to recover them.
-      const firstTool = msg.content?.find((c) => (c as { type?: string }).type === 'toolCall') as Record<string, unknown> | undefined;
-      const meta = (firstTool ?? msg) as unknown as Record<string, unknown>;
-      const callId = meta['_lllmCallId'] as string | undefined;
-      if (!callId) continue;
-
-      const u = msg.usage;
-      const duration = typeof meta['_duration'] === 'number' ? (meta['_duration'] as number) : 0;
-      llmCalls[callId] = {
-        llm_call_id: callId,
-        provider: msg.provider,
-        model: msg.model,
-        duration,
-        total_tokens: u?.totalTokens ?? 0,
-        prompt_tokens: u?.input ?? 0,
-        completion_tokens: u?.output ?? 0,
-        cached_tokens: u?.cacheRead ?? 0,
-        cache_creation_tokens: u?.cacheWrite ?? 0,
-        cost: u?.cost?.total ?? 0,
-        stream: true,
-        finish_reason: msg.stopReason,
-      };
+      const built = buildLlmCallDetail(msg);
+      if (!built) continue;
+      const { callId, detail } = built;
+      llmCalls[callId] = detail;
 
       // LOCAL writes are AWAITED so they persist before the handler returns
       // (a standalone prod build won't keep fire-and-forget promises alive).
       await recordLlmCallEvent({
         conversationId,
         llmCallId: callId,
-        provider: msg.provider,
-        model: msg.model,
+        provider: detail.provider,
+        model: detail.model,
         mode: user.mode,
-        totalTokens: u?.totalTokens ?? 0,
-        promptTokens: u?.input ?? 0,
-        completionTokens: u?.output ?? 0,
-        cachedTokens: u?.cacheRead ?? 0,
-        cacheCreationTokens: u?.cacheWrite ?? 0,
-        cost: u?.cost?.total ?? 0,
-        durationS: duration,
+        totalTokens: detail.total_tokens,
+        promptTokens: detail.prompt_tokens,
+        completionTokens: detail.completion_tokens,
+        cachedTokens: detail.cached_tokens,
+        cacheCreationTokens: detail.cache_creation_tokens,
+        cost: detail.cost,
+        durationS: detail.duration,
         stream: true,
-        finishReason: msg.stopReason,
+        finishReason: detail.finish_reason,
         userId,
       });
 
@@ -613,5 +628,55 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
     });
   } catch (e) {
     console.error('[v2/chat] failed to record LLM calls:', e);
+  }
+}
+
+/**
+ * Token/usage tracking for HEADLESS one-shot runs (feed-summary, micro-tasks, …)
+ * that have no conversation. Mirrors {@link recordLlmCalls} but:
+ *   - tags the usage with `task` (the use-case) instead of a `conversationId`,
+ *     so usage can be sliced by use-case;
+ *   - does NOT write the typed `llm_call_events` row (its `conversation_id` is
+ *     `NOT NULL`) — usage rides the `AppEvents.LLM_CALL` event into `app_events`
+ *     (JSONB) + the central forward;
+ *   - still fills the `llm_logs` response blob (the request row was already
+ *     written by the global `setLlmCallRecorder` when the call was made).
+ * Best-effort: never throws into the caller.
+ */
+export async function recordHeadlessLlmCalls(piDiff: PiLogEntry[], user: EffectiveUser, task: string): Promise<void> {
+  try {
+    const userId = typeof user.userId === 'number' ? user.userId : null;
+    const llmCalls: Record<string, LLMCallDetail> = {};
+    for (const entry of piDiff) {
+      const msg = entry as unknown as AssistantMessage;
+      const built = buildLlmCallDetail(msg);
+      if (!built) continue;
+      const { callId, detail } = built;
+      llmCalls[callId] = detail;
+
+      try {
+        await recordLlmResponse({
+          callId,
+          userId,
+          provider: msg.provider,
+          model: msg.model,
+          responseJson: JSON.stringify(msg),
+          error: msg.stopReason === 'error' ? (msg.errorMessage ?? 'error') : null,
+        });
+      } catch (e) {
+        console.error('[v2/headless] failed to write llm_logs response:', e);
+      }
+    }
+    if (Object.keys(llmCalls).length === 0) return;
+    appEventRegistry.publish(AppEvents.LLM_CALL, {
+      mode: user.mode,
+      task,
+      llmCalls,
+      userId: userId ?? undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
+  } catch (e) {
+    console.error('[v2/headless] failed to record LLM calls:', e);
   }
 }
