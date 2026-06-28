@@ -48,7 +48,7 @@ import { VizTypeSelector } from '../question/VizTypeSelector';
 import { VizConfigPanel } from '../plotx/VizConfigPanel';
 import { TableConditionalFormatPanel } from '../plotx/TableConditionalFormatPanel';
 import { FilesAPI } from '@/lib/data/files';
-import { CompletionsAPI } from '@/lib/data/completions/completions';
+import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 
 /**
  * Props for QuestionViewV2
@@ -189,8 +189,6 @@ export default function QuestionViewV2({
 
   // Query mode state (SQL, GUI, or Viz)
   const [queryMode, setQueryMode] = useState<QueryTab>('sql');
-  const [guiError, setGuiError] = useState<string | null>(null);
-  const [canUseGUI, setCanUseGUI] = useState(true);
 
   // Get files state for referenced questions. shallowEqual avoids re-rendering
   // this view when Immer rotates the bag's top-level ref on an unrelated write.
@@ -252,28 +250,10 @@ export default function QuestionViewV2({
     };
   }, []);
 
-  // Proactive GUI compatibility check: run once when the query and dialect are known.
-  // Sets canUseGUI=false (with tooltip reason) if sqlToIR fails, so the GUI button is
-  // already dimmed when the user opens a question — no surprise on mode switch.
-  useEffect(() => {
-    let cancelled = false;
-    const check = !content.query?.trim()
-      ? Promise.resolve<void>(undefined)
-      : CompletionsAPI.sqlToIR({ sql: content.query, dialect }).then(() => undefined);
-
-    check.then(() => {
-      if (cancelled) return;
-      setCanUseGUI(true);
-      setGuiError(null);
-    }).catch((err: unknown) => {
-      if (cancelled) return;
-      setCanUseGUI(false);
-      const msg = err instanceof Error ? err.message : String(err);
-      setGuiError(msg || 'This query cannot be edited in GUI mode');
-    });
-
-    return () => { cancelled = true; };
-  }, [content.query, dialect]);
+  // Proactive GUI compatibility check: dims the GUI tab (with a tooltip reason) when
+  // the query can't be parsed into the builder IR, so it's already disabled when the
+  // user opens a question — no surprise on mode switch.
+  const { canUseGUI, guiError } = useGuiCompat(content.query, dialect);
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -623,7 +603,8 @@ export default function QuestionViewV2({
                     onModeChange={setQueryMode}
                     canUseGUI={canUseGUI}
                     guiError={guiError ?? undefined}
-                    showVizTab={showVizControls && !!queryData}
+                    showVizTab={showVizControls}
+                    canUseViz={!!queryData}
                   />
                 </Box>
                 <Box flexShrink={0}>

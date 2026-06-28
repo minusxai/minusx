@@ -13,6 +13,7 @@ import {
   Spinner,
   IconButton,
 } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { LuRotateCcw } from 'react-icons/lu';
 import Editor from '@monaco-editor/react';
 import type { ToolCall, ToolMessage } from '@/lib/types';
@@ -225,15 +226,16 @@ export default function ToolInspectModal({
                   <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
                     Arguments
                   </Text>
-                  <IconButton
-                    aria-label="Reset to original args"
-                    size="xs"
-                    variant="ghost"
-                    onClick={handleReset}
-                    title="Reset to original"
-                  >
-                    <LuRotateCcw />
-                  </IconButton>
+                  <Tooltip content="Reset to original">
+                    <IconButton
+                      aria-label="Reset to original args"
+                      size="xs"
+                      variant="ghost"
+                      onClick={handleReset}
+                    >
+                      <LuRotateCcw />
+                    </IconButton>
+                  </Tooltip>
                 </HStack>
                 <JsonEditor
                   value={argsText}

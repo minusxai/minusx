@@ -28,6 +28,8 @@ import { usePresentation } from '@/components/file-toolbar/PresentationContext';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
 import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
+import { useConnections } from '@/lib/hooks/useConnections';
+import { selectDatabase } from '@/lib/utils/database-selector';
 import type {
   NotebookContent, NotebookCell, NotebookSqlCell as SqlCell,
 } from '@/lib/types';
@@ -103,15 +105,21 @@ export default function NotebookView({
     if (fileId !== undefined && !readOnly) removeNotebookCellResult(fileId, id);
   }, [commit, fileId, readOnly]);
 
-  // A new SQL cell defaults to the most recent SQL cell's connection.
+  // A new SQL cell defaults to the most recent SQL cell's connection; with no
+  // prior SQL cell (e.g. the first cell), it falls back to the first available
+  // connection — same default-DB selection as a new question page, so a
+  // single-connection workspace isn't left with an empty connection that the
+  // selector silently renders as "DB Connected".
+  const { connections } = useConnections();
   const makeCell = useCallback((type: 'sql' | 'text'): NotebookCell => {
     if (type === 'text') return { type: 'text', id: newId(), name: null, content: '' };
     const lastSql = [...cellsRef.current].reverse().find((c): c is SqlCell => c.type === 'sql');
+    const connection_name = lastSql?.connection_name || selectDatabase(Object.values(connections));
     return {
       type: 'sql', id: newId(), name: null, query: '', vizSettings: { type: 'table' },
-      parameters: [], parameterValues: {}, connection_name: lastSql?.connection_name ?? '', references: [],
+      parameters: [], parameterValues: {}, connection_name, references: [],
     };
-  }, []);
+  }, [connections]);
 
   // Insert a new cell at an absolute index (0..length).
   const insertAt = useCallback((index: number, type: 'sql' | 'text') => {

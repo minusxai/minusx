@@ -47,6 +47,13 @@ vi.mock('@/components/DatabaseSelector', () => ({
     React.createElement('div', { 'aria-label': 'Cell connection' }, value ?? ''),
 }));
 
+// Available connections, controllable per-test. Default: none (so the first
+// SQL cell has no connection to inherit and falls back to '').
+const conns = vi.hoisted(() => ({ map: {} as Record<string, unknown> }));
+vi.mock('@/lib/hooks/useConnections', () => ({
+  useConnections: () => ({ connections: conns.map, loading: false, error: null }),
+}));
+
 vi.mock('@/components/question/VizTypeSelector', () => ({
   VizTypeSelector: () => React.createElement('div', { 'aria-label': 'Viz type selector' }),
 }));
@@ -75,7 +82,7 @@ function textCell(over: Partial<NotebookTextCell> = {}): NotebookTextCell {
 }
 
 const onChange = vi.fn();
-beforeEach(() => onChange.mockClear());
+beforeEach(() => { onChange.mockClear(); conns.map = {}; });
 
 describe('NotebookView', () => {
   it('shows the empty state and add-cell controls when there are no cells', () => {
@@ -94,6 +101,26 @@ describe('NotebookView', () => {
     expect(cells[0].type).toBe('sql');
     expect(cells[0].id).toBeTruthy();
     expect((cells[0] as NotebookSqlCell).connection_name).toBe('');
+  });
+
+  it('defaults the first SQL cell to the only available connection', () => {
+    conns.map = { only_db: { metadata: { name: 'only_db', type: 'duckdb' } } };
+    renderWithProviders(<NotebookView content={{ description: null, cells: [] }} onChange={onChange} />);
+    fireEvent.click(screen.getByLabelText('Add SQL cell'));
+    const cells = onChange.mock.calls[0][0].cells as NotebookContent['cells'];
+    expect((cells[0] as NotebookSqlCell).connection_name).toBe('only_db');
+  });
+
+  it('inherits the previous SQL cell connection over the available-connections default', () => {
+    conns.map = { other_db: { metadata: { name: 'other_db', type: 'duckdb' } } };
+    renderWithProviders(
+      <NotebookView content={{ description: null, cells: [sqlCell({ connection_name: 'db_a' })] }} onChange={onChange} />
+    );
+    const zones = screen.getAllByLabelText('Insert cell');
+    fireEvent.mouseEnter(zones[zones.length - 1]);
+    fireEvent.click(screen.getByLabelText('Insert SQL cell'));
+    const cells = onChange.mock.calls[0][0].cells as NotebookContent['cells'];
+    expect((cells.find(c => c.id !== 'c1') as NotebookSqlCell).connection_name).toBe('db_a');
   });
 
   it('edits a SQL cell query', async () => {
