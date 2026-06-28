@@ -32,7 +32,7 @@ import { paramTypeMap } from '@/lib/sql/sql-params';
 import { useQuestionReferences } from '@/lib/hooks/useQuestionReferences';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
-import { CompletionsAPI } from '@/lib/data/completions/completions';
+import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 import { connectionTypeToDialect } from '@/lib/types';
 import type {
   NotebookSqlCell as SqlCell, QuestionContent, QuestionReference, VizSettings, FullQuery,
@@ -118,26 +118,9 @@ export default function NotebookSqlCell({
   // Rendered series count, reported by the chart so the sibling VizConfigPanel's
   // color swatches match split-by charts without re-aggregating the rows.
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
-  const [canUseGUI, setCanUseGUI] = useState(true);
-  const [guiError, setGuiError] = useState<string | null>(null);
 
-  // Proactive GUI-compatibility check: dim the GUI tab when sqlToIR can't parse.
-  useEffect(() => {
-    let cancelled = false;
-    const check = !cell.query?.trim()
-      ? Promise.resolve<void>(undefined)
-      : CompletionsAPI.sqlToIR({ sql: cell.query, dialect }).then(() => undefined);
-    check.then(() => {
-      if (cancelled) return;
-      setCanUseGUI(true);
-      setGuiError(null);
-    }).catch((err: unknown) => {
-      if (cancelled) return;
-      setCanUseGUI(false);
-      setGuiError(err instanceof Error ? err.message : 'This query cannot be edited in GUI mode');
-    });
-    return () => { cancelled = true; };
-  }, [cell.query, dialect]);
+  // Proactive GUI-compatibility check: dim the GUI tab when the query can't be parsed.
+  const { canUseGUI, guiError } = useGuiCompat(cell.query, dialect);
 
   const run = useCallback(() => {
     onExecutedChange?.({
@@ -233,7 +216,7 @@ export default function NotebookSqlCell({
             onModeChange={setQueryMode}
             canUseGUI={canUseGUI}
             guiError={guiError ?? undefined}
-            showVizTab={!!data}
+            canUseViz={!!data}
             size="sm"
           />
         }

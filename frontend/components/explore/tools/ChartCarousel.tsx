@@ -10,6 +10,7 @@ import { QuestionVisualization } from '@/components/question/QuestionVisualizati
 import SqlEditor from '@/components/SqlEditor';
 import { QueryBuilderRoot, QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
+import { useGuiCompat } from '@/lib/hooks/use-gui-compat';
 import { VizTypeSelector } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
 
@@ -136,6 +137,12 @@ export default function ChartCarousel({
   const count = successful.length;
   const safeIndex = Math.min(activeIndex, Math.max(0, count - 1));
   const current = successful[safeIndex] ?? null;
+
+  // Proactive GUI-compatibility check: dim the GUI tab when the current query can't
+  // be parsed into the builder IR (this is a read-only preview, but entering GUI on
+  // an unparseable query would just show a "cannot be edited" message).
+  const dialect = connectionTypeToDialect('');
+  const { canUseGUI, guiError } = useGuiCompat(current?.question?.query, dialect);
 
   const [localContent, setLocalContent] = useState<QuestionContent | null>(current?.question ?? null);
   const prevQuestionRef = useRef(current?.question);
@@ -288,8 +295,9 @@ export default function ChartCarousel({
               <QueryModeSelector
                 mode={queryMode}
                 onModeChange={setQueryMode}
-                canUseGUI
-                showVizTab={!!current?.queryResult}
+                canUseGUI={canUseGUI}
+                guiError={guiError ?? undefined}
+                canUseViz={!!current?.queryResult}
               />
             </HStack>
             <Box borderRadius="md" overflow="hidden">
@@ -304,7 +312,7 @@ export default function ChartCarousel({
               {queryMode === 'gui' && current?.question?.query && (
                 <QueryBuilderRoot
                   databaseName={databaseName}
-                  dialect={connectionTypeToDialect('')}
+                  dialect={dialect}
                   sql={current.question.query}
                   onSqlChange={() => {}}
                 />
