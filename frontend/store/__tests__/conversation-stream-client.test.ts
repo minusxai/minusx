@@ -90,6 +90,26 @@ describe('runV3Turn — silent auto-retry on crash interruption', () => {
     expect(streamOpens).toBe(6);  // initial + 5 (MAX_CLIENT_AUTO_RETRIES safety bound)
   });
 
+  it('forwards each committed message content to onMessage (so server tool calls render live)', async () => {
+    const toolResult = { role: 'toolResult', toolCallId: 'tc1', toolName: 'ExecuteQuery', isError: false };
+    streamScript = [
+      [
+        { type: 'message', seq: 0, message: { role: 'assistant', content: [] } as never },
+        { type: 'message', seq: 1, message: toolResult as never },
+        { type: 'status', runStatus: 'idle' },
+        { type: 'done', seq: 1 },
+      ],
+    ];
+    const seen: unknown[] = [];
+    const res = await runV3Turn(7, 0, { userMessage: 'hi', agent: 'WebAnalystAgent', agentArgs: {} }, new AbortController().signal, {
+      ...cb,
+      onMessage: (c) => seen.push(c),
+    });
+    expect(res.status).toBe('idle');
+    expect(seen).toHaveLength(2);
+    expect((seen[1] as { toolName?: string }).toolName).toBe('ExecuteQuery');
+  });
+
   it('does NOT retry a non-retryable error (e.g. an LLM failure)', async () => {
     streamScript = [
       [{ type: 'status', runStatus: 'error' }, { type: 'done', seq: 0 }],  // error without retryable

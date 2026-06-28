@@ -23,6 +23,8 @@ export interface V3StreamCallbacks {
   onPending: (toolCalls: StreamPendingToolCall[]) => void;
   /** A committed message landed (seq advanced) — used to track the resume cursor. */
   onMessageSeq?: (seq: number) => void;
+  /** A committed message landed — its raw pi-log content, so server tool calls can render live. */
+  onMessage?: (content: unknown) => void;
 }
 
 export interface V3TurnResult {
@@ -80,6 +82,7 @@ function readStreamOnce(
         case 'message':
           state.cursor = Math.max(state.cursor, e.seq);
           cb.onMessageSeq?.(e.seq);
+          cb.onMessage?.(e.message);
           break;
         case 'delta':
           cb.onDelta(e.text);
