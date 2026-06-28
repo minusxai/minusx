@@ -35,7 +35,10 @@ export interface AppEventPayloads {
   'file:updated':             BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
   'file:deleted':             BaseEventPayload & { fileId: number; fileVersion?: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
   'folder:created':           BaseEventPayload & { folderId: number; folderPath: string; folderName: string; userId?: number; userEmail?: string; userRole?: string };
-  'llm:call':                 BaseEventPayload & { conversationId: number; llmCalls: Record<string, LLMCallDetail>; userId?: number; userEmail?: string; userRole?: string };
+  // `conversationId` is present for conversation-bound turns (chat UI / onboarding);
+  // headless one-shot runs (feed-summary, micro-tasks, …) omit it and set `task`
+  // instead so usage can be sliced by use-case without a conversation.
+  'llm:call':                 BaseEventPayload & { conversationId?: number; task?: string; llmCalls: Record<string, LLMCallDetail>; userId?: number; userEmail?: string; userRole?: string };
   'query:executed':           BaseEventPayload & { queryHash: string; fileId?: number | null; fileVersion?: number | null; query?: string; params?: Record<string, unknown>; schemaContext?: Array<{ schema: string; table: string; columns: string[] }>; databaseName: string | null; durationMs: number; rowCount: number; colCount?: number; wasCacheHit: boolean; error?: string | null; userId?: number; userEmail?: string | null };
   'error':                    BaseEventPayload & { source: string; message: string; mode?: string; error?: unknown; context?: Record<string, unknown> };
   'job:cron_succeeded':       BaseEventPayload & { triggered: number; skipped: number };
