@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useState, useCallback, useEffect } from 'react';
+import { ReactNode, useState, useCallback } from 'react';
 import {
   Box,
   Heading,
@@ -167,12 +167,6 @@ export default function DocumentHeader({
     setValidationError(null);
     return true;
   }, [name, fileType, metadata.label]);
-
-  // Validation errors are edit-time only — drop them when leaving edit mode
-  // (e.g. Cancel) so a stale "needs a title" banner doesn't linger.
-  useEffect(() => {
-    if (!editMode) setValidationError(null);
-  }, [editMode]);
 
   // Validate and save
   const handleSave = useCallback(() => {
@@ -422,7 +416,7 @@ export default function DocumentHeader({
             {/* Edit/Cancel Button — matches the header toolbar pill aesthetic */}
             {!isPresenting && !hideEditToggle && (
             <IconButton
-              onClick={onEditModeToggle}
+              onClick={() => { setValidationError(null); onEditModeToggle(); }}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
               variant="ghost"
               size="xs"
