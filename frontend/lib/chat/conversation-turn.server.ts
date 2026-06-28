@@ -53,7 +53,7 @@ async function generateConversationTitle(conversationId: number, userMessage: st
       {
         input: userMessage,
         subject: 'a data-analysis chat conversation',
-        instructions: 'Title it by what the user is trying to find out or do.',
+        instructions: 'Title it by what the user is trying to find out or do. Ideally 3–5 words, no punctuation, no quotes, no prefix like "Conversation about". Users use these to quickly find conversations later, so make it concise and descriptive. If the user message is too vague to title, return a generic title like "Data analysis chat" or "Generic question".',
       },
       user,
     );
@@ -267,15 +267,17 @@ export async function runConversationTurn(
   // A turn that actually progressed (idle/paused) clears the auto-retry budget so the next
   // interruption gets a fresh MAX_AUTO_RETRIES. Only consecutive failures count toward the cap.
   if (runStatus !== 'error') await resetAutoRetries(conversationId);
-  await notifyStatus(conversationId, runStatus, finalSeq);
 
   // First successful turn → upgrade the placeholder title to an AI-generated one
-  // from the user's request. Awaited (not fire-and-forget) so it completes in a
-  // standalone prod build; best-effort inside.
+  // from the user's request. Done BEFORE the idle notify so the title row is
+  // ready when the client (on seeing idle) fetches it. Awaited so it completes
+  // in a standalone prod build; best-effort inside.
   if (startSeq === 0 && !runError) {
     const fm = firstUserMessage(piDiff);
     if (fm) await generateConversationTitle(conversationId, fm, user);
   }
+
+  await notifyStatus(conversationId, runStatus, finalSeq);
 
   return { conversationId, runStatus, pendingToolCalls, finalSeq, error: runError };
 }

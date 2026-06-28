@@ -13,8 +13,9 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
+import { ConversationsAPI } from '@/lib/data/conversations';
 import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -330,6 +331,26 @@ export default function ChatInterface({
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // AI-generated conversation title (shown in the header). Existing conversations
+  // carry it from the full load (useConversation) — zero extra cost. A brand-new
+  // conversation gets its title generated server-side after the first turn, so we
+  // fetch the cheap title row EXACTLY ONCE then (never per turn, never if we
+  // already have it). Only the generated title is shown (the raw first message is
+  // already the first bubble).
+  const conversationTitle = conversation?.title ?? null;
+  const turnFinished = conversation?.executionState === 'FINISHED';
+  const titleFetchedFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!conversationID || conversationID <= 0) return;
+    if (conversationTitle) return;                          // already have it (load or prior fetch)
+    if (!turnFinished) return;                              // title is generated once a turn finishes
+    if (titleFetchedFor.current === conversationID) return; // fetch at most once per conversation
+    titleFetchedFor.current = conversationID;
+    ConversationsAPI.getTitle(conversationID)
+      .then((t) => { if (t) dispatch(setConversationTitle({ conversationID, title: t })); })
+      .catch(() => { /* best-effort: header just stays untitled */ });
+  }, [conversationID, conversationTitle, turnFinished, dispatch]);
 
   // Pre-create a conversation on explore page mount so sends go directly to the existing path
   useEffect(() => {
@@ -996,6 +1017,19 @@ export default function ChatInterface({
                   <LuExpand />
                 </Button>
               </Tooltip>
+            )}
+            {conversationTitle && (
+              <Text
+                fontSize="sm"
+                fontFamily="mono"
+                fontWeight="600"
+                color="fg.muted"
+                truncate
+                maxW="360px"
+                title={conversationTitle}
+              >
+                {conversationTitle}
+              </Text>
             )}
             {/* ViewModeToggle removed — always use compact */}
             </HStack>

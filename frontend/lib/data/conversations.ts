@@ -44,6 +44,13 @@ export const ConversationsAPI = {
     return unwrap(res);
   },
 
+  /** Cheap single-row fetch of the AI-generated title (null if not generated yet). */
+  async getTitle(id: number): Promise<string | null> {
+    const res = await fetch(`/api/conversations/${id}/title`);
+    const body = await unwrap<{ title: string | null }>(res);
+    return body.title;
+  },
+
   async remove(id: number): Promise<void> {
     const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
     await unwrap(res);
