@@ -137,6 +137,19 @@ export function truncateMessageForName(message: string): string {
 }
 
 /**
+ * Display name for a conversation in the list. Prefers an AI-generated title once
+ * one exists (`meta.titleGenerated`); otherwise falls back to the raw first user
+ * message, then the stored title.
+ */
+export function conversationDisplayName(
+  meta: { titleGenerated?: boolean; firstMessage?: string } | null | undefined,
+  title: string,
+): string {
+  if (meta?.titleGenerated && title.trim()) return title;
+  return meta?.firstMessage || title;
+}
+
+/**
  * Parse conversation log into displayable messages
  * Extracts user messages, tool calls, and debug entries from log
  *

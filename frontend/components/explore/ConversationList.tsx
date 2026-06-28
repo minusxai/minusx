@@ -142,6 +142,7 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
         {/* Conversation Name */}
         <Text
           fontSize="sm"
+          fontFamily="mono"
           truncate
         >
           {conversation.name}

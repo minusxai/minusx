@@ -39,9 +39,16 @@ function ConversationRow({ conversation, onClick }: { conversation: Conversation
       borderColor="border.muted"
     >
       <HStack justify="space-between" align="center" gap={3}>
-        <Text fontSize="sm" fontFamily="mono" truncate flex="1">
-          {conversation.name}
-        </Text>
+        <VStack align="stretch" gap={0.5} flex="1" minW={0}>
+          <Text fontSize="sm" fontFamily="mono" fontWeight="600" truncate>
+            {conversation.name}
+          </Text>
+          {conversation.preview && (
+            <Text fontSize="xs" fontFamily="mono" color="fg.muted" truncate>
+              {conversation.preview}
+            </Text>
+          )}
+        </VStack>
         <Text fontSize="xs" fontFamily="mono" color="fg.muted" minW="70px" textAlign="right" flexShrink={0}>
           {getRelativeTime(conversation.updatedAt)}
         </Text>
@@ -75,7 +82,8 @@ export default function HistoryPage() {
             </Box>
           </Flex>
 
-        <HStack justify="space-between" align="flex-start" mt={10} mb={2}>
+        {/* Heading + search + list share one centered 50% column (full width on mobile). */}
+        <VStack align="stretch" gap={6} w={{ base: '100%', md: '50%' }} mx="auto" mt={10}>
           <Heading
             fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
             fontWeight="900"
@@ -84,84 +92,86 @@ export default function HistoryPage() {
           >
             Conversations
           </Heading>
-          <Button
-            aria-label="New chat"
-            size="sm"
-            bg="accent.teal"
-            color="white"
-            fontFamily="mono"
-            onClick={() => router.push('/explore')}
-          >
-            <LuPlus />
-            New Chat
-          </Button>
-        </HStack>
+          <HStack gap={3} align="center">
+            <Box position="relative" flex="1" minW={0}>
+              <Box position="absolute" left={4} top="50%" transform="translateY(-50%)" color="fg.muted" zIndex={1}>
+                <LuSearch size={16} />
+              </Box>
+              <Input
+                aria-label="Search conversations"
+                placeholder="Search conversations..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                size="md"
+                fontFamily="mono"
+                fontSize="sm"
+                pl={10}
+                bg="bg.surface"
+                borderColor="border"
+                borderRadius="lg"
+                _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
+              />
+            </Box>
+            <Button
+              aria-label="New chat"
+              size="md"
+              bg="accent.teal"
+              color="white"
+              fontFamily="mono"
+              flexShrink={0}
+              onClick={() => router.push('/explore')}
+            >
+              <LuPlus />
+              New Chat
+            </Button>
+          </HStack>
 
-        <Box position="relative" mb={6}>
-          <Box position="absolute" left={4} top="50%" transform="translateY(-50%)" color="fg.muted" zIndex={1}>
-            <LuSearch size={16} />
-          </Box>
-          <Input
-            aria-label="Search conversations"
-            placeholder="Search conversations..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            size="md"
-            fontFamily="mono"
-            fontSize="sm"
-            pl={10}
-            bg="bg.surface"
-            borderColor="border"
-            borderRadius="lg"
-            _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
-          />
-        </Box>
+          {/* Initial load (first page / new search) */}
+          {loading && conversations.length === 0 && (
+            <Box textAlign="center" py={8}>
+              <Spinner size="md" />
+              <Text fontSize="sm" color="fg.muted" mt={3}>Loading conversations...</Text>
+            </Box>
+          )}
 
-        {/* Initial load (first page / new search) */}
-        {loading && conversations.length === 0 && (
-          <Box textAlign="center" py={8}>
-            <Spinner size="md" />
-            <Text fontSize="sm" color="fg.muted" mt={3}>Loading conversations...</Text>
-          </Box>
-        )}
+          {error && (
+            <Box p={4} bg="bg.error" borderRadius="md">
+              <Text fontSize="sm" color="fg.error">
+                {error || 'Failed to load conversations'}
+              </Text>
+            </Box>
+          )}
 
-        {error && (
-          <Box p={4} bg="bg.error" borderRadius="md">
-            <Text fontSize="sm" color="fg.error">
-              {error || 'Failed to load conversations'}
-            </Text>
-          </Box>
-        )}
+          {!loading && !error && conversations.length === 0 && (
+            <Box py={8} textAlign="center">
+              <Text fontSize="sm" color="fg.muted">
+                {search.trim() ? 'No conversations match your search' : 'No conversations yet'}
+              </Text>
+            </Box>
+          )}
 
-        {!loading && !error && conversations.length === 0 && (
-          <Box py={8} textAlign="center">
-            <Text fontSize="sm" color="fg.muted">
-              {search.trim() ? 'No conversations match your search' : 'No conversations yet'}
-            </Text>
-          </Box>
-        )}
+          {conversations.length > 0 && (
+            <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+              <VStack align="stretch" gap={0}>
+                {conversations.map((conv) => (
+                  <ConversationRow
+                    key={conv.id}
+                    conversation={conv}
+                    onClick={() => handleSelect(conv.id)}
+                  />
+                ))}
+              </VStack>
+            </Box>
+          )}
 
-        {conversations.length > 0 && (
-          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-            <VStack align="stretch" gap={0}>
-              {conversations.map((conv) => (
-                <ConversationRow
-                  key={conv.id}
-                  conversation={conv}
-                  onClick={() => handleSelect(conv.id)}
-                />
-              ))}
-            </VStack>
-          </Box>
-        )}
-
-        {/* Infinite scroll: load the next page as the sentinel nears the viewport. */}
-        <InfiniteScrollSentinel onVisible={loadMore} disabled={!hasMore || loading} />
-        {loading && conversations.length > 0 && (
-          <Box textAlign="center" py={4} aria-label="Loading more conversations">
-            <Spinner size="sm" />
-          </Box>
-        )}
+          {/* Infinite scroll: load the next page as the sentinel nears the viewport. */}
+          <InfiniteScrollSentinel onVisible={loadMore} disabled={!hasMore || loading} />
+          {loading && conversations.length > 0 && (
+            <Box textAlign="center" py={4} aria-label="Loading more conversations">
+              <Spinner size="sm" />
+            </Box>
+          )}
+        </VStack>
         </Box>
       </VStack>
     </Box>

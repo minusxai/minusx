@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare } from 'react-icons/lu';
+import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem, Menu, Portal, Input } from '@chakra-ui/react';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuMessageSquare, LuPencil } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillMention } from '@/lib/types';
 import type { ContextSizeEstimate } from '@/lib/chat/context-size-estimate';
@@ -13,8 +13,9 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector, useAppStore } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, setActiveConversation, setConversationTitle, selectActiveConversation, selectForkChainTail, type DebugMessage } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
+import { ConversationsAPI } from '@/lib/data/conversations';
 import { useUseChatV2, isLegacyChatInV2 } from '@/lib/chat-v2/use-chat-v2';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -330,6 +331,46 @@ export default function ChatInterface({
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // AI-generated conversation title (shown in the header). Existing conversations
+  // carry it from the full load (useConversation) — zero extra cost. A brand-new
+  // conversation gets its title generated server-side after the first turn, so we
+  // fetch the cheap title row EXACTLY ONCE then (never per turn, never if we
+  // already have it). Only the generated title is shown (the raw first message is
+  // already the first bubble).
+  const conversationTitle = conversation?.title ?? null;
+  const turnFinished = conversation?.executionState === 'FINISHED';
+  const titleFetchedFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!conversationID || conversationID <= 0) return;
+    if (conversationTitle) return;                          // already have it (load or prior fetch)
+    if (!turnFinished) return;                              // title is generated once a turn finishes
+    if (titleFetchedFor.current === conversationID) return; // fetch at most once per conversation
+    titleFetchedFor.current = conversationID;
+    ConversationsAPI.getTitle(conversationID)
+      .then((t) => { if (t) dispatch(setConversationTitle({ conversationID, title: t })); })
+      .catch(() => { /* best-effort: header just stays untitled */ });
+  }, [conversationID, conversationTitle, turnFinished, dispatch]);
+
+  // Inline rename of the conversation title (the ▾ menu → Rename).
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const startRename = useCallback(() => {
+    setRenameValue(conversationTitle ?? '');
+    setIsRenaming(true);
+  }, [conversationTitle]);
+  const submitRename = useCallback(async () => {
+    setIsRenaming(false);
+    const next = renameValue.trim();
+    if (!next || !conversationID || conversationID <= 0 || next === conversationTitle) return;
+    dispatch(setConversationTitle({ conversationID, title: next })); // optimistic
+    try {
+      await ConversationsAPI.rename(conversationID, next);
+    } catch (err) {
+      console.error('[ChatInterface] rename failed:', err);
+      toaster.create({ title: "Couldn't rename the conversation", type: 'error' });
+    }
+  }, [renameValue, conversationID, conversationTitle, dispatch]);
 
   // Pre-create a conversation on explore page mount so sends go directly to the existing path
   useEffect(() => {
@@ -996,6 +1037,70 @@ export default function ChatInterface({
                   <LuExpand />
                 </Button>
               </Tooltip>
+            )}
+            {conversationID && conversationID > 0 && (
+              isRenaming ? (
+                <Input
+                  aria-label="Conversation title"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={submitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); submitRename(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); setIsRenaming(false); }
+                  }}
+                  autoFocus
+                  size="xs"
+                  fontFamily="mono"
+                  fontWeight="700"
+                  variant="flushed"
+                  maxW="360px"
+                  h="26px"
+                />
+              ) : (
+                <Menu.Root>
+                  <Menu.Trigger asChild>
+                    <HStack
+                      as="button"
+                      aria-label="Conversation title menu"
+                      gap={1}
+                      px={1.5}
+                      h="26px"
+                      borderRadius="sm"
+                      color="fg.default"
+                      _hover={{ bg: 'bg.muted' }}
+                      maxW="380px"
+                      minW={0}
+                    >
+                      <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate title={conversationTitle ?? undefined}>
+                        {conversationTitle || 'New chat'}
+                      </Text>
+                      <Icon as={LuChevronDown} boxSize={3.5} color="fg.muted" flexShrink={0} />
+                    </HStack>
+                  </Menu.Trigger>
+                  <Portal>
+                    <Menu.Positioner>
+                      <Menu.Content minW="160px" bg="bg.surface" borderColor="border.default" shadow="lg" p={1}>
+                        <Menu.Item
+                          value="rename"
+                          aria-label="Rename conversation"
+                          cursor="pointer"
+                          borderRadius="sm"
+                          px={3}
+                          py={2}
+                          _hover={{ bg: 'bg.muted' }}
+                          onClick={startRename}
+                        >
+                          <HStack gap={2}>
+                            <Icon as={LuPencil} boxSize={4} />
+                            <span>Rename</span>
+                          </HStack>
+                        </Menu.Item>
+                      </Menu.Content>
+                    </Menu.Positioner>
+                  </Portal>
+                </Menu.Root>
+              )
             )}
             {/* ViewModeToggle removed — always use compact */}
             </HStack>

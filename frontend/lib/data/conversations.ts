@@ -44,6 +44,23 @@ export const ConversationsAPI = {
     return unwrap(res);
   },
 
+  /** Cheap single-row fetch of the AI-generated title (null if not generated yet). */
+  async getTitle(id: number): Promise<string | null> {
+    const res = await fetch(`/api/conversations/${id}/title`);
+    const body = await unwrap<{ title: string | null }>(res);
+    return body.title;
+  },
+
+  /** Rename a conversation (sets an explicit title, shown in the list + header). */
+  async rename(id: number, title: string): Promise<void> {
+    const res = await fetch(`/api/conversations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    await unwrap(res);
+  },
+
   async remove(id: number): Promise<void> {
     const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
     await unwrap(res);

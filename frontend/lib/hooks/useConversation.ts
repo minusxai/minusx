@@ -80,6 +80,11 @@ export function useConversation(conversationId?: number) {
             agent,
             agent_args,
             version: 3,
+            // Carry the AI-generated title from the load (free — already fetched).
+            // Only the generated title; the raw first message is already a bubble.
+            title: v3detail.conversation.meta?.titleGenerated && v3detail.conversation.title?.trim()
+              ? v3detail.conversation.title
+              : undefined,
           },
           setAsActive: false,
         }));

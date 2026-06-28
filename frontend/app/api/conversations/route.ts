@@ -2,14 +2,18 @@ import { NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { createConversation, listConversations, type ConversationCursor } from '@/lib/data/conversations.server';
+import { conversationDisplayName } from '@/lib/conversations-utils';
 
 /**
  * Conversation summary for listing. Metadata-only — no per-conversation content load.
- * `name` is the full first user message (meta.firstMessage), falling back to the title.
+ * `name` is the display title (the AI-generated title once present, else the first
+ * message); `preview` is the original first message, set only when `name` is a
+ * generated title (so the list can show "Title" + the original question beneath).
  */
 export interface ConversationSummary {
   id: number;        // v3 conversation id
-  name: string;      // Display name — meta.firstMessage ?? title
+  name: string;      // Display title — conversationDisplayName(meta, title)
+  preview?: string;  // First message as a subtitle, set only when it differs from `name` (never duplicates it)
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
   version: number;   // always 3 (conversations are v3-only)
@@ -57,13 +61,20 @@ export async function GET(request: Request) {
     // Already ordered (updated_at DESC, id DESC) by the keyset query — do NOT re-sort (that would
     // drop the id tiebreak and desync the cursor).
     const rows = await listConversations(user.userId, user.mode, { limit, before, search });
-    const conversations: ConversationSummary[] = rows.map((c) => ({
-      id: c.id,
-      name: (c.meta.firstMessage as string) || c.title,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-      version: 3,
-    }));
+    const conversations: ConversationSummary[] = rows.map((c) => {
+      const name = conversationDisplayName(c.meta, c.title);
+      const firstMessage = c.meta.firstMessage as string | undefined;
+      return {
+        id: c.id,
+        name,
+        // The original question as a subtitle — only when it isn't already the
+        // name (i.e. a generated title is showing), so the two never duplicate.
+        preview: firstMessage && firstMessage !== name ? firstMessage : undefined,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        version: 3,
+      };
+    });
 
     // A full page implies there may be more — hand back the last row as the next cursor.
     const last = rows[rows.length - 1];

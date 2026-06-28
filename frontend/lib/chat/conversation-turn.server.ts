@@ -16,13 +16,14 @@ import type { ChatRequest } from '@/lib/chat-orchestration';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
 import {
-  loadLog, loadMessages, appendMessages, updateConversationTitle, appendError, ConcurrentAppendError,
+  loadLog, loadMessages, appendMessages, updateConversationTitle, setGeneratedConversationTitle, appendError, ConcurrentAppendError,
   acquireRunLease, heartbeatRunLease, releaseRunLease, getConversation,
   bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
+import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 
 const DELTA_FLUSH_MS = 50;
 const HEARTBEAT_MS = 30_000;
@@ -38,6 +39,28 @@ function firstUserMessage(entries: ConversationLog): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Best-effort: replace the placeholder first-turn title (the truncated first
+ * message) with a concise AI-generated title, derived from the user's request.
+ * Runs after the turn so it never blocks streaming; failures are swallowed.
+ */
+async function generateConversationTitle(conversationId: number, userMessage: string, user: EffectiveUser): Promise<void> {
+  try {
+    const title = await runMicroTask(
+      'title',
+      {
+        input: userMessage,
+        subject: 'a data-analysis chat conversation',
+        instructions: 'Title it by what the user is trying to find out or do. Ideally 3–5 words, no punctuation, no quotes, no prefix like "Conversation about". Users use these to quickly find conversations later, so make it concise and descriptive. If the user message is too vague to title, return a generic title like "Data analysis chat" or "Generic question".',
+      },
+      user,
+    );
+    await setGeneratedConversationTitle(conversationId, title);
+  } catch (e) {
+    console.error('[conversation-turn] auto-title failed:', e);
+  }
 }
 
 /** Mirror server/frontend tool errors + a hard run error into the parallel error stream (UI-only). */
@@ -244,6 +267,16 @@ export async function runConversationTurn(
   // A turn that actually progressed (idle/paused) clears the auto-retry budget so the next
   // interruption gets a fresh MAX_AUTO_RETRIES. Only consecutive failures count toward the cap.
   if (runStatus !== 'error') await resetAutoRetries(conversationId);
+
+  // First successful turn → upgrade the placeholder title to an AI-generated one
+  // from the user's request. Done BEFORE the idle notify so the title row is
+  // ready when the client (on seeing idle) fetches it. Awaited so it completes
+  // in a standalone prod build; best-effort inside.
+  if (startSeq === 0 && !runError) {
+    const fm = firstUserMessage(piDiff);
+    if (fm) await generateConversationTitle(conversationId, fm, user);
+  }
+
   await notifyStatus(conversationId, runStatus, finalSeq);
 
   return { conversationId, runStatus, pendingToolCalls, finalSeq, error: runError };
