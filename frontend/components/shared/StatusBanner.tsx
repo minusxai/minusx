@@ -12,6 +12,7 @@
  * editFile doesn't silently skip the update (it skips undefined, not '').
  */
 import { HStack, Text, Switch, Box } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { CheckedChangeDetails } from '@zag-js/switch';
 import { LuInfo, LuCirclePause } from 'react-icons/lu';
 
@@ -109,14 +110,15 @@ export function StatusBanner({
           {suppressed ? (
             <HStack gap={1}>
               <Text fontSize="xs" color="orange.fg" fontWeight="600">{suppressedDisplay}</Text>
-              <button
-                aria-label="Clear suppression"
-                onClick={() => onSuppressChange('')}
-                title="Clear suppression"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--chakra-colors-orange-fg)', fontSize: '14px', lineHeight: 1 }}
-              >
-                ×
-              </button>
+              <Tooltip content="Clear suppression">
+                <button
+                  aria-label="Clear suppression"
+                  onClick={() => onSuppressChange('')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--chakra-colors-orange-fg)', fontSize: '14px', lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              </Tooltip>
             </HStack>
           ) : (
             <input

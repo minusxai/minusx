@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Flex, Text, Icon, IconButton, Code } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { LuRefreshCw, LuX, LuCopy, LuCheck } from 'react-icons/lu';
 import { GIT_COMMIT_SHA, BUILD_TIME, DISABLE_UPDATE_BANNER } from '@/lib/constants';
 import { useAppSelector } from '@/store/hooks';
@@ -117,39 +118,40 @@ export default function UpdateBanner() {
         A new version of MinusX is available.
       </Text>
       <Text fontSize="xs" opacity={0.85} flexShrink={0}>Update by re-running (in the same directory):</Text>
-      <Flex
-        align="center"
-        gap={2}
-        bg="whiteAlpha.200"
-        borderRadius="md"
-        px={3}
-        py={1.5}
-        cursor="pointer"
-        onClick={handleCopy}
-        _hover={{ bg: 'whiteAlpha.300' }}
-        transition="background 0.15s"
-        title="Click to copy"
-        maxW="500px"
-      >
-        <Code
-          fontSize="xs"
-          bg="transparent"
-          color="white"
-          overflow="hidden"
-          textOverflow="ellipsis"
-          whiteSpace="nowrap"
-          flex={1}
+      <Tooltip content="Click to copy">
+        <Flex
+          align="center"
+          gap={2}
+          bg="whiteAlpha.200"
+          borderRadius="md"
+          px={3}
+          py={1.5}
+          cursor="pointer"
+          onClick={handleCopy}
+          _hover={{ bg: 'whiteAlpha.300' }}
+          transition="background 0.15s"
+          maxW="500px"
         >
-          {INSTALL_CMD}
-        </Code>
-        <Icon
-          as={copied ? LuCheck : LuCopy}
-          boxSize={3.5}
-          color={copied ? 'green.200' : 'whiteAlpha.700'}
-          flexShrink={0}
-          transition="color 0.15s"
-        />
-      </Flex>
+          <Code
+            fontSize="xs"
+            bg="transparent"
+            color="white"
+            overflow="hidden"
+            textOverflow="ellipsis"
+            whiteSpace="nowrap"
+            flex={1}
+          >
+            {INSTALL_CMD}
+          </Code>
+          <Icon
+            as={copied ? LuCheck : LuCopy}
+            boxSize={3.5}
+            color={copied ? 'green.200' : 'whiteAlpha.700'}
+            flexShrink={0}
+            transition="color 0.15s"
+          />
+        </Flex>
+      </Tooltip>
       {copied && (
         <Text fontSize="xs" color="green.200" fontWeight="500" flexShrink={0}>
           Copied!

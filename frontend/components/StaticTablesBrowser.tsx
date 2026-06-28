@@ -136,15 +136,16 @@ export default function StaticTablesBrowser({
           fontSize="sm"
           flex={1}
         />
-        <IconButton
-          aria-label="Refresh schema"
-          size="md"
-          variant="outline"
-          onClick={onRetry}
-          title="Fetch latest schema from database"
-        >
-          <LuRefreshCw size={16} />
-        </IconButton>
+        <Tooltip content="Fetch latest schema from database">
+          <IconButton
+            aria-label="Refresh schema"
+            size="md"
+            variant="outline"
+            onClick={onRetry}
+          >
+            <LuRefreshCw size={16} />
+          </IconButton>
+        </Tooltip>
       </HStack>
 
       {filteredSchemas.length === 0 ? (

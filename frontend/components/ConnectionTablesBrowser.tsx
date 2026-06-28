@@ -12,6 +12,7 @@ import {
   Spinner,
   IconButton,
 } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { LuTriangleAlert, LuTable, LuRefreshCw } from 'react-icons/lu';
 import { SchemaTreeItem } from './SchemaTreeView';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -119,15 +120,16 @@ export default function ConnectionTablesBrowser({
           fontSize="sm"
           flex={1}
         />
-        <IconButton
-          aria-label="Refresh schema"
-          size="md"
-          variant="outline"
-          onClick={onRetry}
-          title="Fetch latest schema from database"
-        >
-          <LuRefreshCw size={16} />
-        </IconButton>
+        <Tooltip content="Fetch latest schema from database">
+          <IconButton
+            aria-label="Refresh schema"
+            size="md"
+            variant="outline"
+            onClick={onRetry}
+          >
+            <LuRefreshCw size={16} />
+          </IconButton>
+        </Tooltip>
       </HStack>
 
       {filteredTables.length === 0 ? (

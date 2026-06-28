@@ -11,6 +11,7 @@ import {
   VStack,
   Icon,
 } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
@@ -319,41 +320,43 @@ export default function DocumentHeader({
 
             {/* Save button — always visible in edit mode, disabled when clean */}
             {!isPresenting && editMode && (
-              <IconButton
-                onClick={handleSave}
-                aria-label={'Save'}
-                title={saveDisabled ? saveDisabledReason : undefined}
-                loading={isSaving}
-                disabled={!isDirty || saveDisabled}
-                size="xs"
-                colorPalette="teal"
-                px={2}
-                h="26px"
-              >
-                <LuSave />
-                {'Save'}
-              </IconButton>
+              <Tooltip content={saveDisabledReason} disabled={!saveDisabled}>
+                <IconButton
+                  onClick={handleSave}
+                  aria-label={'Save'}
+                  loading={isSaving}
+                  disabled={!isDirty || saveDisabled}
+                  size="xs"
+                  colorPalette="teal"
+                  px={2}
+                  h="26px"
+                >
+                  <LuSave />
+                  {'Save'}
+                </IconButton>
+              </Tooltip>
             )}
 
             {/* Present (fullscreen) — generic across file types; view mode only */}
             {onTogglePresent && (!editMode || isPresenting) && (
-              <IconButton
-                onClick={onTogglePresent}
-                aria-label={isPresenting ? 'Exit presentation' : 'Present'}
-                title={isPresenting ? 'Exit presentation' : 'Present fullscreen'}
-                variant="ghost"
-                size="xs"
-                minW="26px"
-                px={0}
-                h="26px"
-                bg={isPresenting ? 'bg.emphasized' : 'bg.muted'}
-                borderWidth="1px"
-                borderColor="border.muted"
-                color={isPresenting ? 'fg.default' : 'fg.muted'}
-                _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
-              >
-                {isPresenting ? <LuMinimize /> : <LuPresentation />}
-              </IconButton>
+              <Tooltip content={isPresenting ? 'Exit presentation' : 'Present fullscreen'}>
+                <IconButton
+                  onClick={onTogglePresent}
+                  aria-label={isPresenting ? 'Exit presentation' : 'Present'}
+                  variant="ghost"
+                  size="xs"
+                  minW="26px"
+                  px={0}
+                  h="26px"
+                  bg={isPresenting ? 'bg.emphasized' : 'bg.muted'}
+                  borderWidth="1px"
+                  borderColor="border.muted"
+                  color={isPresenting ? 'fg.default' : 'fg.muted'}
+                  _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
+                >
+                  {isPresenting ? <LuMinimize /> : <LuPresentation />}
+                </IconButton>
+              </Tooltip>
             )}
 
             {/* Edit/Cancel Button — matches the header toolbar pill aesthetic */}

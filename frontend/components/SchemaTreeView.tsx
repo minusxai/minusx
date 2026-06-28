@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Icon, Collapsible, IconButton, Input } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import { LuTable, LuChevronRight, LuChevronDown, LuColumns3, LuSearch, LuX, LuDatabase, LuEye, LuRefreshCw } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 import ChildPathSelector from './ChildPathSelector';
@@ -577,17 +578,18 @@ export default function SchemaTreeView({
           <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
             {connectionName ? `${connectionName} schema` : 'Database schema'}
           </Text>
-          <IconButton
-            aria-label="Refresh schema"
-            size="2xs"
-            variant="ghost"
-            onClick={onRetry}
-            title="Fetch latest schema from database"
-            color="fg.subtle"
-            _hover={{ color: 'accent.teal' }}
-          >
-            <LuRefreshCw size={12} />
-          </IconButton>
+          <Tooltip content="Fetch latest schema from database">
+            <IconButton
+              aria-label="Refresh schema"
+              size="2xs"
+              variant="ghost"
+              onClick={onRetry}
+              color="fg.subtle"
+              _hover={{ color: 'accent.teal' }}
+            >
+              <LuRefreshCw size={12} />
+            </IconButton>
+          </Tooltip>
         </HStack>
       )}
 

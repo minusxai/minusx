@@ -34,6 +34,7 @@ import {
   Dialog,
   Portal,
 } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   LuUpload,
   LuX,
@@ -1165,15 +1166,16 @@ export default function StaticConnectionConfig({
                                         </Text>
                                       </HStack>
                                       <HStack gap={0} flexShrink={0}>
-                                        <IconButton
-                                          size="2xs"
-                                          variant="ghost"
-                                          aria-label="Re-import sheets from this spreadsheet"
-                                          onClick={() => handleReimport(item.id)}
-                                          title="Re-import"
-                                        >
-                                          {isReimporting ? <Spinner size="xs" /> : <LuRefreshCw size={11} />}
-                                        </IconButton>
+                                        <Tooltip content="Re-import">
+                                          <IconButton
+                                            size="2xs"
+                                            variant="ghost"
+                                            aria-label="Re-import sheets from this spreadsheet"
+                                            onClick={() => handleReimport(item.id)}
+                                          >
+                                            {isReimporting ? <Spinner size="xs" /> : <LuRefreshCw size={11} />}
+                                          </IconButton>
+                                        </Tooltip>
                                         <IconButton
                                           size="2xs"
                                           variant="ghost"

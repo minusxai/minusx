@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Text, Button, HStack, VStack, Badge, Spinner, IconButton, Input, createListCollection } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   SelectRoot,
   SelectTrigger,
@@ -167,14 +168,15 @@ export function ColumnSelector({
             </Badge>
 
             {/* Aggregate toggle */}
-            <Button
-              size="xs"
-              variant={col.type === 'aggregate' ? 'solid' : 'ghost'}
-              onClick={() => handleToggleAggregate(index)}
-              title="Toggle aggregate function"
-            >
-              Σ
-            </Button>
+            <Tooltip content="Toggle aggregate function">
+              <Button
+                size="xs"
+                variant={col.type === 'aggregate' ? 'solid' : 'ghost'}
+                onClick={() => handleToggleAggregate(index)}
+              >
+                Σ
+              </Button>
+            </Tooltip>
 
             {/* Aggregate type selector */}
             {col.type === 'aggregate' && (

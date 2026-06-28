@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Text, Button, HStack, VStack, IconButton, Input, createListCollection } from '@chakra-ui/react';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   SelectRoot,
   SelectTrigger,
@@ -184,20 +185,21 @@ export function FilterBuilder({
             <HStack key={index} gap={2}>
               {/* Aggregate toggle (for HAVING) */}
               {filterType === 'having' && (
-                <Button
-                  size="xs"
-                  variant={cond.aggregate ? 'solid' : 'ghost'}
-                  onClick={() => {
-                    if (cond.aggregate) {
-                      handleChangeCondition(index, 'aggregate', undefined);
-                    } else {
-                      handleChangeCondition(index, 'aggregate', 'COUNT');
-                    }
-                  }}
-                  title="Toggle aggregate function"
-                >
-                  Σ
-                </Button>
+                <Tooltip content="Toggle aggregate function">
+                  <Button
+                    size="xs"
+                    variant={cond.aggregate ? 'solid' : 'ghost'}
+                    onClick={() => {
+                      if (cond.aggregate) {
+                        handleChangeCondition(index, 'aggregate', undefined);
+                      } else {
+                        handleChangeCondition(index, 'aggregate', 'COUNT');
+                      }
+                    }}
+                  >
+                    Σ
+                  </Button>
+                </Tooltip>
               )}
 
               {/* Aggregate selector (if aggregate enabled) */}

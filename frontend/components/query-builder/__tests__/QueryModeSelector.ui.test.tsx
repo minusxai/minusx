@@ -39,7 +39,6 @@ describe('QueryModeSelector', () => {
     );
     const gui = screen.getByLabelText('GUI');
     expect(gui.getAttribute('aria-disabled')).toBe('true');
-    expect(gui.getAttribute('title')).toBe('This query cannot be edited in GUI mode');
     fireEvent.click(gui);
     expect(onModeChange).not.toHaveBeenCalled();
   });
@@ -57,7 +56,6 @@ describe('QueryModeSelector', () => {
     );
     const viz = screen.getByLabelText('Viz');
     expect(viz.getAttribute('aria-disabled')).toBe('true');
-    expect(viz.getAttribute('title')).toBe('Run the query to configure a chart');
     fireEvent.click(viz);
     expect(onModeChange).not.toHaveBeenCalled();
   });
