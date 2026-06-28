@@ -25,6 +25,8 @@ export interface ConversationMeta {
   forkedFrom?: number;
   /** Consecutive silent auto-retries of the current turn after server-restart interruptions (cap: MAX_AUTO_RETRIES). */
   autoRetries?: number;
+  /** True once an AI-generated title has been written to `title` (vs the raw first message). */
+  titleGenerated?: boolean;
   [key: string]: unknown;
 }
 

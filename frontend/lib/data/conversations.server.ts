@@ -209,6 +209,19 @@ export async function updateConversationTitle(id: number, title: string): Promis
   await db().exec('UPDATE conversations SET title = $2 WHERE id = $1', [id, title]);
 }
 
+/**
+ * Set an AI-generated title and flag it as generated (so the list prefers it over
+ * the raw first message — see `conversationDisplayName`).
+ */
+export async function setGeneratedConversationTitle(id: number, title: string): Promise<void> {
+  await db().exec(
+    `UPDATE conversations SET title = $2,
+       meta = jsonb_set(COALESCE(meta, '{}'::jsonb), '{titleGenerated}', 'true'::jsonb)
+     WHERE id = $1`,
+    [id, title],
+  );
+}
+
 export async function setRunStatus(id: number, status: RunStatus): Promise<void> {
   await db().exec('UPDATE conversations SET run_status = $2 WHERE id = $1', [id, status]);
 }

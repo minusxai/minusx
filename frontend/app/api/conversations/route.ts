@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { createConversation, listConversations, type ConversationCursor } from '@/lib/data/conversations.server';
+import { conversationDisplayName } from '@/lib/conversations-utils';
 
 /**
  * Conversation summary for listing. Metadata-only — no per-conversation content load.
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
     const rows = await listConversations(user.userId, user.mode, { limit, before, search });
     const conversations: ConversationSummary[] = rows.map((c) => ({
       id: c.id,
-      name: (c.meta.firstMessage as string) || c.title,
+      name: conversationDisplayName(c.meta, c.title),
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       version: 3,
