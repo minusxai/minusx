@@ -47,4 +47,17 @@ describe('DocumentHeader validateBeforeSave', () => {
 
     expect(onSave).toHaveBeenCalledTimes(1);
   });
+
+  it('clears the validation banner when edit mode is exited (Cancel)', async () => {
+    const { findByLabelText, queryByLabelText, rerender } = renderWithProviders(
+      <DocumentHeader {...baseProps({ validateBeforeSave: () => REASON })} />,
+    );
+
+    fireEvent.click(await findByLabelText('Save'));
+    expect(await findByLabelText(REASON)).toBeTruthy();
+
+    // Cancel = parent flips editMode off.
+    rerender(<DocumentHeader {...baseProps({ editMode: false, validateBeforeSave: () => REASON })} />);
+    expect(queryByLabelText(REASON)).toBeNull();
+  });
 });

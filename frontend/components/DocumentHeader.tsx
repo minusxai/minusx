@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useState, useCallback } from 'react';
+import { ReactNode, useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Heading,
@@ -12,7 +12,7 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
+import { LuSave, LuPencil, LuTriangleAlert, LuCircleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
@@ -28,6 +28,14 @@ const pulseAnimation = `
   @keyframes iconBlink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.2; }
+  }
+`;
+
+// Gentle entrance for the save/validation banner.
+const alertInKeyframes = `
+  @keyframes documentHeaderAlertIn {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 `;
 
@@ -160,6 +168,12 @@ export default function DocumentHeader({
     return true;
   }, [name, fileType, metadata.label]);
 
+  // Validation errors are edit-time only — drop them when leaving edit mode
+  // (e.g. Cancel) so a stale "needs a title" banner doesn't linger.
+  useEffect(() => {
+    if (!editMode) setValidationError(null);
+  }, [editMode]);
+
   // Validate and save
   const handleSave = useCallback(() => {
     if (!skipNameValidation && !validateName()) return;
@@ -173,8 +187,12 @@ export default function DocumentHeader({
     onSave();
   }, [skipNameValidation, validateName, validateBeforeSave, onSave]);
 
-  // Combined error (validation takes precedence)
+  // Combined error (validation takes precedence). Validation = "you need to fix
+  // something" → amber/attention; a real save failure → red/danger.
   const displayError = validationError || saveError;
+  const alertTone = validationError
+    ? { fg: 'accent.warning', bg: 'accent.warning/10', border: 'accent.warning/30', icon: LuCircleAlert, label: 'Cannot save yet' }
+    : { fg: 'accent.danger', bg: 'bg.error', border: 'accent.danger/25', icon: LuTriangleAlert, label: 'Save failed' };
 
   return (
     <Box
@@ -437,29 +455,44 @@ export default function DocumentHeader({
         </HStack>
       </VStack>
 
-      {/* Save Error Banner */}
+      {/* Save / validation banner */}
       {displayError && (
-        <Box
-          role="alert"
-          aria-label={displayError}
-          bg="bg.error"
-          px={4}
-          py={3}
-          mb={4}
-          borderRadius="md"
-        >
-          <HStack gap={2} align="start">
-            <LuTriangleAlert size={20} color="var(--chakra-colors-accent-danger)" />
-            <VStack align="start" gap={1} flex={1}>
-              <Text fontSize="sm" fontWeight="600" color="accent.danger">
-                Failed to save
+        <>
+          <style>{alertInKeyframes}</style>
+          <Box
+            role="alert"
+            aria-label={displayError}
+            display="flex"
+            alignItems="flex-start"
+            gap={2.5}
+            bg={alertTone.bg}
+            borderWidth="1px"
+            borderColor={alertTone.border}
+            px={3.5}
+            py={2.5}
+            mb={4}
+            borderRadius="md"
+            css={{ animation: 'documentHeaderAlertIn 0.18s ease-out' }}
+          >
+            {/* mt nudges the icon onto the cap-height of the uppercase label */}
+            <Icon as={alertTone.icon} boxSize={4} color={alertTone.fg} flexShrink={0} mt="2px" />
+            <VStack align="start" gap={0.5} flex={1} minW={0}>
+              <Text
+                fontSize="2xs"
+                fontWeight="700"
+                fontFamily="mono"
+                letterSpacing="0.04em"
+                textTransform="uppercase"
+                color={alertTone.fg}
+              >
+                {alertTone.label}
               </Text>
-              <Text fontSize="sm" color="fg.muted">
+              <Text fontSize="sm" color="fg.default" lineHeight="1.5">
                 {displayError}
               </Text>
             </VStack>
-          </HStack>
-        </Box>
+          </Box>
+        </>
       )}
     </Box>
   );
