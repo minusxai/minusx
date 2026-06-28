@@ -11,7 +11,7 @@ import {
   VStack,
   Icon,
 } from '@chakra-ui/react';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff } from 'react-icons/lu';
+import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFileDiff, LuPresentation, LuMinimize } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
@@ -76,6 +76,11 @@ export interface DocumentHeaderProps {
   // Explain button (optional - shown for questions)
   questionId?: number;  // If provided, show explain button in view mode
 
+  // Present (fullscreen) toggle — generic across file types. Shown in view mode
+  // when provided; `isPresenting` flips it to an Exit affordance.
+  onTogglePresent?: () => void;
+  isPresenting?: boolean;
+
   // When other files have unsaved changes, show a "Review N unsaved changes" button.
   onReviewChanges?: () => void;
   dirtyFileCount?: number;
@@ -111,6 +116,8 @@ export default function DocumentHeader({
   viewMode = 'visual',
   onViewModeChange,
   questionId,
+  onTogglePresent,
+  isPresenting = false,
   onReviewChanges,
   dirtyFileCount = 0,
   saveCount = 1,
@@ -262,33 +269,48 @@ export default function DocumentHeader({
               both view and edit mode so the row height (and the actions below)
               stay put when toggling Edit. */}
           <VStack align="end" gap={1.5} flexShrink={0}>
-            <HStack gap={1.5} flexWrap="wrap" justify="flex-end">
-              <FileTypeBadge fileType={fileType} />
-              {additionalBadges}
-            </HStack>
-          <HStack gap={2} flexShrink={0}>
-            {/* Always-visible extra actions (e.g. Make public for stories) */}
-            {headerActions}
+            {/* While presenting, the header collapses to nothing but the Exit
+                control — no badges, no edit/save/tools — for a clean fullscreen. */}
+            {!isPresenting && (
+              <HStack gap={1.5} flexWrap="wrap" justify="flex-end">
+                <FileTypeBadge fileType={fileType} />
+                {additionalBadges}
+              </HStack>
+            )}
+          <HStack gap={2} flexShrink={0} align="center">
+            {/* Contextual view tools registered by the file view (Run all, Present, …) */}
+            {!isPresenting && headerActions}
+
+            {/* Divider separating contextual view tools from the document
+                lifecycle actions (review / edit / save) so the row reads as
+                two distinct groups rather than one crowded strip. */}
+            {!isPresenting && headerActions && <Box w="1px" h="16px" bg="border.emphasized" flexShrink={0} />}
 
             {/* Explain Button (show in view mode for questions) */}
-            {!editMode && questionId !== undefined && (
+            {!isPresenting && !editMode && questionId !== undefined && (
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
-            {/* Review unsaved changes — muted text link, informational */}
-            {onReviewChanges && dirtyFileCount > 0 && (
+            {/* Review unsaved changes — informational status chip, not an action */}
+            {!isPresenting && onReviewChanges && dirtyFileCount > 0 && (
               <HStack
                 as="button"
                 onClick={onReviewChanges}
                 aria-label={`Review ${dirtyFileCount} unsaved changes`}
-                gap={1}
-                px={1}
+                gap={1.5}
+                h="26px"
+                px={2}
+                borderRadius="md"
+                bg="bg.muted"
+                borderWidth="1px"
+                borderColor="border.muted"
                 color="fg.muted"
-                _hover={{ color: 'fg.default' }}
-                transition="color 0.15s"
+                _hover={{ color: 'fg.default', borderColor: 'border.emphasized' }}
+                transition="color 0.15s, border-color 0.15s"
                 cursor="pointer"
+                flexShrink={0}
               >
-                <Icon as={LuFileDiff} />
+                <Icon as={LuFileDiff} boxSize={3.5} />
                 <Text fontSize="xs" fontWeight="600" fontFamily="mono">
                   Review {dirtyFileCount} change{dirtyFileCount > 1 ? 's' : ''}
                 </Text>
@@ -296,7 +318,7 @@ export default function DocumentHeader({
             )}
 
             {/* Save button — always visible in edit mode, disabled when clean */}
-            {editMode && (
+            {!isPresenting && editMode && (
               <IconButton
                 onClick={handleSave}
                 aria-label={'Save'}
@@ -313,8 +335,29 @@ export default function DocumentHeader({
               </IconButton>
             )}
 
+            {/* Present (fullscreen) — generic across file types; view mode only */}
+            {onTogglePresent && (!editMode || isPresenting) && (
+              <IconButton
+                onClick={onTogglePresent}
+                aria-label={isPresenting ? 'Exit presentation' : 'Present'}
+                title={isPresenting ? 'Exit presentation' : 'Present fullscreen'}
+                variant="ghost"
+                size="xs"
+                minW="26px"
+                px={0}
+                h="26px"
+                bg={isPresenting ? 'bg.emphasized' : 'bg.muted'}
+                borderWidth="1px"
+                borderColor="border.muted"
+                color={isPresenting ? 'fg.default' : 'fg.muted'}
+                _hover={{ color: 'fg.default', bg: 'bg.emphasized' }}
+              >
+                {isPresenting ? <LuMinimize /> : <LuPresentation />}
+              </IconButton>
+            )}
+
             {/* Edit/Cancel Button — matches the header toolbar pill aesthetic */}
-            {!hideEditToggle && (
+            {!isPresenting && !hideEditToggle && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
@@ -333,7 +376,7 @@ export default function DocumentHeader({
             </IconButton>
             )}
             {/* Visual / Code view toggle (shown only when devMode is enabled) */}
-            {onViewModeChange && showJson && (
+            {!isPresenting && onViewModeChange && showJson && (
               <TabSwitcher
                 tabs={[
                   { value: 'visual', label: 'Visual view', icon: LuEye },

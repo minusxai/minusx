@@ -17,13 +17,14 @@
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, VStack, HStack, Button, Center, Text } from '@chakra-ui/react';
-import { LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPresentation, LuX, LuPlus } from 'react-icons/lu';
+import { LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPlus } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import NotebookSqlCell, { type Executed } from './notebook/NotebookSqlCell';
 import NotebookTextCell from './notebook/NotebookTextCell';
 import CellInsertZone from './notebook/CellInsertZone';
 import { NotebookEmptyState } from '@/components/views/shared/empty-states';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
+import { usePresentation } from '@/components/file-toolbar/PresentationContext';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectNotebookCellExecuted, setNotebookCellExecuted } from '@/store/filesSlice';
 import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/api/file-state';
@@ -159,26 +160,21 @@ export default function NotebookView({
     captureNotebookCellResult(fileId, cellId, executed, data as Parameters<typeof captureNotebookCellResult>[3]);
   }, [fileId, readOnly]);
 
-  // Present (reading) mode — view-local; the header just renders the toggle we
-  // publish below, so present isn't special-cased anywhere outside this view.
-  const [present, setPresent] = useState(false);
-  const togglePresent = useCallback(() => setPresent(p => !p), []);
+  // Present (reading) mode is the generic fullscreen flag (shared header Present
+  // button). The notebook overrides its layout for it: code/editor chrome is hidden
+  // and cells render in their read-only reading layout.
+  const present = usePresentation()?.isPresenting ?? false;
 
-  // Publish notebook actions into the document header toolbar (one list). The
-  // Present toggle is always available; editing actions hide while presenting.
+  // Publish notebook editing actions into the document header toolbar. These hide
+  // while presenting (the generic Present toggle owns entering/exiting fullscreen).
   const toolbarActions = useMemo<FileToolbarAction[]>(() => {
-    if (cells.length === 0) return [];
-    const presentAction: FileToolbarAction = present
-      ? { id: 'present', ariaLabel: 'Exit present mode', icon: <LuX />, onClick: togglePresent, active: true }
-      : { id: 'present', ariaLabel: 'Present', icon: <LuPresentation />, onClick: togglePresent };
-    if (present || readOnly) return [presentAction];
+    if (cells.length === 0 || present || readOnly) return [];
     return [
       { id: 'run-all', ariaLabel: 'Run all cells', icon: <LuPlay />, onClick: runAll },
       { id: 'collapse-all', ariaLabel: 'Collapse all cells', icon: <LuChevronsDownUp />, onClick: collapseAll },
       { id: 'expand-all', ariaLabel: 'Expand all cells', icon: <LuChevronsUpDown />, onClick: expandAll },
-      presentAction,
     ];
-  }, [present, readOnly, cells.length, runAll, collapseAll, expandAll, togglePresent]);
+  }, [present, readOnly, cells.length, runAll, collapseAll, expandAll]);
   useFileToolbarActions(toolbarActions);
 
   if (present) {
