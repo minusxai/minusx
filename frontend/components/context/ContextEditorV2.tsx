@@ -884,7 +884,7 @@ export default function ContextEditorV2({
           fileId={file.id}
           fileType="context"
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullSkills', 'fullAnnotations', 'fullMetrics']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs']}
         />
       ) : (
       <Tabs.Root
