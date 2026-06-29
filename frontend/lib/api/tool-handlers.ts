@@ -8,6 +8,7 @@
 import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type ScreenshotDetails } from '@/lib/types';
 import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { isTitleMissing, missingTitleFeedback } from '@/lib/data/file-title';
+import { contextEditWithinBounds } from '@/lib/context/context-agent-view';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -687,27 +688,16 @@ registerFrontendTool('EditFile', async (args, _context) => {
     diffs.push(`Renamed to "${renameTo}"`);
   }
 
-  // Post-edit guard: context files — only docs[] within versions can change
+  // Post-edit guard: context files — the agent may edit a version's AUTHORED fields (whitelist, docs,
+  // metrics, annotations, description). Version identity + the published pointer must not change; the
+  // server-computed menus (fullSchema/parentSchema/full*) are ignored (re-derived on load).
   if (fileState?.type === 'context') {
-    const before = selectMergedContent(stateBefore, fileId) as any;
-    const after = selectMergedContent(getStore().getState(), fileId) as any;
-
-    const stripDocs = (c: any) => {
-      if (!c) return c;
-      const { versions, docs: _topDocs, ...rest } = c;
-      return {
-        ...rest,
-        versions: versions?.map((v: any) => {
-          const { docs: _docs, ...vRest } = v;
-          return vRest;
-        }),
-      };
-    };
-
-    if (JSON.stringify(stripDocs(before)) !== JSON.stringify(stripDocs(after))) {
+    const before = selectMergedContent(stateBefore, fileId);
+    const after = selectMergedContent(getStore().getState(), fileId);
+    if (!contextEditWithinBounds(before, after)) {
       const errorContent = {
         success: false,
-        error: 'EditFile on context files can only modify docs within versions. Other fields (databases, published, evals, childPaths, etc.) cannot be changed via EditFile.',
+        error: "EditFile on a context can only change a version's whitelist, docs, metrics, annotations, or description — version identity and the published pointer can't be changed via EditFile.",
       };
       return { content: errorContent, details: { success: false, error: errorContent.error } };
     }

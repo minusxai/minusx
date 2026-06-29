@@ -10,6 +10,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup } from '@/lib/data/file-markup';
+import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type {
   AugmentedFile,
@@ -136,19 +137,11 @@ function compressFileState(fs: FileState): CompressedFileState {
   if (fs.type === 'notebook' && mergedContent && 'cellResults' in mergedContent) {
     delete (mergedContent as any).cellResults;
   }
-  // Strip column details from fullSchema for context files to reduce payload size
-  if (fs.type === 'context' && mergedContent && 'fullSchema' in mergedContent) {
-    const ctx = mergedContent as any;
-    if (Array.isArray(ctx.fullSchema)) {
-      ctx.fullSchema = (ctx.fullSchema as any[]).map((db: any) => ({
-        ...db,
-        schemas: db.schemas?.map((s: any) => ({
-          ...s,
-          tables: s.tables?.map((t: any) => ({ table: t.table })),
-        })),
-      }));
-    }
-  }
+  // Context files: the agent edits whitelist/docs/etc. — it does NOT need the heavy server-computed
+  // schema cache dumped inline. shapeContextForAgent drops the resolved `fullSchema` and reduces
+  // `parentSchema` (the available-to-whitelist menu) to names-only; column detail comes from
+  // SearchDBSchema. Applied to the agent's MARKUP only — `content` stays full for client rendering.
+  const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
   return {
     id: fs.id,
     name: fs.metadataChanges?.name ?? fs.name,
@@ -158,7 +151,7 @@ function compressFileState(fs: FileState): CompressedFileState {
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
     // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
-    markup: fileToMarkup(fs.type as FileType, mergedContent),
+    markup: fileToMarkup(fs.type as FileType, agentContent),
   };
 }
 
