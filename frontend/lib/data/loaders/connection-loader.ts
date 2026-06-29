@@ -67,11 +67,12 @@ const loadConnectionSchema: CustomLoader = async (file: DbFile, _user: Effective
 
   const content = file.content as ConnectionContent;
 
-  // An empty schemas array is NOT a usable schema: there's nothing to serve, so
-  // a backgroundRefresh would otherwise return [] and let the client cache it for
-  // hours (the onboarding "No tables found" bug). Treat empty as missing → block
-  // and introspect.
-  const hasSchema = !!(content.schema && content.schema.schemas && content.schema.schemas.length > 0);
+  // A present (even empty) schemas array counts as cached — serve it with stale-while-revalidate.
+  // The "empty after upload" case is handled at the source: StepStaticUpload force-reloads the
+  // connection with { refresh: true } after publishing, which always re-introspects (see the
+  // `options.refresh` branch below) — so we don't pay a blocking introspection on every plain load
+  // of a genuinely table-less connection.
+  const hasSchema = content.schema && content.schema.schemas;
   const hasTimestamp = content.schema?.updated_at;
   // If no timestamp, schema is from old version (pre-migration) - treat as stale
   const isStale = hasTimestamp ? isSchemaStale(hasTimestamp) : true;

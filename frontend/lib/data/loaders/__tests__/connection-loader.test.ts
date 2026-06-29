@@ -226,28 +226,28 @@ describe('connectionLoader — stale or missing schema', () => {
 // ---------------------------------------------------------------------------
 
 describe('connectionLoader — empty cached schemas', () => {
-  it('blocks and fetches on backgroundRefresh when cached schemas array is empty', async () => {
-    // Repro of the onboarding bug (#460 regression): the static CSV connection
-    // pre-exists with `schema.schemas = []`. A post-save backgroundRefresh must
-    // NOT serve [] and refresh later (the client caches that for hours and shows
-    // "No tables found") — with nothing useful to serve, it must block and
-    // return the freshly-introspected tables.
+  // An empty-but-fresh cached schema is served as-is (stale-while-revalidate); we deliberately do
+  // NOT block on introspection for every plain load of a table-less connection (that would re-
+  // introspect forever, since the result stays empty). The "empty after upload" bug is fixed at the
+  // source: StepStaticUpload force-reloads with { refresh: true } after publish (see
+  // static-upload-refresh.ui.test.tsx), and explicit refresh always re-introspects (next test).
+  it('serves an empty fresh cached schema without blocking on introspection', async () => {
     mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
     const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
-    const file = await createConnection('conn_empty_bg', '/org/database/conn_empty_bg', emptySchema);
-
-    const result = await connectionLoader(file!, testUser, { backgroundRefresh: true });
-
-    expect(mockGetSchema).toHaveBeenCalledTimes(1);
-    expect((result.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
-  });
-
-  it('blocks and fetches on a normal load when cached schemas array is empty', async () => {
-    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
-    const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
-    const file = await createConnection('conn_empty_normal', '/org/database/conn_empty_normal', emptySchema);
+    const file = await createConnection('conn_empty_fresh', '/org/database/conn_empty_fresh', emptySchema);
 
     const result = await connectionLoader(file!, testUser);
+
+    expect(mockGetSchema).not.toHaveBeenCalled();
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual([]);
+  });
+
+  it('force-introspects an empty cached schema on explicit refresh (the upload-fix path)', async () => {
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
+    const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
+    const file = await createConnection('conn_empty_refresh', '/org/database/conn_empty_refresh', emptySchema);
+
+    const result = await connectionLoader(file!, testUser, { refresh: true });
 
     expect(mockGetSchema).toHaveBeenCalledTimes(1);
     expect((result.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
