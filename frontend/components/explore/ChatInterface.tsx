@@ -1072,9 +1072,11 @@ export default function ChatInterface({
                       maxW="380px"
                       minW={0}
                     >
-                      <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate title={conversationTitle ?? undefined}>
-                        {conversationTitle || 'New chat'}
-                      </Text>
+                      <Tooltip content={conversationTitle || 'Untitled chat'} positioning={{ placement: 'bottom' }}>
+                        <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate maxW="120px">
+                          {conversationTitle || 'Untitled chat'}
+                        </Text>
+                      </Tooltip>
                       <Icon as={LuChevronDown} boxSize={3.5} color="fg.muted" flexShrink={0} />
                     </HStack>
                   </Menu.Trigger>

@@ -146,11 +146,12 @@ describe('Onboarding wizard — context agent app_state', () => {
 
     await waitFor(() => expect(capturedChatBody).not.toBeNull(), { timeout: 5000 });
 
+    // The agent sees the FLAT view (shapeContextForAgent) of the live version — docs at the top
+    // level, no version wrapper.
     const sentContent = capturedChatBody.agentArgs.app_state.state.fileState.content;
-    const sentDocs = sentContent.versions[sentContent.versions.length - 1].docs;
 
     // The agent sees the file's current docs (empty array — no pre-appended slot).
     // It will use EditFile to add docs directly.
-    expect(sentDocs).toEqual([]);
+    expect(sentContent.docs).toEqual([]);
   });
 });

@@ -21,6 +21,7 @@ import {
   DashboardContent,
   StoryContent,
   NotebookContent,
+  ContextAgentContent,
   AtlasQuestionFile,
   AtlasDashboardFile,
   AtlasStoryFile,
@@ -48,6 +49,10 @@ export const atlasSchema: Record<string, unknown> = topLevel({
   DashboardContent: toJson(DashboardContent),
   StoryContent: toJson(StoryContent),
   NotebookContent: toJson(NotebookContent),
+  // Agent's flattened context view — used for the schema_context skill var + context markup
+  // ($ref resolution in file-markup). NOT a member of the validation `oneOf`: contexts persist
+  // version-based and aren't validated against this flat view (see content-validators.ts).
+  ContextContent: toJson(ContextAgentContent),
   AtlasQuestionFile: toJson(AtlasQuestionFile),
   AtlasDashboardFile: toJson(AtlasDashboardFile),
   AtlasStoryFile: toJson(AtlasStoryFile),
@@ -107,6 +112,7 @@ const CONTENT_DEF_BY_TYPE = {
   dashboard: 'DashboardContent',
   story: 'StoryContent',
   notebook: 'NotebookContent',
+  context: 'ContextContent',
 } as const;
 
 export type AtlasSchemaFileType = keyof typeof CONTENT_DEF_BY_TYPE;

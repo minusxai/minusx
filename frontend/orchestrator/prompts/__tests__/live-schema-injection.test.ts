@@ -13,6 +13,7 @@ const SKILL_BY_TYPE: Record<string, string> = {
   dashboard: 'dashboards',
   story: 'data_stories',
   notebook: 'notebooks',
+  context: 'contexts',
 };
 
 describe('skills embed the LIVE per-file-type content schema', () => {
@@ -31,5 +32,8 @@ describe('skills embed the LIVE per-file-type content schema', () => {
     expect(getSkill('questions')).not.toContain('User demographics query');
     expect(getSkill('dashboards')).not.toContain('Section Header');
     expect(getSkill('notebooks')).not.toContain('GitHub activity analysis');
+    // context: the old version-based example (<versions>/<published>) is replaced by the live schema
+    expect(getSkill('contexts')).not.toContain('<versions>');
+    expect(getSkill('contexts')).not.toContain('<published>');
   });
 });

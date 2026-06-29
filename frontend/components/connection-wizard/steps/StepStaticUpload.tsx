@@ -7,7 +7,7 @@ import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import { useAppSelector } from '@/store/hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFileByPath, useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile } from '@/lib/api/file-state';
+import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import { StaticConnectionConfig } from '@/components/views/connection-configs';
 import type { ConnectionContent, CsvFileInfo } from '@/lib/types';
 
@@ -112,6 +112,13 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
     setSaveError(null);
     try {
       const result = await publishFile({ fileId });
+      // Saving only persists config.files — the connection's cached schema is
+      // still the pre-upload (empty) one and is marked "fresh" in Redux, so the
+      // context step's useConnections would skip the server fetch and show
+      // "No tables found". Force a refresh now so the loader re-introspects the
+      // newly uploaded files and the populated schema is in Redux before we
+      // advance. The "Fetching metadata..." progress bar covers this wait.
+      await reloadFile({ fileId: result.id, silent: true });
       const added = [...addedSchemasRef.current];
       // Fallback: if nothing tracked as new, pass all schemas
       const schemaNames = added.length > 0
@@ -173,6 +180,7 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
       ) : (
         <HStack justify="flex-end" pt={2}>
           <Button
+            aria-label="Save and continue"
             bg="accent.teal"
             color="white"
             _hover={{ opacity: 0.9 }}

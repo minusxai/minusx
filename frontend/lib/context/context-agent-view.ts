@@ -1,119 +1,120 @@
 // What the AGENT sees + may edit on a context file.
 //
-// A context carries server-COMPUTED fields the loader re-hydrates each read: `fullSchema` (the
-// resolved own schema = parentSchema ∩ own whitelist), `parentSchema` (the menu of what's available
-// to whitelist), and the inherited menus `fullDocs`/`fullMetrics`/`fullAnnotations`/`fullSkills`.
-// Dumping the whole schema cache (esp. `parentSchema` WITH columns) into the markup every turn is the
-// "too large / all sorts of issues" the user hit. These helpers shape the agent's VIEW and bound its
-// EDITS so it sees what it needs (current whitelist/docs + the available/inheritable menus) without
-// the columnar bulk, and edits only the authored fields.
+// A context is STORED version-based: { versions: [{ whitelist, docs, metrics, annotations, … }],
+// published, skills, evals } plus server-COMPUTED menus the loader re-hydrates each read
+// (fullSchema / parentSchema / fullDocs / fullMetrics / fullAnnotations / fullSkills). The version
+// machinery and the multi-MB schema cache are noise to the agent. These helpers project the live
+// (published) version's KNOWLEDGE LAYER (docs/metrics/annotations) + the content-level evals/skills
+// into a single FLAT working view — the surface the agent reads/edits as markup (schema =
+// ContextAgentContent) — and fold its edits back into the live version on the way out.
+//
+// The `whitelist` (which tables/columns are exposed) is intentionally NOT in the agent's view: it's
+// a human concern (the Databases-tab picker). The agent instead gets the resolved, already-
+// whitelisted schema as read-only app-state context and documents on top of it. The flat view is
+// symmetric across read (compressFileState / buildCurrentFileStr) and write (editFileStr) so an
+// oldMatch copied from one matches the other.
 
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { CONTEXT_BUDGETS } from '@/lib/context/context-budgets';
+import { getPublishedVersion } from '@/lib/context/context-utils';
+import type {
+  ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, Test,
+} from '@/lib/types';
 
-// Char budget governing how much of `parentSchema` (the menu of tables available to whitelist) the
-// agent's edit markup carries. Graceful degradation: under budget → full (with columns); over →
-// names only; still over → capped names + a SearchDBSchema note.
-const PARENT_SCHEMA_BUDGET_CHARS = CONTEXT_BUDGETS.contextParentSchemaChars;
+/**
+ * The live version for the agent: the published version, falling back to the first version when the
+ * published pointer is missing or points at a version that no longer exists ("none or all" → first).
+ */
+function liveVersion(content: ContextContent): ContextVersion | undefined {
+  const versions = content.versions;
+  if (!versions || versions.length === 0) return undefined;
+  const target = getPublishedVersion(content);
+  return versions.find((v) => v.version === target) ?? versions[0];
+}
 
-// Version fields the agent authors and may edit via EditFile.
-const EDITABLE_VERSION_FIELDS = ['whitelist', 'docs', 'metrics', 'annotations', 'description'] as const;
+/**
+ * Shape a context's stored content into the agent's FLAT working view:
+ *   - docs + metrics + annotations from the live version,
+ *   - evals + skills from the content level.
+ * ALL FIVE authored fields are ALWAYS present (defaulting to `[]` when absent) so the agent always
+ * sees the full surface it can author — an empty `metrics`/`annotations`/`skills`/`evals` renders as
+ * an empty `<tag/>`, signalling "you may add these" rather than vanishing.
+ * Everything else — the whitelist, versions[], published, the schedule/recipient eval-job fields, and
+ * the server-computed menus (fullSchema/parentSchema/full*) — is dropped: it's the human-managed
+ * whitelist, version bookkeeping, or re-derived on load, none of it agent-authored. Returns a fresh
+ * object; never mutates the input. No-op for non-context content (returned unchanged).
+ */
+export function shapeContextForAgent<T>(content: T): T {
+  if (!content || typeof content !== 'object') return content;
+  const c = content as unknown as ContextContent;
+  // Distinguish "a context" from arbitrary content: a context always carries versions/published.
+  if (!Array.isArray(c.versions) && c.published === undefined) return content;
+
+  const live = liveVersion(c);
+  const view: Record<string, unknown> = {
+    docs: live?.docs ?? [],
+    metrics: live?.metrics ?? [],
+    annotations: live?.annotations ?? [],
+    skills: c.skills ?? [],
+    evals: c.evals ?? [],
+  };
+  return view as T;
+}
+
+/**
+ * Fold an edited flat agent view back into the stored (version-based) content: the live version's
+ * authored knowledge fields (docs/metrics/annotations) and the content-level evals/skills are
+ * overwritten from `edited`; the version's whitelist, versions[], published, and every other stored
+ * field are preserved from `existing` (the whitelist isn't in the agent's view, so it's never
+ * touched). Only keys actually present in `edited` are applied, so an edit that touches one field
+ * leaves the rest of the live version intact. Mirrors {@link shapeContextForAgent}.
+ */
+export function foldContextAgentView(existing: unknown, edited: unknown): Record<string, unknown> {
+  const base = (existing && typeof existing === 'object' ? existing : {}) as ContextContent;
+  const e = (edited && typeof edited === 'object' ? edited : {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...(base as unknown as Record<string, unknown>) };
+
+  const versions = base.versions ?? [];
+  if (versions.length > 0) {
+    const target = getPublishedVersion(base);
+    let liveIdx = versions.findIndex((v) => v.version === target);
+    if (liveIdx < 0) liveIdx = 0;
+    const v: ContextVersion = { ...versions[liveIdx] };
+    if ('docs' in e) v.docs = (e.docs ?? []) as DocEntry[];
+    if ('metrics' in e) v.metrics = e.metrics as MetricDef[] | undefined;
+    if ('annotations' in e) v.annotations = e.annotations as TableAnnotation[] | undefined;
+    const next = versions.slice();
+    next[liveIdx] = v;
+    out.versions = next;
+  }
+  if ('skills' in e) out.skills = e.skills as SkillEntry[];
+  if ('evals' in e) out.evals = e.evals as Test[];
+  return out;
+}
+
 // Server-computed fields: re-derived on load, stripped on save — ignore them when bounding edits.
 const COMPUTED_CONTEXT_FIELDS = immutableSet([
   'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullSkills',
 ]);
-
-/**
- * Reduce a DatabaseWithSchema[] to a NAMES-ONLY table-of-contents (connection → schema → table, no
- * columns), capped to `budget` chars. Tables are kept in order until the budget is exhausted; schemas
- * (and connections) left with no kept tables are pruned. Returns the capped TOC plus total/kept table
- * counts so the caller can note when it truncated.
- */
-function capSchemaToc(schema: unknown[], budget: number): { capped: unknown[]; total: number; kept: number } {
-  let used = 0;
-  let total = 0;
-  let kept = 0;
-  let truncated = false;
-  const capped: unknown[] = [];
-  for (const db of schema) {
-    const d = db as { schemas?: unknown[] };
-    const keptSchemas: unknown[] = [];
-    for (const s of d.schemas ?? []) {
-      const sc = s as { tables?: { table: string }[] };
-      const keptTables: { table: string }[] = [];
-      for (const t of sc.tables ?? []) {
-        total++;
-        const cost = (t.table?.length ?? 0) + 2; // ~JSON quoting/comma overhead per name
-        if (!truncated && used + cost <= budget) {
-          keptTables.push({ table: t.table });
-          used += cost;
-          kept++;
-        } else {
-          truncated = true;
-        }
-      }
-      if (keptTables.length > 0) keptSchemas.push({ ...(s as object), tables: keptTables });
-    }
-    if (keptSchemas.length > 0) capped.push({ ...(db as object), schemas: keptSchemas });
-  }
-  return { capped, total, kept };
-}
-
-/**
- * Graceful degradation for `parentSchema` (the menu of tables available to whitelist) against a char
- * budget:
- *  1. fits as-is → keep it WITH columns (full fidelity — agent can document + whitelist without a
- *     SearchDBSchema round-trip),
- *  2. names-only fits → drop columns, keep every table name,
- *  3. still too big → cap the table names to the budget + a note pointing at SearchDBSchema.
- */
-function shapeParentSchema(parentSchema: unknown[], budget: number): { value: unknown[]; note?: string } {
-  if (JSON.stringify(parentSchema).length <= budget) return { value: parentSchema };
-  const namesOnly = capSchemaToc(parentSchema, Number.POSITIVE_INFINITY).capped;
-  if (JSON.stringify(namesOnly).length <= budget) return { value: namesOnly };
-  const { capped, total, kept } = capSchemaToc(parentSchema, budget);
-  return {
-    value: capped,
-    note: `Showing ${kept} of ${total} tables available to whitelist — the schema is too large to list in full. Use the SearchDBSchema tool to find any table not listed here.`,
-  };
-}
-
-/**
- * Shape a context's content for the agent's read/edit markup:
- *  - drop `fullSchema` (the RESOLVED own schema — derivable; it's a subset of `parentSchema`, and the
- *    whitelisted table list is already in the prompt schema every page gets),
- *  - degrade `parentSchema` (the available-to-whitelist menu) against a budget (see shapeParentSchema)
- *    — full with columns when small, names-only or capped when large; column detail otherwise comes
- *    on demand via SearchDBSchema,
- *  - keep the inherited menus (fullDocs/fullMetrics/fullAnnotations/fullSkills) so the agent knows
- *    what it can inherit, and the authored versions (whitelist/docs/…) it edits.
- * Returns a shallow clone; never mutates the input. No-op for non-context content.
- */
-export function shapeContextForAgent<T>(content: T): T {
-  if (!content || typeof content !== 'object') return content;
-  const out = { ...(content as Record<string, unknown>) };
-  if ('fullSchema' in out) delete out.fullSchema;
-  if (Array.isArray(out.parentSchema)) {
-    const { value, note } = shapeParentSchema(out.parentSchema, PARENT_SCHEMA_BUDGET_CHARS);
-    out.parentSchema = value;
-    if (note) out.parentSchemaNote = note;
-  }
-  return out as T;
-}
+// Version fields the agent authors (folded into the live version) — ignore when bounding edits.
+// `whitelist` is NOT here: it's not in the agent's view, so the guard treats any whitelist change as
+// out of bounds (the fold preserves it, so a legitimate edit never trips this).
+const EDITABLE_VERSION_FIELDS = immutableSet(['docs', 'metrics', 'annotations']);
+// Content-level fields the agent authors — ignore when bounding edits.
+const EDITABLE_CONTENT_FIELDS = immutableSet(['evals', 'skills']);
 
 /** Drop the editable + computed fields, leaving only the fields an EditFile must NOT touch. */
 function contextEditInvariant(content: unknown): unknown {
   if (!content || typeof content !== 'object') return content;
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(content as Record<string, unknown>)) {
-    if (COMPUTED_CONTEXT_FIELDS.has(k) || k === 'docs') continue; // computed (ignored) + legacy top-level docs (editable)
-    out[k] = v;
+  for (const [k, val] of Object.entries(content as Record<string, unknown>)) {
+    if (COMPUTED_CONTEXT_FIELDS.has(k) || EDITABLE_CONTENT_FIELDS.has(k) || k === 'docs') continue;
+    out[k] = val;
   }
   if (Array.isArray(out.versions)) {
     out.versions = (out.versions as Record<string, unknown>[]).map((v) => {
       const vv: Record<string, unknown> = {};
       for (const [k, val] of Object.entries(v)) {
-        if ((EDITABLE_VERSION_FIELDS as readonly string[]).includes(k)) continue;
+        if (EDITABLE_VERSION_FIELDS.has(k)) continue;
         vv[k] = val;
       }
       return vv;
@@ -123,9 +124,10 @@ function contextEditInvariant(content: unknown): unknown {
 }
 
 /**
- * True if an EditFile on a context changed ONLY a version's authored fields (whitelist, docs,
- * metrics, annotations, description). Version identity and the published pointer must be unchanged;
- * the server-computed menus are ignored (re-derived on load, so round-trip noise never false-rejects).
+ * True if an EditFile on a context changed ONLY the authored fields — the live version's
+ * whitelist/docs/metrics/annotations and the content-level evals/skills. Version identity and the
+ * published pointer must be unchanged; the server-computed menus are ignored (re-derived on load, so
+ * round-trip noise never false-rejects). Safety net atop the fold, which preserves structure anyway.
  */
 export function contextEditWithinBounds(before: unknown, after: unknown): boolean {
   return JSON.stringify(contextEditInvariant(before)) === JSON.stringify(contextEditInvariant(after));

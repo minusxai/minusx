@@ -1113,36 +1113,21 @@ describe('CreateFile tool - content validation', () => {
 describe('EditFile - Context post-edit guard', () => {
   let contextId: number;
 
-  // Markup note: context content is projected to schemaless keyvalue XML, where an
-  // empty array round-trips to "" (an empty `<tag/>`). The post-edit guard diffs the
-  // pre-edit (typed) content against the post-edit (markup-round-tripped) content, so
-  // empty `whitelist` arrays would spuriously read as a non-docs change. Populating the
-  // whitelist arrays keeps them round-tripping as arrays, so the guard only fires on a
-  // genuine non-docs edit.
+  // Context content is stored version-based, but the agent reads/edits a FLAT view of the live
+  // version (shapeContextForAgent): docs/whitelist/metrics/annotations/skills/evals at the top
+  // level. Version bookkeeping (versions/published) and the computed schema cache are NOT in the
+  // markup, so they can't be edited; edits fold back into the live version (foldContextAgentView).
   const contextContent = {
     versions: [{
       version: 1,
-      whitelist: { databases: [{ databaseName: 'test_db', whitelist: ['orders'] }] },
-      docs: [{ content: '# Original doc', draft: false }],
+      whitelist: [{ name: 'test_db', type: 'connection', children: [{ name: 'public', type: 'schema', children: [{ name: 'orders', type: 'table' }] }] }],
+      docs: [{ content: '# Original doc', title: 'Doc', description: 'a doc', draft: false }],
+      metrics: [{ name: 'Revenue', sql: 'SUM(orders.amount)' }],
       description: 'v1 notes',
       createdAt: new Date().toISOString(),
       createdBy: 1,
     }],
     published: { all: 1 },
-    databases: [{ databaseName: 'test_db', whitelist: ['orders'] }],
-    docs: [{ content: '# Original doc', draft: false }],
-  };
-
-  // Markup note: the context loader injects derived, always-empty arrays
-  // (fullAnnotations/fullDocs/fullMetrics/fullSchema/fullSkills/parentSchema) into the
-  // loaded content. Schemaless keyvalue markup round-trips an empty array to "" (an empty
-  // `<tag/>` parses back as empty text), which the post-edit guard would read as a non-docs
-  // change. Dropping those `<tag/>` lines from the markup means the parsed content omits the
-  // keys, so editFileStr's merge preserves the original [] values — the guard then only
-  // fires on a genuine non-docs edit. Prepend this change to doc-only ("allows") edits.
-  const dropDerivedArrays = {
-    oldMatch: '<fullAnnotations/>\n<fullDocs/>\n<fullMetrics/>\n<fullSchema/>\n<fullSkills/>\n<parentSchema/>\n',
-    newMatch: '',
   };
 
   function makeEditToolCall(args: Record<string, unknown>) {
@@ -1198,38 +1183,7 @@ describe('EditFile - Context post-edit guard', () => {
     const result = await executeToolCall(
       makeEditToolCall({
         fileId: contextId,
-        changes: [dropDerivedArrays, { oldMatch: '# Original doc', newMatch: '# Updated doc with new info' }],
-      }),
-    );
-    expect(result.details?.success).toBe(true);
-  });
-
-  it('allows adding a new doc entry', async () => {
-    await readFiles([contextId]);
-    const result = await executeToolCall(
-      makeEditToolCall({
-        fileId: contextId,
-        changes: [dropDerivedArrays, {
-          // Append a second <item> inside the versions[].docs block (both the
-          // versions[].docs and the top-level docs[] are exempt from the post-edit guard).
-          oldMatch: '<content># Original doc</content>\n        <draft type="boolean">false</draft>\n      </item>',
-          newMatch: '<content># Original doc</content>\n        <draft type="boolean">false</draft>\n      </item>\n      <item>\n        <content># New doc</content>\n        <draft type="boolean">true</draft>\n      </item>',
-        }],
-      }),
-    );
-    expect(result.details?.success).toBe(true);
-  });
-
-  it('allows removing a doc entry', async () => {
-    await readFiles([contextId]);
-    const result = await executeToolCall(
-      makeEditToolCall({
-        fileId: contextId,
-        changes: [dropDerivedArrays, {
-          // Empty the top-level docs block (versions[].docs and top-level docs are exempt).
-          oldMatch: '<docs>\n  <item>\n    <content># Original doc</content>\n    <draft type="boolean">false</draft>\n  </item>\n</docs>',
-          newMatch: '<docs/>',
-        }],
+        changes: [{ oldMatch: '# Original doc', newMatch: '# Updated doc with new info' }],
       }),
     );
     expect(result.details?.success).toBe(true);
@@ -1240,54 +1194,58 @@ describe('EditFile - Context post-edit guard', () => {
     const result = await executeToolCall(
       makeEditToolCall({
         fileId: contextId,
-        changes: [dropDerivedArrays, {
-          oldMatch: '<draft type="boolean">false</draft>',
-          newMatch: '<draft type="boolean">true</draft>',
-        }],
+        changes: [{ oldMatch: '<draft>false</draft>', newMatch: '<draft>true</draft>' }],
       }),
     );
     expect(result.details?.success).toBe(true);
   });
 
-  it('allows editing a version description (authored, non-doc field)', async () => {
+  it('cannot edit the whitelist — it is human-managed, not in the agent surface', async () => {
+    await readFiles([contextId]);
+    // The whitelist (connection 'test_db') is not projected into the agent's markup at all.
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{ oldMatch: '"test_db"', newMatch: '"prod_db"' }],
+      }),
+    );
+    expect(result.details?.success).toBe(false);
+    expect(result.details?.error).toMatch(/not found/i);
+  });
+
+  it('allows editing metrics', async () => {
     await readFiles([contextId]);
     const result = await executeToolCall(
       makeEditToolCall({
         fileId: contextId,
-        changes: [{ oldMatch: '<description>v1 notes</description>', newMatch: '<description>updated notes</description>' }],
+        changes: [{ oldMatch: '<name>Revenue</name>', newMatch: '<name>Total Revenue</name>' }],
       }),
     );
     expect(result.details?.success).toBe(true);
   });
 
-  it('rejects editing databases field', async () => {
+  it('cannot edit the published pointer — it is not in the agent surface', async () => {
     await readFiles([contextId]);
     const result = await executeToolCall(
       makeEditToolCall({
         fileId: contextId,
-        changes: [{
-          oldMatch: '<databaseName>test_db</databaseName>',
-          newMatch: '<databaseName>hacked_db</databaseName>',
-        }],
+        changes: [{ oldMatch: '<published>', newMatch: '<published x>' }],
       }),
     );
     expect(result.details?.success).toBe(false);
-    expect(result.details?.error).toMatch(/can only change/);
+    expect(result.details?.error).toMatch(/not found/i);
   });
 
-  it('rejects editing published field', async () => {
+  it('cannot edit version identity — versions[] is not in the agent surface', async () => {
     await readFiles([contextId]);
     const result = await executeToolCall(
       makeEditToolCall({
         fileId: contextId,
-        changes: [{
-          oldMatch: '<published>\n  <all type="number">1</all>\n</published>',
-          newMatch: '<published>\n  <all type="number">99</all>\n</published>',
-        }],
+        changes: [{ oldMatch: '<versions>', newMatch: '<versions x>' }],
       }),
     );
     expect(result.details?.success).toBe(false);
-    expect(result.details?.error).toMatch(/can only change/);
+    expect(result.details?.error).toMatch(/not found/i);
   });
 });
 

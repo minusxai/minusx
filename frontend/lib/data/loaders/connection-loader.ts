@@ -67,6 +67,11 @@ const loadConnectionSchema: CustomLoader = async (file: DbFile, _user: Effective
 
   const content = file.content as ConnectionContent;
 
+  // A present (even empty) schemas array counts as cached — serve it with stale-while-revalidate.
+  // The "empty after upload" case is handled at the source: StepStaticUpload force-reloads the
+  // connection with { refresh: true } after publishing, which always re-introspects (see the
+  // `options.refresh` branch below) — so we don't pay a blocking introspection on every plain load
+  // of a genuinely table-less connection.
   const hasSchema = content.schema && content.schema.schemas;
   const hasTimestamp = content.schema?.updated_at;
   // If no timestamp, schema is from old version (pre-migration) - treat as stale

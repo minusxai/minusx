@@ -10,6 +10,7 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { setFile } from '@/store/filesSlice';
 import CodeView from '@/components/views/CodeView';
+import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 
 const FILE_ID = 4242;
 
@@ -125,24 +126,70 @@ describe('CodeView', () => {
     expect(json.readOnly).toBe(false);
   });
 
-  it('hides omitKeys from both the JSON and XML views', () => {
+  it('JSON tab hides omitKeys but keeps the real (version-based) file', () => {
     const store = setupContext();
     const omit = ['fullSchema', 'parentSchema', 'fullDocs'];
     renderWithProviders(
-      <CodeView fileId={CTX_ID} fileType="context" editable omitKeys={omit} />, { store },
+      <CodeView fileId={CTX_ID} fileType="context" editable omitKeys={omit} xmlContentTransform={shapeContextForAgent} />, { store },
     );
 
+    // JSON tab: the real saved file, minus the loader-computed keys.
     const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(json.value).toContain('"versions"');
     expect(json.value).not.toContain('fullSchema');
     expect(json.value).not.toContain('parentSchema');
     expect(json.value).not.toContain('fullDocs');
 
-    fireEvent.click(screen.getByLabelText('XML'));
+    // Agent XML tab (agent view): flat, no version wrapper, no computed cache.
+    fireEvent.click(screen.getByLabelText('Agent XML'));
     const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
-    expect(xml.value).toContain('<versions');
+    expect(xml.value).not.toContain('<versions');
     expect(xml.value).not.toContain('fullSchema');
     expect(xml.value).not.toContain('parentSchema');
+  });
+
+  it('shows three stages for context: File JSON, Agent JSON, and Agent XML', () => {
+    // Stored file is version-based with a live-version doc; the agent sees the FLATTENED view.
+    const store = storeModule.makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+    store.dispatch(setFile({
+      file: {
+        ...makeContextDbFile(),
+        content: {
+          published: { all: 1 },
+          versions: [{ version: 1, whitelist: [{ name: 'db', type: 'connection' }], docs: [{ content: '# Live doc', title: 'D', description: 'd' }], createdAt: 'x', createdBy: 1 }],
+          fullSchema: [{ databaseName: 'db', schemas: [] }],
+        } as Record<string, unknown>,
+      } as never,
+      references: [],
+    }));
+
+    renderWithProviders(
+      <CodeView fileId={CTX_ID} fileType="context" omitKeys={['fullSchema', 'parentSchema', 'fullDocs']} xmlContentTransform={shapeContextForAgent} />,
+      { store },
+    );
+
+    // 1) File JSON — the real saved file (version-based), minus the loader-computed keys.
+    const fileJson = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
+    expect(fileJson.value).toContain('"versions"');
+    expect(fileJson.value).not.toContain('fullSchema');
+
+    // 2) Agent JSON — the flattened view (docs at top level, no version wrapper / whitelist).
+    fireEvent.click(screen.getByLabelText('Agent JSON'));
+    const agentJson = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
+    expect(agentJson.value).toContain('"docs"');
+    expect(agentJson.value).toContain('# Live doc');
+    expect(agentJson.value).not.toContain('versions');
+    expect(agentJson.value).not.toContain('whitelist');
+
+    // 3) Agent XML — fileToMarkup of that same agent view.
+    fireEvent.click(screen.getByLabelText('Agent XML'));
+    const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
+    expect(xml.value).toContain('<docs>');
+    expect(xml.value).toContain('# Live doc');
+    expect(xml.value).not.toContain('<versions');
+    expect(xml.value).not.toContain('<published');
+    expect(xml.value).not.toContain('<whitelist');
   });
 
   it('preserves omitKeys when the trimmed JSON is edited', () => {

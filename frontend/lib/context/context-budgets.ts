@@ -48,14 +48,6 @@ export const CONTEXT_BUDGETS = {
   schemaNotesChars: 20000,
 
   /**
-   * Max characters of a context's `parentSchema` (the menu of tables available to
-   * whitelist) shown in the agent's edit markup. Graceful degradation by
-   * `shapeContextForAgent`: under budget → keep tables WITH columns; over →
-   * names only; still over → cap table names + a "use SearchDBSchema" note.
-   */
-  contextParentSchemaChars: 20000,
-
-  /**
    * Inline EVERY context doc when there are fewer than this many; at/above it,
    * non-`alwaysInclude` docs move to the lazy "Context Library" catalog (fetched
    * on demand via LoadContext). Applied by `formatContextDocsSection`.

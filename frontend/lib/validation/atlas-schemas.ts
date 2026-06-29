@@ -435,6 +435,75 @@ export const NotebookContent = Type.Object({
 export type NotebookContent = Static<typeof NotebookContent>;
 
 // ============================================================================
+// Context Content — the AGENT's flattened, editable view of a context
+// ============================================================================
+// This is NOT the stored context shape (which is version-based — see ContextContent
+// in lib/types.ts, with versions[]/published). It is the KNOWLEDGE LAYER the agent
+// authors: the live (published) version's docs/metrics/annotations flattened to the top
+// level, plus the content-level evals/skills. The flatten (on read) and fold (on edit,
+// back into versions[live]) live in lib/context/context-agent-view.ts.
+//
+// Schema whitelisting (which tables/columns are exposed) is deliberately ABSENT: it's a
+// human concern managed in the Databases tab, not something the agent edits. The agent
+// instead receives the resolved (already-whitelisted) schema as read-only app-state
+// context and documents on top of it.
+//
+// `evals` is modelled as opaque (described) values so the schema-driven markup renders
+// each via the JSON escape hatch — an eval is a discriminated Test union that round-trips
+// losslessly as JSON without a brittle nested-tag projection.
+
+const CtxDocEntry = Type.Object({
+  content: Type.String({ description: 'Markdown documentation content' }),
+  title: Nullable(Type.String({ description: 'short human-readable title; required to save a non-draft doc' })),
+  description: Nullable(Type.String({ description: 'one-line summary; required to save a non-draft doc' })),
+  childPaths: Nullable(Type.Array(Type.String(), { description: 'child context paths that inherit this doc' })),
+  draft: Nullable(Type.Boolean({ description: 'if true, hidden from the agent until activated' })),
+  alwaysInclude: Nullable(Type.Boolean({ description: 'if true, stays inline in the prompt every turn; otherwise lazy-loaded on demand via LoadContext' })),
+}, { title: 'ContextDocEntry' });
+
+const CtxMetricDef = Type.Object({
+  name: Type.String(),
+  description: Nullable(Type.String()),
+  sql: Nullable(Type.String()),
+  connection: Nullable(Type.String({ description: "owning table's connection (database) name" })),
+  schema: Nullable(Type.String({ description: "owning table's schema" })),
+  table: Nullable(Type.String({ description: 'owning table name' })),
+}, { title: 'ContextMetricDef' });
+
+const CtxColumnAnnotation = Type.Object({
+  name: Type.String(),
+  description: Nullable(Type.String()),
+}, { title: 'ContextColumnAnnotation' });
+
+const CtxTableAnnotation = Type.Object({
+  connection: Nullable(Type.String({ description: 'connection (database) name — disambiguates the same schema.table across connections' })),
+  schema: Type.String(),
+  table: Type.String(),
+  description: Nullable(Type.String()),
+  columns: Nullable(Type.Array(CtxColumnAnnotation)),
+}, { title: 'ContextTableAnnotation' });
+
+const CtxSkillEntry = Type.Object({
+  name: Type.String(),
+  description: Type.String(),
+  content: Type.String(),
+  enabled: Type.Boolean(),
+  createdAt: Type.String(),
+  updatedAt: Type.String(),
+  createdBy: Type.Integer(),
+}, { title: 'ContextSkillEntry' });
+
+export const ContextAgentContent = Type.Object({
+  docs: Type.Array(CtxDocEntry, { description: 'documentation entries the agent authors for this context' }),
+  metrics: Nullable(Type.Array(CtxMetricDef, { description: 'named metrics attached to tables' })),
+  annotations: Nullable(Type.Array(CtxTableAnnotation, { description: 'editorial table/column descriptions' })),
+  skills: Nullable(Type.Array(CtxSkillEntry, { description: 'user-defined skills available in this context' })),
+  evals: Nullable(Type.Array(Type.Unknown(), { description:
+    'eval test definitions for this context (each an opaque Test object: { type, subject, answerType, operator, value })' })),
+}, { title: 'ContextContent' });
+export type ContextAgentContent = Static<typeof ContextAgentContent>;
+
+// ============================================================================
 // Top-level discriminated file models
 // ============================================================================
 

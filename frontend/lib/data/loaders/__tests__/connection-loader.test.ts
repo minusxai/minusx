@@ -222,6 +222,39 @@ describe('connectionLoader — stale or missing schema', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Empty cached schemas — an empty array is NOT a usable schema (first upload)
+// ---------------------------------------------------------------------------
+
+describe('connectionLoader — empty cached schemas', () => {
+  // An empty-but-fresh cached schema is served as-is (stale-while-revalidate); we deliberately do
+  // NOT block on introspection for every plain load of a table-less connection (that would re-
+  // introspect forever, since the result stays empty). The "empty after upload" bug is fixed at the
+  // source: StepStaticUpload force-reloads with { refresh: true } after publish (see
+  // static-upload-refresh.ui.test.tsx), and explicit refresh always re-introspects (next test).
+  it('serves an empty fresh cached schema without blocking on introspection', async () => {
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
+    const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
+    const file = await createConnection('conn_empty_fresh', '/org/database/conn_empty_fresh', emptySchema);
+
+    const result = await connectionLoader(file!, testUser);
+
+    expect(mockGetSchema).not.toHaveBeenCalled();
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual([]);
+  });
+
+  it('force-introspects an empty cached schema on explicit refresh (the upload-fix path)', async () => {
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
+    const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
+    const file = await createConnection('conn_empty_refresh', '/org/database/conn_empty_refresh', emptySchema);
+
+    const result = await connectionLoader(file!, testUser, { refresh: true });
+
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Error fallback behaviour
 // ---------------------------------------------------------------------------
 

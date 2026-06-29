@@ -257,52 +257,28 @@ templates:
         - `type: "question"`: user is editing an existing question from the dashboard. EditFile it directly.
         - `type: "create-question"`: a new draft question is open. EditFile to set the query/name/viz. Do NOT call CreateFile and do NOT manually add it to the dashboard — the user clicks 'Add' in the modal.
   skill_contexts:
-    description: Context file structure (versions, docs, databases), context page behavior guidelines — editing docs only
+    description: Context file structure (docs, metrics, annotations, skills, evals), context page behavior guidelines
     content: |
       ## Instructions: Contexts
 
+      A context is the KNOWLEDGE LAYER for a folder's data: documentation, metric definitions, table/column annotations, skills, and evals. You author that knowledge on top of the schema. You do NOT control which tables/columns are exposed — that whitelisting is managed by users in the Databases tab. The tables you can document are exactly the ones already resolved into your app-state schema.
+
       ### File Structure
-      The content is read and edited as markup (see the EditFile tool for the markup format). Example context markup:
-      ```xml
-      <versions>
-        <item>
-          <version type="number">1</version>
-          <databases/>
-          <docs>
-            <item>
-              <content>{`# Metric Definitions
-
-      Revenue = ...`}</content>
-              <childPaths>
-                <item>/org/sales</item>
-              </childPaths>
-              <draft type="boolean">false</draft>
-            </item>
-            <item>
-              <content>{`# Conventions
-
-      All dates in UTC`}</content>
-            </item>
-          </docs>
-          <createdAt>2024-01-15T10:30:00Z</createdAt>
-          <createdBy type="number">1</createdBy>
-        </item>
-      </versions>
-      <published>
-        <all type="number">1</all>
-      </published>
+      The content is read and edited as markup (see the EditFile tool for the markup format). You see and edit a FLAT view of the context's CURRENTLY-LIVE version — version bookkeeping (`versions`, `published`) and the whitelist/schema cache are hidden; your edits are folded back into the live version automatically. The content schema is:
+      ```json
+      {schema_context}
       ```
-      - Context files define schema whitelisting (`databases`) and documentation (`docs`) for a folder
-      - **You can ONLY edit the `content` field of doc entries within versions** — do NOT modify `databases`, `whitelist`, `published`, `evals`, `fullSchema`, `childPaths`, or `draft`
-      - Each doc entry has: `content` (markdown text), optional `childPaths` (which child folders inherit this doc), optional `draft` (if true, excluded from agent-facing output). Only `content` is editable.
-      - To edit docs, use EditFile with oldMatch/newMatch targeting the text inside a doc's `<content>` element
+      The top-level fields you read/edit:
+      - `docs` — documentation entries (markdown `content` + `title`/`description`; optional `childPaths` for which child folders inherit the doc, `draft` to hide it until ready).
+      - `metrics`, `annotations` — named metrics and editorial table/column descriptions.
+      - `skills`, `evals` — user-defined skills and eval test definitions.
 
       ### Context Page Behavior
-      - You can ONLY edit the `content` field of documentation entries (`docs[].content` within versions). Do NOT attempt to modify `databases`, `whitelist`, `published`, `evals`, `childPaths`, `draft`, or any other fields — those changes will be rejected.
-      - Context files can be edited from any page. During onboarding, a new empty doc entry is appended to the end of the docs array — write your documentation into that last entry.
-      - Typical requests: add/edit/remove documentation entries, improve metric definitions, add conventions, fix typos in existing docs.
-      - Use EditFile to modify doc content. Match the text inside a doc's `<content>` element, not the surrounding markup structure.
-      - The `docs` array is inside the active version object in `versions`. Match text inside the doc's `<content>` element.
+      - You may edit any of the fields above (docs, metrics, annotations, skills, evals); they fold into the live version on save. Use EditFile with oldMatch/newMatch.
+      - For documentation edits, match the text inside a doc's `<content>` element, not the surrounding markup structure.
+      - Context files can be edited from any page. During onboarding, a new empty doc entry is appended to the end of the `docs` array — write your documentation into that last entry.
+      - Typical requests: add/edit/remove documentation entries, improve metric definitions, add table/column annotations, add conventions, fix typos.
+      - You CANNOT change schema whitelisting — if a table you need isn't in your app-state schema, tell the user to add it in the Databases tab rather than trying to edit it here.
 
       ### Writing Great Context Docs
       Good context docs are grounded in the ACTUAL schema and help future agents map business questions to real columns:
@@ -311,6 +287,7 @@ templates:
       - Capture the non-obvious: table grain, important joins/keys, the filters that define "valid" rows, and unit/timezone/currency conventions. Don't restate column types (the schema already has those) — add the business meaning.
       - Prefer concrete examples over vague prose, and keep it scannable.
       - Note: users can also manage structured table/column descriptions and metrics in the context's Databases tab. When those exist, reference metrics by name instead of duplicating them.
+      - ALWAYS write appropriate title and description for each doc entry. The title and description are used in the context library for search and discovery. They should be concise, scannable, and informative. The title should be a short phrase (not a full sentence), and the description should be a 1-2 sentence summary of the doc's content.
   skill_reports:
     description: Dealing with report files — freeform reportPrompt with @ mentions, schedule, recipients, report page behavior guidelines
     content: |
@@ -1088,6 +1065,7 @@ prompts:
       - You DO NOT need to write about number of rows, actual ranges of values or datetimes etc since that can change frequently and isn't as important for understanding the structure of the data.
       - But if a particular column looks interesting (e.g., a `status` column with a limited set of values), it's worth running a quick query to check out the distinct values and including that in the doc.
       - In the end, no need to write a summary of what you wrote via EditFile - the user can see the final markdown in the context file. You can just end with a helpful sentence or two about what the user can ask based on the schema. For example, "I've added the context! You can ask questions about customer behavior, product performance, and sales trends based on the tables and columns in this database."
+      - You must add an appropriate title and description to the doc entry. The title and description will be used in the context library for search and discovery, so make them clear and concise.
       - You have at most {max_steps} tool calls. Be efficient.
     user: |
       <AppState>{app_state}</AppState>

@@ -23,6 +23,7 @@ import { serializeDatabases, parseDatabasesYaml, canDeleteVersion, countResolved
 import SchemaTreeView, { type WhitelistItem } from '../SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
 import { isDocContentOverLimit } from '@/lib/context/context-budgets';
+import { shapeContextForAgent } from '@/lib/context/context-agent-view';
 import { anyDocMetaIncomplete } from '@/lib/context/doc-validation';
 import { Checkbox } from '@/components/ui/checkbox';
 import Editor from '@monaco-editor/react';
@@ -877,14 +878,17 @@ export default function ContextEditorV2({
 
       {/* Code view (whole-file JSON + agent XML) replaces the picker tabs when toggled. */}
       {activeTab === 'yaml' && file?.id !== undefined ? (
-        // Hide loader-computed, inherited fields (fullSchema/parentSchema/fullDocs) — they're
-        // derived, not authored — so the Code view shows just the editable content. They're
-        // preserved on save (CodeView merges them back).
+        // JSON tab: the real saved file (version-based), minus ALL loader-computed `full*`/parent
+        // fields — derived, not authored, stripped on save — so it shows the true persisted content.
+        // XML tab: EXACTLY what the agent sees — the flattened live-version knowledge view
+        // (shapeContextForAgent), which differs from the saved JSON. Context is the one type
+        // where the file-on-disk and the agent's view diverge.
         <CodeView
           fileId={file.id}
           fileType="context"
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullSkills', 'fullAnnotations', 'fullMetrics']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullSkills']}
+          xmlContentTransform={shapeContextForAgent}
         />
       ) : (
       <Tabs.Root
