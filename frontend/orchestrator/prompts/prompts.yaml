@@ -270,6 +270,8 @@ templates:
           <databases/>
           <docs>
             <item>
+              <title>Title of the doc</title>
+              <description>Description of the doc</description>  
               <content>{`# Metric Definitions
 
       Revenue = ...`}</content>
@@ -311,6 +313,7 @@ templates:
       - Capture the non-obvious: table grain, important joins/keys, the filters that define "valid" rows, and unit/timezone/currency conventions. Don't restate column types (the schema already has those) — add the business meaning.
       - Prefer concrete examples over vague prose, and keep it scannable.
       - Note: users can also manage structured table/column descriptions and metrics in the context's Databases tab. When those exist, reference metrics by name instead of duplicating them.
+      - ALWAYS write appropriate title and description for each doc entry. The title and description are used in the context library for search and discovery. They should be concise, scannable, and informative. The title should be a short phrase (not a full sentence), and the description should be a 1-2 sentence summary of the doc's content.
   skill_reports:
     description: Dealing with report files — freeform reportPrompt with @ mentions, schedule, recipients, report page behavior guidelines
     content: |
