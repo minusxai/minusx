@@ -35,6 +35,9 @@ function liveVersion(content: ContextContent): ContextVersion | undefined {
  * Shape a context's stored content into the agent's FLAT working view:
  *   - docs + metrics + annotations from the live version,
  *   - evals + skills from the content level.
+ * ALL FIVE authored fields are ALWAYS present (defaulting to `[]` when absent) so the agent always
+ * sees the full surface it can author — an empty `metrics`/`annotations`/`skills`/`evals` renders as
+ * an empty `<tag/>`, signalling "you may add these" rather than vanishing.
  * Everything else — the whitelist, versions[], published, the schedule/recipient eval-job fields, and
  * the server-computed menus (fullSchema/parentSchema/full*) — is dropped: it's the human-managed
  * whitelist, version bookkeeping, or re-derived on load, none of it agent-authored. Returns a fresh
@@ -49,11 +52,11 @@ export function shapeContextForAgent<T>(content: T): T {
   const live = liveVersion(c);
   const view: Record<string, unknown> = {
     docs: live?.docs ?? [],
+    metrics: live?.metrics ?? [],
+    annotations: live?.annotations ?? [],
+    skills: c.skills ?? [],
+    evals: c.evals ?? [],
   };
-  if (live?.metrics !== undefined) view.metrics = live.metrics;
-  if (live?.annotations !== undefined) view.annotations = live.annotations;
-  if (c.skills !== undefined) view.skills = c.skills;
-  if (c.evals !== undefined) view.evals = c.evals;
   return view as T;
 }
 

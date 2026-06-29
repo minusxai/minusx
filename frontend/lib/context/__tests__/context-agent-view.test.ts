@@ -38,10 +38,16 @@ const ctx = () => ({
 describe('shapeContextForAgent — flatten to the live version', () => {
   it('exposes only the flat knowledge view; drops whitelist/versions/published/computed', () => {
     const shaped: any = shapeContextForAgent(ctx());
-    expect(Object.keys(shaped).sort()).toEqual(['annotations', 'docs', 'evals', 'metrics', 'skills'].filter(k => k in shaped).sort());
+    expect(Object.keys(shaped).sort()).toEqual(['annotations', 'docs', 'evals', 'metrics', 'skills']);
     for (const noise of ['whitelist', 'versions', 'published', 'fullSchema', 'parentSchema', 'fullDocs']) {
       expect(noise in shaped).toBe(false);
     }
+  });
+
+  it('always exposes all five authored fields, defaulting absent ones to [] (discoverable surface)', () => {
+    const minimal = { versions: [{ version: 1, whitelist: [], docs: [], createdAt: 't', createdBy: 1 }], published: { all: 1 } };
+    const shaped: any = shapeContextForAgent(minimal);
+    expect(shaped).toEqual({ docs: [], metrics: [], annotations: [], skills: [], evals: [] });
   });
 
   it('flattens the LIVE (published) version, not the first', () => {

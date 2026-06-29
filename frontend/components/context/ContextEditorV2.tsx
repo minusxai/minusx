@@ -878,8 +878,8 @@ export default function ContextEditorV2({
 
       {/* Code view (whole-file JSON + agent XML) replaces the picker tabs when toggled. */}
       {activeTab === 'yaml' && file?.id !== undefined ? (
-        // JSON tab: the real saved file (version-based), minus loader-computed fields
-        // (fullSchema/parentSchema/fullDocs) — derived, not authored, preserved on save.
+        // JSON tab: the real saved file (version-based), minus ALL loader-computed `full*`/parent
+        // fields — derived, not authored, stripped on save — so it shows the true persisted content.
         // XML tab: EXACTLY what the agent sees — the flattened live-version knowledge view
         // (shapeContextForAgent), which differs from the saved JSON. Context is the one type
         // where the file-on-disk and the agent's view diverge.
@@ -887,7 +887,7 @@ export default function ContextEditorV2({
           fileId={file.id}
           fileType="context"
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullSkills']}
           xmlContentTransform={shapeContextForAgent}
         />
       ) : (
