@@ -138,16 +138,19 @@ function compressFileState(fs: FileState): CompressedFileState {
     delete (mergedContent as any).cellResults;
   }
   // Context files: the agent edits whitelist/docs/etc. — it does NOT need the heavy server-computed
-  // schema cache dumped inline. shapeContextForAgent drops the resolved `fullSchema` and reduces
-  // `parentSchema` (the available-to-whitelist menu) to names-only; column detail comes from
-  // SearchDBSchema. Applied to the agent's MARKUP only — `content` stays full for client rendering.
+  // schema cache. shapeContextForAgent drops the resolved `fullSchema` and degrades `parentSchema`
+  // (the available-to-whitelist menu) to names/capped; column detail comes from SearchDBSchema.
+  // Applied to BOTH `markup` AND `content`: a context's content is never used for the client-side
+  // chart/param rendering the raw `content` is otherwise kept for, so shaping it here also keeps the
+  // multi-MB schema cache off the wire when this AppState is sent to chat (it's a no-op for other
+  // types, whose `content` stays full).
   const agentContent = fs.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
   return {
     id: fs.id,
     name: fs.metadataChanges?.name ?? fs.name,
     path: fs.metadataChanges?.path ?? fs.path,
     type: fs.type as FileType,
-    content: mergedContent,
+    content: agentContent,
     isDirty,
     ...(queryResultId ? { queryResultId } : {}),
     // File Architecture v2: the markup the agent reads + edits (matches buildCurrentFileStr).
