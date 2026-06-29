@@ -180,6 +180,41 @@ export function stripAugmentedContentForLlm(aug: CompressedAugmentedFile): Compr
   };
 }
 
+// A current client shapes a context's markup to tens of KB (shapeContextForAgent). Anything far
+// above that is a STALE client (pre-shaping bundle) shipping the raw multi-MB schema cache — exactly
+// what OOM'd the server. Re-shape only those, so the normal path is byte-for-byte untouched.
+const MAX_CONTEXT_MARKUP_CHARS = 200_000;
+
+/**
+ * SERVER-SIDE defense-in-depth: never let a pathologically large context reach the orchestrator,
+ * regardless of the client's bundle version. For each context fileState in an AppState whose markup
+ * is oversized, strip the schema cache from its content (shapeContextForAgent) and re-derive the
+ * markup from that. Mutates the (freshly-parsed) appState in place. No-op for normal/oversize-free
+ * appstates, non-context files, and non-file pages — so it can't regress the common path.
+ */
+export function boundContextAppState(appState: unknown): void {
+  const a = appState as { type?: string; state?: { fileState?: unknown; references?: unknown[] }; ui?: { openModal?: { fileState?: unknown } } };
+  if (!a || typeof a !== 'object' || a.type !== 'file' || !a.state || typeof a.state !== 'object') return;
+  const fix = (fsUnknown: unknown) => {
+    const fs = fsUnknown as { type?: string; content?: unknown; markup?: unknown };
+    if (!fs || typeof fs !== 'object' || fs.type !== 'context') return;
+    if (typeof fs.markup !== 'string' || fs.markup.length <= MAX_CONTEXT_MARKUP_CHARS) return;
+    fs.content = shapeContextForAgent(fs.content ?? {});
+    let markup = fileToMarkup('context', fs.content);
+    // Hard cap: shaping handles the normal big-connection case cleanly, but a pathological structure
+    // (e.g. thousands of separate connections) can still exceed the budget via per-node overhead.
+    // Truncate as a last resort so the orchestrator can NEVER be handed an unbounded context markup.
+    if (markup.length > MAX_CONTEXT_MARKUP_CHARS) {
+      const note = '\n<!-- context schema truncated (too large); use SearchDBSchema to explore -->';
+      markup = markup.slice(0, MAX_CONTEXT_MARKUP_CHARS - note.length) + note;
+    }
+    fs.markup = markup;
+  };
+  fix(a.state.fileState);
+  if (Array.isArray(a.state.references)) a.state.references.forEach(fix);
+  if (a.ui?.openModal?.fileState) fix(a.ui.openModal.fileState);
+}
+
 /**
  * Compress an AugmentedFile (Redux FileState + references + queryResults) into the
  * model-ready CompressedAugmentedFile shape.
