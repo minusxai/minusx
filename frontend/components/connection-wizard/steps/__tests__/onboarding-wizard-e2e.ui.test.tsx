@@ -200,10 +200,11 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
 
     const realConvId = await waitForConversationFinished(() => testStore.getState() as RootState, convId);
 
-    // The agent receives app_state with docs:[] (no empty doc appended).
+    // The agent receives the FLAT view (shapeContextForAgent) of the live version — docs:[] at the
+    // top level (no version wrapper, no empty doc appended).
     expect(capturedAgentAppState).not.toBeNull();
     const recvContent = capturedAgentAppState.state.fileState.content;
-    expect(recvContent.versions[recvContent.versions.length - 1].docs).toEqual([]);
+    expect(recvContent.docs).toEqual([]);
 
     // No orchestration/EditFile error.
     expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
@@ -287,21 +288,16 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     ).toHaveLength(0);
   }, 45000);
 
-  it('post-edit guard rejects changes to non-doc fields on context files', async () => {
-    // The post-edit guard for context files (`tool-handlers.ts`) rejects any
-    // change outside `docs[]` within versions (e.g. databases, published, etc.).
-    // Use a two-step faux: first EditFile writes a doc (succeeds, so the agent
-    // is in the context-file flow), then a second EditFile touches `published`
-    // which the guard should reject.
+  it('cannot edit non-authored fields — version bookkeeping is not in the agent surface', async () => {
+    // The agent reads/edits a FLAT view of the live version (shapeContextForAgent): only
+    // docs/whitelist/metrics/annotations/skills/evals. Version bookkeeping (versions/published)
+    // is NOT in the markup, so an EditFile targeting `published.all` can't match anything — the
+    // edit fails with "not found", which is the protection (no field to change).
+    // Two-step faux: first change writes a doc (an allowed field), second touches `published`.
     onboardingFaux.setResponses([
       fauxAssistantMessage(
         [fauxToolCall('EditFile', {
           fileId: contextId,
-          // File Architecture v2 markup edits: write a doc (an allowed field) AND
-          // flip the non-doc `published.all` (1 → 0). The published pointer is NOT an
-          // editable version field, so the guard detects the change and rejects the edit.
-          // Context is a schemaless type, so the numeric `published.all` projects to
-          // an annotated `<all type="number">` element (not a bare `<all>`).
           changes: [
             { oldMatch: '<docs/>', newMatch: '<docs><item><content># Doc</content></item></docs>' },
             { oldMatch: '<all type="number">1</all>', newMatch: '<all type="number">0</all>' },
@@ -331,10 +327,8 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     const { loadErrors } = await import('@/lib/data/conversations.server');
     const convErrors = await loadErrors(realConvId);
 
-    // The guard rejection is logged as a frontend-tool error.
-    const guardErrors = convErrors.filter((e) =>
-      /can only change a version|published pointer/i.test(e.message),
-    );
+    // The failed edit (published not in the surface) is logged as a frontend-tool error.
+    const guardErrors = convErrors.filter((e) => /not found/i.test(e.message));
     expect(guardErrors.length).toBeGreaterThan(0);
     expect(guardErrors[0].source).toBe('frontend-tool');
   }, 45000);

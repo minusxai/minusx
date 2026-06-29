@@ -38,6 +38,7 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
+import { shapeContextForAgent, foldContextAgentView } from '@/lib/context/context-agent-view';
 import { extractStoryParams, lintStoryParams, lintDashboardParams, lintStoryParamSources, type EmbeddedQuestion } from '@/lib/data/story-params';
 import { extractSavedQuestionIds, extractInlineQuestions } from '@/lib/data/story-question';
 import { paramTypeMap, buildQueryParamValues } from '@/lib/sql/sql-params';
@@ -537,7 +538,11 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
   // wrapper is not part of the editable surface (EditFile targets by fileId; renames go
   // through metadata). `mergedContent` is still returned for the structured callers.
   void currentName;
-  const fullFileStr = fileToMarkup(fileState.type, mergedContent);
+  // Context: the agent reads/edits a FLAT view of the live version (shapeContextForAgent), so the
+  // markup baseline here must match compressFileState's — else an oldMatch copied from app-state /
+  // ReadFiles wouldn't match. `mergedContent` is still returned FULL (version-based) for the fold.
+  const markupContent = fileState.type === 'context' ? shapeContextForAgent(mergedContent) : mergedContent;
+  const fullFileStr = fileToMarkup(fileState.type, markupContent);
   return { success: true, fullFileStr, mergedContent };
 }
 
@@ -595,8 +600,12 @@ export async function editFileStr(
     return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
   }
   // Merge over the existing content so unedited fields (and any not surfaced in the markup
-  // projection) are preserved; the markup carries the editable surface.
-  const newContent = { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
+  // projection) are preserved; the markup carries the editable surface. Context is special: the
+  // parsed markup is the FLAT agent view, so fold it back into the live version (versions[]/published
+  // preserved) rather than spreading it over the version-based content.
+  const newContent = fileState.type === 'context'
+    ? foldContextAgentView(mergedContent, parsedContent.content)
+    : { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
   // StoryContent no longer has an `assets` field — saved-question deps derive from the body. Drop
   // any legacy `assets` carried over from a migrated story's stored content so re-saves are clean.
   // Set to `undefined` (not `delete`): newContent becomes persistableChanges, and the save path

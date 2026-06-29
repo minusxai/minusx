@@ -34,6 +34,14 @@ interface CodeViewProps {
    * the trimmed JSON never drops them.
    */
   omitKeys?: readonly string[];
+  /**
+   * Optional transform mapping the saved content to the AGENT's view of it. Supply when the agent
+   * sees a different shape than the saved file (context: `shapeContextForAgent` flattens the live
+   * version). When given, the Code view shows three stages — "File JSON" (the saved content), "Agent
+   * JSON" (the transformed view), and "Agent XML" (its markup) — both agent tabs read-only. When
+   * omitted, the file IS the agent view, so just JSON | XML are shown.
+   */
+  xmlContentTransform?: (content: unknown) => unknown;
 }
 
 /** Shallow-copy `obj` without the given top-level keys. */
@@ -44,32 +52,44 @@ function omit(obj: unknown, keys: readonly string[]): unknown {
   return rest;
 }
 
-export default function CodeView({ fileId, fileType, editable = false, omitKeys = [] }: CodeViewProps) {
-  const [tab, setTab] = useState<'json' | 'xml'>('json');
+export default function CodeView({ fileId, fileType, editable = false, omitKeys = [], xmlContentTransform }: CodeViewProps) {
+  const [tab, setTab] = useState<'json' | 'agentJson' | 'xml'>('json');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const persistableContent = useAppSelector(state => selectPersistableContent(state, fileId));
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId));
 
   const fullContent = (persistableContent ?? mergedContent ?? {}) as Record<string, unknown>;
   const displayContent = omit(fullContent, omitKeys);
+  // The agent's view of the content. For most file types this is identical to the saved file, so we
+  // show just JSON | XML. For context a transform is supplied (shapeContextForAgent) and the agent's
+  // view DIFFERS from the file — so we expose three stages of the pipeline:
+  //   File JSON  ──omitKeys──▶  (shown) │ ──xmlContentTransform──▶  Agent JSON │ ──fileToMarkup──▶  Agent XML
+  const agentView = xmlContentTransform ? xmlContentTransform(fullContent) : displayContent;
+  const tabs = xmlContentTransform
+    ? [
+        { value: 'json', label: 'File JSON', icon: LuBraces },
+        { value: 'agentJson', label: 'Agent JSON', icon: LuBraces },
+        { value: 'xml', label: 'Agent XML', icon: LuCode },
+      ]
+    : [
+        { value: 'json', label: 'JSON', icon: LuBraces },
+        { value: 'xml', label: 'XML', icon: LuCode },
+      ];
 
   return (
     <Box p={4} data-file-id={fileId}>
       <HStack mb={3}>
         <TabSwitcher
-          tabs={[
-            { value: 'json', label: 'JSON', icon: LuBraces },
-            { value: 'xml', label: 'XML', icon: LuCode },
-          ]}
+          tabs={tabs}
           activeTab={tab}
-          onTabChange={(t) => setTab(t as 'json' | 'xml')}
+          onTabChange={(t) => setTab(t as typeof tab)}
         />
       </HStack>
 
+      {/* Distinct `key` per tab: the JSON editor is uncontrolled (Monaco keeps its own buffer), so
+          without a remount, switching tabs would leave the previous tab's text (and language) in the
+          editor. Distinct keys force a clean remount. */}
       {tab === 'json' ? (
-        // Distinct `key` per tab: the JSON editor is uncontrolled (Monaco keeps its own
-        // buffer), so without a remount, switching tabs would leave the previous tab's
-        // text (and language) in the editor. Distinct keys force a clean remount.
         <JsonEditor
           key="json"
           value={JSON.stringify(displayContent, null, 2)}
@@ -95,9 +115,12 @@ export default function CodeView({ fileId, fileType, editable = false, omitKeys 
             setJsonError(result.success ? null : result.error ?? null);
           }}
         />
+      ) : tab === 'agentJson' ? (
+        // The agent's view as JSON — read-only (derived from the file via xmlContentTransform).
+        <JsonEditor key="agentJson" readOnly value={JSON.stringify(agentView, null, 2)} />
       ) : (
-        // The agent-facing markup — read-only (it's a derived projection of content).
-        <JsonEditor key="xml" language="xml" readOnly value={fileToMarkup(fileType, displayContent)} />
+        // The agent-facing markup — read-only (fileToMarkup of the agent's view).
+        <JsonEditor key="xml" language="xml" readOnly value={fileToMarkup(fileType, agentView)} />
       )}
     </Box>
   );

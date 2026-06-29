@@ -688,16 +688,17 @@ registerFrontendTool('EditFile', async (args, _context) => {
     diffs.push(`Renamed to "${renameTo}"`);
   }
 
-  // Post-edit guard: context files — the agent may edit a version's AUTHORED fields (whitelist, docs,
-  // metrics, annotations, description). Version identity + the published pointer must not change; the
-  // server-computed menus (fullSchema/parentSchema/full*) are ignored (re-derived on load).
+  // Post-edit guard: context files — the agent may edit the live version's AUTHORED knowledge fields
+  // (docs, metrics, annotations) + content-level evals/skills. The whitelist, version identity, and
+  // the published pointer must not change; the server-computed menus (fullSchema/parentSchema/full*)
+  // are ignored (re-derived on load).
   if (fileState?.type === 'context') {
     const before = selectMergedContent(stateBefore, fileId);
     const after = selectMergedContent(getStore().getState(), fileId);
     if (!contextEditWithinBounds(before, after)) {
       const errorContent = {
         success: false,
-        error: "EditFile on a context can only change a version's whitelist, docs, metrics, annotations, or description — version identity and the published pointer can't be changed via EditFile.",
+        error: "EditFile on a context can only change docs, metrics, annotations, skills, or evals — the schema whitelist (managed in the Databases tab), version identity, and the published pointer can't be changed via EditFile.",
       };
       return { content: errorContent, details: { success: false, error: errorContent.error } };
     }

@@ -92,6 +92,33 @@ describe('fileToMarkup / markupToContent — dashboard (uniform nested, no grid)
   });
 });
 
+describe('fileToMarkup / markupToContent — context (flattened agent view)', () => {
+  it('emits the flat knowledge view (docs/metrics/annotations, no whitelist/versions) and round-trips', () => {
+    // This is the shape shapeContextForAgent produces: the live version's knowledge layer flattened.
+    const content = {
+      docs: [{ content: '# Sales\nrevenue where r < 5', title: 'Sales', description: 'sales docs' }],
+      metrics: [{ name: 'Revenue', sql: 'SUM(orders.amount)' }],
+      annotations: [{ schema: 'public', table: 'orders', description: 'one row per order' }],
+    };
+    const markup = fileToMarkup('context', content);
+    expect(markup).toContain('<docs>');
+    // whitelist is human-managed and not in the agent surface — never projected.
+    expect(markup).not.toContain('<whitelist>');
+    expect(markup).not.toContain('<versions>');
+    expect(markup).not.toContain('<published>');
+    expect(markup).toContain('revenue where r < 5'); // raw (rides in a template literal)
+
+    const back = markupToContent('context', markup);
+    expect(back.ok).toBe(true);
+    if (back.ok) {
+      expect(back.content.docs).toEqual(content.docs);
+      expect(back.content.metrics).toEqual(content.metrics);
+      expect(back.content.annotations).toEqual(content.annotations);
+      expect(back.content).not.toHaveProperty('whitelist');
+    }
+  });
+});
+
 describe('fileToMarkup — schemaless connection (type="…")', () => {
   it('round-trips nested config with typed scalars', () => {
     const content = { type: 'postgres', config: { host: 'db', port: 5432, ssl: true } };
