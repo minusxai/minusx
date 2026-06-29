@@ -253,15 +253,18 @@ export default function DocumentHeader({
                 fontSize={{ base: 'xl', md: '2xl' }}
                 fontWeight="900"
                 letterSpacing="-0.02em"
-                color={titleColor}
+                // Untitled files render the fallback in a muted tone so it reads as a placeholder,
+                // not a real title.
+                color={name.trim() ? titleColor : 'fg.muted'}
                 fontFamily="mono"
                 maxW="100%"
                 lineClamp={1}
-                title={name}
+                aria-label={name.trim() || `Untitled ${metadata.label}`}
+                title={name.trim() || `Untitled ${metadata.label}`}
                 onDoubleClick={readOnlyName ? undefined : onEditModeToggle}
                 cursor={readOnlyName ? 'default' : 'text'}
               >
-                {name}
+                {name.trim() || `Untitled ${metadata.label}`}
               </Heading>
             )}
 
