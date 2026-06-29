@@ -4,7 +4,30 @@ set -euo pipefail
 # ── config ───────────────────────────────────────────────────────────────────
 
 REPO_RAW="https://raw.githubusercontent.com/minusxai/minusx/main"
-FRONTEND_IMAGE="ghcr.io/minusxai/minusx-frontend:latest"
+
+# Image selection.
+#   default            → stable release image (what OSS users want)
+#   --canary           → bleeding-edge image built from every push to main
+#   --image=<full ref> → pin to an explicit image reference
+#   MX_IMAGE env var   → explicit override, wins over flags
+# Piped usage: curl -fsSL minusx.ai/install.sh | bash -s -- --canary
+STABLE_IMAGE="ghcr.io/minusxai/minusx-frontend:latest"
+CANARY_IMAGE="ghcr.io/minusxai/minusx-frontend-canary:latest"
+FRONTEND_IMAGE="$STABLE_IMAGE"
+CHANNEL="stable"
+for arg in "$@"; do
+  case "$arg" in
+    --canary)  FRONTEND_IMAGE="$CANARY_IMAGE"; CHANNEL="canary" ;;
+    --stable)  FRONTEND_IMAGE="$STABLE_IMAGE"; CHANNEL="stable" ;;
+    --image=*) FRONTEND_IMAGE="${arg#*=}";     CHANNEL="custom" ;;
+  esac
+done
+# Explicit env override always wins.
+if [ -n "${MX_IMAGE:-}" ]; then
+  FRONTEND_IMAGE="$MX_IMAGE"
+  CHANNEL="custom"
+fi
+
 TOTAL_STEPS=6
 CURRENT_STEP=0
 
@@ -181,8 +204,9 @@ fi
 
 # ── step 4: pull image ──────────────────────────────────────────────────────
 
-step "Pulling latest Docker image"
+step "Pulling latest Docker image (${CHANNEL})"
 
+info "Image: ${DIM}${FRONTEND_IMAGE}${RESET}"
 run_with_spinner "Pulling frontend image" docker pull --platform linux/amd64 "$FRONTEND_IMAGE"
 
 # ── step 5: start service ───────────────────────────────────────────────────

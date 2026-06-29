@@ -9,9 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g. 1.2.3)'
-        required: true
+        description: 'Version to publish (e.g. 1.2.3). Leave blank to skip the build and just deploy the current latest image.'
+        required: false
         type: string
+      deploy_staging:
+        description: 'Deploy staging after this run'
+        type: boolean
+        default: true
 
 env:
   REGISTRY: ghcr.io
@@ -19,6 +23,8 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Skip the (re)build on a manual run with no version — that's a deploy-only run.
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.version == '') }}
     strategy:
       matrix:
         include:
@@ -48,7 +54,7 @@ jobs:
             type=semver,pattern={{version}},enable=${{ github.ref_type == 'tag' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
-            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
 
       - uses: docker/setup-buildx-action@v3
       - uses: docker/setup-qemu-action@v3
@@ -68,3 +74,26 @@ jobs:
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-staging:
+    needs: publish
+    runs-on: ubuntu-latest
+    # Deploy staging when:
+    #   - a push lands on main (publish just rebuilt the canary `latest` tag), or
+    #   - a manual run ticks "Deploy staging" (with or without a version rebuild).
+    # always() lets this run even when publish is skipped (deploy-only manual run);
+    # the result != 'failure' guard still blocks deploy if a rebuild failed.
+    if: |
+      always() && needs.publish.result != 'failure' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_dispatch' && inputs.deploy_staging)
+      )
+    steps:
+      - name: Trigger staging deploy in minusxai/deploys
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOYS_DISPATCH_TOKEN }}
+        run: |
+          gh workflow run mxbi-oss-staging-deploy.yaml \
+            --repo minusxai/deploys \
+            --ref main
