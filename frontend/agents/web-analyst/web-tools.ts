@@ -17,11 +17,12 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 // handler expects `changes: [{oldMatch, newMatch, replaceAll?}]`.
 const EditFileParams = Type.Object({
   fileId: Type.Number(),
-  changes: Type.Array(Type.Object({
+  name: Type.Optional(Type.String({ description: "Set or rename the file's TITLE (its `name` metadata). The title is NOT part of the markup, so this `name` field is the ONLY way to title a file — always give questions/dashboards/etc. a short, descriptive title. Can be used alone (rename only) or alongside `changes`." })),
+  changes: Type.Optional(Type.Array(Type.Object({
     oldMatch: Type.String({ description: 'Existing substring to replace.' }),
     newMatch: Type.String({ description: 'Replacement text.' }),
     replaceAll: Type.Optional(Type.Boolean({ description: 'Replace every occurrence (default true).' })),
-  })),
+  }), { description: 'Markup find-and-replace edits. Optional — omit (or pass []) for a rename-only edit that just sets `name`.' })),
   rawData: Type.Optional(Type.Boolean({ description: "Default false. The response echoes the updated query RESULT (not the markup — you already know your edit): a chart viz returns an IMAGE + summary, a table/number viz returns the rows + summary. Set true to get rows even for a chart viz." })),
 });
 
@@ -55,6 +56,8 @@ change to the \`<parameters>\` in the same call — orphaned or missing paramete
 replaceAll behaviour (per change):
 - replaceAll=true (default): replace EVERY occurrence (use when renaming a column/table that appears in SELECT, WHERE, GROUP BY, …).
 - replaceAll=false: replace only if oldMatch is unique; otherwise the tool errors — add surrounding context to make it unique.
+
+TITLE: a file's title is its \`name\` metadata, NOT part of the markup. To title or rename a file, pass the \`name\` field (it can be the only thing you pass — a rename needs no \`changes\`). Always give a new file a short, descriptive title.
 
 Changes are staged as drafts in Redux. The user reviews and publishes via Publish All. You do not need to call Navigate or PublishFile.
 
