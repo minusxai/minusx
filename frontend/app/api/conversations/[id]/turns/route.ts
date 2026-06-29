@@ -6,6 +6,7 @@ import { notifyStatus } from '@/lib/chat/conversation-stream.server';
 import { runConversationTurn, INSTANCE_ID } from '@/lib/chat/conversation-turn.server';
 import { getModules } from '@/lib/modules/registry';
 import type { ChatRequest } from '@/lib/chat-orchestration';
+import { boundContextAppState } from '@/lib/api/compress-augmented';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -46,11 +47,16 @@ export const POST = withAuth(async (
       return successResponse({ ok: true, alreadyRunning: true });
     }
 
+    const agentArgs = (body.agentArgs ?? {}) as Record<string, unknown>;
+    // Defense-in-depth: bound any oversized context in the inbound AppState before it reaches the
+    // orchestrator. A stale client (pre schema-shaping bundle) can still ship a multi-MB schema
+    // cache, which is what OOM'd the box; this caps it server-side regardless of client version.
+    if (agentArgs.app_state) boundContextAppState(agentArgs.app_state);
     const chatRequest: ChatRequest = {
       ...(userMessage ? { user_message: userMessage } : {}),
       ...(completedToolCalls ? { completed_tool_calls: completedToolCalls } : {}),
       agent: typeof body.agent === 'string' ? body.agent : conversation.agent,
-      agent_args: (body.agentArgs ?? {}) as Record<string, unknown>,
+      agent_args: agentArgs,
     } as unknown as ChatRequest;
 
     // Claim the lease (status running + fresh heartbeat) + NOTIFY synchronously BEFORE returning, so

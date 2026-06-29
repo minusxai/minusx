@@ -1124,6 +1124,7 @@ describe('EditFile - Context post-edit guard', () => {
       version: 1,
       whitelist: { databases: [{ databaseName: 'test_db', whitelist: ['orders'] }] },
       docs: [{ content: '# Original doc', draft: false }],
+      description: 'v1 notes',
       createdAt: new Date().toISOString(),
       createdBy: 1,
     }],
@@ -1248,6 +1249,17 @@ describe('EditFile - Context post-edit guard', () => {
     expect(result.details?.success).toBe(true);
   });
 
+  it('allows editing a version description (authored, non-doc field)', async () => {
+    await readFiles([contextId]);
+    const result = await executeToolCall(
+      makeEditToolCall({
+        fileId: contextId,
+        changes: [{ oldMatch: '<description>v1 notes</description>', newMatch: '<description>updated notes</description>' }],
+      }),
+    );
+    expect(result.details?.success).toBe(true);
+  });
+
   it('rejects editing databases field', async () => {
     await readFiles([contextId]);
     const result = await executeToolCall(
@@ -1260,7 +1272,7 @@ describe('EditFile - Context post-edit guard', () => {
       }),
     );
     expect(result.details?.success).toBe(false);
-    expect(result.details?.error).toMatch(/can only modify docs/);
+    expect(result.details?.error).toMatch(/can only change/);
   });
 
   it('rejects editing published field', async () => {
@@ -1275,7 +1287,7 @@ describe('EditFile - Context post-edit guard', () => {
       }),
     );
     expect(result.details?.success).toBe(false);
-    expect(result.details?.error).toMatch(/can only modify docs/);
+    expect(result.details?.error).toMatch(/can only change/);
   });
 });
 

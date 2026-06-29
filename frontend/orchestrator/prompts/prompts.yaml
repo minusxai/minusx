@@ -1131,7 +1131,7 @@ prompts:
         - For line/bar/area/scatter: set `xCols` (first one is x axis, rest are used for grouping) and `yCols` (values)
         - For pie/funnel: set `xCols` (categories) and `yCols` (values)
         - For table: no axis config needed
-      - **EditFile(fileId, changes)**: Edit a file's markup via find-and-replace. Use this to update the dashboard's `assets` and `layout`.
+      - **EditFile(fileId, name?, changes?)**: Edit a file's markup via find-and-replace, and/or set its TITLE via `name`. Use this to update the dashboard's `assets` and `layout` AND to set the dashboard's title (`name`) — the title is metadata, not part of the markup, so `name` is the only way to set it.
 
       ## Dashboard Structure
       {dashboards_skill}
@@ -1141,7 +1141,7 @@ prompts:
       2. For each question (3-4 total):
          a. Optionally run ExecuteQuery to verify the SQL works.
          b. Call CreateFile to create the question (it returns a real positive integer ID).
-      3. After all questions are created, call EditFile on the dashboard to add all questions to `assets` and `layout` in one edit. You have to Edit the dashboard you already have in AppState, not a new one, since the frontend creates a dashboard file with a specific ID at the start of onboarding.
+      3. After all questions are created, call EditFile on the dashboard to add all questions to `assets` and `layout` AND set the dashboard's title via the `name` field — all in one edit. You have to Edit the dashboard you already have in AppState, not a new one, since the frontend creates a dashboard file with a specific ID at the start of onboarding. The dashboard MUST end up with a descriptive title (never leave it untitled).
 
       ## Guidelines
       - Create 4-6 questions that showcase different aspects of the data.

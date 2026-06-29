@@ -6,7 +6,9 @@
  */
 
 import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, AugmentedFile, ContextContent, ReadFilesResult, NotebookContent, NotebookSqlCell, type FileType, type ScreenshotDetails } from '@/lib/types';
-import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, type FileId } from '@/store/filesSlice';
+import { setEphemeral, setNotebookCellExecuted, selectMergedContent, selectDirtyFiles, selectContextFromPath, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { isTitleMissing, missingTitleFeedback } from '@/lib/data/file-title';
+import { contextEditWithinBounds } from '@/lib/context/context-agent-view';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -606,7 +608,15 @@ function vizWarningForQuestion(fileId: number): string | null {
 }
 
 registerFrontendTool('EditFile', async (args, _context) => {
-  const { fileId, changes, rawData = false } = args;
+  const { fileId, changes = [], rawData = false } = args;
+  // Optional rename: a file's TITLE is its `name` metadata, never part of the markup, so this is
+  // the only way the agent can title a file.
+  const renameTo = typeof args.name === 'string' ? args.name.trim() : undefined;
+
+  if (changes.length === 0 && renameTo === undefined) {
+    const err = 'EditFile requires `changes` (markup edits) and/or `name` (to set the title).';
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
 
   // Snapshot state before edit to compute delta
   const stateBefore = getStore().getState();
@@ -626,67 +636,68 @@ registerFrontendTool('EditFile', async (args, _context) => {
     (augmentedBefore?.queryResults ?? []).map((qr: any) => qr.id).filter(Boolean)
   );
 
-  // Validate all changes in memory first (atomic: no Redux writes until all pass)
-  const built = buildCurrentFileStr(stateBefore, fileId);
-  if (!built.success) {
-    return { content: { success: false, error: built.error }, details: { success: false, error: built.error } };
-  }
-  let workingStr = built.fullFileStr;
-  for (let i = 0; i < changes.length; i++) {
-    const { oldMatch, newMatch, replaceAll } = changes[i];
-    if (typeof oldMatch !== 'string' || typeof newMatch !== 'string') {
-      const err = `Change ${i + 1}/${changes.length} is missing oldMatch or newMatch`;
+  // All markup changes validated + applied as a single atomic replace. Skipped entirely for a
+  // rename-only edit (no `changes`), so it doesn't dirty the markup or re-run queries needlessly.
+  const diffs: string[] = [];
+  let editValidation: string[] | undefined;
+  if (changes.length > 0) {
+    // Validate all changes in memory first (atomic: no Redux writes until all pass)
+    const built = buildCurrentFileStr(stateBefore, fileId);
+    if (!built.success) {
+      return { content: { success: false, error: built.error }, details: { success: false, error: built.error } };
+    }
+    let workingStr = built.fullFileStr;
+    for (let i = 0; i < changes.length; i++) {
+      const { oldMatch, newMatch, replaceAll } = changes[i];
+      if (typeof oldMatch !== 'string' || typeof newMatch !== 'string') {
+        const err = `Change ${i + 1}/${changes.length} is missing oldMatch or newMatch`;
+        return { content: { success: false, error: err }, details: { success: false, error: err } };
+      }
+      // Mirror editFileStr's \n normalization
+      const normalizedOld = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
+      const normalizedNew = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
+      const effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
+      const effectiveNew = oldMatch === effectiveOld ? newMatch : normalizedNew;
+      if (!workingStr.includes(effectiveOld)) {
+        const err = `String "${oldMatch}" not found in file`;
+        const failureContent = {
+          success: false,
+          error: `Change ${i + 1}/${changes.length} failed: ${err}`,
+          failedIndex: i,
+        };
+        return { content: failureContent, details: { success: false, error: failureContent.error } };
+      }
+      workingStr = (replaceAll ?? true)
+        ? workingStr.replaceAll(effectiveOld, effectiveNew)
+        : workingStr.replace(effectiveOld, effectiveNew);
+    }
+
+    const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: workingStr });
+    if (!result.success) {
+      const err = result.error || 'Edit failed';
       return { content: { success: false, error: err }, details: { success: false, error: err } };
     }
-    // Mirror editFileStr's \n normalization
-    const normalizedOld = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
-    const normalizedNew = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
-    const effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
-    const effectiveNew = oldMatch === effectiveOld ? newMatch : normalizedNew;
-    if (!workingStr.includes(effectiveOld)) {
-      const err = `String "${oldMatch}" not found in file`;
-      const failureContent = {
-        success: false,
-        error: `Change ${i + 1}/${changes.length} failed: ${err}`,
-        failedIndex: i,
-      };
-      return { content: failureContent, details: { success: false, error: failureContent.error } };
-    }
-    workingStr = (replaceAll ?? true)
-      ? workingStr.replaceAll(effectiveOld, effectiveNew)
-      : workingStr.replace(effectiveOld, effectiveNew);
+    if (result.diff) diffs.push(result.diff);
+    editValidation = result.validation;
   }
 
-  // All changes validated — dispatch as a single atomic replace
-  const diffs: string[] = [];
-  const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: workingStr });
-  if (!result.success) {
-    const err = result.error || 'Edit failed';
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  // Apply the rename (metadata `name`) — the data layer supports `changes.name`; the agent's
+  // markup surface does not, so this is the only path to (re)title a file.
+  if (renameTo && renameTo !== selectEffectiveName(getStore().getState(), fileId)) {
+    await editFileOp({ fileId, changes: { name: renameTo } });
+    diffs.push(`Renamed to "${renameTo}"`);
   }
-  if (result.diff) diffs.push(result.diff);
 
-  // Post-edit guard: context files — only docs[] within versions can change
+  // Post-edit guard: context files — the agent may edit a version's AUTHORED fields (whitelist, docs,
+  // metrics, annotations, description). Version identity + the published pointer must not change; the
+  // server-computed menus (fullSchema/parentSchema/full*) are ignored (re-derived on load).
   if (fileState?.type === 'context') {
-    const before = selectMergedContent(stateBefore, fileId) as any;
-    const after = selectMergedContent(getStore().getState(), fileId) as any;
-
-    const stripDocs = (c: any) => {
-      if (!c) return c;
-      const { versions, docs: _topDocs, ...rest } = c;
-      return {
-        ...rest,
-        versions: versions?.map((v: any) => {
-          const { docs: _docs, ...vRest } = v;
-          return vRest;
-        }),
-      };
-    };
-
-    if (JSON.stringify(stripDocs(before)) !== JSON.stringify(stripDocs(after))) {
+    const before = selectMergedContent(stateBefore, fileId);
+    const after = selectMergedContent(getStore().getState(), fileId);
+    if (!contextEditWithinBounds(before, after)) {
       const errorContent = {
         success: false,
-        error: 'EditFile on context files can only modify docs within versions. Other fields (databases, published, evals, childPaths, etc.) cannot be changed via EditFile.',
+        error: "EditFile on a context can only change a version's whitelist, docs, metrics, annotations, or description — version identity and the published pointer can't be changed via EditFile.",
       };
       return { content: errorContent, details: { success: false, error: errorContent.error } };
     }
@@ -841,13 +852,19 @@ registerFrontendTool('EditFile', async (args, _context) => {
 
   // projectMessages rebuilds the LLM-facing content from __status + __augmented (diffed query result,
   // no markup) and preserves the image block above. `content` here is kept for the chat UI.
+  // Nudge the agent while a title-bearing file is still untitled (the title is metadata, not in the
+  // markup, so it's easy to forget) — point it at EditFile's `name`.
+  const titleWarning = fileState?.type && isTitleMissing(fileState.type, selectEffectiveName(getStore().getState(), fileId))
+    ? missingTitleFeedback(fileState.type)
+    : null;
   const status = {
     success: true,
     isDirty: true,
     ...(diff ? { diff } : {}),
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
     ...(vizWarning ? { vizWarning } : {}),
-    ...(result.validation?.length ? { validation: result.validation } : {}),
+    ...(titleWarning ? { titleWarning } : {}),
+    ...(editValidation?.length ? { validation: editValidation } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],
@@ -994,6 +1011,12 @@ registerFrontendTool('CreateFile', async (args, context) => {
   const draftId = await createDraftFile(file_type, { folder: path, name: name ?? undefined });
   if (content && Object.keys(content).length > 0) {
     await editFileOp({ fileId: draftId, changes: { content } });
+  }
+
+  // Non-blocking feedback: a title-bearing file created without a real name. The file is still
+  // created (drafts can be nameless); the agent is told to title it via EditFile's `name`.
+  if (isTitleMissing(file_type as FileType, name)) {
+    createValidation.push(missingTitleFeedback(file_type as FileType));
   }
 
   // Auto-execute query for questions (agent sees results immediately)

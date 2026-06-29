@@ -102,7 +102,10 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     if (hasCreatedDraft.current || virtualDashboardId) return;
     hasCreatedDraft.current = true;
 
-    createDraftFile('dashboard').then((draftId: number) => {
+    // Seed a default title so an onboarding dashboard is NEVER blank, even if the agent forgets to
+    // rename it. The agent is instructed (and now able, via EditFile `name`) to give it a more
+    // descriptive title.
+    createDraftFile('dashboard', { name: 'Getting Started Dashboard' }).then((draftId: number) => {
       setVirtualDashboardId(draftId);
 
       // Set navigation so selectAppState resolves to this draft dashboard

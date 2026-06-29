@@ -19,6 +19,26 @@ const APP_STYLES_BASE_CSS =
   `.mx-chart-fill { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }`;
 
 /**
+ * Rewrite RELATIVE `url(...)` refs in a rule's cssText to ABSOLUTE, resolved against `base` (the
+ * source stylesheet's href). Mirrored rules are dropped into an inline <style> in the story iframe,
+ * whose base URL is the page (/f/<id>) — so a font's `url("../media/x.woff2")` (authored relative to
+ * /_next/static/css/…) would resolve to /media/x.woff2 and 404. Absolutising against the original
+ * stylesheet's href makes it /_next/static/media/x.woff2 again. Absolute/data/blob/root-relative/
+ * fragment refs already resolve correctly and are left as-is.
+ */
+export function absolutizeCssUrls(cssText: string, base: string): string {
+  return cssText.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (match, quote: string, ref: string) => {
+    const r = ref.trim();
+    if (/^(data:|https?:|blob:|\/|#)/i.test(r)) return match; // already absolute / data / blob / root-relative / fragment
+    try {
+      return `url(${quote}${new URL(r, base).href}${quote})`;
+    } catch {
+      return match;
+    }
+  });
+}
+
+/**
  * Fill the shadow root's dedicated app-styles tag with the document's
  * stylesheet rules. Reads cssRules rather than cloning <style> tags because
  * emotion in production inserts rules via CSSOM (speedy mode) — the tags are
@@ -36,10 +56,13 @@ export function mirrorAppStyles(root: ShadowRoot | Document) {
     // shadow sheet, where @import is invalid mid-sheet anyway) and anything
     // not rooted in the document proper (jsdom surfaces shadow styles here).
     if (owner instanceof Element && (owner.hasAttribute('data-mx-story-fonts') || owner.getRootNode() !== document)) continue;
+    // Resolve relative url()s (e.g. self-hosted @font-face src) against the sheet's own location —
+    // not the iframe's — so they don't break when injected into the iframe's inline <style>.
+    const sheetBase = sheet.href || document.baseURI;
     try {
       css.push(Array.from(sheet.cssRules)
         .filter(r => !r.cssText.startsWith('@import'))
-        .map(r => r.cssText).join('\n'));
+        .map(r => absolutizeCssUrls(r.cssText, sheetBase)).join('\n'));
     } catch {
       // Cross-origin stylesheet — skip
     }

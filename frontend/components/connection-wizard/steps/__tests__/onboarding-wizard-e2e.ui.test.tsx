@@ -297,9 +297,9 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
       fauxAssistantMessage(
         [fauxToolCall('EditFile', {
           fileId: contextId,
-          // File Architecture v2 markup edits: write a doc (the allowed field) AND
-          // flip the non-doc `published.all` (1 → 0). The guard strips docs before
-          // comparing, so the published change is detected and the edit is rejected.
+          // File Architecture v2 markup edits: write a doc (an allowed field) AND
+          // flip the non-doc `published.all` (1 → 0). The published pointer is NOT an
+          // editable version field, so the guard detects the change and rejects the edit.
           // Context is a schemaless type, so the numeric `published.all` projects to
           // an annotated `<all type="number">` element (not a bare `<all>`).
           changes: [
@@ -333,7 +333,7 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
 
     // The guard rejection is logged as a frontend-tool error.
     const guardErrors = convErrors.filter((e) =>
-      /can only modify docs within versions/i.test(e.message),
+      /can only change a version|published pointer/i.test(e.message),
     );
     expect(guardErrors.length).toBeGreaterThan(0);
     expect(guardErrors[0].source).toBe('frontend-tool');
