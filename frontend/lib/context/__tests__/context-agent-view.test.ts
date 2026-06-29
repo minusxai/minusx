@@ -33,14 +33,26 @@ describe('shapeContextForAgent', () => {
     expect('fullSchema' in shapeContextForAgent(ctx())).toBe(false);
   });
 
-  it('reduces parentSchema to names only (no columns)', () => {
+  it('tier 1: keeps parentSchema WITH columns when it fits the budget', () => {
     const shaped: any = shapeContextForAgent(ctx());
     const table = shaped.parentSchema[0].schemas[0].tables[0];
     expect(table.table).toBe('orders');
-    expect('columns' in table).toBe(false);
-    // schema + table names preserved so the agent knows what's available to whitelist
-    expect(shaped.parentSchema[0].schemas[0].schema).toBe('sales');
-    expect(shaped.parentSchema[0].schemas[0].tables.map((t: any) => t.table)).toEqual(['orders', 'customers']);
+    expect(table.columns).toEqual([{ name: 'id' }, { name: 'amount' }]); // columns kept for a small schema
+    expect(shaped.parentSchemaNote).toBeUndefined();
+  });
+
+  it('tier 2: drops columns (names only) when with-columns exceeds the budget but names fit', () => {
+    // ~400 tables × many columns: with-columns is well over 20k, names-only is well under.
+    const tables = Array.from({ length: 400 }, (_, i) => ({
+      table: `t${i}`,
+      columns: Array.from({ length: 30 }, (_, c) => ({ name: `column_number_${c}`, type: 'text' })),
+    }));
+    const med = { ...ctx(), parentSchema: [{ databaseName: 'wh', schemas: [{ schema: 'public', tables }] }] };
+    const shaped: any = shapeContextForAgent(med);
+    const kept = shaped.parentSchema[0].schemas[0].tables;
+    expect(kept).toHaveLength(400);               // every table name kept
+    expect('columns' in kept[0]).toBe(false);     // but columns dropped
+    expect(shaped.parentSchemaNote).toBeUndefined(); // nothing truncated
   });
 
   it('keeps the editable fields and the inherited menus', () => {
@@ -57,6 +69,29 @@ describe('shapeContextForAgent', () => {
     shapeContextForAgent(input);
     expect(input.fullSchema).toBe(schemaWithCols);
     expect((input.parentSchema as any)[0].schemas[0].tables[0].columns).toBeTruthy();
+  });
+
+  it('keeps the full menu (no note) when parentSchema fits the budget', () => {
+    const shaped: any = shapeContextForAgent(ctx());
+    expect(shaped.parentSchemaNote).toBeUndefined();
+    expect(shaped.parentSchema[0].schemas[0].tables).toHaveLength(2);
+  });
+
+  it('caps a huge parentSchema to the budget and notes SearchDBSchema for the rest', () => {
+    // A 2000-table schema is far over the 6000-char names budget.
+    const bigTables = Array.from({ length: 2000 }, (_, i) => ({ table: `table_with_a_longish_name_${i}`, columns: [{ name: 'c' }] }));
+    const big = { ...ctx(), parentSchema: [{ databaseName: 'wh', schemas: [{ schema: 'public', tables: bigTables }] }] };
+    const shaped: any = shapeContextForAgent(big);
+
+    const kept = shaped.parentSchema.flatMap((db: any) => (db.schemas || []).flatMap((s: any) => s.tables || []));
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.length).toBeLessThan(2000); // truncated
+    // Bounded by the budget (name-char budget + per-entry JSON overhead) — far below the ~80k the
+    // full 2000-table names-only menu would serialize to.
+    expect(JSON.stringify(shaped.parentSchema).length).toBeLessThan(40000);
+    // The agent is told it's partial and how to find the rest.
+    expect(shaped.parentSchemaNote).toMatch(/SearchDBSchema/);
+    expect(shaped.parentSchemaNote).toMatch(/2000/); // total count surfaced
   });
 });
 
