@@ -222,6 +222,39 @@ describe('connectionLoader — stale or missing schema', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Empty cached schemas — an empty array is NOT a usable schema (first upload)
+// ---------------------------------------------------------------------------
+
+describe('connectionLoader — empty cached schemas', () => {
+  it('blocks and fetches on backgroundRefresh when cached schemas array is empty', async () => {
+    // Repro of the onboarding bug (#460 regression): the static CSV connection
+    // pre-exists with `schema.schemas = []`. A post-save backgroundRefresh must
+    // NOT serve [] and refresh later (the client caches that for hours and shows
+    // "No tables found") — with nothing useful to serve, it must block and
+    // return the freshly-introspected tables.
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
+    const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
+    const file = await createConnection('conn_empty_bg', '/org/database/conn_empty_bg', emptySchema);
+
+    const result = await connectionLoader(file!, testUser, { backgroundRefresh: true });
+
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+  });
+
+  it('blocks and fetches on a normal load when cached schemas array is empty', async () => {
+    mockGetSchema.mockResolvedValue(FRESH_SCHEMA.schemas);
+    const emptySchema: DatabaseSchema = { schemas: [], updated_at: freshTimestamp() };
+    const file = await createConnection('conn_empty_normal', '/org/database/conn_empty_normal', emptySchema);
+
+    const result = await connectionLoader(file!, testUser);
+
+    expect(mockGetSchema).toHaveBeenCalledTimes(1);
+    expect((result.content as ConnectionContent).schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Error fallback behaviour
 // ---------------------------------------------------------------------------
 

@@ -67,7 +67,11 @@ const loadConnectionSchema: CustomLoader = async (file: DbFile, _user: Effective
 
   const content = file.content as ConnectionContent;
 
-  const hasSchema = content.schema && content.schema.schemas;
+  // An empty schemas array is NOT a usable schema: there's nothing to serve, so
+  // a backgroundRefresh would otherwise return [] and let the client cache it for
+  // hours (the onboarding "No tables found" bug). Treat empty as missing → block
+  // and introspect.
+  const hasSchema = !!(content.schema && content.schema.schemas && content.schema.schemas.length > 0);
   const hasTimestamp = content.schema?.updated_at;
   // If no timestamp, schema is from old version (pre-migration) - treat as stale
   const isStale = hasTimestamp ? isSchemaStale(hasTimestamp) : true;
