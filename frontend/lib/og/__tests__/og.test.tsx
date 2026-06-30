@@ -101,13 +101,16 @@ describe('share opengraph-image route', () => {
 describe('share page generateMetadata', () => {
   setupTestDb(getTestDbPath('og_metadata'));
 
-  it('emits og/twitter tags from the resolved story (image is auto-wired by the route)', async () => {
+  it('emits og/twitter tags from the resolved story (share image disabled — no image emitted)', async () => {
     const id = await makeStory('Q3 Revenue Surge', 'How the West drove a 28% jump');
     const { shareableId } = await addShare(id, ADMIN);
     const m = await meta(shareableId);
     expect(m.title).toBe('Q3 Revenue Surge');
     expect(m.description).toBe('How the West drove a 28% jump');
-    expect((m.twitter as { card?: string } | undefined)?.card).toBe('summary_large_image');
+    expect((m.twitter as { card?: string } | undefined)?.card).toBe('summary');
+    // Share images are disabled — no og:image / twitter:image should be emitted.
+    expect((m.openGraph as { images?: unknown } | undefined)?.images).toBeUndefined();
+    expect((m.twitter as { images?: unknown } | undefined)?.images).toBeUndefined();
   });
 
   it('falls back to the tagline when the story has no description', async () => {
