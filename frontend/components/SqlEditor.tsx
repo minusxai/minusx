@@ -685,12 +685,15 @@ export default function SqlEditor({
                     const columnNames = new Set<string>();
                     const schemaNames = new Set<string>();
 
+                    // Schemas can be bounded to a names-only table-of-contents (no `columns`) for large
+                    // connections, so guard every level — a missing `columns`/`tables`/`schemas` must
+                    // not throw "not iterable" (Sentry 7584797922).
                     for (const db of currentSchema) {
-                      for (const schema of db.schemas) {
+                      for (const schema of db.schemas ?? []) {
                         schemaNames.add(schema.schema.toLowerCase());
-                        for (const table of schema.tables) {
+                        for (const table of schema.tables ?? []) {
                           tableNames.add(table.table.toLowerCase());
-                          for (const col of table.columns) {
+                          for (const col of table.columns ?? []) {
                             columnNames.add(col.name.toLowerCase());
                           }
                         }
