@@ -1,7 +1,8 @@
 import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DbFile, BaseFileContent, FileType, QuestionContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
+import { DbFile, BaseFileContent, FileType, QuestionContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent, CsvFileInfo } from '@/lib/types';
+import { pruneConnectionSchemaToFiles } from '@/lib/data/helpers/prune-connection-schema';
 import { IFilesDataLayer } from './files.interface';
 import {
   LoadFileResult,
@@ -557,8 +558,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const merged = mergeExistingSecretRefs(connectionContentWithoutSchema.config, existingConfig);
         connectionContentWithoutSchema.config = await extractConnectionSecrets(name, merged);
       }
-      contentToSave = (previousSchema
-        ? { ...connectionContentWithoutSchema, schema: previousSchema }
+      // STATIC connections (CSV / Sheets) derive their schema from config.files. Reconcile the kept
+      // cache against the just-saved files so a deleted/renamed table doesn't linger in the Table View
+      // or the agent's schema until the slow background re-introspection lands. No-op for live DBs.
+      const newFiles = (connectionContentWithoutSchema.config as { files?: CsvFileInfo[] } | undefined)?.files;
+      const reconciledSchema = pruneConnectionSchemaToFiles(previousSchema, newFiles);
+      contentToSave = (reconciledSchema
+        ? { ...connectionContentWithoutSchema, schema: reconciledSchema }
         : connectionContentWithoutSchema) as BaseFileContent;
     }
 

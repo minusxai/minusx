@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * StoryContainer V2 — smart component for data-story pages.
+ * StoryContainer V2 — smart component for story pages.
  *
  * The visual canvas is a viewer: the story HTML is authored by the agent
  * (EditFile on `content.story` / `content.assets`). Rendering through
