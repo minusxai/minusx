@@ -49,6 +49,7 @@ export function getMentionCompletionsLocal(
             id: undefined,
             name: tableName,
             schema: schemaName,
+            connection: db.databaseName,
             type: 'table',
             display_text: tableName,
             insert_text: `@${schemaName}.${tableName}`,

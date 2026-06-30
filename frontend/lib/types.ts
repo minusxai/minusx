@@ -139,6 +139,15 @@ export interface ChatMentionData {
   schema?: string;
   /** For column mentions: the table the column belongs to. */
   table?: string;
+  /**
+   * Connection (database) name for table/column/metric mentions — disambiguates
+   * the same schema.table across connections. Set both by agent-authored mentions
+   * (the agent sees connection names in its schema app-state) and by the UI picker
+   * (propagated from the schema, same as `schema`). Absent on question/dashboard
+   * mentions, which have no connection. Mirrors the `connection` field on context
+   * annotations (CtxTableAnnotation).
+   */
+  connection?: string;
   source?: 'system' | 'user';
   type: 'table' | 'question' | 'dashboard' | 'skill' | 'column' | 'metric';
 }

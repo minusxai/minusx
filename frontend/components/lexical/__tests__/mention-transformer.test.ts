@@ -6,6 +6,7 @@ import {
   $convertToMarkdownString,
 } from '@lexical/markdown';
 import { $isMentionNode } from '@/components/chat/lexical/MentionNode';
+import type { ChatMentionData } from '@/lib/types';
 import { DOCS_TRANSFORMERS, DOCS_NODES } from '../docs-transformers';
 
 function makeEditor() {
@@ -76,6 +77,19 @@ describe('mention-transformer', () => {
     const mention = nodes.find((n) => n.type === 'mention');
     expect(mention?.mentionData).toMatchObject({ type: 'metric', name: 'Monthly Revenue', table: 'orders', schema: 'public' });
     expect(roundTrip(`Key measure: ${METRIC_MENTION}.`)).toContain(METRIC_MENTION);
+  });
+
+  it('round-trips a table mention carrying an explicit connection (disambiguation)', () => {
+    // The `connection` field is the typed contract under test — a table/column
+    // mention can pin itself to a connection so the same schema.table on a
+    // different connection is unambiguous. Built from a typed ChatMentionData so
+    // `tsc` (npm run validate) fails until the field exists on the interface.
+    const data: ChatMentionData = { type: 'table', name: 'orders', schema: 'public', connection: 'warehouse' };
+    const mention = `@${JSON.stringify(data)}`;
+    const nodes = parse(`Revenue comes from ${mention}.`);
+    const parsed = nodes.find((n) => n.type === 'mention');
+    expect(parsed?.mentionData).toMatchObject({ type: 'table', name: 'orders', schema: 'public', connection: 'warehouse' });
+    expect(roundTrip(`Revenue comes from ${mention}.`)).toContain(mention);
   });
 
   it('leaves surrounding markdown formatting intact alongside a mention', () => {

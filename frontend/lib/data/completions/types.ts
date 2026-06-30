@@ -24,6 +24,8 @@ export interface MentionItem {
   id?: number;
   name: string;
   schema?: string;
+  /** Connection (database) name — propagated onto table mentions to disambiguate the same schema.table across connections. */
+  connection?: string;
   type: 'table' | 'question' | 'dashboard';
   display_text: string;
   insert_text: string;

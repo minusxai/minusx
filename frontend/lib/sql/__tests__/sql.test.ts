@@ -1469,6 +1469,15 @@ describe('getMentionCompletionsLocal', () => {
     expect(names).toContain('Sales Dashboard');
   });
 
+  it('tags each table mention with its connection (database) name', () => {
+    const result = getMentionCompletionsLocal('', schemaData, questions, 'all');
+    const tables = result.filter(s => s.type === 'table');
+    expect(tables.length).toBeGreaterThan(0);
+    // Every table carries the connection so the same schema.table across
+    // connections stays unambiguous in the serialized mention JSON.
+    for (const t of tables) expect(t.connection).toBe('test_db');
+  });
+
   it('filters tables by prefix', () => {
     const result = getMentionCompletionsLocal('user', schemaData, questions, 'all');
     const names = result.map(s => s.name);
