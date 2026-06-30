@@ -135,28 +135,43 @@ export async function buildServerAgentArgs(
     // Proceed without context — agent can still use SearchDBSchema tool
   }
 
-  // Prefer the connection the user selected in the UI; otherwise the first
-  // database whitelisted by the context (mirrors client selectDatabase behavior).
-  // Fall back to the first available connection if no context is present.
-  const contextPreferred = options?.connectionId ?? databases?.[0]?.databaseName ?? null;
-  const selectedConnectionName = selectDatabase(connections, contextPreferred);
-  const selectedConnection = connections.find((c) => c.name === selectedConnectionName) ?? connections[0];
+  // Pick a default connection ONLY when there's an unambiguous single target:
+  //  1. the UI explicitly selected one (interactive chat), or
+  //  2. exactly one connection is available to this context.
+  // When MULTIPLE connections are available and none was selected (Slack / remote / MCP / cron),
+  // DO NOT silently lock to the first — leave the connection unset so the agent PICKS the right one
+  // per query (it has ListDBConnections + a per-tool `connection_id`/`connectionId`). Forcing the
+  // first connection sent every Slack query to the wrong database.
+  const whitelistedNames = (databases ?? []).map((d) => d.databaseName).filter(Boolean);
+  const candidateNames = whitelistedNames.length > 0 ? whitelistedNames : connections.map((c) => c.name);
+
+  let selectedConnection: (typeof connections)[number] | undefined;
+  if (options?.connectionId) {
+    const name = selectDatabase(connections, options.connectionId);
+    selectedConnection = connections.find((c) => c.name === name);
+  } else if (candidateNames.length === 1) {
+    const name = selectDatabase(connections, candidateNames[0]);
+    selectedConnection = connections.find((c) => c.name === name);
+  }
+  // else: multiple connections, no selection → leave undefined so the agent chooses.
 
   const selectedDatabaseName = selectedConnection?.name || '';
 
-  // Prompt schema: prefer the context's whitelisted schema for the selected DB.
-  // When the context whitelists nothing yet (e.g. onboarding, before a context
-  // is built), fall back to the selected connection's own persisted schema —
-  // the same persisted schema the client used to read and send as
-  // agent_args.schema, now resolved server-side.
-  let schema = flattenSchemaForPrompt(databases, selectedDatabaseName);
-  if (schema.length === 0 && selectedConnection?.name) {
-    const persisted = await getPersistedConnectionSchema(selectedConnection.name, user);
-    if (persisted) {
-      schema = persisted.schemas.map((s) => ({
-        schema: s.schema,
-        tables: s.tables.map((t) => t.table),
-      }));
+  // Prompt schema: only when a single connection is resolved. With no default connection the agent
+  // discovers schema on demand via ListDBConnections + SearchDBSchema for the connection it picks.
+  // Prefer the context's whitelisted schema for the selected DB; fall back to the connection's own
+  // persisted schema when the context whitelists nothing yet (e.g. onboarding).
+  let schema: Array<{ schema: string; tables: string[] }> = [];
+  if (selectedConnection) {
+    schema = flattenSchemaForPrompt(databases, selectedDatabaseName);
+    if (schema.length === 0 && selectedConnection.name) {
+      const persisted = await getPersistedConnectionSchema(selectedConnection.name, user);
+      if (persisted) {
+        schema = persisted.schemas.map((s) => ({
+          schema: s.schema,
+          tables: s.tables.map((t) => t.table),
+        }));
+      }
     }
   }
 
