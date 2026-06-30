@@ -336,7 +336,7 @@ export function HelloWorldContent() {
             border="1px solid"
             borderColor="border.default"
             borderRadius="xl"
-            p={{ base: 6, md: 10 }}
+            p={{ base: 4, md: 10 }}
             css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
           >
             <StepComplete />

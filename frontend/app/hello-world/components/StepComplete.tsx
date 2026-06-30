@@ -281,7 +281,7 @@ export default function StepComplete() {
       )}
 
       {/* Quick actions */}
-      <HStack justify="center" gap={4}>
+      <HStack justify="center" gap={4} flexWrap="wrap">
         {QUICK_ACTIONS.map((action) => (
           <Button
             key={action.href}
