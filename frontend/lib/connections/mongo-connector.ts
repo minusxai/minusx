@@ -1,6 +1,6 @@
 import 'server-only';
 import { MongoClient } from 'mongodb';
-import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
+import { NodeConnector, SchemaEntry, QueryResult, QueryStream, TestConnectionResult } from './base';
 import { DEFAULT_LIMIT, MAX_LIMIT } from '@/lib/sql/limit-enforcer';
 
 /**
@@ -134,11 +134,8 @@ export class MongoConnector extends NodeConnector {
    * `params` is unused (Mongo has no `:name` substitution). `timeoutMs`, when
    * set, is passed through as the aggregation's `maxTimeMS`.
    */
-  async query(
-    query: string,
-    _params?: Record<string, string | number>,
-    timeoutMs?: number,
-  ): Promise<QueryResult> {
+  /** Parse + validate the JSON query and enforce the row cap. Shared by query()/queryStream(). */
+  private parsePipeline(query: string): { collection: string; cappedPipeline: Record<string, unknown>[]; finalQuery: string } {
     let parsed: unknown;
     try {
       parsed = JSON.parse(query);
@@ -148,20 +145,23 @@ export class MongoConnector extends NodeConnector {
         `MongoDB query must be a JSON string of the form {"collection": "...", "pipeline": [...]}. JSON parse failed: ${msg}`,
       );
     }
-    const { collection, pipeline } = (parsed ?? {}) as {
-      collection?: unknown;
-      pipeline?: unknown;
-    };
+    const { collection, pipeline } = (parsed ?? {}) as { collection?: unknown; pipeline?: unknown };
     if (typeof collection !== 'string' || collection.length === 0) {
       throw new Error('MongoDB query JSON must have a non-empty string "collection" field.');
     }
     if (!Array.isArray(pipeline)) {
-      throw new Error(
-        'MongoDB query JSON must have an array "pipeline" field (a list of aggregation stages).',
-      );
+      throw new Error('MongoDB query JSON must have an array "pipeline" field (a list of aggregation stages).');
     }
-
     const cappedPipeline = enforceMongoLimit(pipeline as Record<string, unknown>[]);
+    return { collection, cappedPipeline, finalQuery: JSON.stringify({ collection, pipeline: cappedPipeline }) };
+  }
+
+  async query(
+    query: string,
+    _params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryResult> {
+    const { collection, cappedPipeline, finalQuery } = this.parsePipeline(query);
     const client = await this.getClient();
     const options = timeoutMs && timeoutMs > 0 ? { maxTimeMS: timeoutMs } : {};
     const rows = (await client
@@ -171,14 +171,49 @@ export class MongoConnector extends NodeConnector {
       .toArray()) as Record<string, unknown>[];
 
     const { columns, types } = documentsToQueryResultColumns(rows);
-    // `finalQuery` reflects what actually ran — the collection + the
-    // (limit-enforced) pipeline.
-    return {
-      columns,
-      types,
-      rows,
-      finalQuery: JSON.stringify({ collection, pipeline: cappedPipeline }),
-    };
+    return { columns, types, rows, finalQuery };
+  }
+
+  /**
+   * Streaming variant — iterates the aggregation cursor so documents are yielded
+   * as Mongo produces them (cursor closed in the generator's finally). Mongo is
+   * schemaless, so columns/types are sampled from the first batch of documents
+   * (the common case where the pipeline output is uniform); every document's
+   * full set of fields still flows through in the row objects.
+   */
+  override async queryStream(
+    query: string,
+    _params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryStream> {
+    const { collection, cappedPipeline, finalQuery } = this.parsePipeline(query);
+    const client = await this.getClient();
+    const options = timeoutMs && timeoutMs > 0 ? { maxTimeMS: timeoutMs } : {};
+    const cursor = client.db(this.database).collection(collection).aggregate(cappedPipeline, options);
+
+    try {
+      // Sample the first documents to derive columns (schemaless → no schema up front).
+      const SAMPLE = 200;
+      const sample: Record<string, unknown>[] = [];
+      while (sample.length < SAMPLE && (await cursor.hasNext())) {
+        sample.push((await cursor.next()) as Record<string, unknown>);
+      }
+      const { columns, types } = documentsToQueryResultColumns(sample);
+
+      async function* rows(): AsyncGenerator<Record<string, unknown>> {
+        try {
+          for (const doc of sample) yield doc;
+          for await (const doc of cursor) yield doc as Record<string, unknown>;
+        } finally {
+          await cursor.close().catch(() => { /* ignore */ });
+        }
+      }
+
+      return { columns, types, finalQuery, rows: rows() };
+    } catch (err) {
+      await cursor.close().catch(() => { /* ignore */ });
+      throw err;
+    }
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

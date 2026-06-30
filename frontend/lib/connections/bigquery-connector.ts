@@ -1,6 +1,6 @@
 import 'server-only';
 import { BigQuery } from '@google-cloud/bigquery';
-import type { QueryResult, SchemaEntry, TestConnectionResult } from './base';
+import type { QueryResult, QueryStream, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -24,6 +24,12 @@ function normalizeBigQueryRow(row: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
   for (const [k, v] of Object.entries(row)) result[k] = normalizeBigQueryValue(v);
   return result;
+}
+
+/** Extract columns/types from a getQueryResults API response schema. */
+function bigQuerySchema(response: any): { columns: string[]; types: string[] } {
+  const fields: Array<{ name?: string; type?: string }> = response?.schema?.fields ?? [];
+  return { columns: fields.map(f => f.name ?? ''), types: fields.map(f => f.type ?? 'STRING') };
 }
 
 export class BigQueryConnector extends NodeConnectorBase {
@@ -50,8 +56,6 @@ export class BigQueryConnector extends NodeConnectorBase {
     params?: Record<string, string | number | null>,
     paramTypes?: Record<string, string>
   ): Promise<{ rows: Record<string, any>[]; columns: string[]; types: string[] }> {
-    const client = this.getClient();
-
     const queryConfig: Record<string, any> = { query: sql };
     if (params && Object.keys(params).length > 0) {
       queryConfig.params = params;
@@ -60,9 +64,18 @@ export class BigQueryConnector extends NodeConnectorBase {
       }
     }
 
-    const [job] = await client.createQueryJob(queryConfig);
+    const job = await this.createAndAwaitJob(queryConfig);
 
-    // Poll for completion
+    const [rows, , response] = await job.getQueryResults();
+    const { columns, types } = bigQuerySchema(response);
+
+    return { rows: rows as Record<string, any>[], columns, types };
+  }
+
+  /** Create a query job and poll it to DONE (throws on query error). Shared by query()/queryStream(). */
+  private async createAndAwaitJob(queryConfig: Record<string, any>) {
+    const client = this.getClient();
+    const [job] = await client.createQueryJob(queryConfig);
     while (true) {
       const [metadata] = await job.getMetadata();
       const state = metadata?.status?.state;
@@ -73,14 +86,51 @@ export class BigQueryConnector extends NodeConnectorBase {
       }
       await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
+    return job;
+  }
 
-    const [rows, , response] = await job.getQueryResults();
-    const schema = (response as any)?.schema ?? (response as any)?.schema;
-    const fields: Array<{ name?: string; type?: string }> = (schema as any)?.fields ?? [];
-    const columns = fields.map(f => f.name ?? '');
-    const types = fields.map(f => f.type ?? 'STRING');
+  /**
+   * Streaming variant — pages through the job's results (autoPaginate off) so the
+   * server yields rows as BigQuery returns them rather than buffering the whole
+   * set. Schema comes from the first page's API response.
+   */
+  override async queryStream(sql: string, params?: Record<string, string | number>): Promise<QueryStream> {
+    const queryParams: Record<string, string | number | null> = {};
+    const bqSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+      queryParams[key] = params?.[key] ?? null;
+      return `@${key}`;
+    });
+    const finalQuery = inlineSqlParams(sql, params);
 
-    return { rows: rows as Record<string, any>[], columns, types };
+    const hasParams = Object.keys(queryParams).length > 0;
+    const nullTypes: Record<string, string> = {};
+    for (const [k, v] of Object.entries(queryParams)) if (v === null) nullTypes[k] = 'STRING';
+
+    const queryConfig: Record<string, any> = { query: bqSql };
+    if (hasParams) {
+      queryConfig.params = queryParams;
+      if (Object.keys(nullTypes).length) queryConfig.types = nullTypes;
+    }
+
+    const job = await this.createAndAwaitJob(queryConfig);
+
+    // First page → schema + initial rows; follow nextQuery for subsequent pages.
+    const [firstRows, firstNext, response] = await job.getQueryResults({ autoPaginate: false, maxResults: 1000 } as any);
+    const { columns, types } = bigQuerySchema(response);
+
+    async function* rows(): AsyncGenerator<Record<string, unknown>> {
+      let page = firstRows as Record<string, any>[];
+      let next = firstNext as any;
+      for (;;) {
+        for (const r of page) yield normalizeBigQueryRow(r);
+        if (!next) break;
+        const [nextRows, nextNext] = await job.getQueryResults(next);
+        page = nextRows as Record<string, any>[];
+        next = nextNext as any;
+      }
+    }
+
+    return { columns, types, finalQuery, rows: rows() };
   }
 
   async testConnection(includeSchema = false): Promise<TestConnectionResult> {

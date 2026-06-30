@@ -6,7 +6,7 @@ import {
   GetQueryResultsCommand,
 } from '@aws-sdk/client-athena';
 import { GlueClient, GetDatabasesCommand, GetTablesCommand } from '@aws-sdk/client-glue';
-import type { QueryResult, SchemaEntry, TestConnectionResult } from './base';
+import type { QueryResult, QueryStream, SchemaEntry, TestConnectionResult } from './base';
 import { NodeConnector as NodeConnectorBase } from './base';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
 
@@ -126,6 +126,57 @@ export class AthenaConnector extends NodeConnectorBase {
     });
 
     return { columns, types, rows, finalQuery };
+  }
+
+  /**
+   * Streaming variant — Athena's GetQueryResults is natively paged, so we yield
+   * each page's rows as it arrives (following NextToken) instead of buffering the
+   * whole result. The header row is present only on the first page.
+   */
+  override async queryStream(sql: string, params?: Record<string, string | number>): Promise<QueryStream> {
+    const client = this.getAthenaClient();
+    const paramValues: string[] = [];
+    const athenaSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
+      const val = params?.[key];
+      paramValues.push(val != null ? String(val) : 'NULL');
+      return '?';
+    });
+    const finalQuery = inlineSqlParams(sql, params);
+
+    const { QueryExecutionId } = await client.send(
+      new StartQueryExecutionCommand({
+        QueryString: athenaSql,
+        ExecutionParameters: paramValues.length ? paramValues : undefined,
+        WorkGroup: (this.config.work_group as string) ?? 'primary',
+        ResultConfiguration: { OutputLocation: this.config.s3_staging_dir as string },
+      }),
+    );
+    await this.waitForQuery(client, QueryExecutionId!);
+
+    // First page → column metadata (and the header row to skip).
+    const firstPage = await client.send(new GetQueryResultsCommand({ QueryExecutionId: QueryExecutionId! }));
+    const columnInfo = firstPage.ResultSet?.ResultSetMetadata?.ColumnInfo ?? [];
+    const columns = columnInfo.map((c: any) => c.Name as string);
+    const types = columnInfo.map((c: any) => c.Type as string);
+
+    const toRow = (row: any): Record<string, string | null> => {
+      const obj: Record<string, string | null> = {};
+      (row.Data ?? []).forEach((cell: any, i: number) => { obj[columns[i]] = cell.VarCharValue ?? null; });
+      return obj;
+    };
+
+    async function* rows(): AsyncGenerator<Record<string, unknown>> {
+      // First page: row 0 is the header → skip it.
+      for (const row of (firstPage.ResultSet?.Rows ?? []).slice(1)) yield toRow(row);
+      let next = firstPage.NextToken;
+      while (next) {
+        const page = await client.send(new GetQueryResultsCommand({ QueryExecutionId: QueryExecutionId!, NextToken: next }));
+        for (const row of page.ResultSet?.Rows ?? []) yield toRow(row); // no header on later pages
+        next = page.NextToken;
+      }
+    }
+
+    return { columns, types, finalQuery, rows: rows() };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
