@@ -43,6 +43,18 @@ vi.mock('@/store/store', () => ({
 // workspace template ONCE per file instead of in every beforeEach — between
 // tests we just clear non-template files via DELETE.
 const SHARED_DB_PATH = getTestDbPath('edit_file');
+
+// /api/query now streams a JSONL body (header line + one row per line); the client
+// reads it via response.text(). Build a fake Response matching that wire format.
+function jsonlOk(result: { columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery?: string }): Response {
+  const lines = [JSON.stringify({ columns: result.columns, types: result.types, finalQuery: result.finalQuery ?? '', rowCount: result.rows.length })];
+  for (const row of result.rows) lines.push(JSON.stringify(row));
+  const text = lines.join('\n') + '\n';
+  return {
+    ok: true, status: 200, headers: new Headers({ 'X-Cached-At': '0' }),
+    text: async () => text, json: async () => JSON.parse(lines[0]),
+  } as unknown as Response;
+}
 beforeAll(async () => {
   await initTestDatabase(SHARED_DB_PATH);
 });
@@ -696,10 +708,7 @@ describe('editFile - Story auto-executes inline questions (agent sees the new re
       if (urlStr.includes('/api/query')) {
         // Echo the SQL so the test can prove the NEW (edited) query was the one executed.
         const body = init?.body ? JSON.parse(init.body as string) : {};
-        return { ok: true, status: 200, json: async () => ({
-          success: true,
-          data: { columns: ['v'], types: ['INTEGER'], rows: [{ v: 99 }], finalQuery: body.query },
-        }) } as Response;
+        return jsonlOk({ columns: ['v'], types: ['INTEGER'], rows: [{ v: 99 }], finalQuery: body.query });
       }
       throw new Error(`Unmocked fetch call to ${urlStr}`);
     });
@@ -756,10 +765,7 @@ describe('editFile - Story inline <Number> is visible to the agent (EditFile res
             error: { message: 'Failed to extract statements: Parser Error: syntax error at or near "BADSQL"' },
           }) } as Response;
         }
-        return { ok: true, status: 200, json: async () => ({
-          success: true,
-          data: { columns: ['n'], types: ['INTEGER'], rows: [{ n: 7 }], finalQuery: body.query },
-        }) } as Response;
+        return jsonlOk({ columns: ['n'], types: ['INTEGER'], rows: [{ n: 7 }], finalQuery: body.query });
       }
       throw new Error(`Unmocked fetch call to ${urlStr}`);
     });
@@ -822,18 +828,7 @@ describe('CreateFile tool - auto-execute query results', () => {
     global.fetch = vi.fn(async (url: string | URL | Request) => {
       const urlStr = typeof url === 'string' ? url : url.toString();
       if (urlStr.includes('/api/query')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            success: true,
-            data: {
-              columns: ['total_orders'],
-              types: ['BIGINT'],
-              rows: [{ total_orders: 42 }],
-            },
-          }),
-        } as Response;
+        return jsonlOk({ columns: ['total_orders'], types: ['BIGINT'], rows: [{ total_orders: 42 }] });
       }
       throw new Error(`Unmocked fetch call to ${urlStr}`);
     });
@@ -1286,14 +1281,7 @@ describe('EditFile - notebook cell auto-execute', () => {
         return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
       }
       if (urlStr.includes('/api/query')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            success: true,
-            data: { columns: ['n'], types: ['BIGINT'], rows: [{ n: 2 }] },
-          }),
-        } as Response;
+        return jsonlOk({ columns: ['n'], types: ['BIGINT'], rows: [{ n: 2 }] });
       }
       throw new Error(`Unmocked fetch call to ${urlStr}`);
     });

@@ -36,6 +36,7 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { decodeJsonl } from '@/lib/query-cache/jsonl';
 import { sortObjectKeysDeep } from '@/lib/api/file-encoding';
 import { fileToMarkup, markupToContent } from '@/lib/data/file-markup';
 import { shapeContextForAgent, foldContextAgentView } from '@/lib/context/context-agent-view';
@@ -1715,8 +1716,16 @@ export async function getQueryResult(
         throw new Error(errorMessage);
       }
 
-      const apiResponse: { data: QueryResult; finalQuery?: string } = await response.json();
-      const result = { ...apiResponse.data, ...(apiResponse.finalQuery && { finalQuery: apiResponse.finalQuery }) };
+      // /api/query streams a JSONL body (header line + one row per line). Decode
+      // it into the QueryResult shape (columns/types/rows/finalQuery). cachedAt
+      // rides in the X-Cached-At header.
+      const body = await response.text();
+      const decoded = decodeJsonl(body);
+      const cachedAtHeader = response.headers.get('X-Cached-At');
+      const result: QueryResult & { cachedAt?: number } = {
+        ...decoded,
+        ...(cachedAtHeader ? { cachedAt: Number(cachedAtHeader) } : {}),
+      };
 
       // Update Redux cache with result (clears loading state). Deferred while a
       // navigation is in flight — these urgent updates otherwise preempt and

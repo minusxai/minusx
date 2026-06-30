@@ -41,7 +41,9 @@ describe('getQueryResult — concurrency cap', () => {
         peak = Math.max(peak, inFlight);
         await new Promise((r) => setTimeout(r, 5)); // hold the slot so overlap is real
         inFlight -= 1;
-        return { ok: true, status: 200, json: async () => ({ data: { columns: [], types: [], rows: [] } }) } as Response;
+        // /api/query streams JSONL — client reads .text(). Header line + no rows.
+        const text = JSON.stringify({ columns: [], types: [], finalQuery: '', rowCount: 0 }) + '\n';
+        return { ok: true, status: 200, headers: new Headers({ 'X-Cached-At': '0' }), text: async () => text, json: async () => JSON.parse(text) } as unknown as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     });

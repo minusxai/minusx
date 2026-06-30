@@ -1,8 +1,10 @@
-import type { QuestionReference, QuestionContent, QueryResult } from '@/lib/types';
+import type { QuestionReference, QuestionContent } from '@/lib/types';
+import type { QueryResult } from '@/lib/connections/base';
 import { connectionTypeToDialect } from '@/lib/types';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
+import { Readable } from 'stream';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
@@ -13,29 +15,16 @@ import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
 import { getWhitelistForPath, WhitelistSchema } from '@/lib/sql/whitelist-resolver.server';
 import { getModules } from '@/lib/modules/registry';
-import { QUERY_CACHE_TTL_MS } from '@/lib/config';
+import { getCachedJsonlStream } from '@/lib/query-cache/execute.server';
+import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
+import { validatePublicParams, ParamValidationError } from '@/lib/query-cache/param-validation';
+import type { QueryParamSpec } from '@/lib/query-cache/types';
 
 function whitelistToSchemaContext(whitelist: WhitelistSchema): Array<{ schema: string; table: string; columns: string[] }> {
   return whitelist.flatMap(w => w.tables.map(t => ({ schema: w.schema, table: t.table, columns: [] })));
 }
 
-// ---- Server-side query result cache (shared across sessions per process) ----
-// TTL is the runtime-configured QUERY_CACHE_TTL_MS env (default 60_000),
-// imported at the top of the file.
-
-interface CacheEntry { result: QueryResult; cachedAt: number; finalQuery: string; }
-// eslint-disable-next-line no-restricted-syntax -- keys are `${getUserKey(user)}:${queryHash}`
-const queryCache = new Map<string, CacheEntry>();
-// eslint-disable-next-line no-restricted-syntax -- keys are `${getUserKey(user)}:${queryHash}`
-const queryInflight = new Map<string, Promise<QueryResult & { _finalQuery: string }>>();
-
-// Evict stale entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, e] of queryCache) {
-    if (now - e.cachedAt > QUERY_CACHE_TTL_MS) queryCache.delete(k);
-  }
-}, 5 * 60 * 1000);
+type ParamMap = Record<string, string | number | null>;
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -45,142 +34,158 @@ export const POST = withAuth(async (request: NextRequest, user) => {
   const startTime = Date.now();
   try {
     const body = await request.json();
-    const { connection_name, query, parameters, references, filePath, fileId, fileVersion } = body;
+    const {
+      connection_name: bodyConnection, query: bodyQuery, parameters,
+      references, filePath, fileId, fileVersion, cachePolicy: bodyPolicy,
+    } = body;
 
-    // Convert parameters to Record<string, string | number | null> for backend
-    // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
-    // null values represent "None" — the param is explicitly skipped
-    const paramValues: Record<string, string | number | null> = {};
-    if (Array.isArray(parameters)) {
-      // Array format: legacy, no-op (parameters are now just schema definitions)
-    } else if (typeof parameters === 'object' && parameters !== null) {
-      // Object format: {param1: 'val1', param2: null, ...}
-      Object.assign(paramValues, parameters);
+    // Parameter values (object form). null = explicit None.
+    const bodyParams: ParamMap = {};
+    if (typeof parameters === 'object' && parameters !== null && !Array.isArray(parameters)) {
+      Object.assign(bodyParams, parameters);
     }
 
-    // Compute hash on raw inputs (matches client-side Redux hash key)
-    const queryHash = getQueryHash(query, paramValues, connection_name);
-    // User-scoped namespace prevents the cache from serving one user's result to another.
-    const serverCacheKey = `${await getModules().auth.getUserKey(user)}:${queryHash}`;
+    // ── Resolve the EFFECTIVE (connection, query, params, policy) ──────────────
+    // Guests (anonymous public-share viewers) may NOT run raw SQL. They execute
+    // strictly by file id: the server loads the file, uses its FROZEN query, and
+    // validates the supplied params against the file's declared parameter TYPES.
+    let connectionName: string = bodyConnection;
+    let query: string = bodyQuery;
+    let paramValues: ParamMap = bodyParams;
+    let policy = resolveCachePolicy(bodyPolicy);
 
-    // Whitelist validation runs BEFORE the cache lookup. The cache is keyed by
-    // (user, query, params) and does not include filePath; if validation came
-    // after the cache hit, a user could replay a query that succeeded under one
-    // filePath's whitelist from another filePath where it would now be denied,
-    // or keep hitting cached results after an admin revoked the whitelist.
-    // Validate first, then trust the cache only for authorized queries.
+    if (user.guest) {
+      if (typeof fileId !== 'number') {
+        return ApiErrors.forbidden('Guests must execute a saved question by fileId.');
+      }
+      let content: QuestionContent;
+      try {
+        const loaded = await FilesAPI.loadFile(fileId, user);
+        content = loaded.data.content as QuestionContent;
+      } catch {
+        return ApiErrors.notFound('Question');
+      }
+      if (!content || typeof content.query !== 'string') {
+        return ApiErrors.notFound('Question');
+      }
+      connectionName = content.connection_name;
+      query = content.query; // FROZEN — body.query is ignored for guests
+      const spec: QueryParamSpec[] = (content.parameters ?? []).map(p => ({ name: p.name, type: p.type }));
+      try {
+        paramValues = validatePublicParams(spec, (content.parameterValues ?? {}) as ParamMap, bodyParams);
+      } catch (err) {
+        if (err instanceof ParamValidationError) return ApiErrors.badRequest(err.message);
+        throw err;
+      }
+      policy = resolveCachePolicy(content.cachePolicy);
+    }
+
+    if (typeof query !== 'string' || query.length === 0) {
+      return ApiErrors.validationError('query is required');
+    }
+
+    const queryHash = getQueryHash(query, paramValues as Record<string, unknown>, connectionName);
+    const mode = await getModules().auth.getUserKey(user);
+
+    // ── Whitelist validation (BEFORE serving any cache) ────────────────────────
+    // Keyed by (mode, query, params) — does NOT include filePath. Validate before
+    // trusting the cache so a user can't replay a query authorized under one
+    // filePath's whitelist from another where it's now denied.
     let schemaContext: Array<{ schema: string; table: string; columns: string[] }> | null = null;
     if (filePath) {
-      const whitelist = await getWhitelistForPath(filePath, connection_name, user);
+      const whitelist = await getWhitelistForPath(filePath, connectionName, user);
       if (whitelist) {
         schemaContext = whitelistToSchemaContext(whitelist);
         const validationError = await validateQueryTables(query, whitelist, user);
         if (validationError) {
           return NextResponse.json(
             { success: false, error: { code: 'FORBIDDEN_TABLES', message: validationError } },
-            { status: 403 }
+            { status: 403 },
           );
         }
       }
     }
 
-    // Cache hit — return immediately (whitelist already validated above)
-    const cached = queryCache.get(serverCacheKey);
-    if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
-      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
-        databaseName: connection_name, durationMs: 0,
-        rowCount: cached.result.rows.length, colCount: cached.result.columns.length,
-        wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
-      });
-      return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
-    }
-
-    // Thundering herd: join in-flight promise for same hash
-    const existingInflight = queryInflight.get(serverCacheKey);
-    if (existingInflight) {
-      const { _finalQuery: rq, ...rest } = await existingInflight;
-      return NextResponse.json({ success: true, data: rest, finalQuery: rq });
-    }
-
-    // Execute query (wrapped in a promise so concurrent identical requests share it)
-    const execPromise = (async () => {
-      // Handle composed questions (CTE construction)
+    // ── The execution thunk (runs only on miss / expired / background revalidate) ──
+    const execute = async (): Promise<QueryResult> => {
       let composedQuery = query;
-      if (references && Array.isArray(references) && references.length > 0) {
-        // Load referenced questions from DB
+      if (Array.isArray(references) && references.length > 0) {
         const resolvedRefs: ResolvedReference[] = await Promise.all(
           (references as QuestionReference[]).map(async (ref) => {
             const result = await FilesAPI.loadFile(ref.id, user);
-            return {
-              id: ref.id,
-              alias: ref.alias,
-              query: (result.data.content as QuestionContent).query
-            };
-          })
+            return { id: ref.id, alias: ref.alias, query: (result.data.content as QuestionContent).query };
+          }),
         );
-
-        // Use extracted function to build CTEs
         composedQuery = CTEfyQuery(query, resolvedRefs);
       }
 
-      // Derive dialect via getRawByName, not FilesAPI.loadFile: loadFile runs
-      // the connectionLoader, which can trigger a full schema profiling refresh.
+      // Derive dialect via getRawByName (no schema-profiling loader on the hot path).
       let queryDialect = 'duckdb';
       try {
-        const { type } = await ConnectionsAPI.getRawByName(connection_name, user.mode);
+        const { type } = await ConnectionsAPI.getRawByName(connectionName, user.mode);
         if (type) queryDialect = connectionTypeToDialect(type);
-      } catch { /* dialect defaults to duckdb */ }
+      } catch { /* default duckdb */ }
 
-      // Apply None params: remove filter conditions or substitute with NULL
       const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues, queryDialect);
 
       const queryStart = Date.now();
-      const result = await runQuery(connection_name, noneResolvedQuery, resolvedParams, user);
+      const result = await runQuery(connectionName, noneResolvedQuery, resolvedParams, user);
       const durationMs = Date.now() - queryStart;
 
-      const displayQuery = result.finalQuery ?? noneResolvedQuery;
-
-      // Populate server-side cache
-      const cachedAt = Date.now();
-      queryCache.set(serverCacheKey, { result, cachedAt, finalQuery: displayQuery });
-
-      // Publish analytics event (fire-and-forget via registry)
+      // Per-execution analytics (miss + background revalidation). Cache hits are
+      // recorded at the route level below.
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
-        schemaContext: schemaContext ?? undefined,
-        databaseName: connection_name, durationMs,
+        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query,
+        params: paramValues as Record<string, unknown>, schemaContext: schemaContext ?? undefined,
+        databaseName: connectionName, durationMs,
         rowCount: result.rows.length, colCount: result.columns.length,
         wasCacheHit: false, mode: user.mode, userId: user.userId, userEmail: user.email,
       });
 
-      return { ...result, cachedAt, _finalQuery: displayQuery };
-    })();
+      return { ...result, finalQuery: result.finalQuery ?? noneResolvedQuery };
+    };
 
-    queryInflight.set(serverCacheKey, execPromise);
-    try {
-      const { _finalQuery: rq, ...rest } = await execPromise;
-      return NextResponse.json({ success: true, data: rest, finalQuery: rq });
-    } catch (execError) {
+    // ── SWR + lease + blob, streamed as JSONL ──────────────────────────────────
+    const { stream, meta } = await getCachedJsonlStream({
+      mode, connectionName, query, params: paramValues, policy, execute,
+    });
+
+    if (meta.fromCache) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query, params: paramValues as Record<string, unknown>,
-        schemaContext: schemaContext ?? undefined,
-        databaseName: connection_name, durationMs: Date.now() - startTime,
-        rowCount: 0, colCount: 0, wasCacheHit: false,
-        error: execError instanceof Error ? execError.message : String(execError),
-        mode: user.mode, userId: user.userId, userEmail: user.email,
+        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query,
+        params: paramValues as Record<string, unknown>,
+        databaseName: connectionName, durationMs: 0,
+        rowCount: meta.rowCount, colCount: meta.colCount,
+        wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
       });
-      // Query EXECUTION failures are the query's problem (bad SQL, missing
-      // table, warehouse permissions) — return 400, not 500. The client shows
-      // the message in the question UI and (correctly) does NOT page the team
-      // via capture-error for 4xx; the failure stays observable through the
-      // QUERY_EXECUTED analytics event published above.
-      return ApiErrors.badRequest(execError instanceof Error ? execError.message : String(execError));
-    } finally {
-      queryInflight.delete(serverCacheKey);
     }
+
+    // Plain JSONL body (header line + one row per line). Nginx still owns wire
+    // gzip; we set no Content-Encoding. Metadata rides in headers.
+    return new NextResponse(Readable.toWeb(stream) as ReadableStream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Cache': meta.fromCache ? 'hit' : 'miss',
+        'X-Cached-At': String(meta.cachedAt),
+        'X-Row-Count': String(meta.rowCount),
+      },
+    });
   } catch (error) {
-    console.error(`[QUERY API] Error after ${Date.now() - startTime}ms:`, error);
+    // Query EXECUTION failures (bad SQL, missing table, warehouse perms) are the
+    // query's problem → 400, not 500. The client shows the message and (correctly)
+    // does NOT page the team via capture-error for 4xx.
+    const message = error instanceof Error ? error.message : String(error);
+    appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
+      queryHash: '', fileId: null, fileVersion: null, query: '', params: {},
+      databaseName: '', durationMs: Date.now() - startTime,
+      rowCount: 0, colCount: 0, wasCacheHit: false, error: message,
+      mode: user.mode, userId: user.userId, userEmail: user.email,
+    });
+    if (error instanceof Error) {
+      return ApiErrors.badRequest(message);
+    }
     return handleApiError(error);
   }
 });

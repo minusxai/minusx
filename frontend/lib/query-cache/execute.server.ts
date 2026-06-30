@@ -98,7 +98,9 @@ export async function getCachedJsonlStream(opts: CachedExec): Promise<{ stream: 
 async function resolve(opts: CachedExec): Promise<Resolved> {
   const now = nowOf(opts);
   const key = cacheKey(opts);
-  const row = await getCacheRow(key);
+  // Cache reads are best-effort: a DB/infra hiccup degrades to direct execution,
+  // never breaks the query. (Also lets DB-less unit tests exercise the route.)
+  const row = await getCacheRow(key).catch(() => null);
   const cls = classifyCacheRow(row, now);
 
   if ((cls === 'fresh' || cls === 'stale') && row?.blobRef) {
@@ -114,17 +116,20 @@ async function resolve(opts: CachedExec): Promise<Resolved> {
 async function executeWithLease(key: string, opts: CachedExec, startNow: number): Promise<Resolved> {
   let now = startNow;
   for (let attempt = 0; attempt < MAX_LEASE_ATTEMPTS; attempt++) {
+    // If the lease can't be claimed (DB down), act as the winner and execute —
+    // correctness over dedup. Execution errors still propagate (→ 400).
     const claim = await claimLease(
       key,
       { query: opts.query, connectionName: opts.connectionName, params: opts.params, policy: opts.policy },
       now,
-    );
+    ).catch(() => ({ won: true } as { won: boolean }));
     if (claim.won) {
       const result = await runAndStore(key, opts);
       return { source: 'fresh', result, cachedAt: now };
     }
     // Lost — wait for the winner's blob.
-    const ready = await waitForReady(key, { timeoutMs: WAIT_TIMEOUT_MS, intervalMs: 50, now: () => Date.now() });
+    const ready = await waitForReady(key, { timeoutMs: WAIT_TIMEOUT_MS, intervalMs: 50, now: () => Date.now() })
+      .catch(() => null);
     if (ready?.blobRef) {
       return {
         source: 'cache', blobRef: ready.blobRef, finalQuery: ready.finalQuery ?? '',
@@ -134,14 +139,24 @@ async function executeWithLease(key: string, opts: CachedExec, startNow: number)
     now = Date.now(); // winner died without a blob → re-claim
   }
   // Exhausted attempts (rare) — execute directly so the caller still gets data.
-  const result = await runAndStore(key, opts).catch(() => opts.execute());
+  const result = await runAndStore(key, opts);
   return { source: 'fresh', result, cachedAt: Date.now() };
 }
 
-/** Execute, write the blob, mark ready. On failure, free the lease and rethrow. */
+/**
+ * Execute, then best-effort write the blob + mark ready. The EXECUTION error
+ * propagates (it's the query's problem → 400); cache-write errors are swallowed
+ * (the caller still gets the result, just uncached this round).
+ */
 async function runAndStore(key: string, opts: CachedExec): Promise<QueryResult> {
+  let result: QueryResult;
   try {
-    const result = await opts.execute();
+    result = await opts.execute();
+  } catch (err) {
+    await releaseLease(key).catch(() => { /* best effort */ });
+    throw err; // execution failure → surfaced to the route as 400
+  }
+  try {
     const blobRef = blobRefForKey(key);
     const { byteSize } = await store(opts).putStream(blobRef, resultToJsonlStream(result));
     await markReady(
@@ -152,11 +167,11 @@ async function runAndStore(key: string, opts: CachedExec): Promise<QueryResult> 
       },
       Date.now(),
     );
-    return result;
-  } catch (err) {
+  } catch {
+    // Cache write failed (DB/blob infra) — degrade gracefully, free the lease.
     await releaseLease(key).catch(() => { /* best effort */ });
-    throw err;
   }
+  return result;
 }
 
 /** Fire-and-forget background refresh of a stale entry. One winner via the lease. */

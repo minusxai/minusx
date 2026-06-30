@@ -52,6 +52,7 @@ vi.mock('@/lib/connections', async (importOriginal) => {
 });
 
 import { POST } from '@/app/api/query/route';
+import { decodeJsonl } from '@/lib/query-cache/jsonl';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
 import { NextRequest } from 'next/server';
@@ -108,12 +109,10 @@ describe('POST /api/query — no schema profiling on the query path', () => {
       parameters: {},
     });
 
-    const body = await res.json();
-
-    // Query still executes and returns the connector's rows.
+    // Query still executes and returns the connector's rows (JSONL wire format).
     expect(res.status).toBe(200);
-    expect(body.success).toBe(true);
-    expect(body.data.rows).toEqual([{ x: 1 }]);
+    const decoded = decodeJsonl(await res.text());
+    expect(decoded.rows).toEqual([{ x: 1 }]);
     expect(querySpy).toHaveBeenCalled();
 
     // The hot path must NOT trigger schema profiling/refresh.

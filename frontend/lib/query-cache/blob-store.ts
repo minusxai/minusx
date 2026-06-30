@@ -41,7 +41,8 @@ class ObjectStoreBlobStore implements QueryCacheBlobStore {
     const buf = await this.store.get(ref);
     if (!buf) return null;
     const text = await gunzipToString(buf);
-    return Readable.from([text]);
+    // Emit a Buffer (not a string) so the stream pipes cleanly to Readable.toWeb.
+    return Readable.from([Buffer.from(text, 'utf8')]);
   }
 
   async getResult(ref: string): Promise<QueryResult | null> {

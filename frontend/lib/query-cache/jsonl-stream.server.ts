@@ -13,17 +13,21 @@ import { decodeJsonl } from './jsonl';
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
 
-/** A Readable that emits the result as JSONL, one line per `read`, header first. */
+/**
+ * A Readable that emits the result as JSONL, one Buffer line per `read`, header
+ * first. Emits Buffers (not strings) so it pipes cleanly to `Readable.toWeb`
+ * (the HTTP response body) and to the gzip transform.
+ */
 export function resultToJsonlStream(result: QueryResult): Readable {
-  function* gen(): Generator<string> {
+  function* gen(): Generator<Buffer> {
     const header: JsonlHeader = {
       columns: result.columns,
       types: result.types,
       finalQuery: result.finalQuery,
       rowCount: result.rows.length,
     };
-    yield JSON.stringify(header) + '\n';
-    for (const row of result.rows) yield JSON.stringify(row) + '\n';
+    yield Buffer.from(JSON.stringify(header) + '\n', 'utf8');
+    for (const row of result.rows) yield Buffer.from(JSON.stringify(row) + '\n', 'utf8');
   }
   return Readable.from(gen());
 }

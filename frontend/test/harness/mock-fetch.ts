@@ -6,28 +6,31 @@ import type { MockInstance } from 'vitest';
  */
 
 import { NextRequest } from 'next/server';
+import { encodeResultToJsonl } from '@/lib/query-cache/jsonl';
 
 /**
  * Common interceptors that can be reused across tests
  */
 export const commonInterceptors = {
-  /** Mock /api/query with sales data */
+  /** Mock /api/query with sales data. Returns the JSONL wire format the real route now emits. */
   mockQuerySales: async (urlStr: string) => {
     if (urlStr.includes('/api/query')) {
+      const text = encodeResultToJsonl({
+        columns: ['region', 'total_sales'],
+        types: ['text', 'number'],
+        rows: [
+          { region: 'Southwest', total_sales: 27150594.59 },
+          { region: 'Canada', total_sales: 18398929.19 },
+        ],
+        finalQuery: '',
+      });
       return {
         ok: true,
         status: 200,
-        json: async () => ({
-          data: {
-            columns: ['region', 'total_sales'],
-            types: ['text', 'number'],
-            rows: [
-              { region: 'Southwest', total_sales: 27150594.59 },
-              { region: 'Canada', total_sales: 18398929.19 }
-            ]
-          }
-        })
-      } as Response;
+        headers: new Headers({ 'X-Cache': 'miss', 'X-Cached-At': '0' }),
+        text: async () => text,
+        json: async () => JSON.parse(text.split('\n')[0]),
+      } as unknown as Response;
     }
     return null;
   },
@@ -126,13 +129,16 @@ export function setupMockFetch(options: MockFetchOptions) {
         });
 
         const response = await interceptor.handler(request);
-        const data = await response.json();
-
+        // Read the body once as text so both JSON routes and the JSONL /api/query
+        // stream are supported; expose .text()/.json()/headers like a real Response.
+        const text = await response.text();
         return {
-          ok: response.status === 200,
+          ok: response.status >= 200 && response.status < 300,
           status: response.status,
-          json: async () => data
-        } as Response;
+          headers: response.headers,
+          text: async () => text,
+          json: async () => JSON.parse(text),
+        } as unknown as Response;
       }
     }
 
