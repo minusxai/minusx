@@ -32,6 +32,30 @@ function bigQuerySchema(response: any): { columns: string[]; types: string[] } {
   return { columns: fields.map(f => f.name ?? ''), types: fields.map(f => f.type ?? 'STRING') };
 }
 
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Build BigQuery's explicit query-parameter `types` map.
+ *
+ * BigQuery (unlike DuckDB/Postgres) won't coerce a STRING parameter to DATE, so
+ * `date_col >= @start` fails when @start is bound as STRING. We type a param as
+ * DATE when the question DECLARED it `date` AND the value is a clean YYYY-MM-DD
+ * (a malformed/timestamp value falls back to inference — no new error). `null`
+ * params still need an explicit type (BigQuery requires it) → STRING. text/number
+ * are left to BigQuery's own inference, which is already correct.
+ */
+function bigQueryParamTypes(
+  queryParams: Record<string, string | number | null>,
+  declared?: Record<string, string>,
+): Record<string, string> {
+  const types: Record<string, string> = {};
+  for (const [k, v] of Object.entries(queryParams)) {
+    if (v === null) { types[k] = 'STRING'; continue; }
+    if (declared?.[k] === 'date' && typeof v === 'string' && YMD.test(v)) types[k] = 'DATE';
+  }
+  return types;
+}
+
 export class BigQueryConnector extends NodeConnectorBase {
   private client: BigQuery | null = null;
 
@@ -94,7 +118,12 @@ export class BigQueryConnector extends NodeConnectorBase {
    * server yields rows as BigQuery returns them rather than buffering the whole
    * set. Schema comes from the first page's API response.
    */
-  override async queryStream(sql: string, params?: Record<string, string | number>): Promise<QueryStream> {
+  override async queryStream(
+    sql: string,
+    params?: Record<string, string | number>,
+    _timeoutMs?: number,
+    paramTypes?: Record<string, string>,
+  ): Promise<QueryStream> {
     const queryParams: Record<string, string | number | null> = {};
     const bqSql = sql.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
       queryParams[key] = params?.[key] ?? null;
@@ -103,13 +132,12 @@ export class BigQueryConnector extends NodeConnectorBase {
     const finalQuery = inlineSqlParams(sql, params);
 
     const hasParams = Object.keys(queryParams).length > 0;
-    const nullTypes: Record<string, string> = {};
-    for (const [k, v] of Object.entries(queryParams)) if (v === null) nullTypes[k] = 'STRING';
+    const bqParamTypes = bigQueryParamTypes(queryParams, paramTypes);
 
     const queryConfig: Record<string, any> = { query: bqSql };
     if (hasParams) {
       queryConfig.params = queryParams;
-      if (Object.keys(nullTypes).length) queryConfig.types = nullTypes;
+      if (Object.keys(bqParamTypes).length) queryConfig.types = bqParamTypes;
     }
 
     const job = await this.createAndAwaitJob(queryConfig);

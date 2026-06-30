@@ -44,6 +44,8 @@ export async function runQueryStream(
   query: string,
   params: Record<string, string | number>,
   user: EffectiveUser,
+  /** Declared logical param types ('text'|'number'|'date'), keyed by name — advisory; see queryStream. */
+  paramTypes?: Record<string, string>,
 ): Promise<QueryStream> {
   // Use getRawByName so credentials (e.g. service_account_json) are included.
   const rawConn = await ConnectionsAPI.getRawByName(databaseName, user.mode).catch(() => null);
@@ -77,6 +79,6 @@ export async function runQueryStream(
   // Real connectors all inherit NodeConnector.queryStream; a minimal connector
   // (or a test mock) implementing only query() is wrapped as a one-shot stream.
   return typeof connector.queryStream === 'function'
-    ? connector.queryStream(cappedQuery, params)
+    ? connector.queryStream(cappedQuery, params, undefined, paramTypes)
     : queryResultToStream(await connector.query(cappedQuery, params));
 }

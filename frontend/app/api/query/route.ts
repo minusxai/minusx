@@ -34,9 +34,13 @@ export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
     const {
-      connection_name: bodyConnection, query: bodyQuery, parameters,
+      connection_name: bodyConnection, query: bodyQuery, parameters, parameterTypes,
       references, filePath, fileId, fileVersion, cachePolicy: bodyPolicy,
     } = body;
+    // Declared param types ('text'|'number'|'date'), keyed by name — advisory, used
+    // by connectors that need explicit typing (BigQuery: bind a `date` param as DATE).
+    const paramTypes: Record<string, string> | undefined =
+      parameterTypes && typeof parameterTypes === 'object' ? parameterTypes : undefined;
 
     // Parameter values (object form). null = explicit None.
     const bodyParams: ParamMap = {};
@@ -117,7 +121,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       // Stream the result — the executor pipes it through to the object store +
       // client without materializing on the server.
-      return runQueryStream(connectionName, noneResolvedQuery, resolvedParams, user);
+      return runQueryStream(connectionName, noneResolvedQuery, resolvedParams, user, paramTypes);
     };
 
     // ── SWR + lease + blob, streamed as JSONL ──────────────────────────────────

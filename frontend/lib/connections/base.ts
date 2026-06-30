@@ -214,6 +214,11 @@ export abstract class NodeConnector {
     query: string,
     params?: Record<string, string | number>,
     timeoutMs?: number,
+    // Declared logical param types ('text' | 'number' | 'date'), keyed by name.
+    // Optional + advisory: only connectors that need explicit param typing read
+    // it (e.g. BigQuery types a `date` param as DATE so date comparisons compile).
+    // The default wrapper ignores it.
+    _paramTypes?: Record<string, string>,
   ): Promise<QueryStream> {
     return queryResultToStream(await this.query(query, params, timeoutMs));
   }
