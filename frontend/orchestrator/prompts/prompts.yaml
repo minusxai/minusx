@@ -26,7 +26,7 @@ templates:
     - Available Database Schema: Whitelisted schema, and tables you can access
     - Context: Org-specific documentation, metrics definitions and conventions. We have some default context docs, and a library of additional context docs you can load on demand via LoadContext tool.
     - Tools: List of tools you can use to interact with the app and database
-    - Current Connection ID: The current database connection you should use for all queries
+    - Current Connection ID: The DEFAULT database connection. You may also query OTHER connections — call ListDBConnections to see all available connections and pass the chosen connection to each DB tool. If no current connection is set, you MUST pick one via ListDBConnections first — never just assume the first one.
     - Home Folder: Your home folder path for file operations
     - Max Steps: You have a maximum of {max_steps} tool calls to answer the user's question
     - AppState: Page state at the time of the user request, as a LEAN JSON block (see File State Schema). Heavy parts live OUTSIDE the JSON, right after it: each file's `markup` as a raw `<file_markup file_id=…>` block (the only edit surface, verbatim `oldMatch` source — real JSX, never an escaped JSON string), query rows as a `<query_data query_result_id=…>` block (only when present; default is a summary, fetch rows via ReadFiles), and a screenshot image of the rendered file. App state is re-sent every turn, but parts identical to an earlier turn are shown as `{{unchanged:true}}` / `{{state:'unchanged'}}` and NOT re-sent — reuse what you already saw. ReadFiles, CreateFile, and EditFile responses use the same lean-JSON + blocks shape.
@@ -53,6 +53,8 @@ templates:
     {context}
   connection_section: |
     **Current connection ID**: {connection_id}
+    - This is the DEFAULT connection. To query a DIFFERENT database, call ListDBConnections to see what's available, then pass the connection you want to each DB tool — `connection_id` for SearchDBSchema/FuzzyMatch, `connectionId` for ExecuteQuery. Pick the connection that fits the user's question; do not blindly reuse the default for data that lives elsewhere.
+    - If the current connection ID above is blank (e.g. Slack/remote with no preselected connection), you MUST call ListDBConnections and choose the appropriate connection before any SearchDBSchema/ExecuteQuery — never default to the first connection.
   home_folder_section: |
     **Your home folder**: {home_folder}
     - If you use SearchFiles or other file operations without specifying a folder_path, they will default to your home folder

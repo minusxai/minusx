@@ -88,4 +88,44 @@ describe('buildServerAgentArgs — schema resolution', () => {
     expect(args.connection_id).toBe('ctxdb');
     expect(args.schema).toEqual([{ schema: 'main', tables: ['CtxUsers'] }]);
   });
+
+  it('does NOT lock to a connection when MULTIPLE are available and none is selected (Slack/remote) — the agent picks', async () => {
+    // Context whitelisting two connections, no UI selection (no connectionId) → ambiguous.
+    const ctxContent = {
+      published: { all: 1 },
+      versions: [{
+        version: 1,
+        whitelist: [
+          { name: 'multi_a', type: 'connection' },
+          { name: 'multi_b', type: 'connection' },
+        ],
+        docs: [], createdAt: new Date().toISOString(), createdBy: 1,
+      }],
+    } as unknown as ContextContent;
+    const ctxId = await DocumentDB.create('multi-context', '/org/multi-context', 'context', ctxContent, []);
+    await DocumentDB.create('multi_a', '/org/database/multi_a', 'connection', { type: 'duckdb', config: {}, schema: persistedSchema('TableA') }, [], undefined, false);
+    await DocumentDB.create('multi_b', '/org/database/multi_b', 'connection', { type: 'duckdb', config: {}, schema: persistedSchema('TableB') }, [], undefined, false);
+
+    const args = await buildServerAgentArgs(USER, { contextFileId: ctxId }); // NO connectionId
+
+    expect(args.connection_id).toBeUndefined();  // never the first — the agent must choose via ListDBConnections
+    expect(args.schema).toEqual([]);             // no upfront schema → discover the picked connection on demand
+  });
+
+  it('uses the only whitelisted connection when exactly one is available, even without a UI selection', async () => {
+    const ctxContent = {
+      published: { all: 1 },
+      versions: [{
+        version: 1,
+        whitelist: [{ name: 'solo_conn', type: 'connection' }],
+        docs: [], createdAt: new Date().toISOString(), createdBy: 1,
+      }],
+    } as unknown as ContextContent;
+    const ctxId = await DocumentDB.create('solo-context', '/org/solo-context', 'context', ctxContent, []);
+    await DocumentDB.create('solo_conn', '/org/database/solo_conn', 'connection', { type: 'duckdb', config: {}, schema: persistedSchema('SoloTable') }, [], undefined, false);
+
+    const args = await buildServerAgentArgs(USER, { contextFileId: ctxId }); // NO connectionId
+
+    expect(args.connection_id).toBe('solo_conn'); // unambiguous single connection → still provided
+  });
 });
