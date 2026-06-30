@@ -252,6 +252,17 @@ export const QuestionReference = Type.Object({
 }, { title: 'QuestionReference' });
 export type QuestionReference = Static<typeof QuestionReference>;
 
+// Per-file query-cache windows (Query Execution, Cache & Params Arch V2). Both ms.
+// `revalidateMs`: results younger than this are served fresh. `expiryMs`: results
+// older than this are never served — execution blocks. Between the two, results
+// are stale-valid (served immediately while a background refresh runs). Omitted
+// fields fall back to env-configured defaults (20 min / 1 hr).
+export const CachePolicy = Type.Object({
+  revalidateMs: Type.Optional(Type.Number({ description: 'serve-fresh window in ms (default 20 min)' })),
+  expiryMs: Type.Optional(Type.Number({ description: 'hard-expiry window in ms (default 1 hr)' })),
+}, { title: 'CachePolicy' });
+export type CachePolicy = Static<typeof CachePolicy>;
+
 export const QuestionContent = Type.Object({
   description: Nullable(Type.String()),
   query: Type.String({ description: 'SQL query string, may contain :paramName tokens' }),
@@ -260,6 +271,7 @@ export const QuestionContent = Type.Object({
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
   connection_name: Type.String({ description: 'connection name (empty string if none)' }),
   references: Nullable(Type.Array(QuestionReference)),
+  cachePolicy: Nullable(CachePolicy),
 }, { title: 'QuestionContent' });
 export type QuestionContent = Static<typeof QuestionContent>;
 
