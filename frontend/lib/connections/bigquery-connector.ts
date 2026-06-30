@@ -35,25 +35,33 @@ function bigQuerySchema(response: any): { columns: string[]; types: string[] } {
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Build BigQuery's explicit query-parameter `types` map.
+ * Build BigQuery's `{ params, types }` for createQueryJob.
  *
- * BigQuery (unlike DuckDB/Postgres) won't coerce a STRING parameter to DATE, so
- * `date_col >= @start` fails when @start is bound as STRING. We type a param as
- * DATE when the question DECLARED it `date` AND the value is a clean YYYY-MM-DD
- * (a malformed/timestamp value falls back to inference — no new error). `null`
- * params still need an explicit type (BigQuery requires it) → STRING. text/number
- * are left to BigQuery's own inference, which is already correct.
+ * BigQuery (unlike DuckDB/Postgres) won't coerce a STRING parameter to DATE in
+ * every context, so parameterized date filters can fail to compile. The fix is
+ * to bind a declared `date` param as a REAL DATE value via BigQuery.date(), NOT
+ * a string with `type:'DATE'` — the latter binds the value to NULL in the
+ * @google-cloud/bigquery client (verified against a live connection). A
+ * BigQueryDate value is inferred as DATE with no explicit `types` entry needed.
+ * `null` params still need an explicit type (BigQuery requires it) → STRING;
+ * text/number keep BigQuery's own (correct) inference. A malformed/non-YMD date
+ * value falls back to a plain string (no new error).
  */
-function bigQueryParamTypes(
-  queryParams: Record<string, string | number | null>,
+function bigQueryParams(
+  raw: Record<string, string | number | null>,
   declared?: Record<string, string>,
-): Record<string, string> {
+): { params: Record<string, unknown>; types: Record<string, string> } {
+  const params: Record<string, unknown> = {};
   const types: Record<string, string> = {};
-  for (const [k, v] of Object.entries(queryParams)) {
-    if (v === null) { types[k] = 'STRING'; continue; }
-    if (declared?.[k] === 'date' && typeof v === 'string' && YMD.test(v)) types[k] = 'DATE';
+  for (const [k, v] of Object.entries(raw)) {
+    if (v === null) { params[k] = null; types[k] = 'STRING'; continue; }
+    if (declared?.[k] === 'date' && typeof v === 'string' && YMD.test(v)) {
+      params[k] = BigQuery.date(v); // real DATE value (BigQueryDate), not a string
+    } else {
+      params[k] = v;
+    }
   }
-  return types;
+  return { params, types };
 }
 
 export class BigQueryConnector extends NodeConnectorBase {
@@ -132,12 +140,12 @@ export class BigQueryConnector extends NodeConnectorBase {
     const finalQuery = inlineSqlParams(sql, params);
 
     const hasParams = Object.keys(queryParams).length > 0;
-    const bqParamTypes = bigQueryParamTypes(queryParams, paramTypes);
+    const { params: bqParams, types: bqTypes } = bigQueryParams(queryParams, paramTypes);
 
     const queryConfig: Record<string, any> = { query: bqSql };
     if (hasParams) {
-      queryConfig.params = queryParams;
-      if (Object.keys(bqParamTypes).length) queryConfig.types = bqParamTypes;
+      queryConfig.params = bqParams;
+      if (Object.keys(bqTypes).length) queryConfig.types = bqTypes;
     }
 
     const job = await this.createAndAwaitJob(queryConfig);

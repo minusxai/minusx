@@ -1,6 +1,8 @@
 /**
- * BigQuery binds declared `date` params as DATE (not STRING), so `date_col >= @d`
- * compiles. Captures the job config handed to createQueryJob. BigQuery mocked.
+ * BigQuery binds a declared `date` param as a REAL DATE value (BigQuery.date(),
+ * a BigQueryDate) — NOT a string with `type:'DATE'`, which nulls the value in
+ * the @google-cloud/bigquery client (verified against a live connection). Captures
+ * the job config handed to createQueryJob. BigQuery mocked.
  */
 const { captured } = vi.hoisted(() => {
   const captured: { config: any } = { config: null };
@@ -15,16 +17,21 @@ vi.mock('@google-cloud/bigquery', () => {
       return [[], null];
     },
   };
-  return { BigQuery: class { async createQueryJob(cfg: any) { captured.config = cfg; return [job]; } } };
+  // Mirror the real static BigQuery.date() → a tagged BigQueryDate-like value.
+  class BigQuery {
+    static date(value: string) { return { value, _kind: 'BigQueryDate' }; }
+    async createQueryJob(cfg: any) { captured.config = cfg; return [job]; }
+  }
+  return { BigQuery };
 });
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BigQueryConnector } from '../bigquery-connector';
 
-describe('BigQueryConnector — declared date params bind as DATE', () => {
+describe('BigQueryConnector — declared date params bind as a real DATE value', () => {
   beforeEach(() => { captured.config = null; });
 
-  it('types a declared `date` param as DATE in the job config', async () => {
+  it('binds a declared `date` param as a BigQueryDate value (not a string, no DATE type)', async () => {
     const conn = new BigQueryConnector('bq', { project_id: 'p', service_account_json: '{}' });
     await conn.queryStream(
       'SELECT * FROM t WHERE order_date >= :start',
@@ -33,11 +40,13 @@ describe('BigQueryConnector — declared date params bind as DATE', () => {
       { start: 'date' },
     );
     expect(captured.config.query).toContain('@start');
-    expect(captured.config.params).toEqual({ start: '2024-01-01' }); // still bound, not inlined
-    expect(captured.config.types.start).toBe('DATE');
+    // Bound as a BigQueryDate VALUE — the client infers DATE from it.
+    expect(captured.config.params.start).toEqual({ value: '2024-01-01', _kind: 'BigQueryDate' });
+    // No explicit `types` entry for it (and definitely not the value-nulling 'DATE').
+    expect(captured.config.types?.start).toBeUndefined();
   });
 
-  it('does NOT type text/number params (BigQuery infers those correctly)', async () => {
+  it('leaves text/number params as plain values (BigQuery infers those correctly)', async () => {
     const conn = new BigQueryConnector('bq', { project_id: 'p', service_account_json: '{}' });
     await conn.queryStream(
       'SELECT * FROM t WHERE name = :n AND amt > :a',
@@ -45,12 +54,12 @@ describe('BigQueryConnector — declared date params bind as DATE', () => {
       undefined,
       { n: 'text', a: 'number' },
     );
-    // No DATE types forced; n/a left to BigQuery inference (types may be absent).
+    expect(captured.config.params).toEqual({ n: 'bob', a: 5 });
     expect(captured.config.types?.n).toBeUndefined();
     expect(captured.config.types?.a).toBeUndefined();
   });
 
-  it('falls back (no DATE type) for a malformed date value', async () => {
+  it('falls back to a plain string for a malformed (non-YYYY-MM-DD) date value', async () => {
     const conn = new BigQueryConnector('bq', { project_id: 'p', service_account_json: '{}' });
     await conn.queryStream(
       'SELECT * FROM t WHERE d >= :d',
@@ -58,6 +67,19 @@ describe('BigQueryConnector — declared date params bind as DATE', () => {
       undefined,
       { d: 'date' },
     );
+    expect(captured.config.params.d).toBe('2024-01-01T00:00:00Z'); // unchanged string
     expect(captured.config.types?.d).toBeUndefined();
+  });
+
+  it('still types a null param as STRING (BigQuery requires an explicit type for null)', async () => {
+    const conn = new BigQueryConnector('bq', { project_id: 'p', service_account_json: '{}' });
+    await conn.queryStream(
+      'SELECT * FROM t WHERE x = :x',
+      {}, // :x has no value → null
+      undefined,
+      {},
+    );
+    expect(captured.config.params.x).toBeNull();
+    expect(captured.config.types.x).toBe('STRING');
   });
 });
