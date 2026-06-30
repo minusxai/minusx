@@ -60,6 +60,40 @@ export interface QueryResult {
   finalQuery: string;
 }
 
+/**
+ * Streaming query result — the STREAMING-FIRST contract. The column metadata
+ * (`columns`/`types`/`finalQuery`) is known up front (drivers expose it as soon
+ * as the query starts), then `rows` is an async iterable that yields row objects
+ * lazily as the driver produces them. Peak memory is one batch, never the whole
+ * result — so the cache-write/response path can pipe straight through to the
+ * object store + client without ever materializing.
+ *
+ * `query()` is the materialized convenience built on top of this via
+ * {@link drainQueryStream}; every execution flows through `queryStream()`.
+ */
+export interface QueryStream {
+  columns: string[];
+  types: string[];
+  finalQuery: string;
+  /** Lazily-yielded, already-JSON-safe row objects. */
+  rows: AsyncIterable<Record<string, unknown>>;
+}
+
+/** Drain a streaming result fully into a materialized QueryResult (for consumers that need every row). */
+export async function drainQueryStream(stream: QueryStream): Promise<QueryResult> {
+  const rows: Record<string, unknown>[] = [];
+  for await (const row of stream.rows) rows.push(row);
+  return { columns: stream.columns, types: stream.types, finalQuery: stream.finalQuery, rows };
+}
+
+/** Wrap a materialized QueryResult as a one-shot QueryStream (the base-class fallback for unconverted connectors). */
+export function queryResultToStream(result: QueryResult): QueryStream {
+  async function* gen(): AsyncGenerator<Record<string, unknown>> {
+    for (const row of result.rows) yield row;
+  }
+  return { columns: result.columns, types: result.types, finalQuery: result.finalQuery, rows: gen() };
+}
+
 export interface TestConnectionResult {
   success: boolean;
   message: string;
@@ -166,6 +200,23 @@ export abstract class NodeConnector {
     params?: Record<string, string | number>,
     timeoutMs?: number,
   ): Promise<QueryResult>;
+
+  /**
+   * Execute a query and STREAM the result (streaming-first contract).
+   *
+   * Default implementation wraps {@link query} as a one-shot stream — correct,
+   * but materializes. Connectors override this with a driver-native cursor
+   * (DuckDB chunk reader, pg-query-stream, BigQuery createQueryStream, …) so the
+   * server never holds the whole result; their `query()` then just drains this
+   * via {@link drainQueryStream}.
+   */
+  async queryStream(
+    query: string,
+    params?: Record<string, string | number>,
+    timeoutMs?: number,
+  ): Promise<QueryStream> {
+    return queryResultToStream(await this.query(query, params, timeoutMs));
+  }
 
   /**
    * Get database schema.

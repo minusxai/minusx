@@ -46,6 +46,11 @@ vi.mock('@/lib/connections', async (importOriginal) => {
     getNodeConnector: () => ({
       getSchema: getSchemaSpy,
       query: querySpy,
+      // Streaming path wraps query() as a one-shot stream (mirrors NodeConnector's default).
+      queryStream: async (...a: unknown[]) => {
+        const r = await (querySpy as (...x: unknown[]) => Promise<{ columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery: string }>)(...a);
+        return { columns: r.columns, types: r.types, finalQuery: r.finalQuery, rows: (async function* () { for (const x of r.rows) yield x; })() };
+      },
       testConnection: vi.fn(),
     }),
   };

@@ -5,9 +5,9 @@ import { getNodeConnector } from '@/lib/connections';
 import { enforceQueryLimit } from '@/lib/sql/limit-enforcer';
 import { connectionTypeToDialect } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { QueryResult } from './base';
+import { drainQueryStream, queryResultToStream, type QueryResult, type QueryStream } from './base';
 
-export type { QueryResult };
+export type { QueryResult, QueryStream };
 
 /**
  * Execute a SQL query against a named connection.
@@ -28,6 +28,23 @@ export async function runQuery(
   params: Record<string, string | number>,
   user: EffectiveUser,
 ): Promise<QueryResult> {
+  // Materialized convenience — drains the streaming path. Every execution flows
+  // through runQueryStream, so streaming-capable connectors stream even here.
+  return drainQueryStream(await runQueryStream(databaseName, query, params, user));
+}
+
+/**
+ * Execute a SQL query and STREAM the result. The streaming-first server seam:
+ * the cache-write/response path consumes this and pipes batches straight to the
+ * object store + client without materializing. Shares connection resolution +
+ * row-cap enforcement with {@link runQuery}.
+ */
+export async function runQueryStream(
+  databaseName: string,
+  query: string,
+  params: Record<string, string | number>,
+  user: EffectiveUser,
+): Promise<QueryStream> {
   // Use getRawByName so credentials (e.g. service_account_json) are included.
   const rawConn = await ConnectionsAPI.getRawByName(databaseName, user.mode).catch(() => null);
   if (!rawConn) {
@@ -57,5 +74,9 @@ export async function runQuery(
   const dialect = connectionTypeToDialect(type);
   const cappedQuery = await enforceQueryLimit(query, { dialect });
 
-  return connector.query(cappedQuery, params);
+  // Real connectors all inherit NodeConnector.queryStream; a minimal connector
+  // (or a test mock) implementing only query() is wrapped as a one-shot stream.
+  return typeof connector.queryStream === 'function'
+    ? connector.queryStream(cappedQuery, params)
+    : queryResultToStream(await connector.query(cappedQuery, params));
 }

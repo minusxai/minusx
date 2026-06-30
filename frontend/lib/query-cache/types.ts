@@ -93,6 +93,8 @@ export interface JsonlHeader {
   columns: string[];
   types: string[];
   finalQuery: string;
-  rowCount: number;
+  /** Present on materialized encodes; OMITTED on streaming encodes (unknown up front).
+   *  The authoritative count for a streamed blob lives in the query_cache row. */
+  rowCount?: number;
 }
 

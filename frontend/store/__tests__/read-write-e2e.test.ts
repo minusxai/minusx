@@ -114,6 +114,11 @@ const { mockRunQuery } = vi.hoisted(() => ({
 
 vi.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
+  // The streaming route uses runQueryStream — wrap the materialized mock as a one-shot stream.
+  runQueryStream: async (...a: unknown[]) => {
+    const r = await (mockRunQuery as unknown as (...x: unknown[]) => Promise<{ columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery: string }>)(...a);
+    return { columns: r.columns, types: r.types, finalQuery: r.finalQuery, rows: (async function* () { for (const x of r.rows) yield x; })() };
+  },
 }));
 
 describe('Phase 1: Unified File System API E2E', () => {

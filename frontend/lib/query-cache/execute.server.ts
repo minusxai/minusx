@@ -1,24 +1,28 @@
 /**
- * executeQueryCached — the ONE chokepoint for cached query execution.
- *
- * Both `/api/query` and the agent's ExecuteQuery go through here, so they share
- * one durable, cross-instance, stale-while-revalidate cache (arch doc §3–5).
+ * executeQueryCached — the ONE chokepoint for cached query execution, now fully
+ * STREAMING write-through (arch doc §1, §3–5).
  *
  *   fresh   → serve blob (cache stream, no execution)
  *   stale   → serve blob NOW + fire-and-forget background revalidation (lease)
- *   expired → execute synchronously (lease)
- *   miss    → execute synchronously (lease); losers wait then read the winner's blob
+ *   expired → execute (lease)
+ *   miss    → execute (lease); losers wait then read the winner's blob
  *
- * Callers supply an `execute()` thunk that runs the actual query (None-resolution,
- * CTE composition, runQuery). This module owns the cache key, the lease, the blob
- * write, and the SWR decision — never the SQL itself.
+ * On a miss/refresh the caller's `execute()` returns a `QueryStream` (header +
+ * lazily-yielded rows). We pipe it connector → JSONL → gzip → object store
+ * WITHOUT ever materializing (peak RAM = one chunk), then serve every read back
+ * from the object store. The server never holds the whole result on the write
+ * path. Materialization happens only when a consumer (the agent) explicitly
+ * reads the full result back, and only for the degraded (cache-infra-down) path.
+ *
+ * Best-effort: a cache-infra failure degrades to direct execution; SQL errors
+ * still propagate (→ 400).
  */
 import 'server-only';
 import type { Readable } from 'stream';
-import type { QueryResult } from '@/lib/connections/base';
+import { drainQueryStream, type QueryResult, type QueryStream } from '@/lib/connections/base';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { createQueryCacheBlobStore, blobRefForKey } from './blob-store';
-import { resultToJsonlStream } from './jsonl-stream.server';
+import { resultToJsonlStream, queryStreamToJsonl } from './jsonl-stream.server';
 import { classifyCacheRow } from './swr';
 import {
   claimLease, getCacheRow, markReady, releaseLease, waitForReady,
@@ -32,8 +36,8 @@ export interface CachedExec {
   query: string;
   params: Record<string, string | number | null>;
   policy: CachePolicy;
-  /** Runs the actual query (applyNoneParams + CTE + runQuery) and returns the result. */
-  execute: () => Promise<QueryResult>;
+  /** Runs the actual query and returns a STREAMING result (runQueryStream). */
+  execute: () => Promise<QueryStream>;
   /** Overridable for tests. */
   blobStore?: QueryCacheBlobStore;
   now?: () => number;
@@ -61,7 +65,7 @@ function store(opts: CachedExec): QueryCacheBlobStore {
 }
 
 type Resolved =
-  | { source: 'cache'; blobRef: string; finalQuery: string; rowCount: number; colCount: number; cachedAt: number }
+  | { source: 'cache'; blobRef: string; finalQuery: string; rowCount: number; colCount: number; cachedAt: number; fromCache: boolean }
   | { source: 'fresh'; result: QueryResult; cachedAt: number };
 
 /** Get the cached result fully materialized (agent + small reads). */
@@ -72,10 +76,10 @@ export async function getCachedResult(opts: CachedExec): Promise<{ result: Query
   }
   const result = await store(opts).getResult(r.blobRef);
   if (result) {
-    return { result, meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: true, cachedAt: r.cachedAt } };
+    return { result, meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: r.fromCache, cachedAt: r.cachedAt } };
   }
-  // Blob vanished between index read and blob read → execute fresh.
-  const fresh = await runAndStore(cacheKey(opts), opts);
+  // Blob vanished between index read and blob read → execute fresh (materialized).
+  const fresh = await drainQueryStream(await opts.execute());
   return { result: fresh, meta: metaOf(fresh, false, nowOf(opts)) };
 }
 
@@ -87,9 +91,9 @@ export async function getCachedJsonlStream(opts: CachedExec): Promise<{ stream: 
   }
   const stream = await store(opts).getStream(r.blobRef);
   if (stream) {
-    return { stream, meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: true, cachedAt: r.cachedAt } };
+    return { stream, meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: r.fromCache, cachedAt: r.cachedAt } };
   }
-  const fresh = await runAndStore(cacheKey(opts), opts);
+  const fresh = await drainQueryStream(await opts.execute());
   return { stream: resultToJsonlStream(fresh), meta: metaOf(fresh, false, nowOf(opts)) };
 }
 
@@ -98,8 +102,7 @@ export async function getCachedJsonlStream(opts: CachedExec): Promise<{ stream: 
 async function resolve(opts: CachedExec): Promise<Resolved> {
   const now = nowOf(opts);
   const key = cacheKey(opts);
-  // Cache reads are best-effort: a DB/infra hiccup degrades to direct execution,
-  // never breaks the query. (Also lets DB-less unit tests exercise the route.)
+  // Cache reads are best-effort: a DB/infra hiccup degrades to direct execution.
   const row = await getCacheRow(key).catch(() => null);
   const cls = classifyCacheRow(row, now);
 
@@ -107,7 +110,7 @@ async function resolve(opts: CachedExec): Promise<Resolved> {
     if (cls === 'stale') backgroundRevalidate(key, opts);
     return {
       source: 'cache', blobRef: row.blobRef, finalQuery: row.finalQuery ?? '',
-      rowCount: row.rowCount ?? 0, colCount: row.colCount ?? 0, cachedAt: row.createdAt,
+      rowCount: row.rowCount ?? 0, colCount: row.colCount ?? 0, cachedAt: row.createdAt, fromCache: true,
     };
   }
   return executeWithLease(key, opts, now);
@@ -116,62 +119,58 @@ async function resolve(opts: CachedExec): Promise<Resolved> {
 async function executeWithLease(key: string, opts: CachedExec, startNow: number): Promise<Resolved> {
   let now = startNow;
   for (let attempt = 0; attempt < MAX_LEASE_ATTEMPTS; attempt++) {
-    // If the lease can't be claimed (DB down), act as the winner and execute —
-    // correctness over dedup. Execution errors still propagate (→ 400).
     const claim = await claimLease(
       key,
       { query: opts.query, connectionName: opts.connectionName, params: opts.params, policy: opts.policy },
       now,
     ).catch(() => ({ won: true } as { won: boolean }));
     if (claim.won) {
-      const result = await runAndStore(key, opts);
-      return { source: 'fresh', result, cachedAt: now };
+      return runAndStore(key, opts, now);
     }
-    // Lost — wait for the winner's blob.
     const ready = await waitForReady(key, { timeoutMs: WAIT_TIMEOUT_MS, intervalMs: 50, now: () => Date.now() })
       .catch(() => null);
     if (ready?.blobRef) {
       return {
         source: 'cache', blobRef: ready.blobRef, finalQuery: ready.finalQuery ?? '',
-        rowCount: ready.rowCount ?? 0, colCount: ready.colCount ?? 0, cachedAt: ready.createdAt,
+        rowCount: ready.rowCount ?? 0, colCount: ready.colCount ?? 0, cachedAt: ready.createdAt, fromCache: true,
       };
     }
     now = Date.now(); // winner died without a blob → re-claim
   }
-  // Exhausted attempts (rare) — execute directly so the caller still gets data.
-  const result = await runAndStore(key, opts);
-  return { source: 'fresh', result, cachedAt: Date.now() };
+  return runAndStore(key, opts, Date.now());
 }
 
 /**
- * Execute, then best-effort write the blob + mark ready. The EXECUTION error
- * propagates (it's the query's problem → 400); cache-write errors are swallowed
- * (the caller still gets the result, just uncached this round).
+ * Execute (streaming) and write-through to the blob store, never materializing.
+ * EXECUTION errors propagate (→ 400). A cache-infra failure degrades: re-execute
+ * and materialize so the caller still gets data, just uncached this round.
  */
-async function runAndStore(key: string, opts: CachedExec): Promise<QueryResult> {
-  let result: QueryResult;
+async function runAndStore(key: string, opts: CachedExec, now: number): Promise<Resolved> {
+  let stream: QueryStream;
   try {
-    result = await opts.execute();
+    stream = await opts.execute();
   } catch (err) {
     await releaseLease(key).catch(() => { /* best effort */ });
     throw err; // execution failure → surfaced to the route as 400
   }
   try {
     const blobRef = blobRefForKey(key);
-    const { byteSize } = await store(opts).putStream(blobRef, resultToJsonlStream(result));
+    const { readable, rowCount, colCount } = queryStreamToJsonl(stream);
+    const { byteSize } = await store(opts).putStream(blobRef, readable); // connector → gzip → object store
+    const rc = rowCount();
     await markReady(
       key,
-      {
-        blobRef, finalQuery: result.finalQuery, rowCount: result.rows.length,
-        colCount: result.columns.length, byteSize, policy: opts.policy,
-      },
+      { blobRef, finalQuery: stream.finalQuery, rowCount: rc, colCount, byteSize, policy: opts.policy },
       Date.now(),
     );
+    return { source: 'cache', blobRef, finalQuery: stream.finalQuery, rowCount: rc, colCount, cachedAt: now, fromCache: false };
   } catch {
-    // Cache write failed (DB/blob infra) — degrade gracefully, free the lease.
+    // Cache-infra failure (object store / DB) — degrade: re-execute, materialize,
+    // serve directly (uncached). Bounded by the row cap.
     await releaseLease(key).catch(() => { /* best effort */ });
+    const fresh = await drainQueryStream(await opts.execute());
+    return { source: 'fresh', result: fresh, cachedAt: now };
   }
-  return result;
 }
 
 /** Fire-and-forget background refresh of a stale entry. One winner via the lease. */
@@ -183,7 +182,7 @@ function backgroundRevalidate(key: string, opts: CachedExec): void {
       Date.now(),
     );
     if (!claim.won) return; // someone else is already revalidating
-    await runAndStore(key, opts).catch(() => { /* stale blob keeps serving; lease freed in runAndStore */ });
+    await runAndStore(key, opts, Date.now()).catch(() => { /* stale blob keeps serving */ });
   })().catch(() => { /* never surface to the request */ });
 }
 

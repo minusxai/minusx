@@ -17,7 +17,15 @@ const { querySpy } = vi.hoisted(() => ({
 
 vi.mock('@/lib/connections', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/connections')>();
-  return { ...actual, getNodeConnector: () => ({ getSchema: vi.fn(async () => []), query: querySpy, testConnection: vi.fn() }) };
+  return { ...actual, getNodeConnector: () => ({
+    getSchema: vi.fn(async () => []),
+    query: querySpy,
+    queryStream: async (...a: unknown[]) => {
+      const r = await (querySpy as (...x: unknown[]) => Promise<{ columns: string[]; types: string[]; rows: Record<string, unknown>[]; finalQuery: string }>)(...a);
+      return { columns: r.columns, types: r.types, finalQuery: r.finalQuery, rows: (async function* () { for (const x of r.rows) yield x; })() };
+    },
+    testConnection: vi.fn(),
+  }) };
 });
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

@@ -12,7 +12,7 @@ import { getCachedResult, getCachedJsonlStream } from '../execute.server';
 import { createQueryCacheBlobStore } from '../blob-store';
 import { decodeJsonl } from '../jsonl';
 import type { ObjectStore } from '@/lib/object-store';
-import type { QueryResult } from '@/lib/connections/base';
+import { queryResultToStream, type QueryResult, type QueryStream } from '@/lib/connections/base';
 import type { CachePolicy } from '../types';
 import { Readable } from 'stream';
 
@@ -20,6 +20,12 @@ function fakeObjectStore(): ObjectStore {
   const map = new Map<string, Buffer>();
   return {
     async put(key, body) { map.set(key, Buffer.from(body)); return `mem://${key}`; },
+    async putStream(key, body) {
+      const chunks: Buffer[] = [];
+      for await (const c of body) chunks.push(Buffer.from(c));
+      map.set(key, Buffer.concat(chunks));
+    },
+    async getStream(key) { const b = map.get(key); return b ? Readable.from([b]) : null; },
     async get(key) { return map.get(key) ?? null; },
     async delete(key) { map.delete(key); },
     async exists(key) { return map.has(key); },
@@ -33,9 +39,9 @@ const POLICY: CachePolicy = { revalidateMs: 1000, expiryMs: 5000 };
 
 function makeOpts(overrides: Partial<Parameters<typeof getCachedResult>[0]> = {}) {
   let calls = 0;
-  const exec = vi.fn(async (): Promise<QueryResult> => {
+  const exec = vi.fn(async (): Promise<QueryStream> => {
     calls += 1;
-    return { columns: ['n'], types: ['number'], rows: [{ n: calls }], finalQuery: `run-${calls}` };
+    return queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: calls }], finalQuery: `run-${calls}` });
   });
   const opts = {
     mode: 'org', connectionName: 'duckdb', query: 'SELECT 1', params: {}, policy: POLICY,
@@ -115,9 +121,9 @@ describe('executeQueryCached (SWR orchestration)', () => {
 
   it('concurrent misses execute once (lease dedup); both callers get the result', async () => {
     let calls = 0;
-    const slowExec = vi.fn(async (): Promise<QueryResult> => {
+    const slowExec = vi.fn(async (): Promise<QueryStream> => {
       calls += 1; await tick(60);
-      return { columns: ['n'], types: ['number'], rows: [{ n: calls }], finalQuery: `run-${calls}` };
+      return queryResultToStream({ columns: ['n'], types: ['number'], rows: [{ n: calls }], finalQuery: `run-${calls}` });
     });
     const opts = {
       mode: 'org', connectionName: 'duckdb', query: 'SELECT 2', params: {}, policy: POLICY,

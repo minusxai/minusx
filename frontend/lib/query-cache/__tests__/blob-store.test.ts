@@ -11,6 +11,12 @@ function fakeObjectStore(): ObjectStore & { map: Map<string, Buffer> } {
   return {
     map,
     async put(key, body) { map.set(key, Buffer.from(body)); return `mem://${key}`; },
+    async putStream(key, body) {
+      const chunks: Buffer[] = [];
+      for await (const c of body) chunks.push(Buffer.from(c));
+      map.set(key, Buffer.concat(chunks));
+    },
+    async getStream(key) { const b = map.get(key); return b ? Readable.from([b]) : null; },
     async get(key) { return map.get(key) ?? null; },
     async delete(key) { map.delete(key); },
     async exists(key) { return map.has(key); },

@@ -6,7 +6,7 @@ import 'server-only';
 import { Readable } from 'stream';
 import { gzip, gunzip } from 'zlib';
 import { promisify } from 'util';
-import type { QueryResult } from '@/lib/connections/base';
+import type { QueryResult, QueryStream } from '@/lib/connections/base';
 import type { JsonlHeader } from './types';
 import { decodeJsonl } from './jsonl';
 
@@ -30,6 +30,26 @@ export function resultToJsonlStream(result: QueryResult): Readable {
     for (const row of result.rows) yield Buffer.from(JSON.stringify(row) + '\n', 'utf8');
   }
   return Readable.from(gen());
+}
+
+/**
+ * Encode a streaming QueryStream to a JSONL Readable WITHOUT materializing: the
+ * header line is emitted first (columns/types/finalQuery — no rowCount, unknown
+ * up front), then each row as the connector yields it. `rowCount()` returns the
+ * running total (final once the readable is fully consumed) for the cache row.
+ */
+export function queryStreamToJsonl(stream: QueryStream): { readable: Readable; rowCount: () => number; colCount: number } {
+  let count = 0;
+  const colCount = stream.columns.length;
+  async function* gen(): AsyncGenerator<Buffer> {
+    const header: JsonlHeader = { columns: stream.columns, types: stream.types, finalQuery: stream.finalQuery };
+    yield Buffer.from(JSON.stringify(header) + '\n', 'utf8');
+    for await (const row of stream.rows) {
+      count++;
+      yield Buffer.from(JSON.stringify(row) + '\n', 'utf8');
+    }
+  }
+  return { readable: Readable.from(gen()), rowCount: () => count, colCount };
 }
 
 /** Consume a JSONL Readable fully into a QueryResult. */

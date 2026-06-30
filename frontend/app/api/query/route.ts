@@ -1,5 +1,5 @@
 import type { QuestionReference, QuestionContent } from '@/lib/types';
-import type { QueryResult } from '@/lib/connections/base';
+import type { QueryStream } from '@/lib/connections/base';
 import { connectionTypeToDialect } from '@/lib/types';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
@@ -8,7 +8,7 @@ import { Readable } from 'stream';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
-import { runQuery } from '@/lib/connections/run-query';
+import { runQueryStream } from '@/lib/connections/run-query';
 import { applyNoneParams } from '@/lib/sql/none-params';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
@@ -94,7 +94,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // ── The execution thunk (runs only on miss / expired / background revalidate) ──
-    const execute = async (): Promise<QueryResult> => {
+    const execute = async (): Promise<QueryStream> => {
       let composedQuery = query;
       if (Array.isArray(references) && references.length > 0) {
         const resolvedRefs: ResolvedReference[] = await Promise.all(
@@ -115,21 +115,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues, queryDialect);
 
-      const queryStart = Date.now();
-      const result = await runQuery(connectionName, noneResolvedQuery, resolvedParams, user);
-      const durationMs = Date.now() - queryStart;
-
-      // Per-execution analytics (miss + background revalidation). Cache hits are
-      // recorded at the route level below.
-      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query,
-        params: paramValues as Record<string, unknown>, schemaContext: schemaContext ?? undefined,
-        databaseName: connectionName, durationMs,
-        rowCount: result.rows.length, colCount: result.columns.length,
-        wasCacheHit: false, mode: user.mode, userId: user.userId, userEmail: user.email,
-      });
-
-      return { ...result, finalQuery: result.finalQuery ?? noneResolvedQuery };
+      // Stream the result — the executor pipes it through to the object store +
+      // client without materializing on the server.
+      return runQueryStream(connectionName, noneResolvedQuery, resolvedParams, user);
     };
 
     // ── SWR + lease + blob, streamed as JSONL ──────────────────────────────────
@@ -137,15 +125,14 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       mode, connectionName, query, params: paramValues, policy, execute,
     });
 
-    if (meta.fromCache) {
-      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query,
-        params: paramValues as Record<string, unknown>,
-        databaseName: connectionName, durationMs: 0,
-        rowCount: meta.rowCount, colCount: meta.colCount,
-        wasCacheHit: true, mode: user.mode, userId: user.userId, userEmail: user.email,
-      });
-    }
+    // One analytics event per request, from the executor's meta (covers hit + miss).
+    appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
+      queryHash, fileId: fileId ?? null, fileVersion: fileVersion ?? null, query,
+      params: paramValues as Record<string, unknown>, schemaContext: schemaContext ?? undefined,
+      databaseName: connectionName, durationMs: Date.now() - startTime,
+      rowCount: meta.rowCount, colCount: meta.colCount,
+      wasCacheHit: meta.fromCache, mode: user.mode, userId: user.userId, userEmail: user.email,
+    });
 
     // Plain JSONL body (header line + one row per line). Nginx still owns wire
     // gzip; we set no Content-Encoding. Metadata rides in headers.

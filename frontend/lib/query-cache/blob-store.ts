@@ -1,22 +1,16 @@
 /**
  * QueryCacheBlobStore — the data plane. Stores gzipped-JSONL result blobs in
- * the object store (S3 hosted / local-file open-source) behind a stream-first
- * interface.
- *
- * The interface is stream-first so connector-level streaming can drop in later
- * without touching callers. v1 gzips into a bounded buffer before handing it to
- * the underlying `ObjectStore.put` (results are row-capped, so the compressed
- * buffer is small); swapping in an `ObjectStore.putStream` later is transparent
- * to everything above this file.
+ * the object store (S3 hosted / local-file open-source) and streams them in/out
+ * without ever buffering the whole object: a JSONL row stream is piped through
+ * gzip straight to the object store, and read back through gunzip. Peak memory
+ * is one chunk, regardless of result size.
  */
 import 'server-only';
-import { Readable } from 'stream';
-import { createGzip } from 'zlib';
-import { pipeline } from 'stream/promises';
+import { Readable, Transform } from 'stream';
+import { createGzip, createGunzip } from 'zlib';
 import { createObjectStore, type ObjectStore } from '@/lib/object-store';
 import type { QueryCacheBlobStore } from './types';
 import { decodeJsonl } from './jsonl';
-import { gunzipToString } from './jsonl-stream.server';
 import type { QueryResult } from '@/lib/connections/base';
 
 const CONTENT_TYPE = 'application/gzip';
@@ -25,30 +19,34 @@ class ObjectStoreBlobStore implements QueryCacheBlobStore {
   constructor(private readonly store: ObjectStore) {}
 
   async putStream(ref: string, body: Readable): Promise<{ byteSize: number }> {
-    // Compress the JSONL stream, collecting the (bounded) gzipped output, then
-    // hand the buffer to the object store. Backpressure flows through the gzip
-    // transform; only the compressed bytes are held, never the raw rows twice.
+    // body (plain JSONL) → gzip → counter → object store. Errors anywhere in the
+    // chain are forwarded downstream so the object-store write rejects.
     const gzip = createGzip();
-    const chunks: Buffer[] = [];
-    gzip.on('data', (c: Buffer) => chunks.push(c));
-    await pipeline(body, gzip);
-    const buf = Buffer.concat(chunks);
-    await this.store.put(ref, buf, CONTENT_TYPE);
-    return { byteSize: buf.length };
+    let byteSize = 0;
+    const counter = new Transform({
+      transform(chunk, _enc, cb) { byteSize += chunk.length; cb(null, chunk); },
+    });
+    body.on('error', (e) => gzip.destroy(e));
+    gzip.on('error', (e) => counter.destroy(e));
+    body.pipe(gzip).pipe(counter);
+    await this.store.putStream(ref, counter, CONTENT_TYPE);
+    return { byteSize };
   }
 
   async getStream(ref: string): Promise<Readable | null> {
-    const buf = await this.store.get(ref);
-    if (!buf) return null;
-    const text = await gunzipToString(buf);
-    // Emit a Buffer (not a string) so the stream pipes cleanly to Readable.toWeb.
-    return Readable.from([Buffer.from(text, 'utf8')]);
+    const gz = await this.store.getStream(ref);
+    if (!gz) return null;
+    const gunzip = createGunzip();
+    gz.on('error', (e) => gunzip.destroy(e));
+    return gz.pipe(gunzip);
   }
 
   async getResult(ref: string): Promise<QueryResult | null> {
-    const buf = await this.store.get(ref);
-    if (!buf) return null;
-    return decodeJsonl(await gunzipToString(buf));
+    const stream = await this.getStream(ref);
+    if (!stream) return null;
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(Buffer.from(c));
+    return decodeJsonl(Buffer.concat(chunks).toString('utf8'));
   }
 
   async delete(ref: string): Promise<void> {

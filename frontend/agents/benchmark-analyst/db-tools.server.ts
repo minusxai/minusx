@@ -11,6 +11,7 @@ import { Type } from 'typebox';
 import type { TSchema } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
 import { runQuery } from '@/lib/connections/run-query';
+import { queryResultToStream } from '@/lib/connections/base';
 import { getCachedResult } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
 import { loadConnectionSchema } from '@/lib/connections/load-schema';
@@ -75,7 +76,10 @@ export class ExecuteQuery extends BaseExecuteQuery {
       query,
       params: params as Record<string, string | number | null>,
       policy: resolveCachePolicy(null),
-      execute: () => runQuery(connectionId, query, params, user),
+      // The agent fundamentally materializes (LLM needs finite text/chart), so it
+      // uses runQuery and wraps it as a one-shot stream for the executor. The
+      // streaming write-through still avoids a second server-side copy.
+      execute: async () => queryResultToStream(await runQuery(connectionId, query, params, user)),
     });
     return result;
   }

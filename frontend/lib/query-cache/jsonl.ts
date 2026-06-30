@@ -63,13 +63,15 @@ export function decodeJsonlBounded(text: string, maxRows: number): BoundedDecode
   const header = JSON.parse(lines[0]) as JsonlHeader;
   const rowLines = lines.slice(1);
   const rows = rowLines.slice(0, Math.max(0, maxRows)).map((l) => JSON.parse(l) as Record<string, unknown>);
+  // Streamed blobs omit rowCount from the header — fall back to the actual line count.
+  const totalRows = header.rowCount ?? rowLines.length;
   return {
     columns: header.columns,
     types: header.types,
     finalQuery: header.finalQuery,
     rows,
-    totalRows: header.rowCount,
-    truncated: header.rowCount > rows.length,
+    totalRows,
+    truncated: totalRows > rows.length,
   };
 }
 
