@@ -61,15 +61,17 @@ describe('mergeReimportedSheetFiles — re-import preserves deletions + renames'
     expect(merged[0].row_count).toBe(17);
   });
 
-  it('keeps a tab that was removed from the sheet (no re-imported match) instead of dropping it', () => {
-    const existing = [sheetFile({ filename: 'gone_tab.csv', spreadsheet_id: 'A', s3_key: 'old1', row_count: 9 })];
+  it('drops a tab that was removed from the live sheet (source gone), keeping the still-present ones', () => {
+    const existing = [
+      sheetFile({ filename: 'gone_tab.csv', spreadsheet_id: 'A', s3_key: 'old_gone', row_count: 9 }),
+      sheetFile({ filename: 'companies_1.csv', spreadsheet_id: 'A', s3_key: 'old1' }),
+    ];
     const reimported = [sheetFile({ filename: 'companies_1.csv', spreadsheet_id: 'A', s3_key: 'fresh1' })];
 
     const merged = mergeReimportedSheetFiles(existing, 'A', reimported);
 
-    expect(merged).toHaveLength(1);
-    expect(merged[0].filename).toBe('gone_tab.csv');
-    expect(merged[0].s3_key).toBe('old1'); // untouched, not dropped
+    expect(merged.map((f) => f.filename)).toEqual(['companies_1.csv']); // gone_tab dropped (gone from sheet)
+    expect(merged[0].s3_key).toBe('fresh1');
   });
 
   it('does NOT auto-add brand-new tabs that were never imported', () => {
