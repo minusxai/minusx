@@ -35,7 +35,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const body = await request.json();
     const {
       connection_name: bodyConnection, query: bodyQuery, parameters, parameterTypes,
-      references, filePath, fileId, fileVersion, cachePolicy: bodyPolicy,
+      references, filePath, fileId, fileVersion, cachePolicy: bodyPolicy, forceRefresh: bodyForceRefresh,
     } = body;
     // Declared param types ('text'|'number'|'date'), keyed by name — advisory, used
     // by connectors that need explicit typing (BigQuery: bind a `date` param as DATE).
@@ -125,8 +125,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     };
 
     // ── SWR + lease + blob, streamed as JSONL ──────────────────────────────────
+    // forceRefresh ("Run query") re-executes + refreshes the cache. NOT honored for
+    // guests — public shares must stay cache-served so they can't hammer the warehouse.
+    const forceRefresh = bodyForceRefresh === true && !user.guest;
     const { stream, meta } = await getCachedJsonlStream({
-      mode, connectionName, query, params: paramValues, policy, execute,
+      mode, connectionName, query, params: paramValues, policy, execute, forceRefresh,
     });
 
     // One analytics event per request, from the executor's meta (covers hit + miss).

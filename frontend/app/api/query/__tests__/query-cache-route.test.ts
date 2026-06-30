@@ -75,6 +75,26 @@ describe('POST /api/query — durable cache', () => {
     expect(querySpy).toHaveBeenCalledTimes(1); // NOT re-executed — served from the blob
   });
 
+  it('forceRefresh re-executes a cached query and updates the cache', async () => {
+    const body = { connection_name: CONNECTION, query: 'SELECT 9 AS x', parameters: {} };
+    const r1 = await post(body);                       // miss → cached
+    expect(r1.headers.get('X-Cache')).toBe('miss');
+    expect(querySpy).toHaveBeenCalledTimes(1);
+
+    const r2 = await post(body);                       // normal → hit
+    expect(r2.headers.get('X-Cache')).toBe('hit');
+    expect(querySpy).toHaveBeenCalledTimes(1);
+
+    const r3 = await post({ ...body, forceRefresh: true }); // Run query → re-execute
+    expect(r3.status).toBe(200);
+    expect(r3.headers.get('X-Cache')).toBe('miss');    // fresh execution
+    expect(querySpy).toHaveBeenCalledTimes(2);
+
+    const r4 = await post(body);                       // back to serving the refreshed blob
+    expect(r4.headers.get('X-Cache')).toBe('hit');
+    expect(querySpy).toHaveBeenCalledTimes(2);
+  });
+
   it('different params miss separately (distinct cache keys)', async () => {
     await post({ connection_name: CONNECTION, query: 'SELECT :p AS x', parameters: { p: 1 } });
     await post({ connection_name: CONNECTION, query: 'SELECT :p AS x', parameters: { p: 2 } });

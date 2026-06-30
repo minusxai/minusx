@@ -17,7 +17,7 @@ import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSli
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { editFile } from '@/lib/api/file-state';
+import { editFile, getQueryResult } from '@/lib/api/file-state';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent } from '@/lib/types';
@@ -126,8 +126,12 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     editFile({ fileId, changes: { content: updates } });
   }, [fileId, readOnly]);
 
-  // Phase 3: Execute query handler - updates lastExecuted to trigger execution
-  const handleExecute = useCallback((overrideParamValues?: Record<string, any>) => {
+  // Phase 3: Execute query handler - updates lastExecuted to trigger execution.
+  // `force` (a deliberate Run / param submit) additionally forces a fresh SERVER
+  // execution that refreshes the durable cache — without it the cleared client
+  // cache just gets re-served from the server's cache. Auto-execute on mount calls
+  // this WITHOUT force, so navigating to a question stays cache-served.
+  const handleExecute = useCallback((overrideParamValues?: Record<string, any>, opts?: { force?: boolean }) => {
     if (!mergedContent) return;
 
     // Priority: explicit override > URL params merged with content > content params
@@ -149,7 +153,17 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       fileId,
       changes: { lastExecuted: newQuery }
     }));
-  }, [mergedContent, fileId, dispatch, urlParamOverrides]);
+
+    // Deliberate Run → force a fresh server execution + cache refresh. The declarative
+    // useQueryResult effect that fires on the lastExecuted change dedups onto this same
+    // in-flight request (queryPromiseManager keyed by query/params/db), so it's one hit.
+    if (opts?.force) {
+      getQueryResult(
+        { ...newQuery, parameterTypes, filePath: file?.path },
+        { forceLoad: true },
+      ).catch(() => { /* error already lands in Redux */ });
+    }
+  }, [mergedContent, fileId, dispatch, urlParamOverrides, parameterTypes, file?.path]);
 
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
@@ -191,6 +205,14 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     editFile({ fileId, changes: { content: { parameterValues: { ...currentValues, [paramName]: value } } } });
   }, [fileId, mergedContent, readOnly]);
 
+  // Every call from the view's onExecute is a deliberate user Run (Run button,
+  // Cmd+Enter, param submit) → force a server refresh. Internal auto-execute calls
+  // handleExecute directly (no force) so navigation stays cache-served.
+  const handleExecuteForced = useCallback(
+    (overrideParamValues?: Record<string, any>) => handleExecute(overrideParamValues, { force: true }),
+    [handleExecute],
+  );
+
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>
     selectProposedQuery(state, typeof fileId === 'number' ? fileId : undefined)
@@ -227,7 +249,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       readOnly={readOnly}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
-      onExecute={handleExecute}
+      onExecute={handleExecuteForced}
     />
   );
 }

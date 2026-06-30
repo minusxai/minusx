@@ -38,6 +38,12 @@ export interface CachedExec {
   policy: CachePolicy;
   /** Runs the actual query and returns a STREAMING result (runQueryStream). */
   execute: () => Promise<QueryStream>;
+  /**
+   * Force a fresh execution that refreshes the cache, bypassing the fresh/stale
+   * serve (the "Run query" button). Still lease-guarded, so concurrent forced
+   * runs don't stampede the warehouse.
+   */
+  forceRefresh?: boolean;
   /** Overridable for tests. */
   blobStore?: QueryCacheBlobStore;
   now?: () => number;
@@ -102,16 +108,20 @@ export async function getCachedJsonlStream(opts: CachedExec): Promise<{ stream: 
 async function resolve(opts: CachedExec): Promise<Resolved> {
   const now = nowOf(opts);
   const key = cacheKey(opts);
-  // Cache reads are best-effort: a DB/infra hiccup degrades to direct execution.
-  const row = await getCacheRow(key).catch(() => null);
-  const cls = classifyCacheRow(row, now);
 
-  if ((cls === 'fresh' || cls === 'stale') && row?.blobRef) {
-    if (cls === 'stale') backgroundRevalidate(key, opts);
-    return {
-      source: 'cache', blobRef: row.blobRef, finalQuery: row.finalQuery ?? '',
-      rowCount: row.rowCount ?? 0, colCount: row.colCount ?? 0, cachedAt: row.createdAt, fromCache: true,
-    };
+  // forceRefresh ("Run query") skips the fresh/stale serve and re-executes,
+  // refreshing the cached blob (still lease-guarded inside executeWithLease).
+  if (!opts.forceRefresh) {
+    // Cache reads are best-effort: a DB/infra hiccup degrades to direct execution.
+    const row = await getCacheRow(key).catch(() => null);
+    const cls = classifyCacheRow(row, now);
+    if ((cls === 'fresh' || cls === 'stale') && row?.blobRef) {
+      if (cls === 'stale') backgroundRevalidate(key, opts);
+      return {
+        source: 'cache', blobRef: row.blobRef, finalQuery: row.finalQuery ?? '',
+        rowCount: row.rowCount ?? 0, colCount: row.colCount ?? 0, cachedAt: row.createdAt, fromCache: true,
+      };
+    }
   }
   return executeWithLease(key, opts, now);
 }
